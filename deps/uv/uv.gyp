@@ -24,6 +24,7 @@
   'targets': [
     {
       'target_name': 'uv',
+      'toolsets': ['host', 'target'],
       'type': '<(library)',
       'include_dirs': [
         'include',

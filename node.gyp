@@ -55,6 +55,7 @@
     {
       'target_name': 'node',
       'type': 'executable',
+      'toolsets': ['host', 'target'],
 
       'dependencies': [
         'deps/http_parser/http_parser.gyp:http_parser',

@@ -23,7 +23,7 @@
 #ifndef NODE_EV_EMUL_H_
 #define NODE_EV_EMUL_H_
 
-#include "uv.h"
+#include "third_party/libuv/include/uv.h"
 
 #include <stdio.h>
 #include <stddef.h>

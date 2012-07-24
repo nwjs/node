@@ -58,8 +58,8 @@
 # define SIGKILL         9
 #endif
 
-#include "uv.h"
-#include "v8.h"
+#include "third_party/libuv/include/uv.h"
+#include "v8/include/v8.h"
 #include <sys/types.h> /* struct stat */
 #include <sys/stat.h>
 #include <assert.h>
@@ -87,12 +87,16 @@ namespace node {
 
 NODE_EXTERN extern bool no_deprecation;
 
+NODE_EXTERN void BeforeV8(int argc, char *argv[]);
+NODE_EXTERN void Setup(int argc, char *argv[]);
 NODE_EXTERN int Start(int argc, char *argv[]);
+NODE_EXTERN void Shutdown();
 
 char** Init(int argc, char *argv[]);
 v8::Handle<v8::Object> SetupProcessObject(int argc, char *argv[]);
 void Load(v8::Handle<v8::Object> process);
 void EmitExit(v8::Handle<v8::Object> process);
+void RunAtExit();
 
 #define NODE_PSYMBOL(s) \
   v8::Persistent<v8::String>::New(v8::String::NewSymbol(s))

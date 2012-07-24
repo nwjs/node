@@ -97,6 +97,8 @@ ngx_queue_t req_wrap_queue = { &req_wrap_queue, &req_wrap_queue };
 // declared in req_wrap.h
 Persistent<String> process_symbol;
 Persistent<String> domain_symbol;
+Persistent<Object> g_process_l;
+Persistent<Context> g_context;
 
 static Persistent<Object> process;
 
@@ -2910,7 +2912,7 @@ static char **copy_argv(int argc, char **argv) {
   return argv_copy;
 }
 
-int Start(int argc, char *argv[]) {
+void BeforeV8(int argc, char *argv[]) {
   // Hack aroung with the argv pointer. Used for process.title = "blah".
   argv = uv_setup_args(argc, argv);
 
@@ -2922,25 +2924,36 @@ int Start(int argc, char *argv[]) {
   // Use copy here as to not modify the original argv:
   Init(argc, argv_copy);
 
+  // Clean up the copy:
+  free(argv_copy);
+}
+
+void Setup(int argc, char *argv[]) {
+  HandleScope handle_scope;
+  process_symbol = NODE_PSYMBOL("process");
+  domain_symbol = NODE_PSYMBOL("domain");
+
+  // Use original argv, as we're just copying values out of it.
+  g_process_l = Persistent<Object>::New(SetupProcessObject(argc, argv));
+  v8_typed_array::AttachBindings(g_context->Global());
+
+  // Create all the objects, load modules, do everything.
+  // so your next reading stop should be node::Load()!
+  Load(g_process_l);
+}
+
+int Start(int argc, char *argv[]) {
+  BeforeV8(argc, argv);
+
   V8::Initialize();
   {
     Locker locker;
     HandleScope handle_scope;
 
-    // Create the one and only Context.
-    Persistent<Context> context = Context::New();
-    Context::Scope context_scope(context);
+    node::g_context = Context::New();
+    Context::Scope context_scope(g_context);
 
-    process_symbol = NODE_PSYMBOL("process");
-    domain_symbol = NODE_PSYMBOL("domain");
-
-    // Use original argv, as we're just copying values out of it.
-    Handle<Object> process_l = SetupProcessObject(argc, argv);
-    v8_typed_array::AttachBindings(context->Global());
-
-    // Create all the objects, load modules, do everything.
-    // so your next reading stop should be node::Load()!
-    Load(process_l);
+    Setup(argc, argv);
 
     // All our arguments are loaded. We've evaluated all of the scripts. We
     // might even have created TCP servers. Now we enter the main eventloop. If
@@ -2949,12 +2962,7 @@ int Start(int argc, char *argv[]) {
     // watchers, it blocks.
     uv_run(uv_default_loop());
 
-    EmitExit(process_l);
-    RunAtExit();
-
-#ifndef NDEBUG
-    context.Dispose();
-#endif
+    Shutdown();
   }
 
 #ifndef NDEBUG
@@ -2962,11 +2970,16 @@ int Start(int argc, char *argv[]) {
   V8::Dispose();
 #endif  // NDEBUG
 
-  // Clean up the copy:
-  free(argv_copy);
-
   return 0;
 }
 
+void Shutdown() {
+  EmitExit(g_process_l);
+  RunAtExit();
+
+#ifndef NDEBUG
+  g_context.Dispose();
+#endif
+}
 
 }  // namespace node

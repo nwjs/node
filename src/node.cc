@@ -97,8 +97,6 @@ ngx_queue_t req_wrap_queue = { &req_wrap_queue, &req_wrap_queue };
 // declared in req_wrap.h
 Persistent<String> process_symbol;
 Persistent<String> domain_symbol;
-Persistent<Object> g_process_l;
-Persistent<Context> g_context;
 
 static Persistent<Object> process;
 
@@ -2980,7 +2978,13 @@ int Start(int argc, char *argv[]) {
     process_symbol = NODE_PSYMBOL("process");
     domain_symbol = NODE_PSYMBOL("domain");
 
-    Setup(argc, argv);
+    // Use original argv, as we're just copying values out of it.
+    Handle<Object> process_l = SetupProcessObject(argc, argv);
+    v8_typed_array::AttachBindings(context->Global());
+
+    // Create all the objects, load modules, do everything.
+    // so your next reading stop should be node::Load()!
+    Load(process_l);
 
     // All our arguments are loaded. We've evaluated all of the scripts. We
     // might even have created TCP servers. Now we enter the main eventloop. If
@@ -2989,7 +2993,12 @@ int Start(int argc, char *argv[]) {
     // watchers, it blocks.
     uv_run(uv_default_loop());
 
-    Shutdown();
+    EmitExit(process_l);
+    RunAtExit();
+
+#ifndef NDEBUG
+    context.Dispose();
+#endif
   }
 
 #ifndef NDEBUG
@@ -3000,8 +3009,6 @@ int Start(int argc, char *argv[]) {
   return 0;
 }
 
-<<<<<<< HEAD
-=======
 void Shutdown() {
   EmitExit(g_process_l);
   RunAtExit();
@@ -3011,5 +3018,4 @@ void Shutdown() {
 #endif
 }
 
->>>>>>> Split node::Start into several steps, store process_l and context as global persistent handle
 }  // namespace node

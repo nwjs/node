@@ -88,15 +88,13 @@ namespace node {
 NODE_EXTERN extern bool no_deprecation;
 
 NODE_EXTERN void BeforeV8(int argc, char *argv[]);
-NODE_EXTERN void Setup(int argc, char *argv[]);
 NODE_EXTERN int Start(int argc, char *argv[]);
-NODE_EXTERN void Shutdown();
 
 char** Init(int argc, char *argv[]);
-v8::Handle<v8::Object> SetupProcessObject(int argc, char *argv[]);
-void Load(v8::Handle<v8::Object> process);
-void EmitExit(v8::Handle<v8::Object> process);
-void RunAtExit();
+NODE_EXTERN v8::Handle<v8::Object> SetupProcessObject(int argc, char *argv[]);
+NODE_EXTERN void Load(v8::Handle<v8::Object> process);
+NODE_EXTERN void EmitExit(v8::Handle<v8::Object> process);
+NODE_EXTERN void RunAtExit();
 
 #define NODE_PSYMBOL(s) \
   v8::Persistent<v8::String>::New(v8::String::NewSymbol(s))

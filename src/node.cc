@@ -2928,7 +2928,7 @@ static char **copy_argv(int argc, char **argv) {
   return argv_copy;
 }
 
-void BeforeV8(int argc, char *argv[]) {
+void SetupUv(int argc, char *argv[]) {
   // Hack aroung with the argv pointer. Used for process.title = "blah".
   argv = uv_setup_args(argc, argv);
 
@@ -2944,8 +2944,28 @@ void BeforeV8(int argc, char *argv[]) {
   free(argv_copy);
 }
 
+void SetupContext(int argc, char *argv[], v8::Handle<v8::Object> global) {
+  HandleScope scope;
+
+  process_symbol = NODE_PSYMBOL("process");
+  domain_symbol = NODE_PSYMBOL("domain");
+
+  // Use original argv, as we're just copying values out of it.
+  SetupProcessObject(argc, argv);
+  v8_typed_array::AttachBindings(global);
+
+  // Create all the objects, load modules, do everything.
+  // so your next reading stop should be node::Load()!
+  Load(process);
+}
+
+void Shutdown() {
+  EmitExit(process);
+  RunAtExit();
+}
+
 int Start(int argc, char *argv[]) {
-  BeforeV8(argc, argv);
+  SetupUv(argc, argv);
 
   V8::Initialize();
   {

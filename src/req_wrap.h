@@ -29,8 +29,6 @@ namespace node {
 // defined in node.cc
 extern v8::Persistent<v8::String> process_symbol;
 extern v8::Persistent<v8::String> domain_symbol;
-extern v8::Persistent<v8::Object> g_process_l;
-extern v8::Persistent<v8::Context> g_context;
 extern ngx_queue_t req_wrap_queue;
 
 template <typename T>

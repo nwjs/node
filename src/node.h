@@ -95,10 +95,10 @@ NODE_EXTERN void Shutdown();
 NODE_EXTERN int Start(int argc, char *argv[]);
 
 char** Init(int argc, char *argv[]);
-NODE_EXTERN v8::Handle<v8::Object> SetupProcessObject(int argc, char *argv[]);
-NODE_EXTERN void Load(v8::Handle<v8::Object> process);
-NODE_EXTERN void EmitExit(v8::Handle<v8::Object> process);
-NODE_EXTERN void RunAtExit();
+v8::Handle<v8::Object> SetupProcessObject(int argc, char *argv[]);
+void Load(v8::Handle<v8::Object> process);
+void EmitExit(v8::Handle<v8::Object> process);
+void RunAtExit();
 
 #define NODE_PSYMBOL(s) \
   v8::Persistent<v8::String>::New(v8::String::NewSymbol(s))

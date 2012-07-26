@@ -70,6 +70,8 @@
     global.GLOBAL = global;
     global.root = global;
     global.Buffer = NativeModule.require('buffer').Buffer;
+    // FIXME expose real `require` later
+    global.require = NativeModule.require;
   };
 
   startup.globalTimeouts = function() {

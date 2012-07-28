@@ -61,6 +61,7 @@
     global.require = function() {
       // Force 'this' in 'require' to be 'module'
       return module.require.apply(module, arguments);
+      module.require.apply(module, arguments);
     }
   }
 
@@ -70,8 +71,6 @@
     global.GLOBAL = global;
     global.root = global;
     global.Buffer = NativeModule.require('buffer').Buffer;
-    // FIXME expose real `require` later
-    global.require = NativeModule.require;
   };
 
   startup.globalTimeouts = function() {

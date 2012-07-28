@@ -53,12 +53,15 @@
 
     startup.resolveArgv0();
 
-    // There are various modes that Node can run in. The most common two
-    // are running from a script and running the REPL - but there are a few
-    // others like the debugger or running --eval arguments. Here we decide
-    // which mode we run in.
+    // Emulate the script's execution everionment
+    // TODO pass the real path of html file 
     var Module = NativeModule.require('module');
-    // do nothing now
+    var module = new Module('.', null);
+    global.process.mainModule = module;
+    global.require = function() {
+      // Force 'this' in 'require' to be 'module'
+      module.require.apply(module, arguments);
+    }
   }
 
   startup.globalVariables = function() {
@@ -67,8 +70,6 @@
     global.GLOBAL = global;
     global.root = global;
     global.Buffer = NativeModule.require('buffer').Buffer;
-    // FIXME expose real `require` later
-    global.require = NativeModule.require;
   };
 
   startup.globalTimeouts = function() {

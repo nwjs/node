@@ -61,7 +61,6 @@
     global.require = function() {
       // Force 'this' in 'require' to be 'module'
       return module.require.apply(module, arguments);
-      module.require.apply(module, arguments);
     }
   }
 

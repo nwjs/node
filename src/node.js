@@ -60,7 +60,7 @@
     global.process.mainModule = module;
     global.require = function() {
       // Force 'this' in 'require' to be 'module'
-      module.require.apply(module, arguments);
+      return module.require.apply(module, arguments);
     }
   }
 

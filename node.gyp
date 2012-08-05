@@ -49,6 +49,11 @@
       'lib/vm.js',
       'lib/zlib.js',
     ],
+    'conditions': [
+      [ 'OS=="win"', {
+        'node_use_openssl%': 'false',
+      }],
+    ],
   },
 
   'targets': [

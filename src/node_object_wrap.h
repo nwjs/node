@@ -23,7 +23,7 @@
 #define object_wrap_h
 
 #include "node.h"
-#include "v8.h"
+#include "v8/include/v8.h"
 #include <assert.h>
 
 namespace node {

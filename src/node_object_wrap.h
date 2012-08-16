@@ -53,7 +53,9 @@ class NODE_EXTERN ObjectWrap {
     return static_cast<T*>(handle->GetPointerFromInternalField(0));
   }
 
-
+#ifdef WIN32
+#pragma warning(disable:4251)
+#endif
   v8::Persistent<v8::Object> handle_; // ro
 
  protected:

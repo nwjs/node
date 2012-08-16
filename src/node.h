@@ -60,7 +60,7 @@
 # define SIGKILL         9
 #endif
 
-#include "third_party/libuv/include/uv.h"
+#include "uv.h"
 #include "v8/include/v8.h"
 #include <sys/types.h> /* struct stat */
 #include <sys/stat.h>

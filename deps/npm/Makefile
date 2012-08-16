@@ -92,7 +92,7 @@ doc/cli/index.md: $(markdowns) scripts/index-build.js scripts/doc-build.sh packa
 	node scripts/index-build.js > $@
 
 node_modules/.bin/ronn:
-	node cli.js install https://github.com/isaacs/ronnjs/tarball/master
+	node cli.js install
 
 doc: man
 
@@ -113,13 +113,21 @@ publish: link doc
 
 docpublish: doc-publish
 doc-publish: doc
-	rsync -vazu --stats --no-implied-dirs --delete html/doc/ npmjs.org:/var/www/npmjs.org/public/doc
-	rsync -vazu --stats --no-implied-dirs --delete html/api/ npmjs.org:/var/www/npmjs.org/public/api
-	rsync -vazu --stats --no-implied-dirs --delete html/webfonts/ npmjs.org:/var/www/npmjs.org/public/webfonts
-	scp html/style.css npmjs.org:/var/www/npmjs.org/public/
+	rsync -vazu --stats --no-implied-dirs --delete \
+		html/doc/ \
+		node@npmjs.org:/home/node/npm-www/doc
+	rsync -vazu --stats --no-implied-dirs --delete \
+		html/api/ \
+		node@npmjs.org:/home/node/npm-www/api
+	rsync -vazu --stats --no-implied-dirs --delete \
+		html/webfonts/ \
+		node@npmjs.org:/home/node/npm-www/static/webfonts
+	rsync -vazu --stats --no-implied-dirs --delete \
+		html/style.css \
+		node@npmjs.org:/home/node/npm-www/static/
 
 zip-publish: release
-	scp release/* npmjs.org:/var/www/npmjs.org/public/dist/
+	scp release/* node@nodejs.org:dist/npm/
 
 release:
 	@bash scripts/release.sh

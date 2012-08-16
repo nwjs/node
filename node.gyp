@@ -145,7 +145,7 @@
           'sources': [ 'src/node_crypto.cc' ],
           'conditions': [
             [ 'node_shared_openssl=="false"', {
-              'dependencies': [ '../openssl/openssl.gyp:openssl' ],
+              'dependencies': [ 'deps/openssl/openssl.gyp:openssl' ],
             }]]
         }, {
           'defines': [ 'HAVE_OPENSSL=0' ]
@@ -233,6 +233,7 @@
         [ 'OS=="solaris"', {
           'libraries': [
             '-lkstat',
+            '-lumem',
           ],
         }],
       ],

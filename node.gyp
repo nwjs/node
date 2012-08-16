@@ -64,7 +64,7 @@
 
       'dependencies': [
         'deps/http_parser/http_parser.gyp:http_parser',
-        '../libuv/uv.gyp:uv',
+        'deps/uv/uv.gyp:uv',
         'node_js2c#host',
       ],
 

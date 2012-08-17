@@ -125,7 +125,7 @@ char** uv_setup_args(int argc, char** argv) {
   s = envc ? environ[envc - 1] : argv[argc - 1];
 
   process_title.str = argv[0];
-  process_title.len = s + strlen(s) + 1 - argv[0];
+  process_title.len = strlen(process_title.str) + 1;
 
   size = process_title.len;
   size += (argc + 1) * sizeof(char **);

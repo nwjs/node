@@ -39,8 +39,8 @@
     process.EventEmitter = EventEmitter; // process.EventEmitter is deprecated
 
     startup.globalVariables();
-    startup.globalTimeouts();
-    startup.globalConsole();
+    // startup.globalTimeouts();
+    // startup.globalConsole();
 
     startup.processAssert();
     startup.processConfig();
@@ -54,7 +54,6 @@
     startup.resolveArgv0();
 
     // Emulate the script's execution everionment
-    // TODO pass the real path of html file 
     var Module = NativeModule.require('module');
     var module = new Module('.', null);
     global.process.mainModule = module;

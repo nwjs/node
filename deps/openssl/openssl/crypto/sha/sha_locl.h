@@ -89,7 +89,7 @@ static void sha_block_data_order (SHA_CTX *c, const void *p,size_t num);
 
 #elif defined(SHA_1)
 
-# define HASH_UPDATE             	SHA1_Update
+# define HASH_UPDATE             	OpensslSHA1_Update
 # define HASH_TRANSFORM          	SHA1_Transform
 # define HASH_FINAL              	SHA1_Final
 # define HASH_INIT			SHA1_Init

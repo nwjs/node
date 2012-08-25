@@ -221,7 +221,7 @@ int SHA512_Final (unsigned char *md, SHA512_CTX *c)
 int SHA384_Final (unsigned char *md,SHA512_CTX *c)
 {   return SHA512_Final (md,c);   }
 
-int SHA512_Update (SHA512_CTX *c, const void *_data, size_t len)
+int OpensslSHA512_Update (SHA512_CTX *c, const void *_data, size_t len)
 	{
 	SHA_LONG64	l;
 	unsigned char  *p=c->u.p;
@@ -272,8 +272,8 @@ int SHA512_Update (SHA512_CTX *c, const void *_data, size_t len)
 	return 1;
 	}
 
-int SHA384_Update (SHA512_CTX *c, const void *data, size_t len)
-{   return SHA512_Update (c,data,len);   }
+int OpensslSHA384_Update (SHA512_CTX *c, const void *data, size_t len)
+{   return OpensslSHA512_Update (c,data,len);   }
 
 void SHA512_Transform (SHA512_CTX *c, const unsigned char *data)
 {   sha512_block_data_order (c,data,1);  }
@@ -285,7 +285,7 @@ unsigned char *SHA384(const unsigned char *d, size_t n, unsigned char *md)
 
 	if (md == NULL) md=m;
 	SHA384_Init(&c);
-	SHA512_Update(&c,d,n);
+	OpensslSHA512_Update(&c,d,n);
 	SHA512_Final(md,&c);
 	OPENSSL_cleanse(&c,sizeof(c));
 	return(md);
@@ -298,7 +298,7 @@ unsigned char *SHA512(const unsigned char *d, size_t n, unsigned char *md)
 
 	if (md == NULL) md=m;
 	SHA512_Init(&c);
-	SHA512_Update(&c,d,n);
+	OpensslSHA512_Update(&c,d,n);
 	SHA512_Final(md,&c);
 	OPENSSL_cleanse(&c,sizeof(c));
 	return(md);

@@ -3009,13 +3009,4 @@ int Start(int argc, char *argv[]) {
   return 0;
 }
 
-void Shutdown() {
-  EmitExit(g_process_l);
-  RunAtExit();
-
-#ifndef NDEBUG
-  g_context.Dispose();
-#endif
-}
-
 }  // namespace node

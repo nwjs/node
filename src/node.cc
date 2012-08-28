@@ -2380,7 +2380,7 @@ void Load(Handle<Object> process_l) {
 
   if (try_catch.HasCaught())  {
     ReportException(try_catch, true);
-    exit(11);
+    // exit(11);
   }
 }
 

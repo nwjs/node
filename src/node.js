@@ -39,7 +39,7 @@
     process.EventEmitter = EventEmitter; // process.EventEmitter is deprecated
 
     startup.globalVariables();
-    // startup.globalTimeouts();
+    startup.globalTimeouts();
     // startup.globalConsole();
 
     startup.processAssert();

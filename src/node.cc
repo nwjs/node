@@ -95,6 +95,7 @@ ngx_queue_t handle_wrap_queue = { &handle_wrap_queue, &handle_wrap_queue };
 ngx_queue_t req_wrap_queue = { &req_wrap_queue, &req_wrap_queue };
 
 // declared in req_wrap.h
+Persistent<Context> g_context;
 Persistent<String> process_symbol;
 Persistent<String> domain_symbol;
 

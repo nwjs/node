@@ -7,6 +7,7 @@
     {
       'target_name': 'openssl',
       'type': '<(library)',
+      'toolsets': ['host', 'target'],
       'defines': [
         'L_ENDIAN',
         'OPENSSL_THREADS',

@@ -141,7 +141,7 @@ static int pkey_hmac_keygen(EVP_PKEY_CTX *ctx, EVP_PKEY *pkey)
 static int int_update(EVP_MD_CTX *ctx,const void *data,size_t count)
 	{
 	HMAC_PKEY_CTX *hctx = ctx->pctx->data;
-	HMAC_Update(&hctx->ctx, data, count);
+	OpensslHMAC_Update(&hctx->ctx, data, count);
 	return 1;
 	}
 
@@ -192,7 +192,7 @@ static int pkey_hmac_ctrl(EVP_PKEY_CTX *ctx, int type, int p1, void *p2)
 
 		case EVP_PKEY_CTRL_DIGESTINIT:
 		key = (ASN1_OCTET_STRING *)ctx->pkey->pkey.ptr;
-		HMAC_Init_ex(&hctx->ctx, key->data, key->length, hctx->md,
+		OpensslHMAC_Init_ex(&hctx->ctx, key->data, key->length, hctx->md,
 				ctx->engine);
 		break;
 

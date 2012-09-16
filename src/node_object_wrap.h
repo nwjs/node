@@ -23,7 +23,7 @@
 #define object_wrap_h
 
 #include "node.h"
-#include "v8.h"
+#include "v8/include/v8.h"
 #include <assert.h>
 
 // Explicitly instantiate some template classes, so we're sure they will be
@@ -62,7 +62,9 @@ class NODE_EXTERN ObjectWrap {
     return static_cast<T*>(handle->GetPointerFromInternalField(0));
   }
 
-
+#ifdef WIN32
+#pragma warning(disable:4251)
+#endif
   v8::Persistent<v8::Object> handle_; // ro
 
  protected:

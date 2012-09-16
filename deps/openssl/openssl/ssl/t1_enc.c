@@ -170,42 +170,42 @@ static int tls1_P_hash(const EVP_MD *md, const unsigned char *sec,
 
 	HMAC_CTX_init(&ctx);
 	HMAC_CTX_init(&ctx_tmp);
-	if (!HMAC_Init_ex(&ctx,sec,sec_len,md, NULL))
+	if (!OpensslHMAC_Init_ex(&ctx,sec,sec_len,md, NULL))
 		goto err;
-	if (!HMAC_Init_ex(&ctx_tmp,sec,sec_len,md, NULL))
+	if (!OpensslHMAC_Init_ex(&ctx_tmp,sec,sec_len,md, NULL))
 		goto err;
-	if (seed1 != NULL && !HMAC_Update(&ctx,seed1,seed1_len))
+	if (seed1 != NULL && !OpensslHMAC_Update(&ctx,seed1,seed1_len))
 		goto err;
-	if (seed2 != NULL && !HMAC_Update(&ctx,seed2,seed2_len))
+	if (seed2 != NULL && !OpensslHMAC_Update(&ctx,seed2,seed2_len))
 		goto err;
-	if (seed3 != NULL && !HMAC_Update(&ctx,seed3,seed3_len))
+	if (seed3 != NULL && !OpensslHMAC_Update(&ctx,seed3,seed3_len))
 		goto err;
-	if (seed4 != NULL && !HMAC_Update(&ctx,seed4,seed4_len))
+	if (seed4 != NULL && !OpensslHMAC_Update(&ctx,seed4,seed4_len))
 		goto err;
-	if (seed5 != NULL && !HMAC_Update(&ctx,seed5,seed5_len))
+	if (seed5 != NULL && !OpensslHMAC_Update(&ctx,seed5,seed5_len))
 		goto err;
 	if (!HMAC_Final(&ctx,A1,&A1_len))
 		goto err;
 
 	for (;;)
 		{
-		if (!HMAC_Init_ex(&ctx,NULL,0,NULL,NULL)) /* re-init */
+		if (!OpensslHMAC_Init_ex(&ctx,NULL,0,NULL,NULL)) /* re-init */
 			goto err;
-		if (!HMAC_Init_ex(&ctx_tmp,NULL,0,NULL,NULL)) /* re-init */
+		if (!OpensslHMAC_Init_ex(&ctx_tmp,NULL,0,NULL,NULL)) /* re-init */
 			goto err;
-		if (!HMAC_Update(&ctx,A1,A1_len))
+		if (!OpensslHMAC_Update(&ctx,A1,A1_len))
 			goto err;
-		if (!HMAC_Update(&ctx_tmp,A1,A1_len))
+		if (!OpensslHMAC_Update(&ctx_tmp,A1,A1_len))
 			goto err;
-		if (seed1 != NULL && !HMAC_Update(&ctx,seed1,seed1_len))
+		if (seed1 != NULL && !OpensslHMAC_Update(&ctx,seed1,seed1_len))
 			goto err;
-		if (seed2 != NULL && !HMAC_Update(&ctx,seed2,seed2_len))
+		if (seed2 != NULL && !OpensslHMAC_Update(&ctx,seed2,seed2_len))
 			goto err;
-		if (seed3 != NULL && !HMAC_Update(&ctx,seed3,seed3_len))
+		if (seed3 != NULL && !OpensslHMAC_Update(&ctx,seed3,seed3_len))
 			goto err;
-		if (seed4 != NULL && !HMAC_Update(&ctx,seed4,seed4_len))
+		if (seed4 != NULL && !OpensslHMAC_Update(&ctx,seed4,seed4_len))
 			goto err;
-		if (seed5 != NULL && !HMAC_Update(&ctx,seed5,seed5_len))
+		if (seed5 != NULL && !OpensslHMAC_Update(&ctx,seed5,seed5_len))
 			goto err;
 
 		if (olen > chunk)

@@ -54,7 +54,8 @@
   'targets': [
     {
       'target_name': 'node',
-      'type': 'executable',
+      'type': 'static_library',
+      'toolsets': ['host', 'target'],
 
       'dependencies': [
         'deps/http_parser/http_parser.gyp:http_parser',
@@ -63,6 +64,7 @@
       ],
 
       'include_dirs': [
+        '../..',
         'src',
         'deps/uv/src/ares',
         '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
@@ -138,7 +140,7 @@
           'sources': [ 'src/node_crypto.cc' ],
           'conditions': [
             [ 'node_shared_openssl=="false"', {
-              'dependencies': [ './deps/openssl/openssl.gyp:openssl' ],
+              'dependencies': [ 'deps/openssl/openssl.gyp:openssl' ],
             }]]
         }, {
           'defines': [ 'HAVE_OPENSSL=0' ]
@@ -182,11 +184,11 @@
             'deps/v8/include/v8.h',
             'deps/v8/include/v8-debug.h',
           ],
-          'dependencies': [ 'deps/v8/tools/gyp/v8.gyp:v8' ],
+          'dependencies': [ '../../v8/tools/gyp/v8.gyp:v8' ],
         }],
 
         [ 'node_shared_zlib=="false"', {
-          'dependencies': [ 'deps/zlib/zlib.gyp:zlib' ],
+          'dependencies': [ '../zlib/zlib.gyp:zlib' ],
         }],
 
         [ 'OS=="win"', {

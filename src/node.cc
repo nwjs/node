@@ -95,6 +95,7 @@ ngx_queue_t handle_wrap_queue = { &handle_wrap_queue, &handle_wrap_queue };
 ngx_queue_t req_wrap_queue = { &req_wrap_queue, &req_wrap_queue };
 
 // declared in req_wrap.h
+Persistent<Context> g_context;
 Persistent<String> process_symbol;
 Persistent<String> domain_symbol;
 
@@ -2928,7 +2929,7 @@ static char **copy_argv(int argc, char **argv) {
   return argv_copy;
 }
 
-int Start(int argc, char *argv[]) {
+void SetupUv(int argc, char *argv[]) {
   // Hack aroung with the argv pointer. Used for process.title = "blah".
   argv = uv_setup_args(argc, argv);
 
@@ -2940,12 +2941,38 @@ int Start(int argc, char *argv[]) {
   // Use copy here as to not modify the original argv:
   Init(argc, argv_copy);
 
+  // Clean up the copy:
+  free(argv_copy);
+}
+
+void SetupContext(int argc, char *argv[], v8::Handle<v8::Object> global) {
+  HandleScope scope;
+
+  process_symbol = NODE_PSYMBOL("process");
+  domain_symbol = NODE_PSYMBOL("domain");
+
+  // Use original argv, as we're just copying values out of it.
+  SetupProcessObject(argc, argv);
+  v8_typed_array::AttachBindings(global);
+
+  // Create all the objects, load modules, do everything.
+  // so your next reading stop should be node::Load()!
+  Load(process);
+}
+
+void Shutdown() {
+  EmitExit(process);
+  RunAtExit();
+}
+
+int Start(int argc, char *argv[]) {
+  SetupUv(argc, argv);
+
   V8::Initialize();
   {
     Locker locker;
     HandleScope handle_scope;
 
-    // Create the one and only Context.
     Persistent<Context> context = Context::New();
     Context::Scope context_scope(context);
 
@@ -2980,11 +3007,7 @@ int Start(int argc, char *argv[]) {
   V8::Dispose();
 #endif  // NDEBUG
 
-  // Clean up the copy:
-  free(argv_copy);
-
   return 0;
 }
-
 
 }  // namespace node

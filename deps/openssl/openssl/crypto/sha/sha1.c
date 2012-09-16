@@ -110,7 +110,7 @@ void do_fp(FILE *f)
 		{
 		i=read(fd,buf,BUFSIZE);
 		if (i <= 0) break;
-		SHA1_Update(&c,buf,(unsigned long)i);
+		OpensslSHA1_Update(&c,buf,(unsigned long)i);
 		}
 	SHA1_Final(&(md[0]),&c);
 	pt(md);

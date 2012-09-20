@@ -57,7 +57,11 @@
     var Module = NativeModule.require('module');
     var module = new Module('.', null);
     global.process.mainModule = module;
-    global.require = function() {
+    global.require = function(name) {
+      // Our custom modules
+      if (name == 'nw.gui')
+        return process.gui;
+
       // Force 'this' in 'require' to be 'module'
       return module.require.apply(module, arguments);
     }

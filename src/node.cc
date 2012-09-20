@@ -2313,9 +2313,9 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   NODE_SET_METHOD(process, "_kill", Kill);
 
-  NODE_SET_METHOD(process, "_debugProcess", DebugProcess);
-  NODE_SET_METHOD(process, "_debugPause", DebugPause);
-  NODE_SET_METHOD(process, "_debugEnd", DebugEnd);
+  // NODE_SET_METHOD(process, "_debugProcess", DebugProcess);
+  // NODE_SET_METHOD(process, "_debugPause", DebugPause);
+  // NODE_SET_METHOD(process, "_debugEnd", DebugEnd);
 
   NODE_SET_METHOD(process, "hrtime", Hrtime);
 
@@ -2838,6 +2838,7 @@ char** Init(int argc, char *argv[]) {
   // even when we need it to access it from another (debugger) thread.
   node_isolate = Isolate::GetCurrent();
 
+#if 0
   // If the --debug flag was specified then initialize the debug thread.
   if (use_debug_agent) {
     EnableDebug(debug_wait_connect);
@@ -2848,6 +2849,7 @@ char** Init(int argc, char *argv[]) {
     RegisterSignalHandler(SIGUSR1, EnableDebugSignalHandler);
 #endif // __POSIX__
   }
+#endif
 
   return argv;
 }

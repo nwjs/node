@@ -272,6 +272,28 @@ int uv_run_once(uv_loop_t* loop) {
 }
 
 
+int uv_run_once_nowait(uv_loop_t* loop) {
+  void ev__run(EV_P_ ev_tstamp waittime);
+
+  /* uv__run(loop) */ 
+  uv_update_time(loop);
+  uv__run_timers(loop);
+  uv__run_idle(loop);
+  uv__run_prepare(loop);
+
+  /* uv__poll() */
+  ev_invoke_pending(loop->ev);
+  ev__run(loop->ev, 0);
+  ev_invoke_pending(loop->ev);
+  /* end of uv__poll() */
+
+  uv__run_check(loop);
+  uv__run_closing_handles(loop);
+  return uv__has_active_handles(loop) || uv__has_active_reqs(loop);
+  /* end of uv__run(loop) */ 
+}
+
+
 void uv_update_time(uv_loop_t* loop) {
   loop->time = uv_hrtime() / 1000000;
 }

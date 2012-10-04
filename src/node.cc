@@ -1509,6 +1509,7 @@ static Handle<Value> SetGid(const Arguments& args) {
     struct group grp, *grpp = NULL;
     int err;
 
+    errno = 0;
     if ((err = getgrnam_r(*grpnam, &grp, getbuf, ARRAY_SIZE(getbuf), &grpp)) ||
         grpp == NULL) {
       if (errno == 0)
@@ -1549,6 +1550,7 @@ static Handle<Value> SetUid(const Arguments& args) {
     struct passwd pwd, *pwdp = NULL;
     int err;
 
+    errno = 0;
     if ((err = getpwnam_r(*pwnam, &pwd, getbuf, ARRAY_SIZE(getbuf), &pwdp)) ||
         pwdp == NULL) {
       if (errno == 0)

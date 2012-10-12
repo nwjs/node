@@ -118,6 +118,9 @@ uint64_t uv_get_total_memory(void) {
 
 
 char** uv_setup_args(int argc, char** argv) {
+  process_title = argc ? strdup(argv[0]) : NULL;
+  return argv;
+#if 0
   char **new_argv;
   char **new_env;
   size_t size;
@@ -159,6 +162,7 @@ char** uv_setup_args(int argc, char** argv) {
 
   environ = new_env;
   return new_argv;
+#endif
 }
 
 

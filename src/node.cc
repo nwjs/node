@@ -2771,6 +2771,7 @@ char** Init(int argc, char *argv[]) {
   // Initialize prog_start_time to get relative uptime.
   uv_uptime(&prog_start_time);
 
+#if 0
   // Make inherited handles noninheritable.
   uv_disable_stdio_inheritance();
 
@@ -2806,6 +2807,7 @@ char** Init(int argc, char *argv[]) {
     SetResourceConstraints(&constraints); // Must be done before V8::Initialize
   }
   V8::SetFlagsFromCommandLine(&v8argc, v8argv, false);
+#endif
 
 #ifdef __POSIX__
   // Ignore SIGPIPE

@@ -118,7 +118,10 @@ uint64_t uv_get_total_memory(void) {
 
 
 char** uv_setup_args(int argc, char** argv) {
-  process_title = argc ? strdup(argv[0]) : NULL;
+  if (argc > 0) {
+    process_title.str = argv[0];
+    process_title.len = strlen(argv[0]);
+  }
   return argv;
 #if 0
   char **new_argv;

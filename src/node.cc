@@ -2226,16 +2226,16 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   process->Set(String::NewSymbol("platform"), String::New(PLATFORM));
 
   // process.argv
-  Local<Array> arguments = Array::New(argc - option_end_index + 1);
-  arguments->Set(Integer::New(0), String::New(argv[0]));
-  for (j = 1, i = option_end_index; i < argc; j++, i++) {
+  Local<Array> arguments = Array::New(argc);
+  for (i = 0; i < argc; i++) {
     Local<String> arg = String::New(argv[i]);
-    arguments->Set(Integer::New(j), arg);
+    arguments->Set(Integer::New(i), arg);
   }
   // assign it
   process->Set(String::NewSymbol("argv"), arguments);
 
   // process.execArgv
+  option_end_index = argc;
   Local<Array> execArgv = Array::New(option_end_index - 1);
   for (j = 1, i = 0; j < option_end_index; j++, i++) {
     execArgv->Set(Integer::New(i), String::New(argv[j]));

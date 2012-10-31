@@ -19,35 +19,25 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef NODE_VERSION_H
-#define NODE_VERSION_H
+var common = require('../common');
+var assert = require('assert');
+var EventEmitter = require('events').EventEmitter;
+var util = require('util');
 
-#define NODE_MAJOR_VERSION 0
-#define NODE_MINOR_VERSION 8
-#define NODE_PATCH_VERSION 14
-#define NODE_VERSION_IS_RELEASE 1
+util.inherits(MyEE, EventEmitter);
 
-#ifndef NODE_STRINGIFY
-#define NODE_STRINGIFY(n) NODE_STRINGIFY_HELPER(n)
-#define NODE_STRINGIFY_HELPER(n) #n
-#endif
+function MyEE(cb) {
+  this.on('foo', cb);
+  process.nextTick(this.emit.bind(this, 'foo'));
+  EventEmitter.call(this);
+}
 
-#if NODE_VERSION_IS_RELEASE
-# define NODE_VERSION_STRING  NODE_STRINGIFY(NODE_MAJOR_VERSION) "." \
-                              NODE_STRINGIFY(NODE_MINOR_VERSION) "." \
-                              NODE_STRINGIFY(NODE_PATCH_VERSION)
-#else
-# define NODE_VERSION_STRING  NODE_STRINGIFY(NODE_MAJOR_VERSION) "." \
-                              NODE_STRINGIFY(NODE_MINOR_VERSION) "." \
-                              NODE_STRINGIFY(NODE_PATCH_VERSION) "-pre"
-#endif
+var called = false;
+var myee = new MyEE(function() {
+  called = true;
+});
 
-#define NODE_VERSION "v" NODE_VERSION_STRING
-
-
-#define NODE_VERSION_AT_LEAST(major, minor, patch) \
-  (( (major) < NODE_MAJOR_VERSION) \
-  || ((major) == NODE_MAJOR_VERSION && (minor) < NODE_MINOR_VERSION) \
-  || ((major) == NODE_MAJOR_VERSION && (minor) == NODE_MINOR_VERSION && (patch) <= NODE_PATCH_VERSION))
-
-#endif /* NODE_VERSION_H */
+process.on('exit', function() {
+  assert(called);
+  console.log('ok');
+});

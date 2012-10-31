@@ -176,6 +176,12 @@ parser.add_option("--with-arm-float-abi",
     help="Specifies which floating-point ABI to use. Valid values are: "
          "soft, softfp, hard")
 
+# Using --unsafe-optimizations voids your warranty.
+parser.add_option("--unsafe-optimizations",
+    action="store_true",
+    dest="unsafe_optimizations",
+    help=optparse.SUPPRESS_HELP)
+
 (options, args) = parser.parse_args()
 
 
@@ -322,12 +328,31 @@ def compiler_version():
   return (version, is_clang)
 
 
+def configure_arm(o):
+  # V8 on ARM requires that armv7 is set. CPU Model detected by
+  # the presence of __ARM_ARCH_7__ and the like defines in compiler
+  if options.arm_float_abi:
+    hard_float = options.arm_float_abi == 'hard'
+  else:
+    hard_float = arm_hard_float_abi()
+  o['variables']['v8_use_arm_eabi_hardfloat'] = b(hard_float)
+
+  armv7 = is_arch_armv7()
+  if armv7:
+    # CHECKME VFPv3 implies ARMv7+ but is the reverse true as well?
+    o['variables']['arm_fpu'] = 'vfpv3'
+    o['variables']['arm_neon'] = 0
+  o['variables']['armv7'] = int(armv7)
+
+
 def configure_node(o):
   # TODO add gdb
   o['variables']['v8_no_strict_aliasing'] = 1 # work around compiler bugs
   o['variables']['node_prefix'] = os.path.expanduser(options.prefix or '')
   o['variables']['node_install_npm'] = b(not options.without_npm)
   o['variables']['node_install_waf'] = b(not options.without_waf)
+  o['variables']['node_unsafe_optimizations'] = (
+    1 if options.unsafe_optimizations else 0)
   o['default_configuration'] = 'Debug' if options.debug else 'Release'
 
   host_arch = host_arch_win() if os.name == 'nt' else host_arch_cc()
@@ -335,15 +360,8 @@ def configure_node(o):
   o['variables']['host_arch'] = host_arch
   o['variables']['target_arch'] = target_arch
 
-  # V8 on ARM requires that armv7 is set. CPU Model detected by
-  # the presence of __ARM_ARCH_7__ and the like defines in compiler
   if target_arch == 'arm':
-    if options.arm_float_abi:
-      hard_float = options.arm_float_abi == 'hard'
-    else:
-      hard_float = arm_hard_float_abi()
-    o['variables']['v8_use_arm_eabi_hardfloat'] = b(hard_float)
-    o['variables']['armv7'] = 1 if is_arch_armv7() else 0
+    configure_arm(o)
 
   cc_version, is_clang = compiler_version()
   o['variables']['clang'] = 1 if is_clang else 0

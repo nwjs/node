@@ -70,6 +70,12 @@
         '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
       ],
 
+      'direct_dependent_settings': {
+        'include_dirs': [
+          'deps/uv/include',
+        ],
+      },
+
       'sources': [
         'src/fs_event_wrap.cc',
         'src/cares_wrap.cc',

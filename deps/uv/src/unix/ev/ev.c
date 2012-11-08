@@ -1621,12 +1621,6 @@ ev_backend (EV_P)
   return backend;
 }
 
-int
-ev_backend_fd (EV_P)
-{
-  return backend_fd;
-}
-
 #if EV_FEATURE_API
 unsigned int
 ev_iteration (EV_P)

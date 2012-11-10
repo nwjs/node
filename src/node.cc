@@ -2968,6 +2968,9 @@ void SetupContext(int argc, char *argv[], v8::Handle<v8::Object> global) {
   // Create all the objects, load modules, do everything.
   // so your next reading stop should be node::Load()!
   Load(process);
+
+  // ensure the main module is called early. It should not block
+  Tick();
 }
 
 void Shutdown() {

@@ -98,8 +98,7 @@ ngx_queue_t req_wrap_queue = { &req_wrap_queue, &req_wrap_queue };
 Persistent<Context> g_context;
 Persistent<String> process_symbol;
 Persistent<String> domain_symbol;
-
-static Persistent<Object> process;
+Persistent<Object> process;
 
 static Persistent<String> errno_symbol;
 static Persistent<String> syscall_symbol;

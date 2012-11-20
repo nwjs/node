@@ -40,7 +40,15 @@
 
     startup.globalVariables();
     startup.globalTimeouts();
-    startup.globalConsole();
+
+    if (process.platform != 'win32')
+      startup.globalConsole();
+    else
+      global.console = {
+        log: function() {},
+        error: function(){},
+        warn: function() {}
+      }; // Will be override when WebKit is started.
 
     startup.processAssert();
     startup.processConfig();

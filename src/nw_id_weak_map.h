@@ -36,6 +36,7 @@ class IDWeakMap : node::ObjectWrap {
   static v8::Handle<v8::Value> Get(const v8::Arguments& args);
   static v8::Handle<v8::Value> Has(const v8::Arguments& args);
   static v8::Handle<v8::Value> Delete(const v8::Arguments& args);
+  static v8::Handle<v8::Value> AllocateId(const v8::Arguments& args);
 
  private:
   explicit IDWeakMap();

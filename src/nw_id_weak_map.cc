@@ -37,6 +37,8 @@ void IDWeakMap::Init() {
       v8::FunctionTemplate::New(Has)->GetFunction());
   tpl->PrototypeTemplate()->Set(v8::String::NewSymbol("delete"),
       v8::FunctionTemplate::New(Delete)->GetFunction());
+  tpl->PrototypeTemplate()->Set(v8::String::NewSymbol("allocateId"),
+      v8::FunctionTemplate::New(AllocateId)->GetFunction());
 
   constructor_ = v8::Persistent<v8::Function>::New(tpl->GetFunction());
 }
@@ -128,6 +130,12 @@ v8::Handle<v8::Value> IDWeakMap::Delete(const v8::Arguments& args) {
   int key = args[0]->IntegerValue();
   obj->Erase(key);
   return v8::Undefined();
+}
+
+// static
+v8::Handle<v8::Value> IDWeakMap::AllocateId(const v8::Arguments& args) {
+  static int next_object_id = 1;
+  return v8::Integer::New(next_object_id++);
 }
 
 IDWeakMap::IDWeakMap() {

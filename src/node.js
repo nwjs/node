@@ -83,6 +83,9 @@
       process.nextTick(Module.runMain);
     }
 
+    // Registry to store nw's UI objects
+    global.__nwObjectsRegistry = new IDWeakMap();
+
     // Emulate the script's execution everionment
     var module = new Module('.', null);
     global.process.mainModule = module;

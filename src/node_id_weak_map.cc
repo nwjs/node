@@ -18,9 +18,38 @@
 // ETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 //  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "nw_id_weak_map.h"
+#include "node.h"
+
+#include <map>
 
 namespace nw {
+
+// Key is int type and Value is weak pointer
+class IDWeakMap : node::ObjectWrap {
+ public:
+  static void Init();
+  static v8::Handle<v8::Function> GetContructor();
+  static void AttachBindings(v8::Handle<v8::Object> obj);
+
+  static v8::Handle<v8::Value> New(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Set(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Get(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Has(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Delete(const v8::Arguments& args);
+  static v8::Handle<v8::Value> AllocateId(const v8::Arguments& args);
+
+ private:
+  explicit IDWeakMap();
+  virtual ~IDWeakMap();
+
+  void Erase(int key);
+
+  static void WeakCallback(v8::Persistent<v8::Value> value, void *data);
+
+  static v8::Persistent<v8::Function> constructor_;
+
+  std::map< int, v8::Persistent<v8::Value> > map_;
+};
 
 v8::Persistent<v8::Function> IDWeakMap::constructor_;
 
@@ -163,3 +192,5 @@ void IDWeakMap::WeakCallback(v8::Persistent<v8::Value> value, void *data) {
 }
 
 }  // namespace nw
+
+NODE_MODULE(node_id_weak_map, nw::IDWeakMap::AttachBindings)

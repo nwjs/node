@@ -45,5 +45,8 @@ NODE_EXT_LIST_ITEM(node_tty_wrap)
 NODE_EXT_LIST_ITEM(node_process_wrap)
 NODE_EXT_LIST_ITEM(node_fs_event_wrap)
 
+// nw extensions
+NODE_EXT_LIST_ITEM(node_id_weak_map)
+
 NODE_EXT_LIST_END
 

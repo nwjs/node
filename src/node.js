@@ -489,6 +489,7 @@
 
   startup.initNw = function() {
     // Registry to store nw's UI objects
+    var IDWeakMap = process.binding('id_weak_map').IDWeakMap;
     global.__nwObjectsRegistry = new IDWeakMap();
 
     // Make __nwObjectsRegistry able to handle events.

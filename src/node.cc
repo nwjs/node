@@ -78,7 +78,6 @@ typedef int mode_t;
 # include "node_crypto.h"
 #endif
 #include "node_script.h"
-#include "nw_id_weak_map.h"
 #include "v8_typed_array.h"
 
 using namespace v8;
@@ -2964,7 +2963,6 @@ void SetupContext(int argc, char *argv[], v8::Handle<v8::Object> global) {
   // Use original argv, as we're just copying values out of it.
   SetupProcessObject(argc, argv);
   v8_typed_array::AttachBindings(global);
-  nw::IDWeakMap::AttachBindings(global);
 
   // Create all the objects, load modules, do everything.
   // so your next reading stop should be node::Load()!

@@ -61,6 +61,8 @@
 
     startup.resolveArgv0();
 
+    startup.initNw();
+
     var Module = NativeModule.require('module');
 
     // Execute the main script
@@ -82,9 +84,6 @@
       // Main entry point into most programs:
       process.nextTick(Module.runMain);
     }
-
-    // Registry to store nw's UI objects
-    global.__nwObjectsRegistry = new IDWeakMap();
 
     // Emulate the script's execution everionment
     var module = new Module('.', null);
@@ -487,6 +486,25 @@
       process.argv[0] = path.join(cwd, process.argv[0]);
     }
   };
+
+  startup.initNw = function() {
+    // Registry to store nw's UI objects
+    global.__nwObjectsRegistry = new IDWeakMap();
+
+    // Make __nwObjectsRegistry able to handle events.
+    global.__nwObjectsRegistry.handleEvent = function(object_id, ev, args) {
+      var object = this.get(object_id);
+      args.splice(0, 0, ev);
+      object.handleEvent.apply(object, args);
+    }
+
+    // Store nw Shell's corresponding js objects
+    global.__nwWindowsStore = {};
+
+    // Make Window a EventEmitter
+    NativeModule.require('util').inherits(global.Window, process.EventEmitter);
+    global.Window.init();
+  }
 
   // Below you find a minimal module system, which is used to load the node
   // core modules found in lib/*.js. All core modules are compiled into the

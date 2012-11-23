@@ -94,6 +94,7 @@
         'src/node_string.cc',
         'src/node_zlib.cc',
         'src/node_id_weak_map.cc',
+        'src/node_v8_util.cc',
         'src/pipe_wrap.cc',
         'src/stream_wrap.cc',
         'src/slab_allocator.cc',

@@ -18,36 +18,44 @@
 // ETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 //  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "node.h"
 #include "object_life_monitor.h"
 
 namespace nw {
 
-static v8::Handle<v8::Value> GetHiddenValue(const v8::Arguments& args) {
-  return args[0]->ToObject()->GetHiddenValue(args[1]->ToString());
+// static
+void ObjectLifeMonitor::BindTo(v8::Handle<v8::Object> target,
+                               v8::Handle<v8::Value> destructor) {
+  target->SetHiddenValue(v8::String::New("destructor"), destructor);
+
+  ObjectLifeMonitor* olm = new ObjectLifeMonitor();
+  olm->handle_ = v8::Persistent<v8::Object>::New(target);
+  olm->handle_.MakeWeak(olm, WeakCallback);
 }
 
-static v8::Handle<v8::Value> SetHiddenValue(const v8::Arguments& args) {
-  args[0]->ToObject()->SetHiddenValue(args[1]->ToString(), args[2]);
-  return v8::Undefined();
+ObjectLifeMonitor::ObjectLifeMonitor() {
 }
 
-static v8::Handle<v8::Value> GetConstructorName(const v8::Arguments& args) {
-  return args[0]->ToObject()->GetConstructorName();
+ObjectLifeMonitor::~ObjectLifeMonitor() {
+  handle_.ClearWeak();
+  handle_.Dispose();
+  handle_.Clear();
 }
 
-static v8::Handle<v8::Value> SetDestructor(const v8::Arguments& args) {
-  nw::ObjectLifeMonitor::BindTo(args[0]->ToObject(), args[1]);
-  return v8::Undefined();
-}
+// static
+void ObjectLifeMonitor::WeakCallback(v8::Persistent<v8::Value> value,
+                                     void *data) {
+  // destructor.call(object, object);
+  {
+    v8::HandleScope scope;
 
-void InitializeV8Util(v8::Handle<v8::Object> target) {
-  NODE_SET_METHOD(target, "getHiddenValue", GetHiddenValue);
-  NODE_SET_METHOD(target, "setHiddenValue", SetHiddenValue);
-  NODE_SET_METHOD(target, "getConstructorName", GetConstructorName);
-  NODE_SET_METHOD(target, "setDestructor", SetDestructor);
+    v8::Local<v8::Object> obj = value->ToObject();
+    v8::Local<v8::Value> args[] = { obj };
+    v8::Local<v8::Function>::Cast(obj->GetHiddenValue(
+        v8::String::New("destructor")))->Call(obj, 1, args);
+  }
+
+  ObjectLifeMonitor* obj = static_cast<ObjectLifeMonitor*>(data);
+  delete obj;
 }
 
 }  // namespace nw
-
-NODE_MODULE(node_v8_util, nw::InitializeV8Util)

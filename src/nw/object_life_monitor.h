@@ -18,36 +18,27 @@
 // ETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 //  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#ifndef THIRD_PARTY_NODE_SRC_NW_OBJECT_LIFE_MONITOR_H_
+#define THIRD_PARTY_NODE_SRC_NW_OBJECT_LIFE_MONITOR_H_
+
 #include "node.h"
-#include "object_life_monitor.h"
 
 namespace nw {
 
-static v8::Handle<v8::Value> GetHiddenValue(const v8::Arguments& args) {
-  return args[0]->ToObject()->GetHiddenValue(args[1]->ToString());
-}
+class ObjectLifeMonitor {
+ public:
+  static void BindTo(v8::Handle<v8::Object> target,
+                     v8::Handle<v8::Value> destructor);
 
-static v8::Handle<v8::Value> SetHiddenValue(const v8::Arguments& args) {
-  args[0]->ToObject()->SetHiddenValue(args[1]->ToString(), args[2]);
-  return v8::Undefined();
-}
+ private:
+  ObjectLifeMonitor();
+  virtual ~ObjectLifeMonitor();
 
-static v8::Handle<v8::Value> GetConstructorName(const v8::Arguments& args) {
-  return args[0]->ToObject()->GetConstructorName();
-}
+  static void WeakCallback(v8::Persistent<v8::Value> value, void *data);
 
-static v8::Handle<v8::Value> SetDestructor(const v8::Arguments& args) {
-  nw::ObjectLifeMonitor::BindTo(args[0]->ToObject(), args[1]);
-  return v8::Undefined();
-}
-
-void InitializeV8Util(v8::Handle<v8::Object> target) {
-  NODE_SET_METHOD(target, "getHiddenValue", GetHiddenValue);
-  NODE_SET_METHOD(target, "setHiddenValue", SetHiddenValue);
-  NODE_SET_METHOD(target, "getConstructorName", GetConstructorName);
-  NODE_SET_METHOD(target, "setDestructor", SetDestructor);
-}
+  v8::Persistent<v8::Object> handle_;
+};
 
 }  // namespace nw
 
-NODE_MODULE(node_v8_util, nw::InitializeV8Util)
+#endif  // THIRD_PARTY_NODE_SRC_NW_OBJECT_LIFE_MONITOR_H_

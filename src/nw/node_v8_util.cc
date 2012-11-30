@@ -41,11 +41,27 @@ static v8::Handle<v8::Value> SetDestructor(const v8::Arguments& args) {
   return v8::Undefined();
 }
 
+static v8::Handle<v8::Value> GetCreationContext(const v8::Arguments& args) {
+  v8::HandleScope handle_scope;
+  v8::Local<v8::Context> creation_context = args[0]->ToObject()->
+      CreationContext();
+
+  return handle_scope.Close(creation_context->Global());
+}
+
+static v8::Handle<v8::Value> GetObjectHash(const v8::Arguments& args) {
+  v8::HandleScope handle_scope;
+  return handle_scope.Close(v8::Integer::New(
+      args[0]->ToObject()->GetIdentityHash()));
+}
+
 void InitializeV8Util(v8::Handle<v8::Object> target) {
   NODE_SET_METHOD(target, "getHiddenValue", GetHiddenValue);
   NODE_SET_METHOD(target, "setHiddenValue", SetHiddenValue);
   NODE_SET_METHOD(target, "getConstructorName", GetConstructorName);
   NODE_SET_METHOD(target, "setDestructor", SetDestructor);
+  NODE_SET_METHOD(target, "getCreationContext", GetCreationContext);
+  NODE_SET_METHOD(target, "getObjectHash", GetObjectHash);
 }
 
 }  // namespace nw

@@ -41,14 +41,13 @@
     startup.globalVariables();
     startup.globalTimeouts();
 
-    if (process.platform != 'win32')
-      startup.globalConsole();
-    else
-      global.console = {
-        log: function() {},
-        error: function(){},
-        warn: function() {}
-      }; // Will be override when WebKit is started.
+    // nw: we try to keep the uniform behaviour (logging to devtools) here.
+    // FIXME: should have a better solution for full console support
+    global.console = {
+      log: function() {},
+      error: function(){},
+      warn: function() {}
+    }; // Will be override when WebKit is started.
 
     startup.processAssert();
     startup.processConfig();

@@ -84,13 +84,11 @@
       process.nextTick(Module.runMain);
     }
 
-    // Emulate the script's execution everionment
+    // Emulate node.js script's execution everionment
     var module = new Module('.', null);
     global.process.mainModule = module;
-    global.require = function(name) {
-      // Force 'this' in 'require' to be 'module'
-      return module.require.apply(module, arguments);
-    }
+    module._compile('global.module = module;\n' +
+                    'global.require = require;\n', 'nw-emulate-node');
   }
 
   startup.globalVariables = function() {

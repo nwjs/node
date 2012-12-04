@@ -10,11 +10,9 @@
         ],
         'conditions': [
           ['OS=="solaris"', {
-            'cflags': ['-pthreads'],
-            'ldlags': ['-pthreads'],
+            'cflags': [ '-pthreads' ],
           }, {
-            'cflags': ['-pthread'],
-            'ldlags': ['-pthread'],
+            'cflags': [ '-pthread' ],
           }],
         ],
       }],
@@ -33,13 +31,7 @@
       ],
       'direct_dependent_settings': {
         'include_dirs': [ 'include' ],
-        'conditions': [
-          ['OS=="linux"', {
-            'libraries': [ '-ldl' ],
-          }],
-        ],
       },
-
       'defines': [
         'HAVE_CONFIG_H'
       ],
@@ -215,12 +207,21 @@
             'src/unix/uv-eio.h',
           ],
           'include_dirs': [ 'src/unix/ev', ],
-          'libraries': [ '-lm' ]
+          'link_settings': {
+            'libraries': [ '-lm' ],
+            'conditions': [
+              ['OS=="solaris"', {
+                'ldflags': [ '-pthreads' ],
+              }, {
+                'ldflags': [ '-pthread' ],
+              }],
+            ],
+          },
         }],
         [ 'OS=="mac"', {
           'include_dirs': [ 'src/ares/config_darwin' ],
           'sources': [ 'src/unix/darwin.c' ],
-          'direct_dependent_settings': {
+          'link_settings': {
             'libraries': [
               '$(SDKROOT)/System/Library/Frameworks/CoreServices.framework',
             ],
@@ -243,8 +244,8 @@
             'EV_CONFIG_H="config_linux.h"',
             'EIO_CONFIG_H="config_linux.h"',
           ],
-          'direct_dependent_settings': {
-            'libraries': [ '-lrt' ],
+          'link_settings': {
+            'libraries': [ '-ldl', '-lrt' ],
           },
         }],
         [ 'OS=="solaris"', {
@@ -256,7 +257,7 @@
             'EV_CONFIG_H="config_sunos.h"',
             'EIO_CONFIG_H="config_sunos.h"',
           ],
-          'direct_dependent_settings': {
+          'link_settings': {
             'libraries': [
               '-lkstat',
               '-lsocket',
@@ -271,7 +272,7 @@
             'EV_CONFIG_H="config_freebsd.h"',
             'EIO_CONFIG_H="config_freebsd.h"',
           ],
-          'direct_dependent_settings': {
+          'link_settings': {
             'libraries': [
               '-lkvm',
             ],

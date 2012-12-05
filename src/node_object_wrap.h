@@ -72,7 +72,7 @@ class NODE_EXTERN ObjectWrap {
     assert(handle_.IsEmpty());
     assert(handle->InternalFieldCount() > 0);
     handle_ = v8::Persistent<v8::Object>::New(handle);
-    handle_->SetPointerInInternalField(0, this);
+    handle_->SetInternalField(0, v8::External::New(this));
     MakeWeak();
   }
 

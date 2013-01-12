@@ -110,9 +110,9 @@ int PKCS5_PBKDF2_HMAC(const char *pass, int passlen,
 		itmp[1] = (unsigned char)((i >> 16) & 0xff);
 		itmp[2] = (unsigned char)((i >> 8) & 0xff);
 		itmp[3] = (unsigned char)(i & 0xff);
-		HMAC_Init_ex(&hctx, pass, passlen, digest, NULL);
-		HMAC_Update(&hctx, salt, saltlen);
-		HMAC_Update(&hctx, itmp, 4);
+		OpensslHMAC_Init_ex(&hctx, pass, passlen, digest, NULL);
+		OpensslHMAC_Update(&hctx, salt, saltlen);
+		OpensslHMAC_Update(&hctx, itmp, 4);
 		HMAC_Final(&hctx, digtmp, NULL);
 		memcpy(p, digtmp, cplen);
 		for(j = 1; j < iter; j++)

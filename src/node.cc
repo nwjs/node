@@ -95,10 +95,10 @@ ngx_queue_t handle_wrap_queue = { &handle_wrap_queue, &handle_wrap_queue };
 ngx_queue_t req_wrap_queue = { &req_wrap_queue, &req_wrap_queue };
 
 // declared in req_wrap.h
+Persistent<Context> g_context;
 Persistent<String> process_symbol;
 Persistent<String> domain_symbol;
-
-static Persistent<Object> process;
+Persistent<Object> process;
 
 static Persistent<String> errno_symbol;
 static Persistent<String> syscall_symbol;
@@ -2225,16 +2225,16 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   process->Set(String::NewSymbol("platform"), String::New(PLATFORM));
 
   // process.argv
-  Local<Array> arguments = Array::New(argc - option_end_index + 1);
-  arguments->Set(Integer::New(0), String::New(argv[0]));
-  for (j = 1, i = option_end_index; i < argc; j++, i++) {
+  Local<Array> arguments = Array::New(argc);
+  for (i = 0; i < argc; i++) {
     Local<String> arg = String::New(argv[i]);
-    arguments->Set(Integer::New(j), arg);
+    arguments->Set(Integer::New(i), arg);
   }
   // assign it
   process->Set(String::NewSymbol("argv"), arguments);
 
   // process.execArgv
+  option_end_index = argc;
   Local<Array> execArgv = Array::New(option_end_index - 1);
   for (j = 1, i = 0; j < option_end_index; j++, i++) {
     execArgv->Set(Integer::New(i), String::New(argv[j]));
@@ -2318,9 +2318,9 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   NODE_SET_METHOD(process, "_kill", Kill);
 
-  NODE_SET_METHOD(process, "_debugProcess", DebugProcess);
-  NODE_SET_METHOD(process, "_debugPause", DebugPause);
-  NODE_SET_METHOD(process, "_debugEnd", DebugEnd);
+  // NODE_SET_METHOD(process, "_debugProcess", DebugProcess);
+  // NODE_SET_METHOD(process, "_debugPause", DebugPause);
+  // NODE_SET_METHOD(process, "_debugEnd", DebugEnd);
 
   NODE_SET_METHOD(process, "hrtime", Hrtime);
 
@@ -2774,6 +2774,7 @@ char** Init(int argc, char *argv[]) {
   // Initialize prog_start_time to get relative uptime.
   uv_uptime(&prog_start_time);
 
+#if 0
   // Make inherited handles noninheritable.
   uv_disable_stdio_inheritance();
 
@@ -2809,6 +2810,7 @@ char** Init(int argc, char *argv[]) {
     SetResourceConstraints(&constraints); // Must be done before V8::Initialize
   }
   V8::SetFlagsFromCommandLine(&v8argc, v8argv, false);
+#endif
 
 #ifdef __POSIX__
   // Ignore SIGPIPE
@@ -2843,6 +2845,7 @@ char** Init(int argc, char *argv[]) {
   // even when we need it to access it from another (debugger) thread.
   node_isolate = Isolate::GetCurrent();
 
+#if 0
   // If the --debug flag was specified then initialize the debug thread.
   if (use_debug_agent) {
     EnableDebug(debug_wait_connect);
@@ -2853,6 +2856,7 @@ char** Init(int argc, char *argv[]) {
     RegisterSignalHandler(SIGUSR1, EnableDebugSignalHandler);
 #endif // __POSIX__
   }
+#endif
 
   return argv;
 }
@@ -2934,7 +2938,7 @@ static char **copy_argv(int argc, char **argv) {
   return argv_copy;
 }
 
-int Start(int argc, char *argv[]) {
+void SetupUv(int argc, char *argv[]) {
   // Hack aroung with the argv pointer. Used for process.title = "blah".
   argv = uv_setup_args(argc, argv);
 
@@ -2946,12 +2950,41 @@ int Start(int argc, char *argv[]) {
   // Use copy here as to not modify the original argv:
   Init(argc, argv_copy);
 
+  // Clean up the copy:
+  free(argv_copy);
+}
+
+void SetupContext(int argc, char *argv[], v8::Handle<v8::Object> global) {
+  HandleScope scope;
+
+  process_symbol = NODE_PSYMBOL("process");
+  domain_symbol = NODE_PSYMBOL("domain");
+
+  // Use original argv, as we're just copying values out of it.
+  SetupProcessObject(argc, argv);
+  v8_typed_array::AttachBindings(global);
+
+  // Create all the objects, load modules, do everything.
+  // so your next reading stop should be node::Load()!
+  Load(process);
+
+  // ensure the main module is called early. It should not block
+  Tick();
+}
+
+void Shutdown() {
+  EmitExit(process);
+  RunAtExit();
+}
+
+int Start(int argc, char *argv[]) {
+  SetupUv(argc, argv);
+
   V8::Initialize();
   {
     Locker locker;
     HandleScope handle_scope;
 
-    // Create the one and only Context.
     Persistent<Context> context = Context::New();
     Context::Scope context_scope(context);
 
@@ -2986,11 +3019,7 @@ int Start(int argc, char *argv[]) {
   V8::Dispose();
 #endif  // NDEBUG
 
-  // Clean up the copy:
-  free(argv_copy);
-
   return 0;
 }
-
 
 }  // namespace node

@@ -3,10 +3,14 @@
 # found in the LICENSE file.
 
 {
+  'variables': {
+    'openssl_use_asm%': 'false',
+  },
   'targets': [
     {
       'target_name': 'openssl',
       'type': '<(library)',
+      'toolsets': ['host', 'target'],
       'defines': [
         'L_ENDIAN',
         'OPENSSL_THREADS',
@@ -611,7 +615,7 @@
         'openssl/engines/e_ubsec.c'
       ],
       'conditions': [
-        ['target_arch!="ia32" and target_arch!="x64"', {
+        ['openssl_use_asm=="false"', {
           # Disable asm
           'defines': [
             'OPENSSL_NO_ASM'

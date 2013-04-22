@@ -6,12 +6,14 @@
   'variables': {
     'is_clang': 0,
     'gcc_version': 0,
+    'openssl_use_asm%': 'false',
   },
 
   'targets': [
     {
       'target_name': 'openssl',
-      'type': '<(library)',
+      'type': 'static_library',
+      'toolsets': ['host', 'target'],
       'defines': [
         # No clue what these are for.
         'L_ENDIAN',
@@ -663,7 +665,7 @@
         ['exclude', 'store/.*$']
       ],
       'conditions': [
-        ['target_arch!="ia32" and target_arch!="x64"', {
+        ['openssl_use_asm=="false"', {
           # Disable asm
           'defines': [
             'OPENSSL_NO_ASM'

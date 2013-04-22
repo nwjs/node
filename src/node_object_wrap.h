@@ -46,6 +46,7 @@ class NODE_EXTERN ObjectWrap {
 
   virtual ~ObjectWrap ( ) {
     if (!handle_.IsEmpty()) {
+      v8::HandleScope scope;
       assert(handle_.IsNearDeath());
       handle_.ClearWeak();
       handle_->SetPointerInInternalField(0, 0);
@@ -62,7 +63,9 @@ class NODE_EXTERN ObjectWrap {
     return static_cast<T*>(handle->GetPointerFromInternalField(0));
   }
 
-
+#ifdef WIN32
+#pragma warning(disable:4251)
+#endif
   v8::Persistent<v8::Object> handle_; // ro
 
  protected:

@@ -479,7 +479,7 @@
     return e;
   }
 
-  function createWritableDummyStream() {
+  function createWritableDummyStream(fd) {
     var DummyStream = NativeModule.require('dummystream');
     stream = new DummyStream();
     stream.fd = fd;
@@ -558,7 +558,7 @@
     process.__defineGetter__('stdout', function() {
       if (stdout) return stdout;
       if (process.platform === 'win32')
-        stdout = createWritableDummyStream();
+        stdout = createWritableDummyStream(1);
       else
         stdout = createWritableStdioStream(1);
       stdout.destroy = stdout.destroySoon = function(er) {
@@ -576,7 +576,7 @@
     process.__defineGetter__('stderr', function() {
       if (stderr) return stderr;
       if (process.platform === 'win32')
-        stderr = createWritableDummyStream();
+        stderr = createWritableDummyStream(2);
       else
         stderr = createWritableStdioStream(2);
       stderr.destroy = stderr.destroySoon = function(er) {

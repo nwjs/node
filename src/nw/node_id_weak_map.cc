@@ -44,7 +44,7 @@ class IDWeakMap : node::ObjectWrap {
 
   void Erase(int key);
 
-  static void WeakCallback(v8::Persistent<v8::Value> value, void *data);
+  static void WeakCallback(v8::Isolate* isolate, v8::Persistent<v8::Value> value, void *data);
 
   static v8::Persistent<v8::Function> constructor_;
 
@@ -111,7 +111,7 @@ v8::Handle<v8::Value> IDWeakMap::Set(const v8::Arguments& args) {
   v8::Persistent<v8::Value> value = v8::Persistent<v8::Value>::New(args[1]);
   value->ToObject()->SetHiddenValue(
       v8::String::New("IDWeakMapKey"), v8::Integer::New(key));
-  value.MakeWeak(obj, WeakCallback);
+  value.MakeWeak(v8::Isolate::GetCurrent(), obj, WeakCallback);
   obj->map_[key] = value;
 
   return v8::Undefined();
@@ -175,14 +175,14 @@ IDWeakMap::~IDWeakMap() {
 
 void IDWeakMap::Erase(int key) {
   v8::Persistent<v8::Value> value = map_[key];
-  value.ClearWeak();
+  value.ClearWeak(v8::Isolate::GetCurrent());
   value.Dispose();
   value.Clear();
   map_.erase(key);
 }
 
 // static
-void IDWeakMap::WeakCallback(v8::Persistent<v8::Value> value, void *data) {
+void IDWeakMap::WeakCallback(v8::Isolate* isolate, v8::Persistent<v8::Value> value, void *data) {
   v8::HandleScope scope;
 
   IDWeakMap* obj = static_cast<IDWeakMap*>(data);

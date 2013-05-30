@@ -29,20 +29,21 @@ void ObjectLifeMonitor::BindTo(v8::Handle<v8::Object> target,
 
   ObjectLifeMonitor* olm = new ObjectLifeMonitor();
   olm->handle_ = v8::Persistent<v8::Object>::New(target);
-  olm->handle_.MakeWeak(olm, WeakCallback);
+  olm->handle_.MakeWeak(v8::Isolate::GetCurrent(), olm, WeakCallback);
 }
 
 ObjectLifeMonitor::ObjectLifeMonitor() {
 }
 
 ObjectLifeMonitor::~ObjectLifeMonitor() {
-  handle_.ClearWeak();
+  handle_.ClearWeak(v8::Isolate::GetCurrent());
   handle_.Dispose();
   handle_.Clear();
 }
 
 // static
-void ObjectLifeMonitor::WeakCallback(v8::Persistent<v8::Value> value,
+void ObjectLifeMonitor::WeakCallback(v8::Isolate* isolate,
+                                     v8::Persistent<v8::Value> value,
                                      void *data) {
   // destructor.call(object, object);
   {

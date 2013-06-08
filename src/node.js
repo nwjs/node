@@ -783,6 +783,8 @@
     // Make __nwObjectsRegistry able to handle events.
     global.__nwObjectsRegistry.handleEvent = function(object_id, ev, args) {
       var object = this.get(object_id);
+      if (object === null)
+        return;
       args.splice(0, 0, ev);
       object.handleEvent.apply(object, args);
     }

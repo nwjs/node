@@ -119,17 +119,17 @@ typedef struct seed_key_st {
 #ifdef OPENSSL_FIPS
 void private_SEED_set_key(const unsigned char rawkey[SEED_KEY_LENGTH], SEED_KEY_SCHEDULE *ks);
 #endif
-void SEED_set_key(const unsigned char rawkey[SEED_KEY_LENGTH], SEED_KEY_SCHEDULE *ks);
+void OpensslSEED_set_key(const unsigned char rawkey[SEED_KEY_LENGTH], SEED_KEY_SCHEDULE *ks);
 
-void SEED_encrypt(const unsigned char s[SEED_BLOCK_SIZE], unsigned char d[SEED_BLOCK_SIZE], const SEED_KEY_SCHEDULE *ks);
-void SEED_decrypt(const unsigned char s[SEED_BLOCK_SIZE], unsigned char d[SEED_BLOCK_SIZE], const SEED_KEY_SCHEDULE *ks);
+void OpensslSEED_encrypt(const unsigned char s[SEED_BLOCK_SIZE], unsigned char d[SEED_BLOCK_SIZE], const SEED_KEY_SCHEDULE *ks);
+void OpensslSEED_decrypt(const unsigned char s[SEED_BLOCK_SIZE], unsigned char d[SEED_BLOCK_SIZE], const SEED_KEY_SCHEDULE *ks);
 
-void SEED_ecb_encrypt(const unsigned char *in, unsigned char *out, const SEED_KEY_SCHEDULE *ks, int enc);
-void SEED_cbc_encrypt(const unsigned char *in, unsigned char *out,
+void OpensslSEED_ecb_encrypt(const unsigned char *in, unsigned char *out, const SEED_KEY_SCHEDULE *ks, int enc);
+void OpensslSEED_cbc_encrypt(const unsigned char *in, unsigned char *out,
         size_t len, const SEED_KEY_SCHEDULE *ks, unsigned char ivec[SEED_BLOCK_SIZE], int enc);
-void SEED_cfb128_encrypt(const unsigned char *in, unsigned char *out,
+void OpensslSEED_cfb128_encrypt(const unsigned char *in, unsigned char *out,
         size_t len, const SEED_KEY_SCHEDULE *ks, unsigned char ivec[SEED_BLOCK_SIZE], int *num, int enc);
-void SEED_ofb128_encrypt(const unsigned char *in, unsigned char *out,
+void OpensslSEED_ofb128_encrypt(const unsigned char *in, unsigned char *out,
         size_t len, const SEED_KEY_SCHEDULE *ks, unsigned char ivec[SEED_BLOCK_SIZE], int *num);
 
 #ifdef  __cplusplus

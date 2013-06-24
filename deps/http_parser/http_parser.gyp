@@ -49,6 +49,7 @@
     {
       'target_name': 'http_parser',
       'type': 'static_library',
+      'toolsets': ['host', 'target'],
       'include_dirs': [ '.' ],
       'direct_dependent_settings': {
         'include_dirs': [ '.' ],

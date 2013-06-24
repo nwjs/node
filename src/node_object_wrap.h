@@ -46,8 +46,9 @@ class NODE_EXTERN ObjectWrap {
 
   virtual ~ObjectWrap ( ) {
     if (!handle_.IsEmpty()) {
+      v8::HandleScope scope;
       assert(handle_.IsNearDeath());
-      handle_.ClearWeak();
+      handle_.ClearWeak(v8::Isolate::GetCurrent());
       handle_->SetPointerInInternalField(0, 0);
       handle_.Dispose();
       handle_.Clear();
@@ -62,7 +63,9 @@ class NODE_EXTERN ObjectWrap {
     return static_cast<T*>(handle->GetPointerFromInternalField(0));
   }
 
-
+#ifdef WIN32
+#pragma warning(disable:4251)
+#endif
   v8::Persistent<v8::Object> handle_; // ro
 
  protected:
@@ -76,7 +79,7 @@ class NODE_EXTERN ObjectWrap {
 
 
   inline void MakeWeak (void) {
-    handle_.MakeWeak(this, WeakCallback);
+    handle_.MakeWeak(v8::Isolate::GetCurrent(), this, WeakCallback);
     handle_.MarkIndependent();
   }
 
@@ -87,7 +90,7 @@ class NODE_EXTERN ObjectWrap {
   virtual void Ref() {
     assert(!handle_.IsEmpty());
     refs_++;
-    handle_.ClearWeak();
+    handle_.ClearWeak(v8::Isolate::GetCurrent());
   }
 
   /* Unref() marks an object as detached from the event loop.  This is its
@@ -111,7 +114,7 @@ class NODE_EXTERN ObjectWrap {
 
 
  private:
-  static void WeakCallback (v8::Persistent<v8::Value> value, void *data) {
+  static void WeakCallback (v8::Isolate* isolate, v8::Persistent<v8::Value> value, void *data) {
     v8::HandleScope scope;
 
     ObjectWrap *obj = static_cast<ObjectWrap*>(data);

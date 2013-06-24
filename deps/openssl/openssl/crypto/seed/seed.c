@@ -197,7 +197,7 @@ static const seed_word KC[] = {
 	KC0,	KC1,	KC2,	KC3,	KC4,	KC5,	KC6,	KC7,
 	KC8,	KC9,	KC10,	KC11,	KC12,	KC13,	KC14,	KC15	};
 #endif
-void SEED_set_key(const unsigned char rawkey[SEED_KEY_LENGTH], SEED_KEY_SCHEDULE *ks)
+void OpensslSEED_set_key(const unsigned char rawkey[SEED_KEY_LENGTH], SEED_KEY_SCHEDULE *ks)
 #ifdef OPENSSL_FIPS
 	{
 	fips_cipher_abort(SEED);
@@ -246,7 +246,7 @@ void private_SEED_set_key(const unsigned char rawkey[SEED_KEY_LENGTH], SEED_KEY_
 #endif
 }
 
-void SEED_encrypt(const unsigned char s[SEED_BLOCK_SIZE], unsigned char d[SEED_BLOCK_SIZE], const SEED_KEY_SCHEDULE *ks)
+void OpensslSEED_encrypt(const unsigned char s[SEED_BLOCK_SIZE], unsigned char d[SEED_BLOCK_SIZE], const SEED_KEY_SCHEDULE *ks)
 {
 	seed_word x1, x2, x3, x4;
 	seed_word t0, t1;
@@ -289,7 +289,7 @@ void SEED_encrypt(const unsigned char s[SEED_BLOCK_SIZE], unsigned char d[SEED_B
 	word2char(x2, d+12);
 }
 
-void SEED_decrypt(const unsigned char s[SEED_BLOCK_SIZE], unsigned char d[SEED_BLOCK_SIZE], const SEED_KEY_SCHEDULE *ks)
+void OpensslSEED_decrypt(const unsigned char s[SEED_BLOCK_SIZE], unsigned char d[SEED_BLOCK_SIZE], const SEED_KEY_SCHEDULE *ks)
 {
 	seed_word x1, x2, x3, x4;
 	seed_word t0, t1;

@@ -121,6 +121,9 @@ using v8::kExternalUnsignedIntArray;
 QUEUE handle_wrap_queue = { &handle_wrap_queue, &handle_wrap_queue };
 QUEUE req_wrap_queue = { &req_wrap_queue, &req_wrap_queue };
 
+// declared in req_wrap.h
+Persistent<Context> g_context;
+
 static bool print_eval = false;
 static bool force_repl = false;
 static bool trace_deprecation = false;
@@ -142,6 +145,7 @@ static uv_async_t dispatch_debug_messages_async;
 // Declared in node_internals.h
 Isolate* node_isolate = NULL;
 
+static Environment* g_env = NULL;
 
 class ArrayBufferAllocator : public ArrayBuffer::Allocator {
  public:
@@ -2458,9 +2462,9 @@ void SetupProcessObject(Environment* env,
 
   NODE_SET_METHOD(process, "_kill", Kill);
 
-  NODE_SET_METHOD(process, "_debugProcess", DebugProcess);
-  NODE_SET_METHOD(process, "_debugPause", DebugPause);
-  NODE_SET_METHOD(process, "_debugEnd", DebugEnd);
+  // NODE_SET_METHOD(process, "_debugProcess", DebugProcess);
+  // NODE_SET_METHOD(process, "_debugPause", DebugPause);
+  // NODE_SET_METHOD(process, "_debugEnd", DebugEnd);
 
   NODE_SET_METHOD(process, "hrtime", Hrtime);
 
@@ -3028,6 +3032,7 @@ void Init(int* argc,
   // Initialize prog_start_time to get relative uptime.
   uv_uptime(&prog_start_time);
 
+#if 0
   // Make inherited handles noninheritable.
   uv_disable_stdio_inheritance();
 
@@ -3073,6 +3078,7 @@ void Init(int* argc,
     const char expose_debug_as[] = "--expose_debug_as=v8debug";
     V8::SetFlagsFromString(expose_debug_as, sizeof(expose_debug_as) - 1);
   }
+#endif
 
   V8::SetArrayBufferAllocator(&ArrayBufferAllocator::the_singleton);
 
@@ -3112,12 +3118,14 @@ void Init(int* argc,
   V8::SetFatalErrorHandler(node::OnFatalError);
   V8::AddMessageListener(OnMessage);
 
+#if 0
   // If the --debug flag was specified then initialize the debug thread.
   if (use_debug_agent) {
     EnableDebug(debug_wait_connect);
   } else {
     RegisterDebugSignalHandler();
   }
+#endif
 }
 
 
@@ -3272,5 +3280,79 @@ int Start(int argc, char** argv) {
   return 0;
 }
 
+// copied beginning of Start() until v8::Initialize()
+int SetupUv(int argc, char** argv) {
+#if !defined(_WIN32)
+  // Try hard not to lose SIGUSR1 signals during the bootstrap process.
+  InstallEarlyDebugSignalHandler();
+#endif
+
+  assert(argc > 0);
+
+  // Hack around with the argv pointer. Used for process.title = "blah".
+  argv = uv_setup_args(argc, argv);
+
+  // This needs to run *before* V8::Initialize().  The const_cast is not
+  // optional, in case you're wondering.
+  int exec_argc;
+  const char** exec_argv;
+  Init(&argc, const_cast<const char**>(argv), &exec_argc, &exec_argv);
+
+#if HAVE_OPENSSL
+  // V8 on Windows doesn't have a good source of entropy. Seed it from
+  // OpenSSL's pool.
+  V8::SetEntropySource(crypto::EntropySource);
+#endif
+
+}
+
+void SetupContext(int argc, char *argv[], v8::Handle<v8::Context> context) {
+  Isolate* isolate == Isolate::GetCurrent();
+  HandleScope handle_scope(isolate);
+
+  Context::Scope context_scope(context);
+  Environment* env = Environment::New(context);
+
+  uv_check_init(env->event_loop(), env->immediate_check_handle());
+  uv_unref(
+      reinterpret_cast<uv_handle_t*>(env->immediate_check_handle()));
+  uv_idle_init(env->event_loop(), env->immediate_idle_handle());
+
+  // Inform V8's CPU profiler when we're idle.  The profiler is sampling-based
+  // but not all samples are created equal; mark the wall clock time spent in
+  // epoll_wait() and friends so profiling tools can filter it out.  The samples
+  // still end up in v8.log but with state=IDLE rather than state=EXTERNAL.
+  // TODO(bnoordhuis) Depends on a libuv implementation detail that we should
+  // probably fortify in the API contract, namely that the last started prepare
+  // or check watcher runs first.  It's not 100% foolproof; if an add-on starts
+  // a prepare or check watcher after us, any samples attributed to its callback
+  // will be recorded with state=IDLE.
+  uv_prepare_init(env->event_loop(), env->idle_prepare_handle());
+  uv_check_init(env->event_loop(), env->idle_check_handle());
+  uv_unref(reinterpret_cast<uv_handle_t*>(env->idle_prepare_handle()));
+  uv_unref(reinterpret_cast<uv_handle_t*>(env->idle_check_handle()));
+
+  if (v8_is_profiling) {
+    StartProfilerIdleNotifier(env);
+  }
+
+  Local<FunctionTemplate> process_template = FunctionTemplate::New();
+  process_template->SetClassName(FIXED_ONE_BYTE_STRING(isolate, "process"));
+
+  Local<Object> process_object = process_template->GetFunction()->NewInstance();
+  env->set_process_object(process_object);
+
+  SetupProcessObject(env, argc, argv, argc, argv);
+  Load(env);
+
+  g_env = env;
+}
+
+void Shutdown() {
+  EmitExit(g_env);
+  RunAtExit(g_env);
+  g_env->Dispose();
+  g_env = NULL;
+}
 
 }  // namespace node

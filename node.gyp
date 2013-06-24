@@ -30,6 +30,7 @@
       'lib/dgram.js',
       'lib/dns.js',
       'lib/domain.js',
+      'lib/dummystream.js',
       'lib/events.js',
       'lib/freelist.js',
       'lib/fs.js',
@@ -73,18 +74,26 @@
   'targets': [
     {
       'target_name': 'node',
-      'type': 'executable',
+      'type': 'static_library',
+      'toolsets': ['host', 'target'],
 
       'dependencies': [
         'node_js2c#host',
       ],
 
       'include_dirs': [
+        '../..',
         'src',
         'tools/msvs/genfiles',
         'deps/uv/src/ares',
         '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
       ],
+
+      'direct_dependent_settings': {
+        'include_dirs': [
+          'deps/uv/include',
+        ],
+      },
 
       'sources': [
         'src/fs_event_wrap.cc',
@@ -103,6 +112,9 @@
         'src/node_stat_watcher.cc',
         'src/node_watchdog.cc',
         'src/node_zlib.cc',
+        'src/nw/node_id_weak_map.cc',
+        'src/nw/node_v8_util.cc',
+        'src/nw/object_life_monitor.cc',
         'src/pipe_wrap.cc',
         'src/signal_wrap.cc',
         'src/smalloc.cc',
@@ -135,6 +147,7 @@
         'src/node_version.h',
         'src/node_watchdog.h',
         'src/node_wrap.h',
+        'src/nw/object_life_monitor.h',
         'src/pipe_wrap.h',
         'src/queue.h',
         'src/smalloc.h',
@@ -177,7 +190,7 @@
           ],
           'conditions': [
             [ 'node_shared_openssl=="false"', {
-              'dependencies': [ './deps/openssl/openssl.gyp:openssl' ],
+              'dependencies': [ 'deps/openssl/openssl.gyp:openssl' ],
             }]]
         }, {
           'defines': [ 'HAVE_OPENSSL=0' ]
@@ -257,11 +270,11 @@
             'deps/v8/include/v8.h',
             'deps/v8/include/v8-debug.h',
           ],
-          'dependencies': [ 'deps/v8/tools/gyp/v8.gyp:v8' ],
+          'dependencies': [ '../../v8/tools/gyp/v8.gyp:v8' ],
         }],
 
         [ 'node_shared_zlib=="false"', {
-          'dependencies': [ 'deps/zlib/zlib.gyp:zlib' ],
+          'dependencies': [ '../zlib/zlib.gyp:zlib' ],
         }],
 
         [ 'node_shared_http_parser=="false"', {

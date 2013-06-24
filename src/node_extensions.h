@@ -52,6 +52,8 @@
     ITEM(node_fs_event_wrap)                                                  \
     ITEM(node_signal_wrap)                                                    \
                                                                               \
+    ITEM(node_id_weak_map)                                                    \
+    ITEM(node_v8_util)                                                        \
     END                                                                       \
 
 #endif  // SRC_NODE_EXTENSIONS_H_

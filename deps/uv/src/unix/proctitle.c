@@ -35,6 +35,12 @@ static struct {
 
 
 char** uv_setup_args(int argc, char** argv) {
+  if (argc > 0) {
+    process_title.str = argv[0];
+    process_title.len = strlen(argv[0]);
+  }
+  return argv;
+#if 0
   char** new_argv;
   size_t size;
   char* s;
@@ -71,6 +77,7 @@ char** uv_setup_args(int argc, char** argv) {
   new_argv[i] = NULL;
 
   return new_argv;
+#endif
 }
 
 

@@ -1,6 +1,7 @@
 {
   'variables': {
     'uv_use_dtrace%': 'false',
+    'library%': 'static_library',
     # uv_parent_path is the relative path to libuv in the parent project
     # this is only relevant when dtrace is enabled and libuv is a child project
     # as it's necessary to correctly locate the object files for post
@@ -31,7 +32,8 @@
   'targets': [
     {
       'target_name': 'libuv',
-      'type': '<(library)',
+      'toolsets': ['host', 'target'],
+      'type': 'static_library',
       'include_dirs': [
         'include',
         'src/',

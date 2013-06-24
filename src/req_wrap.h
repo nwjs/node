@@ -33,6 +33,7 @@ namespace node {
 
 // defined in node.cc
 extern QUEUE req_wrap_queue;
+extern v8::Persistent<v8::Context> g_context;
 
 template <typename T>
 class ReqWrap : public AsyncWrap {

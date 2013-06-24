@@ -16,6 +16,7 @@
     'node_use_openssl%': 'true',
     'node_use_systemtap%': 'false',
     'node_shared_openssl%': 'false',
+    'node_tag%': '',
     'library_files': [
       'src/node.js',
       'lib/_debugger.js',
@@ -30,6 +31,7 @@
       'lib/dgram.js',
       'lib/dns.js',
       'lib/domain.js',
+      'lib/dummystream.js',
       'lib/events.js',
       'lib/freelist.js',
       'lib/fs.js',
@@ -64,18 +66,26 @@
   'targets': [
     {
       'target_name': 'node',
-      'type': 'executable',
+      'type': 'static_library',
+      'toolsets': ['host', 'target'],
 
       'dependencies': [
         'node_js2c#host',
       ],
 
       'include_dirs': [
+        '../..',
         'src',
         'tools/msvs/genfiles',
         'deps/uv/src/ares',
         '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
       ],
+
+      'direct_dependent_settings': {
+        'include_dirs': [
+          'deps/uv/include',
+        ],
+      },
 
       'sources': [
         'src/fs_event_wrap.cc',
@@ -94,6 +104,9 @@
         'src/node_stat_watcher.cc',
         'src/node_string.cc',
         'src/node_zlib.cc',
+        'src/nw/node_id_weak_map.cc',
+        'src/nw/node_v8_util.cc',
+        'src/nw/object_life_monitor.cc',
         'src/pipe_wrap.cc',
         'src/signal_wrap.cc',
         'src/string_bytes.cc',
@@ -120,6 +133,7 @@
         'src/node_script.h',
         'src/node_string.h',
         'src/node_version.h',
+        'src/nw/object_life_monitor.h',
         'src/ngx-queue.h',
         'src/pipe_wrap.h',
         'src/tty_wrap.h',
@@ -152,7 +166,7 @@
           'sources': [ 'src/node_crypto.cc' ],
           'conditions': [
             [ 'node_shared_openssl=="false"', {
-              'dependencies': [ './deps/openssl/openssl.gyp:openssl' ],
+              'dependencies': [ 'deps/openssl/openssl.gyp:openssl' ],
             }]]
         }, {
           'defines': [ 'HAVE_OPENSSL=0' ]
@@ -227,11 +241,11 @@
             'deps/v8/include/v8.h',
             'deps/v8/include/v8-debug.h',
           ],
-          'dependencies': [ 'deps/v8/tools/gyp/v8.gyp:v8' ],
+          'dependencies': [ '../../v8/tools/gyp/v8.gyp:v8' ],
         }],
 
         [ 'node_shared_zlib=="false"', {
-          'dependencies': [ 'deps/zlib/zlib.gyp:zlib' ],
+          'dependencies': [ '../zlib/zlib.gyp:zlib' ],
         }],
 
         [ 'node_shared_http_parser=="false"', {
@@ -369,7 +383,7 @@
             }]
           ],
               'action': [
-                '<(python)',
+                'python',
                 'tools/js2c.py',
                 '<@(_outputs)',
                 '<@(_inputs)',

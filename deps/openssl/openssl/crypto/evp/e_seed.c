@@ -69,14 +69,14 @@ typedef struct
 	SEED_KEY_SCHEDULE ks;
 	} EVP_SEED_KEY;
 
-IMPLEMENT_BLOCK_CIPHER(seed, ks, SEED, EVP_SEED_KEY, NID_seed,
+IMPLEMENT_BLOCK_CIPHER(seed, ks, OpensslSEED, EVP_SEED_KEY, NID_seed,
                        16, 16, 16, 128,
                        0, seed_init_key, 0, 0, 0, 0)
 
 static int seed_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,
                          const unsigned char *iv, int enc)
 	{
-	SEED_set_key(key, ctx->cipher_data);
+	OpensslSEED_set_key(key, ctx->cipher_data);
 	return 1;
 	}
 

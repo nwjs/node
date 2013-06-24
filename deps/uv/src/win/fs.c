@@ -28,6 +28,7 @@
 #include <limits.h>
 #include <sys/stat.h>
 #include <sys/utime.h>
+#include <stdlib.h>
 #include <stdio.h>
 
 #include "uv.h"

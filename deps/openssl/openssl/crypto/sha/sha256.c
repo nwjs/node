@@ -45,7 +45,7 @@ unsigned char *SHA224(const unsigned char *d, size_t n, unsigned char *md)
 
 	if (md == NULL) md=m;
 	SHA224_Init(&c);
-	SHA256_Update(&c,d,n);
+	OpensslSHA256_Update(&c,d,n);
 	SHA256_Final(md,&c);
 	OPENSSL_cleanse(&c,sizeof(c));
 	return(md);
@@ -58,14 +58,14 @@ unsigned char *SHA256(const unsigned char *d, size_t n, unsigned char *md)
 
 	if (md == NULL) md=m;
 	SHA256_Init(&c);
-	SHA256_Update(&c,d,n);
+	OpensslSHA256_Update(&c,d,n);
 	SHA256_Final(md,&c);
 	OPENSSL_cleanse(&c,sizeof(c));
 	return(md);
 	}
 
-int SHA224_Update(SHA256_CTX *c, const void *data, size_t len)
-{   return SHA256_Update (c,data,len);   }
+int OpensslSHA224_Update(SHA256_CTX *c, const void *data, size_t len)
+{   return OpensslSHA256_Update (c,data,len);   }
 int SHA224_Final (unsigned char *md, SHA256_CTX *c)
 {   return SHA256_Final (md,c);   }
 
@@ -103,7 +103,7 @@ int SHA224_Final (unsigned char *md, SHA256_CTX *c)
 	}				\
 	} while (0)
 
-#define	HASH_UPDATE		SHA256_Update
+#define	HASH_UPDATE		OpensslSHA256_Update
 #define	HASH_TRANSFORM		SHA256_Transform
 #define	HASH_FINAL		SHA256_Final
 #define	HASH_BLOCK_DATA_ORDER	sha256_block_data_order

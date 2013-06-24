@@ -65,7 +65,7 @@
 #include <openssl/fips.h>
 #endif
 
-int HMAC_Init_ex(HMAC_CTX *ctx, const void *key, int len,
+int OpensslHMAC_Init_ex(HMAC_CTX *ctx, const void *key, int len,
 		  const EVP_MD *md, ENGINE *impl)
 	{
 	int i,j,reset=0;
@@ -146,14 +146,14 @@ int HMAC_Init_ex(HMAC_CTX *ctx, const void *key, int len,
 	return 0;
 	}
 
-int HMAC_Init(HMAC_CTX *ctx, const void *key, int len, const EVP_MD *md)
+int OpensslHMAC_Init(HMAC_CTX *ctx, const void *key, int len, const EVP_MD *md)
 	{
 	if(key && md)
 	    HMAC_CTX_init(ctx);
-	return HMAC_Init_ex(ctx,key,len,md, NULL);
+	return OpensslHMAC_Init_ex(ctx,key,len,md, NULL);
 	}
 
-int HMAC_Update(HMAC_CTX *ctx, const unsigned char *data, size_t len)
+int OpensslHMAC_Update(HMAC_CTX *ctx, const unsigned char *data, size_t len)
 	{
 #ifdef OPENSSL_FIPS
 	if (FIPS_mode() && !ctx->i_ctx.engine)
@@ -231,9 +231,9 @@ unsigned char *HMAC(const EVP_MD *evp_md, const void *key, int key_len,
 
 	if (md == NULL) md=m;
 	HMAC_CTX_init(&c);
-	if (!HMAC_Init(&c,key,key_len,evp_md))
+	if (!OpensslHMAC_Init(&c,key,key_len,evp_md))
 		goto err;
-	if (!HMAC_Update(&c,d,n))
+	if (!OpensslHMAC_Update(&c,d,n))
 		goto err;
 	if (!HMAC_Final(&c,md,md_len))
 		goto err;

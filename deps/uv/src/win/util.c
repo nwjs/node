@@ -24,6 +24,7 @@
 #include <limits.h>
 #include <malloc.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <wchar.h>
@@ -34,7 +35,8 @@
 #include <iphlpapi.h>
 #include <psapi.h>
 #include <tlhelp32.h>
-
+#include <WTypes.h>
+#include <WinPerf.h>
 
 /*
  * Max title length; the only thing MSDN tells us about the maximum length

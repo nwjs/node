@@ -22,6 +22,8 @@
 #ifndef V8_TYPED_ARRAY_H_
 #define V8_TYPED_ARRAY_H_
 
+#define V8_USE_UNSAFE_HANDLES
+
 #include "v8.h"
 
 namespace v8_typed_array {

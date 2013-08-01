@@ -43,13 +43,13 @@ ObjectLifeMonitor::~ObjectLifeMonitor() {
 
 // static
 void ObjectLifeMonitor::WeakCallback(v8::Isolate* isolate,
-                                     v8::Persistent<v8::Value> value,
-                                     void *data) {
+                                     v8::Persistent<v8::Object>* value,
+                                     ObjectLifeMonitor *data) {
   // destructor.call(object, object);
   {
     v8::HandleScope scope;
 
-    v8::Local<v8::Object> obj = value->ToObject();
+    v8::Local<v8::Object> obj = (*value)->ToObject();
     v8::Local<v8::Value> args[] = { obj };
     v8::Local<v8::Function>::Cast(obj->GetHiddenValue(
         v8::String::New("destructor")))->Call(obj, 1, args);

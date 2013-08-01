@@ -114,13 +114,13 @@ class NODE_EXTERN ObjectWrap {
 
 
  private:
-  static void WeakCallback (v8::Isolate* isolate, v8::Persistent<v8::Value> value, void *data) {
+  static void WeakCallback (v8::Isolate* isolate, v8::Persistent<v8::Object>* value, ObjectWrap* data) {
     v8::HandleScope scope;
 
     ObjectWrap *obj = static_cast<ObjectWrap*>(data);
-    assert(value == obj->handle_);
+    assert(*value == obj->handle_);
     assert(!obj->refs_);
-    assert(value.IsNearDeath());
+    assert(value->IsNearDeath());
     delete obj;
   }
 };

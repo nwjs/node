@@ -22,6 +22,8 @@
 #ifndef NODE_HTTP_PARSER
 #define NODE_HTTP_PARSER
 
+#define V8_USE_UNSAFE_HANDLES
+
 #include "v8.h"
 
 #include "http_parser.h"

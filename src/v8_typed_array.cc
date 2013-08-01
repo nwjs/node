@@ -69,8 +69,8 @@ class ArrayBuffer {
   }
 
  private:
-  static void WeakCallback(v8::Persistent<v8::Value> value, void* data) {
-    v8::Object* obj = v8::Object::Cast(*value);
+  static void WeakCallback(v8::Isolate* isolate, v8::Persistent<v8::Object>* value, void* data) {
+    v8::Object* obj = v8::Object::Cast(**value);
 
     void* ptr = obj->GetIndexedPropertiesExternalArrayData();
     int element_size = v8_typed_array::SizeOfArrayElementForType(
@@ -80,8 +80,8 @@ class ArrayBuffer {
 
     v8::V8::AdjustAmountOfExternalAllocatedMemory(-size);
 
-    value.ClearWeak();
-    value.Dispose();
+    value->ClearWeak();
+    value->Dispose();
 
     free(ptr);
   }
@@ -125,7 +125,7 @@ class ArrayBuffer {
 
     v8::Persistent<v8::Object> persistent =
         v8::Persistent<v8::Object>::New(args.This());
-    persistent.MakeWeak(NULL, &ArrayBuffer::WeakCallback);
+    persistent.MakeWeak((void*)NULL, &ArrayBuffer::WeakCallback);
 
     return args.This();
   }

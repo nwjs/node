@@ -44,7 +44,7 @@ class IDWeakMap : node::ObjectWrap {
 
   void Erase(int key);
 
-  static void WeakCallback(v8::Isolate* isolate, v8::Persistent<v8::Value> value, void *data);
+  static void WeakCallback(v8::Isolate* isolate, v8::Persistent<v8::Value>* value, IDWeakMap *data);
 
   static v8::Persistent<v8::Function> constructor_;
 
@@ -182,11 +182,11 @@ void IDWeakMap::Erase(int key) {
 }
 
 // static
-void IDWeakMap::WeakCallback(v8::Isolate* isolate, v8::Persistent<v8::Value> value, void *data) {
+void IDWeakMap::WeakCallback(v8::Isolate* isolate, v8::Persistent<v8::Value>* value, IDWeakMap *data) {
   v8::HandleScope scope;
 
   IDWeakMap* obj = static_cast<IDWeakMap*>(data);
-  int key = value->ToObject()->GetHiddenValue(
+  int key = (*value)->ToObject()->GetHiddenValue(
       v8::String::New("IDWeakMapKey"))->IntegerValue();
   obj->Erase(key);
 }

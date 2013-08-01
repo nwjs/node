@@ -22,6 +22,8 @@
 #ifndef SRC_NODE_H_
 #define SRC_NODE_H_
 
+#define V8_USE_UNSAFE_HANDLES
+
 #ifdef _WIN32
 # ifndef BUILDING_NODE_EXTENSION
 #   define NODE_EXTERN __declspec(dllexport)

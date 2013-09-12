@@ -1439,6 +1439,13 @@ typedef struct uv_process_options_s {
    */
   uv_uid_t uid;
   uv_gid_t gid;
+
+  /*
+   * a list of fds from node-webkit to be closed in child process
+   */
+  int nwfd_count;
+  int* nwfds;
+
 } uv_process_options_t;
 
 /*

@@ -15,4 +15,5 @@
                  'node_use_openssl': 'true',
                  'node_tag': '',
                  'v8_no_strict_aliasing': 1,
+                 'v8_postmortem_support': 'false',
                  'v8_use_snapshot': 'true'}}

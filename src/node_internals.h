@@ -38,6 +38,10 @@ namespace node {
 
 // Defined in node.cc
 extern v8::Isolate* node_isolate;
+extern Environment* g_env;
+
+void EmitExit(Environment* env);
+void RunAtExit(Environment* env);
 
 // If persistent.IsWeak() == false, then do not call persistent.Dispose()
 // while the returned Local<T> is still in scope, it will destroy the

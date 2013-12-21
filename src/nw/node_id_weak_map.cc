@@ -20,23 +20,42 @@
 
 #include "node.h"
 
+#include "node_object_wrap.h"
+#include "util.h"
+#include "util-inl.h"
+
 #include <map>
 
 namespace nw {
 
+using v8::Context;
+using v8::FunctionCallbackInfo;
+using v8::FunctionTemplate;
+using v8::Handle;
+using v8::HandleScope;
+using v8::Integer;
+using v8::Local;
+using v8::Number;
+using v8::Object;
+using v8::String;
+using v8::Value;
+
 // Key is int type and Value is weak pointer
-class IDWeakMap : node::ObjectWrap {
+class IDWeakMap : public node::ObjectWrap {
  public:
   static void Init();
-  static v8::Handle<v8::Function> GetContructor();
+  static v8::Local<v8::Function> GetContructor();
   static void AttachBindings(v8::Handle<v8::Object> obj);
 
-  static v8::Handle<v8::Value> New(const v8::Arguments& args);
-  static v8::Handle<v8::Value> Set(const v8::Arguments& args);
-  static v8::Handle<v8::Value> Get(const v8::Arguments& args);
-  static v8::Handle<v8::Value> Has(const v8::Arguments& args);
-  static v8::Handle<v8::Value> Delete(const v8::Arguments& args);
-  static v8::Handle<v8::Value> AllocateId(const v8::Arguments& args);
+  static void New(const FunctionCallbackInfo<Value>& args);
+  static void Set(const FunctionCallbackInfo<Value>& args);
+  static void Get(const FunctionCallbackInfo<Value>& args);
+  static void Has(const FunctionCallbackInfo<Value>& args);
+  static void Delete(const FunctionCallbackInfo<Value>& args);
+  static void AllocateId(const FunctionCallbackInfo<Value>& args);
+  static void Initialize(Handle<Object> target,
+                         Handle<Value> unused,
+                         Handle<Context> context);
 
  private:
   explicit IDWeakMap();
@@ -47,8 +66,10 @@ class IDWeakMap : node::ObjectWrap {
   static void WeakCallback(v8::Isolate* isolate, v8::Persistent<v8::Value>* value, IDWeakMap *data);
 
   static v8::Persistent<v8::Function> constructor_;
+  typedef v8::Persistent<v8::Value, v8::CopyablePersistentTraits<v8::Value> >
+      CopyableValue;
 
-  std::map< int, v8::Persistent<v8::Value> > map_;
+  std::map< int, CopyableValue > map_;
 };
 
 v8::Persistent<v8::Function> IDWeakMap::constructor_;
@@ -69,15 +90,15 @@ void IDWeakMap::Init() {
   tpl->PrototypeTemplate()->Set(v8::String::NewSymbol("allocateId"),
       v8::FunctionTemplate::New(AllocateId)->GetFunction());
 
-  constructor_ = v8::Persistent<v8::Function>::New(tpl->GetFunction());
+  constructor_.Reset(node::node_isolate, tpl->GetFunction());
 }
 
 // static
-v8::Handle<v8::Function> IDWeakMap::GetContructor() {
+v8::Local<v8::Function> IDWeakMap::GetContructor() {
   if (constructor_.IsEmpty())
     Init();
 
-  return constructor_;
+  return node::StrongPersistentToLocal(constructor_);
 }
 
 // static
@@ -88,83 +109,90 @@ void IDWeakMap::AttachBindings(v8::Handle<v8::Object> obj) {
 }
 
 // static
-v8::Handle<v8::Value> IDWeakMap::New(const v8::Arguments& args) {
+void IDWeakMap::New(const FunctionCallbackInfo<Value>& args) {
   IDWeakMap* obj = new IDWeakMap();
   obj->Wrap(args.This());
-  return args.This();
+  args.GetReturnValue().Set(args.This());
 }
 
 // static
-v8::Handle<v8::Value> IDWeakMap::Set(const v8::Arguments& args) {
+void IDWeakMap::Set(const FunctionCallbackInfo<Value>& args) {
   if (args.Length() < 2 || !args[0]->IsNumber() || !args[1]->IsObject()) {
-    return v8::ThrowException(v8::Exception::Error(
+    args.GetIsolate()->ThrowException(v8::Exception::Error(
           v8::String::New("Invalid arguments")));
+    return;
   }
 
   IDWeakMap* obj = ObjectWrap::Unwrap<IDWeakMap>(args.This());
 
   int key = args[0]->IntegerValue();
-  if (!obj->map_[key].IsEmpty())
-    return v8::ThrowException(v8::Exception::Error(
-          v8::String::New("Element already exists")));
 
-  v8::Persistent<v8::Value> value = v8::Persistent<v8::Value>::New(args[1]);
+  if (obj->map_.find(key) != obj->map_.end()) {
+    args.GetIsolate()->ThrowException(v8::Exception::Error(
+          v8::String::New("Element already exists")));
+    return;
+  }
+
+  v8::Persistent<v8::Value> value(node::node_isolate, args[1]);
   value->ToObject()->SetHiddenValue(
       v8::String::New("IDWeakMapKey"), v8::Integer::New(key));
-  value.MakeWeak(v8::Isolate::GetCurrent(), obj, WeakCallback);
+
   obj->map_[key] = value;
-
-  return v8::Undefined();
+  value.MakeWeak(obj, WeakCallback);
+  args.GetReturnValue().Set(v8::Undefined());
 }
 
 // static
-v8::Handle<v8::Value> IDWeakMap::Get(const v8::Arguments& args) {
+void IDWeakMap::Get(const FunctionCallbackInfo<Value>& args) {
   if (args.Length() < 1 || !args[0]->IsNumber()) {
-    return v8::ThrowException(v8::Exception::Error(
+    args.GetIsolate()->ThrowException(v8::Exception::Error(
           v8::String::New("Invalid arguments")));
+    return;
   }
 
   IDWeakMap* obj = ObjectWrap::Unwrap<IDWeakMap>(args.This());
 
   int key = args[0]->IntegerValue();
-  v8::Persistent<v8::Value> value = obj->map_[key];
+  CopyableValue value = obj->map_.at(key);
   if (value.IsEmpty())
-    return v8::Null();
+    args.GetReturnValue().Set(v8::Null());
 
-  return value;
+  args.GetReturnValue().Set(v8::Persistent<v8::Value>(node::node_isolate, value));
 }
 
 // static
-v8::Handle<v8::Value> IDWeakMap::Has(const v8::Arguments& args) {
+void IDWeakMap::Has(const FunctionCallbackInfo<Value>& args) {
   if (args.Length() < 1 || !args[0]->IsNumber()) {
-    return v8::ThrowException(v8::Exception::Error(
+    args.GetIsolate()->ThrowException(v8::Exception::Error(
           v8::String::New("Invalid arguments")));
+    return;
   }
 
   IDWeakMap* obj = ObjectWrap::Unwrap<IDWeakMap>(args.This());
 
   int key = args[0]->IntegerValue();
-  return v8::Boolean::New(!obj->map_[key].IsEmpty());
+  args.GetReturnValue().Set(v8::Boolean::New(!obj->map_[key].IsEmpty()));
 }
 
 // static
-v8::Handle<v8::Value> IDWeakMap::Delete(const v8::Arguments& args) {
+void IDWeakMap::Delete(const FunctionCallbackInfo<Value>& args) {
   if (args.Length() < 1 || !args[0]->IsNumber()) {
-    return v8::ThrowException(v8::Exception::Error(
+    args.GetIsolate()->ThrowException(v8::Exception::Error(
           v8::String::New("Invalid arguments")));
+    return;
   }
 
   IDWeakMap* obj = ObjectWrap::Unwrap<IDWeakMap>(args.This());
 
   int key = args[0]->IntegerValue();
   obj->Erase(key);
-  return v8::Undefined();
+  args.GetReturnValue().Set(v8::Undefined());
 }
 
 // static
-v8::Handle<v8::Value> IDWeakMap::AllocateId(const v8::Arguments& args) {
+void IDWeakMap::AllocateId(const FunctionCallbackInfo<Value>& args) {
   static int next_object_id = 1;
-  return v8::Integer::New(next_object_id++);
+  args.GetReturnValue().Set(v8::Integer::New(next_object_id++));
 }
 
 IDWeakMap::IDWeakMap() {
@@ -174,7 +202,7 @@ IDWeakMap::~IDWeakMap() {
 }
 
 void IDWeakMap::Erase(int key) {
-  v8::Persistent<v8::Value> value = map_[key];
+  CopyableValue& value = map_[key];
   value.ClearWeak(v8::Isolate::GetCurrent());
   value.Dispose();
   value.Clear();
@@ -191,6 +219,14 @@ void IDWeakMap::WeakCallback(v8::Isolate* isolate, v8::Persistent<v8::Value>* va
   obj->Erase(key);
 }
 
+//static
+void IDWeakMap::Initialize(Handle<Object> target,
+                Handle<Value> unused,
+                Handle<Context> context) {
+  // Environment* env = Environment::GetCurrent(context);
+  IDWeakMap::AttachBindings(target);
+}
+
 }  // namespace nw
 
-NODE_MODULE(node_id_weak_map, nw::IDWeakMap::AttachBindings)
+NODE_MODULE_CONTEXT_AWARE(node_id_weak_map, nw::IDWeakMap::Initialize)

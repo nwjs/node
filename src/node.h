@@ -131,8 +131,8 @@ namespace node {
 
 NODE_EXTERN extern bool no_deprecation;
 
-NODE_EXTERN void SetupUv(int argc, char *argv[]);
-NODE_EXTERN void SetupContext(int argc, char *argv[], v8::Handle<v8::Object> global);
+NODE_EXTERN void SetupUv(int argc, char **argv);
+NODE_EXTERN void SetupContext(int argc, char *argv[], v8::Handle<v8::Context> ctx);
 NODE_EXTERN void Shutdown();
 NODE_EXTERN int Start(int argc, char *argv[]);
 

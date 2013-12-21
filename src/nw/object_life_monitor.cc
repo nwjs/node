@@ -28,8 +28,8 @@ void ObjectLifeMonitor::BindTo(v8::Handle<v8::Object> target,
   target->SetHiddenValue(v8::String::New("destructor"), destructor);
 
   ObjectLifeMonitor* olm = new ObjectLifeMonitor();
-  olm->handle_ = v8::Persistent<v8::Object>::New(target);
-  olm->handle_.MakeWeak(v8::Isolate::GetCurrent(), olm, WeakCallback);
+  olm->handle_.Reset(node::node_isolate, target);
+  olm->handle_.MakeWeak(olm, WeakCallback);
 }
 
 ObjectLifeMonitor::ObjectLifeMonitor() {

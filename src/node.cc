@@ -122,7 +122,7 @@ QUEUE handle_wrap_queue = { &handle_wrap_queue, &handle_wrap_queue };
 QUEUE req_wrap_queue = { &req_wrap_queue, &req_wrap_queue };
 
 // declared in req_wrap.h
-Persistent<Context> g_context;
+v8::Persistent<Context> g_context;
 
 static bool print_eval = false;
 static bool force_repl = false;
@@ -145,7 +145,7 @@ static uv_async_t dispatch_debug_messages_async;
 // Declared in node_internals.h
 Isolate* node_isolate = NULL;
 
-static Environment* g_env = NULL;
+Environment* g_env = NULL;
 
 class ArrayBufferAllocator : public ArrayBuffer::Allocator {
  public:
@@ -3080,7 +3080,7 @@ void Init(int* argc,
   }
 #endif
 
-  V8::SetArrayBufferAllocator(&ArrayBufferAllocator::the_singleton);
+  // V8::SetArrayBufferAllocator(&ArrayBufferAllocator::the_singleton);
 
   // Fetch a reference to the main isolate, so we have a reference to it
   // even when we need it to access it from another (debugger) thread.
@@ -3281,7 +3281,7 @@ int Start(int argc, char** argv) {
 }
 
 // copied beginning of Start() until v8::Initialize()
-int SetupUv(int argc, char** argv) {
+void SetupUv(int argc, char** argv) {
 #if !defined(_WIN32)
   // Try hard not to lose SIGUSR1 signals during the bootstrap process.
   InstallEarlyDebugSignalHandler();
@@ -3307,7 +3307,7 @@ int SetupUv(int argc, char** argv) {
 }
 
 void SetupContext(int argc, char *argv[], v8::Handle<v8::Context> context) {
-  Isolate* isolate == Isolate::GetCurrent();
+  Isolate* isolate = Isolate::GetCurrent();
   HandleScope handle_scope(isolate);
 
   Context::Scope context_scope(context);

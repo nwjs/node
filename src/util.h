@@ -39,9 +39,11 @@ namespace node {
 #define FIXED_ONE_BYTE_STRING(isolate, string)                                \
   (node::OneByteString((isolate), (string), sizeof(string) - 1))
 
+#ifndef DISALLOW_COPY_AND_ASSIGN
 #define DISALLOW_COPY_AND_ASSIGN(TypeName)                                    \
   void operator=(const TypeName&);                                            \
   TypeName(const TypeName&)
+#endif
 
 #if defined(NDEBUG)
 #define ASSERT(expression)
@@ -50,8 +52,12 @@ namespace node {
     if (!(expression)) abort();                                               \
   } while (0)
 #else
+#ifndef ASSERT
 #define ASSERT(expression)  assert(expression)
+#endif
+#ifndef CHECK
 #define CHECK(expression)   assert(expression)
+#endif
 #endif
 
 #define UNREACHABLE() abort()

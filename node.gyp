@@ -1,6 +1,7 @@
 {
   'variables': {
     'v8_use_snapshot%': 'true',
+    'v8_postmortem_support%': 'false',
     # Turn off -Werror in V8
     # See http://codereview.chromium.org/8159015
     'werror': '',
@@ -16,6 +17,7 @@
     'node_use_openssl%': 'true',
     'node_shared_openssl%': 'false',
     'node_use_mdb%': 'false',
+    'node_tag%': '',
     'library_files': [
       'src/node.js',
       'lib/_debugger.js',
@@ -407,7 +409,7 @@
             }]
           ],
           'action': [
-            '<(python)',
+            'python',
             'tools/js2c.py',
             '<@(_outputs)',
             '<@(_inputs)',

@@ -111,7 +111,7 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeCallback(
   v8::Local<v8::Value> ret = cb->Call(context, argc, argv);
 
   if (try_catch.HasCaught()) {
-    return Undefined(env()->isolate());
+    return v8::Undefined(env()->isolate());
   }
 
   if (has_async_queue()) {
@@ -144,7 +144,7 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeCallback(
 
   if (try_catch.HasCaught()) {
     tick_info->set_last_threw(true);
-    return Undefined(env()->isolate());
+    return v8::Undefined(env()->isolate());
   }
 
   return ret;

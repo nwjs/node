@@ -25,7 +25,7 @@
 #include "env.h"
 #include "util.h"
 #include "util-inl.h"
-#include "uv.h"
+#include "third_party/node/deps/uv/include/uv.h"
 #include "v8.h"
 
 #include <stddef.h>
@@ -35,10 +35,10 @@ namespace node {
 
 inline Environment::IsolateData* Environment::IsolateData::GetOrCreate(
     v8::Isolate* isolate) {
-  IsolateData* isolate_data = static_cast<IsolateData*>(isolate->GetData());
+  IsolateData* isolate_data = static_cast<IsolateData*>(isolate->GetData2());
   if (isolate_data == NULL) {
     isolate_data = new IsolateData(isolate);
-    isolate->SetData(isolate_data);
+    isolate->SetData2(isolate_data);
   }
   isolate_data->ref_count_ += 1;
   return isolate_data;
@@ -46,7 +46,7 @@ inline Environment::IsolateData* Environment::IsolateData::GetOrCreate(
 
 inline void Environment::IsolateData::Put() {
   if (--ref_count_ == 0) {
-    isolate()->SetData(NULL);
+    isolate()->SetData2(NULL);
     delete this;
   }
 }

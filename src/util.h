@@ -46,7 +46,9 @@ namespace node {
 #endif
 
 #if defined(NDEBUG)
+#if !defined(ASSERT)
 #define ASSERT(expression)
+#endif
 #define CHECK(expression)                                                     \
   do {                                                                        \
     if (!(expression)) abort();                                               \

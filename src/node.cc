@@ -3116,7 +3116,7 @@ void Init(int* argc,
 #endif  // __POSIX__
 
   V8::SetFatalErrorHandler(node::OnFatalError);
-  V8::AddMessageListener(OnMessage);
+  //V8::AddMessageListener(OnMessage);
 
 #if 0
   // If the --debug flag was specified then initialize the debug thread.

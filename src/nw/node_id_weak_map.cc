@@ -68,8 +68,8 @@ class IDWeakMap : public node::ObjectWrap {
   static v8::Persistent<v8::Function> constructor_;
   typedef v8::Persistent<v8::Value, v8::CopyablePersistentTraits<v8::Value> >
       CopyableValue;
-
-  std::map< int, CopyableValue > map_;
+  typedef std::map< int, CopyableValue > CopyableValueMap;
+  CopyableValueMap map_;
 };
 
 v8::Persistent<v8::Function> IDWeakMap::constructor_;
@@ -153,10 +153,12 @@ void IDWeakMap::Get(const FunctionCallbackInfo<Value>& args) {
   IDWeakMap* obj = ObjectWrap::Unwrap<IDWeakMap>(args.This());
 
   int key = args[0]->IntegerValue();
-  CopyableValue value = obj->map_.at(key);
-  if (value.IsEmpty())
+  CopyableValueMap::iterator it = obj->map_.find(key);
+  if (it == obj->map_.end()) {
     args.GetReturnValue().Set(v8::Null());
-
+    return;
+  }
+  CopyableValue value = it->second;
   args.GetReturnValue().Set(v8::Persistent<v8::Value>(node::node_isolate, value));
 }
 

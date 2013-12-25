@@ -898,6 +898,35 @@ void SetupNextTick(const FunctionCallbackInfo<Value>& args) {
       FIXED_ONE_BYTE_STRING(args.GetIsolate(), "_setupNextTick"));
 }
 
+Handle<Value> CallTickCallback(Environment* env, const Handle<Value> ret) {
+  TryCatch try_catch;
+  try_catch.SetVerbose(true);
+
+  Environment::TickInfo* tick_info = env->tick_info();
+
+  if (tick_info->in_tick()) {
+    return ret;
+  }
+
+  if (tick_info->length() == 0) {
+    tick_info->set_index(0);
+    return ret;
+  }
+
+  tick_info->set_in_tick(true);
+
+  Local<Object> process = env->process_object();
+  // process nextTicks after call
+  env->tick_callback_function()->Call(process, 0, NULL);
+
+  tick_info->set_in_tick(false);
+  if (try_catch.HasCaught()) {
+    tick_info->set_last_threw(true);
+    return Undefined(node_isolate);
+  }
+
+  return ret;
+}
 
 Handle<Value> MakeCallback(Environment* env,
                            Handle<Object> object,
@@ -936,32 +965,8 @@ Handle<Value> MakeCallback(Environment* env,
       return Undefined(node_isolate);
   }
 
-  Environment::TickInfo* tick_info = env->tick_info();
-
-  if (tick_info->in_tick()) {
-    return ret;
-  }
-
-  if (tick_info->length() == 0) {
-    tick_info->set_index(0);
-    return ret;
-  }
-
-  tick_info->set_in_tick(true);
-
-  // process nextTicks after call
-  env->tick_callback_function()->Call(process, 0, NULL);
-
-  tick_info->set_in_tick(false);
-
-  if (try_catch.HasCaught()) {
-    tick_info->set_last_threw(true);
-    return Undefined(node_isolate);
-  }
-
-  return ret;
+  return CallTickCallback(env, ret);
 }
-
 
 // Internal only.
 Handle<Value> MakeCallback(Environment* env,

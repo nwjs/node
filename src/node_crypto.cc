@@ -4073,7 +4073,7 @@ Handle<Value> RandomBytes(const Arguments& args) {
     if (!argv[0]->IsNull())
       return ThrowException(argv[0]);
     else
-      return argv[1];
+      return scope.Close(argv[1]);
   }
 }
 

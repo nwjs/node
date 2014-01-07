@@ -176,7 +176,11 @@
         'PLATFORM="<(OS)"',
         'NODE_TAG="<(node_tag)"',
       ],
-
+      'configurations': {
+        'Debug': {
+          'defines': [ 'DEBUG' ],
+        },
+      },
       'conditions': [
         [ 'node_use_openssl=="true"', {
           'defines': [ 'HAVE_OPENSSL=1' ],

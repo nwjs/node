@@ -24,6 +24,8 @@
 
 #define V8_USE_UNSAFE_HANDLES
 
+#include "../deps/uv/include/uv.h"
+
 #ifdef _WIN32
 # ifndef BUILDING_NODE_EXTENSION
 #   define NODE_EXTERN __declspec(dllexport)
@@ -46,6 +48,15 @@
 #if defined(__MINGW32__) || defined(_MSC_VER)
 #ifndef _WIN32_WINNT
 # define _WIN32_WINNT   0x0501
+#endif
+
+//copied from uv_win.h
+#if 0
+#if !defined(_SSIZE_T_) && !defined(_SSIZE_T_DEFINED)
+typedef intptr_t ssize_t;
+# define _SSIZE_T_
+# define _SSIZE_T_DEFINED
+#endif
 #endif
 
 #ifndef NOMINMAX

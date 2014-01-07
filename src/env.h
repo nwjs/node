@@ -22,7 +22,7 @@
 #ifndef SRC_ENV_H_
 #define SRC_ENV_H_
 
-#include "ares.h"
+#include "../deps/cares/include/ares.h"
 #include "tree.h"
 #include "util.h"
 #include "third_party/node/deps/uv/include/uv.h"

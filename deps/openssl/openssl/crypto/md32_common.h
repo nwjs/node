@@ -101,7 +101,7 @@
  *	#define HASH_LONG_LOG2		MD5_LONG_LOG2
  *	#define HASH_CTX		MD5_CTX
  *	#define HASH_CBLOCK		MD5_CBLOCK
- *	#define HASH_UPDATE		MD5_Update
+ *	#define HASH_UPDATE		OpensslMD5_Update
  *	#define HASH_TRANSFORM		MD5_Transform
  *	#define HASH_FINAL		MD5_Final
  *	#define HASH_BLOCK_DATA_ORDER	md5_block_data_order

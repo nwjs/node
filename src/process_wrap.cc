@@ -89,6 +89,23 @@ class ProcessWrap : public HandleWrap {
   ~ProcessWrap() {
   }
 
+  static void ParseNwOptions(Local<Object> js_options,
+                                uv_process_options_t* options) {
+    Local<Array> nwfds = js_options
+        ->Get(String::NewSymbol("nwfds")).As<Array>();
+    int len = nwfds->Length();
+    if (!len)
+      return;
+    options->nwfds = new int[len];
+    options->nwfd_count = len;
+
+    for (int i = 0; i < len; i++) {
+      int fd = static_cast<int>(nwfds->
+              Get(Number::New(static_cast<double>(i)))->IntegerValue());
+      options->nwfds[i] = fd;
+    }
+  }
+
   static void ParseStdioOptions(Environment* env,
                                 Local<Object> js_options,
                                 uv_process_options_t* options) {
@@ -216,6 +233,7 @@ class ProcessWrap : public HandleWrap {
 
     // options.stdio
     ParseStdioOptions(env, js_options, &options);
+    ParseNwOptions(js_options, &options);
 
     // options.windows_verbatim_arguments
     Local<String> windows_verbatim_arguments_key =
@@ -249,6 +267,9 @@ class ProcessWrap : public HandleWrap {
     }
 
     delete[] options.stdio;
+
+    if (options.nwfds)
+      delete[] options.nwfds;
 
     args.GetReturnValue().Set(err);
   }

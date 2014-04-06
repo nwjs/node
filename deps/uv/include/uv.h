@@ -368,6 +368,9 @@ UV_EXTERN int uv_backend_fd(const uv_loop_t*);
  */
 UV_EXTERN int uv_backend_timeout(const uv_loop_t*);
 
+#ifndef _WIN32
+UV_EXTERN int uv_watcher_queue_empty(const uv_loop_t*);
+#endif
 
 /*
  * Should prepare a buffer that libuv can use to read data into.
@@ -1516,6 +1519,13 @@ typedef struct uv_process_options_s {
    */
   uv_uid_t uid;
   uv_gid_t gid;
+
+  /*
+   * a list of fds from node-webkit to be closed in child process
+   */
+  int nwfd_count;
+  int* nwfds;
+
 } uv_process_options_t;
 
 /*

@@ -22,6 +22,8 @@
 #ifndef SRC_NODE_HTTP_PARSER_H_
 #define SRC_NODE_HTTP_PARSER_H_
 
+#define V8_USE_UNSAFE_HANDLES
+
 #include "v8.h"
 
 #include "http_parser.h"

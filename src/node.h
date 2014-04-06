@@ -22,6 +22,10 @@
 #ifndef SRC_NODE_H_
 #define SRC_NODE_H_
 
+#define V8_USE_UNSAFE_HANDLES
+
+#include "../deps/uv/include/uv.h"
+
 #ifdef _WIN32
 # ifndef BUILDING_NODE_EXTENSION
 #   define NODE_EXTERN __declspec(dllexport)
@@ -46,7 +50,18 @@
 # define _WIN32_WINNT   0x0501
 #endif
 
+//copied from uv_win.h
+#if 0
+#if !defined(_SSIZE_T_) && !defined(_SSIZE_T_DEFINED)
+typedef intptr_t ssize_t;
+# define _SSIZE_T_
+# define _SSIZE_T_DEFINED
+#endif
+#endif
+
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 
 #endif
 
@@ -169,6 +184,9 @@ namespace node {
 
 NODE_EXTERN extern bool no_deprecation;
 
+NODE_EXTERN void SetupUv(int argc, char **argv);
+NODE_EXTERN void SetupContext(int argc, char *argv[], v8::Handle<v8::Context> ctx);
+NODE_EXTERN void Shutdown();
 NODE_EXTERN int Start(int argc, char *argv[]);
 
 /* Converts a unixtime to V8 Date */

@@ -97,7 +97,7 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeDomainCallback(
     domain = domain_v.As<v8::Object>();
 
     if (domain->Get(env()->disposed_string())->IsTrue())
-      return Undefined(env()->isolate());
+      return v8::Undefined(env()->isolate());
 
     v8::Local<v8::Function> enter =
       domain->Get(env()->enter_string()).As<v8::Function>();
@@ -105,13 +105,13 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeDomainCallback(
     enter->Call(domain, 0, NULL);
 
     if (try_catch.HasCaught())
-      return Undefined(env()->isolate());
+      return v8::Undefined(env()->isolate());
   }
 
   v8::Local<v8::Value> ret = cb->Call(context, argc, argv);
 
   if (try_catch.HasCaught()) {
-    return Undefined(env()->isolate());
+    return v8::Undefined(env()->isolate());
   }
 
   if (has_domain) {
@@ -121,7 +121,7 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeDomainCallback(
     exit->Call(domain, 0, NULL);
 
     if (try_catch.HasCaught())
-      return Undefined(env()->isolate());
+      return v8::Undefined(env()->isolate());
   }
 
   if (has_async_listener()) {
@@ -129,7 +129,7 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeDomainCallback(
     env()->async_listener_unload_function()->Call(process, 1, &val);
 
     if (try_catch.HasCaught())
-      return Undefined(env()->isolate());
+      return v8::Undefined(env()->isolate());
   }
 
   Environment::TickInfo* tick_info = env()->tick_info();
@@ -151,7 +151,7 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeDomainCallback(
 
   if (try_catch.HasCaught()) {
     tick_info->set_last_threw(true);
-    return Undefined(env()->isolate());
+    return v8::Undefined(env()->isolate());
   }
 
   return ret;
@@ -184,7 +184,7 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeCallback(
   v8::Local<v8::Value> ret = cb->Call(context, argc, argv);
 
   if (try_catch.HasCaught()) {
-    return Undefined(env()->isolate());
+    return v8::Undefined(env()->isolate());
   }
 
   if (has_async_listener()) {
@@ -214,7 +214,7 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeCallback(
 
   if (try_catch.HasCaught()) {
     tick_info->set_last_threw(true);
-    return Undefined(env()->isolate());
+    return v8::Undefined(env()->isolate());
   }
 
   return ret;

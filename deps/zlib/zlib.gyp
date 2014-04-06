@@ -12,6 +12,7 @@
         {
           'target_name': 'zlib',
           'type': 'static_library',
+          'toolsets': ['host', 'target'],
           'sources': [
             'contrib/minizip/ioapi.c',
             'contrib/minizip/ioapi.h',

@@ -3347,7 +3347,13 @@ void SetupContext(int argc, char *argv[], v8::Handle<v8::Context> context) {
   Local<Object> process_object = process_template->GetFunction()->NewInstance();
   env->set_process_object(process_object);
 
-  SetupProcessObject(env, argc, argv, argc, argv);
+  // Parse a few arguments which are specific to Node.
+  int v8_argc, exec_argc;
+  const char** v8_argv;
+  const char** exec_argv;
+  ParseArgs(&argc, const_cast<const char**>(argv), &exec_argc, &exec_argv, &v8_argc, &v8_argv);
+
+  SetupProcessObject(env, argc, argv, exec_argc, exec_argv);
   Load(env);
 
   g_env = env;

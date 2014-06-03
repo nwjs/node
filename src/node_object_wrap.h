@@ -38,7 +38,7 @@ class ObjectWrap {
   virtual ~ObjectWrap() {
     if (persistent().IsEmpty())
       return;
-    v8::HandleScope scope;
+    // v8::HandleScope scope;
     assert(persistent().IsNearDeath());
     persistent().ClearWeak();
     persistent().Reset();

@@ -61,7 +61,9 @@ int wmain(int argc, wchar_t *wargv[]) {
 }
 #else
 // UNIX
+#if 0
 int main(int argc, char *argv[]) {
   return node::Start(argc, argv);
 }
+#endif
 #endif

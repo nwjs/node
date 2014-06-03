@@ -34,7 +34,8 @@ class ObjectLifeMonitor {
   ObjectLifeMonitor();
   virtual ~ObjectLifeMonitor();
 
-  static void WeakCallback(v8::Isolate* isolate, v8::Persistent<v8::Object>* value, ObjectLifeMonitor *data);
+  static void WeakCallback(
+      const v8::WeakCallbackData<v8::Object, ObjectLifeMonitor>& data);
 
   v8::Persistent<v8::Object> handle_;
 };

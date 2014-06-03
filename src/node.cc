@@ -1110,7 +1110,7 @@ Handle<Value> CallTickCallback(Environment* env, const Handle<Value> ret) {
   tick_info->set_in_tick(true);
 
   // process nextTicks after call
-  env->tick_callback_function()->Call(process, 0, NULL);
+  env->tick_callback_function()->Call(env->process_object(), 0, NULL);
 
   tick_info->set_in_tick(false);
 
@@ -3696,7 +3696,7 @@ void SetupContext(int argc, char *argv[], v8::Handle<v8::Context> context) {
     StartProfilerIdleNotifier(env);
   }
 
-  Local<FunctionTemplate> process_template = FunctionTemplate::New();
+  Local<FunctionTemplate> process_template = FunctionTemplate::New(isolate);
   process_template->SetClassName(FIXED_ONE_BYTE_STRING(isolate, "process"));
 
   Local<Object> process_object = process_template->GetFunction()->NewInstance();

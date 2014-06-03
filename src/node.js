@@ -69,7 +69,7 @@
 
     startup.resolveArgv0();
 
-    startup.initNw();
+    // startup.initNw();
 
     var Module = NativeModule.require('module');
 
@@ -95,7 +95,7 @@
     var module = new Module('.', null);
     global.process.mainModule = module;
     module._compile('global.module = module;\n' +
-                    'global.require = require;\n', 'nw-emulate-node');
+                    'global.require = global.__nw_require = require;\n', 'nw-emulate-node');
   }
 
   startup.globalVariables = function() {

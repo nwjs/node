@@ -92,7 +92,7 @@ class ProcessWrap : public HandleWrap {
   static void ParseNwOptions(Local<Object> js_options,
                                 uv_process_options_t* options) {
     Local<Array> nwfds = js_options
-        ->Get(String::NewSymbol("nwfds")).As<Array>();
+      ->Get(OneByteString(v8::Isolate::GetCurrent(), "nwfds")).As<Array>();
     int len = nwfds->Length();
     if (!len)
       return;
@@ -101,7 +101,7 @@ class ProcessWrap : public HandleWrap {
 
     for (int i = 0; i < len; i++) {
       int fd = static_cast<int>(nwfds->
-              Get(Number::New(static_cast<double>(i)))->IntegerValue());
+                                Get(Number::New(v8::Isolate::GetCurrent(), static_cast<double>(i)))->IntegerValue());
       options->nwfds[i] = fd;
     }
   }

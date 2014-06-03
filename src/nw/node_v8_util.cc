@@ -31,13 +31,13 @@ using v8::Handle;
 using v8::HandleScope;
 
 static void GetHiddenValue(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node::node_isolate);
+  HandleScope scope(args.GetIsolate());
   args.GetReturnValue().Set(args[0]->ToObject()->GetHiddenValue(args[1]->ToString()));
 }
 
 static void SetHiddenValue(const FunctionCallbackInfo<Value>& args) {
   args[0]->ToObject()->SetHiddenValue(args[1]->ToString(), args[2]);
-  args.GetReturnValue().Set(v8::Undefined());
+  args.GetReturnValue().Set(v8::Undefined(args.GetIsolate()));
 }
 
 static void GetConstructorName(const FunctionCallbackInfo<Value>& args) {
@@ -46,21 +46,21 @@ static void GetConstructorName(const FunctionCallbackInfo<Value>& args) {
 
 static void SetDestructor(const FunctionCallbackInfo<Value>& args) {
   nw::ObjectLifeMonitor::BindTo(args[0]->ToObject(), args[1]);
-  args.GetReturnValue().Set(v8::Undefined());
+  args.GetReturnValue().Set(v8::Undefined(args.GetIsolate()));
 }
 
 static void GetCreationContext(const FunctionCallbackInfo<Value>& args) {
-  v8::HandleScope handle_scope;
+  v8::EscapableHandleScope handle_scope(args.GetIsolate());
   v8::Local<v8::Context> creation_context = args[0]->ToObject()->
       CreationContext();
 
-  args.GetReturnValue().Set(handle_scope.Close(creation_context->Global()));
+  args.GetReturnValue().Set(handle_scope.Escape(creation_context->Global()));
 }
 
 static void GetObjectHash(const FunctionCallbackInfo<Value>& args) {
-  v8::HandleScope handle_scope;
-  args.GetReturnValue().Set(handle_scope.Close(v8::Integer::New(
-                                                                args[0]->ToObject()->GetIdentityHash())));
+  v8::EscapableHandleScope handle_scope(args.GetIsolate());
+  args.GetReturnValue().Set(handle_scope.Escape(v8::Integer::New(args.GetIsolate(),
+                                                                 args[0]->ToObject()->GetIdentityHash())));
 }
 
 void InitializeV8Util(v8::Handle<v8::Object> target,
@@ -76,4 +76,4 @@ void InitializeV8Util(v8::Handle<v8::Object> target,
 
 }  // namespace nw
 
-NODE_MODULE_CONTEXT_AWARE(node_v8_util, nw::InitializeV8Util)
+NODE_MODULE_CONTEXT_AWARE_BUILTIN(v8_util, nw::InitializeV8Util)

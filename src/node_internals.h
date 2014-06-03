@@ -40,7 +40,7 @@ namespace node {
 class Environment;
 extern Environment* g_env;
 
-void EmitExit(Environment* env);
+int EmitExit(Environment* env);
 void RunAtExit(Environment* env);
 void OnMessage(v8::Handle<v8::Message> message, v8::Handle<v8::Value> error);
 v8::Handle<v8::Value> CallTickCallback(Environment* env, const v8::Handle<v8::Value> ret);

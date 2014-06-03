@@ -63,7 +63,7 @@ class IDWeakMap : public node::ObjectWrap {
 
   void Erase(int key);
 
-  static void WeakCallback(v8::Isolate* isolate, v8::Persistent<v8::Value>* value, IDWeakMap *data);
+  static void WeakCallback(const v8::WeakCallbackData<v8::Value, IDWeakMap>& data);
 
   static v8::Persistent<v8::Function> constructor_;
   typedef v8::Persistent<v8::Value, v8::CopyablePersistentTraits<v8::Value> >
@@ -76,21 +76,22 @@ v8::Persistent<v8::Function> IDWeakMap::constructor_;
 
 // static
 void IDWeakMap::Init() {
-  v8::Local<v8::FunctionTemplate> tpl = v8::FunctionTemplate::New(New);
-  tpl->SetClassName(v8::String::NewSymbol("IDWeakMap"));
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::Local<v8::FunctionTemplate> tpl = v8::FunctionTemplate::New(isolate, New);
+  tpl->SetClassName(v8::String::NewFromUtf8(isolate, "IDWeakMap"));
   tpl->InstanceTemplate()->SetInternalFieldCount(1);
-  tpl->PrototypeTemplate()->Set(v8::String::NewSymbol("set"),
-      v8::FunctionTemplate::New(Set)->GetFunction());
-  tpl->PrototypeTemplate()->Set(v8::String::NewSymbol("get"),
-      v8::FunctionTemplate::New(Get)->GetFunction());
-  tpl->PrototypeTemplate()->Set(v8::String::NewSymbol("has"),
-      v8::FunctionTemplate::New(Has)->GetFunction());
-  tpl->PrototypeTemplate()->Set(v8::String::NewSymbol("delete"),
-      v8::FunctionTemplate::New(Delete)->GetFunction());
-  tpl->PrototypeTemplate()->Set(v8::String::NewSymbol("allocateId"),
-      v8::FunctionTemplate::New(AllocateId)->GetFunction());
+  tpl->PrototypeTemplate()->Set(v8::String::NewFromUtf8(isolate, "set"),
+      v8::FunctionTemplate::New(isolate, Set)->GetFunction());
+  tpl->PrototypeTemplate()->Set(v8::String::NewFromUtf8(isolate, "get"),
+      v8::FunctionTemplate::New(isolate, Get)->GetFunction());
+  tpl->PrototypeTemplate()->Set(v8::String::NewFromUtf8(isolate, "has"),
+      v8::FunctionTemplate::New(isolate, Has)->GetFunction());
+  tpl->PrototypeTemplate()->Set(v8::String::NewFromUtf8(isolate, "delete"),
+      v8::FunctionTemplate::New(isolate, Delete)->GetFunction());
+  tpl->PrototypeTemplate()->Set(v8::String::NewFromUtf8(isolate, "allocateId"),
+      v8::FunctionTemplate::New(isolate, AllocateId)->GetFunction());
 
-  constructor_.Reset(node::node_isolate, tpl->GetFunction());
+  constructor_.Reset(isolate, tpl->GetFunction());
 }
 
 // static
@@ -103,9 +104,10 @@ v8::Local<v8::Function> IDWeakMap::GetContructor() {
 
 // static
 void IDWeakMap::AttachBindings(v8::Handle<v8::Object> obj) {
-  v8::HandleScope scope;
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::HandleScope scope(isolate);
 
-  obj->Set(v8::String::New("IDWeakMap"), GetContructor());
+  obj->Set(v8::String::NewFromUtf8(isolate, "IDWeakMap"), GetContructor());
 }
 
 // static
@@ -117,9 +119,10 @@ void IDWeakMap::New(const FunctionCallbackInfo<Value>& args) {
 
 // static
 void IDWeakMap::Set(const FunctionCallbackInfo<Value>& args) {
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
   if (args.Length() < 2 || !args[0]->IsNumber() || !args[1]->IsObject()) {
     args.GetIsolate()->ThrowException(v8::Exception::Error(
-          v8::String::New("Invalid arguments")));
+                                                           v8::String::NewFromUtf8(isolate, "Invalid arguments")));
     return;
   }
 
@@ -129,24 +132,26 @@ void IDWeakMap::Set(const FunctionCallbackInfo<Value>& args) {
 
   if (obj->map_.find(key) != obj->map_.end()) {
     args.GetIsolate()->ThrowException(v8::Exception::Error(
-          v8::String::New("Element already exists")));
+          v8::String::NewFromUtf8(isolate, "Element already exists")));
     return;
   }
 
-  v8::Persistent<v8::Value> value(node::node_isolate, args[1]);
-  value->ToObject()->SetHiddenValue(
-      v8::String::New("IDWeakMapKey"), v8::Integer::New(key));
+  v8::Persistent<v8::Value> value;
+  value.Reset(isolate, args[1]);
+  v8::Local<v8::Value> val = v8::Local<v8::Value>::New(isolate, value);
+  val->ToObject()->SetHiddenValue(
+                                  v8::String::NewFromUtf8(isolate, "IDWeakMapKey"), v8::Integer::New(isolate, key));
 
   obj->map_[key] = value;
-  value.MakeWeak(obj, WeakCallback);
-  args.GetReturnValue().Set(v8::Undefined());
+  value.SetWeak(obj, WeakCallback);
+  args.GetReturnValue().Set(v8::Undefined(isolate));
 }
 
 // static
 void IDWeakMap::Get(const FunctionCallbackInfo<Value>& args) {
   if (args.Length() < 1 || !args[0]->IsNumber()) {
     args.GetIsolate()->ThrowException(v8::Exception::Error(
-          v8::String::New("Invalid arguments")));
+                                                           v8::String::NewFromUtf8(args.GetIsolate(), "Invalid arguments")));
     return;
   }
 
@@ -155,32 +160,32 @@ void IDWeakMap::Get(const FunctionCallbackInfo<Value>& args) {
   int key = args[0]->IntegerValue();
   CopyableValueMap::iterator it = obj->map_.find(key);
   if (it == obj->map_.end()) {
-    args.GetReturnValue().Set(v8::Null());
+    args.GetReturnValue().Set(v8::Null(args.GetIsolate()));
     return;
   }
   CopyableValue value = it->second;
-  args.GetReturnValue().Set(v8::Persistent<v8::Value>(node::node_isolate, value));
+  args.GetReturnValue().Set(v8::Persistent<v8::Value>(args.GetIsolate(), value));
 }
 
 // static
 void IDWeakMap::Has(const FunctionCallbackInfo<Value>& args) {
   if (args.Length() < 1 || !args[0]->IsNumber()) {
     args.GetIsolate()->ThrowException(v8::Exception::Error(
-          v8::String::New("Invalid arguments")));
+                                                           v8::String::NewFromUtf8(args.GetIsolate(), "Invalid arguments")));
     return;
   }
 
   IDWeakMap* obj = ObjectWrap::Unwrap<IDWeakMap>(args.This());
 
   int key = args[0]->IntegerValue();
-  args.GetReturnValue().Set(v8::Boolean::New(!obj->map_[key].IsEmpty()));
+  args.GetReturnValue().Set(v8::Boolean::New(args.GetIsolate(), !obj->map_[key].IsEmpty()));
 }
 
 // static
 void IDWeakMap::Delete(const FunctionCallbackInfo<Value>& args) {
   if (args.Length() < 1 || !args[0]->IsNumber()) {
     args.GetIsolate()->ThrowException(v8::Exception::Error(
-          v8::String::New("Invalid arguments")));
+                                                           v8::String::NewFromUtf8(args.GetIsolate(), "Invalid arguments")));
     return;
   }
 
@@ -188,13 +193,13 @@ void IDWeakMap::Delete(const FunctionCallbackInfo<Value>& args) {
 
   int key = args[0]->IntegerValue();
   obj->Erase(key);
-  args.GetReturnValue().Set(v8::Undefined());
+  args.GetReturnValue().Set(v8::Undefined(args.GetIsolate()));
 }
 
 // static
 void IDWeakMap::AllocateId(const FunctionCallbackInfo<Value>& args) {
   static int next_object_id = 1;
-  args.GetReturnValue().Set(v8::Integer::New(next_object_id++));
+  args.GetReturnValue().Set(v8::Integer::New(args.GetIsolate(), next_object_id++));
 }
 
 IDWeakMap::IDWeakMap() {
@@ -205,19 +210,22 @@ IDWeakMap::~IDWeakMap() {
 
 void IDWeakMap::Erase(int key) {
   CopyableValue& value = map_[key];
-  value.ClearWeak(v8::Isolate::GetCurrent());
-  value.Dispose();
-  value.Clear();
+  value.ClearWeak();
+  value.Reset();
   map_.erase(key);
 }
 
 // static
-void IDWeakMap::WeakCallback(v8::Isolate* isolate, v8::Persistent<v8::Value>* value, IDWeakMap *data) {
-  v8::HandleScope scope;
+void IDWeakMap::WeakCallback(
+    const v8::WeakCallbackData<v8::Value, IDWeakMap>& data) {
 
-  IDWeakMap* obj = static_cast<IDWeakMap*>(data);
-  int key = (*value)->ToObject()->GetHiddenValue(
-      v8::String::New("IDWeakMapKey"))->IntegerValue();
+  v8::Isolate* isolate = data.GetIsolate();
+  v8::HandleScope scope(isolate);
+
+  IDWeakMap* obj = data.GetParameter();
+  v8::Handle<v8::Value> value = data.GetValue();
+  int key = value->ToObject()->GetHiddenValue(
+      v8::String::NewFromUtf8(isolate, "IDWeakMapKey"))->IntegerValue();
   obj->Erase(key);
 }
 
@@ -231,4 +239,4 @@ void IDWeakMap::Initialize(Handle<Object> target,
 
 }  // namespace nw
 
-NODE_MODULE_CONTEXT_AWARE(node_id_weak_map, nw::IDWeakMap::Initialize)
+NODE_MODULE_CONTEXT_AWARE_BUILTIN(node_id_weak_map, nw::IDWeakMap::Initialize)

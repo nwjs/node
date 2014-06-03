@@ -83,6 +83,10 @@
         'node_js2c#host',
       ],
 
+      'includes': [
+        'common.gypi',
+      ],
+
       'include_dirs': [
         '../..',
         'src',

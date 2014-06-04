@@ -239,4 +239,4 @@ void IDWeakMap::Initialize(Handle<Object> target,
 
 }  // namespace nw
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(node_id_weak_map, nw::IDWeakMap::Initialize)
+NODE_MODULE_CONTEXT_AWARE_BUILTIN(id_weak_map, nw::IDWeakMap::Initialize)

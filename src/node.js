@@ -69,7 +69,7 @@
 
     startup.resolveArgv0();
 
-    // startup.initNw();
+    startup.initNw();
 
     var Module = NativeModule.require('module');
 

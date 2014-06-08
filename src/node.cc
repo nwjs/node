@@ -2444,7 +2444,7 @@ static Handle<Object> GetFeatures(Environment* env) {
   Local<Value> debug = False(env->isolate());
 #endif  // defined(DEBUG) && DEBUG
 
-  obj->Set(env->debug_string(), debug);
+  obj->Set(env->debug_str(), debug);
 
   obj->Set(env->uv_string(), True(env->isolate()));
   // TODO(bnoordhuis) ping libuv

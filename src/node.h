@@ -82,6 +82,8 @@ typedef intptr_t ssize_t;
 // terminally confused when it's done in node_internals.h
 namespace node {
 
+class Environment;
+
 NODE_EXTERN v8::Local<v8::Value> ErrnoException(v8::Isolate* isolate,
                                                 int errorno,
                                                 const char* syscall = NULL,
@@ -146,6 +148,12 @@ NODE_EXTERN v8::Handle<v8::Value> MakeCallback(
     v8::Handle<v8::Function> callback,
     int argc,
     v8::Handle<v8::Value>* argv);
+
+NODE_EXTERN v8::Handle<v8::Value> MakeCallback(Environment* env,
+                                               v8::Handle<v8::Value> recv,
+                                               const char* method,
+                                               int argc,
+                                               v8::Handle<v8::Value> argv[]);
 
 }  // namespace node
 

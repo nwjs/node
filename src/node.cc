@@ -87,6 +87,30 @@ typedef int mode_t;
 extern char **environ;
 #endif
 
+NODE_MODULE_REF(cares_wrap)
+NODE_MODULE_REF(fs_event_wrap)
+NODE_MODULE_REF(buffer)
+NODE_MODULE_REF(contextify)
+NODE_MODULE_REF(crypto)
+NODE_MODULE_REF(fs)
+NODE_MODULE_REF(http_parser)
+NODE_MODULE_REF(os)
+NODE_MODULE_REF(v8)
+NODE_MODULE_REF(zlib)
+NODE_MODULE_REF(pipe_wrap)
+NODE_MODULE_REF(process_wrap)
+NODE_MODULE_REF(signal_wrap)
+NODE_MODULE_REF(smalloc)
+NODE_MODULE_REF(spawn_sync)
+NODE_MODULE_REF(tcp_wrap)
+NODE_MODULE_REF(timer_wrap)
+NODE_MODULE_REF(tls_wrap)
+NODE_MODULE_REF(tty_wrap)
+NODE_MODULE_REF(udp_wrap)
+NODE_MODULE_REF(uv)
+NODE_MODULE_REF(id_weak_map)
+NODE_MODULE_REF(v8_util)
+
 namespace node {
 
 using v8::Array;
@@ -149,6 +173,8 @@ static Isolate* node_isolate = NULL;
 
 Environment* g_env = NULL;
 
+//NODE_MODULE_REF_BEGIN()
+//NODE_MODULE_REF_END()
 
 class ArrayBufferAllocator : public ArrayBuffer::Allocator {
  public:
@@ -3708,11 +3734,38 @@ void SetupContext(int argc, char *argv[], v8::Handle<v8::Context> context) {
   g_env = env;
 }
 
+void ref_node_modules() {
+NODE_MODULE_REF2(cares_wrap)
+NODE_MODULE_REF2(fs_event_wrap)
+NODE_MODULE_REF2(buffer)
+NODE_MODULE_REF2(contextify)
+NODE_MODULE_REF2(crypto)
+NODE_MODULE_REF2(fs)
+NODE_MODULE_REF2(http_parser)
+NODE_MODULE_REF2(os)
+NODE_MODULE_REF2(v8)
+NODE_MODULE_REF2(zlib)
+NODE_MODULE_REF2(pipe_wrap)
+NODE_MODULE_REF2(process_wrap)
+NODE_MODULE_REF2(signal_wrap)
+NODE_MODULE_REF2(smalloc)
+NODE_MODULE_REF2(spawn_sync)
+NODE_MODULE_REF2(tcp_wrap)
+NODE_MODULE_REF2(timer_wrap)
+NODE_MODULE_REF2(tls_wrap)
+NODE_MODULE_REF2(tty_wrap)
+NODE_MODULE_REF2(udp_wrap)
+NODE_MODULE_REF2(uv)
+NODE_MODULE_REF2(id_weak_map)
+NODE_MODULE_REF2(v8_util)
+}
+
 void Shutdown() {
   EmitExit(g_env);
   RunAtExit(g_env);
   g_env->Dispose();
   g_env = NULL;
+  ref_node_modules();
 }
 
 }  // namespace node

@@ -363,10 +363,10 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
 #if defined(_MSC_VER)
 #pragma section(".CRT$XCU", read)
 #define NODE_C_CTOR(fn)                                               \
-  static void __cdecl fn(void);                                       \
+  void __cdecl fn(void);                                       \
   __declspec(dllexport, allocate(".CRT$XCU"))                         \
       void (__cdecl*fn ## _)(void) = fn;                              \
-  static void __cdecl fn(void)
+  void __cdecl fn(void)
 #else
 #define NODE_C_CTOR(fn)                                               \
   static void fn(void) __attribute__((constructor));                  \
@@ -392,6 +392,12 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
     }                                                                 \
   }
 
+#define NODE_MODULE_REF(modname)                                      \
+  extern int _node_ref_ ## modname;
+
+#define NODE_MODULE_REF2(modname)                                      \
+  _node_ref_ ## modname = 1;
+
 #define NODE_MODULE_CONTEXT_AWARE_X(modname, regfunc, priv, flags)    \
   extern "C" {                                                        \
     static node::node_module _module =                                \
@@ -409,7 +415,8 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
     NODE_C_CTOR(_register_ ## modname) {                              \
       node_module_register(&_module);                                 \
     }                                                                 \
-  }
+  }                                                                   \
+  int _node_ref_ ## modname;                                 
 
 #define NODE_MODULE(modname, regfunc)                                 \
   NODE_MODULE_X(modname, regfunc, NULL, 0)

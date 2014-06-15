@@ -94,7 +94,7 @@ static void uv_init(void) {
   /* functions (eg _get_osfhandle) raise an assert when called with invalid */
   /* FDs even though they return the proper error code in the release build. */
 #if defined(_DEBUG) && !defined(__MINGW32__)
-  _CrtSetReportHook(uv__crt_dbg_report_handler);
+  /* _CrtSetReportHook(uv__crt_dbg_report_handler); */
 #endif
 
   /* Fetch winapi function pointers. This must be done first because other */

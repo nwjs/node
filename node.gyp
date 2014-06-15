@@ -204,8 +204,8 @@
               'dependencies': [
                 'deps/openssl/openssl.gyp:openssl',
 
-                # For tests
-                './deps/openssl/openssl.gyp:openssl-cli'
+                ## For tests
+                #'./deps/openssl/openssl.gyp:openssl-cli'
               ],
             }]]
         }, {

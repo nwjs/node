@@ -2605,7 +2605,8 @@ void SetupProcessObject(Environment* env,
                         int argc,
                         const char* const* argv,
                         int exec_argc,
-                        const char* const* exec_argv) {
+                        const char* const* exec_argv,
+                        bool node_webkit) {
   HandleScope scope(env->isolate());
 
   Local<Object> process = env->process_object();
@@ -2614,6 +2615,9 @@ void SetupProcessObject(Environment* env,
                        ProcessTitleGetter,
                        ProcessTitleSetter);
 
+  if (node_webkit) {
+    READONLY_PROPERTY(process, "__node_webkit", Integer::New(env->isolate(), 1));
+  }
   // process.version
   READONLY_PROPERTY(process,
                     "version",
@@ -3378,11 +3382,12 @@ static void DebugEnd(const FunctionCallbackInfo<Value>& args) {
 void Init(int* argc,
           const char** argv,
           int* exec_argc,
-          const char*** exec_argv) {
+          const char*** exec_argv,
+          bool node_webkit) {
   // Initialize prog_start_time to get relative uptime.
   uv_uptime(&prog_start_time);
 
-#if 0
+  if (!node_webkit) {
   // Make inherited handles noninheritable.
   uv_disable_stdio_inheritance();
 
@@ -3435,7 +3440,7 @@ void Init(int* argc,
     const char expose_debug_as[] = "--expose_debug_as=v8debug";
     V8::SetFlagsFromString(expose_debug_as, sizeof(expose_debug_as) - 1);
   }
-#endif
+  } //node-webkit
 
   // V8::SetArrayBufferAllocator(&ArrayBufferAllocator::the_singleton);
 
@@ -3473,7 +3478,8 @@ void Init(int* argc,
 #endif  // __POSIX__
 
   V8::SetFatalErrorHandler(node::OnFatalError);
-#if 0
+
+  if (!node_webkit) {
   V8::AddMessageListener(OnMessage);
 
   // If the --debug flag was specified then initialize the debug thread.
@@ -3482,7 +3488,7 @@ void Init(int* argc,
   } else {
     RegisterDebugSignalHandler();
   }
-#endif
+  }
 }
 
 
@@ -3557,7 +3563,8 @@ Environment* CreateEnvironment(Isolate* isolate,
                                int argc,
                                const char* const* argv,
                                int exec_argc,
-                               const char* const* exec_argv) {
+                               const char* const* exec_argv,
+                               bool node_webkit) {
   HandleScope handle_scope(isolate);
 
   Local<Context> context = Context::New(isolate);
@@ -3593,7 +3600,7 @@ Environment* CreateEnvironment(Isolate* isolate,
   Local<Object> process_object = process_template->GetFunction()->NewInstance();
   env->set_process_object(process_object);
 
-  SetupProcessObject(env, argc, argv, exec_argc, exec_argv);
+  SetupProcessObject(env, argc, argv, exec_argc, exec_argv, node_webkit);
   Load(env);
 
   return env;
@@ -3615,7 +3622,7 @@ int Start(int argc, char** argv) {
   // optional, in case you're wondering.
   int exec_argc;
   const char** exec_argv;
-  Init(&argc, const_cast<const char**>(argv), &exec_argc, &exec_argv);
+  Init(&argc, const_cast<const char**>(argv), &exec_argc, &exec_argv, false);
 
 #if HAVE_OPENSSL
   // V8 on Windows doesn't have a good source of entropy. Seed it from
@@ -3628,7 +3635,7 @@ int Start(int argc, char** argv) {
   {
     Locker locker(node_isolate);
     Environment* env =
-        CreateEnvironment(node_isolate, argc, argv, exec_argc, exec_argv);
+      CreateEnvironment(node_isolate, argc, argv, exec_argc, exec_argv, false);
     // This Context::Scope is here so EnableDebug() can look up the current
     // environment with Environment::GetCurrentChecked().
     // TODO(bnoordhuis) Reorder the debugger initialization logic so it can
@@ -3682,7 +3689,7 @@ void SetupUv(int argc, char** argv) {
   // optional, in case you're wondering.
   int exec_argc;
   const char** exec_argv;
-  Init(&argc, const_cast<const char**>(argv), &exec_argc, &exec_argv);
+  Init(&argc, const_cast<const char**>(argv), &exec_argc, &exec_argv, true);
 
 #if HAVE_OPENSSL
   // V8 on Windows doesn't have a good source of entropy. Seed it from
@@ -3728,7 +3735,7 @@ void SetupContext(int argc, char *argv[], v8::Handle<v8::Context> context) {
   Local<Object> process_object = process_template->GetFunction()->NewInstance();
   env->set_process_object(process_object);
 
-  SetupProcessObject(env, argc, argv, argc, argv);
+  SetupProcessObject(env, argc, argv, 0, NULL, true);
   Load(env);
 
   g_env = env;

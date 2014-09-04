@@ -239,6 +239,11 @@ int uv_backend_timeout(const uv_loop_t* loop) {
   return 0;
 }
 
+int uv_pending_reqs(const uv_loop_t* loop) {
+  if (loop->pending_reqs_tail == NULL)
+    return 0;
+  return 1;
+}
 
 static void uv_poll(uv_loop_t* loop, int block) {
   DWORD bytes, timeout;

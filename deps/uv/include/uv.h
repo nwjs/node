@@ -368,6 +368,10 @@ UV_EXTERN int uv_backend_fd(const uv_loop_t*);
  */
 UV_EXTERN int uv_backend_timeout(const uv_loop_t*);
 
+#ifdef _WIN32
+UV_EXTERN int uv_pending_reqs(const uv_loop_t* loop);
+#endif
+
 #ifndef _WIN32
 UV_EXTERN int uv_watcher_queue_empty(const uv_loop_t*);
 #endif

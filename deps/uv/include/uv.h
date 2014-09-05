@@ -1365,6 +1365,7 @@ UV_EXTERN int uv_async_init(uv_loop_t*,
  * This can be called from other threads to wake up a libuv thread.
  */
 UV_EXTERN int uv_async_send(uv_async_t* async);
+UV_EXTERN int uv_async_send_nw(uv_async_t* async);
 
 
 /*

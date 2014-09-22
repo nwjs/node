@@ -2597,7 +2597,7 @@ void StopProfilerIdleNotifier(const FunctionCallbackInfo<Value>& args) {
 
 #define READONLY_PROPERTY(obj, str, var)                                      \
   do {                                                                        \
-    obj->Set(OneByteString(env->isolate(), str), var, v8::ReadOnly);          \
+    obj->ForceSet(OneByteString(env->isolate(), str), var, v8::ReadOnly);          \
   } while (0)
 
 
@@ -3110,11 +3110,13 @@ static void EnableDebug(Isolate* isolate, bool wait_connect) {
   assert(debugger_running == false);
   Isolate::Scope isolate_scope(isolate);
   HandleScope handle_scope(isolate);
+#if 0 //FIXME
   v8::Debug::SetDebugMessageDispatchHandler(DispatchMessagesDebugAgentCallback,
                                             false);
   debugger_running = v8::Debug::EnableAgent("node " NODE_VERSION,
                                             debug_port,
                                             wait_connect);
+#endif
   if (debugger_running == false) {
     fprintf(stderr, "Starting debugger on port %d failed\n", debug_port);
     fflush(stderr);
@@ -3369,7 +3371,9 @@ static void DebugPause(const FunctionCallbackInfo<Value>& args) {
 
 static void DebugEnd(const FunctionCallbackInfo<Value>& args) {
   if (debugger_running) {
+#if 0  //FIXME
     v8::Debug::DisableAgent();
+#endif
     debugger_running = false;
   }
 }

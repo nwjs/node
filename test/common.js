@@ -105,6 +105,11 @@ if (global.gc) {
   knownGlobals.push(gc);
 }
 
+if (global.externalizeString) {
+  knownGlobals.push(externalizeString);
+  knownGlobals.push(isAsciiString);
+}
+
 if (global.DTRACE_HTTP_SERVER_RESPONSE) {
   knownGlobals.push(DTRACE_HTTP_SERVER_RESPONSE);
   knownGlobals.push(DTRACE_HTTP_SERVER_REQUEST);

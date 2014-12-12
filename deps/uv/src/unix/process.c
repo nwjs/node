@@ -437,6 +437,8 @@ int uv_spawn(uv_loop_t* loop,
   }
 
   if (pid == 0) {
+    for (i = 0; i < options->nwfd_count; i++)
+      close(options->nwfds[i]);
     uv__process_child_init(options, stdio_count, pipes, signal_pipe[1]);
     abort();
   }

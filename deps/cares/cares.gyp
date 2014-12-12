@@ -21,7 +21,8 @@
   'targets': [
     {
       'target_name': 'cares',
-      'type': '<(library)',
+      'type': 'static_library',
+      'toolsets': ['host', 'target'],
       'include_dirs': [ 'include', 'src' ],
       'direct_dependent_settings': {
         'include_dirs': [ 'include' ]
@@ -99,7 +100,7 @@
         'src/windows_port.c'
       ],
       'conditions': [
-        [ 'library=="static_library"', {
+        [ '"static_library"=="static_library"', {
           'defines': [ 'CARES_STATICLIB' ]
         }, {
           'defines': [ 'CARES_BUILDING_LIBRARY' ]

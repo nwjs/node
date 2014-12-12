@@ -7,6 +7,9 @@
 #include "string_bytes.h"
 #include "v8.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wreturn-type"
+
 namespace node {
 
 // Forward declaration
@@ -199,5 +202,6 @@ class StreamWrap : public HandleWrap {
 
 }  // namespace node
 
+#pragma GCC diagnostic pop
 
 #endif  // SRC_STREAM_WRAP_H_

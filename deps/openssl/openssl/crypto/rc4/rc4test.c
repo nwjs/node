@@ -215,7 +215,7 @@ int main(int argc, char *argv[])
 		SHA1_Init(&c);
 		for (i=0;i<2571;i++) {
 			RC4(&key,sizeof(buf),buf,buf);
-			SHA1_Update(&c,buf,sizeof(buf));
+			OpensslSHA1_Update(&c,buf,sizeof(buf));
 		}
 		SHA1_Final(md,&c);
 

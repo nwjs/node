@@ -74,7 +74,7 @@ unsigned char *MD5(const unsigned char *d, size_t n, unsigned char *md)
 	if (!MD5_Init(&c))
 		return NULL;
 #ifndef CHARSET_EBCDIC
-	MD5_Update(&c,d,n);
+	OpensslMD5_Update(&c,d,n);
 #else
 	{
 		char temp[1024];
@@ -84,7 +84,7 @@ unsigned char *MD5(const unsigned char *d, size_t n, unsigned char *md)
 		{
 			chunk = (n > sizeof(temp)) ? sizeof(temp) : n;
 			ebcdic2ascii(temp, d, chunk);
-			MD5_Update(&c,temp,chunk);
+			OpensslMD5_Update(&c,temp,chunk);
 			n -= chunk;
 			d += chunk;
 		}

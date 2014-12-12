@@ -1,11 +1,11 @@
 #ifndef SRC_ENV_H_
 #define SRC_ENV_H_
 
-#include "ares.h"
+#include "../deps/cares/include/ares.h"
 #include "debug-agent.h"
 #include "tree.h"
 #include "util.h"
-#include "uv.h"
+#include "third_party/node/deps/uv/include/uv.h"
 #include "v8.h"
 #include "queue.h"
 

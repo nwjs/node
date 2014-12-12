@@ -98,7 +98,7 @@ int PKCS5_PBKDF2_HMAC(const char *pass, int passlen,
 		passlen = 0;
 	else if(passlen == -1)
 		passlen = strlen(pass);
-	if (!HMAC_Init_ex(&hctx_tpl, pass, passlen, digest, NULL))
+	if (!OpensslHMAC_Init_ex(&hctx_tpl, pass, passlen, digest, NULL))
 		{
 		HMAC_CTX_cleanup(&hctx_tpl);
 		return 0;
@@ -121,8 +121,8 @@ int PKCS5_PBKDF2_HMAC(const char *pass, int passlen,
 			HMAC_CTX_cleanup(&hctx_tpl);
 			return 0;
 			}
-		if (!HMAC_Update(&hctx, salt, saltlen)
-		    || !HMAC_Update(&hctx, itmp, 4)
+		if (!OpensslHMAC_Update(&hctx, salt, saltlen)
+		    || !OpensslHMAC_Update(&hctx, itmp, 4)
 		    || !HMAC_Final(&hctx, digtmp, NULL))
 			{
 			HMAC_CTX_cleanup(&hctx_tpl);
@@ -138,7 +138,7 @@ int PKCS5_PBKDF2_HMAC(const char *pass, int passlen,
 				HMAC_CTX_cleanup(&hctx_tpl);
 				return 0;
 				}
-			if (!HMAC_Update(&hctx, digtmp, mdlen)
+			if (!OpensslHMAC_Update(&hctx, digtmp, mdlen)
 			    || !HMAC_Final(&hctx, digtmp, NULL))
 				{
 				HMAC_CTX_cleanup(&hctx_tpl);

@@ -30,6 +30,7 @@
 #include "util.h"
 
 namespace node {
+extern v8::Persistent<v8::Context> g_context;
 
 template <typename T>
 class ReqWrap : public AsyncWrap {

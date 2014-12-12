@@ -92,6 +92,30 @@ typedef int mode_t;
 extern char **environ;
 #endif
 
+NODE_MODULE_REF(cares_wrap)
+NODE_MODULE_REF(fs_event_wrap)
+NODE_MODULE_REF(buffer)
+NODE_MODULE_REF(contextify)
+NODE_MODULE_REF(crypto)
+NODE_MODULE_REF(fs)
+NODE_MODULE_REF(http_parser)
+NODE_MODULE_REF(os)
+NODE_MODULE_REF(v8)
+NODE_MODULE_REF(zlib)
+NODE_MODULE_REF(pipe_wrap)
+NODE_MODULE_REF(process_wrap)
+NODE_MODULE_REF(signal_wrap)
+NODE_MODULE_REF(smalloc)
+NODE_MODULE_REF(spawn_sync)
+NODE_MODULE_REF(tcp_wrap)
+NODE_MODULE_REF(timer_wrap)
+NODE_MODULE_REF(tls_wrap)
+NODE_MODULE_REF(tty_wrap)
+NODE_MODULE_REF(udp_wrap)
+NODE_MODULE_REF(uv)
+NODE_MODULE_REF(id_weak_map)
+NODE_MODULE_REF(v8_util)
+
 namespace node {
 
 using v8::Array;
@@ -122,6 +146,9 @@ using v8::V8;
 using v8::Value;
 using v8::kExternalUint32Array;
 
+// declared in req_wrap.h
+v8::Persistent<Context> g_context;
+
 static bool print_eval = false;
 static bool force_repl = false;
 static bool trace_deprecation = false;
@@ -151,7 +178,7 @@ static bool debugger_running;
 static uv_async_t dispatch_debug_messages_async;
 
 static Isolate* node_isolate = NULL;
-
+Environment* g_env = NULL;
 int WRITE_UTF8_FLAGS = v8::String::HINT_MANY_WRITES_EXPECTED |
                        v8::String::NO_NULL_TERMINATION;
 
@@ -1051,6 +1078,12 @@ Handle<Value> MakeCallback(Environment* env,
   if (try_catch.HasCaught()) {
     return Undefined(env->isolate());
   }
+  return CallTickCallback(env, ret);
+}
+
+Handle<Value> CallTickCallback(Environment* env, const Handle<Value> ret) {
+  TryCatch try_catch;
+  try_catch.SetVerbose(true);
 
   Environment::TickInfo* tick_info = env->tick_info();
 
@@ -1070,7 +1103,7 @@ Handle<Value> MakeCallback(Environment* env,
   tick_info->set_in_tick(true);
 
   // process nextTicks after call
-  env->tick_callback_function()->Call(process, 0, NULL);
+  env->tick_callback_function()->Call(env->process_object(), 0, NULL);
 
   tick_info->set_in_tick(false);
 
@@ -2418,7 +2451,7 @@ static Handle<Object> GetFeatures(Environment* env) {
   Local<Value> debug = False(env->isolate());
 #endif  // defined(DEBUG) && DEBUG
 
-  obj->Set(env->debug_string(), debug);
+  obj->Set(env->debug_str(), debug);
 
   obj->Set(env->uv_string(), True(env->isolate()));
   // TODO(bnoordhuis) ping libuv
@@ -2560,7 +2593,8 @@ void SetupProcessObject(Environment* env,
                         int argc,
                         const char* const* argv,
                         int exec_argc,
-                        const char* const* exec_argv) {
+                        const char* const* exec_argv,
+                        bool node_webkit) {
   HandleScope scope(env->isolate());
 
   Local<Object> process = env->process_object();
@@ -2569,6 +2603,9 @@ void SetupProcessObject(Environment* env,
                        ProcessTitleGetter,
                        ProcessTitleSetter);
 
+  if (node_webkit) {
+    READONLY_PROPERTY(process, "__node_webkit", Integer::New(env->isolate(), 1));
+  }
   // process.version
   READONLY_PROPERTY(process,
                     "version",
@@ -2753,9 +2790,9 @@ void SetupProcessObject(Environment* env,
 
   NODE_SET_METHOD(process, "_kill", Kill);
 
-  NODE_SET_METHOD(process, "_debugProcess", DebugProcess);
-  NODE_SET_METHOD(process, "_debugPause", DebugPause);
-  NODE_SET_METHOD(process, "_debugEnd", DebugEnd);
+//  NODE_SET_METHOD(process, "_debugProcess", DebugProcess);
+//  NODE_SET_METHOD(process, "_debugPause", DebugPause);
+//  NODE_SET_METHOD(process, "_debugEnd", DebugEnd);
 
   NODE_SET_METHOD(process, "hrtime", Hrtime);
 
@@ -2806,11 +2843,13 @@ static void RawDebug(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-void LoadEnvironment(Environment* env) {
+void LoadEnvironment(Environment* env, bool node_webkit) {
   HandleScope handle_scope(env->isolate());
 
   V8::SetFatalErrorHandler(node::OnFatalError);
+  if (!node_webkit) {
   V8::AddMessageListener(OnMessage);
+  }
 
   // Compile, execute the src/node.js file. (Which was included as static C
   // string in node_natives.h. 'natve_node' is the string containing that
@@ -3365,10 +3404,11 @@ static void DebugEnd(const FunctionCallbackInfo<Value>& args) {
 void Init(int* argc,
           const char** argv,
           int* exec_argc,
-          const char*** exec_argv) {
+          const char*** exec_argv, bool node_webkit) {
   // Initialize prog_start_time to get relative uptime.
   prog_start_time = static_cast<double>(uv_now(uv_default_loop()));
 
+  if (!node_webkit) {
   // Make inherited handles noninheritable.
   uv_disable_stdio_inheritance();
 
@@ -3433,8 +3473,9 @@ void Init(int* argc,
     const char expose_debug_as[] = "--expose_debug_as=v8debug";
     V8::SetFlagsFromString(expose_debug_as, sizeof(expose_debug_as) - 1);
   }
-
   V8::SetArrayBufferAllocator(&ArrayBufferAllocator::the_singleton);
+  } //node-webkit
+
 
   // Fetch a reference to the main isolate, so we have a reference to it
   // even when we need it to access it from another (debugger) thread.
@@ -3559,9 +3600,9 @@ Environment* CreateEnvironment(Isolate* isolate,
                           argc,
                           argv,
                           exec_argc,
-                          exec_argv);
+                          exec_argv, false);
 
-  LoadEnvironment(env);
+  LoadEnvironment(env, false);
 
   return env;
 }
@@ -3587,7 +3628,8 @@ Environment* CreateEnvironment(Isolate* isolate,
                                int argc,
                                const char* const* argv,
                                int exec_argc,
-                               const char* const* exec_argv) {
+                               const char* const* exec_argv,
+                               bool node_webkit) {
   HandleScope handle_scope(isolate);
 
   Context::Scope context_scope(context);
@@ -3643,7 +3685,7 @@ Environment* CreateEnvironment(Isolate* isolate,
   Local<Object> process_object = process_template->GetFunction()->NewInstance();
   env->set_process_object(process_object);
 
-  SetupProcessObject(env, argc, argv, exec_argc, exec_argv);
+  SetupProcessObject(env, argc, argv, exec_argc, exec_argv, node_webkit);
 
   return env;
 }
@@ -3655,11 +3697,6 @@ int Start(int argc, char** argv) {
   if (replaceInvalid == NULL)
     WRITE_UTF8_FLAGS |= String::REPLACE_INVALID_UTF8;
 
-#if !defined(_WIN32)
-  // Try hard not to lose SIGUSR1 signals during the bootstrap process.
-  InstallEarlyDebugSignalHandler();
-#endif
-
   assert(argc > 0);
 
   // Hack around with the argv pointer. Used for process.title = "blah".
@@ -3669,7 +3706,7 @@ int Start(int argc, char** argv) {
   // optional, in case you're wondering.
   int exec_argc;
   const char** exec_argv;
-  Init(&argc, const_cast<const char**>(argv), &exec_argc, &exec_argv);
+  Init(&argc, const_cast<const char**>(argv), &exec_argc, &exec_argv, false);
 
 #if HAVE_OPENSSL
   // V8 on Windows doesn't have a good source of entropy. Seed it from
@@ -3692,14 +3729,14 @@ int Start(int argc, char** argv) {
         argc,
         argv,
         exec_argc,
-        exec_argv);
+        exec_argv, false);
     Context::Scope context_scope(context);
 
     // Start debug agent when argv has --debug
     if (use_debug_agent)
       StartDebug(env, debug_wait_connect);
 
-    LoadEnvironment(env);
+    LoadEnvironment(env, false);
 
     // Enable debugger
     if (use_debug_agent)
@@ -3736,5 +3773,82 @@ int Start(int argc, char** argv) {
   return code;
 }
 
+// copied beginning of Start() until v8::Initialize()
+void SetupUv(int argc, char** argv) {
+  const char* replaceInvalid = getenv("NODE_INVALID_UTF8");
+
+  if (replaceInvalid == NULL)
+    WRITE_UTF8_FLAGS |= String::REPLACE_INVALID_UTF8;
+
+#if !defined(_WIN32)
+  // Try hard not to lose SIGUSR1 signals during the bootstrap process.
+  InstallEarlyDebugSignalHandler();
+#endif
+
+  assert(argc > 0);
+
+  // Hack around with the argv pointer. Used for process.title = "blah".
+  argv = uv_setup_args(argc, argv);
+
+  // This needs to run *before* V8::Initialize().  The const_cast is not
+  // optional, in case you're wondering.
+  int exec_argc;
+  const char** exec_argv;
+  Init(&argc, const_cast<const char**>(argv), &exec_argc, &exec_argv, true);
+
+#if HAVE_OPENSSL
+  // V8 on Windows doesn't have a good source of entropy. Seed it from
+  // OpenSSL's pool.
+  V8::SetEntropySource(crypto::EntropySource);
+#endif
+
+  node_is_initialized = true;
+
+  node_isolate = Isolate::GetCurrent();
+}
+
+void SetupContext(int argc, char *argv[], v8::Handle<v8::Context> context) {
+  Isolate* isolate = Isolate::GetCurrent();
+  HandleScope handle_scope(isolate);
+  Context::Scope context_scope(context);
+
+  g_env = CreateEnvironment(isolate, uv_default_loop(),
+                            context, argc, argv, 0, NULL, true);
+  LoadEnvironment(g_env, true);
+}
+
+void ref_node_modules() {
+NODE_MODULE_REF2(cares_wrap)
+NODE_MODULE_REF2(fs_event_wrap)
+NODE_MODULE_REF2(buffer)
+NODE_MODULE_REF2(contextify)
+NODE_MODULE_REF2(crypto)
+NODE_MODULE_REF2(fs)
+NODE_MODULE_REF2(http_parser)
+NODE_MODULE_REF2(os)
+NODE_MODULE_REF2(v8)
+NODE_MODULE_REF2(zlib)
+NODE_MODULE_REF2(pipe_wrap)
+NODE_MODULE_REF2(process_wrap)
+NODE_MODULE_REF2(signal_wrap)
+NODE_MODULE_REF2(smalloc)
+NODE_MODULE_REF2(spawn_sync)
+NODE_MODULE_REF2(tcp_wrap)
+NODE_MODULE_REF2(timer_wrap)
+NODE_MODULE_REF2(tls_wrap)
+NODE_MODULE_REF2(tty_wrap)
+NODE_MODULE_REF2(udp_wrap)
+NODE_MODULE_REF2(uv)
+NODE_MODULE_REF2(id_weak_map)
+NODE_MODULE_REF2(v8_util)
+}
+
+void Shutdown() {
+  EmitExit(g_env);
+  RunAtExit(g_env);
+  g_env->Dispose();
+  g_env = NULL;
+  ref_node_modules();
+}
 
 }  // namespace node

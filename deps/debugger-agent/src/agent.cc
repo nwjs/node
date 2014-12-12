@@ -185,13 +185,13 @@ void Agent::WorkerRun() {
         ARRAY_SIZE(argv),
         argv,
         ARRAY_SIZE(argv),
-        argv);
+        argv, false);
 
     child_env_ = env;
 
     // Expose API
     InitAdaptor(env);
-    LoadEnvironment(env);
+    LoadEnvironment(env, false);
 
     CHECK_EQ(&child_loop_, env->event_loop());
     uv_run(&child_loop_, UV_RUN_DEFAULT);

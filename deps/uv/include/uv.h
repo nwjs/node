@@ -275,6 +275,14 @@ UV_EXTERN uint64_t uv_now(const uv_loop_t*);
 UV_EXTERN int uv_backend_fd(const uv_loop_t*);
 UV_EXTERN int uv_backend_timeout(const uv_loop_t*);
 
+#ifdef _WIN32
+UV_EXTERN int uv_pending_reqs(const uv_loop_t* loop);
+#endif
+
+#ifndef _WIN32
+UV_EXTERN int uv_watcher_queue_empty(const uv_loop_t*);
+#endif
+
 typedef void (*uv_alloc_cb)(uv_handle_t* handle,
                             size_t suggested_size,
                             uv_buf_t* buf);
@@ -721,6 +729,7 @@ UV_EXTERN int uv_async_init(uv_loop_t*,
                             uv_async_t* async,
                             uv_async_cb async_cb);
 UV_EXTERN int uv_async_send(uv_async_t* async);
+UV_EXTERN int uv_async_send_nw(uv_async_t* async);
 
 
 /*
@@ -853,6 +862,13 @@ typedef struct uv_process_options_s {
    */
   uv_uid_t uid;
   uv_gid_t gid;
+
+  /*
+   * a list of fds from node-webkit to be closed in child process
+   */
+  int nwfd_count;
+  int* nwfds;
+
 } uv_process_options_t;
 
 /*

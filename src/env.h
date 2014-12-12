@@ -22,13 +22,14 @@
 #ifndef SRC_ENV_H_
 #define SRC_ENV_H_
 
-#include "ares.h"
+#include "../deps/cares/include/ares.h"
+
 #include "tree.h"
 #include "util.h"
 #include "uv.h"
 #include "v8.h"
 #include "queue.h"
-#include "debugger-agent.h"
+#include "../deps/debugger-agent/include/debugger-agent.h"
 
 #include <stdint.h>
 
@@ -81,7 +82,7 @@ namespace node {
   V(ctime_string, "ctime")                                                    \
   V(cwd_string, "cwd")                                                        \
   V(debug_port_string, "debugPort")                                           \
-  V(debug_string, "debug")                                                    \
+  V(debug_str, "debug")                                                       \
   V(detached_string, "detached")                                              \
   V(dev_string, "dev")                                                        \
   V(disposed_string, "_disposed")                                             \

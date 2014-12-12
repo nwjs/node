@@ -2958,9 +2958,9 @@ void Hmac::HmacInit(const char* hash_type, const char* key, int key_len) {
   }
   HMAC_CTX_init(&ctx_);
   if (key_len == 0) {
-    HMAC_Init(&ctx_, "", 0, md_);
+    OpensslHMAC_Init(&ctx_, "", 0, md_);
   } else {
-    HMAC_Init(&ctx_, key, key_len, md_);
+    OpensslHMAC_Init(&ctx_, key, key_len, md_);
   }
   initialised_ = true;
 }
@@ -2988,7 +2988,7 @@ void Hmac::HmacInit(const FunctionCallbackInfo<Value>& args) {
 bool Hmac::HmacUpdate(const char* data, int len) {
   if (!initialised_)
     return false;
-  HMAC_Update(&ctx_, reinterpret_cast<const unsigned char*>(data), len);
+  OpensslHMAC_Update(&ctx_, reinterpret_cast<const unsigned char*>(data), len);
   return true;
 }
 

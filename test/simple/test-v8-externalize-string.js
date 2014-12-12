@@ -19,19 +19,18 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef SRC_NODE_HTTP_PARSER_H_
-#define SRC_NODE_HTTP_PARSER_H_
+// Flags: --expose_externalize_string
 
-#define V8_USE_UNSAFE_HANDLES
+var common = require('../common');
+var assert = require('assert');
 
-#include "v8.h"
+assert(typeof externalizeString === 'function',
+  'Run this test with --expose_externalize_string.');
 
-#include "http_parser.h"
+var str = '中';
+var buf = new Buffer(str);
+assert.equal(buf.toString('hex'), 'e4b8ad');
 
-namespace node {
-
-void InitHttpParser(v8::Handle<v8::Object> target);
-
-}  // namespace node
-
-#endif  // SRC_NODE_HTTP_PARSER_H_
+externalizeString(str, true); // force two bytes string
+var extbuf = new Buffer(str); // convert string to utf8 buffer
+assert.equal(extbuf.toString('hex'), 'e4b8ad');

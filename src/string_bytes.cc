@@ -304,6 +304,16 @@ size_t StringBytes::Write(Isolate* isolate,
 
   CHECK(val->IsString() == true);
   Local<String> str = val.As<String>();
+  bool is_extern_ascii = is_extern && str->IsExternalAscii();
+  if (is_extern_ascii) {
+    str = String::NewFromOneByte(isolate,
+      reinterpret_cast<const uint8_t*>(data),
+      String::kNormalString, len);
+  } else if (is_extern) {
+    str = String::NewFromTwoByte(isolate,
+      reinterpret_cast<const uint16_t*>(data),
+      String::kNormalString, len);
+  }
   len = len < buflen ? len : buflen;
 
   int flags = String::NO_NULL_TERMINATION |
@@ -313,31 +323,20 @@ size_t StringBytes::Write(Isolate* isolate,
     case ASCII:
     case BINARY:
     case BUFFER:
-      if (is_extern)
-        memcpy(buf, data, len);
-      else
-        len = str->WriteOneByte(reinterpret_cast<uint8_t*>(buf),
-                                0,
-                                buflen,
-                                flags);
+      len = str->WriteOneByte(reinterpret_cast<uint8_t*>(buf),
+                              0,
+                              buflen,
+                              flags);
       if (chars_written != NULL)
         *chars_written = len;
       break;
 
     case UTF8:
-      if (is_extern)
-        // TODO(tjfontaine) should this validate invalid surrogate pairs as
-        // well?
-        memcpy(buf, data, len);
-      else
-        len = str->WriteUtf8(buf, buflen, chars_written, WRITE_UTF8_FLAGS);
+      len = str->WriteUtf8(buf, buflen, chars_written, WRITE_UTF8_FLAGS);
       break;
 
     case UCS2:
-      if (is_extern)
-        memcpy(buf, data, len * 2);
-      else
-        len = str->Write(reinterpret_cast<uint16_t*>(buf), 0, buflen, flags);
+      len = str->Write(reinterpret_cast<uint16_t*>(buf), 0, buflen, flags);
       if (IsBigEndian()) {
         // Node's "ucs2" encoding wants LE character data stored in
         // the Buffer, so we need to reorder on BE platforms.  See
@@ -354,24 +353,20 @@ size_t StringBytes::Write(Isolate* isolate,
       break;
 
     case BASE64:
-      if (is_extern) {
-        len = base64_decode(buf, buflen, data, extlen);
-      } else {
+      do {
         String::Value value(str);
         len = base64_decode(buf, buflen, *value, value.length());
-      }
+      } while(0);
       if (chars_written != NULL) {
         *chars_written = len;
       }
       break;
 
     case HEX:
-      if (is_extern) {
-        len = hex_decode(buf, buflen, data, extlen);
-      } else {
+      do {
         String::Value value(str);
         len = hex_decode(buf, buflen, *value, value.length());
-      }
+      } while(0);
       if (chars_written != NULL) {
         *chars_written = len * 2;
       }
@@ -459,10 +454,19 @@ size_t StringBytes::Size(Isolate* isolate,
     return Buffer::Length(val);
 
   const char* data;
-  if (GetExternalParts(isolate, val, &data, &data_size))
-    return data_size;
+  bool is_extern = GetExternalParts(isolate, val, &data, &data_size);
 
   Local<String> str = val->ToString();
+  bool is_extern_ascii = is_extern && str->IsExternalAscii();
+  if (is_extern_ascii) {
+    str = String::NewFromOneByte(isolate,
+      reinterpret_cast<const uint8_t*>(data),
+      String::kNormalString, data_size);
+  } else if (is_extern) {
+    str = String::NewFromTwoByte(isolate,
+      reinterpret_cast<const uint16_t*>(data),
+      String::kNormalString, data_size);
+  }
 
   switch (encoding) {
     case BINARY:

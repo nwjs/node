@@ -22,6 +22,10 @@
 #ifndef SRC_NODE_H_
 #define SRC_NODE_H_
 
+#define V8_USE_UNSAFE_HANDLES
+
+#include "../deps/uv/include/uv.h"
+
 #ifdef _WIN32
 # ifndef BUILDING_NODE_EXTENSION
 #   define NODE_EXTERN __declspec(dllexport)
@@ -46,7 +50,18 @@
 # define _WIN32_WINNT   0x0501
 #endif
 
+//copied from uv_win.h
+#if 0
+#if !defined(_SSIZE_T_) && !defined(_SSIZE_T_DEFINED)
+typedef intptr_t ssize_t;
+# define _SSIZE_T_
+# define _SSIZE_T_DEFINED
+#endif
+#endif
+
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 
 #endif
 
@@ -69,6 +84,8 @@ struct uv_loop_s;
 // Forward-declare these functions now to stop MSVS from becoming
 // terminally confused when it's done in node_internals.h
 namespace node {
+
+class Environment;
 
 NODE_EXTERN v8::Local<v8::Value> ErrnoException(v8::Isolate* isolate,
                                                 int errorno,
@@ -135,6 +152,12 @@ NODE_EXTERN v8::Handle<v8::Value> MakeCallback(
     int argc,
     v8::Handle<v8::Value>* argv);
 
+NODE_EXTERN v8::Handle<v8::Value> MakeCallback(Environment* env,
+                                               v8::Handle<v8::Value> recv,
+                                               const char* method,
+                                               int argc,
+                                               v8::Handle<v8::Value> argv[]);
+
 }  // namespace node
 
 #if defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
@@ -172,6 +195,9 @@ namespace node {
 
 NODE_EXTERN extern bool no_deprecation;
 
+NODE_EXTERN void SetupUv(int argc, char **argv);
+NODE_EXTERN void SetupContext(int argc, char *argv[], v8::Handle<v8::Context> ctx);
+NODE_EXTERN void Shutdown();
 NODE_EXTERN int Start(int argc, char *argv[]);
 NODE_EXTERN void Init(int* argc,
                       const char** argv,
@@ -186,8 +212,9 @@ NODE_EXTERN Environment* CreateEnvironment(v8::Isolate* isolate,
                                            int argc,
                                            const char* const* argv,
                                            int exec_argc,
-                                           const char* const* exec_argv);
-NODE_EXTERN void LoadEnvironment(Environment* env);
+                                           const char* const* exec_argv,
+                                           bool node_webkit);
+NODE_EXTERN void LoadEnvironment(Environment* env, bool node_webkit);
 
 // NOTE: Calling this is the same as calling
 // CreateEnvironment() + LoadEnvironment() from above.
@@ -375,10 +402,10 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
 #if defined(_MSC_VER)
 #pragma section(".CRT$XCU", read)
 #define NODE_C_CTOR(fn)                                               \
-  static void __cdecl fn(void);                                       \
+  void __cdecl fn(void);                                       \
   __declspec(dllexport, allocate(".CRT$XCU"))                         \
       void (__cdecl*fn ## _)(void) = fn;                              \
-  static void __cdecl fn(void)
+  void __cdecl fn(void)
 #else
 #define NODE_C_CTOR(fn)                                               \
   static void fn(void) __attribute__((constructor));                  \
@@ -404,6 +431,12 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
     }                                                                 \
   }
 
+#define NODE_MODULE_REF(modname)                                      \
+  extern int _node_ref_ ## modname;
+
+#define NODE_MODULE_REF2(modname)                                      \
+  _node_ref_ ## modname = 1;
+
 #define NODE_MODULE_CONTEXT_AWARE_X(modname, regfunc, priv, flags)    \
   extern "C" {                                                        \
     static node::node_module _module =                                \
@@ -421,7 +454,8 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
     NODE_C_CTOR(_register_ ## modname) {                              \
       node_module_register(&_module);                                 \
     }                                                                 \
-  }
+  }                                                                   \
+  int _node_ref_ ## modname;                                 
 
 #define NODE_MODULE(modname, regfunc)                                 \
   NODE_MODULE_X(modname, regfunc, NULL, 0)

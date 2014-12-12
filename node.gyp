@@ -13,6 +13,8 @@
     'node_use_openssl%': 'true',
     'node_shared_openssl%': 'false',
     'node_use_mdb%': 'false',
+    'icu_small%': 'false',
+    'node_tag%': '',
     'node_v8_options%': '',
     'library_files': [
       'src/node.js',
@@ -28,6 +30,7 @@
       'lib/dgram.js',
       'lib/dns.js',
       'lib/domain.js',
+      'lib/dummystream.js',
       'lib/events.js',
       'lib/freelist.js',
       'lib/fs.js',
@@ -73,19 +76,31 @@
   'targets': [
     {
       'target_name': 'node',
-      'type': 'executable',
+      'type': 'static_library',
+      'toolsets': ['host', 'target'],
 
       'dependencies': [
         'node_js2c#host',
         'deps/debugger-agent/debugger-agent.gyp:debugger-agent',
       ],
 
+      'includes': [
+        'common.gypi',
+      ],
+
       'include_dirs': [
+        '../..',
         'src',
         'tools/msvs/genfiles',
         'deps/uv/src/ares',
         '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
       ],
+
+      'direct_dependent_settings': {
+        'include_dirs': [
+          'deps/uv/include',
+        ],
+      },
 
       'sources': [
         'src/async-wrap.cc',
@@ -105,6 +120,9 @@
         'src/node_stat_watcher.cc',
         'src/node_watchdog.cc',
         'src/node_zlib.cc',
+        'src/nw/node_id_weak_map.cc',
+        'src/nw/node_v8_util.cc',
+        'src/nw/object_life_monitor.cc',
         'src/node_i18n.cc',
         'src/pipe_wrap.cc',
         'src/signal_wrap.cc',
@@ -139,6 +157,7 @@
         'src/node_wrap.h',
         'src/node_i18n.h',
         'src/pipe_wrap.h',
+        'src/nw/object_life_monitor.h',
         'src/queue.h',
         'src/smalloc.h',
         'src/tty_wrap.h',
@@ -167,6 +186,11 @@
         'NODE_V8_OPTIONS="<(node_v8_options)"',
       ],
 
+      'configurations': {
+        'Debug': {
+          'defines': [ 'DEBUG' ],
+        },
+      },
       'conditions': [
         [ 'gcc_version<=44', {
           # GCC versions <= 4.4 do not handle the aliasing in the queue
@@ -200,10 +224,10 @@
           'conditions': [
             [ 'node_shared_openssl=="false"', {
               'dependencies': [
-                './deps/openssl/openssl.gyp:openssl',
+                'deps/openssl/openssl.gyp:openssl',
 
                 # For tests
-                './deps/openssl/openssl.gyp:openssl-cli',
+                #'deps/openssl/openssl.gyp:openssl-cli',
               ],
               # Do not let unused OpenSSL symbols to slip away
               'xcode_settings': {
@@ -305,11 +329,11 @@
             'deps/v8/include/v8.h',
             'deps/v8/include/v8-debug.h',
           ],
-          'dependencies': [ 'deps/v8/tools/gyp/v8.gyp:v8' ],
+          'dependencies': [ '../../v8/tools/gyp/v8.gyp:v8' ],
         }],
 
         [ 'node_shared_zlib=="false"', {
-          'dependencies': [ 'deps/zlib/zlib.gyp:zlib' ],
+          'dependencies': [ '../zlib/zlib.gyp:zlib' ],
         }],
 
         [ 'node_shared_http_parser=="false"', {
@@ -455,7 +479,7 @@
             }]
           ],
           'action': [
-            '<(python)',
+            'python',
             'tools/js2c.py',
             '<@(_outputs)',
             '<@(_inputs)',

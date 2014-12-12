@@ -272,6 +272,12 @@ int uv_backend_fd(const uv_loop_t* loop) {
 }
 
 
+int uv_watcher_queue_empty(const uv_loop_t* loop) {
+  if (!QUEUE_EMPTY(&loop->watcher_queue))
+    return 0;
+  return 1;
+}
+
 int uv_backend_timeout(const uv_loop_t* loop) {
   if (loop->stop_flag != 0)
     return 0;

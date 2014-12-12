@@ -193,6 +193,7 @@ inline Environment* Environment::New(v8::Local<v8::Context> context,
 
 inline void Environment::AssignToContext(v8::Local<v8::Context> context) {
   context->SetAlignedPointerInEmbedderData(kContextEmbedderDataIndex, this);
+  context->SetAlignedPointerInEmbedderData(1, NULL);
 }
 
 inline Environment* Environment::GetCurrent(v8::Isolate* isolate) {

@@ -25,7 +25,7 @@
 #include "node.h"
 #include "util.h"
 #include "util-inl.h"
-#include "uv.h"
+#include "../deps/uv/include/uv.h"
 #include "v8.h"
 
 #include <assert.h>
@@ -38,6 +38,12 @@ namespace node {
 
 // Forward declaration
 class Environment;
+extern Environment* g_env;
+
+int EmitExit(Environment* env);
+void RunAtExit(Environment* env);
+void OnMessage(v8::Handle<v8::Message> message, v8::Handle<v8::Value> error);
+v8::Handle<v8::Value> CallTickCallback(Environment* env, const v8::Handle<v8::Value> ret);
 
 // If persistent.IsWeak() == false, then do not call persistent.Reset()
 // while the returned Local<T> is still in scope, it will destroy the
@@ -114,7 +120,9 @@ inline static int snprintf(char* buf, unsigned int len, const char* fmt, ...) {
 
 #if defined(__GNUC__) && __GNUC__ >= 4
 # define MUST_USE_RESULT __attribute__((warn_unused_result))
+#if !defined(NO_RETURN)
 # define NO_RETURN __attribute__((noreturn))
+#endif
 #else
 # define MUST_USE_RESULT
 # define NO_RETURN

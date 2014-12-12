@@ -44,7 +44,17 @@
 
     startup.globalVariables();
     startup.globalTimeouts();
-    startup.globalConsole();
+    if (process.__node_webkit) {
+      // nw: we try to keep the uniform behaviour (logging to devtools) here.
+      // FIXME: should have a better solution for full console support
+      global.console = {
+        log: function() {},
+        error: function(){},
+        warn: function() {}
+      }; // Will be override when WebKit is started.
+    } else {
+      startup.globalConsole();
+    }
 
     startup.processAssert();
     startup.processConfig();
@@ -62,6 +72,33 @@
 
     startup.resolveArgv0();
 
+    if (process.__node_webkit) {
+      startup.initNw();
+      var Module = NativeModule.require('module');
+      // Execute the main script
+      if (process.argv[1]) {
+        // make process.argv[1] into a full path
+        var path = NativeModule.require('path');
+        process.argv[1] = path.resolve(process.argv[1]);
+
+        // If this is a worker in cluster mode, start up the communication
+        // channel.
+        if (process.env.NODE_UNIQUE_ID) {
+          var cluster = NativeModule.require('cluster');
+          cluster._setupWorker();
+
+          // Make sure it's not accidentally inherited by child processes.
+          delete process.env.NODE_UNIQUE_ID;
+        }
+        // Main entry point into most programs:
+        process.nextTick(Module.runMain);
+      }
+      // Emulate node.js script's execution everionment
+      var module = new Module('.', null);
+      global.process.mainModule = module;
+      module._compile('global.module = module;\n' +
+                      'global.require = global.__nw_require = require;\n', 'nw-emulate-node');
+    } else { // upstream startup process
     // There are various modes that Node can run in. The most common two
     // are running from a script and running the REPL - but there are a few
     // others like the debugger or running --eval arguments. Here we decide
@@ -164,6 +201,7 @@
           evalScript('[stdin]');
         });
       }
+    }
     }
   }
 
@@ -432,6 +470,17 @@
     if (process._print_eval) console.log(result);
   }
 
+  function createWritableDummyStream(fd) {
+    var DummyStream = NativeModule.require('dummystream');
+    stream = new DummyStream();
+    stream.fd = fd;
+
+    stream._isStdio = true;
+
+    return stream;
+
+  }
+
   function createWritableStdioStream(fd) {
     var stream;
     var tty_wrap = process.binding('tty_wrap');
@@ -499,7 +548,10 @@
 
     process.__defineGetter__('stdout', function() {
       if (stdout) return stdout;
-      stdout = createWritableStdioStream(1);
+      if (process.platform === 'win32')
+        stdout = createWritableDummyStream(1);
+      else
+        stdout = createWritableStdioStream(1);
       stdout.destroy = stdout.destroySoon = function(er) {
         er = er || new Error('process.stdout cannot be closed.');
         stdout.emit('error', er);
@@ -514,7 +566,10 @@
 
     process.__defineGetter__('stderr', function() {
       if (stderr) return stderr;
-      stderr = createWritableStdioStream(2);
+      if (process.platform === 'win32')
+        stderr = createWritableDummyStream(2);
+      else
+        stderr = createWritableStdioStream(2);
       stderr.destroy = stderr.destroySoon = function(er) {
         er = er || new Error('process.stderr cannot be closed.');
         stderr.emit('error', er);
@@ -731,6 +786,28 @@
       process.argv[0] = path.join(cwd, process.argv[0]);
     }
   };
+
+  startup.initNw = function() {
+    // Registry to store nw's UI objects
+    var IDWeakMap = process.binding('id_weak_map').IDWeakMap;
+    global.__nwObjectsRegistry = new IDWeakMap();
+
+    // Make __nwObjectsRegistry able to handle events.
+    global.__nwObjectsRegistry.handleEvent = function(object_id, ev, args) {
+      var object = this.get(object_id);
+      if (object === null)
+        return;
+      args.splice(0, 0, ev);
+      object.handleEvent.apply(object, args);
+    }
+
+    // Store nw Shell's corresponding js objects
+    global.__nwWindowsStore = {};
+
+    // Make Window a EventEmitter
+    NativeModule.require('util').inherits(global.Window, process.EventEmitter);
+    global.Window.init();
+  }
 
   // Below you find a minimal module system, which is used to load the node
   // core modules found in lib/*.js. All core modules are compiled into the

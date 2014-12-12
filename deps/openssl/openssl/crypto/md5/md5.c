@@ -110,7 +110,7 @@ void do_fp(FILE *f)
 		{
 		i=read(fd,buf,BUFSIZE);
 		if (i <= 0) break;
-		MD5_Update(&c,buf,(unsigned long)i);
+		OpensslMD5_Update(&c,buf,(unsigned long)i);
 		}
 	MD5_Final(&(md[0]),&c);
 	pt(md);

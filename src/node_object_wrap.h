@@ -38,6 +38,7 @@ class ObjectWrap {
   virtual ~ObjectWrap() {
     if (persistent().IsEmpty())
       return;
+    // v8::HandleScope scope;
     assert(persistent().IsNearDeath());
     persistent().ClearWeak();
     persistent().Reset();
@@ -69,7 +70,6 @@ class ObjectWrap {
   inline v8::Persistent<v8::Object>& persistent() {
     return handle_;
   }
-
 
  protected:
   inline void Wrap(v8::Handle<v8::Object> handle) {

@@ -83,6 +83,26 @@ int uv_async_send(uv_async_t* handle) {
   return 0;
 }
 
+// WARNING: this func should be kept sync with uv_async_send()
+
+int uv_async_send_nw(uv_async_t* handle) {
+  uv_loop_t* loop = handle->loop;
+
+  if (handle->type != UV_ASYNC) {
+    /* Can't set errno because that's not thread-safe. */
+    return -1;
+  }
+
+  /* The user should make sure never to call uv_async_send to a closing */
+  /* or closed handle. */
+  assert(!(handle->flags & UV__HANDLE_CLOSING));
+
+  uv__atomic_exchange_set(&handle->async_sent);
+  POST_COMPLETION_FOR_REQ(loop, &handle->async_req);
+
+  return 0;
+}
+
 
 void uv_process_async_wakeup_req(uv_loop_t* loop, uv_async_t* handle,
     uv_req_t* req) {

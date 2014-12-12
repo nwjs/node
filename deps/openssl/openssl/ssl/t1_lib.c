@@ -2348,7 +2348,7 @@ static int tls_decrypt_ticket(SSL *s, const unsigned char *etick, int eticklen,
 		/* Check key name matches */
 		if (memcmp(etick, tctx->tlsext_tick_key_name, 16))
 			return 2;
-		HMAC_Init_ex(&hctx, tctx->tlsext_tick_hmac_key, 16,
+		OpensslHMAC_Init_ex(&hctx, tctx->tlsext_tick_hmac_key, 16,
 					tlsext_tick_md(), NULL);
 		EVP_DecryptInit_ex(&ctx, EVP_aes_128_cbc(), NULL,
 				tctx->tlsext_tick_aes_key, etick + 16);
@@ -2364,7 +2364,7 @@ static int tls_decrypt_ticket(SSL *s, const unsigned char *etick, int eticklen,
 		}
 	eticklen -= mlen;
 	/* Check HMAC of encrypted ticket */
-	HMAC_Update(&hctx, etick, eticklen);
+	OpensslHMAC_Update(&hctx, etick, eticklen);
 	HMAC_Final(&hctx, tick_hmac, NULL);
 	HMAC_CTX_cleanup(&hctx);
 	if (CRYPTO_memcmp(tick_hmac, etick + eticklen, mlen))

@@ -6,13 +6,14 @@
   'variables': {
     'is_clang': 0,
     'gcc_version': 0,
-    'openssl_no_asm%': 0
+    'openssl_no_asm%': 1
   },
 
   'targets': [
     {
       'target_name': 'openssl',
-      'type': '<(library)',
+      'type': 'static_library',
+      'toolsets': ['host', 'target'],
       'sources': [
         'openssl/ssl/bio_ssl.c',
         'openssl/ssl/d1_both.c',

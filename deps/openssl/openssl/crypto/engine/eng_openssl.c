@@ -318,7 +318,7 @@ static int test_sha1_update(EVP_MD_CTX *ctx,const void *data,size_t count)
 #ifdef TEST_ENG_OPENSSL_SHA_P_UPDATE
 	fprintf(stderr, "(TEST_ENG_OPENSSL_SHA) test_sha1_update() called\n");
 #endif
-	return SHA1_Update(ctx->md_data,data,count);
+	return OpensslSHA1_Update(ctx->md_data,data,count);
 	}
 static int test_sha1_final(EVP_MD_CTX *ctx,unsigned char *md)
 	{

@@ -1,4 +1,8 @@
 {
+  'variables': {
+    'library%': 'static_library',
+    'uv_library%': 'static_library',
+  },
   'target_defaults': {
     'conditions': [
       ['OS != "win"', {
@@ -25,7 +29,8 @@
   'targets': [
     {
       'target_name': 'libuv',
-      'type': '<(uv_library)',
+      'type': 'static_library',
+      'toolsets': ['host', 'target'],
       'include_dirs': [
         'include',
         'src/',

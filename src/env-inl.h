@@ -5,7 +5,7 @@
 #include "node.h"
 #include "util.h"
 #include "util-inl.h"
-#include "uv.h"
+#include "third_party/node/deps/uv/include/uv.h"
 #include "v8.h"
 
 #include <stddef.h>
@@ -136,6 +136,7 @@ inline Environment* Environment::New(v8::Local<v8::Context> context,
 
 inline void Environment::AssignToContext(v8::Local<v8::Context> context) {
   context->SetAlignedPointerInEmbedderData(kContextEmbedderDataIndex, this);
+  context->SetAlignedPointerInEmbedderData(1, NULL);
 }
 
 inline Environment* Environment::GetCurrent(v8::Isolate* isolate) {

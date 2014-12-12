@@ -12,21 +12,29 @@ namespace node {
 #define FIXED_ONE_BYTE_STRING(isolate, string)                                \
   (node::OneByteString((isolate), (string), sizeof(string) - 1))
 
+#ifndef DISALLOW_COPY_AND_ASSIGN
 #define DISALLOW_COPY_AND_ASSIGN(TypeName)                                    \
   void operator=(const TypeName&) = delete;                                   \
   void operator=(TypeName&&) = delete;                                        \
   TypeName(const TypeName&) = delete;                                         \
   TypeName(TypeName&&) = delete
+#endif
 
 #if defined(NDEBUG)
+#if !defined(ASSERT)
 # define ASSERT(expression)
-# define CHECK(expression)                                                    \
+#endif
+# define CHECK(expression)                                              \
   do {                                                                        \
     if (!(expression)) abort();                                               \
   } while (0)
 #else
+#ifndef ASSERT
 # define ASSERT(expression)  assert(expression)
+#endif
+#ifndef CHECK
 # define CHECK(expression)   assert(expression)
+#endif
 #endif
 
 #define ASSERT_EQ(a, b) ASSERT((a) == (b))
@@ -36,12 +44,24 @@ namespace node {
 #define ASSERT_LT(a, b) ASSERT((a) < (b))
 #define ASSERT_NE(a, b) ASSERT((a) != (b))
 
+#ifndef CHECK_EQ
 #define CHECK_EQ(a, b) CHECK((a) == (b))
+#endif
+#ifndef CHECK_GE
 #define CHECK_GE(a, b) CHECK((a) >= (b))
+#endif
+#ifndef CHECK_GT
 #define CHECK_GT(a, b) CHECK((a) > (b))
+#endif
+#ifndef CHECK_LE
 #define CHECK_LE(a, b) CHECK((a) <= (b))
+#endif
+#ifndef CHECK_LT
 #define CHECK_LT(a, b) CHECK((a) < (b))
+#endif
+#ifndef CHECK_NE
 #define CHECK_NE(a, b) CHECK((a) != (b))
+#endif
 
 #define UNREACHABLE() abort()
 

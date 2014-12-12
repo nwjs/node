@@ -99,7 +99,7 @@ static void uv_init(void) {
    * FDs even though they return the proper error code in the release build.
    */
 #if defined(_DEBUG) && (defined(_MSC_VER) || defined(__MINGW64_VERSION_MAJOR))
-  _CrtSetReportHook(uv__crt_dbg_report_handler);
+  /* _CrtSetReportHook(uv__crt_dbg_report_handler); */
 #endif
 
   /* Fetch winapi function pointers. This must be done first because other
@@ -301,6 +301,11 @@ int uv_backend_timeout(const uv_loop_t* loop) {
   return uv__next_timeout(loop);
 }
 
+int uv_pending_reqs(const uv_loop_t* loop) {
+  if (loop->pending_reqs_tail == NULL)
+    return 0;
+  return 1;
+}
 
 static void uv_poll(uv_loop_t* loop, DWORD timeout) {
   DWORD bytes;

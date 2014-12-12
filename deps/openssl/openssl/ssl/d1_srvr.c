@@ -1692,7 +1692,7 @@ int dtls1_send_newsession_ticket(SSL *s)
 			RAND_pseudo_bytes(iv, 16);
 			EVP_EncryptInit_ex(&ctx, EVP_aes_128_cbc(), NULL,
 					tctx->tlsext_tick_aes_key, iv);
-			HMAC_Init_ex(&hctx, tctx->tlsext_tick_hmac_key, 16,
+			OpensslHMAC_Init_ex(&hctx, tctx->tlsext_tick_hmac_key, 16,
 					tlsext_tick_md(), NULL);
 			memcpy(key_name, tctx->tlsext_tick_key_name, 16);
 			}
@@ -1713,7 +1713,7 @@ int dtls1_send_newsession_ticket(SSL *s)
 		p += len;
 		EVP_CIPHER_CTX_cleanup(&ctx);
 
-		HMAC_Update(&hctx, macstart, p - macstart);
+		OpensslHMAC_Update(&hctx, macstart, p - macstart);
 		HMAC_Final(&hctx, p, &hlen);
 		HMAC_CTX_cleanup(&hctx);
 

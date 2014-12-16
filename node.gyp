@@ -232,7 +232,7 @@
               # Do not let unused OpenSSL symbols to slip away
               'xcode_settings': {
                 'OTHER_LDFLAGS': [
-                  '-Wl,-force_load,<(PRODUCT_DIR)/libopenssl.a',
+                  #'-Wl,-force_load,<(PRODUCT_DIR)/libopenssl.a',
                 ],
               },
               'conditions': [

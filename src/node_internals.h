@@ -40,10 +40,10 @@ namespace node {
 class Environment;
 extern Environment* g_env;
 
-int EmitExit(Environment* env);
-void RunAtExit(Environment* env);
-void OnMessage(v8::Handle<v8::Message> message, v8::Handle<v8::Value> error);
-v8::Handle<v8::Value> CallTickCallback(Environment* env, const v8::Handle<v8::Value> ret);
+//extern int EmitExit(Environment* env);
+//extern void RunAtExit(Environment* env);
+extern void OnMessage(v8::Handle<v8::Message> message, v8::Handle<v8::Value> error);
+extern v8::Handle<v8::Value> CallTickCallback(Environment* env, const v8::Handle<v8::Value> ret);
 
 // If persistent.IsWeak() == false, then do not call persistent.Reset()
 // while the returned Local<T> is still in scope, it will destroy the

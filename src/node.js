@@ -454,7 +454,7 @@
 
   function createWritableDummyStream(fd) {
     var DummyStream = NativeModule.require('dummystream');
-    stream = new DummyStream();
+    var stream = new DummyStream();
     stream.fd = fd;
 
     stream._isStdio = true;

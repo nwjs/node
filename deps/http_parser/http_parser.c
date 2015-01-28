@@ -2185,7 +2185,7 @@ http_parser_parse_url(const char *buf, size_t buflen, int is_connect,
         break;
 
       default:
-        assert(!"Unexpected state");
+        assert(!(int)"Unexpected state");
         return 1;
     }
 

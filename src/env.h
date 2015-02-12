@@ -60,7 +60,7 @@ namespace node {
   V(ctime_string, "ctime")                                                    \
   V(cwd_string, "cwd")                                                        \
   V(debug_port_string, "debugPort")                                           \
-  V(debug_string, "debug")                                                    \
+  V(debug_str, "debug")                                                    \
   V(dest_string, "dest")                                                      \
   V(detached_string, "detached")                                              \
   V(dev_string, "dev")                                                        \

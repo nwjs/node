@@ -3818,11 +3818,6 @@ void SetupUv(int argc, char** argv) {
   if (replaceInvalid == nullptr)
     WRITE_UTF8_FLAGS |= String::REPLACE_INVALID_UTF8;
 
-#if !defined(_WIN32)
-  // Try hard not to lose SIGUSR1 signals during the bootstrap process.
-  InstallEarlyDebugSignalHandler();
-#endif
-
   CHECK_GT(argc, 0);
 
   // Hack around with the argv pointer. Used for process.title = "blah".

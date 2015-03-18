@@ -98,7 +98,7 @@ static void uv_init(void) {
    * FDs even though they return the proper error code in the release build.
    */
 #if defined(_DEBUG) && (defined(_MSC_VER) || defined(__MINGW64_VERSION_MAJOR))
-  _CrtSetReportHook(uv__crt_dbg_report_handler);
+  //_CrtSetReportHook(uv__crt_dbg_report_handler);
 #endif
 
   /* Fetch winapi function pointers. This must be done first because other
@@ -374,10 +374,11 @@ int uv_run(uv_loop_t *loop, uv_run_mode mode) {
   int r;
   int ran_pending;
   void (*poll)(uv_loop_t* loop, DWORD timeout);
-
+#if 1
   if (pGetQueuedCompletionStatusEx)
     poll = &uv_poll_ex;
   else
+#endif
     poll = &uv_poll;
 
   r = uv__loop_alive(loop);

@@ -6,6 +6,7 @@
 #include "node_javascript.h"
 #include "node_version.h"
 #include "node_internals.h"
+#include "node_webkit.h"
 
 #if defined HAVE_PERFCTR
 #include "node_counters.h"
@@ -81,6 +82,28 @@ typedef int mode_t;
 extern char **environ;
 #endif
 
+NODE_MODULE_REF(cares_wrap)
+NODE_MODULE_REF(fs_event_wrap)
+NODE_MODULE_REF(buffer)
+NODE_MODULE_REF(contextify)
+NODE_MODULE_REF(crypto)
+NODE_MODULE_REF(fs)
+NODE_MODULE_REF(http_parser)
+NODE_MODULE_REF(os)
+NODE_MODULE_REF(v8)
+NODE_MODULE_REF(zlib)
+NODE_MODULE_REF(pipe_wrap)
+NODE_MODULE_REF(process_wrap)
+NODE_MODULE_REF(signal_wrap)
+NODE_MODULE_REF(smalloc)
+NODE_MODULE_REF(spawn_sync)
+NODE_MODULE_REF(tcp_wrap)
+NODE_MODULE_REF(timer_wrap)
+NODE_MODULE_REF(tls_wrap)
+NODE_MODULE_REF(tty_wrap)
+NODE_MODULE_REF(udp_wrap)
+NODE_MODULE_REF(uv)
+
 namespace node {
 
 using v8::Array;
@@ -134,6 +157,12 @@ static node_module* modpending;
 static node_module* modlist_builtin;
 static node_module* modlist_linked;
 static node_module* modlist_addon;
+
+
+NODE_EXTERN Environment* g_env = nullptr;
+NODE_EXTERN v8::Persistent<Context> g_context;
+NODE_EXTERN int (*g_nw_uv_run)(uv_loop_t* loop, uv_run_mode mode);
+static NWTickCallback* g_nw_tick_callback = nullptr;
 
 #if defined(NODE_HAVE_I18N_SUPPORT)
 // Path to ICU data (for i18n / Intl)
@@ -2190,7 +2219,7 @@ void FatalException(Isolate* isolate, const TryCatch& try_catch) {
 }
 
 
-void OnMessage(Local<Message> message, Local<Value> error) {
+NODE_EXTERN void OnMessage(Local<Message> message, Local<Value> error) {
   // The current version of V8 sends messages for errors only
   // (thus `error` is always set).
   FatalException(Isolate::GetCurrent(), error, message);
@@ -2945,7 +2974,7 @@ void LoadEnvironment(Environment* env) {
   HandleScope handle_scope(env->isolate());
 
   env->isolate()->SetFatalErrorHandler(node::OnFatalError);
-  env->isolate()->AddMessageListener(OnMessage);
+  //env->isolate()->AddMessageListener(OnMessage);
 
   // Compile, execute the src/node.js file. (Which was included as static C
   // string in node_natives.h. 'natve_node' is the string containing that
@@ -3989,5 +4018,61 @@ int Start(int argc, char** argv) {
   return exit_code;
 }
 
+void ref_node_modules() {
+NODE_MODULE_REF2(cares_wrap)
+NODE_MODULE_REF2(fs_event_wrap)
+NODE_MODULE_REF2(buffer)
+NODE_MODULE_REF2(contextify)
+NODE_MODULE_REF2(crypto)
+NODE_MODULE_REF2(fs)
+NODE_MODULE_REF2(http_parser)
+NODE_MODULE_REF2(os)
+NODE_MODULE_REF2(v8)
+NODE_MODULE_REF2(zlib)
+NODE_MODULE_REF2(pipe_wrap)
+NODE_MODULE_REF2(process_wrap)
+NODE_MODULE_REF2(signal_wrap)
+NODE_MODULE_REF2(smalloc)
+NODE_MODULE_REF2(spawn_sync)
+NODE_MODULE_REF2(tcp_wrap)
+NODE_MODULE_REF2(timer_wrap)
+NODE_MODULE_REF2(tls_wrap)
+NODE_MODULE_REF2(tty_wrap)
+NODE_MODULE_REF2(udp_wrap)
+NODE_MODULE_REF2(uv)
+}
+
+// copied beginning of Start() until v8::Initialize()
+NODE_EXTERN void SetupNWNode(int argc, char** argv) {
+  node_is_initialized = true;
+  ref_node_modules();
+  node_isolate = Isolate::GetCurrent();
+}
+
+NODE_EXTERN bool is_node_initialized() {
+  return node_is_initialized;
+}
+
+NODE_EXTERN void StartNWInstance(int argc, char *argv[], v8::Handle<v8::Context> context) {
+  Isolate* isolate = Isolate::GetCurrent();
+  HandleScope handle_scope(isolate);
+  Context::Scope context_scope(context);
+
+  g_env = CreateEnvironment(isolate, uv_default_loop(),
+                            context, argc, argv, 0, NULL);
+  LoadEnvironment(g_env);
+}
+
+NODE_EXTERN void SetNWTickCallback(NWTickCallback* tick_callback) {
+  g_nw_tick_callback = tick_callback;
+}
+
+NODE_EXTERN v8::Handle<v8::Value> CallNWTickCallback(Environment* env, const v8::Handle<v8::Value> ret) {
+  return (*g_nw_tick_callback)(env, ret);
+}
+
+NODE_EXTERN Environment* GetCurrentEnvironment(v8::Handle<v8::Context> context) {
+  return Environment::GetCurrent(context);
+}
 
 }  // namespace node

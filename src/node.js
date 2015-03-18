@@ -45,6 +45,12 @@
 
     process.argv[0] = process.execPath;
 
+    var Module = NativeModule.require('module');
+    var module = new Module('.', null);
+    global.process.mainModule = module;
+    module._compile('global.module = module;\n' +
+                    'global.require = global.__nw_require = require;\n', 'nw-emulate-node');
+    return;
     // There are various modes that Node can run in. The most common two
     // are running from a script and running the REPL - but there are a few
     // others like the debugger or running --eval arguments. Here we decide

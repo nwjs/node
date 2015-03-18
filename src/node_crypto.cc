@@ -27,6 +27,7 @@
 #define strcasecmp _stricmp
 #endif
 
+
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
 #define OPENSSL_CONST const
 #else

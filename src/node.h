@@ -8,7 +8,7 @@
 #   define NODE_EXTERN __declspec(dllimport)
 # endif
 #else
-# define NODE_EXTERN /* nothing */
+# define NODE_EXTERN __attribute__((visibility("default")))
 #endif
 
 #ifdef BUILDING_NODE_EXTENSION
@@ -279,10 +279,6 @@ NODE_DEPRECATED("Use ParseEncoding(isolate, ...)",
 NODE_EXTERN void FatalException(v8::Isolate* isolate,
                                 const v8::TryCatch& try_catch);
 
-NODE_DEPRECATED("Use FatalException(isolate, ...)",
-                inline void FatalException(const v8::TryCatch& try_catch) {
-  return FatalException(v8::Isolate::GetCurrent(), try_catch);
-})
 
 // Don't call with encoding=UCS2.
 NODE_EXTERN v8::Local<v8::Value> Encode(v8::Isolate* isolate,
@@ -314,12 +310,6 @@ NODE_DEPRECATED("Use Encode(isolate, ...)",
 NODE_EXTERN ssize_t DecodeBytes(v8::Isolate* isolate,
                                 v8::Local<v8::Value>,
                                 enum encoding encoding = BINARY);
-NODE_DEPRECATED("Use DecodeBytes(isolate, ...)",
-                inline ssize_t DecodeBytes(
-    v8::Local<v8::Value> val,
-    enum encoding encoding = BINARY) {
-  return DecodeBytes(v8::Isolate::GetCurrent(), val, encoding);
-})
 
 // returns bytes written.
 NODE_EXTERN ssize_t DecodeWrite(v8::Isolate* isolate,
@@ -327,13 +317,6 @@ NODE_EXTERN ssize_t DecodeWrite(v8::Isolate* isolate,
                                 size_t buflen,
                                 v8::Local<v8::Value>,
                                 enum encoding encoding = BINARY);
-NODE_DEPRECATED("Use DecodeWrite(isolate, ...)",
-                inline ssize_t DecodeWrite(char* buf,
-                                           size_t buflen,
-                                           v8::Local<v8::Value> val,
-                                           enum encoding encoding = BINARY) {
-  return DecodeWrite(v8::Isolate::GetCurrent(), buf, buflen, val, encoding);
-})
 
 #ifdef _WIN32
 NODE_EXTERN v8::Local<v8::Value> WinapiErrnoException(
@@ -427,6 +410,13 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
     }                                                                 \
   }
 
+#define NODE_MODULE_REF(modname)                \
+  extern int _node_ref_ ## modname;
+
+#define NODE_MODULE_REF2(modname)                                      \
+  _node_ref_ ## modname = 1;
+
+
 #define NODE_MODULE_CONTEXT_AWARE_X(modname, regfunc, priv, flags)    \
   extern "C" {                                                        \
     static node::node_module _module =                                \
@@ -444,7 +434,8 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
     NODE_C_CTOR(_register_ ## modname) {                              \
       node_module_register(&_module);                                 \
     }                                                                 \
-  }
+  }                                                                   \
+  int _node_ref_ ## modname;
 
 #define NODE_MODULE(modname, regfunc)                                 \
   NODE_MODULE_X(modname, regfunc, NULL, 0)

@@ -460,7 +460,7 @@ static void read_udp_packets(ares_channel channel, fd_set *read_fds,
           else
             fromlen = sizeof(from.sa6);
           count = (ssize_t)recvfrom(server->udp_socket, (void *)buf,
-                                    sizeof(buf), 0, &from.sa, &fromlen);
+                                    sizeof(buf), 0, &from.sa, (socklen_t *)&fromlen);
 #else
           count = sread(server->udp_socket, buf, sizeof(buf));
 #endif

@@ -41,6 +41,7 @@ inline v8::Local<TypeName> PersistentToLocal(
     v8::Isolate* isolate,
     const v8::Persistent<TypeName>& persistent);
 
+NODE_EXTERN v8::Handle<v8::Value> CallTickCallback(Environment* env, const v8::Handle<v8::Value> ret);
 // Call with valid HandleScope and while inside Context scope.
 v8::Local<v8::Value> MakeCallback(Environment* env,
                                    v8::Local<v8::Object> recv,

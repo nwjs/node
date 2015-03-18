@@ -1,4 +1,7 @@
 {
+  'variables': {
+    'uv_library%': 'static_library',
+  },
   'target_defaults': {
     'conditions': [
       ['OS != "win"', {
@@ -36,9 +39,10 @@
     ],
     'xcode_settings': {
       'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES',  # -fvisibility=hidden
-      'WARNING_CFLAGS': [ '-Wall', '-Wextra', '-Wno-unused-parameter' ],
+      'WARNING_CFLAGS': [ '-Wall', '-Wextra', '-Wno-unused-parameter' , '-Wno-error=gnu-folding-constant', '-Wno-varargs'],
       'OTHER_CFLAGS': [ '-g', '--std=gnu89', '-pedantic' ],
-    }
+    },
+    'msvs_disabled_warnings': [4267],
   },
 
   'targets': [
@@ -49,6 +53,7 @@
         'include',
         'src/',
       ],
+      'defines': [ 'BUILDING_UV_SHARED=1' ],
       'direct_dependent_settings': {
         'include_dirs': [ 'include' ],
         'conditions': [
@@ -210,6 +215,7 @@
             '-Wall',
             '-Wextra',
             '-Wno-unused-parameter',
+            '-Wno-varargs',
           ],
         }],
         [ 'OS in "mac ios"', {
@@ -302,7 +308,7 @@
         [ 'OS in "ios mac freebsd dragonflybsd openbsd netbsd".split()', {
           'sources': [ 'src/unix/kqueue.c' ],
         }],
-        ['uv_library=="shared_library"', {
+        ['component=="shared_library"', {
           'defines': [ 'BUILDING_UV_SHARED=1' ]
         }],
         ['OS=="os390"', {

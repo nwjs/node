@@ -4,18 +4,22 @@
 
 {
   'variables': {
-    'is_clang': 0,
+    'is_clang': 1,
     'gcc_version': 0,
     'openssl_no_asm%': 0,
     'llvm_version%': 0,
     'xcode_version%': 0,
     'gas_version%': 0,
-    'openssl_fips%': 'false',
+    'openssl_fips%': '',
+    'node_byteorder%': 'little',
+    'conditions': [
+      ['OS=="mac"', { 'openssl_no_asm%': 1 } ],
+    ],
   },
   'targets': [
     {
       'target_name': 'openssl',
-      'type': '<(library)',
+      'type': 'static_library',
       'includes': ['openssl.gypi'],
       'sources': ['<@(openssl_sources)'],
       'sources/': [
@@ -167,7 +171,7 @@
         ]
       }],
       ['is_clang==1 or gcc_version>=43', {
-        'cflags': ['-Wno-old-style-declaration'],
+        'cflags': ['-Wno-error=unused-command-line-argument', '-Wno-error=parentheses-equality'],
       }],
       ['OS=="solaris"', {
         'defines': ['__EXTENSIONS__'],

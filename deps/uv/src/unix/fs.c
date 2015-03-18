@@ -45,6 +45,9 @@
 #include <utime.h>
 #include <poll.h>
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warray-bounds"
+
 #if defined(__DragonFly__)  ||                                            \
     defined(__FreeBSD__)    ||                                            \
     defined(__OpenBSD__)    ||                                            \
@@ -1308,3 +1311,4 @@ void uv_fs_req_cleanup(uv_fs_t* req) {
     uv__free(req->ptr);
   req->ptr = NULL;
 }
+#pragma clang diagnostic pop

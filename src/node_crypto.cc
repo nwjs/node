@@ -3330,7 +3330,7 @@ bool CipherBase::GetAuthTag(char** out, unsigned int* out_len) const {
   if (initialised_ || kind_ != kCipher || !auth_tag_)
     return false;
   *out_len = auth_tag_len_;
-  *out = static_cast<char*>(node::Malloc(auth_tag_len_));
+  *out = static_cast<char*>(env()->isolate()->array_buffer_allocator()->Allocate(auth_tag_len_));
   CHECK_NE(*out, nullptr);
   memcpy(*out, auth_tag_, auth_tag_len_);
   return true;
@@ -4906,7 +4906,7 @@ void ECDH::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
   // NOTE: field_size is in bits
   int field_size = EC_GROUP_get_degree(ecdh->group_);
   size_t out_len = (field_size + 7) / 8;
-  char* out = static_cast<char*>(node::Malloc(out_len));
+  char* out = static_cast<char*>(env->isolate()->array_buffer_allocator()->Allocate(out_len));
   CHECK_NE(out, nullptr);
 
   int r = ECDH_compute_key(out, out_len, pub, ecdh->key_, nullptr);
@@ -4942,7 +4942,7 @@ void ECDH::GetPublicKey(const FunctionCallbackInfo<Value>& args) {
   if (size == 0)
     return env->ThrowError("Failed to get public key length");
 
-  unsigned char* out = static_cast<unsigned char*>(node::Malloc(size));
+  unsigned char* out = static_cast<unsigned char*>(env->isolate()->array_buffer_allocator()->Allocate(size));
   CHECK_NE(out, nullptr);
 
   int r = EC_POINT_point2oct(ecdh->group_, pub, form, out, size, nullptr);
@@ -4968,7 +4968,7 @@ void ECDH::GetPrivateKey(const FunctionCallbackInfo<Value>& args) {
     return env->ThrowError("Failed to get ECDH private key");
 
   int size = BN_num_bytes(b);
-  unsigned char* out = static_cast<unsigned char*>(node::Malloc(size));
+  unsigned char* out = static_cast<unsigned char*>(env->isolate()->array_buffer_allocator()->Allocate(size));
   CHECK_NE(out, nullptr);
 
   if (size != BN_bn2bin(b, out)) {
@@ -5367,8 +5367,8 @@ class RandomBytesRequest : public AsyncWrap {
       : AsyncWrap(env, object, AsyncWrap::PROVIDER_CRYPTO),
         error_(0),
         size_(size),
-        data_(static_cast<char*>(node::Malloc(size))) {
-    if (data() == nullptr)
+        data_(static_cast<char*>(env->isolate()->array_buffer_allocator()->Allocate(size))) {
+    if (data() == nullptr && size > 0)
       FatalError("node::RandomBytesRequest()", "Out of Memory");
     Wrap(object, this);
   }
@@ -5391,7 +5391,7 @@ class RandomBytesRequest : public AsyncWrap {
   }
 
   inline void release() {
-    free(data_);
+    env()->isolate()->array_buffer_allocator()->Free(data_, size_);
     size_ = 0;
   }
 

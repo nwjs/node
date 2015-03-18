@@ -17,9 +17,18 @@
     'node_shared_libuv%': 'false',
     'node_use_openssl%': 'true',
     'node_shared_openssl%': 'false',
+    'openssl_fips%': '',
     'node_v8_options%': '',
     'node_enable_v8_vtunejit%': 'false',
     'node_core_target_name%': 'node',
+    'node_target_type%': 'shared_library',
+    'node_tag%': '',
+    'node_release_urlbase%': '',
+    'node_byteorder%': 'little',
+    'python%': 'python',
+    'icu_small%': 'false',
+    'v8_postmortem_support%' : 'false',
+    'V8_BASE%': '<(PRODUCT_DIR)/obj/v8/tools/gyp/libv8_base.a',
     'library_files': [
       'lib/internal/bootstrap_node.js',
       'lib/_debug_agent.js',
@@ -120,21 +129,50 @@
     ],
   },
 
+  'includes': [
+    '../../build/util/version.gypi',
+  ],
+
   'targets': [
     {
       'target_name': '<(node_core_target_name)',
       'type': '<(node_target_type)',
-
       'dependencies': [
         'node_js2c#host',
+        #'../../v8/tools/gyp/v8.gyp:v8',
+        '../../v8/src/v8.gyp:v8_libplatform',
+        '../../chrome/chrome.gyp:chrome_dll',
       ],
+
+      'msvs_disabled_warnings': [4146, 4267],
+
+      'xcode_settings': {
+        'WARNING_CFLAGS': [ '-Wno-error=deprecated-declarations' ],
+        'LD_RUNPATH_SEARCH_PATHS': [ '@loader_path/../../../../../../..', ],
+      },
 
       'include_dirs': [
         'src',
+        'deps/openssl/openssl/include',
+        #'../boringssl/src/include',
         'tools/msvs/genfiles',
         'deps/uv/src/ares',
         '<(SHARED_INTERMEDIATE_DIR)', # for node_natives.h
+        '../../v8', # include/v8_platform.h
+        '../../v8/include'
       ],
+
+      'direct_dependent_settings': {
+        'include_dirs': [
+          '../../v8/include',
+          'deps/uv/include',
+          'deps/cares/include',
+        ],
+        'defines': [
+          'BUILDING_NW_NODE=1',
+        ],
+
+      },
 
       'sources': [
         'src/debug-agent.cc',
@@ -217,8 +255,8 @@
         'src/util.cc',
         'src/string_search.cc',
         'deps/http_parser/http_parser.h',
-        'deps/v8/include/v8.h',
-        'deps/v8/include/v8-debug.h',
+        #'deps/v8/include/v8.h',
+        #'deps/v8/include/v8-debug.h',
         '<(SHARED_INTERMEDIATE_DIR)/node_natives.h',
         # javascript files to make for an even more pleasant IDE experience
         '<@(library_files)',
@@ -232,6 +270,9 @@
         'NODE_WANT_INTERNALS=1',
         # Warn when using deprecated V8 APIs.
         'V8_DEPRECATION_WARNINGS=1',
+        'BUILDING_NW_NODE=1',
+        'V8_SHARED',
+        'USING_V8_SHARED',
       ],
 
 
@@ -287,6 +328,17 @@
           'defines': [
             'NODE_RELEASE_URLBASE="<(node_release_urlbase)"',
           ]
+        }],
+        ['node_target_type=="shared_library"', {
+          'direct_dependent_settings': {
+            'defines': [
+              'USING_UV_SHARED=1',
+              'BUILDING_NODE_EXTENSION=1',
+            ],
+          },
+        }],
+        ['clang==1', {
+          'cflags': ['-Wno-error=missing-declarations', '-Wno-error=array-bounds'],
         }],
         [ 'v8_enable_i18n_support==1', {
           'defines': [ 'NODE_HAVE_I18N_SUPPORT=1' ],
@@ -350,9 +402,9 @@
             [ 'node_shared_openssl=="false"', {
               'dependencies': [
                 './deps/openssl/openssl.gyp:openssl',
-
+                #'../boringssl/boringssl.gyp:boringssl', 
                 # For tests
-                './deps/openssl/openssl.gyp:openssl-cli',
+                #'./deps/openssl/openssl.gyp:openssl-cli',
               ],
               # Do not let unused OpenSSL symbols to slip away
               'conditions': [
@@ -361,16 +413,16 @@
                 [ 'node_target_type!="static_library"', {
                   'xcode_settings': {
                     'OTHER_LDFLAGS': [
-                      '-Wl,-force_load,<(PRODUCT_DIR)/<(OPENSSL_PRODUCT)',
+                      #'-Wl,-force_load,<(PRODUCT_DIR)/<(OPENSSL_PRODUCT)',
                     ],
                   },
                   'conditions': [
                     ['OS in "linux freebsd" and node_shared=="false"', {
                       'ldflags': [
-                        '-Wl,--whole-archive,'
-                            '<(PRODUCT_DIR)/obj.target/deps/openssl/'
-                            '<(OPENSSL_PRODUCT)',
-                        '-Wl,--no-whole-archive',
+                        #'-Wl,--whole-archive,'
+                        #    '<(PRODUCT_DIR)/obj.target/deps/openssl/'
+                        #    '<(OPENSSL_PRODUCT)',
+                        #'-Wl,--no-whole-archive',
                       ],
                     }],
                     # openssl.def is based on zlib.def, zlib symbols
@@ -463,7 +515,7 @@
           'defines': [ 'NODE_NO_BROWSER_GLOBALS' ],
         } ],
         [ 'node_use_bundled_v8=="true" and v8_postmortem_support=="true"', {
-          'dependencies': [ 'deps/v8/tools/gyp/v8.gyp:postmortem-metadata' ],
+          'dependencies': [ '../../v8/src/v8.gyp:postmortem-metadata' ],
           'conditions': [
             # -force_load is not applicable for the static library
             [ 'node_target_type!="static_library"', {
@@ -476,7 +528,7 @@
           ],
         }],
         [ 'node_shared_zlib=="false"', {
-          'dependencies': [ 'deps/zlib/zlib.gyp:zlib' ],
+          'dependencies': [ '../zlib/zlib.gyp:zlib' ],
         }, {
           'defines': [ 'ZLIB_CONST' ],
         }],
@@ -496,7 +548,7 @@
         [ 'OS=="win"', {
           'sources': [
             'src/backtrace_win32.cc',
-            'src/res/node.rc',
+            #'src/res/node.rc',
           ],
           'defines!': [
             'NODE_PLATFORM="win"',
@@ -522,6 +574,18 @@
           'defines': [
             # we need to use node's preferred "darwin" rather than gyp's preferred "mac"
             'NODE_PLATFORM="darwin"',
+          ],
+          'postbuilds': [
+            {
+              'postbuild_name': 'Fix Framework Link',
+              'action': [
+                'install_name_tool',
+                '-change',
+                '@executable_path/../Versions/<(version_full)/<(mac_product_name) Framework.framework/<(mac_product_name) Framework',
+                '@executable_path/../../../<(mac_product_name) Framework.framework/<(mac_product_name) Framework',
+                '${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}'
+              ],
+            },
           ],
         }],
         [ 'OS=="freebsd"', {
@@ -550,9 +614,9 @@
           ],
         }],
         [ '(OS=="freebsd" or OS=="linux") and node_shared=="false"', {
-          'ldflags': [ '-Wl,-z,noexecstack',
-                       '-Wl,--whole-archive <(V8_BASE)',
-                       '-Wl,--no-whole-archive' ]
+          #'ldflags': [ '-Wl,-z,noexecstack',
+          #             '-Wl,--whole-archive <(V8_BASE)',
+          #             '-Wl,--no-whole-archive' ]
         }],
         [ 'OS=="sunos"', {
           'ldflags': [ '-Wl,-M,/usr/lib/ld/map.noexstk' ],
@@ -855,10 +919,14 @@
     {
       'target_name': 'cctest',
       'type': 'executable',
-      'dependencies': [ 'deps/gtest/gtest.gyp:gtest' ],
+      'dependencies': [
+        '../../testing/gtest.gyp:gtest',
+        '../../v8/src/v8.gyp:v8',
+        '../../v8/src/v8.gyp:v8_libplatform'
+      ],
       'include_dirs': [
         'src',
-        'deps/v8/include'
+        '../../v8/include'
       ],
       'defines': [
         # gtest's ASSERT macros conflict with our own.

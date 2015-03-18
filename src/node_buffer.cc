@@ -222,7 +222,7 @@ MaybeLocal<Object> New(Isolate* isolate,
   char* data = nullptr;
 
   if (length > 0) {
-    data = static_cast<char*>(BufferMalloc(length));
+    data = static_cast<char*>(isolate->array_buffer_allocator()->Allocate(length));
 
     if (data == nullptr)
       return Local<Object>();
@@ -243,7 +243,7 @@ MaybeLocal<Object> New(Isolate* isolate,
     return scope.Escape(buf);
 
   // Object failed to be created. Clean up resources.
-  free(data);
+  isolate->array_buffer_allocator()->Free(data, length);
   return Local<Object>();
 }
 
@@ -267,7 +267,7 @@ MaybeLocal<Object> New(Environment* env, size_t length) {
 
   void* data;
   if (length > 0) {
-    data = BufferMalloc(length);
+    data = env->isolate()->array_buffer_allocator()->Allocate(length);
     if (data == nullptr)
       return Local<Object>();
   } else {
@@ -286,7 +286,7 @@ MaybeLocal<Object> New(Environment* env, size_t length) {
     return scope.Escape(ui);
 
   // Object failed to be created. Clean up resources.
-  free(data);
+  env->isolate()->array_buffer_allocator()->Free(data, length);
   return Local<Object>();
 }
 
@@ -312,7 +312,7 @@ MaybeLocal<Object> Copy(Environment* env, const char* data, size_t length) {
   void* new_data;
   if (length > 0) {
     CHECK_NE(data, nullptr);
-    new_data = node::UncheckedMalloc(length);
+    new_data = env->isolate()->array_buffer_allocator()->Allocate(length);
     if (new_data == nullptr)
       return Local<Object>();
     memcpy(new_data, data, length);
@@ -332,7 +332,7 @@ MaybeLocal<Object> Copy(Environment* env, const char* data, size_t length) {
     return scope.Escape(ui);
 
   // Object failed to be created. Clean up resources.
-  free(new_data);
+  env->isolate()->array_buffer_allocator()->Free(new_data, length);
   return Local<Object>();
 }
 
@@ -410,7 +410,6 @@ MaybeLocal<Object> New(Environment* env, char* data, size_t length) {
     return scope.Escape(ui);
   return Local<Object>();
 }
-
 
 void CreateFromString(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[0]->IsString());

@@ -126,6 +126,8 @@
 # include <openssl/dh.h>
 #endif
 
+#define HMAC_Update node_HMAC_Update
+
 static const SSL_METHOD *dtls1_get_server_method(int ver);
 static int dtls1_send_hello_verify_request(SSL *s);
 

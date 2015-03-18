@@ -4,17 +4,20 @@
 
 {
   'variables': {
-    'is_clang': 0,
+    'is_clang': 1,
     'gcc_version': 0,
     'openssl_no_asm%': 0,
     'llvm_version%': 0,
     'gas_version%': 0,
     'openssl_fips%': 'false',
+    'conditions': [
+      ['OS=="mac"', { 'openssl_no_asm%': 1 } ],
+    ],
   },
   'targets': [
     {
       'target_name': 'openssl',
-      'type': '<(library)',
+      'type': 'static_library',
       'includes': ['openssl.gypi'],
       'sources': ['<@(openssl_sources)'],
       'sources/': [
@@ -130,7 +133,27 @@
         'include_dirs': [
           'openssl/include'
         ],
+        'defines': [
+          'HMAC_Update=node_HMAC_Update',
+          'MD5_Update=node_MD5_Update',
+          'SHA512_Update=node_SHA512_Update',
+          'SHA384_Update=node_SHA384_Update',
+          'SHA256_Update=node_SHA256_Update',
+          'SHA224_Update=node_SHA224_Update',
+          'SHA1_Update=node_SHA1_Update',
+          'HMAC_Init=node_HMAC_Init',
+        ],
       },
+      'defines': [
+        'HMAC_Update=node_HMAC_Update',
+          'MD5_Update=node_MD5_Update',
+          'SHA512_Update=node_SHA512_Update',
+          'SHA384_Update=node_SHA384_Update',
+          'SHA256_Update=node_SHA256_Update',
+          'SHA224_Update=node_SHA224_Update',
+          'SHA1_Update=node_SHA1_Update',
+        'HMAC_Init=node_HMAC_Init',
+      ],
     },
     {
       # openssl-cli target
@@ -159,7 +182,7 @@
         ]
       }],
       ['is_clang==1 or gcc_version>=43', {
-        'cflags': ['-Wno-old-style-declaration'],
+        'cflags': ['-Wno-error=unused-command-line-argument', '-Wno-error=parentheses-equality'],
       }],
       ['OS=="solaris"', {
         'defines': ['__EXTENSIONS__'],

@@ -161,6 +161,7 @@ static node_module* modlist_addon;
 
 NODE_EXTERN Environment* g_env = nullptr;
 NODE_EXTERN v8::Persistent<Context> g_context;
+NODE_EXTERN v8::Persistent<Context> g_dom_context;
 NODE_EXTERN int (*g_nw_uv_run)(uv_loop_t* loop, uv_run_mode mode);
 static NWTickCallback* g_nw_tick_callback = nullptr;
 

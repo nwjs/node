@@ -32,6 +32,7 @@
 
 namespace node {
 extern NODE_EXTERN v8::Persistent<v8::Context> g_context;
+extern NODE_EXTERN v8::Persistent<v8::Context> g_dom_context;
 
 // Forward declaration
 class Environment;

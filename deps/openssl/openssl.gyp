@@ -153,6 +153,8 @@
     'includes': ['openssl.gypi'],
     'include_dirs': ['<@(openssl_default_include_dirs)'],
     'defines': ['<@(openssl_default_defines_all)'],
+    'cflags!': ['-fvisibility=hidden'],
+    'cflags_cc!': ['-fvisibility-inlines-hidden'],
     'conditions': [
       ['OS=="win"', {
         'defines': ['<@(openssl_default_defines_win)'],

@@ -153,6 +153,7 @@ static bool debug_wait_connect = false;
 static int debug_port = 5858;
 static bool v8_is_profiling = false;
 static bool node_is_initialized = false;
+static bool node_is_nwjs = false;
 static node_module* modpending;
 static node_module* modlist_builtin;
 static node_module* modlist_linked;
@@ -2671,6 +2672,9 @@ void SetupProcessObject(Environment* env,
                        ProcessTitleSetter,
                        env->as_external());
 
+  if (node_is_nwjs)
+    READONLY_PROPERTY(process, "__nwjs", Integer::New(env->isolate(), 1));
+
   // process.version
   READONLY_PROPERTY(process,
                     "version",
@@ -2994,7 +2998,8 @@ void LoadEnvironment(Environment* env) {
   HandleScope handle_scope(env->isolate());
 
   env->isolate()->SetFatalErrorHandler(node::OnFatalError);
-  //env->isolate()->AddMessageListener(OnMessage);
+  if (!node_is_nwjs)
+    env->isolate()->AddMessageListener(OnMessage);
 
   // Compile, execute the src/node.js file. (Which was included as static C
   // string in node_natives.h. 'native_node' is the string containing that
@@ -3644,6 +3649,7 @@ void Init(int* argc,
   // Initialize prog_start_time to get relative uptime.
   prog_start_time = static_cast<double>(uv_now(uv_default_loop()));
 
+  if (!node_is_nwjs) {
   // Make inherited handles noninheritable.
   uv_disable_stdio_inheritance();
 
@@ -3653,6 +3659,8 @@ void Init(int* argc,
                 &dispatch_debug_messages_async,
                 DispatchDebugMessagesAsyncCallback);
   uv_unref(reinterpret_cast<uv_handle_t*>(&dispatch_debug_messages_async));
+
+  } //node_is_nwjs
 
 #if defined(NODE_V8_OPTIONS)
   // Should come before the call to V8::SetFlagsFromCommandLine()
@@ -3725,9 +3733,11 @@ void Init(int* argc,
   const char no_typed_array_heap[] = "--typed_array_max_size_in_heap=0";
   V8::SetFlagsFromString(no_typed_array_heap, sizeof(no_typed_array_heap) - 1);
 
+  if (!node_is_nwjs) {
   if (!use_debug_agent) {
     RegisterDebugSignalHandler();
   }
+  } //node_is_nwjs
 
   // We should set node_is_initialized here instead of in node::Start,
   // otherwise embedders using node::Init to initialize everything will not be
@@ -4004,6 +4014,115 @@ static void StartNodeInstance(void* arg) {
     node_isolate = nullptr;
 }
 
+#ifdef V8_USE_EXTERNAL_STARTUP_DATA
+// Helper class to load the startup data files from disk.
+//
+// This is meant as a convenience for stand-alone binaries like d8, cctest,
+// unittest. A V8 embedder would likely either handle startup data on their
+// own or just disable the feature if they don't want to handle it at all,
+// while tools like cctest need to work in either configuration. Hence this is
+// not meant for inclusion in the general v8 library.
+class StartupDataHandler {
+ public:
+  // Load startup data, and call the v8::V8::Set*DataBlob API functions.
+  //
+  // natives_blob and snapshot_blob will be loaded realitive to exec_path,
+  // which would usually be the equivalent of argv[0].
+  StartupDataHandler(const char* exec_path, const char* natives_blob,
+                     const char* snapshot_blob);
+  ~StartupDataHandler();
+
+ private:
+  static char* RelativePath(char** buffer, const char* exec_path,
+                            const char* name);
+
+  void LoadFromFiles(const char* natives_blob, const char* snapshot_blob);
+
+  void Load(const char* blob_file, v8::StartupData* startup_data,
+            void (*setter_fn)(v8::StartupData*));
+
+  v8::StartupData natives_;
+  v8::StartupData snapshot_;
+
+  // Disallow copy & assign.
+  StartupDataHandler(const StartupDataHandler& other);
+  void operator=(const StartupDataHandler& other);
+};
+
+StartupDataHandler::StartupDataHandler(const char* exec_path,
+                                       const char* natives_blob,
+                                       const char* snapshot_blob) {
+  // If we have (at least one) explicitly given blob, use those.
+  // If not, use the default blob locations next to the d8 binary.
+  if (natives_blob || snapshot_blob) {
+    LoadFromFiles(natives_blob, snapshot_blob);
+  } else {
+    char* natives;
+    char* snapshot;
+    LoadFromFiles(RelativePath(&natives, exec_path, "natives_blob.bin"),
+                  RelativePath(&snapshot, exec_path, "snapshot_blob.bin"));
+
+    free(natives);
+    free(snapshot);
+  }
+}
+
+
+StartupDataHandler::~StartupDataHandler() {
+  delete[] natives_.data;
+  delete[] snapshot_.data;
+}
+
+
+char* StartupDataHandler::RelativePath(char** buffer, const char* exec_path,
+                                       const char* name) {
+  const char* last_slash = strrchr(exec_path, '/');
+  if (last_slash) {
+    int after_slash = last_slash - exec_path + 1;
+    int name_length = static_cast<int>(strlen(name));
+    *buffer = reinterpret_cast<char*>(calloc(after_slash + name_length + 1, 1));
+    strncpy(*buffer, exec_path, after_slash);
+    strncat(*buffer, name, name_length);
+  } else {
+    *buffer = strdup(name);
+  }
+  return *buffer;
+}
+
+
+void StartupDataHandler::LoadFromFiles(const char* natives_blob,
+                                       const char* snapshot_blob) {
+  Load(natives_blob, &natives_, v8::V8::SetNativesDataBlob);
+  Load(snapshot_blob, &snapshot_, v8::V8::SetSnapshotDataBlob);
+}
+
+
+void StartupDataHandler::Load(const char* blob_file,
+                              v8::StartupData* startup_data,
+                              void (*setter_fn)(v8::StartupData*)) {
+  startup_data->data = NULL;
+  startup_data->raw_size = 0;
+
+  if (!blob_file) return;
+
+  FILE* file = fopen(blob_file, "rb");
+  if (!file) return;
+
+  fseek(file, 0, SEEK_END);
+  startup_data->raw_size = ftell(file);
+  rewind(file);
+
+  startup_data->data = new char[startup_data->raw_size];
+  int read_size = static_cast<int>(fread(const_cast<char*>(startup_data->data),
+                                         1, startup_data->raw_size, file));
+  fclose(file);
+
+  if (startup_data->raw_size == read_size) (*setter_fn)(startup_data);
+}
+
+#endif  // V8_USE_EXTERNAL_STARTUP_DATA
+
+
 int Start(int argc, char** argv) {
   PlatformInit();
 
@@ -4028,6 +4147,10 @@ int Start(int argc, char** argv) {
   default_platform = v8::platform::CreateDefaultPlatform(thread_pool_size);
   V8::InitializePlatform(default_platform);
   V8::Initialize();
+
+#ifdef V8_USE_EXTERNAL_STARTUP_DATA
+  StartupDataHandler startup_data(argv[0], nullptr, nullptr);
+#endif
 
   int exit_code = 1;
   {
@@ -4079,6 +4202,7 @@ NODE_MODULE_REF2(uv)
 // copied beginning of Start() until v8::Initialize()
 NODE_EXTERN void SetupNWNode(int argc, char** argv) {
   node_is_initialized = true;
+  node_is_nwjs = true;
   ref_node_modules();
   node_isolate = Isolate::GetCurrent();
 }

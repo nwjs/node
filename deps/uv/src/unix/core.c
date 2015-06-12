@@ -74,7 +74,7 @@
 #include <sys/ioctl.h>
 #endif
 
-static void uv__run_pending(uv_loop_t* loop);
+static int uv__run_pending(uv_loop_t* loop);
 
 /* Verify that uv_buf_t is ABI-compatible with struct iovec. */
 STATIC_ASSERT(sizeof(uv_buf_t) == sizeof(struct iovec));
@@ -310,6 +310,7 @@ int uv_loop_alive(const uv_loop_t* loop) {
 int uv_run(uv_loop_t* loop, uv_run_mode mode) {
   int timeout;
   int r;
+  int ran_pending;
 
   r = uv__loop_alive(loop);
   if (!r)
@@ -318,12 +319,12 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
   while (r != 0 && loop->stop_flag == 0) {
     uv__update_time(loop);
     uv__run_timers(loop);
-    uv__run_pending(loop);
+    ran_pending = uv__run_pending(loop);
     uv__run_idle(loop);
     uv__run_prepare(loop);
 
     timeout = 0;
-    if ((mode & UV_RUN_NOWAIT) == 0)
+    if ((mode == UV_RUN_ONCE && !ran_pending) || mode == UV_RUN_DEFAULT)
       timeout = uv_backend_timeout(loop);
 
     uv__io_poll(loop, timeout);
@@ -344,8 +345,7 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
     }
 
     r = uv__loop_alive(loop);
-
-    if (mode & (UV_RUN_ONCE | UV_RUN_NOWAIT))
+    if (mode == UV_RUN_ONCE || mode == UV_RUN_NOWAIT)
       break;
   }
 
@@ -641,6 +641,11 @@ int uv_cwd(char* buffer, size_t* size) {
     return -errno;
 
   *size = strlen(buffer);
+  if (*size > 1 && buffer[*size - 1] == '/') {
+    buffer[*size-1] = '\0';
+    (*size)--;
+  }
+
   return 0;
 }
 
@@ -695,9 +700,12 @@ int uv_fileno(const uv_handle_t* handle, uv_os_fd_t* fd) {
 }
 
 
-static void uv__run_pending(uv_loop_t* loop) {
+static int uv__run_pending(uv_loop_t* loop) {
   QUEUE* q;
   uv__io_t* w;
+
+  if (QUEUE_EMPTY(&loop->pending_queue))
+    return 0;
 
   while (!QUEUE_EMPTY(&loop->pending_queue)) {
     q = QUEUE_HEAD(&loop->pending_queue);
@@ -707,6 +715,8 @@ static void uv__run_pending(uv_loop_t* loop) {
     w = QUEUE_DATA(q, uv__io_t, pending_queue);
     w->cb(loop, w, UV__POLLOUT);
   }
+
+  return 1;
 }
 
 

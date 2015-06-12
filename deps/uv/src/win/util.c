@@ -22,7 +22,6 @@
 #include <assert.h>
 #include <direct.h>
 #include <limits.h>
-#include <malloc.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -538,13 +537,13 @@ int uv_uptime(double* uptime) {
       return uv_translate_sys_error(result);
     }
 
-    free(malloced_buffer);
-
     buffer_size *= 2;
     /* Don't let the buffer grow infinitely. */
     if (buffer_size > 1 << 20) {
       goto internalError;
     }
+
+    free(malloced_buffer);
 
     buffer = malloced_buffer = (BYTE*) malloc(buffer_size);
     if (malloced_buffer == NULL) {

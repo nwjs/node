@@ -402,9 +402,6 @@
         }],
       ],
       'msvs_settings': {
-        'VCLinkerTool': {
-          'SubSystem': 1, # /subsystem:console
-        },
         'VCManifestTool': {
           'EmbedManifest': 'true',
           'AdditionalManifestFiles': 'src/res/node.exe.extra.manifest'

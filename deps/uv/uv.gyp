@@ -21,28 +21,8 @@
       }],
     ],
     'xcode_settings': {
-        'conditions': [
-          [ 'clang==1', {
-            'WARNING_CFLAGS': [
-              '-Wall',
-              '-Wextra',
-              '-Wno-unused-parameter',
-              '-Wno-dollar-in-identifier-extension'
-            ]}, {
-           'WARNING_CFLAGS': [
-             '-Wall',
-             '-Wextra',
-             '-Wno-unused-parameter'
-          ]}
-        ]
-      ],
-      'OTHER_LDFLAGS': [
-      ],
-      'OTHER_CFLAGS': [
-        '-g',
-        '--std=gnu89',
-        '-pedantic'
-      ],
+      'WARNING_CFLAGS': [ '-Wall', '-Wextra', '-Wno-unused-parameter' ],
+      'OTHER_CFLAGS': [ '-g', '--std=gnu89', '-pedantic' ],
     }
   },
 
@@ -64,7 +44,7 @@
               '_FILE_OFFSET_BITS=64',
             ],
           }],
-          ['OS == "mac"', {
+          ['OS in "mac ios"', {
             'defines': [ '_DARWIN_USE_64_BIT_INODE=1' ],
           }],
           ['OS == "linux"', {
@@ -198,18 +178,17 @@
               'cflags': [ '-fPIC' ],
             }],
             ['uv_library=="shared_library" and OS!="mac"', {
-              'link_settings': {
-                # Must correspond with UV_VERSION_MAJOR and UV_VERSION_MINOR
-                # in include/uv-version.h
-                'libraries': [ '-Wl,-soname,libuv.so.1.0' ],
-              },
+              # This will cause gyp to set soname
+              # Must correspond with UV_VERSION_MAJOR
+              # in include/uv-version.h
+              'product_extension': 'so.1',
             }],
           ],
         }],
-        [ 'OS in "linux mac android"', {
+        [ 'OS in "linux mac ios android"', {
           'sources': [ 'src/unix/proctitle.c' ],
         }],
-        [ 'OS=="mac"', {
+        [ 'OS in "mac ios"', {
           'sources': [
             'src/unix/darwin.c',
             'src/unix/fsevents.c',
@@ -226,6 +205,7 @@
           'cflags': [ '-Wstrict-aliasing' ],
         }],
         [ 'OS=="linux"', {
+          'defines': [ '_GNU_SOURCE' ],
           'sources': [
             'src/unix/linux-core.c',
             'src/unix/linux-inotify.c',
@@ -291,7 +271,7 @@
             'libraries': [ '-lkvm' ],
           },
         }],
-        [ 'OS in "mac freebsd dragonflybsd openbsd netbsd".split()', {
+        [ 'OS in "ios mac freebsd dragonflybsd openbsd netbsd".split()', {
           'sources': [ 'src/unix/kqueue.c' ],
         }],
         ['uv_library=="shared_library"', {
@@ -346,6 +326,7 @@
         'test/test-loop-close.c',
         'test/test-loop-stop.c',
         'test/test-loop-time.c',
+        'test/test-loop-configure.c',
         'test/test-walk-handles.c',
         'test/test-watcher-cross-stop.c',
         'test/test-multiple-listen.c',
@@ -358,9 +339,11 @@
         'test/test-pipe-sendmsg.c',
         'test/test-pipe-server-close.c',
         'test/test-pipe-close-stdout-read-stdin.c',
+        'test/test-pipe-set-non-blocking.c',
         'test/test-platform-output.c',
         'test/test-poll.c',
         'test/test-poll-close.c',
+        'test/test-poll-close-doesnt-corrupt-stack.c',
         'test/test-poll-closesocket.c',
         'test/test-process-title.c',
         'test/test-ref.c',
@@ -391,8 +374,10 @@
         'test/test-tcp-write-to-half-open-connection.c',
         'test/test-tcp-write-after-connect.c',
         'test/test-tcp-writealot.c',
+        'test/test-tcp-write-fail.c',
         'test/test-tcp-try-write.c',
         'test/test-tcp-unexpected-read.c',
+        'test/test-tcp-oob.c',
         'test/test-tcp-read-stop.c',
         'test/test-tcp-write-queue-order.c',
         'test/test-threadpool.c',

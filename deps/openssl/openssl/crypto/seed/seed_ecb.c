@@ -7,7 +7,7 @@
  * are met:
  *
  * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer. 
+ *    notice, this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in
@@ -51,10 +51,11 @@
 
 #include <openssl/seed.h>
 
-void OpensslSEED_ecb_encrypt(const unsigned char *in, unsigned char *out, const SEED_KEY_SCHEDULE *ks, int enc) 
-	{
-	if (enc)
-		OpensslSEED_encrypt(in, out, ks);
-	else
-		OpensslSEED_decrypt(in, out, ks);
-	}
+void OpensslSEED_ecb_encrypt(const unsigned char *in, unsigned char *out,
+                      const SEED_KEY_SCHEDULE *ks, int enc)
+{
+    if (enc)
+        OpensslSEED_encrypt(in, out, ks);
+    else
+        OpensslSEED_decrypt(in, out, ks);
+}

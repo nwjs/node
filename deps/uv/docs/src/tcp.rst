@@ -36,9 +36,11 @@ API
 
     Open an existing file descriptor or SOCKET as a TCP handle.
 
+    .. versionchanged:: 1.2.1 the file descriptor is set to non-blocking mode.
+
     .. note::
-        The user is responsible for setting the file descriptor in
-        non-blocking mode.
+        The passed file descriptor or SOCKET is not checked for its type, but
+        it's required that it represents a valid stream socket.
 
 .. c:function:: int uv_tcp_nodelay(uv_tcp_t* handle, int enable)
 

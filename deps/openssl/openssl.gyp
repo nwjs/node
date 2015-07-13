@@ -9,7 +9,7 @@
     'openssl_no_asm%': 0,
     'llvm_version%': 0,
     'gas_version%': 0,
-    'openssl_fips%': 'false',
+    'openssl_fips%': '',
     'conditions': [
       ['OS=="mac"', { 'openssl_no_asm%': 1 } ],
     ],

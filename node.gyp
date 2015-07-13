@@ -102,10 +102,11 @@
       'include_dirs': [
         'src',
         'deps/openssl/openssl/include',
+        #'../boringssl/src/include',
         'tools/msvs/genfiles',
         'deps/uv/src/ares',
         '<(SHARED_INTERMEDIATE_DIR)', # for node_natives.h
-        'deps/v8' # include/v8_platform.h
+        '../../v8' # include/v8_platform.h
       ],
 
       'direct_dependent_settings': {
@@ -228,7 +229,7 @@
             'NODE_RELEASE_URLBASE="<(node_release_urlbase)"',
           ]
         }],
-        ['component=="shared_library"', {
+        ['node_target_type=="shared_library"', {
           'direct_dependent_settings': {
             'defines': [
               'USING_UV_SHARED=1',
@@ -369,7 +370,7 @@
           ]
         } ],
         [ 'v8_postmortem_support=="true"', {
-          'dependencies': [ 'deps/v8/tools/gyp/v8.gyp:postmortem-metadata' ],
+          'dependencies': [ '../../v8/tools/gyp/v8.gyp:postmortem-metadata' ],
           'conditions': [
             # -force_load is not applicable for the static library
             [ 'node_target_type!="static_library"', {
@@ -684,12 +685,12 @@
       'type': 'executable',
       'dependencies': [
         'deps/gtest/gtest.gyp:gtest',
-        'deps/v8/tools/gyp/v8.gyp:v8',
-        'deps/v8/tools/gyp/v8.gyp:v8_libplatform'
+        '../../v8/tools/gyp/v8.gyp:v8',
+        '../../v8/tools/gyp/v8.gyp:v8_libplatform'
       ],
       'include_dirs': [
         'src',
-        'deps/v8/include'
+        '../../v8/include'
       ],
       'defines': [
         # gtest's ASSERT macros conflict with our own.

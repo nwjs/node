@@ -10,7 +10,10 @@ namespace Buffer {
 static const unsigned int kMaxLength =
     sizeof(int32_t) == sizeof(intptr_t) ? 0x3fffffff : 0x7fffffff;
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wignored-attributes"
 NODE_EXTERN typedef void (*FreeCallback)(char* data, void* hint);
+#pragma GCC diagnostic pop
 
 NODE_EXTERN bool HasInstance(v8::Local<v8::Value> val);
 NODE_EXTERN bool HasInstance(v8::Local<v8::Object> val);

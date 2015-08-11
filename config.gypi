@@ -16,6 +16,8 @@
                  'node_shared_v8': 'false',
                  'node_shared_zlib': 'false',
                  'node_tag': '',
+                 'node_release_urlbase': '',
+                 'node_byteorder': 'little',
                  'node_use_dtrace': 'false',
                  'node_use_etw': 'false',
                  'node_use_mdb': 'false',

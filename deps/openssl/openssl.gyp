@@ -10,6 +10,7 @@
     'llvm_version%': 0,
     'gas_version%': 0,
     'openssl_fips%': '',
+    'node_byteorder%': 'little',
     'conditions': [
       ['OS=="mac"', { 'openssl_no_asm%': 1 } ],
     ],

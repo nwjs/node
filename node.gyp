@@ -14,6 +14,8 @@
     'node_v8_options%': '',
     'node_target_type%': '<(component)',
     'node_tag%': '',
+    'node_release_urlbase%': '',
+    'node_byteorder%': 'little',
     'python%': 'python',
     'icu_small%': 'false',
     'v8_postmortem_support%' : 'false',

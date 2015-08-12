@@ -94,7 +94,7 @@
         '../../v8/tools/gyp/v8.gyp:v8_libplatform'
       ],
 
-      'msvs_disabled_warnings': [4146, 4267],
+      'msvs_disabled_warnings': [4146, 4267, 4003],
 
       'xcode_settings': {
         'WARNING_CFLAGS': [ '-Wno-error=deprecated-declarations' ],

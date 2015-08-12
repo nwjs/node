@@ -123,7 +123,7 @@
         '../../chrome/chrome.gyp:chrome_dll',
       ],
 
-      'msvs_disabled_warnings': [4146, 4267],
+      'msvs_disabled_warnings': [4146, 4267, 4003],
 
       'xcode_settings': {
         'WARNING_CFLAGS': [ '-Wno-error=deprecated-declarations' ],

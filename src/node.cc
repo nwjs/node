@@ -3906,8 +3906,8 @@ Environment* CreateEnvironment(Isolate* isolate,
 static void StartNodeInstance(void* arg) {
   NodeInstanceData* instance_data = static_cast<NodeInstanceData*>(arg);
   Isolate::CreateParams params;
-  ArrayBufferAllocator array_buffer_allocator;
-  params.array_buffer_allocator = &array_buffer_allocator;
+  // ArrayBufferAllocator array_buffer_allocator;
+  // params.array_buffer_allocator = &array_buffer_allocator;
   Isolate* isolate = Isolate::New(params);
   if (track_heap_objects) {
     isolate->GetHeapProfiler()->StartTrackingHeapObjects(true);

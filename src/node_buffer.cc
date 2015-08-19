@@ -252,7 +252,7 @@ MaybeLocal<Object> New(Environment* env, size_t length) {
 
   void* data;
   if (length > 0) {
-    data = malloc(length);
+    data = env->isolate()->array_buffer_allocator()->Allocate(length);
     if (data == nullptr)
       return Local<Object>();
   } else {
@@ -297,7 +297,7 @@ MaybeLocal<Object> Copy(Environment* env, const char* data, size_t length) {
   void* new_data;
   if (length > 0) {
     CHECK_NE(data, nullptr);
-    new_data = malloc(length);
+    new_data = env->isolate()->array_buffer_allocator()->Allocate(length);
     if (new_data == nullptr)
       return Local<Object>();
     memcpy(new_data, data, length);
@@ -406,11 +406,9 @@ void Create(const FunctionCallbackInfo<Value>& args) {
 
   void* data;
   if (length > 0) {
-    data = malloc(length);
-    if (data == nullptr) {
-      return env->ThrowRangeError(
-          "Buffer allocation failed - process out of memory");
-    }
+    data = isolate->array_buffer_allocator()->Allocate(length);
+    if (data == nullptr)
+      return env->ThrowRangeError("Buffer allocation failed - process out of memory");
   } else {
     data = nullptr;
   }

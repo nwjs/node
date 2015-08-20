@@ -43,6 +43,7 @@
       'lib/dgram.js',
       'lib/dns.js',
       'lib/domain.js',
+      'lib/dummystream.js',
       'lib/events.js',
       'lib/fs.js',
       'lib/http.js',

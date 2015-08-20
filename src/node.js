@@ -557,6 +557,18 @@
     });
   }
 
+  function createWritableDummyStream(fd) {
+    var DummyStream = NativeModule.require('dummystream');
+    var stream = new DummyStream();
+    stream.fd = fd;
+
+    stream._isStdio = true;
+    stream.isTTY = false;
+
+    return stream;
+
+  }
+
   function createWritableStdioStream(fd) {
     var stream;
     var tty_wrap = process.binding('tty_wrap');
@@ -605,7 +617,10 @@
 
     process.__defineGetter__('stdout', function() {
       if (stdout) return stdout;
-      stdout = createWritableStdioStream(1);
+      if (process.platform === 'win32')
+        stdout = createWritableDummyStream(1);
+      else
+        stdout = createWritableStdioStream(1);
       stdout.destroy = stdout.destroySoon = function(er) {
         er = er || new Error('process.stdout cannot be closed.');
         stdout.emit('error', er);
@@ -620,7 +635,10 @@
 
     process.__defineGetter__('stderr', function() {
       if (stderr) return stderr;
-      stderr = createWritableStdioStream(2);
+      if (process.platform === 'win32')
+        stderr = createWritableDummyStream(2);
+      else
+        stderr = createWritableStdioStream(2);
       stderr.destroy = stderr.destroySoon = function(er) {
         er = er || new Error('process.stderr cannot be closed.');
         stderr.emit('error', er);

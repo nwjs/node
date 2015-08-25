@@ -334,3 +334,10 @@ exports.getNodeVersion = function getNodeVersion() {
     pre: pre
   };
 }
+exports.busyLoop = function busyLoop(time) {
+  var startTime = new Date().getTime();
+  var stopTime =  startTime + time;
+  while (new Date().getTime() < stopTime) {
+    ;
+  }
+};

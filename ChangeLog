@@ -1,4 +1,39 @@
-2015.05.22, Version 0.12.4 (Stable)
+2015.07.09, Version 0.12.7 (Stable)
+
+* openssl: upgrade to 1.0.1p
+
+* npm: upgrade to 2.11.3
+
+* V8: cherry-pick JitCodeEvent patch from upstream (Ben Noordhuis)
+
+* win,msi: create npm folder in AppData directory (Steven Rockarts)
+
+
+2015.07.03, Version 0.12.6 (Stable), 0be9a77bb18ec15b4fb6a1fb0762f313b7351201
+
+* V8: fix out-of-band write in utf8 decoder
+
+
+2015.06.22, Version 0.12.5 (Stable), 61c6abf00898fe00eb7fcf2c23ba0b01cf12034c
+
+* openssl: upgrade to 1.0.1o (Addressing multiple CVEs)
+
+* npm: upgrade to 2.11.2
+
+* uv: upgrade to 1.6.1
+
+* V8: avoid deadlock when profiling is active (Dmitri Melikyan)
+
+* install: fix source path for openssl headers (Oguz Bastemur)
+
+* install: make sure opensslconf.h is overwritten (Oguz Bastemur)
+
+* timers: fix timeout when added in timer's callback (Julien Gilli)
+
+* windows: broadcast WM_SETTINGCHANGE after install (Mathias Küsel)
+
+
+2015.05.22, Version 0.12.4 (Stable), 0a604e92e258c5ee2752d763e50721e35053f135
 
 * npm: upgrade to 2.10.1
 
@@ -1032,7 +1067,29 @@
 * console: `console.dir()` bypasses inspect() methods (Nathan Rajlich)
 
 
-2015.03.23, Version 0.10.38 (Maintenance)
+2015.07.09, Version 0.10.40 (Maintenance), 0439a28d519fb6efe228074b0588a59452fc1677
+
+* openssl: upgrade to 1.0.1p
+
+* V8: back-port JitCodeEvent patch from upstream (Ben Noordhuis)
+
+* win,msi: create npm folder in AppData directory (Steven Rockarts)
+
+
+2015.06.18, Version 0.10.39 (Maintenance), 615a35ccd2cb5cba80901862aefe51a940995f44
+
+* openssl: upgrade to 1.0.1o (Addressing multiple CVEs)
+
+* install: fix source path for openssl headers (Oguz Bastemur)
+
+* install: make sure opensslconf.h is overwritten (Oguz Bastemur)
+
+* timers: fix timeout when added in timer's callback (Julien Gilli)
+
+* windows: broadcast WM_SETTINGCHANGE after install (Mathias Küsel)
+
+
+2015.03.23, Version 0.10.38 (Maintenance), 0b5731a63cc40c4fe9275c79158fe0a5dd4d1609
 
 * openssl: upgrade to 1.0.1m (Addressing multiple CVEs)
 

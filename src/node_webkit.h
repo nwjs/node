@@ -46,7 +46,7 @@ typedef v8::Handle<v8::Value> NWTickCallback(Environment* env, const v8::Handle<
 extern NW_EXTERN v8::Handle<v8::Value> CallNWTickCallback(Environment* env, const v8::Handle<v8::Value> ret);
 extern NW_EXTERN void SetNWTickCallback(NWTickCallback* tick_callback);
 
-extern NODE_EXTERN v8::Handle<v8::Value> CallTickCallback(Environment* env, const v8::Handle<v8::Value> ret);
+extern NODE_EXTERN v8::Handle<v8::Value> CallTickCallback(Environment* env);
 
 extern NW_EXTERN bool is_node_initialized();
 extern NW_EXTERN void SetupNWNode(int argc, char **argv);

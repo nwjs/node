@@ -1111,6 +1111,11 @@ Local<Value> MakeCallback(Environment* env,
 }
 
 
+v8::Handle<v8::Value> CallTickCallback(Environment* env) {
+  env->KickNextTick();
+  return Undefined(env->isolate());
+}
+
 // Internal only.
 Local<Value> MakeCallback(Environment* env,
                            Local<Object> recv,

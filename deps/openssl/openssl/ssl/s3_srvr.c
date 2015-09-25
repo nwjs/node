@@ -170,7 +170,6 @@
 #endif
 #include <openssl/md5.h>
 
-#define HMAC_Update node_HMAC_Update
 
 #ifndef OPENSSL_NO_SSL3_METHOD
 static const SSL_METHOD *ssl3_get_server_method(int ver);

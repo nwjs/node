@@ -1,6 +1,8 @@
 #ifndef _NW_NODE_INTERFACE_H
 #define _NW_NODE_INTERFACE_H
 
+#if 0
+
 #include "v8.h"
 #include "uv.h"
 
@@ -38,24 +40,57 @@ extern NODE_EXTERN v8::Persistent<v8::Context> g_dom_context;
 class Environment;
 extern NODE_EXTERN Environment* g_env;
 
-extern NW_EXTERN Environment* GetCurrentEnvironment(v8::Handle<v8::Context> context);
-extern NODE_EXTERN int EmitExit(Environment* env);
-extern NODE_EXTERN void RunAtExit(Environment* env);
 extern NW_EXTERN void OnMessage(v8::Handle<v8::Message> message, v8::Handle<v8::Value> error);
-typedef v8::Handle<v8::Value> NWTickCallback(Environment* env, const v8::Handle<v8::Value> ret);
 extern NW_EXTERN v8::Handle<v8::Value> CallNWTickCallback(Environment* env, const v8::Handle<v8::Value> ret);
-extern NW_EXTERN void SetNWTickCallback(NWTickCallback* tick_callback);
 
-extern NODE_EXTERN v8::Handle<v8::Value> CallTickCallback(Environment* env);
-
-extern NW_EXTERN bool is_node_initialized();
-extern NW_EXTERN void SetupNWNode(int argc, char **argv);
-extern NW_EXTERN void StartNWInstance(int argc, char *argv[], v8::Handle<v8::Context> ctx);
 extern NW_EXTERN void Shutdown();
-extern NODE_EXTERN int Start(int argc, char *argv[]);
 
 extern NODE_EXTERN int (*g_nw_uv_run)(uv_loop_t* loop, uv_run_mode mode);
 
 }
 
+#endif
+
+#if defined(__APPLE__)
+typedef struct _msg_pump_context_t {
+  uv_thread_t* embed_thread_;
+
+  // Semaphore to wait for main loop in the polling thread.
+  uv_sem_t* embed_sem_;
+
+  // Dummy handle to make uv's loop not quit.
+  uv_async_t* dummy_uv_handle_;
+} msg_pump_context_t;
+#else
+typedef struct _msg_pump_context_t {
+  void* loop;
+  std::vector<uv_async_t*>* wakeup_events;
+  void* wakeup_event;
+  void* idle_handle;
+  void* delay_timer;
+} msg_pump_context_t;
+
+#endif
+
+typedef bool (*IsNodeInitializedFn)();
+typedef void (*CallTickCallbackFn)(void* env);
+typedef v8::Handle<v8::Value> (*NWTickCallback)(void* env, const v8::Handle<v8::Value> ret);
+typedef void (*SetupNWNodeFn)(int argc, char **argv);
+typedef void (*GetNodeContextFn)(void*);
+typedef void (*SetNodeContextFn)(v8::Isolate* isolate, void* ctx);
+typedef void (*SetNWTickCallbackFn)(NWTickCallback tick_callback);
+typedef void (*StartNWInstanceFn)(int argc, char *argv[], v8::Handle<v8::Context> ctx);
+typedef void* (*GetNodeEnvFn)();
+typedef void* (*GetCurrentEnvironmentFn)(v8::Handle<v8::Context> context);
+typedef int (*EmitExitFn)(void* env);
+typedef void (*RunAtExitFn)(void* env);
+typedef void (*VoidHookFn)(void*);
+typedef void (*VoidIntHookFn)(void*, int);
+typedef int (*UVRunFn)(void*, int);
+typedef void (*SetUVRunFn)(UVRunFn);
+typedef int (*NodeStartFn)(int argc, char *argv[]);
+typedef void* (*GetPointerFn)();
+typedef void (*VoidPtr3Fn)(void*, void*, void*);
+typedef void (*VoidVoidFn)();
+typedef int (*IntVoidFn)();
 #endif

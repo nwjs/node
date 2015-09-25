@@ -12,7 +12,7 @@
     'node_use_openssl%': 'true',
     'node_shared_openssl%': 'false',
     'node_v8_options%': '',
-    'node_target_type%': '<(component)',
+    'node_target_type%': 'shared_library',
     'node_tag%': '',
     'node_release_urlbase%': '',
     'node_byteorder%': 'little',
@@ -91,8 +91,9 @@
       'dependencies': [
         'node_js2c#host',
         'deps/cares/cares.gyp:cares',
-        '../../v8/tools/gyp/v8.gyp:v8',
-        '../../v8/tools/gyp/v8.gyp:v8_libplatform'
+        #'../../v8/tools/gyp/v8.gyp:v8',
+        '../../v8/tools/gyp/v8.gyp:v8_libplatform',
+        '../../chrome/chrome.gyp:chrome_dll',
       ],
 
       'msvs_disabled_warnings': [4146, 4267, 4003],
@@ -108,7 +109,8 @@
         'tools/msvs/genfiles',
         'deps/uv/src/ares',
         '<(SHARED_INTERMEDIATE_DIR)', # for node_natives.h
-        '../../v8' # include/v8_platform.h
+        '../../v8', # include/v8_platform.h
+        '../../v8/include'
       ],
 
       'direct_dependent_settings': {
@@ -210,6 +212,8 @@
         # Warn when using deprecated V8 APIs.
         'V8_DEPRECATION_WARNINGS=1',
         'BUILDING_NW_NODE=1',
+        'V8_SHARED',
+        'USING_V8_SHARED',
       ],
 
 

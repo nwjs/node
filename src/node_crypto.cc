@@ -27,7 +27,6 @@
 #define strcasecmp _stricmp
 #endif
 
-#define HMAC_Init node_HMAC_Init
 
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
 #define OPENSSL_CONST const

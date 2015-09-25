@@ -6,6 +6,8 @@
 #include "node_javascript.h"
 #include "node_version.h"
 #include "node_internals.h"
+
+#include <vector>
 #include "node_webkit.h"
 
 #if defined HAVE_PERFCTR
@@ -162,8 +164,8 @@ static node_module* modlist_addon;
 NODE_EXTERN Environment* g_env = nullptr;
 NODE_EXTERN v8::Persistent<Context> g_context;
 NODE_EXTERN v8::Persistent<Context> g_dom_context;
-NODE_EXTERN int (*g_nw_uv_run)(uv_loop_t* loop, uv_run_mode mode);
-static NWTickCallback* g_nw_tick_callback = nullptr;
+static UVRunFn g_nw_uv_run = nullptr;
+static NWTickCallback g_nw_tick_callback = nullptr;
 
 #if defined(NODE_HAVE_I18N_SUPPORT)
 // Path to ICU data (for i18n / Intl)
@@ -1110,11 +1112,6 @@ Local<Value> MakeCallback(Environment* env,
   return ret;
 }
 
-
-v8::Handle<v8::Value> CallTickCallback(Environment* env) {
-  env->KickNextTick();
-  return Undefined(env->isolate());
-}
 
 // Internal only.
 Local<Value> MakeCallback(Environment* env,
@@ -4202,38 +4199,225 @@ NODE_MODULE_REF2(udp_wrap)
 NODE_MODULE_REF2(uv)
 }
 
-// copied beginning of Start() until v8::Initialize()
-NODE_EXTERN void SetupNWNode(int argc, char** argv) {
-  node_is_initialized = true;
-  node_is_nwjs = true;
-  ref_node_modules();
-  node_isolate = Isolate::GetCurrent();
-}
-
-NODE_EXTERN bool is_node_initialized() {
-  return node_is_initialized;
-}
-
-NODE_EXTERN void StartNWInstance(int argc, char *argv[], v8::Handle<v8::Context> context) {
-  Isolate* isolate = Isolate::GetCurrent();
-  HandleScope handle_scope(isolate);
-  Context::Scope context_scope(context);
-
-  g_env = CreateEnvironment(isolate, uv_default_loop(),
-                            context, argc, argv, 0, NULL);
-  LoadEnvironment(g_env);
-}
-
-NODE_EXTERN void SetNWTickCallback(NWTickCallback* tick_callback) {
-  g_nw_tick_callback = tick_callback;
-}
-
 NODE_EXTERN v8::Handle<v8::Value> CallNWTickCallback(Environment* env, const v8::Handle<v8::Value> ret) {
   return (*g_nw_tick_callback)(env, ret);
 }
 
-NODE_EXTERN Environment* GetCurrentEnvironment(v8::Handle<v8::Context> context) {
-  return Environment::GetCurrent(context);
-}
 
 }  // namespace node
+
+extern "C" {
+void wakeup_callback(uv_async_t* handle) {
+  // do nothing, just make libuv exit loop.
+}
+
+void idle_callback(uv_idle_t* handle) {
+  // do nothing, just make libuv exit loop.
+}
+
+void timer_callback(uv_timer_t* timer) {
+  // libuv would block unexpectedly with zero-timeout timer
+  // this is a workaround of libuv bug #574:
+  // https://github.com/joyent/libuv/issues/574
+  uv_idle_start(static_cast<uv_idle_t*>(timer->data), idle_callback);
+}
+
+
+NODE_EXTERN int g_uv_run(void* loop, int mode) {
+  return uv_run((uv_loop_t*)loop, (uv_run_mode)mode);
+}
+
+NODE_EXTERN void g_set_uv_run(UVRunFn uv_run_fn) {
+  node::g_nw_uv_run = uv_run_fn;
+}
+
+NODE_EXTERN int g_node_start(int argc, char** argv) {
+  return node::Start(argc, argv);
+}
+
+NODE_EXTERN void g_msg_pump_nest_enter(msg_pump_context_t* ctx) {
+  ctx->loop = uv_loop_new();
+
+  ctx->wakeup_events->push_back((uv_async_t*)ctx->wakeup_event);
+  ctx->wakeup_event = new uv_async_t;
+  uv_async_init((uv_loop_t*)ctx->loop, (uv_async_t*)ctx->wakeup_event, wakeup_callback);
+}
+
+NODE_EXTERN void g_msg_pump_pre_loop(msg_pump_context_t* ctx) {
+  ctx->idle_handle = new uv_idle_t;
+  uv_idle_init((uv_loop_t*)ctx->loop, (uv_idle_t*)ctx->idle_handle);
+
+  ctx->delay_timer = new uv_timer_t;
+  ((uv_timer_t*)ctx->delay_timer)->data = ctx->idle_handle;
+  uv_timer_init((uv_loop_t*)ctx->loop, (uv_timer_t*)ctx->delay_timer);
+}
+
+NODE_EXTERN void g_msg_pump_did_work(msg_pump_context_t* ctx) {
+  if (node::g_env) {
+    v8::Isolate* isolate = node::g_env->isolate();
+    v8::HandleScope handleScope(isolate);
+    (*node::g_nw_uv_run)((uv_loop_t*)ctx->loop, UV_RUN_NOWAIT);
+    node::CallNWTickCallback(node::g_env, v8::Undefined(isolate));
+  }
+}
+
+NODE_EXTERN void g_msg_pump_need_work(msg_pump_context_t* ctx) {
+  (*node::g_nw_uv_run)((uv_loop_t*)ctx->loop, UV_RUN_ONCE);
+}
+
+NODE_EXTERN void g_msg_pump_delay_work(msg_pump_context_t* ctx, int sec) {
+  uv_timer_start((uv_timer_t*)ctx->delay_timer, timer_callback, sec, 0);
+  (*node::g_nw_uv_run)((uv_loop_t*)ctx->loop, UV_RUN_ONCE);
+  uv_idle_stop((uv_idle_t*)ctx->idle_handle);
+  uv_timer_stop((uv_timer_t*)ctx->delay_timer);
+}
+
+NODE_EXTERN void g_msg_pump_nest_leave(msg_pump_context_t* ctx) {
+  uv_close((uv_handle_t*)(ctx->wakeup_event), NULL);
+  // Delete external loop.
+  uv_loop_close((uv_loop_t*)ctx->loop);
+  free((uv_loop_t*)ctx->loop);
+  ctx->loop = nullptr;
+    // // Restore previous async handle.
+  delete (uv_async_t*)ctx->wakeup_event;
+  ctx->wakeup_event = ctx->wakeup_events->back();
+  ctx->wakeup_events->pop_back();
+}
+
+NODE_EXTERN uv_loop_t* g_uv_default_loop() {
+  return uv_default_loop();
+}
+
+NODE_EXTERN void g_msg_pump_clean_ctx(msg_pump_context_t* ctx) {
+  delete (uv_idle_t*)ctx->idle_handle;
+  ctx->idle_handle = nullptr;
+
+  delete (uv_timer_t*)ctx->delay_timer;
+  ctx->delay_timer = nullptr;
+}
+
+NODE_EXTERN void g_msg_pump_sched_work(uv_async_t* wakeup_event) {
+#ifdef _WIN32
+  uv_async_send_nw(wakeup_event);
+#else
+  uv_async_send(wakeup_event);
+#endif
+}
+
+NODE_EXTERN void g_msg_pump_ctor(uv_async_t** wakeup_event) {
+  *wakeup_event = new uv_async_t;
+  uv_async_init(uv_default_loop(), *wakeup_event, wakeup_callback);
+  node::g_nw_uv_run = (UVRunFn)uv_run;
+}
+
+NODE_EXTERN void g_msg_pump_dtor(uv_async_t** wakeup_event) {
+  delete *wakeup_event;
+  *wakeup_event = nullptr;
+}
+
+NODE_EXTERN bool g_is_node_initialized() {
+  return node::node_is_initialized;
+}
+
+NODE_EXTERN void g_call_tick_callback(node::Environment* env) {
+  env->KickNextTick();
+}
+
+// copied beginning of Start() until v8::Initialize()
+NODE_EXTERN void g_setup_nwnode(int argc, char** argv) {
+  node::node_is_initialized = true;
+  node::node_is_nwjs = true;
+  node::ref_node_modules();
+  node::node_isolate = v8::Isolate::GetCurrent();
+}
+
+NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Context> context) {
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::HandleScope handle_scope(isolate);
+  v8::Context::Scope context_scope(context);
+
+  node::g_env = node::CreateEnvironment(isolate, uv_default_loop(),
+                            context, argc, argv, 0, NULL);
+  node::LoadEnvironment(node::g_env);
+}
+
+NODE_EXTERN void g_set_nw_tick_callback(NWTickCallback tick_callback) {
+  node::g_nw_tick_callback = tick_callback;
+}
+
+NODE_EXTERN void* g_get_node_env() {
+  return node::g_env;
+}
+
+NODE_EXTERN void g_get_node_context(v8::Local<v8::Context>* ret) {
+  *ret = v8::Local<v8::Context>::New(v8::Isolate::GetCurrent(), node::g_context);
+}
+
+NODE_EXTERN void g_set_node_context(v8::Isolate* isolate, v8::Local<v8::Context>* context) {
+  node::g_context.Reset(isolate, *context);
+}
+
+NODE_EXTERN void* g_get_current_env(v8::Handle<v8::Context> context) {
+  return node::Environment::GetCurrent(context);
+}
+
+NODE_EXTERN void g_emit_exit(node::Environment* env) {
+  node::EmitExit(env);
+}
+
+NODE_EXTERN void g_run_at_exit(node::Environment* env) {
+  node::RunAtExit(env);
+}
+
+#ifdef __APPLE__
+NODE_EXTERN void g_msg_pump_ctor_osx(msg_pump_context_t* ctx, void* EmbedThreadRunner, void* data) {
+  // Add dummy handle for libuv, otherwise libuv would quit when there is
+  // nothing to do.
+  ctx->dummy_uv_handle = new uv_async_t;
+  uv_async_init(uv_default_loop(), ctx->dummy_uv_handle, UvNoOp);
+
+  // Start worker that will interrupt main loop when having uv events.
+  ctx->embed_sem = new uv_sem_t;
+  uv_sem_init(ctx->embed_sem, 0);
+  ctx->embed_thread = new uv_thread_t;
+  uv_thread_create(ctx->embed_thread, EmbedThreadRunner, data);
+
+  // Execute loop for once.
+  uv_run(uv_default_loop(), UV_RUN_NOWAIT);
+  node::g_nw_uv_run = uv_run;
+}
+
+NODE_EXTERN void g_msg_pump_dtor_osx(msg_pump_context_t* ctx) {
+  uv_thread_join(ctx->embed_thread);
+
+  delete ctx->dummy_uv_handle;
+  ctx->dummy_uv_handle = nullptr;
+
+  delete ctx->embed_sem;
+  ctx->embed_sem = nullptr;
+
+  delete ctx->embed_thread;
+  ctx->embed_thread = nullptr;
+}
+
+NODE_EXTERN int g_nw_uvrun_nowait() {
+  return (*node::g_nw_uv_run)(uv_default_loop(), UV_RUN_NOWAIT);
+}
+
+NODE_EXTERN int g_uv_backend_timeout() {
+  return  uv_backend_timeout(uv_default_loop());
+}
+
+NODE_EXTERN void g_uv_sem_post(msg_pump_context_t* ctx) {
+  uv_sem_post(ctx->embed_sem);
+}
+
+NODE_EXTERN int g_uv_backend_fd() {
+  return uv_backend_fd(uv_default_loop());
+}
+
+NODE_EXTERN void g_uv_sem_wait(msg_pump_context_t* ctx) {
+  uv_sem_wait(ctx->embed_sem);
+}
+#endif
+}

@@ -3808,13 +3808,11 @@ void SetupUv(int argc, char** argv) {
   // OpenSSL's pool.
   V8::SetEntropySource(crypto::EntropySource);
 #endif
-
-  node_is_initialized = true;
-
-  node_isolate = Isolate::GetCurrent();
 }
 
 void SetupContext(int argc, char *argv[], v8::Handle<v8::Context> context) {
+  node_is_initialized = true;
+
   Isolate* isolate = Isolate::GetCurrent();
   HandleScope handle_scope(isolate);
   Context::Scope context_scope(context);

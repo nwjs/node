@@ -51,26 +51,24 @@ extern NODE_EXTERN int (*g_nw_uv_run)(uv_loop_t* loop, uv_run_mode mode);
 
 #endif
 
-#if defined(__APPLE__)
+#include <vector>
+
 typedef struct _msg_pump_context_t {
-  uv_thread_t* embed_thread_;
+#if defined(__APPLE__)
+  void* embed_thread;
 
   // Semaphore to wait for main loop in the polling thread.
-  uv_sem_t* embed_sem_;
+  void* embed_sem;
 
   // Dummy handle to make uv's loop not quit.
-  uv_async_t* dummy_uv_handle_;
-} msg_pump_context_t;
-#else
-typedef struct _msg_pump_context_t {
+  void* dummy_uv_handle;
+#endif
   void* loop;
-  std::vector<uv_async_t*>* wakeup_events;
+  std::vector<void*>* wakeup_events;
   void* wakeup_event;
   void* idle_handle;
   void* delay_timer;
 } msg_pump_context_t;
-
-#endif
 
 typedef bool (*IsNodeInitializedFn)();
 typedef void (*CallTickCallbackFn)(void* env);

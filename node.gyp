@@ -84,6 +84,10 @@
     ],
   },
 
+  'includes': [
+    '../../build/util/version.gypi',
+  ],
+
   'targets': [
     {
       'target_name': 'node',
@@ -100,6 +104,7 @@
 
       'xcode_settings': {
         'WARNING_CFLAGS': [ '-Wno-error=deprecated-declarations' ],
+        'LD_RUNPATH_SEARCH_PATHS': [ '@loader_path/../../../../../../..', ],
       },
 
       'include_dirs': [
@@ -424,6 +429,18 @@
           'defines': [
             # we need to use node's preferred "darwin" rather than gyp's preferred "mac"
             'NODE_PLATFORM="darwin"',
+          ],
+          'postbuilds': [
+            {
+              'postbuild_name': 'Fix Framework Link',
+              'action': [
+                'install_name_tool',
+                '-change',
+                '@executable_path/../Versions/<(version_full)/<(mac_product_name) Framework.framework/<(mac_product_name) Framework',
+                '@executable_path/../../../<(mac_product_name) Framework.framework/<(mac_product_name) Framework',
+                '${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}'
+              ],
+            },
           ],
         }],
         [ 'OS=="freebsd"', {

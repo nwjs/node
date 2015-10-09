@@ -4337,33 +4337,37 @@ NODE_EXTERN void g_run_at_exit(node::Environment* env) {
 }
 
 #ifdef __APPLE__
+
+void UvNoOp(uv_async_t* handle) {
+}
+
 NODE_EXTERN void g_msg_pump_ctor_osx(msg_pump_context_t* ctx, void* EmbedThreadRunner, void* data) {
   // Add dummy handle for libuv, otherwise libuv would quit when there is
   // nothing to do.
   ctx->dummy_uv_handle = new uv_async_t;
-  uv_async_init(uv_default_loop(), ctx->dummy_uv_handle, UvNoOp);
+  uv_async_init(uv_default_loop(), (uv_async_t*)ctx->dummy_uv_handle, UvNoOp);
 
   // Start worker that will interrupt main loop when having uv events.
   ctx->embed_sem = new uv_sem_t;
-  uv_sem_init(ctx->embed_sem, 0);
+  uv_sem_init((uv_sem_t*)ctx->embed_sem, 0);
   ctx->embed_thread = new uv_thread_t;
-  uv_thread_create(ctx->embed_thread, EmbedThreadRunner, data);
+  uv_thread_create((uv_thread_t*)ctx->embed_thread, (uv_thread_cb)EmbedThreadRunner, data);
 
   // Execute loop for once.
   uv_run(uv_default_loop(), UV_RUN_NOWAIT);
-  node::g_nw_uv_run = uv_run;
+  node::g_nw_uv_run = (UVRunFn)uv_run;
 }
 
 NODE_EXTERN void g_msg_pump_dtor_osx(msg_pump_context_t* ctx) {
-  uv_thread_join(ctx->embed_thread);
+  uv_thread_join((uv_thread_t*)ctx->embed_thread);
 
-  delete ctx->dummy_uv_handle;
+  delete (uv_async_t*)ctx->dummy_uv_handle;
   ctx->dummy_uv_handle = nullptr;
 
-  delete ctx->embed_sem;
+  delete (uv_sem_t*)ctx->embed_sem;
   ctx->embed_sem = nullptr;
 
-  delete ctx->embed_thread;
+  delete (uv_thread_t*)ctx->embed_thread;
   ctx->embed_thread = nullptr;
 }
 
@@ -4376,7 +4380,7 @@ NODE_EXTERN int g_uv_backend_timeout() {
 }
 
 NODE_EXTERN void g_uv_sem_post(msg_pump_context_t* ctx) {
-  uv_sem_post(ctx->embed_sem);
+  uv_sem_post((uv_sem_t*)ctx->embed_sem);
 }
 
 NODE_EXTERN int g_uv_backend_fd() {
@@ -4384,7 +4388,7 @@ NODE_EXTERN int g_uv_backend_fd() {
 }
 
 NODE_EXTERN void g_uv_sem_wait(msg_pump_context_t* ctx) {
-  uv_sem_wait(ctx->embed_sem);
+  uv_sem_wait((uv_sem_t*)ctx->embed_sem);
 }
 #endif
 }

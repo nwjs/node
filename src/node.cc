@@ -3955,7 +3955,7 @@ static void StartNodeInstance(void* arg) {
     HandleScope handle_scope(isolate);
     Local<Context> context = Context::New(isolate);
     Environment* env = CreateEnvironment(isolate, context, instance_data);
-    array_buffer_allocator->set_env(env);
+    //array_buffer_allocator->set_env(env);
     Context::Scope context_scope(context);
     if (instance_data->is_main())
       env->set_using_abort_on_uncaught_exc(abort_on_uncaught_exception);
@@ -4002,7 +4002,7 @@ static void StartNodeInstance(void* arg) {
     __lsan_do_leak_check();
 #endif
 
-    array_buffer_allocator->set_env(nullptr);
+    //array_buffer_allocator->set_env(nullptr);
     env->Dispose();
     env = nullptr;
   }
@@ -4010,7 +4010,7 @@ static void StartNodeInstance(void* arg) {
   CHECK_NE(isolate, nullptr);
   isolate->Dispose();
   isolate = nullptr;
-  delete array_buffer_allocator;
+  //delete array_buffer_allocator;
   if (instance_data->is_main())
     node_isolate = nullptr;
 }

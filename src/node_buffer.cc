@@ -211,7 +211,7 @@ MaybeLocal<Object> New(Isolate* isolate,
   EscapableHandleScope scope(isolate);
 
   size_t length = StringBytes::Size(isolate, string, enc);
-  char* data = static_cast<char*>(env->isolate()->array_buffer_allocator()->Allocate(length));
+  char* data = static_cast<char*>(isolate->array_buffer_allocator()->Allocate(length));
 
   if (data == nullptr)
     return Local<Object>();

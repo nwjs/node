@@ -11,6 +11,7 @@
     'node_shared_libuv%': 'false',
     'node_use_openssl%': 'true',
     'node_shared_openssl%': 'false',
+    'openssl_fips%': 'false',
     'node_v8_options%': '',
     'node_target_type%': 'shared_library',
     'node_tag%': '',

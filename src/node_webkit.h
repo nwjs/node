@@ -40,6 +40,7 @@ typedef int (*NodeStartFn)(int argc, char *argv[]);
 typedef void (*SetBlobPathFn)(const char *path);
 typedef void* (*GetPointerFn)();
 typedef void (*VoidPtr3Fn)(void*, void*, void*);
+typedef void (*VoidPtr4Fn)(void*, void*, void*, void*);
 typedef void (*VoidVoidFn)();
 typedef int (*IntVoidFn)();
 typedef bool (*BoolPtrFn)(void*);

@@ -4686,7 +4686,7 @@ NODE_EXTERN void g_run_at_exit(node::Environment* env) {
 void UvNoOp(uv_async_t* handle) {
 }
 
-NODE_EXTERN void g_msg_pump_ctor_osx(msg_pump_context_t* ctx, void* EmbedThreadRunner, void* data) {
+NODE_EXTERN void g_msg_pump_ctor_osx(msg_pump_context_t* ctx, void* EmbedThreadRunner, void* kevent_hook, void* data) {
   // Add dummy handle for libuv, otherwise libuv would quit when there is
   // nothing to do.
   ctx->dummy_uv_handle = new uv_async_t;
@@ -4697,6 +4697,11 @@ NODE_EXTERN void g_msg_pump_ctor_osx(msg_pump_context_t* ctx, void* EmbedThreadR
   uv_sem_init((uv_sem_t*)ctx->embed_sem, 0);
   ctx->embed_thread = new uv_thread_t;
   uv_thread_create((uv_thread_t*)ctx->embed_thread, (uv_thread_cb)EmbedThreadRunner, data);
+
+  uv_loop_t* uvloop = uv_default_loop();
+  uvloop->keventfunc = kevent_hook;
+
+  ctx->loop = uvloop;
 
   // Execute loop for once.
   uv_run(uv_default_loop(), UV_RUN_NOWAIT);
@@ -4718,6 +4723,16 @@ NODE_EXTERN void g_msg_pump_dtor_osx(msg_pump_context_t* ctx) {
 
 NODE_EXTERN int g_nw_uvrun_nowait() {
   return (*node::g_nw_uv_run)(uv_default_loop(), UV_RUN_NOWAIT);
+}
+
+NODE_EXTERN int g_uv_runloop_once() {
+  if (node::g_env) {
+    v8::Isolate* isolate = node::g_env->isolate();
+    v8::HandleScope handleScope(isolate);
+    v8::Context::Scope cscope(node::g_env->context());
+    return (*node::g_nw_uv_run)(uv_default_loop(), UV_RUN_ONCE);
+  }
+  return (*node::g_nw_uv_run)(uv_default_loop(), UV_RUN_ONCE);
 }
 
 NODE_EXTERN int g_uv_backend_timeout() {

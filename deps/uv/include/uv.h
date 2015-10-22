@@ -1457,6 +1457,7 @@ struct uv_loop_s {
   void* active_reqs[2];
   /* Internal flag to signal loop stop. */
   unsigned int stop_flag;
+  void* keventfunc;
   UV_LOOP_PRIVATE_FIELDS
 };
 

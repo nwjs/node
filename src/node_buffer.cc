@@ -55,10 +55,12 @@ bool zero_fill_all_buffers = false;
 
 namespace {
 
+#if 0
 inline void* BufferMalloc(size_t length) {
   return zero_fill_all_buffers ? node::UncheckedCalloc(length) :
                                  node::UncheckedMalloc(length);
 }
+#endif
 
 }  // namespace
 

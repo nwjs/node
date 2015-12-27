@@ -368,7 +368,10 @@ void UDPWrap::OnSend(uv_udp_send_t* req, int status) {
 void UDPWrap::OnAlloc(uv_handle_t* handle,
                       size_t suggested_size,
                       uv_buf_t* buf) {
-  buf->base = static_cast<char*>(malloc(suggested_size));
+  UDPWrap* wrap = static_cast<UDPWrap*>(((uv_udp_t*)handle)->data);
+  Environment* env = wrap->env();
+
+  buf->base = static_cast<char*>(env->isolate()->array_buffer_allocator()->Allocate(suggested_size));
   buf->len = suggested_size;
 
   if (buf->base == nullptr && suggested_size > 0) {
@@ -383,14 +386,14 @@ void UDPWrap::OnRecv(uv_udp_t* handle,
                      const uv_buf_t* buf,
                      const struct sockaddr* addr,
                      unsigned int flags) {
+  UDPWrap* wrap = static_cast<UDPWrap*>(handle->data);
+  Environment* env = wrap->env();
   if (nread == 0 && addr == nullptr) {
     if (buf->base != nullptr)
-      free(buf->base);
+      env->isolate()->array_buffer_allocator()->Free(buf->base, buf->len);
     return;
   }
 
-  UDPWrap* wrap = static_cast<UDPWrap*>(handle->data);
-  Environment* env = wrap->env();
 
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
@@ -405,12 +408,12 @@ void UDPWrap::OnRecv(uv_udp_t* handle,
 
   if (nread < 0) {
     if (buf->base != nullptr)
-      free(buf->base);
+      env->isolate()->array_buffer_allocator()->Free(buf->base, buf->len);
     wrap->MakeCallback(env->onmessage_string(), arraysize(argv), argv);
     return;
   }
 
-  char* base = static_cast<char*>(realloc(buf->base, nread));
+  char* base = static_cast<char*>(buf->base); //NOTE: we don't realloc here
   argv[2] = Buffer::New(env, base, nread).ToLocalChecked();
   argv[3] = AddressToJS(env, addr);
   wrap->MakeCallback(env->onmessage_string(), arraysize(argv), argv);

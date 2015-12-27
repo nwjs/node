@@ -148,7 +148,9 @@ void StreamWrap::OnAlloc(uv_handle_t* handle,
 
 
 void StreamWrap::OnAllocImpl(size_t size, uv_buf_t* buf, void* ctx) {
-  buf->base = node::Malloc(size);
+  StreamWrap* wrap = static_cast<StreamWrap*>(ctx);
+  Environment* env = wrap->env();
+  buf->base = static_cast<char*>(env->isolate()->array_buffer_allocator()->Allocate(size));
   buf->len = size;
 }
 
@@ -187,19 +189,23 @@ void StreamWrap::OnReadImpl(ssize_t nread,
 
   if (nread < 0)  {
     if (buf->base != nullptr)
-      free(buf->base);
+      env->isolate()->array_buffer_allocator()->Free(buf->base, buf->len);
     wrap->EmitData(nread, Local<Object>(), pending_obj);
     return;
   }
 
   if (nread == 0) {
     if (buf->base != nullptr)
-      free(buf->base);
+      env->isolate()->array_buffer_allocator()->Free(buf->base, buf->len);
     return;
   }
 
+  char* base = static_cast<char*>(buf->base); //NOTE: realloc is
+                                              //removed here because
+                                              //nread is always less
+                                              //than buf->len, see the
+                                              //check in the next line
   CHECK_LE(static_cast<size_t>(nread), buf->len);
-  char* base = node::Realloc(buf->base, nread);
 
   if (pending == UV_TCP) {
     pending_obj = AcceptHandle<TCPWrap, uv_tcp_t>(env, wrap);

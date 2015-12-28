@@ -4648,6 +4648,8 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
   v8::HandleScope handle_scope(isolate);
   v8::Context::Scope context_scope(context);
 
+  argv = uv_setup_args(argc, argv);
+
   node::g_env = node::CreateEnvironment(isolate, uv_default_loop(),
                             context, argc, argv, 0, NULL);
   node::LoadEnvironment(node::g_env);

@@ -4564,20 +4564,33 @@ NODE_EXTERN void g_msg_pump_did_work(msg_pump_context_t* ctx) {
   if (node::g_env) {
     v8::Isolate* isolate = node::g_env->isolate();
     v8::HandleScope handleScope(isolate);
+    v8::Context::Scope cscope(node::g_env->context());
     (*node::g_nw_uv_run)((uv_loop_t*)ctx->loop, UV_RUN_NOWAIT);
     node::CallNWTickCallback(node::g_env, v8::Undefined(isolate));
   }
 }
 
 NODE_EXTERN void g_msg_pump_need_work(msg_pump_context_t* ctx) {
+  if (node::g_env) {
+    node::g_env->context()->Enter();
+  }
   (*node::g_nw_uv_run)((uv_loop_t*)ctx->loop, UV_RUN_ONCE);
+  if (node::g_env) {
+    node::g_env->context()->Exit();
+  }
 }
 
 NODE_EXTERN void g_msg_pump_delay_work(msg_pump_context_t* ctx, int sec) {
+  if (node::g_env) {
+    node::g_env->context()->Enter();
+  }
   uv_timer_start((uv_timer_t*)ctx->delay_timer, timer_callback, sec, 0);
   (*node::g_nw_uv_run)((uv_loop_t*)ctx->loop, UV_RUN_ONCE);
   uv_idle_stop((uv_idle_t*)ctx->idle_handle);
   uv_timer_stop((uv_timer_t*)ctx->delay_timer);
+  if (node::g_env) {
+    node::g_env->context()->Exit();
+  }
 }
 
 NODE_EXTERN void g_msg_pump_nest_leave(msg_pump_context_t* ctx) {

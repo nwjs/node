@@ -4627,6 +4627,8 @@ NODE_EXTERN void g_msg_pump_ctor_osx(msg_pump_context_t* ctx, void* EmbedThreadR
   uv_loop_t* uvloop = uv_default_loop();
   uvloop->keventfunc = kevent_hook;
 
+  ctx->loop = uvloop;
+
   // Execute loop for once.
   uv_run(uv_default_loop(), UV_RUN_NOWAIT);
   node::g_nw_uv_run = (UVRunFn)uv_run;

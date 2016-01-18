@@ -4556,6 +4556,9 @@ NODE_EXTERN bool g_is_node_initialized() {
 }
 
 NODE_EXTERN void g_call_tick_callback(node::Environment* env) {
+  v8::HandleScope scope(env->isolate());
+  v8::Context::Scope context_scope(env->context());
+
   env->KickNextTick();
 }
 

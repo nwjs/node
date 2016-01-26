@@ -1165,7 +1165,7 @@ void SetupPromises(const FunctionCallbackInfo<Value>& args) {
 
   CHECK(args[0]->IsFunction());
 
-  isolate->SetPromiseRejectCallback(PromiseRejectCallback);
+  //isolate->SetPromiseRejectCallback(PromiseRejectCallback);
   env->set_promise_reject_function(args[0].As<Function>());
 
   env->process_object()->Delete(
@@ -4694,6 +4694,10 @@ NODE_EXTERN void g_emit_exit(node::Environment* env) {
 
 NODE_EXTERN void g_run_at_exit(node::Environment* env) {
   node::RunAtExit(env);
+}
+
+NODE_EXTERN void g_promise_reject_callback(v8::PromiseRejectMessage* data) {
+  node::PromiseRejectCallback(*data);
 }
 
 #ifdef __APPLE__

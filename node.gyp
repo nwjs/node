@@ -745,7 +745,7 @@
       'target_name': 'cctest',
       'type': 'executable',
       'dependencies': [
-        'deps/gtest/gtest.gyp:gtest',
+        '../../testing/gtest.gyp:gtest',
         '../../v8/tools/gyp/v8.gyp:v8',
         '../../v8/tools/gyp/v8.gyp:v8_libplatform'
       ],

@@ -4660,6 +4660,12 @@ NODE_EXTERN int g_nw_uvrun_nowait() {
 }
 
 NODE_EXTERN int g_uv_runloop_once() {
+  if (node::g_env) {
+    v8::Isolate* isolate = node::g_env->isolate();
+    v8::HandleScope handleScope(isolate);
+    v8::Context::Scope cscope(node::g_env->context());
+    return (*node::g_nw_uv_run)(uv_default_loop(), UV_RUN_ONCE);
+  }
   return (*node::g_nw_uv_run)(uv_default_loop(), UV_RUN_ONCE);
 }
 

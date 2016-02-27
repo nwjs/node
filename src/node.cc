@@ -985,6 +985,7 @@ void* ArrayBufferAllocator::Allocate(size_t size) {
   return malloc(size);
 }
 
+#if 0
 static bool DomainHasErrorHandler(const Environment* env,
                                   const Local<Object>& domain) {
   HandleScope scope(env->isolate());
@@ -1030,8 +1031,10 @@ static bool DomainsStackHasErrorHandler(const Environment* env) {
 
   return false;
 }
+#endif
 
 
+#if 0
 static bool ShouldAbortOnUncaughtException(Isolate* isolate) {
   HandleScope scope(isolate);
 
@@ -1044,7 +1047,7 @@ static bool ShouldAbortOnUncaughtException(Isolate* isolate) {
 
   return isEmittingTopLevelDomainError || !DomainsStackHasErrorHandler(env);
 }
-
+#endif
 
 void SetupDomainUse(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
@@ -4558,8 +4561,9 @@ NODE_EXTERN bool g_is_node_initialized() {
 NODE_EXTERN void g_call_tick_callback(node::Environment* env) {
   v8::HandleScope scope(env->isolate());
   v8::Context::Scope context_scope(env->context());
+  node::Environment::AsyncCallbackScope callback_scope(env);
 
-  env->KickNextTick();
+  env->KickNextTick(&callback_scope);
 }
 
 // copied beginning of Start() until v8::Initialize()

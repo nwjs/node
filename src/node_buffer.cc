@@ -248,11 +248,17 @@ MaybeLocal<Object> New(Isolate* isolate,
     CHECK(actual <= length);
 
     if (actual == 0) {
-      free(data);
+      isolate->array_buffer_allocator()->Free(data, length);
       data = nullptr;
-    } else if (actual < length) {
+    }
+#if 0 //FIXME #4357: costs some extra bytes here. It shouldn't be
+      //significant because of the length calculation in
+      //StringBytes::Size()
+      //v8 buffer allocator doesn't support reallocate
+    else if (actual < length) {
       data = node::Realloc(data, actual);
     }
+#endif
   }
 
   Local<Object> buf;

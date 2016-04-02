@@ -466,6 +466,7 @@ class Environment {
 
   inline int64_t get_async_wrap_uid();
 
+  bool KickNextTick(AsyncCallbackScope* scope);
   // List of id's that have been destroyed and need the destroy() cb called.
   inline std::vector<int64_t>* destroy_ids_list();
 

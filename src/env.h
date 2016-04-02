@@ -469,6 +469,8 @@ class Environment {
   // List of id's that have been destroyed and need the destroy() cb called.
   inline std::vector<int64_t>* destroy_ids_list();
 
+  bool KickNextTick(AsyncCallbackScope* scope);
+
   inline uint32_t* heap_statistics_buffer() const;
   inline void set_heap_statistics_buffer(uint32_t* pointer);
 

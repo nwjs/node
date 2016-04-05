@@ -2363,6 +2363,7 @@ void FatalException(Isolate* isolate,
     // failed before the process._fatalException function was added!
     // this is probably pretty bad.  Nothing to do but report and exit.
     ReportException(env, error, message);
+    if (!node_is_nwjs)
     exit(6);
   }
 
@@ -2378,11 +2379,13 @@ void FatalException(Isolate* isolate,
   if (fatal_try_catch.HasCaught()) {
     // the fatal exception function threw, so we must exit
     ReportException(env, fatal_try_catch);
+    if (!node_is_nwjs)
     exit(7);
   }
 
   if (false == caught->BooleanValue()) {
     ReportException(env, error, message);
+    if (!node_is_nwjs)
     exit(1);
   }
 }
@@ -3229,7 +3232,7 @@ void LoadEnvironment(Environment* env) {
   HandleScope handle_scope(env->isolate());
 
   env->isolate()->SetFatalErrorHandler(node::OnFatalError);
-  if (!node_is_nwjs)
+  //if (!node_is_nwjs)
     env->isolate()->AddMessageListener(OnMessage);
 
   // Compile, execute the src/node.js file. (Which was included as static C

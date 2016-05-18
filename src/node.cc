@@ -4811,7 +4811,8 @@ NODE_EXTERN void g_setup_nwnode(int argc, char** argv) {
   node::node_is_initialized = true;
   node::node_is_nwjs = true;
   node::ref_node_modules();
-  node::node_isolate.exchange(v8::Isolate::GetCurrent());
+  CHECK_EQ(0, uv_mutex_init(&node::node_isolate_mutex));
+  node::node_isolate = v8::Isolate::GetCurrent();
 }
 
 NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Context> context) {

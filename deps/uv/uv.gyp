@@ -21,7 +21,7 @@
     ],
     'xcode_settings': {
       'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES',  # -fvisibility=hidden
-      'WARNING_CFLAGS': [ '-Wall', '-Wextra', '-Wno-unused-parameter' , '-Wno-error=gnu-folding-constant'],
+      'WARNING_CFLAGS': [ '-Wall', '-Wextra', '-Wno-unused-parameter' , '-Wno-error=gnu-folding-constant', '-Wno-varargs'],
       'OTHER_CFLAGS': [ '-g', '--std=gnu89', '-pedantic' ],
     },
     'msvs_disabled_warnings': [4267],

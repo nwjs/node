@@ -161,6 +161,7 @@
         'link_settings': {
           'libraries': ['<@(openssl_default_libraries_win)'],
         },
+        'msvs_disabled_warnings': [4311],
       }, {
         'defines': ['<@(openssl_default_defines_not_win)'],
         'cflags': ['-Wno-missing-field-initializers'],

@@ -24,7 +24,7 @@
       'WARNING_CFLAGS': [ '-Wall', '-Wextra', '-Wno-unused-parameter' , '-Wno-error=gnu-folding-constant', '-Wno-varargs'],
       'OTHER_CFLAGS': [ '-g', '--std=gnu89', '-pedantic' ],
     },
-    'msvs_disabled_warnings': [4267],
+    'msvs_disabled_warnings': [4267, 4477],
   },
 
   'targets': [

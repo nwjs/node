@@ -2539,6 +2539,8 @@ void FatalException(Isolate* isolate,
   HandleScope scope(isolate);
 
   Environment* env = Environment::GetCurrent(isolate);
+  if (!env) //FIXME: check why env is null #4912
+    return;
   Local<Object> process_object = env->process_object();
   Local<String> fatal_exception_string = env->fatal_exception_string();
   Local<Function> fatal_exception_function =

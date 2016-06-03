@@ -10,7 +10,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 
-#ifdef __APPLE__
+#if 0
 #include <tr1/type_traits>
 #else
 #include <type_traits>  // std::remove_reference
@@ -18,7 +18,7 @@
 
 namespace node {
 
-#ifdef __APPLE__
+#if 0
 template <typename T> using remove_reference = std::tr1::remove_reference<T>;
 #else
 template <typename T> using remove_reference = std::remove_reference<T>;

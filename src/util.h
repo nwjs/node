@@ -11,8 +11,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifdef __APPLE__
-#include <tr1/type_traits>  // NOLINT(build/c++tr1)
+#if 0
+#include <tr1/type_traits>
 #else
 #include <type_traits>  // std::remove_reference
 #endif
@@ -31,7 +31,7 @@ NO_RETURN void Abort();
 NO_RETURN void Assert(const char* const (*args)[4]);
 void DumpBacktrace(FILE* fp);
 
-#ifdef __APPLE__
+#if 0
 template <typename T> using remove_reference = std::tr1::remove_reference<T>;
 #else
 template <typename T> using remove_reference = std::remove_reference<T>;

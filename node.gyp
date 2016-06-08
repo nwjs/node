@@ -29,7 +29,8 @@
     'python%': 'python',
     'icu_small%': 'false',
     'v8_postmortem_support%' : 'false',
-    'V8_BASE%': '<(PRODUCT_DIR)/obj/v8/tools/gyp/libv8_base.a',
+    'V8_BASE%': '<(PRODUCT_DIR)/../nw/obj/v8/libv8_libbase.a',
+    'V8_PLTFRM%': '<(PRODUCT_DIR)/../nw/obj/v8/libv8_libplatform.a',
     'library_files': [
       'lib/internal/bootstrap_node.js',
       'lib/_debug_agent.js',
@@ -141,9 +142,9 @@
       'type': '<(node_target_type)',
       'dependencies': [
         'node_js2c#host',
-        #'../../v8/tools/gyp/v8.gyp:v8',
-        '../../v8/src/v8.gyp:v8_libplatform',
-        '../../chrome/chrome.gyp:chrome_dll',
+        ##'../../v8/tools/gyp/v8.gyp:v8',
+        #'../../v8/src/v8.gyp:v8_libplatform',
+        #'../../chrome/chrome.gyp:chrome_dll',
       ],
 
       'msvs_disabled_warnings': [4146, 4267, 4003, 4065, 4477],
@@ -614,7 +615,11 @@
           ],
         }],
         [ '(OS=="freebsd" or OS=="linux") and node_shared=="false"', {
-          #'ldflags': [ '-Wl,-z,noexecstack',
+          'ldflags': [ '-L<(PRODUCT_DIR)/../nw/', '-lnw',
+                      '-Wl,--whole-archive <(V8_BASE)',
+                      '<(V8_PLTFRM)',
+                      '-Wl,--no-whole-archive' ]
+          # 'ldflags': [ '-Wl,-z,noexecstack',
           #             '-Wl,--whole-archive <(V8_BASE)',
           #             '-Wl,--no-whole-archive' ]
         }],

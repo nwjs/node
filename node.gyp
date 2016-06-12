@@ -463,7 +463,7 @@
             'NODE_PLATFORM="win32"',
             '_UNICODE=1',
           ],
-          'libraries': [ '-lpsapi.lib' ]
+          'libraries': [ '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/nw.dll.lib', '<(PRODUCT_DIR)/../nw/v8.dll.lib' ]
         }, { # POSIX
           'defines': [ '__POSIX__' ],
         }],
@@ -516,14 +516,21 @@
             'NODE_PLATFORM="sunos"',
           ],
         }],
-        [ 'OS=="freebsd" or OS=="linux"', {
-          'ldflags': [ '-L<(PRODUCT_DIR)/../nw/', '-lnw',
+        [ 'OS=="linux"', {
+          'ldflags': [ '-L<(PRODUCT_DIR)/../nw/lib/', '-lnw',
                       '-Wl,--whole-archive <(V8_BASE)',
                       '<(V8_PLTFRM)',
                       '-Wl,--no-whole-archive' ]
-          # 'ldflags': [ '-Wl,-z,noexecstack',
-          #             '-Wl,--whole-archive <(V8_BASE)',
-          #             '-Wl,--no-whole-archive' ]
+        }],
+        [ 'OS=="mac"', {
+          'xcode_settings': {
+            'OTHER_LDFLAGS': [
+              '-L<(PRODUCT_DIR)/../nw/', '-lv8',
+              '<(PRODUCT_DIR)/../nw/nwjs\ Framework.framework/nwjs\ Framework',
+                      '-Wl,-force_load <(V8_BASE)',
+                      '-Wl,-force_load <(V8_PLTFRM)',
+            ],
+          },
         }],
         [ 'OS=="sunos"', {
           'ldflags': [ '-Wl,-M,/usr/lib/ld/map.noexstk' ],

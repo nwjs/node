@@ -30,11 +30,21 @@
 
     # Don't bake anything extra into the snapshot.
     'v8_use_external_startup_data%': 0,
+    
 
     # Don't use ICU data file (icudtl.dat) from V8, we use our own.
     'icu_use_data_file_flag%': 0,
 
     'conditions': [
+      ['OS=="win" and component=="shared_library"', {
+        # See http://msdn.microsoft.com/en-us/library/aa652367.aspx
+        'win_release_RuntimeLibrary%': '2', # 2 = /MD (nondebug DLL)
+        'win_debug_RuntimeLibrary%': '3',   # 3 = /MDd (debug DLL)
+      }, {
+        # See http://msdn.microsoft.com/en-us/library/aa652367.aspx
+        'win_release_RuntimeLibrary%': '0', # 0 = /MT (nondebug static)
+        'win_debug_RuntimeLibrary%': '1',   # 1 = /MTd (debug static)
+      }],
       ['OS == "win"', {
         'os_posix': 0,
         'v8_postmortem_support%': 'false',
@@ -83,23 +93,10 @@
             'cflags': [ '-fPIE' ],
             'ldflags': [ '-fPIE', '-pie' ]
           }],
-          ['node_shared=="true"', {
-            'msvs_settings': {
-             'VCCLCompilerTool': {
-               'RuntimeLibrary': 3, # MultiThreadedDebugDLL (/MDd)
-             }
-            }
-          }],
-          ['node_shared=="false"', {
-            'msvs_settings': {
-              'VCCLCompilerTool': {
-                'RuntimeLibrary': 1 # MultiThreadedDebug (/MTd)
-              }
-            }
-          }]
         ],
         'msvs_settings': {
           'VCCLCompilerTool': {
+            'RuntimeLibrary': '<(win_debug_RuntimeLibrary), # static debug
             'Optimization': 0, # /Od, no optimization
             'MinimalRebuild': 'false',
             'OmitFramePointers': 'false',
@@ -133,23 +130,10 @@
             'cflags': [ '-fPIE' ],
             'ldflags': [ '-fPIE', '-pie' ]
           }],
-          ['node_shared=="true"', {
-            'msvs_settings': {
-             'VCCLCompilerTool': {
-               'RuntimeLibrary': 2 # MultiThreadedDLL (/MD)
-             }
-            }
-          }],
-          ['node_shared=="false"', {
-            'msvs_settings': {
-              'VCCLCompilerTool': {
-                'RuntimeLibrary': 0 # MultiThreaded (/MT)
-              }
-            }
-          }]
         ],
         'msvs_settings': {
           'VCCLCompilerTool': {
+            'RuntimeLibrary': '<(win_release_RuntimeLibrary), # static release
             'Optimization': 3, # /Ox, full optimization
             'FavorSizeOrSpeed': 1, # /Ot, favour speed over size
             'InlineFunctionExpansion': 2, # /Ob2, inline anything eligible

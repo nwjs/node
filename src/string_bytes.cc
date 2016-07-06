@@ -320,7 +320,7 @@ size_t StringBytes::Write(Isolate* isolate,
     }
 
     case BASE64:
-      if (is_extern) {
+      if (is_extern && str->IsExternalOneByte()) {
         nbytes = base64_decode(buf, buflen, data, external_nbytes);
       } else {
         String::Value value(str);
@@ -332,7 +332,7 @@ size_t StringBytes::Write(Isolate* isolate,
       break;
 
     case HEX:
-      if (is_extern) {
+      if (is_extern && str->IsExternalOneByte()) {
         nbytes = hex_decode(buf, buflen, data, external_nbytes);
       } else {
         String::Value value(str);

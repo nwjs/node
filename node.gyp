@@ -7,9 +7,10 @@
     'node_use_perfctr%': 'false',
     'node_no_browser_globals%': 'false',
     'node_use_v8_platform%': 'true',
-    'node_use_bundled_v8%': 'true',
-    'node_shared%': 'false',
     'force_dynamic_crt%': 0,
+    'node_use_bundled_v8': 'false',
+    'node_shared': 'true',
+    'v8_inspector': 'false',
     'node_module_version%': '',
     'node_shared_zlib%': 'false',
     'node_shared_http_parser%': 'false',
@@ -300,8 +301,8 @@
         }],
         [ 'node_use_bundled_v8=="true"', {
           'dependencies': [
-            'deps/v8/tools/gyp/v8.gyp:v8',
-            'deps/v8/tools/gyp/v8.gyp:v8_libplatform'
+            #'deps/v8/tools/gyp/v8.gyp:v8',
+            #'deps/v8/tools/gyp/v8.gyp:v8_libplatform'
           ],
         }],
         [ 'node_use_v8_platform=="true"', {
@@ -969,13 +970,13 @@
         }],
         [ 'node_use_v8_platform=="true"', {
           'dependencies': [
-            'deps/v8/tools/gyp/v8.gyp:v8_libplatform',
+            #'deps/v8/tools/gyp/v8.gyp:v8_libplatform',
           ],
         }],
         [ 'node_use_bundled_v8=="true"', {
           'dependencies': [
-            'deps/v8/tools/gyp/v8.gyp:v8',
-            'deps/v8/tools/gyp/v8.gyp:v8_libplatform'
+            #'deps/v8/tools/gyp/v8.gyp:v8',
+            #'deps/v8/tools/gyp/v8.gyp:v8_libplatform'
           ],
         }],
       ]

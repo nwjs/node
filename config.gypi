@@ -10,6 +10,7 @@
                  'icu_small': 'false',
                  'node_install_npm': 'true',
                  'node_prefix': '',
+                 'node_shared': 'true',
                  'node_shared_http_parser': 'false',
                  'node_shared_libuv': 'false',
                  'node_shared_openssl': 'false',

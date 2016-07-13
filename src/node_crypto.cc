@@ -1460,7 +1460,7 @@ static Local<Object> X509ToObject(Environment* env, X509* cert) {
       (void) BIO_reset(bio);
 
       BN_ULONG exponent_word = BN_get_word(rsa->e);
-      BIO_printf(bio, "0x%lx", exponent_word);
+      BIO_printf(bio, "0x%lx", (unsigned long)exponent_word);
 
       BIO_get_mem_ptr(bio, &mem);
       info->Set(env->exponent_string(),

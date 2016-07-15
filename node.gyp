@@ -619,7 +619,13 @@
             'NODE_PLATFORM="sunos"',
           ],
         }],
-        [ 'OS=="linux"', {
+        [ 'OS=="linux" and component == "shared_library"', {
+          'ldflags': [ '-L<(PRODUCT_DIR)/../nw/lib/', '-lv8',
+                      '-Wl,--whole-archive <(V8_BASE)',
+                      '<(V8_PLTFRM)',
+                      '-Wl,--no-whole-archive' ]
+        }],
+        [ 'OS=="linux" and component != "shared_library"', {
           'ldflags': [ '-L<(PRODUCT_DIR)/../nw/lib/', '-lnw',
                       '-Wl,--whole-archive <(V8_BASE)',
                       '<(V8_PLTFRM)',

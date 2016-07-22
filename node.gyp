@@ -11,6 +11,7 @@
     'node_use_bundled_v8': 'false',
     'node_shared': 'true',
     'v8_inspector': 'false',
+    'node_enable_d8': 'false',
     'node_module_version%': '',
     'node_shared_zlib%': 'false',
     'node_shared_http_parser%': 'false',

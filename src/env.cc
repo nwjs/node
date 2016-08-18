@@ -169,7 +169,7 @@ bool Environment::KickNextTick(Environment::AsyncCallbackScope* scope) {
     return true;
   }
 
-  Local<Value> ret =
+  Local<v8::Value> ret =
     tick_callback_function()->Call(process_object(), 0, nullptr);
 
   return !ret.IsEmpty();

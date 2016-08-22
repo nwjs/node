@@ -667,7 +667,7 @@
               '-X^_',
               '-X^private_',
               # Base generated DEF on zlib.def
-              '-Bdeps/zlib/win32/zlib.def'
+              #'-Bdeps/zlib/win32/zlib.def'
             ],
           },
           'conditions': [

@@ -96,7 +96,7 @@
         ],
         'msvs_settings': {
           'VCCLCompilerTool': {
-            'RuntimeLibrary': '<(win_debug_RuntimeLibrary), # static debug
+            'RuntimeLibrary': '<(win_debug_RuntimeLibrary)', # static debug
             'Optimization': 0, # /Od, no optimization
             'MinimalRebuild': 'false',
             'OmitFramePointers': 'false',
@@ -133,7 +133,7 @@
         ],
         'msvs_settings': {
           'VCCLCompilerTool': {
-            'RuntimeLibrary': '<(win_release_RuntimeLibrary), # static release
+            'RuntimeLibrary': '<(win_release_RuntimeLibrary)', # static release
             'Optimization': 3, # /Ox, full optimization
             'FavorSizeOrSpeed': 1, # /Ot, favour speed over size
             'InlineFunctionExpansion': 2, # /Ob2, inline anything eligible

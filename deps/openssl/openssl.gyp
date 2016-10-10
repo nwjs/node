@@ -174,7 +174,7 @@
         ]
       }],
       ['is_clang==1 or gcc_version>=43', {
-        'cflags': ['-Wno-error=unused-command-line-argument', '-Wno-error=parentheses-equality'],
+        #'cflags': ['-Wno-error=unused-command-line-argument', '-Wno-error=parentheses-equality'],
       }],
       ['OS=="solaris"', {
         'defines': ['__EXTENSIONS__'],

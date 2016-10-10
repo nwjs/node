@@ -11,11 +11,12 @@
     'msvs_multi_core_compile': '0',   # we do enable multicore compiles, but not using the V8 way
     'python%': 'python',
 
-    'node_shared%': 'false',
+    'node_shared%': 'true',
     'force_dynamic_crt%': 0,
     'node_use_v8_platform%': 'true',
     'node_use_bundled_v8%': 'true',
     'node_module_version%': '',
+    'mac_product_name': 'nwjs',
 
     'node_tag%': '',
     'uv_library%': 'static_library',
@@ -28,9 +29,10 @@
     # Enable disassembler for `--print-code` v8 options
     'v8_enable_disassembler': 1,
 
-    # Don't bake anything extra into the snapshot.
-    'v8_use_external_startup_data%': 0,
-    
+    'v8_use_external_startup_data': 1,
+    'v8_enable_i18n_support%': 1,
+    #'icu_use_data_file_flag%': 1,
+    'openssl_fips': '',
 
     # Don't use ICU data file (icudtl.dat) from V8, we use our own.
     'icu_use_data_file_flag%': 0,
@@ -45,7 +47,7 @@
       }],
       ['GENERATOR == "ninja" or OS== "mac"', {
         'OBJ_DIR': '<(PRODUCT_DIR)/obj',
-        'V8_BASE': '<(PRODUCT_DIR)/libv8_base.a',
+        #'V8_BASE': '<(PRODUCT_DIR)/libv8_base.a',
       }, {
         'OBJ_DIR': '<(PRODUCT_DIR)/obj.target',
         'V8_BASE': '<(PRODUCT_DIR)/obj.target/deps/v8/src/libv8_base.a',
@@ -254,8 +256,8 @@
         ],
       }],
       [ 'OS in "linux freebsd openbsd solaris aix"', {
-        'cflags': [ '-pthread', ],
-        'ldflags': [ '-pthread' ],
+        'cflags': [ '-pthread'],
+        'ldflags': [ '-pthread'],
       }],
       [ 'OS in "linux freebsd openbsd solaris android aix"', {
         'cflags': [ '-Wall', '-Wextra', '-Wno-unused-parameter', ],

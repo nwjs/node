@@ -1211,7 +1211,6 @@ void PromiseRejectCallback(PromiseRejectMessage message) {
 
 void SetupPromises(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
-  Isolate* isolate = env->isolate();
 
   CHECK(args[0]->IsFunction());
 
@@ -4983,7 +4982,6 @@ NODE_EXTERN void g_stop_nw_instance() {
     return;
   struct thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
   assert(tls_ctx);
-  v8::Isolate* isolate = v8::Isolate::GetCurrent();
   bool more;
   uv_timer_t quit_timer;
   uv_loop_t* loop = tls_ctx->env->event_loop();

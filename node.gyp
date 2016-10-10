@@ -1,5 +1,6 @@
 {
   'variables': {
+    'icu_gyp_path%': '../icu/icu.gyp',
     'v8_use_snapshot%': 'false',
     'node_use_dtrace%': 'false',
     'node_use_lttng%': 'false',
@@ -19,7 +20,7 @@
     'node_shared_libuv%': 'false',
     'node_use_openssl': 'true',
     'node_shared_openssl': 'false',
-    'openssl_fips%': '',
+    'openssl_fips': '',
     'node_v8_options%': '',
     'node_enable_v8_vtunejit%': 'false',
     'node_core_target_name%': 'node',
@@ -280,6 +281,7 @@
         'BUILDING_NW_NODE=1',
         'V8_SHARED',
         'USING_V8_SHARED',
+        'V8_USE_EXTERNAL_STARTUP_DATA'
       ],
 
 
@@ -350,8 +352,8 @@
         [ 'v8_enable_i18n_support==1', {
           'defines': [ 'NODE_HAVE_I18N_SUPPORT=1' ],
           'dependencies': [
-            '<(icu_gyp_path):icui18n',
-            '<(icu_gyp_path):icuuc',
+            '../icu/icu.gyp:icui18n',
+            '../icu/icu.gyp:icuuc',
           ],
           'conditions': [
             [ 'icu_small=="true"', {
@@ -636,7 +638,39 @@
                       '<(V8_PLTFRM)',
                       '-Wl,--no-whole-archive' ]
         }],
-        [ 'OS=="mac"', {
+        [ 'OS=="mac" and component == "shared_library"', {
+          'xcode_settings': {
+            'OTHER_LDFLAGS': [
+              '-L<(PRODUCT_DIR)/../nw/', '-lv8',
+              '<(PRODUCT_DIR)/../nw/nwjs\ Framework.framework/nwjs\ Framework',
+                      '-Wl,-force_load <(V8_BASE)',
+                      '-Wl,-force_load <(V8_PLTFRM)',
+            ],
+          },
+          'postbuilds': [
+            {
+              'postbuild_name': 'Fix iculib Link',
+              'action': [
+                'install_name_tool',
+                '-change',
+                '/usr/local/lib/libicuuc.dylib',
+                '@rpath/libicuuc.dylib',
+                '${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}'
+              ],
+            },
+            {
+              'postbuild_name': 'Fix iculib Link2',
+              'action': [
+                'install_name_tool',
+                '-change',
+                '/usr/local/lib/libicui18n.dylib',
+                '@rpath/libicui18n.dylib',
+                '${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}'
+              ],
+            },
+          ],
+        }],
+        [ 'OS=="mac" and component != "shared_library"', {
           'xcode_settings': {
             'OTHER_LDFLAGS': [
               #'-L<(PRODUCT_DIR)/../nw/', '-lv8',
@@ -948,7 +982,7 @@
       'target_name': 'cctest',
       'type': 'executable',
       'dependencies': [
-        '../../testing/gtest.gyp:gtest',
+        #'../../testing/gtest.gyp:gtest',
         '../../v8/src/v8.gyp:v8',
         '../../v8/src/v8.gyp:v8_libplatform'
       ],

@@ -647,6 +647,28 @@
                       '-Wl,-force_load <(V8_PLTFRM)',
             ],
           },
+          'postbuilds': [
+            {
+              'postbuild_name': 'Fix iculib Link',
+              'action': [
+                'install_name_tool',
+                '-change',
+                '/usr/local/lib/libicuuc.dylib',
+                '@rpath/libicuuc.dylib',
+                '${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}'
+              ],
+            },
+            {
+              'postbuild_name': 'Fix iculib Link2',
+              'action': [
+                'install_name_tool',
+                '-change',
+                '/usr/local/lib/libicui18n.dylib',
+                '@rpath/libicui18n.dylib',
+                '${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}'
+              ],
+            },
+          ],
         }],
         [ 'OS=="mac" and component != "shared_library"', {
           'xcode_settings': {

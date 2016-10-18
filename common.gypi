@@ -33,6 +33,7 @@
     'v8_enable_i18n_support%': 1,
     #'icu_use_data_file_flag%': 1,
     'openssl_fips': '',
+    'win_fastlink': 0,
 
     # Don't use ICU data file (icudtl.dat) from V8, we use our own.
     'icu_use_data_file_flag%': 0,
@@ -81,7 +82,81 @@
       ],
     },
     'configurations': {
-      'Debug': {
+      'Common_Base': {
+        'abstract': 1,
+        'msvs_settings':{
+          'VCCLCompilerTool': {
+            'AdditionalOptions': [
+              '/bigobj',
+              # Tell the compiler to crash on failures. This is undocumented
+              # and unsupported but very handy.
+              '/d2FastFail',
+            ],
+          },
+          'VCLinkerTool': {
+            # Add the default import libs.
+            'AdditionalDependencies': [
+              'kernel32.lib',
+              'gdi32.lib',
+              'winspool.lib',
+              'comdlg32.lib',
+              'advapi32.lib',
+              'shell32.lib',
+              'ole32.lib',
+              'oleaut32.lib',
+              'user32.lib',
+              'uuid.lib',
+              'odbc32.lib',
+              'odbccp32.lib',
+              'delayimp.lib',
+              'credui.lib',
+              'dbghelp.lib',
+              'shlwapi.lib',
+              'winmm.lib',
+            ],
+            'AdditionalOptions': [
+              # Suggested by Microsoft Devrel to avoid
+              #   LINK : fatal error LNK1248: image size (80000000) exceeds maximum allowable size (80000000)
+              # which started happening more regularly after VS2013 Update 4.
+              # Needs to be a bit lower for VS2015, or else errors out.
+              '/maxilksize:0x7ff00000',
+              # Tell the linker to crash on failures.
+              '/fastfail',
+            ],
+          },
+        },
+        'conditions': [
+          ['OS=="win" and win_fastlink==1 and MSVS_VERSION != "2013"', {
+            'msvs_settings': {
+              'VCLinkerTool': {
+                # /PROFILE is incompatible with /debug:fastlink
+                'Profile': 'false',
+                'AdditionalOptions': [
+                  # Tell VS 2015+ to create a PDB that references debug
+                  # information in .obj and .lib files instead of copying
+                  # it all.
+                  '/DEBUG:FASTLINK',
+                ],
+              },
+            },
+          }],
+          ['OS=="win" and MSVS_VERSION == "2015"', {
+            'msvs_settings': {
+              'VCCLCompilerTool': {
+                'AdditionalOptions': [
+                  # Work around crbug.com/526851, bug in VS 2015 RTM compiler.
+                  '/Zc:sizedDealloc-',
+                  # Disable thread-safe statics to avoid overhead and because
+                  # they are disabled on other platforms. See crbug.com/587210
+                  # and -fno-threadsafe-statics.
+                  '/Zc:threadSafeInit-',
+                ],
+              },
+            },
+          }],
+        ],
+      },
+      'Debug_Base': {
         'variables': {
           'v8_enable_handle_zapping': 1,
         },
@@ -116,7 +191,7 @@
           'GCC_OPTIMIZATION_LEVEL': '0', # stop gyp from defaulting to -Os
         },
       },
-      'Release': {
+      'Release_Base': {
         'variables': {
           'v8_enable_handle_zapping': 0,
         },
@@ -164,7 +239,19 @@
             'LinkIncremental': 1, # disable incremental linking
           },
         },
-      }
+      },
+      'Debug': {
+        'inherit_from': ['Common_Base', 'Debug_Base'],
+      },
+      'Release': {
+        'inherit_from': ['Common_Base', 'Release_Base'],
+      },
+      'conditions': [
+        [ 'OS=="win"', {
+              'Debug_x64': { 'inherit_from': ['Debug'] },
+              'Release_x64': { 'inherit_from': ['Release'], },
+        }],
+      ],
     },
     # Forcibly disable -Werror.  We support a wide range of compilers, it's
     # simply not feasible to squelch all warnings, never mind that the
@@ -210,7 +297,7 @@
         'SuppressStartupBanner': 'true',
       },
     },
-    'msvs_disabled_warnings': [4351, 4355, 4800],
+    'msvs_disabled_warnings': [4351, 4355, 4800, 4595],
     'conditions': [
       ['asan == 1 and OS != "mac"', {
         'cflags+': [
@@ -251,7 +338,7 @@
           '_CRT_NONSTDC_NO_DEPRECATE',
           # Make sure the STL doesn't try to use exceptions
           '_HAS_EXCEPTIONS=0',
-          'BUILDING_V8_SHARED=1',
+          #'BUILDING_V8_SHARED=1',
           'BUILDING_UV_SHARED=1',
         ],
       }],

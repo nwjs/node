@@ -45,6 +45,7 @@
       }, {
         'os_posix': 1,
         'v8_postmortem_support%': 'true',
+        'clang_dir': '<!(cd <(DEPTH) && pwd -P)/third_party/llvm-build/Release+Asserts',
       }],
       ['GENERATOR == "ninja" or OS== "mac"', {
         'OBJ_DIR': '<(PRODUCT_DIR)/obj',
@@ -66,6 +67,16 @@
     ],
   },
 
+  'conditions': [
+      [ 'clang==1 and OS != "mac"', {
+        'make_global_settings': [
+          ['CC', '<(clang_dir)/bin/clang'],
+          ['CXX', '<(clang_dir)/bin/clang++'],
+          ['CC.host', '$(CC)'],
+          ['CXX.host', '$(CXX)'],
+        ],
+      }],
+  ],
   'target_defaults': {
     'default_configuration': 'Release',
     'variables': {
@@ -157,6 +168,7 @@
         ],
       },
       'Debug_Base': {
+        'abstract': 1,
         'variables': {
           'v8_enable_handle_zapping': 1,
         },
@@ -192,6 +204,7 @@
         },
       },
       'Release_Base': {
+        'abstract': 1,
         'variables': {
           'v8_enable_handle_zapping': 0,
         },

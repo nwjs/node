@@ -621,6 +621,9 @@
             'NODE_PLATFORM="sunos"',
           ],
         }],
+        [ 'OS=="linux"', {
+          'cflags': [ "-Wno-unused-result" ],
+        }],
         [ 'OS=="linux" and component == "shared_library"', {
           'ldflags': [ '-L<(PRODUCT_DIR)/../nw/lib/', '-lv8',
                       '-Wl,--whole-archive <(V8_LIBBASE)',

@@ -115,7 +115,7 @@
         }],
         [ 'OS=="win"', {
           'include_dirs': [ 'config/win32' ],
-          'msvs_disabled_warnings': [4133],
+          'msvs_disabled_warnings': [4133, 4018],
           'sources': [
             'src/config-win32.h',
             'src/windows_port.c',

@@ -4735,6 +4735,17 @@ void timer_callback(uv_timer_t* timer) {
   uv_idle_start(static_cast<uv_idle_t*>(timer->data), idle_callback);
 }
 
+void close_async_cb(uv_handle_t* handle) {
+  delete reinterpret_cast<uv_async_t*>(handle);
+}
+
+void close_timer_cb(uv_handle_t* handle) {
+  delete reinterpret_cast<uv_timer_t*>(handle);
+}
+
+void close_idle_cb(uv_handle_t* handle) {
+  delete reinterpret_cast<uv_idle_t*>(handle);
+}
 
 NODE_EXTERN int g_uv_run(void* loop, int mode) {
   return uv_run((uv_loop_t*)loop, (uv_run_mode)mode);
@@ -4806,13 +4817,12 @@ NODE_EXTERN void g_msg_pump_delay_work(msg_pump_context_t* ctx, int sec) {
 }
 
 NODE_EXTERN void g_msg_pump_nest_leave(msg_pump_context_t* ctx) {
-  uv_close((uv_handle_t*)(ctx->wakeup_event), NULL);
+  uv_close((uv_handle_t*)(ctx->wakeup_event), close_async_cb);
   // Delete external loop.
   uv_loop_close((uv_loop_t*)ctx->loop);
   free((uv_loop_t*)ctx->loop);
   ctx->loop = nullptr;
     // // Restore previous async handle.
-  delete (uv_async_t*)ctx->wakeup_event;
   ctx->wakeup_event = ctx->wakeup_events->back();
   ctx->wakeup_events->pop_back();
 }
@@ -4822,14 +4832,12 @@ NODE_EXTERN uv_loop_t* g_uv_default_loop() {
 }
 
 NODE_EXTERN void g_msg_pump_clean_ctx(msg_pump_context_t* ctx) {
-  uv_close((uv_handle_t*)ctx->idle_handle, NULL);
+  uv_close((uv_handle_t*)ctx->idle_handle, close_idle_cb);
   uv_run(uv_default_loop(), UV_RUN_NOWAIT);
-  delete (uv_idle_t*)ctx->idle_handle;
   ctx->idle_handle = nullptr;
 
-  uv_close((uv_handle_t*)ctx->delay_timer, NULL);
+  uv_close((uv_handle_t*)ctx->delay_timer, close_timer_cb);
   uv_run(uv_default_loop(), UV_RUN_NOWAIT);
-  delete (uv_timer_t*)ctx->delay_timer;
   ctx->delay_timer = nullptr;
 }
 
@@ -4850,11 +4858,10 @@ NODE_EXTERN void g_msg_pump_ctor(uv_async_t** wakeup_event, int worker_support) 
 }
 
 NODE_EXTERN void g_msg_pump_dtor(uv_async_t** wakeup_event) {
-  uv_close((uv_handle_t*)*wakeup_event, NULL);
+  uv_close((uv_handle_t*)*wakeup_event, close_async_cb);
   uv_run(uv_default_loop(), UV_RUN_NOWAIT);
-  delete *wakeup_event;
-  *wakeup_event = nullptr;
   uv_loop_close(uv_default_loop());
+  *wakeup_event = nullptr;
 }
 
 NODE_EXTERN bool g_is_node_initialized() {

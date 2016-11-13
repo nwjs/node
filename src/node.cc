@@ -5031,6 +5031,29 @@ NODE_EXTERN void g_uv_init_nw(int worker) {
 void UvNoOp(uv_async_t* handle) {
 }
 
+NODE_EXTERN bool g_nw_enter_dom() {
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  if (tls_ctx && tls_ctx->env) {
+    v8::Isolate* isolate = tls_ctx->env->isolate();
+    v8::HandleScope handleScope(isolate);
+    v8::Local<v8::Context> context = isolate->GetEnteredContext();
+    if (context == tls_ctx->env->context()) {
+      context->Exit();
+      return true;
+    }
+  }
+  return false;
+}
+
+NODE_EXTERN void g_nw_leave_dom(bool reenter) {
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  if (reenter && tls_ctx && tls_ctx->env) {
+    v8::Isolate* isolate = tls_ctx->env->isolate();
+    v8::HandleScope handleScope(isolate);
+    tls_ctx->env->context()->Enter();
+  }
+}
+
 NODE_EXTERN void g_msg_pump_ctor_osx(msg_pump_context_t* ctx, void* EmbedThreadRunner, void* kevent_hook, void* data, int worker_support) {
   uv_init_nw(worker_support);
   g_worker_support = worker_support;

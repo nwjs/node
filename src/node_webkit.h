@@ -47,5 +47,7 @@ typedef void (*VoidVoidFn)();
 typedef int (*IntVoidFn)();
 typedef void (*VoidIntFn)(int);
 typedef bool (*BoolPtrFn)(void*);
+typedef bool (*BoolVoidFn)();
+typedef void (*VoidBoolFn)(bool);
 
 #endif

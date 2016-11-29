@@ -4906,6 +4906,7 @@ NODE_EXTERN void g_call_tick_callback(node::Environment* env) {
 
 // copied beginning of Start() until v8::Initialize()
 NODE_EXTERN void g_setup_nwnode(int argc, char** argv, bool worker) {
+  node::prog_start_time = static_cast<double>(uv_now(uv_default_loop()));
   node::node_is_initialized = true;
   node::node_is_nwjs = true;
   node::node_isolate = v8::Isolate::GetCurrent();

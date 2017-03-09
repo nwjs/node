@@ -661,7 +661,10 @@ void TLSWrap::OnReadImpl(ssize_t nread,
 
 
 void TLSWrap::OnAllocSelf(size_t suggested_size, uv_buf_t* buf, void* ctx) {
-  buf->base = node::Malloc(suggested_size);
+  TLSWrap* wrap = static_cast<TLSWrap*>(ctx);
+  Environment* env = wrap->env();
+
+  buf->base = static_cast<char*>(env->isolate()->array_buffer_allocator()->Allocate(suggested_size));
   buf->len = suggested_size;
 }
 

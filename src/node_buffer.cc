@@ -59,10 +59,12 @@ bool zero_fill_all_buffers = false;
 
 namespace {
 
+#if 0
 inline void* BufferMalloc(size_t length) {
   return zero_fill_all_buffers ? node::UncheckedCalloc(length) :
                                  node::UncheckedMalloc(length);
 }
+#endif
 
 }  // namespace
 
@@ -248,7 +250,7 @@ MaybeLocal<Object> New(Isolate* isolate,
   char* data = nullptr;
 
   if (length > 0) {
-    data = static_cast<char*>(BufferMalloc(length));
+    data = static_cast<char*>(isolate->array_buffer_allocator()->Allocate(length));
 
     if (data == nullptr)
       return Local<Object>();
@@ -257,11 +259,17 @@ MaybeLocal<Object> New(Isolate* isolate,
     CHECK(actual <= length);
 
     if (actual == 0) {
-      free(data);
+      isolate->array_buffer_allocator()->Free(data, length);
       data = nullptr;
-    } else if (actual < length) {
+    }
+#if 0 //FIXME #4357: costs some extra bytes here. It shouldn't be
+      //significant because of the length calculation in
+      //StringBytes::Size()
+      //v8 buffer allocator doesn't support reallocate
+    else if (actual < length) {
       data = node::Realloc(data, actual);
     }
+#endif
   }
 
   Local<Object> buf;
@@ -269,7 +277,7 @@ MaybeLocal<Object> New(Isolate* isolate,
     return scope.Escape(buf);
 
   // Object failed to be created. Clean up resources.
-  free(data);
+  isolate->array_buffer_allocator()->Free(data, length);
   return Local<Object>();
 }
 
@@ -293,7 +301,7 @@ MaybeLocal<Object> New(Environment* env, size_t length) {
 
   void* data;
   if (length > 0) {
-    data = BufferMalloc(length);
+    data = env->isolate()->array_buffer_allocator()->Allocate(length);
     if (data == nullptr)
       return Local<Object>();
   } else {
@@ -312,7 +320,7 @@ MaybeLocal<Object> New(Environment* env, size_t length) {
     return scope.Escape(ui);
 
   // Object failed to be created. Clean up resources.
-  free(data);
+  env->isolate()->array_buffer_allocator()->Free(data, length);
   return Local<Object>();
 }
 
@@ -338,7 +346,7 @@ MaybeLocal<Object> Copy(Environment* env, const char* data, size_t length) {
   void* new_data;
   if (length > 0) {
     CHECK_NE(data, nullptr);
-    new_data = node::UncheckedMalloc(length);
+    new_data = env->isolate()->array_buffer_allocator()->Allocate(length);
     if (new_data == nullptr)
       return Local<Object>();
     memcpy(new_data, data, length);
@@ -358,7 +366,7 @@ MaybeLocal<Object> Copy(Environment* env, const char* data, size_t length) {
     return scope.Escape(ui);
 
   // Object failed to be created. Clean up resources.
-  free(new_data);
+  env->isolate()->array_buffer_allocator()->Free(new_data, length);
   return Local<Object>();
 }
 

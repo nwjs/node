@@ -25,6 +25,8 @@
  * return -1 with errno set. The dispatcher in uv__fs_work() takes care of
  * getting the errno to the right place (req->result or as the return value.)
  */
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warray-bounds"
 
 #include "uv.h"
 #include "internal.h"
@@ -1367,3 +1369,4 @@ void uv_fs_req_cleanup(uv_fs_t* req) {
     uv__free(req->ptr);
   req->ptr = NULL;
 }
+#pragma clang diagnostic pop

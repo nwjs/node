@@ -3468,7 +3468,7 @@ bool CipherBase::GetAuthTag(char** out, unsigned int* out_len) const {
   if (initialised_ || kind_ != kCipher || !auth_tag_)
     return false;
   *out_len = auth_tag_len_;
-  *out = node::Malloc(auth_tag_len_);
+  *out = static_cast<char*>(env()->isolate()->array_buffer_allocator()->Allocate(auth_tag_len_));
   memcpy(*out, auth_tag_, auth_tag_len_);
   return true;
 }
@@ -3483,6 +3483,7 @@ void CipherBase::GetAuthTag(const FunctionCallbackInfo<Value>& args) {
   unsigned int out_len = 0;
 
   if (cipher->GetAuthTag(&out, &out_len)) {
+    
     Local<Object> buf = Buffer::New(env, out, out_len).ToLocalChecked();
     args.GetReturnValue().Set(buf);
   } else {
@@ -5136,12 +5137,12 @@ void ECDH::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
   // NOTE: field_size is in bits
   int field_size = EC_GROUP_get_degree(ecdh->group_);
   size_t out_len = (field_size + 7) / 8;
-  char* out = node::Malloc(out_len);
+  char* out = static_cast<char*>(env->isolate()->array_buffer_allocator()->Allocate(out_len));
 
   int r = ECDH_compute_key(out, out_len, pub, ecdh->key_, nullptr);
   EC_POINT_free(pub);
   if (!r) {
-    free(out);
+    env->isolate()->array_buffer_allocator()->Free(out, out_len);
     return env->ThrowError("Failed to compute ECDH key");
   }
 
@@ -5171,11 +5172,11 @@ void ECDH::GetPublicKey(const FunctionCallbackInfo<Value>& args) {
   if (size == 0)
     return env->ThrowError("Failed to get public key length");
 
-  unsigned char* out = node::Malloc<unsigned char>(size);
+  unsigned char* out = static_cast<unsigned char*>(env->isolate()->array_buffer_allocator()->Allocate(size));
 
   int r = EC_POINT_point2oct(ecdh->group_, pub, form, out, size, nullptr);
   if (r != size) {
-    free(out);
+    env->isolate()->array_buffer_allocator()->Free(out, size);
     return env->ThrowError("Failed to get public key");
   }
 
@@ -5196,10 +5197,10 @@ void ECDH::GetPrivateKey(const FunctionCallbackInfo<Value>& args) {
     return env->ThrowError("Failed to get ECDH private key");
 
   int size = BN_num_bytes(b);
-  unsigned char* out = node::Malloc<unsigned char>(size);
+  unsigned char* out = static_cast<unsigned char*>(env->isolate()->array_buffer_allocator()->Allocate(size));
 
   if (size != BN_bn2bin(b, out)) {
-    free(out);
+    env->isolate()->array_buffer_allocator()->Free(out, size);
     return env->ThrowError("Failed to convert ECDH private key to Buffer");
   }
 
@@ -5622,10 +5623,10 @@ class RandomBytesRequest : public AsyncWrap {
   }
 
   inline void release() {
-    size_ = 0;
     if (free_mode_ == FREE_DATA) {
-      free(data_);
+      env()->isolate()->array_buffer_allocator()->Free(data_, size_);
     }
+    size_ = 0;
   }
 
   inline void return_memory(char** d, size_t* len) {
@@ -5746,7 +5747,7 @@ void RandomBytes(const FunctionCallbackInfo<Value>& args) {
 
   Local<Object> obj = env->randombytes_constructor_template()->
       NewInstance(env->context()).ToLocalChecked();
-  char* data = node::Malloc(size);
+  char* data = static_cast<char*>(env->isolate()->array_buffer_allocator()->Allocate(size));
   RandomBytesRequest* req =
       new RandomBytesRequest(env,
                              obj,

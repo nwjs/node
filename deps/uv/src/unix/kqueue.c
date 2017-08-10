@@ -36,6 +36,8 @@
 
 static void uv__fs_event(uv_loop_t* loop, uv__io_t* w, unsigned int fflags);
 
+typedef  int (*keventfunc_t)(int kq, const struct kevent *changelist, int nchanges,
+                    struct kevent *eventlist, int nevents, const struct timespec *timeout);
 
 int uv__kqueue_init(uv_loop_t* loop) {
   loop->backend_fd = kqueue();
@@ -118,6 +120,8 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
   int op;
   int i;
 
+  keventfunc_t keventfunc = loop->keventfunc ? (keventfunc_t)loop->keventfunc : &kevent;
+
   if (loop->nfds == 0) {
     assert(QUEUE_EMPTY(&loop->watcher_queue));
     return;
@@ -150,7 +154,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
       EV_SET(events + nevents, w->fd, filter, op, fflags, 0, 0);
 
       if (++nevents == ARRAY_SIZE(events)) {
-        if (kevent(loop->backend_fd, events, nevents, NULL, 0, NULL))
+        if (keventfunc(loop->backend_fd, events, nevents, NULL, 0, NULL))
           abort();
         nevents = 0;
       }
@@ -160,7 +164,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
       EV_SET(events + nevents, w->fd, EVFILT_WRITE, EV_ADD, 0, 0, 0);
 
       if (++nevents == ARRAY_SIZE(events)) {
-        if (kevent(loop->backend_fd, events, nevents, NULL, 0, NULL))
+        if (keventfunc(loop->backend_fd, events, nevents, NULL, 0, NULL))
           abort();
         nevents = 0;
       }
@@ -189,7 +193,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
     if (pset != NULL)
       pthread_sigmask(SIG_BLOCK, pset, NULL);
 
-    nfds = kevent(loop->backend_fd,
+    nfds = keventfunc(loop->backend_fd,
                   events,
                   nevents,
                   events,
@@ -206,7 +210,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
     SAVE_ERRNO(uv__update_time(loop));
 
     if (nfds == 0) {
-      assert(timeout != -1);
+      //assert(timeout != -1);
       return;
     }
 
@@ -244,7 +248,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
         struct kevent events[1];
 
         EV_SET(events + 0, fd, ev->filter, EV_DELETE, 0, 0, 0);
-        if (kevent(loop->backend_fd, events, 1, NULL, 0, NULL))
+        if (keventfunc(loop->backend_fd, events, 1, NULL, 0, NULL))
           if (errno != EBADF && errno != ENOENT)
             abort();
 
@@ -269,7 +273,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
           /* TODO batch up */
           struct kevent events[1];
           EV_SET(events + 0, fd, ev->filter, EV_DELETE, 0, 0, 0);
-          if (kevent(loop->backend_fd, events, 1, NULL, 0, NULL))
+          if (keventfunc(loop->backend_fd, events, 1, NULL, 0, NULL))
             if (errno != ENOENT)
               abort();
         }
@@ -283,7 +287,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
           /* TODO batch up */
           struct kevent events[1];
           EV_SET(events + 0, fd, ev->filter, EV_DELETE, 0, 0, 0);
-          if (kevent(loop->backend_fd, events, 1, NULL, 0, NULL))
+          if (keventfunc(loop->backend_fd, events, 1, NULL, 0, NULL))
             if (errno != ENOENT)
               abort();
         }
@@ -373,7 +377,8 @@ static void uv__fs_event(uv_loop_t* loop, uv__io_t* w, unsigned int fflags) {
   /* MAXPATHLEN == PATH_MAX but the former is what XNU calls it internally. */
   char pathbuf[MAXPATHLEN];
 #endif
-
+  keventfunc_t keventfunc = loop->keventfunc ? (keventfunc_t)loop->keventfunc : &kevent;
+  
   handle = container_of(w, uv_fs_event_t, event_watcher);
 
   if (fflags & (NOTE_ATTRIB | NOTE_EXTEND))
@@ -401,7 +406,7 @@ static void uv__fs_event(uv_loop_t* loop, uv__io_t* w, unsigned int fflags) {
 
   EV_SET(&ev, w->fd, EVFILT_VNODE, EV_ADD | EV_ONESHOT, fflags, 0, 0);
 
-  if (kevent(loop->backend_fd, &ev, 1, NULL, 0, NULL))
+  if (keventfunc(loop->backend_fd, &ev, 1, NULL, 0, NULL))
     abort();
 }
 

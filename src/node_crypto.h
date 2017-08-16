@@ -444,7 +444,7 @@ class CipherBase : public BaseObject {
               int key_len,
               const char* iv,
               int iv_len);
-  bool Update(const char* data, int len, unsigned char** out, int* out_len);
+  bool Update(Environment* env, const char* data, int len, unsigned char** out, int* out_len);
   bool Final(unsigned char** out, int *out_len);
   bool SetAutoPadding(bool auto_padding);
 
@@ -635,7 +635,7 @@ class PublicKeyCipher {
   template <Operation operation,
             EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init,
             EVP_PKEY_cipher_t EVP_PKEY_cipher>
-  static bool Cipher(const char* key_pem,
+  static bool Cipher(Environment* env, const char* key_pem,
                      int key_pem_len,
                      const char* passphrase,
                      int padding,

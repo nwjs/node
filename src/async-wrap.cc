@@ -711,7 +711,7 @@ MaybeLocal<Value> AsyncWrap::MakeCallback(const Local<Function> cb,
   Environment::TickInfo* tick_info = env()->tick_info();
 
   if (tick_info->length() == 0) {
-    env()->isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(env()->isolate());
   }
 
   // Make sure the stack unwound properly. If there are nested MakeCallback's

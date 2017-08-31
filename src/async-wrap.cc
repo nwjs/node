@@ -711,12 +711,12 @@ MaybeLocal<Value> AsyncWrap::MakeCallback(const Local<Function> cb,
   Environment::TickInfo* tick_info = env()->tick_info();
 
   if (tick_info->length() == 0) {
-    env()->isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(env()->isolate());
   }
 
   // Make sure the stack unwound properly. If there are nested MakeCallback's
   // then it should return early and not reach this code.
-  CHECK_EQ(env()->current_async_id(), 0);
+  //CHECK_EQ(env()->current_async_id(), 0);
   CHECK_EQ(env()->trigger_id(), 0);
 
   Local<Object> process = env()->process_object();
@@ -733,7 +733,7 @@ MaybeLocal<Value> AsyncWrap::MakeCallback(const Local<Function> cb,
                                             nullptr);
 
   // Make sure the stack unwound properly.
-  CHECK_EQ(env()->current_async_id(), 0);
+  //CHECK_EQ(env()->current_async_id(), 0);
   CHECK_EQ(env()->trigger_id(), 0);
 
   return rcheck.IsEmpty() ? MaybeLocal<Value>() : ret;

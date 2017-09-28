@@ -376,7 +376,7 @@ void Init(Local<Object> target,
                             constants,
                             attr).ToChecked();
 
-  SetupGarbageCollectionTracking(isolate);
+  //SetupGarbageCollectionTracking(isolate);
 }
 
 }  // namespace performance

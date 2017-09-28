@@ -526,7 +526,7 @@ const char* GetVersion(const char* type,
   } else if (!strcmp(type, TYPE_UNICODE)) {
     return U_UNICODE_VERSION;
   } else if (!strcmp(type, TYPE_TZ)) {
-    return TimeZone::getTZDataVersion(*status);
+    return icu_59::TimeZone::getTZDataVersion(*status);
   } else if (!strcmp(type, TYPE_CLDR)) {
     UVersionInfo versionArray;
     ulocdata_getCLDRVersion(versionArray, status);

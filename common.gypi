@@ -375,8 +375,8 @@
         ],
       }],
       [ 'OS in "linux freebsd openbsd solaris aix"', {
-        'cflags': [ '-pthread'],
-        'ldflags': [ '-pthread'],
+        'cflags': [ '-pthread', ],
+        'ldflags': [ '-pthread' ],
       }],
       [ 'OS in "linux freebsd openbsd solaris android aix"', {
         'cflags': [ '-Wall', '-Wextra', '-Wno-unused-parameter', ],

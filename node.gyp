@@ -31,7 +31,6 @@
     'node_tag%': '',
     'node_release_urlbase%': '',
     'node_byteorder%': 'little',
-    'python%': 'python',
     'icu_small%': 'false',
     'v8_postmortem_support%' : 'false',
     'V8_LIBBASE%': '<(PRODUCT_DIR)/../nw/obj/v8/libv8_libbase.a',

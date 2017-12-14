@@ -591,6 +591,7 @@ class Environment {
 
   std::unordered_multimap<int, loader::ModuleWrap*> module_map;
 
+  bool KickNextTick(AsyncCallbackScope* scope);
   inline double* heap_statistics_buffer() const;
   inline void set_heap_statistics_buffer(double* pointer);
 

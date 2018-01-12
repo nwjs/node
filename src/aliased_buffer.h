@@ -41,6 +41,7 @@ class AliasedBuffer {
     v8::Local<v8::ArrayBuffer> ab = v8::ArrayBuffer::New(
         isolate_, buffer_, sizeInBytes);
 
+    ab->set_nodejs(true);
     // allocate v8 TypedArray
     v8::Local<V8T> js_array = V8T::New(ab, byte_offset_, count);
     js_array_ = v8::Global<V8T>(isolate, js_array);

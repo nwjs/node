@@ -121,7 +121,6 @@ struct sockaddr;
     V(stream_wrap)                                                            \
     V(tcp_wrap)                                                               \
     V(timer_wrap)                                                             \
-    V(trace_events)                                                           \
     V(tty_wrap)                                                               \
     V(udp_wrap)                                                               \
     V(url)                                                                    \
@@ -217,6 +216,8 @@ v8::Local<v8::Context> NewContext(
     v8::Isolate* isolate,
     v8::Local<v8::ObjectTemplate> object_template =
         v8::Local<v8::ObjectTemplate>());
+
+NODE_EXTERN v8::Handle<v8::Value> CallTickCallback(Environment* env, const v8::Handle<v8::Value> ret);
 
 // Convert a struct sockaddr to a { address: '1.2.3.4', port: 1234 } JS object.
 // Sets address and port properties on the info object and returns it.

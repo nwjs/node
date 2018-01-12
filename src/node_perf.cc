@@ -226,9 +226,11 @@ void MarkGarbageCollectionEnd(Isolate* isolate,
 }
 
 inline void SetupGarbageCollectionTracking(Environment* env) {
+#if 0
   env->isolate()->AddGCPrologueCallback(MarkGarbageCollectionStart);
   env->isolate()->AddGCEpilogueCallback(MarkGarbageCollectionEnd,
                                         static_cast<void*>(env));
+#endif
 }
 
 inline Local<Value> GetName(Local<Function> fn) {
@@ -384,7 +386,7 @@ void Init(Local<Object> target,
                             constants,
                             attr).ToChecked();
 
-  SetupGarbageCollectionTracking(env);
+  //SetupGarbageCollectionTracking(env);
 }
 
 }  // namespace performance

@@ -444,7 +444,7 @@ inline ssize_t Http2Session::OnCallbackPadding(size_t frameLen,
   Local<Context> context = env()->context();
   Context::Scope context_scope(context);
 
-#if defined(DEBUG) && DEBUG
+#if 0 //defined(DEBUG) && DEBUG
   CHECK(object()->Has(context, env()->ongetpadding_string()).FromJust());
 #endif
 

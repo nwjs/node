@@ -2994,6 +2994,7 @@ napi_status napi_create_external_arraybuffer(napi_env env,
   v8::Local<v8::ArrayBuffer> buffer =
       v8::ArrayBuffer::New(isolate, external_data, byte_length);
 
+  buffer->set_nodejs(true);
   if (finalize_cb != nullptr) {
     // Create a self-deleting weak reference that invokes the finalizer
     // callback.

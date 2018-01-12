@@ -270,9 +270,30 @@ void Environment::EnvPromiseHook(v8::PromiseHookType type,
                                  v8::Local<v8::Promise> promise,
                                  v8::Local<v8::Value> parent) {
   Environment* env = Environment::GetCurrent(promise->CreationContext());
+  if (!env)  //NWJS#5980
+    return;
   for (const PromiseHookCallback& hook : env->promise_hooks_) {
     hook.cb_(type, promise, parent, hook.arg_);
   }
+}
+
+bool Environment::KickNextTick(Environment::AsyncCallbackScope* scope) {
+  TickInfo* info = tick_info();
+
+  if (info->length() == 0) {
+    //isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
+  }
+
+  if (info->length() == 0) {
+    info->set_index(0);
+    return true;
+  }
+
+  Local<v8::Value> ret =
+    tick_callback_function()->Call(process_object(), 0, nullptr);
+
+  return !ret.IsEmpty();
 }
 
 }  // namespace node

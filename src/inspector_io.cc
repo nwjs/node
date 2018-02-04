@@ -22,6 +22,8 @@ namespace {
 using AsyncAndAgent = std::pair<uv_async_t, Agent*>;
 using v8_inspector::StringBuffer;
 using v8_inspector::StringView;
+using icu_60::UnicodeString;
+using icu_60::CheckedArrayByteSink;
 
 template<typename Transport>
 using TransportAndIo = std::pair<Transport*, InspectorIo*>;
@@ -112,7 +114,7 @@ void ReleasePairOnAsyncClose(uv_handle_t* async) {
 
 std::unique_ptr<StringBuffer> Utf8ToStringView(const std::string& message) {
   UnicodeString utf16 =
-      UnicodeString::fromUTF8(StringPiece(message.data(), message.length()));
+    UnicodeString::fromUTF8(icu_60::StringPiece(message.data(), message.length()));
   StringView view(reinterpret_cast<const uint16_t*>(utf16.getBuffer()),
                   utf16.length());
   return StringBuffer::create(view);

@@ -726,7 +726,7 @@ inline ssize_t Http2Session::OnCallbackPadding(size_t frameLen,
   Local<Context> context = env()->context();
   Context::Scope context_scope(context);
 
-#if defined(DEBUG) && DEBUG
+#if 0 //defined(DEBUG) && DEBUG
   CHECK(object()->Has(context, env()->ongetpadding_string()).FromJust());
 #endif
 
@@ -1681,6 +1681,8 @@ void Http2Session::OnStreamRead(ssize_t nread, const uv_buf_t& buf) {
                          buf.base,
                          nread,
                          v8::ArrayBufferCreationMode::kInternalized);
+
+    stream_buf_ab_->set_nodejs(true);
 
     statistics_.data_received += nread;
     ssize_t ret = Write(&stream_buf_, 1);

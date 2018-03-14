@@ -63,10 +63,10 @@
         'clang_dir': '<!(cd <(DEPTH) && pwd -P)/third_party/llvm-build/Release+Asserts',
       }],
       ['OS=="linux" and target_arch=="ia32" and <(building_nw)==1', {
-        'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_jessie_i386-sysroot',
+        'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_stretch_i386-sysroot',
       }],
       ['OS=="linux" and target_arch=="x64" and <(building_nw)==1', {
-        'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_jessie_amd64-sysroot',
+        'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_stretch_amd64-sysroot',
       }],
       ['OS== "mac"', {
         'obj_dir': '<(PRODUCT_DIR)/obj.target',

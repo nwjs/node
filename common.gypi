@@ -11,16 +11,18 @@
     'msvs_multi_core_compile': '0',   # we do enable multicore compiles, but not using the V8 way
     'python%': 'python',
 
-    'node_shared%': 'false',
+    'node_shared%': 'true',
     'force_dynamic_crt%': 0,
     'node_use_v8_platform%': 'true',
     'node_use_bundled_v8%': 'true',
     'node_module_version%': '',
+    'mac_product_name': 'nwjs',
 
     'node_tag%': '',
     'uv_library%': 'static_library',
 
-    'openssl_fips%': '',
+    'openssl_fips': '',
+    'llvm_version': '6.0',
 
     # Default to -O0 for debug builds.
     'v8_optimized_debug%': 0,
@@ -31,9 +33,12 @@
 
     # Enable disassembler for `--print-code` v8 options
     'v8_enable_disassembler': 1,
+    'v8_host_byteorder': '<!(python -c "import sys; print sys.byteorder")',
 
-    # Don't bake anything extra into the snapshot.
-    'v8_use_external_startup_data%': 0,
+    'v8_use_external_startup_data': 1,
+    'v8_enable_i18n_support%': 1,
+    #'icu_use_data_file_flag%': 1,
+    'win_fastlink': 0,
 
     # Some STL containers (e.g. std::vector) do not preserve ABI compatibility
     # between debug and non-debug mode.
@@ -41,15 +46,12 @@
 
     # Don't use ICU data file (icudtl.dat) from V8, we use our own.
     'icu_use_data_file_flag%': 0,
+    'variables': {
+      'building_nw%' : 0,
+    },
+    'building_nw%' : '<(building_nw)',
 
     'conditions': [
-      ['GENERATOR=="ninja"', {
-        'obj_dir': '<(PRODUCT_DIR)/obj',
-        'v8_base': '<(PRODUCT_DIR)/obj/deps/v8/src/libv8_base.a',
-       }, {
-         'obj_dir%': '<(PRODUCT_DIR)/obj.target',
-         'v8_base%': '<(PRODUCT_DIR)/obj.target/deps/v8/src/libv8_base.a',
-      }],
       ['OS == "win"', {
         'os_posix': 0,
         'v8_postmortem_support%': 'false',
@@ -58,10 +60,27 @@
       }, {
         'os_posix': 1,
         'v8_postmortem_support%': 'true',
+        'clang_dir': '<!(cd <(DEPTH) && pwd -P)/third_party/llvm-build/Release+Asserts',
+      }],
+      ['OS=="linux" and target_arch=="ia32" and <(building_nw)==1', {
+        'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_jessie_i386-sysroot',
+      }],
+      ['OS=="linux" and target_arch=="x64" and <(building_nw)==1', {
+        'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_jessie_amd64-sysroot',
       }],
       ['OS== "mac"', {
-        'obj_dir%': '<(PRODUCT_DIR)/obj.target',
-        'v8_base': '<(PRODUCT_DIR)/libv8_base.a',
+        'obj_dir': '<(PRODUCT_DIR)/obj.target',
+        #'v8_base': '<(PRODUCT_DIR)/libv8_base.a',
+      }, {
+        'conditions': [
+          ['GENERATOR=="ninja"', {
+            'obj_dir': '<(PRODUCT_DIR)/obj',
+            'v8_base': '<(PRODUCT_DIR)/obj/deps/v8/src/libv8_base.a',
+          }, {
+            'obj_dir%': '<(PRODUCT_DIR)/obj.target',
+            'v8_base%': '<(PRODUCT_DIR)/obj.target/deps/v8/src/libv8_base.a',
+          }],
+        ],
       }],
       ['openssl_fips != ""', {
         'openssl_product': '<(STATIC_LIB_PREFIX)crypto<(STATIC_LIB_SUFFIX)',
@@ -76,10 +95,108 @@
     ],
   },
 
+  'conditions': [
+      [ 'clang==1 and OS != "mac" and building_nw==1', {
+        'make_global_settings': [
+          ['CC', '<(clang_dir)/bin/clang'],
+          ['CXX', '<(clang_dir)/bin/clang++'],
+          ['CC.host', '$(CC)'],
+          ['CXX.host', '$(CXX)'],
+        ],
+      }],
+  ],
   'target_defaults': {
     'default_configuration': 'Release',
+    'variables': {
+      'conditions': [
+        ['OS=="win" and component=="shared_library"', {
+          # See http://msdn.microsoft.com/en-us/library/aa652367.aspx
+          'win_release_RuntimeLibrary%': '2', # 2 = /MD (nondebug DLL)
+          'win_debug_RuntimeLibrary%': '3',   # 3 = /MDd (debug DLL)
+        }, {
+          # See http://msdn.microsoft.com/en-us/library/aa652367.aspx
+          'win_release_RuntimeLibrary%': '0', # 0 = /MT (nondebug static)
+          'win_debug_RuntimeLibrary%': '1',   # 1 = /MTd (debug static)
+        }],
+      ],
+    },
     'configurations': {
-      'Debug': {
+      'Common_Base': {
+        'abstract': 1,
+        'msvs_settings':{
+          'VCCLCompilerTool': {
+            'AdditionalOptions': [
+              '/bigobj',
+              # Tell the compiler to crash on failures. This is undocumented
+              # and unsupported but very handy.
+              '/d2FastFail',
+            ],
+          },
+          'VCLinkerTool': {
+            # Add the default import libs.
+            'AdditionalDependencies': [
+              'kernel32.lib',
+              'gdi32.lib',
+              'winspool.lib',
+              'comdlg32.lib',
+              'advapi32.lib',
+              'shell32.lib',
+              'ole32.lib',
+              'oleaut32.lib',
+              'user32.lib',
+              'uuid.lib',
+              'odbc32.lib',
+              'odbccp32.lib',
+              'delayimp.lib',
+              'credui.lib',
+              'dbghelp.lib',
+              'shlwapi.lib',
+              'winmm.lib',
+            ],
+            'AdditionalOptions': [
+              # Suggested by Microsoft Devrel to avoid
+              #   LINK : fatal error LNK1248: image size (80000000) exceeds maximum allowable size (80000000)
+              # which started happening more regularly after VS2013 Update 4.
+              # Needs to be a bit lower for VS2015, or else errors out.
+              '/maxilksize:0x7ff00000',
+              # Tell the linker to crash on failures.
+              '/fastfail',
+            ],
+          },
+        },
+        'conditions': [
+          ['OS=="win" and win_fastlink==1 and MSVS_VERSION != "2013"', {
+            'msvs_settings': {
+              'VCLinkerTool': {
+                # /PROFILE is incompatible with /debug:fastlink
+                'Profile': 'false',
+                'AdditionalOptions': [
+                  # Tell VS 2015+ to create a PDB that references debug
+                  # information in .obj and .lib files instead of copying
+                  # it all.
+                  '/DEBUG:FASTLINK',
+                ],
+              },
+            },
+          }],
+          ['OS=="win" and MSVS_VERSION == "2015"', {
+            'msvs_settings': {
+              'VCCLCompilerTool': {
+                'AdditionalOptions': [
+                  # Work around crbug.com/526851, bug in VS 2015 RTM compiler.
+                  '/Zc:sizedDealloc-',
+                  # Disable thread-safe statics to avoid overhead and because
+                  # they are disabled on other platforms. See crbug.com/587210
+                  # and -fno-threadsafe-statics.
+                  '/Zc:threadSafeInit-',
+                ],
+              },
+            },
+          }],
+        ],
+      },
+      'Debug_Base': {
+        'abstract': 1,
         'variables': {
           'v8_enable_handle_zapping': 1,
         },
@@ -97,23 +214,10 @@
             'cflags': [ '-fPIE' ],
             'ldflags': [ '-fPIE', '-pie' ]
           }],
-          ['node_shared=="true"', {
-            'msvs_settings': {
-             'VCCLCompilerTool': {
-               'RuntimeLibrary': 3, # MultiThreadedDebugDLL (/MDd)
-             }
-            }
-          }],
-          ['node_shared=="false"', {
-            'msvs_settings': {
-              'VCCLCompilerTool': {
-                'RuntimeLibrary': 1 # MultiThreadedDebug (/MTd)
-              }
-            }
-          }]
         ],
         'msvs_settings': {
           'VCCLCompilerTool': {
+            'RuntimeLibrary': '<(win_debug_RuntimeLibrary)', # static debug
             'Optimization': 0, # /Od, no optimization
             'MinimalRebuild': 'false',
             'OmitFramePointers': 'false',
@@ -131,7 +235,8 @@
           'GCC_OPTIMIZATION_LEVEL': '0', # stop gyp from defaulting to -Os
         },
       },
-      'Release': {
+      'Release_Base': {
+        'abstract': 1,
         'variables': {
           'v8_enable_handle_zapping': 0,
         },
@@ -151,23 +256,10 @@
             'cflags': [ '-fPIE' ],
             'ldflags': [ '-fPIE', '-pie' ]
           }],
-          ['node_shared=="true"', {
-            'msvs_settings': {
-             'VCCLCompilerTool': {
-               'RuntimeLibrary': 2 # MultiThreadedDLL (/MD)
-             }
-            }
-          }],
-          ['node_shared=="false"', {
-            'msvs_settings': {
-              'VCCLCompilerTool': {
-                'RuntimeLibrary': 0 # MultiThreaded (/MT)
-              }
-            }
-          }]
         ],
         'msvs_settings': {
           'VCCLCompilerTool': {
+            'RuntimeLibrary': '<(win_release_RuntimeLibrary)', # static release
             'Optimization': 3, # /Ox, full optimization
             'FavorSizeOrSpeed': 1, # /Ot, favor speed over size
             'InlineFunctionExpansion': 2, # /Ob2, inline anything eligible
@@ -194,7 +286,19 @@
             ],
           },
         },
-      }
+      },
+      'Debug': {
+        'inherit_from': ['Common_Base', 'Debug_Base'],
+      },
+      'Release': {
+        'inherit_from': ['Common_Base', 'Release_Base'],
+      },
+      'conditions': [
+        [ 'OS=="win"', {
+              'Debug_x64': { 'inherit_from': ['Debug'] },
+              'Release_x64': { 'inherit_from': ['Release'], },
+        }],
+      ],
     },
     # Forcibly disable -Werror.  We support a wide range of compilers, it's
     # simply not feasible to squelch all warnings, never mind that the
@@ -242,7 +346,7 @@
         'SuppressStartupBanner': 'true',
       },
     },
-    'msvs_disabled_warnings': [4351, 4355, 4800],
+    'msvs_disabled_warnings': [4351, 4355, 4800, 4595],
     'conditions': [
       ['asan == 1 and OS != "mac"', {
         'cflags+': [
@@ -283,7 +387,7 @@
           '_CRT_NONSTDC_NO_DEPRECATE',
           # Make sure the STL doesn't try to use exceptions
           '_HAS_EXCEPTIONS=0',
-          'BUILDING_V8_SHARED=1',
+          #'BUILDING_V8_SHARED=1',
           'BUILDING_UV_SHARED=1',
         ],
       }],
@@ -317,6 +421,10 @@
           [ 'target_arch=="x64"', {
             'cflags': [ '-m64' ],
             'ldflags': [ '-m64' ],
+          }],
+          [ 'building_nw==1', {
+            'cflags': [ '--sysroot=<(sysroot)' ],
+            'ldflags': [ '--sysroot=<(sysroot)','<!(<(DEPTH)/content/nw/tools/sysroot_ld_path.sh <(sysroot))' ],
           }],
           [ 'target_arch=="ppc" and OS!="aix"', {
             'cflags': [ '-m32' ],

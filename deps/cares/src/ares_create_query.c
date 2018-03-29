@@ -16,6 +16,11 @@
 
 #include "ares_setup.h"
 
+#ifndef _WIN32
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warray-bounds"
+#endif
+
 #ifdef HAVE_NETINET_IN_H
 #  include <netinet/in.h>
 #endif
@@ -200,3 +205,7 @@ int ares_create_query(const char *name, int dnsclass, int type,
 
   return ARES_SUCCESS;
 }
+
+#ifndef _WIN32
+#pragma clang diagnostic pop
+#endif

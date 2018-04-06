@@ -126,7 +126,7 @@
  * modules to a maximum of 1000 miliseconds each, unless CryptoGenRandom
  * failed
  */
-# define MAXDELAY 1000
+# define MAXDELAY 10
 
 /*
  * Intel hardware RNG CSP -- available from

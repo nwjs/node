@@ -4,17 +4,21 @@
 
 {
   'variables': {
-    'is_clang': 0,
+    'is_clang': 1,
     'gcc_version': 0,
     'openssl_no_asm%': 0,
     'xcode_version%': 0,
     'gas_version%': 0,
-    'openssl_fips%': 'false',
+    'openssl_fips%': '',
+    'node_byteorder%': 'little',
+    'conditions': [
+      ['OS=="mac"', { 'openssl_no_asm%': 1 } ],
+    ],
   },
   'targets': [
     {
       'target_name': 'openssl',
-      'type': '<(library)',
+      'type': 'static_library',
       'includes': ['openssl.gypi'],
       'sources': ['<@(openssl_sources)'],
       'sources/': [
@@ -148,12 +152,15 @@
     'includes': ['openssl.gypi'],
     'include_dirs': ['<@(openssl_default_include_dirs)'],
     'defines': ['<@(openssl_default_defines_all)'],
+    'cflags!': ['-fvisibility=hidden'],
+    'cflags_cc!': ['-fvisibility-inlines-hidden'],
     'conditions': [
       ['OS=="win"', {
         'defines': ['<@(openssl_default_defines_win)'],
         'link_settings': {
           'libraries': ['<@(openssl_default_libraries_win)'],
         },
+        'msvs_disabled_warnings': [4311],
       }, {
         'defines': ['<@(openssl_default_defines_not_win)'],
         'cflags': ['-Wno-missing-field-initializers'],
@@ -169,7 +176,7 @@
         ]
       }],
       ['is_clang==1 or gcc_version>=43', {
-        'cflags': ['-Wno-old-style-declaration'],
+        #'cflags': ['-Wno-error=unused-command-line-argument', '-Wno-error=parentheses-equality'],
       }],
       ['OS=="solaris"', {
         'defines': ['__EXTENSIONS__'],

@@ -1415,6 +1415,7 @@ void GetStatValues(const FunctionCallbackInfo<Value>& args) {
   Local<ArrayBuffer> ab = ArrayBuffer::New(env->isolate(),
                                            fields,
                                            sizeof(double) * 2 * 14);
+  ab->set_nodejs(true);
   Local<Float64Array> fields_array = Float64Array::New(ab, 0, 2 * 14);
   args.GetReturnValue().Set(fields_array);
 }

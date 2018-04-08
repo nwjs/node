@@ -1612,6 +1612,8 @@ void Http2Session::OnStreamRead(ssize_t nread, const uv_buf_t& buf) {
                          nread,
                          v8::ArrayBufferCreationMode::kInternalized);
 
+    stream_buf_ab_->set_nodejs(true);
+
     statistics_.data_received += nread;
     ssize_t ret = Write(&stream_buf_, 1);
 

@@ -629,6 +629,8 @@ class Environment {
 
   std::unordered_map<std::string, loader::PackageConfig> package_json_cache;
 
+  bool KickNextTick(AsyncCallbackScope* scope);
+
   inline double* heap_statistics_buffer() const;
   inline void set_heap_statistics_buffer(double* pointer);
 

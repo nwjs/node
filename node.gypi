@@ -61,11 +61,11 @@
     [ 'node_use_bundled_v8=="true"', {
       'conditions': [
         [ 'build_v8_with_gn=="true"', {
-          'dependencies': ['deps/v8/gypfiles/v8-monolithic.gyp:v8_monolith'],
+          #'dependencies': ['deps/v8/gypfiles/v8-monolithic.gyp:v8_monolith'],
         }, {
           'dependencies': [
-            'deps/v8/gypfiles/v8.gyp:v8',
-            'deps/v8/gypfiles/v8.gyp:v8_libplatform',
+            #'deps/v8/gypfiles/v8.gyp:v8',
+            #'deps/v8/gypfiles/v8.gyp:v8_libplatform',
           ],
         }],
       ],
@@ -94,11 +94,22 @@
       'debug_http2==1', {
       'defines': [ 'NODE_DEBUG_HTTP2=1' ]
     }],
+    ['node_target_type=="shared_library"', {
+      'direct_dependent_settings': {
+        'defines': [
+          'USING_UV_SHARED=1',
+          'BUILDING_NODE_EXTENSION=1',
+        ],
+      },
+    }],
+    ['clang==1', {
+      'cflags': ['-Wno-error=missing-declarations', '-Wno-error=array-bounds'],
+    }],
     [ 'v8_enable_i18n_support==1', {
       'defines': [ 'NODE_HAVE_I18N_SUPPORT=1' ],
       'dependencies': [
-        '<(icu_gyp_path):icui18n',
-        '<(icu_gyp_path):icuuc',
+        '../icu/icu.gyp:icui18n',
+        '../icu/icu.gyp:icuuc',
       ],
       'conditions': [
         [ 'icu_small=="true"', {
@@ -128,7 +139,7 @@
         }],
         # when building with GN, the v8_monolith target already includes postmortem metadata
         [ 'build_v8_with_gn=="false"', {
-          'dependencies': [ 'deps/v8/gypfiles/v8.gyp:postmortem-metadata' ],
+          'dependencies': [ '../../v8/src/v8.gyp:postmortem-metadata' ],
         }],
       ],
     }],
@@ -203,6 +214,9 @@
     [ 'node_shared_nghttp2=="false"', {
       'dependencies': [ 'deps/nghttp2/nghttp2.gyp:nghttp2' ],
     }],
+    [ 'OS=="win" and component=="shared_library"', {
+      'libraries': [ '<(PRODUCT_DIR)/../nw/v8.dll.lib' ]
+    }],
 
     [ 'OS=="mac"', {
       # linking Corefoundation is needed since certain OSX debugging tools
@@ -215,6 +229,18 @@
         # we need to use node's preferred "darwin" rather than gyp's preferred "mac"
         'NODE_PLATFORM="darwin"',
       ],
+     'postbuilds': [
+       {
+         'postbuild_name': 'Fix Framework Link',
+         'action': [
+           'install_name_tool',
+           '-change',
+           '@executable_path/../Versions/<(version_full)/<(mac_product_name) Framework.framework/<(mac_product_name) Framework',
+           '@loader_path/<(mac_product_name) Framework',
+           '${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}'
+         ],
+       },
+     ],
     }],
     [ 'OS=="freebsd"', {
       'libraries': [
@@ -262,11 +288,62 @@
         'NODE_PLATFORM="sunos"',
       ],
     }],
-    [ '(OS=="freebsd" or OS=="linux") and node_shared=="false"'
-        ' and force_load=="true"', {
-      'ldflags': [ '-Wl,-z,noexecstack',
-                   '-Wl,--whole-archive <(v8_base)',
-                   '-Wl,--no-whole-archive' ]
+    [ 'OS=="linux"', {
+      'cflags': [ "-Wno-unused-result" ],
+    }],
+    [ 'OS=="linux" and component == "shared_library"', {
+          'ldflags': [ '-L<(PRODUCT_DIR)/../nw/lib/', '-lv8',
+                      '-Wl,--whole-archive <(V8_LIBBASE)',
+                      '<(V8_PLTFRM)',
+                      '-Wl,--no-whole-archive' ]
+    }],
+    [ 'OS=="linux" and component != "shared_library"', {
+          'ldflags': [ '-L<(PRODUCT_DIR)/../nw/lib/', '-lnw',
+                      #'-Wl,--whole-archive <(V8_LIBBASE)',
+                      #'<(V8_PLTFRM)',
+                      #'-Wl,--no-whole-archive'
+                     ]
+    }],
+    [ 'OS=="mac" and component == "shared_library"', {
+      'xcode_settings': {
+        'OTHER_LDFLAGS': [
+          '-L<(PRODUCT_DIR)/../nw/', '-lv8',
+          '<(PRODUCT_DIR)/../nw/nwjs\ Framework.framework/nwjs\ Framework',
+                  '-Wl,-force_load <(V8_LIBBASE)',
+                  '-Wl,-force_load <(V8_PLTFRM)',
+        ],
+      },
+      'postbuilds': [
+        {
+          'postbuild_name': 'Fix iculib Link',
+          'action': [
+            'install_name_tool',
+            '-change',
+            '/usr/local/lib/libicuuc.dylib',
+            '@rpath/libicuuc.dylib',
+            '${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}'
+          ],
+        },
+        {
+          'postbuild_name': 'Fix iculib Link2',
+          'action': [
+            'install_name_tool',
+            '-change',
+            '/usr/local/lib/libicui18n.dylib',
+            '@rpath/libicui18n.dylib',
+            '${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}'
+          ],
+        },
+      ],
+    }],
+    [ 'OS=="mac" and component != "shared_library"', {
+     'xcode_settings': {
+       'OTHER_LDFLAGS': [
+         '<(PRODUCT_DIR)/../nw/nwjs\ Framework.framework/nwjs\ Framework',
+                 '-Wl,-force_load <(V8_LIBBASE)',
+                 '-Wl,-force_load <(V8_PLTFRM)',
+       ],
+     },
     }],
     [ 'OS in "mac freebsd linux" and node_shared=="false"'
         ' and coverage=="true"', {
@@ -303,7 +380,7 @@
             './deps/openssl/openssl.gyp:openssl',
 
             # For tests
-            './deps/openssl/openssl.gyp:openssl-cli',
+            #'./deps/openssl/openssl.gyp:openssl-cli',
           ],
           'conditions': [
             # -force_load or --whole-archive are not applicable for
@@ -311,7 +388,7 @@
             [ 'force_load=="true"', {
               'xcode_settings': {
                 'OTHER_LDFLAGS': [
-                  '-Wl,-force_load,<(PRODUCT_DIR)/<(openssl_product)',
+                  #'-Wl,-force_load,<(PRODUCT_DIR)/<(openssl_product)',
                 ],
               },
               'msvs_settings': {
@@ -324,9 +401,9 @@
               'conditions': [
                 ['OS in "linux freebsd" and node_shared=="false"', {
                   'ldflags': [
-                    '-Wl,--whole-archive,'
-                      '<(obj_dir)/deps/openssl/<(openssl_product)',
-                    '-Wl,--no-whole-archive',
+                    #'-Wl,--whole-archive,'
+                    #  '<(obj_dir)/deps/openssl/<(openssl_product)',
+                    #'-Wl,--no-whole-archive',
                   ],
                 }],
                 # openssl.def is based on zlib.def, zlib symbols

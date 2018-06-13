@@ -23,6 +23,8 @@ namespace {
 using AsyncAndAgent = std::pair<uv_async_t, Agent*>;
 using v8_inspector::StringBuffer;
 using v8_inspector::StringView;
+using icu_60::UnicodeString;
+using icu_60::CheckedArrayByteSink;
 
 template <typename Transport>
 using TransportAndIo = std::pair<Transport*, InspectorIo*>;

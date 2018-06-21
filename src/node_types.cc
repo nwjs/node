@@ -35,7 +35,6 @@ namespace {
   V(SharedArrayBuffer)                                                        \
   V(Proxy)                                                                    \
   V(WebAssemblyCompiledModule)                                                \
-  V(ModuleNamespaceObject)                                                    \
 
 
 #define V(type) \

@@ -8,6 +8,8 @@
     'config/',
   ],
   # build options specific to OS
+  'cflags!': ['-fvisibility=hidden'],
+  'cflags_cc!': ['-fvisibility-inlines-hidden'],
   'conditions': [
     [ 'OS=="aix"', {
       # AIX is missing /usr/include/endian.h
@@ -39,6 +41,7 @@
           '-luser32.lib',
         ],
       },
+      'msvs_disabled_warnings': [4311],
     }, 'OS=="mac"', {
       'xcode_settings': {
         'WARNING_CFLAGS': ['-Wno-missing-field-initializers']

@@ -231,6 +231,7 @@ void uv__fs_scandir_cleanup(uv_fs_t* req);
 # define UV_REQ_INIT(req, typ)                                                \
   do {                                                                        \
     (req)->type = (typ);                                                      \
+    (req)->next_req = NULL;                                                   \
     (req)->u.io.overlapped.Internal = 0;  /* SET_REQ_SUCCESS() */             \
   }                                                                           \
   while (0)

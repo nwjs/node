@@ -64,7 +64,7 @@ class Agent {
  private:
   static void ThreadCb(void* arg);
   static void DisconnectClient(std::pair<Agent*, int>* id_agent) {
-    id_agent->first->Disconnect(id_agent->second);
+    //id_agent->first->Disconnect(id_agent->second);
     delete id_agent;
   }
 

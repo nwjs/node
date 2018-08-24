@@ -151,10 +151,11 @@ void JSStream::New(const FunctionCallbackInfo<Value>& args) {
 
 template <class Wrap>
 void JSStream::Finish(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
   CHECK(args[0]->IsObject());
   Wrap* w = static_cast<Wrap*>(StreamReq::FromObject(args[0].As<Object>()));
 
-  w->Done(args[1]->Int32Value());
+  w->Done(args[1]->Int32Value(env->context()).FromJust());
 }
 
 

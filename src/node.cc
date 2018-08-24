@@ -1198,7 +1198,7 @@ static void Exit(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
   WaitForInspectorDisconnect(env);
   v8_platform.StopTracingAgent();
-  env->Exit(args[0]->Int32Value());
+  env->Exit(args[0]->Int32Value(env->context()).FromJust());
 }
 
 extern "C" void node_module_register(void* m) {
@@ -2386,7 +2386,7 @@ void DebugProcess(const FunctionCallbackInfo<Value>& args) {
   pid_t pid;
   int r;
 
-  pid = args[0]->IntegerValue();
+  pid = args[0]->IntegerValue(env->context()).FromJust();
   r = kill(pid, SIGUSR1);
   if (r != 0) {
     return env->ThrowErrnoException(errno, "kill");

@@ -108,9 +108,9 @@ class ProcessWrap : public HandleWrap {
       Local<Value> type =
           stdio->Get(context, env->type_string()).ToLocalChecked();
 
-      if (type->Equals(env->ignore_string())) {
+      if (type->Equals(env->context(), env->ignore_string()).FromJust()) {
         options->stdio[i].flags = UV_IGNORE;
-      } else if (type->Equals(env->pipe_string())) {
+      } else if (type->Equals(env->context(), env->pipe_string()).FromJust()) {
         options->stdio[i].flags = static_cast<uv_stdio_flags>(
             UV_CREATE_PIPE | UV_READABLE_PIPE | UV_WRITABLE_PIPE);
         Local<String> handle_key = env->handle_string();
@@ -120,7 +120,7 @@ class ProcessWrap : public HandleWrap {
         options->stdio[i].data.stream =
             reinterpret_cast<uv_stream_t*>(
                 Unwrap<PipeWrap>(handle)->UVHandle());
-      } else if (type->Equals(env->wrap_string())) {
+      } else if (type->Equals(env->context(), env->wrap_string()).FromJust()) {
         Local<String> handle_key = env->handle_string();
         Local<Object> handle =
             stdio->Get(context, handle_key).ToLocalChecked().As<Object>();
@@ -131,8 +131,10 @@ class ProcessWrap : public HandleWrap {
         options->stdio[i].data.stream = stream;
       } else {
         Local<String> fd_key = env->fd_string();
-        int fd = static_cast<int>(
-            stdio->Get(context, fd_key).ToLocalChecked()->IntegerValue());
+        int fd = static_cast<int>(stdio->Get(context, fd_key)
+                                      .ToLocalChecked()
+                                      ->IntegerValue(env->context())
+                                      .FromJust());
         options->stdio[i].flags = UV_INHERIT_FD;
         options->stdio[i].data.fd = fd;
       }

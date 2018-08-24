@@ -171,6 +171,7 @@ void UDPWrap::GetFD(const FunctionCallbackInfo<Value>& args) {
 
 
 void UDPWrap::DoBind(const FunctionCallbackInfo<Value>& args, int family) {
+  Environment* env = Environment::GetCurrent(args);
   UDPWrap* wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap,
                           args.Holder(),
@@ -180,8 +181,8 @@ void UDPWrap::DoBind(const FunctionCallbackInfo<Value>& args, int family) {
   CHECK_EQ(args.Length(), 3);
 
   node::Utf8Value address(args.GetIsolate(), args[0]);
-  const int port = args[1]->Uint32Value();
-  const int flags = args[2]->Uint32Value();
+  const int port = args[1]->Uint32Value(env->context()).FromJust();
+  const int flags = args[2]->Uint32Value(env->context()).FromJust();
   char addr[sizeof(sockaddr_in6)];
   int err;
 
@@ -208,11 +209,12 @@ void UDPWrap::DoBind(const FunctionCallbackInfo<Value>& args, int family) {
 
 
 void UDPWrap::Open(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
   UDPWrap* wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap,
                           args.Holder(),
                           args.GetReturnValue().Set(UV_EBADF));
-  int fd = static_cast<int>(args[0]->IntegerValue());
+  int fd = static_cast<int>(args[0]->IntegerValue(env->context()).FromJust());
   int err = uv_udp_open(&wrap->handle_, fd);
 
   args.GetReturnValue().Set(err);
@@ -264,14 +266,14 @@ void UDPWrap::BufferSize(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(size);
 }
 
-
-#define X(name, fn)                                                           \
-  void UDPWrap::name(const FunctionCallbackInfo<Value>& args) {               \
-    UDPWrap* wrap = Unwrap<UDPWrap>(args.Holder());                           \
-    CHECK_EQ(args.Length(), 1);                                               \
-    int flag = args[0]->Int32Value();                                         \
-    int err = wrap == nullptr ? UV_EBADF : fn(&wrap->handle_, flag);          \
-    args.GetReturnValue().Set(err);                                           \
+#define X(name, fn)                                                            \
+  void UDPWrap::name(const FunctionCallbackInfo<Value>& args) {                \
+    Environment* env = Environment::GetCurrent(args);                          \
+    UDPWrap* wrap = Unwrap<UDPWrap>(args.Holder());                            \
+    CHECK_EQ(args.Length(), 1);                                                \
+    int flag = args[0]->Int32Value(env->context()).FromJust();                 \
+    int err = wrap == nullptr ? UV_EBADF : fn(&wrap->handle_, flag);           \
+    args.GetReturnValue().Set(err);                                            \
   }
 
 X(SetTTL, uv_udp_set_ttl)
@@ -353,8 +355,8 @@ void UDPWrap::DoSend(const FunctionCallbackInfo<Value>& args, int family) {
   Local<Array> chunks = args[1].As<Array>();
   // it is faster to fetch the length of the
   // array in js-land
-  size_t count = args[2]->Uint32Value();
-  const unsigned short port = args[3]->Uint32Value();
+  size_t count = args[2].As<Uint32>()->Value();
+  const unsigned short port = args[3].As<Uint32>()->Value();
   node::Utf8Value address(env->isolate(), args[4]);
   const bool have_callback = args[5]->IsTrue();
 

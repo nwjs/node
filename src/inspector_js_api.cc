@@ -241,7 +241,7 @@ void Open(const FunctionCallbackInfo<Value>& args) {
   bool wait_for_connect = false;
 
   if (args.Length() > 0 && args[0]->IsUint32()) {
-    uint32_t port = args[0]->Uint32Value();
+    uint32_t port = args[0].As<v8::Uint32>()->Value();
     agent->options()->host_port.port = port;
   }
 

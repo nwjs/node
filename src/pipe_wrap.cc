@@ -191,9 +191,11 @@ void PipeWrap::Fchmod(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
 
 void PipeWrap::Listen(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+
   PipeWrap* wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
-  int backlog = args[0]->Int32Value();
+  int backlog = args[0]->Int32Value(env->context()).FromJust();
   int err = uv_listen(reinterpret_cast<uv_stream_t*>(&wrap->handle_),
                       backlog,
                       OnConnection);
@@ -207,7 +209,7 @@ void PipeWrap::Open(const FunctionCallbackInfo<Value>& args) {
   PipeWrap* wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
 
-  int fd = args[0]->Int32Value();
+  int fd = args[0]->Int32Value(env->context()).FromJust();
 
   int err = uv_pipe_open(&wrap->handle_, fd);
   wrap->set_fd(fd);

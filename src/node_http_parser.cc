@@ -293,7 +293,9 @@ class Parser : public AsyncWrap, public StreamListener {
       return -1;
     }
 
-    return head_response.ToLocalChecked()->IntegerValue();
+    return head_response.ToLocalChecked()
+        ->IntegerValue(env()->context())
+        .FromJust();
   }
 
 
@@ -361,8 +363,8 @@ class Parser : public AsyncWrap, public StreamListener {
 
   static void New(const FunctionCallbackInfo<Value>& args) {
     Environment* env = Environment::GetCurrent(args);
-    http_parser_type type =
-        static_cast<http_parser_type>(args[0]->Int32Value());
+    http_parser_type type = static_cast<http_parser_type>(
+        args[0]->Int32Value(env->context()).FromJust());
     CHECK(type == HTTP_REQUEST || type == HTTP_RESPONSE);
     new Parser(env, args.This(), type);
   }
@@ -458,8 +460,8 @@ class Parser : public AsyncWrap, public StreamListener {
   static void Reinitialize(const FunctionCallbackInfo<Value>& args) {
     Environment* env = Environment::GetCurrent(args);
 
-    http_parser_type type =
-        static_cast<http_parser_type>(args[0]->Int32Value());
+    http_parser_type type = static_cast<http_parser_type>(
+        args[0]->Int32Value(env->context()).FromJust());
 
     CHECK(type == HTTP_REQUEST || type == HTTP_RESPONSE);
     Parser* parser;

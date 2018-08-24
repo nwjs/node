@@ -86,12 +86,12 @@ class SignalWrap : public HandleWrap {
   }
 
   static void Start(const FunctionCallbackInfo<Value>& args) {
+    Environment* env = Environment::GetCurrent(args);
     SignalWrap* wrap;
     ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
-    int signum = args[0]->Int32Value();
+    int signum = args[0]->Int32Value(env->context()).FromJust();
 #if defined(__POSIX__) && HAVE_INSPECTOR
     if (signum == SIGPROF) {
-      Environment* env = Environment::GetCurrent(args);
       if (env->inspector_agent()->IsListening()) {
         ProcessEmitWarning(env,
                            "process.on(SIGPROF) is reserved while debugging");

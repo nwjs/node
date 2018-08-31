@@ -173,7 +173,7 @@ void PipeWrap::Bind(const FunctionCallbackInfo<Value>& args) {
 void PipeWrap::SetPendingInstances(const FunctionCallbackInfo<Value>& args) {
   PipeWrap* wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
-  int instances = args[0]->Int32Value();
+  int instances = args[0].As<Int32>()->Value();
   uv_pipe_pending_instances(&wrap->handle_, instances);
 }
 #endif

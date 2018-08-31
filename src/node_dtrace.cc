@@ -75,7 +75,7 @@ using v8::Value;
         "expected object for " #obj " to contain integer member " #member);\
   }                                                                        \
   *valp = obj->Get(OneByteString(env->isolate(), #member))                 \
-      ->Int32Value();
+      .As<Int32>()->Value();
 
 #define SLURP_OBJECT(obj, member, valp)                                    \
   if (!(obj)->IsObject()) {                                                \

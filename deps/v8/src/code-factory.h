@@ -6,7 +6,6 @@
 #define V8_CODE_FACTORY_H_
 
 #include "src/allocation.h"
-#include "src/assembler.h"
 #include "src/callable.h"
 #include "src/code-stubs.h"
 #include "src/globals.h"
@@ -14,6 +13,12 @@
 
 namespace v8 {
 namespace internal {
+
+// For ArrayNoArgumentConstructor and ArraySingleArgumentConstructor.
+enum AllocationSiteOverrideMode {
+  DONT_OVERRIDE,
+  DISABLE_ALLOCATION_SITES,
+};
 
 class V8_EXPORT_PRIVATE CodeFactory final {
  public:
@@ -85,15 +90,17 @@ class V8_EXPORT_PRIVATE CodeFactory final {
   static Callable InterpreterCEntry(Isolate* isolate, int result_size = 1);
   static Callable InterpreterOnStackReplacement(Isolate* isolate);
 
-  static Callable ArrayConstructor(Isolate* isolate);
-  static Callable ArrayPop(Isolate* isolate);
-  static Callable ArrayPush(Isolate* isolate);
-  static Callable ArrayShift(Isolate* isolate);
-  static Callable ExtractFastJSArray(Isolate* isolate);
-  static Callable CloneFastJSArray(Isolate* isolate);
-  static Callable FunctionPrototypeBind(Isolate* isolate);
-  static Callable TransitionElementsKind(Isolate* isolate, ElementsKind from,
-                                         ElementsKind to, bool is_jsarray);
+  static Callable ArrayNoArgumentConstructor(
+      Isolate* isolate, ElementsKind kind,
+      AllocationSiteOverrideMode override_mode);
+  static Callable ArraySingleArgumentConstructor(
+      Isolate* isolate, ElementsKind kind,
+      AllocationSiteOverrideMode override_mode);
+
+  static Callable InternalArrayNoArgumentConstructor(Isolate* isolate,
+                                                     ElementsKind kind);
+  static Callable InternalArraySingleArgumentConstructor(Isolate* isolate,
+                                                         ElementsKind kind);
 };
 
 }  // namespace internal

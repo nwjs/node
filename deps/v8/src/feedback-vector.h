@@ -51,6 +51,7 @@ enum class FeedbackSlotKind {
   kLiteral,
   kForIn,
   kInstanceOf,
+  kCloneObject,
 
   kKindsNumber  // Last value indicating number of kinds.
 };
@@ -107,6 +108,10 @@ inline bool IsTypeProfileKind(FeedbackSlotKind kind) {
   return kind == FeedbackSlotKind::kTypeProfile;
 }
 
+inline bool IsCloneObjectKind(FeedbackSlotKind kind) {
+  return kind == FeedbackSlotKind::kCloneObject;
+}
+
 inline TypeofMode GetTypeofModeFromSlotKind(FeedbackSlotKind kind) {
   DCHECK(IsLoadGlobalICKind(kind));
   return (kind == FeedbackSlotKind::kLoadGlobalInsideTypeof)
@@ -140,8 +145,13 @@ class FeedbackMetadata;
 //  - optimized code cell (weak cell or Smi marker)
 // followed by an array of feedback slots, of length determined by the feedback
 // metadata.
-class FeedbackVector : public HeapObject {
+class FeedbackVector : public HeapObject, public NeverReadOnlySpaceObject {
  public:
+  // Use the mixin methods over the HeapObject methods.
+  // TODO(v8:7786) Remove once the HeapObject methods are gone.
+  using NeverReadOnlySpaceObject::GetHeap;
+  using NeverReadOnlySpaceObject::GetIsolate;
+
   // Casting.
   static inline FeedbackVector* cast(Object* obj);
 
@@ -243,12 +253,7 @@ class FeedbackVector : public HeapObject {
     return GetLanguageModeFromSlotKind(GetKind(slot));
   }
 
-#ifdef OBJECT_PRINT
-  // For gdb debugging.
-  void Print();
-#endif  // OBJECT_PRINT
-
-  static void AssertNoLegacyTypes(Object* object);
+  static void AssertNoLegacyTypes(MaybeObject* object);
 
   DECL_PRINTER(FeedbackVector)
   DECL_VERIFIER(FeedbackVector)
@@ -365,11 +370,14 @@ class V8_EXPORT_PRIVATE FeedbackVectorSpec {
                        : FeedbackSlotKind::kStoreGlobalSloppy);
   }
 
-  FeedbackSlot AddKeyedStoreICSlot(LanguageMode language_mode) {
+  FeedbackSlotKind GetKeyedStoreICSlotKind(LanguageMode language_mode) {
     STATIC_ASSERT(LanguageModeSize == 2);
-    return AddSlot(is_strict(language_mode)
-                       ? FeedbackSlotKind::kStoreKeyedStrict
-                       : FeedbackSlotKind::kStoreKeyedSloppy);
+    return is_strict(language_mode) ? FeedbackSlotKind::kStoreKeyedStrict
+                                    : FeedbackSlotKind::kStoreKeyedSloppy;
+  }
+
+  FeedbackSlot AddKeyedStoreICSlot(LanguageMode language_mode) {
+    return AddSlot(GetKeyedStoreICSlotKind(language_mode));
   }
 
   FeedbackSlot AddStoreInArrayLiteralICSlot() {
@@ -398,6 +406,10 @@ class V8_EXPORT_PRIVATE FeedbackVectorSpec {
 
   FeedbackSlot AddTypeProfileSlot();
 
+  FeedbackSlot AddCloneObjectSlot() {
+    return AddSlot(FeedbackSlotKind::kCloneObject);
+  }
+
 #ifdef OBJECT_PRINT
   // For gdb debugging.
   void Print();
@@ -413,6 +425,26 @@ class V8_EXPORT_PRIVATE FeedbackVectorSpec {
   }
 
   ZoneVector<unsigned char> slot_kinds_;
+
+  friend class SharedFeedbackSlot;
+};
+
+// Helper class that creates a feedback slot on-demand.
+class SharedFeedbackSlot {
+ public:
+  // FeedbackSlot default constructor constructs an invalid slot.
+  SharedFeedbackSlot(FeedbackVectorSpec* spec, FeedbackSlotKind kind)
+      : kind_(kind), spec_(spec) {}
+
+  FeedbackSlot Get() {
+    if (slot_.IsInvalid()) slot_ = spec_->AddSlot(kind_);
+    return slot_;
+  }
+
+ private:
+  FeedbackSlotKind kind_;
+  FeedbackSlot slot_;
+  FeedbackVectorSpec* spec_;
 };
 
 // FeedbackMetadata is an array-like object with a slot count (indicating how
@@ -444,11 +476,6 @@ class FeedbackMetadata : public HeapObject {
   // If {spec} is null, then it is considered empty.
   V8_EXPORT_PRIVATE static Handle<FeedbackMetadata> New(
       Isolate* isolate, const FeedbackVectorSpec* spec = nullptr);
-
-#ifdef OBJECT_PRINT
-  // For gdb debugging.
-  void Print();
-#endif  // OBJECT_PRINT
 
   DECL_PRINTER(FeedbackMetadata)
   DECL_VERIFIER(FeedbackMetadata)
@@ -497,14 +524,6 @@ class FeedbackMetadata : public HeapObject {
   DISALLOW_IMPLICIT_CONSTRUCTORS(FeedbackMetadata);
 };
 
-// The following asserts protect an optimization in type feedback vector
-// code that looks into the contents of a slot assuming to find a String,
-// a Symbol, an AllocationSite, a WeakCell, or a FixedArray.
-STATIC_ASSERT(WeakCell::kSize >= 2 * kPointerSize);
-STATIC_ASSERT(WeakCell::kValueOffset ==
-              AllocationSite::kTransitionInfoOrBoilerplateOffset);
-STATIC_ASSERT(WeakCell::kValueOffset == FixedArray::kLengthOffset);
-STATIC_ASSERT(WeakCell::kValueOffset == Name::kHashFieldSlot);
 // Verify that an empty hash field looks like a tagged object, but can't
 // possibly be confused with a pointer.
 STATIC_ASSERT((Name::kEmptyHashField & kHeapObjectTag) == kHeapObjectTag);
@@ -606,10 +625,13 @@ class FeedbackNexus final {
   // Clear() returns true if the state of the underlying vector was changed.
   bool Clear();
   void ConfigureUninitialized();
-  void ConfigurePremonomorphic();
+  void ConfigurePremonomorphic(Handle<Map> receiver_map);
+  // ConfigureMegamorphic() returns true if the state of the underlying vector
+  // was changed. Extra feedback is cleared if the 0 parameter version is used.
+  bool ConfigureMegamorphic();
   bool ConfigureMegamorphic(IcCheckType property_type);
 
-  inline Object* GetFeedback() const;
+  inline MaybeObject* GetFeedback() const;
   inline MaybeObject* GetFeedbackExtra() const;
 
   inline Isolate* GetIsolate() const;
@@ -659,6 +681,10 @@ class FeedbackNexus final {
                                int context_slot_index);
   void ConfigureHandlerMode(const MaybeObjectHandle& handler);
 
+  // For CloneObject ICs
+  static constexpr int kCloneObjectPolymorphicEntrySize = 2;
+  void ConfigureCloneObject(Handle<Map> source_map, Handle<Map> result_map);
+
 // Bit positions in a smi that encodes lexical environment variable access.
 #define LEXICAL_MODE_BIT_FIELDS(V, _)  \
   V(ContextIndexBits, unsigned, 12, _) \
@@ -681,8 +707,9 @@ class FeedbackNexus final {
   std::vector<int> GetSourcePositions() const;
   std::vector<Handle<String>> GetTypesForSourcePositions(uint32_t pos) const;
 
- protected:
   inline void SetFeedback(Object* feedback,
+                          WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
+  inline void SetFeedback(MaybeObject* feedback,
                           WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
   inline void SetFeedbackExtra(Object* feedback_extra,
                                WriteBarrierMode mode = UPDATE_WRITE_BARRIER);

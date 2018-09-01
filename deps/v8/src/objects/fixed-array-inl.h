@@ -5,19 +5,17 @@
 #ifndef V8_OBJECTS_FIXED_ARRAY_INL_H_
 #define V8_OBJECTS_FIXED_ARRAY_INL_H_
 
-#include "src/objects.h"
+#include "src/objects/fixed-array.h"
+
+#include "src/objects-inl.h"  // Needed for write barriers
+#include "src/objects/bigint.h"
+#include "src/objects/maybe-object-inl.h"
 
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
 
 namespace v8 {
 namespace internal {
-
-TYPE_CHECKER(ByteArray, BYTE_ARRAY_TYPE)
-TYPE_CHECKER(FixedArrayExact, FIXED_ARRAY_TYPE)
-TYPE_CHECKER(FixedDoubleArray, FIXED_DOUBLE_ARRAY_TYPE)
-TYPE_CHECKER(FixedArrayOfWeakCells, FIXED_ARRAY_TYPE)
-TYPE_CHECKER(WeakArrayList, WEAK_ARRAY_LIST_TYPE)
 
 CAST_ACCESSOR(ArrayList)
 CAST_ACCESSOR(ByteArray)
@@ -26,7 +24,6 @@ CAST_ACCESSOR(FixedArrayBase)
 CAST_ACCESSOR(FixedDoubleArray)
 CAST_ACCESSOR(FixedTypedArrayBase)
 CAST_ACCESSOR(TemplateList)
-CAST_ACCESSOR(FixedArrayOfWeakCells)
 CAST_ACCESSOR(WeakFixedArray)
 CAST_ACCESSOR(WeakArrayList)
 
@@ -50,7 +47,7 @@ Object** FixedArray::GetFirstElementAddress() {
 }
 
 bool FixedArray::ContainsOnlySmisOrHoles() {
-  Object* the_hole = GetHeap()->the_hole_value();
+  Object* the_hole = GetReadOnlyRoots().the_hole_value();
   Object** current = GetFirstElementAddress();
   for (int i = 0; i < length(); ++i) {
     Object* candidate = *current++;
@@ -60,7 +57,7 @@ bool FixedArray::ContainsOnlySmisOrHoles() {
 }
 
 Object* FixedArray::get(int index) const {
-  SLOW_DCHECK(index >= 0 && index < this->length());
+  DCHECK(index >= 0 && index < this->length());
   return RELAXED_READ_FIELD(this, kHeaderSize + index * kPointerSize);
 }
 
@@ -87,7 +84,7 @@ bool FixedArray::is_the_hole(Isolate* isolate, int index) {
 }
 
 void FixedArray::set(int index, Smi* value) {
-  DCHECK_NE(map(), GetHeap()->fixed_cow_array_map());
+  DCHECK_NE(map(), GetReadOnlyRoots().fixed_cow_array_map());
   DCHECK_LT(index, this->length());
   DCHECK(reinterpret_cast<Object*>(value)->IsSmi());
   int offset = kHeaderSize + index * kPointerSize;
@@ -95,58 +92,70 @@ void FixedArray::set(int index, Smi* value) {
 }
 
 void FixedArray::set(int index, Object* value) {
-  DCHECK_NE(GetHeap()->fixed_cow_array_map(), map());
+  DCHECK_NE(GetReadOnlyRoots().fixed_cow_array_map(), map());
   DCHECK(IsFixedArray());
   DCHECK_GE(index, 0);
   DCHECK_LT(index, this->length());
   int offset = kHeaderSize + index * kPointerSize;
   RELAXED_WRITE_FIELD(this, offset, value);
-  WRITE_BARRIER(GetHeap(), this, offset, value);
+  WRITE_BARRIER(this, offset, value);
 }
 
 void FixedArray::set(int index, Object* value, WriteBarrierMode mode) {
-  DCHECK_NE(map(), GetHeap()->fixed_cow_array_map());
+  DCHECK_NE(map(), GetReadOnlyRoots().fixed_cow_array_map());
   DCHECK_GE(index, 0);
   DCHECK_LT(index, this->length());
   int offset = kHeaderSize + index * kPointerSize;
   RELAXED_WRITE_FIELD(this, offset, value);
-  CONDITIONAL_WRITE_BARRIER(GetHeap(), this, offset, value, mode);
+  CONDITIONAL_WRITE_BARRIER(this, offset, value, mode);
 }
 
 void FixedArray::NoWriteBarrierSet(FixedArray* array, int index,
                                    Object* value) {
-  DCHECK_NE(array->map(), array->GetHeap()->fixed_cow_array_map());
+  DCHECK_NE(array->map(), array->GetReadOnlyRoots().fixed_cow_array_map());
   DCHECK_GE(index, 0);
   DCHECK_LT(index, array->length());
-  DCHECK(!array->GetHeap()->InNewSpace(value));
+  DCHECK(!Heap::InNewSpace(value));
   RELAXED_WRITE_FIELD(array, kHeaderSize + index * kPointerSize, value);
 }
 
 void FixedArray::set_undefined(int index) {
-  set_undefined(GetIsolate(), index);
+  set_undefined(GetReadOnlyRoots(), index);
 }
 
 void FixedArray::set_undefined(Isolate* isolate, int index) {
-  FixedArray::NoWriteBarrierSet(this, index,
-                                isolate->heap()->undefined_value());
+  set_undefined(ReadOnlyRoots(isolate), index);
 }
 
-void FixedArray::set_null(int index) { set_null(GetIsolate(), index); }
+void FixedArray::set_undefined(ReadOnlyRoots ro_roots, int index) {
+  FixedArray::NoWriteBarrierSet(this, index, ro_roots.undefined_value());
+}
+
+void FixedArray::set_null(int index) { set_null(GetReadOnlyRoots(), index); }
 
 void FixedArray::set_null(Isolate* isolate, int index) {
-  FixedArray::NoWriteBarrierSet(this, index, isolate->heap()->null_value());
+  set_null(ReadOnlyRoots(isolate), index);
 }
 
-void FixedArray::set_the_hole(int index) { set_the_hole(GetIsolate(), index); }
+void FixedArray::set_null(ReadOnlyRoots ro_roots, int index) {
+  FixedArray::NoWriteBarrierSet(this, index, ro_roots.null_value());
+}
+
+void FixedArray::set_the_hole(int index) {
+  set_the_hole(GetReadOnlyRoots(), index);
+}
 
 void FixedArray::set_the_hole(Isolate* isolate, int index) {
-  FixedArray::NoWriteBarrierSet(this, index, isolate->heap()->the_hole_value());
+  set_the_hole(ReadOnlyRoots(isolate), index);
+}
+
+void FixedArray::set_the_hole(ReadOnlyRoots ro_roots, int index) {
+  FixedArray::NoWriteBarrierSet(this, index, ro_roots.the_hole_value());
 }
 
 void FixedArray::FillWithHoles(int from, int to) {
-  Isolate* isolate = GetIsolate();
   for (int i = from; i < to; i++) {
-    set_the_hole(isolate, i);
+    set_the_hole(i);
   }
 }
 
@@ -159,16 +168,16 @@ Object** FixedArray::RawFieldOfElementAt(int index) {
 }
 
 double FixedDoubleArray::get_scalar(int index) {
-  DCHECK(map() != GetHeap()->fixed_cow_array_map() &&
-         map() != GetHeap()->fixed_array_map());
+  DCHECK(map() != GetReadOnlyRoots().fixed_cow_array_map() &&
+         map() != GetReadOnlyRoots().fixed_array_map());
   DCHECK(index >= 0 && index < this->length());
   DCHECK(!is_the_hole(index));
   return READ_DOUBLE_FIELD(this, kHeaderSize + index * kDoubleSize);
 }
 
 uint64_t FixedDoubleArray::get_representation(int index) {
-  DCHECK(map() != GetHeap()->fixed_cow_array_map() &&
-         map() != GetHeap()->fixed_array_map());
+  DCHECK(map() != GetReadOnlyRoots().fixed_cow_array_map() &&
+         map() != GetReadOnlyRoots().fixed_array_map());
   DCHECK(index >= 0 && index < this->length());
   int offset = kHeaderSize + index * kDoubleSize;
   return READ_UINT64_FIELD(this, offset);
@@ -184,8 +193,8 @@ Handle<Object> FixedDoubleArray::get(FixedDoubleArray* array, int index,
 }
 
 void FixedDoubleArray::set(int index, double value) {
-  DCHECK(map() != GetHeap()->fixed_cow_array_map() &&
-         map() != GetHeap()->fixed_array_map());
+  DCHECK(map() != GetReadOnlyRoots().fixed_cow_array_map() &&
+         map() != GetReadOnlyRoots().fixed_array_map());
   int offset = kHeaderSize + index * kDoubleSize;
   if (std::isnan(value)) {
     WRITE_DOUBLE_FIELD(this, offset, std::numeric_limits<double>::quiet_NaN());
@@ -200,8 +209,8 @@ void FixedDoubleArray::set_the_hole(Isolate* isolate, int index) {
 }
 
 void FixedDoubleArray::set_the_hole(int index) {
-  DCHECK(map() != GetHeap()->fixed_cow_array_map() &&
-         map() != GetHeap()->fixed_array_map());
+  DCHECK(map() != GetReadOnlyRoots().fixed_cow_array_map() &&
+         map() != GetReadOnlyRoots().fixed_array_map());
   int offset = kHeaderSize + index * kDoubleSize;
   WRITE_UINT64_FIELD(this, offset, kHoleNanInt64);
 }
@@ -225,7 +234,7 @@ void FixedDoubleArray::FillWithHoles(int from, int to) {
 }
 
 MaybeObject* WeakFixedArray::Get(int index) const {
-  SLOW_DCHECK(index >= 0 && index < this->length());
+  DCHECK(index >= 0 && index < this->length());
   return RELAXED_READ_WEAK_FIELD(this, OffsetOfElementAt(index));
 }
 
@@ -234,7 +243,7 @@ void WeakFixedArray::Set(int index, MaybeObject* value) {
   DCHECK_LT(index, length());
   int offset = OffsetOfElementAt(index);
   RELAXED_WRITE_FIELD(this, offset, value);
-  WEAK_WRITE_BARRIER(GetHeap(), this, offset, value);
+  WEAK_WRITE_BARRIER(this, offset, value);
 }
 
 void WeakFixedArray::Set(int index, MaybeObject* value, WriteBarrierMode mode) {
@@ -242,7 +251,7 @@ void WeakFixedArray::Set(int index, MaybeObject* value, WriteBarrierMode mode) {
   DCHECK_LT(index, length());
   int offset = OffsetOfElementAt(index);
   RELAXED_WRITE_FIELD(this, offset, value);
-  CONDITIONAL_WEAK_WRITE_BARRIER(GetHeap(), this, offset, value, mode);
+  CONDITIONAL_WEAK_WRITE_BARRIER(this, offset, value, mode);
 }
 
 MaybeObject** WeakFixedArray::data_start() {
@@ -253,8 +262,13 @@ MaybeObject** WeakFixedArray::RawFieldOfElementAt(int index) {
   return HeapObject::RawMaybeWeakField(this, OffsetOfElementAt(index));
 }
 
+MaybeObject** WeakFixedArray::GetFirstElementAddress() {
+  return reinterpret_cast<MaybeObject**>(
+      FIELD_ADDR(this, OffsetOfElementAt(0)));
+}
+
 MaybeObject* WeakArrayList::Get(int index) const {
-  SLOW_DCHECK(index >= 0 && index < this->capacity());
+  DCHECK(index >= 0 && index < this->capacity());
   return RELAXED_READ_WEAK_FIELD(this, OffsetOfElementAt(index));
 }
 
@@ -263,51 +277,21 @@ void WeakArrayList::Set(int index, MaybeObject* value, WriteBarrierMode mode) {
   DCHECK_LT(index, this->capacity());
   int offset = OffsetOfElementAt(index);
   RELAXED_WRITE_FIELD(this, offset, value);
-  CONDITIONAL_WEAK_WRITE_BARRIER(GetHeap(), this, offset, value, mode);
+  CONDITIONAL_WEAK_WRITE_BARRIER(this, offset, value, mode);
 }
 
 MaybeObject** WeakArrayList::data_start() {
   return HeapObject::RawMaybeWeakField(this, kHeaderSize);
 }
 
-Object* FixedArrayOfWeakCells::Get(int index) const {
-  Object* raw = FixedArray::cast(this)->get(index + kFirstIndex);
-  if (raw->IsSmi()) return raw;
-  DCHECK(raw->IsWeakCell());
-  return WeakCell::cast(raw)->value();
-}
-
-bool FixedArrayOfWeakCells::IsEmptySlot(int index) const {
-  DCHECK(index < Length());
-  return Get(index)->IsSmi();
-}
-
-void FixedArrayOfWeakCells::Clear(int index) {
-  FixedArray::cast(this)->set(index + kFirstIndex, Smi::kZero);
-}
-
-int FixedArrayOfWeakCells::Length() const {
-  return FixedArray::cast(this)->length() - kFirstIndex;
-}
-
-int FixedArrayOfWeakCells::last_used_index() const {
-  return Smi::ToInt(FixedArray::cast(this)->get(kLastUsedIndexIndex));
-}
-
-void FixedArrayOfWeakCells::set_last_used_index(int index) {
-  FixedArray::cast(this)->set(kLastUsedIndexIndex, Smi::FromInt(index));
-}
-
-template <class T>
-T* FixedArrayOfWeakCells::Iterator::Next() {
-  if (list_ != nullptr) {
-    // Assert that list did not change during iteration.
-    DCHECK_EQ(last_used_index_, list_->last_used_index());
-    while (index_ < list_->Length()) {
-      Object* item = list_->Get(index_++);
-      if (item != Empty()) return T::cast(item);
+HeapObject* WeakArrayList::Iterator::Next() {
+  if (array_ != nullptr) {
+    while (index_ < array_->length()) {
+      MaybeObject* item = array_->Get(index_++);
+      DCHECK(item->IsWeakHeapObject() || item->IsClearedWeakHeapObject());
+      if (!item->IsClearedWeakHeapObject()) return item->ToWeakHeapObject();
     }
-    list_ = nullptr;
+    array_ = nullptr;
   }
   return nullptr;
 }
@@ -334,7 +318,7 @@ void ArrayList::Set(int index, Object* obj, WriteBarrierMode mode) {
 }
 
 void ArrayList::Clear(int index, Object* undefined) {
-  DCHECK(undefined->IsUndefined(GetIsolate()));
+  DCHECK(undefined->IsUndefined());
   FixedArray::cast(this)->set(kFirstIndex + index, undefined,
                               SKIP_WRITE_BARRIER);
 }
@@ -405,12 +389,12 @@ byte* ByteArray::GetDataStartAddress() {
 
 template <class T>
 PodArray<T>* PodArray<T>::cast(Object* object) {
-  SLOW_DCHECK(object->IsByteArray());
+  DCHECK(object->IsByteArray());
   return reinterpret_cast<PodArray<T>*>(object);
 }
 template <class T>
 const PodArray<T>* PodArray<T>::cast(const Object* object) {
-  SLOW_DCHECK(object->IsByteArray());
+  DCHECK(object->IsByteArray());
   return reinterpret_cast<const PodArray<T>*>(object);
 }
 
@@ -420,6 +404,11 @@ Handle<PodArray<T>> PodArray<T>::New(Isolate* isolate, int length,
                                      PretenureFlag pretenure) {
   return Handle<PodArray<T>>::cast(
       isolate->factory()->NewByteArray(length * sizeof(T), pretenure));
+}
+
+template <class T>
+int PodArray<T>::length() {
+  return ByteArray::length() / sizeof(T);
 }
 
 void* FixedTypedArrayBase::external_pointer() const {
@@ -442,9 +431,9 @@ void* FixedTypedArrayBase::DataPtr() {
 int FixedTypedArrayBase::ElementSize(InstanceType type) {
   int element_size;
   switch (type) {
-#define TYPED_ARRAY_CASE(Type, type, TYPE, ctype, size) \
-  case FIXED_##TYPE##_ARRAY_TYPE:                       \
-    element_size = size;                                \
+#define TYPED_ARRAY_CASE(Type, type, TYPE, ctype) \
+  case FIXED_##TYPE##_ARRAY_TYPE:                 \
+    element_size = sizeof(ctype);                 \
     break;
 
     TYPED_ARRAYS(TYPED_ARRAY_CASE)
@@ -672,9 +661,10 @@ inline uint64_t FixedTypedArray<BigUint64ArrayTraits>::FromHandle(
 }
 
 template <class Traits>
-Handle<Object> FixedTypedArray<Traits>::get(FixedTypedArray<Traits>* array,
+Handle<Object> FixedTypedArray<Traits>::get(Isolate* isolate,
+                                            FixedTypedArray<Traits>* array,
                                             int index) {
-  return Traits::ToHandle(array->GetIsolate(), array->get_scalar(index));
+  return Traits::ToHandle(isolate, array->get_scalar(index));
 }
 
 template <class Traits>
@@ -689,7 +679,7 @@ void FixedTypedArray<Traits>::SetValue(uint32_t index, Object* value) {
   } else {
     // Clamp undefined to the default value. All other types have been
     // converted to a number type further up in the call chain.
-    DCHECK(value->IsUndefined(GetIsolate()));
+    DCHECK(value->IsUndefined());
   }
   set(index, cast_value);
 }
@@ -761,18 +751,18 @@ STATIC_CONST_MEMBER_DEFINITION const InstanceType
 
 template <class Traits>
 FixedTypedArray<Traits>* FixedTypedArray<Traits>::cast(Object* object) {
-  SLOW_DCHECK(object->IsHeapObject() &&
-              HeapObject::cast(object)->map()->instance_type() ==
-                  Traits::kInstanceType);
+  DCHECK(object->IsHeapObject() &&
+         HeapObject::cast(object)->map()->instance_type() ==
+             Traits::kInstanceType);
   return reinterpret_cast<FixedTypedArray<Traits>*>(object);
 }
 
 template <class Traits>
 const FixedTypedArray<Traits>* FixedTypedArray<Traits>::cast(
     const Object* object) {
-  SLOW_DCHECK(object->IsHeapObject() &&
-              HeapObject::cast(object)->map()->instance_type() ==
-                  Traits::kInstanceType);
+  DCHECK(object->IsHeapObject() &&
+         HeapObject::cast(object)->map()->instance_type() ==
+             Traits::kInstanceType);
   return reinterpret_cast<FixedTypedArray<Traits>*>(object);
 }
 

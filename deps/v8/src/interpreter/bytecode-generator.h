@@ -6,6 +6,7 @@
 #define V8_INTERPRETER_BYTECODE_GENERATOR_H_
 
 #include "src/ast/ast.h"
+#include "src/feedback-vector.h"
 #include "src/interpreter/bytecode-array-builder.h"
 #include "src/interpreter/bytecode-label.h"
 #include "src/interpreter/bytecode-register.h"
@@ -43,7 +44,7 @@ class BytecodeGenerator final : public AstVisitor<BytecodeGenerator> {
 
   // Visiting function for declarations list and statements are overridden.
   void VisitDeclarations(Declaration::List* declarations);
-  void VisitStatements(ZoneList<Statement*>* statments);
+  void VisitStatements(ZonePtrList<Statement>* statments);
 
  private:
   class ContextScope;
@@ -100,7 +101,7 @@ class BytecodeGenerator final : public AstVisitor<BytecodeGenerator> {
 
   // Visit the arguments expressions in |args| and store them in |args_regs|,
   // growing |args_regs| for each argument visited.
-  void VisitArguments(ZoneList<Expression*>* args, RegisterList* arg_regs);
+  void VisitArguments(ZonePtrList<Expression>* args, RegisterList* arg_regs);
 
   // Visit a keyed super property load. The optional
   // |opt_receiver_out| register will have the receiver stored to it
@@ -119,6 +120,11 @@ class BytecodeGenerator final : public AstVisitor<BytecodeGenerator> {
   void VisitPropertyLoad(Register obj, Property* expr);
   void VisitPropertyLoadForRegister(Register obj, Property* expr,
                                     Register destination);
+
+  void BuildLoadNamedProperty(Property* property, Register object,
+                              const AstRawString* name);
+  void BuildStoreNamedProperty(Property* property, Register object,
+                               const AstRawString* name);
 
   void BuildVariableLoad(Variable* variable, HoleCheckMode hole_check_mode,
                          TypeofMode typeof_mode = NOT_INSIDE_TYPEOF);
@@ -179,9 +185,10 @@ class BytecodeGenerator final : public AstVisitor<BytecodeGenerator> {
                                FeedbackSlot element_slot);
   void BuildArrayLiteralElementsInsertion(Register array,
                                           int first_spread_index,
-                                          ZoneList<Expression*>* elements,
+                                          ZonePtrList<Expression>* elements,
                                           bool skip_constants);
 
+  void BuildCreateObjectLiteral(Register literal, uint8_t flags, size_t entry);
   void AllocateTopLevelRegisters();
   void VisitArgumentsObject(Variable* variable);
   void VisitRestArgumentsArray(Variable* rest);
@@ -247,7 +254,7 @@ class BytecodeGenerator final : public AstVisitor<BytecodeGenerator> {
   TypeHint VisitForAccumulatorValue(Expression* expr);
   void VisitForAccumulatorValueOrTheHole(Expression* expr);
   V8_WARN_UNUSED_RESULT Register VisitForRegisterValue(Expression* expr);
-  INLINE(void VisitForRegisterValue(Expression* expr, Register destination));
+  V8_INLINE void VisitForRegisterValue(Expression* expr, Register destination);
   void VisitAndPushIntoRegisterList(Expression* expr, RegisterList* reg_list);
   void VisitForEffect(Expression* expr);
   void VisitForTest(Expression* expr, BytecodeLabels* then_labels,
@@ -276,6 +283,11 @@ class BytecodeGenerator final : public AstVisitor<BytecodeGenerator> {
   FeedbackSlot GetDummyCompareICSlot();
 
   void AddToEagerLiteralsIfEager(FunctionLiteral* literal);
+
+  // Checks if the visited expression is one shot, i.e executed only once. Any
+  // expression either in a top level code or an IIFE that is not within a loop
+  // is eligible for one shot optimizations.
+  inline bool ShouldOptimizeAsOneShot() const;
 
   static constexpr ToBooleanMode ToBooleanModeFromTypeHint(TypeHint type_hint) {
     return type_hint == TypeHint::kBoolean ? ToBooleanMode::kAlreadyBoolean
@@ -362,7 +374,7 @@ class BytecodeGenerator final : public AstVisitor<BytecodeGenerator> {
 
   // Dummy feedback slot for compare operations, where we don't care about
   // feedback
-  FeedbackSlot dummy_feedback_slot_;
+  SharedFeedbackSlot dummy_feedback_slot_;
 
   BytecodeJumpTable* generator_jump_table_;
   int suspend_count_;

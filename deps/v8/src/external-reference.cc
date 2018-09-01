@@ -57,8 +57,6 @@ namespace internal {
 
 constexpr double double_min_int_constant = kMinInt;
 constexpr double double_one_half_constant = 0.5;
-constexpr double double_minus_one_half_constant = -0.5;
-constexpr double double_negative_infinity_constant = -V8_INFINITY;
 constexpr uint64_t double_the_hole_nan_constant = kHoleNanInt64;
 constexpr double double_uint32_bias_constant =
     static_cast<double>(kMaxUInt32) + 1;
@@ -128,7 +126,7 @@ ExternalReference ExternalReference::isolate_address(Isolate* isolate) {
 }
 
 ExternalReference ExternalReference::builtins_address(Isolate* isolate) {
-  return ExternalReference(isolate->builtins()->builtins_table_address());
+  return ExternalReference(isolate->heap()->builtin_address(0));
 }
 
 ExternalReference ExternalReference::handle_scope_implementer_address(
@@ -182,7 +180,7 @@ ExternalReference::incremental_marking_record_write_function() {
 
 ExternalReference ExternalReference::store_buffer_overflow_function() {
   return ExternalReference(
-      Redirect(FUNCTION_ADDR(StoreBuffer::StoreBufferOverflow)));
+      Redirect(Heap::store_buffer_overflow_function_address()));
 }
 
 ExternalReference ExternalReference::delete_handle_scope_extensions() {
@@ -366,16 +364,6 @@ ExternalReference ExternalReference::wasm_float64_pow() {
   return ExternalReference(Redirect(FUNCTION_ADDR(wasm::float64_pow_wrapper)));
 }
 
-ExternalReference ExternalReference::wasm_set_thread_in_wasm_flag() {
-  return ExternalReference(
-      Redirect(FUNCTION_ADDR(wasm::set_thread_in_wasm_flag)));
-}
-
-ExternalReference ExternalReference::wasm_clear_thread_in_wasm_flag() {
-  return ExternalReference(
-      Redirect(FUNCTION_ADDR(wasm::clear_thread_in_wasm_flag)));
-}
-
 static void f64_mod_wrapper(Address data) {
   double dividend = ReadUnalignedValue<double>(data);
   double divisor = ReadUnalignedValue<double>(data + sizeof(dividend));
@@ -471,23 +459,21 @@ ExternalReference ExternalReference::address_of_pending_message_obj(
   return ExternalReference(isolate->pending_message_obj_address());
 }
 
+ExternalReference ExternalReference::abort_with_reason() {
+  return ExternalReference(Redirect(FUNCTION_ADDR(i::abort_with_reason)));
+}
+
 ExternalReference ExternalReference::address_of_min_int() {
   return ExternalReference(reinterpret_cast<Address>(&double_min_int_constant));
+}
+
+ExternalReference ExternalReference::address_of_runtime_stats_flag() {
+  return ExternalReference(&FLAG_runtime_stats);
 }
 
 ExternalReference ExternalReference::address_of_one_half() {
   return ExternalReference(
       reinterpret_cast<Address>(&double_one_half_constant));
-}
-
-ExternalReference ExternalReference::address_of_minus_one_half() {
-  return ExternalReference(
-      reinterpret_cast<Address>(&double_minus_one_half_constant));
-}
-
-ExternalReference ExternalReference::address_of_negative_infinity() {
-  return ExternalReference(
-      reinterpret_cast<Address>(&double_negative_infinity_constant));
 }
 
 ExternalReference ExternalReference::address_of_the_hole_nan() {
@@ -725,9 +711,9 @@ ExternalReference ExternalReference::libc_memmove_function() {
   return ExternalReference(Redirect(FUNCTION_ADDR(libc_memmove)));
 }
 
-void* libc_memset(void* dest, int byte, size_t n) {
-  DCHECK_EQ(static_cast<char>(byte), byte);
-  return memset(dest, byte, n);
+void* libc_memset(void* dest, int value, size_t n) {
+  DCHECK_EQ(static_cast<byte>(value), value);
+  return memset(dest, value, n);
 }
 
 ExternalReference ExternalReference::libc_memset_function() {
@@ -839,9 +825,20 @@ ExternalReference ExternalReference::cpu_features() {
   return ExternalReference(&CpuFeatures::supported_);
 }
 
-ExternalReference ExternalReference::promise_hook_or_debug_is_active_address(
+ExternalReference ExternalReference::promise_hook_address(Isolate* isolate) {
+  return ExternalReference(isolate->promise_hook_address());
+}
+
+ExternalReference ExternalReference::async_event_delegate_address(
     Isolate* isolate) {
-  return ExternalReference(isolate->promise_hook_or_debug_is_active_address());
+  return ExternalReference(isolate->async_event_delegate_address());
+}
+
+ExternalReference
+ExternalReference::promise_hook_or_async_event_delegate_address(
+    Isolate* isolate) {
+  return ExternalReference(
+      isolate->promise_hook_or_async_event_delegate_address());
 }
 
 ExternalReference ExternalReference::debug_is_active_address(Isolate* isolate) {
@@ -851,11 +848,6 @@ ExternalReference ExternalReference::debug_is_active_address(Isolate* isolate) {
 ExternalReference ExternalReference::debug_hook_on_function_call_address(
     Isolate* isolate) {
   return ExternalReference(isolate->debug()->hook_on_function_call_address());
-}
-
-ExternalReference ExternalReference::debug_execution_mode_address(
-    Isolate* isolate) {
-  return ExternalReference(isolate->debug_execution_mode_address());
 }
 
 ExternalReference ExternalReference::runtime_function_table_address(
@@ -927,11 +919,6 @@ ExternalReference ExternalReference::mod_two_doubles_operation() {
       Redirect(FUNCTION_ADDR(modulo_double_double), BUILTIN_FP_FP_CALL));
 }
 
-ExternalReference ExternalReference::debug_last_step_action_address(
-    Isolate* isolate) {
-  return ExternalReference(isolate->debug()->last_step_action_address());
-}
-
 ExternalReference ExternalReference::debug_suspended_generator_address(
     Isolate* isolate) {
   return ExternalReference(isolate->debug()->suspended_generator_address());
@@ -940,6 +927,12 @@ ExternalReference ExternalReference::debug_suspended_generator_address(
 ExternalReference ExternalReference::debug_restart_fp_address(
     Isolate* isolate) {
   return ExternalReference(isolate->debug()->restart_fp_address());
+}
+
+ExternalReference ExternalReference::wasm_thread_in_wasm_flag_address_address(
+    Isolate* isolate) {
+  return ExternalReference(reinterpret_cast<Address>(
+      &isolate->thread_local_top()->thread_in_wasm_flag_address_));
 }
 
 ExternalReference ExternalReference::fixed_typed_array_base_data_offset() {
@@ -964,6 +957,17 @@ std::ostream& operator<<(std::ostream& os, ExternalReference reference) {
   const Runtime::Function* fn = Runtime::FunctionForEntry(reference.address());
   if (fn) os << "<" << fn->name << ".entry>";
   return os;
+}
+
+void abort_with_reason(int reason) {
+  if (IsValidAbortReason(reason)) {
+    const char* message = GetAbortReason(static_cast<AbortReason>(reason));
+    base::OS::PrintError("abort: %s\n", message);
+  } else {
+    base::OS::PrintError("abort: <unknown reason: %d>\n", reason);
+  }
+  base::OS::Abort();
+  UNREACHABLE();
 }
 
 }  // namespace internal

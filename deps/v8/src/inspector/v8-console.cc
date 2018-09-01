@@ -24,9 +24,9 @@ namespace v8_inspector {
 namespace {
 
 String16 consoleContextToString(
-    const v8::debug::ConsoleContext& consoleContext) {
+    v8::Isolate* isolate, const v8::debug::ConsoleContext& consoleContext) {
   if (consoleContext.id() == 0) return String16();
-  return toProtocolString(consoleContext.name()) + "#" +
+  return toProtocolString(isolate, consoleContext.name()) + "#" +
          String16::fromInteger(consoleContext.id());
 }
 
@@ -88,7 +88,7 @@ class ConsoleHelper {
         V8ConsoleMessage::createForConsoleAPI(
             m_context, m_contextId, m_groupId, m_inspector,
             m_inspector->client()->currentTimeMS(), type, arguments,
-            consoleContextToString(m_consoleContext),
+            consoleContextToString(m_isolate, m_consoleContext),
             m_inspector->debugger()->captureStackTrace(false));
     consoleMessageStorage()->addMessage(std::move(message));
   }
@@ -124,7 +124,7 @@ class ConsoleHelper {
       if (!m_info[0]->ToString(m_context).ToLocal(&titleValue))
         return defaultValue;
     }
-    return toProtocolString(titleValue);
+    return toProtocolString(m_context->GetIsolate(), titleValue);
   }
 
   v8::MaybeLocal<v8::Object> firstArgAsObject() {
@@ -297,7 +297,8 @@ static String16 identifierFromTitleOrStackTrace(
   } else {
     identifier = title + "@";
   }
-  identifier = consoleContextToString(consoleContext) + "@" + identifier;
+  identifier = consoleContextToString(inspector->isolate(), consoleContext) +
+               "@" + identifier;
 
   return identifier;
 }
@@ -345,16 +346,6 @@ void V8Console::Assert(const v8::debug::ConsoleCallArguments& info,
   m_inspector->debugger()->breakProgramOnAssert(helper.groupId());
 }
 
-void V8Console::MarkTimeline(const v8::debug::ConsoleCallArguments& info,
-                             const v8::debug::ConsoleContext& consoleContext) {
-  ConsoleHelper(info, consoleContext, m_inspector)
-      .reportDeprecatedCall("V8Console#markTimelineDeprecated",
-                            "'console.markTimeline' is "
-                            "deprecated. Please use "
-                            "'console.timeStamp' instead.");
-  TimeStamp(info, consoleContext);
-}
-
 void V8Console::Profile(const v8::debug::ConsoleCallArguments& info,
                         const v8::debug::ConsoleContext& consoleContext) {
   ConsoleHelper helper(info, consoleContext, m_inspector);
@@ -380,7 +371,8 @@ static void timeFunction(const v8::debug::ConsoleCallArguments& info,
   String16 protocolTitle = helper.firstArgToString("default", false);
   if (timelinePrefix) protocolTitle = "Timeline '" + protocolTitle + "'";
   const String16& timerId =
-      protocolTitle + "@" + consoleContextToString(consoleContext);
+      protocolTitle + "@" +
+      consoleContextToString(inspector->isolate(), consoleContext);
   if (helper.consoleMessageStorage()->hasTimer(helper.contextId(), timerId)) {
     helper.reportCallWithArgument(
         ConsoleAPIType::kWarning,
@@ -398,7 +390,8 @@ static void timeEndFunction(const v8::debug::ConsoleCallArguments& info,
   String16 protocolTitle = helper.firstArgToString("default", false);
   if (timelinePrefix) protocolTitle = "Timeline '" + protocolTitle + "'";
   const String16& timerId =
-      protocolTitle + "@" + consoleContextToString(consoleContext);
+      protocolTitle + "@" +
+      consoleContextToString(inspector->isolate(), consoleContext);
   if (!helper.consoleMessageStorage()->hasTimer(helper.contextId(), timerId)) {
     helper.reportCallWithArgument(
         ConsoleAPIType::kWarning,
@@ -408,29 +401,11 @@ static void timeEndFunction(const v8::debug::ConsoleCallArguments& info,
   inspector->client()->consoleTimeEnd(toStringView(protocolTitle));
   double elapsed = helper.consoleMessageStorage()->timeEnd(
       helper.contextId(),
-      protocolTitle + "@" + consoleContextToString(consoleContext));
+      protocolTitle + "@" +
+          consoleContextToString(inspector->isolate(), consoleContext));
   String16 message =
       protocolTitle + ": " + String16::fromDouble(elapsed) + "ms";
   helper.reportCallWithArgument(ConsoleAPIType::kTimeEnd, message);
-}
-
-void V8Console::Timeline(const v8::debug::ConsoleCallArguments& info,
-                         const v8::debug::ConsoleContext& consoleContext) {
-  ConsoleHelper(info, consoleContext, m_inspector)
-      .reportDeprecatedCall("V8Console#timeline",
-                            "'console.timeline' is deprecated. Please use "
-                            "'console.time' instead.");
-  timeFunction(info, consoleContext, true, m_inspector);
-}
-
-void V8Console::TimelineEnd(const v8::debug::ConsoleCallArguments& info,
-                            const v8::debug::ConsoleContext& consoleContext) {
-  ConsoleHelper(info, consoleContext, m_inspector)
-      .reportDeprecatedCall("V8Console#timelineEnd",
-                            "'console.timelineEnd' is "
-                            "deprecated. Please use "
-                            "'console.timeEnd' instead.");
-  timeEndFunction(info, consoleContext, true, m_inspector);
 }
 
 void V8Console::Time(const v8::debug::ConsoleCallArguments& info,
@@ -556,7 +531,8 @@ void V8Console::monitorFunctionCallback(
   v8::Local<v8::Value> name = function->GetName();
   if (!name->IsString() || !v8::Local<v8::String>::Cast(name)->Length())
     name = function->GetInferredName();
-  String16 functionName = toProtocolStringWithTypeCheck(name);
+  String16 functionName =
+      toProtocolStringWithTypeCheck(info.GetIsolate(), name);
   String16Builder builder;
   builder.append("console.log(\"function ");
   if (functionName.isEmpty())
@@ -808,7 +784,8 @@ void V8Console::CommandLineAPIScope::accessorGetterCallback(
 
   v8::Local<v8::Value> value;
   if (!commandLineAPI->Get(context, name).ToLocal(&value)) return;
-  if (isCommandLineAPIGetter(toProtocolStringWithTypeCheck(name))) {
+  if (isCommandLineAPIGetter(
+          toProtocolStringWithTypeCheck(info.GetIsolate(), name))) {
     DCHECK(value->IsFunction());
     v8::MicrotasksScope microtasks(info.GetIsolate(),
                                    v8::MicrotasksScope::kDoNotRunMicrotasks);

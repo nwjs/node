@@ -20,6 +20,7 @@ namespace torque {
 
 class Scope;
 class ScopeChain;
+class Generic;
 
 class Declarable {
  public:
@@ -32,9 +33,11 @@ class Declarable {
     kBuiltin,
     kRuntimeFunction,
     kGeneric,
+    kGenericList,
     kTypeAlias,
     kLabel,
-    kConstant
+    kExternConstant,
+    kModuleConstant
   };
   Kind kind() const { return kind_; }
   bool IsMacro() const { return kind() == kMacro; }
@@ -46,8 +49,13 @@ class Declarable {
   bool IsLabel() const { return kind() == kLabel; }
   bool IsVariable() const { return kind() == kVariable; }
   bool IsMacroList() const { return kind() == kMacroList; }
-  bool IsConstant() const { return kind() == kConstant; }
-  bool IsValue() const { return IsVariable() || IsConstant() || IsParameter(); }
+  bool IsGenericList() const { return kind() == kGenericList; }
+  bool IsExternConstant() const { return kind() == kExternConstant; }
+  bool IsModuleConstant() const { return kind() == kModuleConstant; }
+  bool IsValue() const {
+    return IsVariable() || IsExternConstant() || IsParameter() ||
+           IsModuleConstant();
+  }
   virtual const char* type_name() const { return "<<unknown>>"; }
 
  protected:
@@ -82,11 +90,8 @@ class Value : public Declarable {
  public:
   const std::string& name() const { return name_; }
   virtual bool IsConst() const { return true; }
-  virtual std::string GetValueForDeclaration() const = 0;
-  virtual std::string GetValueForRead() const {
-    return GetValueForDeclaration();
-  }
-  virtual std::string GetValueForWrite() const { UNREACHABLE(); }
+  virtual std::string value() const = 0;
+  virtual std::string RValue() const { return value(); }
   DECLARE_DECLARABLE_BOILERPLATE(Value, value);
   const Type* type() const { return type_; }
 
@@ -102,7 +107,7 @@ class Value : public Declarable {
 class Parameter : public Value {
  public:
   DECLARE_DECLARABLE_BOILERPLATE(Parameter, parameter);
-  std::string GetValueForDeclaration() const override { return var_name_; }
+  std::string value() const override { return var_name_; }
 
  private:
   friend class Declarations;
@@ -113,33 +118,46 @@ class Parameter : public Value {
   std::string var_name_;
 };
 
+class ModuleConstant : public Value {
+ public:
+  DECLARE_DECLARABLE_BOILERPLATE(ModuleConstant, constant);
+  std::string value() const override { UNREACHABLE(); }
+  std::string RValue() const override { return name() + "()"; }
+
+ private:
+  friend class Declarations;
+  explicit ModuleConstant(const std::string& name, const Type* type)
+      : Value(Declarable::kModuleConstant, type, name) {}
+};
+
 class Variable : public Value {
  public:
   DECLARE_DECLARABLE_BOILERPLATE(Variable, variable);
-  bool IsConst() const override { return false; }
-  std::string GetValueForDeclaration() const override { return value_; }
-  std::string GetValueForRead() const override {
-    if (type()->IsConstexpr()) {
-      return std::string("*") + value_;
-    } else {
-      return value_ + "->value()";
+  bool IsConst() const override { return const_; }
+  std::string value() const override { return value_; }
+  std::string RValue() const override;
+  void Define() {
+    if (defined_ && IsConst()) {
+      ReportError("Cannot re-define a const-bound variable.");
     }
+    defined_ = true;
   }
-  std::string GetValueForWrite() const override {
-    return std::string("*") + value_;
-  }
-  void Define() { defined_ = true; }
   bool IsDefined() const { return defined_; }
 
  private:
   friend class Declarations;
-  Variable(const std::string& name, const std::string& value, const Type* type)
+  Variable(const std::string& name, const std::string& value, const Type* type,
+           bool is_const)
       : Value(Declarable::kVariable, type, name),
         value_(value),
-        defined_(false) {}
+        defined_(false),
+        const_(is_const) {
+    DCHECK_IMPLIES(type->IsConstexpr(), IsConst());
+  }
 
   std::string value_;
   bool defined_;
+  bool const_;
 };
 
 class Label : public Declarable {
@@ -170,16 +188,16 @@ class Label : public Declarable {
   bool used_;
 };
 
-class Constant : public Value {
+class ExternConstant : public Value {
  public:
-  DECLARE_DECLARABLE_BOILERPLATE(Constant, constant);
-  std::string GetValueForDeclaration() const override { return value_; }
+  DECLARE_DECLARABLE_BOILERPLATE(ExternConstant, constant);
+  std::string value() const override { return value_; }
 
  private:
   friend class Declarations;
-  explicit Constant(const std::string& name, const Type* type,
-                    const std::string& value)
-      : Value(Declarable::kConstant, type, name), value_(value) {}
+  explicit ExternConstant(const std::string& name, const Type* type,
+                          const std::string& value)
+      : Value(Declarable::kExternConstant, type, name), value_(value) {}
 
   std::string value_;
 };
@@ -206,31 +224,37 @@ class Callable : public Declarable {
   }
   void IncrementReturns() { ++returns_; }
   bool HasReturns() const { return returns_; }
+  base::Optional<Generic*> generic() const { return generic_; }
 
  protected:
   Callable(Declarable::Kind kind, const std::string& name,
-           const Signature& signature)
-      : Declarable(kind), name_(name), signature_(signature), returns_(0) {}
+           const Signature& signature, base::Optional<Generic*> generic)
+      : Declarable(kind),
+        name_(name),
+        signature_(signature),
+        returns_(0),
+        generic_(generic) {}
 
  private:
   std::string name_;
   Signature signature_;
   size_t returns_;
+  base::Optional<Generic*> generic_;
 };
 
 class Macro : public Callable {
  public:
   DECLARE_DECLARABLE_BOILERPLATE(Macro, macro);
 
- protected:
-  Macro(Declarable::Kind type, const std::string& name,
-        const Signature& signature)
-      : Callable(type, name, signature) {}
-
  private:
   friend class Declarations;
-  Macro(const std::string& name, const Signature& signature)
-      : Macro(Declarable::kMacro, name, signature) {}
+  Macro(const std::string& name, const Signature& signature,
+        base::Optional<Generic*> generic)
+      : Callable(Declarable::kMacro, name, signature, generic) {
+    if (signature.parameter_types.var_args) {
+      ReportError("Varargs are not supported for macros.");
+    }
+  }
 };
 
 class MacroList : public Declarable {
@@ -262,8 +286,8 @@ class Builtin : public Callable {
  private:
   friend class Declarations;
   Builtin(const std::string& name, Builtin::Kind kind, bool external,
-          const Signature& signature)
-      : Callable(Declarable::kBuiltin, name, signature),
+          const Signature& signature, base::Optional<Generic*> generic)
+      : Callable(Declarable::kBuiltin, name, signature, generic),
         kind_(kind),
         external_(external) {}
 
@@ -277,8 +301,9 @@ class RuntimeFunction : public Callable {
 
  private:
   friend class Declarations;
-  RuntimeFunction(const std::string& name, const Signature& signature)
-      : Callable(Declarable::kRuntimeFunction, name, signature) {}
+  RuntimeFunction(const std::string& name, const Signature& signature,
+                  base::Optional<Generic*> generic)
+      : Callable(Declarable::kRuntimeFunction, name, signature, generic) {}
 };
 
 class Generic : public Declarable {
@@ -286,6 +311,7 @@ class Generic : public Declarable {
   DECLARE_DECLARABLE_BOILERPLATE(Generic, generic);
 
   GenericDeclaration* declaration() const { return declaration_; }
+  const std::string& name() const { return name_; }
   Module* module() const { return module_; }
 
  private:
@@ -293,11 +319,29 @@ class Generic : public Declarable {
   Generic(const std::string& name, Module* module,
           GenericDeclaration* declaration)
       : Declarable(Declarable::kGeneric),
+        name_(name),
         module_(module),
         declaration_(declaration) {}
 
+  std::string name_;
   Module* module_;
   GenericDeclaration* declaration_;
+};
+
+class GenericList : public Declarable {
+ public:
+  DECLARE_DECLARABLE_BOILERPLATE(GenericList, generic_list);
+  const std::vector<Generic*>& list() { return list_; }
+  Generic* AddGeneric(Generic* generic) {
+    list_.push_back(generic);
+    return generic;
+  }
+
+ private:
+  friend class Declarations;
+  GenericList() : Declarable(Declarable::kGenericList) {}
+
+  std::vector<Generic*> list_;
 };
 
 typedef std::pair<Generic*, TypeVector> SpecializationKey;
@@ -316,28 +360,14 @@ class TypeAlias : public Declarable {
   const Type* type_;
 };
 
-inline std::ostream& operator<<(std::ostream& os, const Callable& m) {
-  os << "callable " << m.name() << "(" << m.signature().parameter_types
-     << "): " << m.signature().return_type;
-  return os;
-}
+void PrintLabel(std::ostream& os, const Label& l, bool with_names);
 
-inline std::ostream& operator<<(std::ostream& os, const Variable& v) {
-  os << "variable " << v.name() << ": " << v.type();
-  return os;
-}
-
-inline std::ostream& operator<<(std::ostream& os, const Builtin& b) {
-  os << "builtin " << b.signature().return_type << " " << b.name()
-     << b.signature().parameter_types;
-  return os;
-}
-
-inline std::ostream& operator<<(std::ostream& os, const RuntimeFunction& b) {
-  os << "runtime function " << b.signature().return_type << " " << b.name()
-     << b.signature().parameter_types;
-  return os;
-}
+std::ostream& operator<<(std::ostream& os, const Callable& m);
+std::ostream& operator<<(std::ostream& os, const Variable& v);
+std::ostream& operator<<(std::ostream& os, const Builtin& b);
+std::ostream& operator<<(std::ostream& os, const Label& l);
+std::ostream& operator<<(std::ostream& os, const RuntimeFunction& b);
+std::ostream& operator<<(std::ostream& os, const Generic& g);
 
 #undef DECLARE_DECLARABLE_BOILERPLATE
 

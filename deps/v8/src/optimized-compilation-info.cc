@@ -5,12 +5,10 @@
 #include "src/optimized-compilation-info.h"
 
 #include "src/api.h"
-#include "src/ast/ast.h"
-#include "src/ast/scopes.h"
 #include "src/debug/debug.h"
 #include "src/isolate.h"
 #include "src/objects-inl.h"
-#include "src/parsing/parse-info.h"
+#include "src/objects/shared-function-info.h"
 #include "src/source-position.h"
 
 namespace v8 {
@@ -23,7 +21,6 @@ OptimizedCompilationInfo::OptimizedCompilationInfo(
   shared_info_ = shared;
   closure_ = closure;
   optimization_id_ = isolate->NextOptimizationId();
-  dependencies_.reset(new CompilationDependencies(isolate, zone));
 
   SetFlag(kCalledWithCodeStartRegister);
   if (FLAG_function_context_specialization) MarkAsFunctionContextSpecializing();
@@ -39,7 +36,7 @@ OptimizedCompilationInfo::OptimizedCompilationInfo(
   // Collect source positions for optimized code when profiling or if debugger
   // is active, to be able to get more precise source positions at the price of
   // more memory consumption.
-  if (isolate->NeedsSourcePositionsForProfiling()) {
+  if (isolate->NeedsDetailedOptimizedCodeLineInfo()) {
     MarkAsSourcePositionsEnabled();
   }
 
@@ -64,7 +61,7 @@ OptimizedCompilationInfo::OptimizedCompilationInfo(
       PassesFilter(debug_name, CStrVector(FLAG_trace_turbo_filter)));
   // Embedded builtins don't support embedded absolute code addresses, so we
   // cannot use jump tables.
-  if (code_kind != Code::BUILTIN) {
+  if (code_kind != Code::BUILTIN && code_kind != Code::BYTECODE_HANDLER) {
     SetFlag(kSwitchJumpTableEnabled);
   }
 }
@@ -78,7 +75,6 @@ OptimizedCompilationInfo::OptimizedCompilationInfo(
       osr_offset_(BailoutId::None()),
       zone_(zone),
       deferred_handles_(nullptr),
-      dependencies_(nullptr),
       bailout_reason_(BailoutReason::kNoReason),
       optimization_id_(-1),
       debug_name_(debug_name) {}
@@ -86,9 +82,6 @@ OptimizedCompilationInfo::OptimizedCompilationInfo(
 OptimizedCompilationInfo::~OptimizedCompilationInfo() {
   if (GetFlag(kDisableFutureOptimization) && has_shared_info()) {
     shared_info()->DisableOptimization(bailout_reason());
-  }
-  if (dependencies()) {
-    dependencies()->Rollback();
   }
 }
 
@@ -104,12 +97,12 @@ void OptimizedCompilationInfo::set_deferred_handles(
   deferred_handles_.reset(deferred_handles);
 }
 
-void OptimizedCompilationInfo::ReopenHandlesInNewHandleScope() {
+void OptimizedCompilationInfo::ReopenHandlesInNewHandleScope(Isolate* isolate) {
   if (!shared_info_.is_null()) {
-    shared_info_ = Handle<SharedFunctionInfo>(*shared_info_);
+    shared_info_ = Handle<SharedFunctionInfo>(*shared_info_, isolate);
   }
   if (!closure_.is_null()) {
-    closure_ = Handle<JSFunction>(*closure_);
+    closure_ = Handle<JSFunction>(*closure_, isolate);
   }
 }
 

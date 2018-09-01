@@ -16,20 +16,29 @@ namespace v8 {
 namespace internal {
 namespace compiler {
 
-OperationTyper::OperationTyper(Isolate* isolate, Zone* zone)
+OperationTyper::OperationTyper(Isolate* isolate, JSHeapBroker* js_heap_broker,
+                               Zone* zone)
     : zone_(zone), cache_(TypeCache::Get()) {
   Factory* factory = isolate->factory();
-  infinity_ = Type::NewConstant(factory->infinity_value(), zone);
-  minus_infinity_ = Type::NewConstant(factory->minus_infinity_value(), zone);
+  infinity_ =
+      Type::NewConstant(js_heap_broker, factory->infinity_value(), zone);
+  minus_infinity_ =
+      Type::NewConstant(js_heap_broker, factory->minus_infinity_value(), zone);
   Type truncating_to_zero = Type::MinusZeroOrNaN();
   DCHECK(!truncating_to_zero.Maybe(Type::Integral32()));
 
-  singleton_empty_string_ = Type::HeapConstant(factory->empty_string(), zone);
-  singleton_NaN_string_ = Type::HeapConstant(factory->NaN_string(), zone);
-  singleton_zero_string_ = Type::HeapConstant(factory->zero_string(), zone);
-  singleton_false_ = Type::HeapConstant(factory->false_value(), zone);
-  singleton_true_ = Type::HeapConstant(factory->true_value(), zone);
-  singleton_the_hole_ = Type::HeapConstant(factory->the_hole_value(), zone);
+  singleton_empty_string_ =
+      Type::HeapConstant(js_heap_broker, factory->empty_string(), zone);
+  singleton_NaN_string_ =
+      Type::HeapConstant(js_heap_broker, factory->NaN_string(), zone);
+  singleton_zero_string_ =
+      Type::HeapConstant(js_heap_broker, factory->zero_string(), zone);
+  singleton_false_ =
+      Type::HeapConstant(js_heap_broker, factory->false_value(), zone);
+  singleton_true_ =
+      Type::HeapConstant(js_heap_broker, factory->true_value(), zone);
+  singleton_the_hole_ =
+      Type::HeapConstant(js_heap_broker, factory->the_hole_value(), zone);
   signed32ish_ = Type::Union(Type::Signed32(), truncating_to_zero, zone);
   unsigned32ish_ = Type::Union(Type::Unsigned32(), truncating_to_zero, zone);
 
@@ -256,7 +265,9 @@ Type OperationTyper::ConvertReceiver(Type type) {
   return type;
 }
 
-Type OperationTyper::ToNumberOrNumeric(Object::Conversion mode, Type type) {
+// Returns the result type of converting {type} to number, if the
+// result does not depend on conversion options.
+base::Optional<Type> OperationTyper::ToNumberCommon(Type type) {
   if (type.Is(Type::Number())) return type;
   if (type.Is(Type::NullOrUndefined())) {
     if (type.Is(Type::Null())) return cache_.kSingletonZero;
@@ -280,6 +291,13 @@ Type OperationTyper::ToNumberOrNumeric(Object::Conversion mode, Type type) {
     }
     return Type::Intersect(type, Type::Number(), zone());
   }
+  return base::Optional<Type>();
+}
+
+Type OperationTyper::ToNumberOrNumeric(Object::Conversion mode, Type type) {
+  if (base::Optional<Type> maybe_result_type = ToNumberCommon(type)) {
+    return *maybe_result_type;
+  }
   if (type.Is(Type::BigInt())) {
     return mode == Object::Conversion::kToNumber ? Type::None() : type;
   }
@@ -289,6 +307,13 @@ Type OperationTyper::ToNumberOrNumeric(Object::Conversion mode, Type type) {
 
 Type OperationTyper::ToNumber(Type type) {
   return ToNumberOrNumeric(Object::Conversion::kToNumber, type);
+}
+
+Type OperationTyper::ToNumberConvertBigInt(Type type) {
+  if (base::Optional<Type> maybe_result_type = ToNumberCommon(type)) {
+    return *maybe_result_type;
+  }
+  return Type::Number();
 }
 
 Type OperationTyper::ToNumeric(Type type) {

@@ -68,6 +68,10 @@ class ArrayBuiltinsAssembler : public BaseBuiltinsFromDSLAssembler {
 
   void NullPostLoopAction();
 
+  // Uses memset to effectively initialize the given FixedArray with Smi zeroes.
+  void FillFixedArrayWithSmiZero(TNode<FixedArray> array,
+                                 TNode<Smi> smi_length);
+
  protected:
   TNode<Context> context() { return context_; }
   TNode<Object> receiver() { return receiver_; }
@@ -76,7 +80,7 @@ class ArrayBuiltinsAssembler : public BaseBuiltinsFromDSLAssembler {
   TNode<Number> len() { return len_; }
   Node* callbackfn() { return callbackfn_; }
   Node* this_arg() { return this_arg_; }
-  Node* k() { return k_.value(); }
+  TNode<Number> k() { return CAST(k_.value()); }
   Node* a() { return a_.value(); }
 
   void ReturnFromBuiltin(Node* value);
@@ -105,6 +109,41 @@ class ArrayBuiltinsAssembler : public BaseBuiltinsFromDSLAssembler {
       const CallResultProcessor& processor, const PostLoopAction& action,
       MissingPropertyMode missing_property_mode,
       ForEachDirection direction = ForEachDirection::kForward);
+
+  void TailCallArrayConstructorStub(
+      const Callable& callable, TNode<Context> context,
+      TNode<JSFunction> target, TNode<HeapObject> allocation_site_or_undefined,
+      TNode<Int32T> argc);
+
+  void GenerateDispatchToArrayStub(
+      TNode<Context> context, TNode<JSFunction> target, TNode<Int32T> argc,
+      AllocationSiteOverrideMode mode,
+      TNode<AllocationSite> allocation_site = TNode<AllocationSite>());
+
+  void CreateArrayDispatchNoArgument(
+      TNode<Context> context, TNode<JSFunction> target, TNode<Int32T> argc,
+      AllocationSiteOverrideMode mode,
+      TNode<AllocationSite> allocation_site = TNode<AllocationSite>());
+
+  void CreateArrayDispatchSingleArgument(
+      TNode<Context> context, TNode<JSFunction> target, TNode<Int32T> argc,
+      AllocationSiteOverrideMode mode,
+      TNode<AllocationSite> allocation_site = TNode<AllocationSite>());
+
+  void GenerateConstructor(Node* context, Node* array_function, Node* array_map,
+                           Node* array_size, Node* allocation_site,
+                           ElementsKind elements_kind, AllocationSiteMode mode);
+  void GenerateArrayNoArgumentConstructor(ElementsKind kind,
+                                          AllocationSiteOverrideMode mode);
+  void GenerateArraySingleArgumentConstructor(ElementsKind kind,
+                                              AllocationSiteOverrideMode mode);
+  void GenerateArrayNArgumentsConstructor(
+      TNode<Context> context, TNode<JSFunction> target,
+      TNode<Object> new_target, TNode<Int32T> argc,
+      TNode<HeapObject> maybe_allocation_site);
+
+  void GenerateInternalArrayNoArgumentConstructor(ElementsKind kind);
+  void GenerateInternalArraySingleArgumentConstructor(ElementsKind kind);
 
  private:
   static ElementsKind ElementsKindForInstanceType(InstanceType type);

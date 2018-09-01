@@ -101,8 +101,10 @@ void MemoryOptimizer::VisitNode(Node* node, AllocationState const* state) {
     case IrOpcode::kIfException:
     case IrOpcode::kLoad:
     case IrOpcode::kProtectedLoad:
+    case IrOpcode::kUnalignedLoad:
     case IrOpcode::kStore:
     case IrOpcode::kProtectedStore:
+    case IrOpcode::kUnalignedStore:
     case IrOpcode::kRetain:
     case IrOpcode::kUnsafePointerAdd:
     case IrOpcode::kDebugBreak:
@@ -236,8 +238,9 @@ void MemoryOptimizer::VisitAllocateRaw(Node* node,
                                      : __
                                        AllocateInOldSpaceStubConstant();
         if (!allocate_operator_.is_set()) {
-          auto call_descriptor =
-              Linkage::GetAllocateCallDescriptor(graph()->zone());
+          auto call_descriptor = Linkage::GetStubCallDescriptor(
+              graph()->zone(), AllocateDescriptor{}, 0,
+              CallDescriptor::kCanUseRoots, Operator::kNoThrow);
           allocate_operator_.set(common()->Call(call_descriptor));
         }
         Node* vfalse = __ Call(allocate_operator_.get(), target, size);
@@ -291,8 +294,9 @@ void MemoryOptimizer::VisitAllocateRaw(Node* node,
                                  : __
                                    AllocateInOldSpaceStubConstant();
     if (!allocate_operator_.is_set()) {
-      auto call_descriptor =
-          Linkage::GetAllocateCallDescriptor(graph()->zone());
+      auto call_descriptor = Linkage::GetStubCallDescriptor(
+          graph()->zone(), AllocateDescriptor{}, 0,
+          CallDescriptor::kCanUseRoots, Operator::kNoThrow);
       allocate_operator_.set(common()->Call(call_descriptor));
     }
     __ Goto(&done, __ Call(allocate_operator_.get(), target, size));

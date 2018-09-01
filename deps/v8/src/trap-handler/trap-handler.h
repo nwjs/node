@@ -77,6 +77,13 @@ inline bool IsTrapHandlerEnabled() {
 
 extern THREAD_LOCAL int g_thread_in_wasm_code;
 
+// Return the address of the thread-local {g_thread_in_wasm_code} variable. This
+// pointer can be accessed and modified as long as the thread calling this
+// function exists. Only use if from the same thread do avoid race conditions.
+inline int* GetThreadInWasmThreadLocalAddress() {
+  return &g_thread_in_wasm_code;
+}
+
 inline bool IsThreadInWasm() { return g_thread_in_wasm_code; }
 
 inline void SetThreadInWasm() {
@@ -92,12 +99,6 @@ inline void ClearThreadInWasm() {
     g_thread_in_wasm_code = false;
   }
 }
-
-class ThreadInWasmScope {
- public:
-  ThreadInWasmScope() { SetThreadInWasm(); }
-  ~ThreadInWasmScope() { ClearThreadInWasm(); }
-};
 
 bool RegisterDefaultTrapHandler();
 V8_EXPORT_PRIVATE void RestoreOriginalSignalHandler();

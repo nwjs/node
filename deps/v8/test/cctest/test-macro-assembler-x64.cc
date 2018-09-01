@@ -35,6 +35,7 @@
 #include "src/objects-inl.h"
 #include "src/simulator.h"
 #include "test/cctest/cctest.h"
+#include "test/common/assembler-tester.h"
 
 namespace v8 {
 namespace internal {
@@ -186,7 +187,8 @@ TEST(SmiCompare) {
   Isolate* isolate = CcTest::i_isolate();
   HandleScope handles(isolate);
   size_t allocated;
-  byte* buffer = AllocateAssemblerBuffer(&allocated);
+  byte* buffer =
+      AllocateAssemblerBuffer(&allocated, 2 * Assembler::kMinimalBufferSize);
   MacroAssembler assembler(isolate, buffer, static_cast<int>(allocated),
                            v8::internal::CodeObjectRequired::kYes);
 
@@ -228,9 +230,7 @@ TEST(SmiCompare) {
   CHECK_EQ(0, result);
 }
 
-
-
-TEST(Integer32ToSmi) {
+TEST(SmiTag) {
   Isolate* isolate = CcTest::i_isolate();
   HandleScope handles(isolate);
   size_t allocated;
@@ -243,36 +243,36 @@ TEST(Integer32ToSmi) {
   Label exit;
 
   __ movq(rax, Immediate(1));  // Test number.
-  __ movl(rcx, Immediate(0));
-  __ Integer32ToSmi(rcx, rcx);
+  __ movq(rcx, Immediate(0));
+  __ SmiTag(rcx, rcx);
   __ Set(rdx, reinterpret_cast<intptr_t>(Smi::kZero));
   __ cmpq(rcx, rdx);
   __ j(not_equal, &exit);
 
   __ movq(rax, Immediate(2));  // Test number.
-  __ movl(rcx, Immediate(1024));
-  __ Integer32ToSmi(rcx, rcx);
+  __ movq(rcx, Immediate(1024));
+  __ SmiTag(rcx, rcx);
   __ Set(rdx, reinterpret_cast<intptr_t>(Smi::FromInt(1024)));
   __ cmpq(rcx, rdx);
   __ j(not_equal, &exit);
 
   __ movq(rax, Immediate(3));  // Test number.
-  __ movl(rcx, Immediate(-1));
-  __ Integer32ToSmi(rcx, rcx);
+  __ movq(rcx, Immediate(-1));
+  __ SmiTag(rcx, rcx);
   __ Set(rdx, reinterpret_cast<intptr_t>(Smi::FromInt(-1)));
   __ cmpq(rcx, rdx);
   __ j(not_equal, &exit);
 
   __ movq(rax, Immediate(4));  // Test number.
-  __ movl(rcx, Immediate(Smi::kMaxValue));
-  __ Integer32ToSmi(rcx, rcx);
+  __ movq(rcx, Immediate(Smi::kMaxValue));
+  __ SmiTag(rcx, rcx);
   __ Set(rdx, reinterpret_cast<intptr_t>(Smi::FromInt(Smi::kMaxValue)));
   __ cmpq(rcx, rdx);
   __ j(not_equal, &exit);
 
   __ movq(rax, Immediate(5));  // Test number.
-  __ movl(rcx, Immediate(Smi::kMinValue));
-  __ Integer32ToSmi(rcx, rcx);
+  __ movq(rcx, Immediate(Smi::kMinValue));
+  __ SmiTag(rcx, rcx);
   __ Set(rdx, reinterpret_cast<intptr_t>(Smi::FromInt(Smi::kMinValue)));
   __ cmpq(rcx, rdx);
   __ j(not_equal, &exit);
@@ -280,36 +280,36 @@ TEST(Integer32ToSmi) {
   // Different target register.
 
   __ movq(rax, Immediate(6));  // Test number.
-  __ movl(rcx, Immediate(0));
-  __ Integer32ToSmi(r8, rcx);
+  __ movq(rcx, Immediate(0));
+  __ SmiTag(r8, rcx);
   __ Set(rdx, reinterpret_cast<intptr_t>(Smi::kZero));
   __ cmpq(r8, rdx);
   __ j(not_equal, &exit);
 
   __ movq(rax, Immediate(7));  // Test number.
-  __ movl(rcx, Immediate(1024));
-  __ Integer32ToSmi(r8, rcx);
+  __ movq(rcx, Immediate(1024));
+  __ SmiTag(r8, rcx);
   __ Set(rdx, reinterpret_cast<intptr_t>(Smi::FromInt(1024)));
   __ cmpq(r8, rdx);
   __ j(not_equal, &exit);
 
   __ movq(rax, Immediate(8));  // Test number.
-  __ movl(rcx, Immediate(-1));
-  __ Integer32ToSmi(r8, rcx);
+  __ movq(rcx, Immediate(-1));
+  __ SmiTag(r8, rcx);
   __ Set(rdx, reinterpret_cast<intptr_t>(Smi::FromInt(-1)));
   __ cmpq(r8, rdx);
   __ j(not_equal, &exit);
 
   __ movq(rax, Immediate(9));  // Test number.
-  __ movl(rcx, Immediate(Smi::kMaxValue));
-  __ Integer32ToSmi(r8, rcx);
+  __ movq(rcx, Immediate(Smi::kMaxValue));
+  __ SmiTag(r8, rcx);
   __ Set(rdx, reinterpret_cast<intptr_t>(Smi::FromInt(Smi::kMaxValue)));
   __ cmpq(r8, rdx);
   __ j(not_equal, &exit);
 
   __ movq(rax, Immediate(10));  // Test number.
-  __ movl(rcx, Immediate(Smi::kMinValue));
-  __ Integer32ToSmi(r8, rcx);
+  __ movq(rcx, Immediate(Smi::kMinValue));
+  __ SmiTag(r8, rcx);
   __ Set(rdx, reinterpret_cast<intptr_t>(Smi::FromInt(Smi::kMinValue)));
   __ cmpq(r8, rdx);
   __ j(not_equal, &exit);
@@ -347,7 +347,7 @@ TEST(SmiCheck) {
   // CheckSmi
 
   __ movl(rcx, Immediate(0));
-  __ Integer32ToSmi(rcx, rcx);
+  __ SmiTag(rcx, rcx);
   cond = masm->CheckSmi(rcx);
   __ j(NegateCondition(cond), &exit);
 
@@ -358,7 +358,7 @@ TEST(SmiCheck) {
 
   __ incq(rax);
   __ movl(rcx, Immediate(-1));
-  __ Integer32ToSmi(rcx, rcx);
+  __ SmiTag(rcx, rcx);
   cond = masm->CheckSmi(rcx);
   __ j(NegateCondition(cond), &exit);
 
@@ -369,7 +369,7 @@ TEST(SmiCheck) {
 
   __ incq(rax);
   __ movl(rcx, Immediate(Smi::kMaxValue));
-  __ Integer32ToSmi(rcx, rcx);
+  __ SmiTag(rcx, rcx);
   cond = masm->CheckSmi(rcx);
   __ j(NegateCondition(cond), &exit);
 
@@ -380,7 +380,7 @@ TEST(SmiCheck) {
 
   __ incq(rax);
   __ movl(rcx, Immediate(Smi::kMinValue));
-  __ Integer32ToSmi(rcx, rcx);
+  __ SmiTag(rcx, rcx);
   cond = masm->CheckSmi(rcx);
   __ j(NegateCondition(cond), &exit);
 

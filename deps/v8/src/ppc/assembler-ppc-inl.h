@@ -54,8 +54,8 @@ void RelocInfo::apply(intptr_t delta) {
   // absolute code pointer inside code object moves with the code object.
   if (IsInternalReference(rmode_)) {
     // Jump table entry
-    Address target = Memory::Address_at(pc_);
-    Memory::Address_at(pc_) = target + delta;
+    Address target = Memory<Address>(pc_);
+    Memory<Address>(pc_) = target + delta;
   } else {
     // mov sequence
     DCHECK(IsInternalReferenceEncoded(rmode_));
@@ -69,7 +69,7 @@ void RelocInfo::apply(intptr_t delta) {
 Address RelocInfo::target_internal_reference() {
   if (IsInternalReference(rmode_)) {
     // Jump table entry
-    return Memory::Address_at(pc_);
+    return Memory<Address>(pc_);
   } else {
     // mov sequence
     DCHECK(IsInternalReferenceEncoded(rmode_));
@@ -173,7 +173,7 @@ Handle<HeapObject> RelocInfo::target_object_handle(Assembler* origin) {
       Assembler::target_address_at(pc_, constant_pool_)));
 }
 
-void RelocInfo::set_target_object(HeapObject* target,
+void RelocInfo::set_target_object(Heap* heap, HeapObject* target,
                                   WriteBarrierMode write_barrier_mode,
                                   ICacheFlushMode icache_flush_mode) {
   DCHECK(IsCodeTarget(rmode_) || rmode_ == EMBEDDED_OBJECT);
@@ -181,9 +181,7 @@ void RelocInfo::set_target_object(HeapObject* target,
                                    reinterpret_cast<Address>(target),
                                    icache_flush_mode);
   if (write_barrier_mode == UPDATE_WRITE_BARRIER && host() != nullptr) {
-    host()->GetHeap()->incremental_marking()->RecordWriteIntoCode(host(), this,
-                                                                  target);
-    host()->GetHeap()->RecordWriteIntoCode(host(), this, target);
+    WriteBarrierForCode(host(), this, target);
   }
 }
 
@@ -196,13 +194,6 @@ Address RelocInfo::target_external_reference() {
 void RelocInfo::set_target_external_reference(
     Address target, ICacheFlushMode icache_flush_mode) {
   DCHECK(rmode_ == RelocInfo::EXTERNAL_REFERENCE);
-  Assembler::set_target_address_at(pc_, constant_pool_, target,
-                                   icache_flush_mode);
-}
-
-void RelocInfo::set_wasm_code_table_entry(Address target,
-                                          ICacheFlushMode icache_flush_mode) {
-  DCHECK(rmode_ == RelocInfo::WASM_CODE_TABLE_ENTRY);
   Assembler::set_target_address_at(pc_, constant_pool_, target,
                                    icache_flush_mode);
 }
@@ -228,11 +219,12 @@ Address RelocInfo::target_off_heap_target() {
 void RelocInfo::WipeOut() {
   DCHECK(IsEmbeddedObject(rmode_) || IsCodeTarget(rmode_) ||
          IsRuntimeEntry(rmode_) || IsExternalReference(rmode_) ||
-         IsInternalReference(rmode_) || IsInternalReferenceEncoded(rmode_));
+         IsInternalReference(rmode_) || IsInternalReferenceEncoded(rmode_) ||
+         IsOffHeapTarget(rmode_));
   if (IsInternalReference(rmode_)) {
     // Jump table entry
-    Memory::Address_at(pc_) = kNullAddress;
-  } else if (IsInternalReferenceEncoded(rmode_)) {
+    Memory<Address>(pc_) = kNullAddress;
+  } else if (IsInternalReferenceEncoded(rmode_) || IsOffHeapTarget(rmode_)) {
     // mov sequence
     // Currently used only by deserializer, no need to flush.
     Assembler::set_target_address_at(pc_, constant_pool_, kNullAddress,
@@ -247,7 +239,7 @@ void RelocInfo::Visit(ObjectVisitor* visitor) {
   RelocInfo::Mode mode = rmode();
   if (mode == RelocInfo::EMBEDDED_OBJECT) {
     visitor->VisitEmbeddedPointer(host(), this);
-  } else if (RelocInfo::IsCodeTarget(mode)) {
+  } else if (RelocInfo::IsCodeTargetMode(mode)) {
     visitor->VisitCodeTarget(host(), this);
   } else if (mode == RelocInfo::EXTERNAL_REFERENCE) {
     visitor->VisitExternalReference(host(), this);
@@ -280,7 +272,7 @@ Address Assembler::target_address_at(Address pc, Address constant_pool) {
   if (FLAG_enable_embedded_constant_pool && constant_pool) {
     ConstantPoolEntry::Access access;
     if (IsConstantPoolLoadStart(pc, &access))
-      return Memory::Address_at(target_constant_pool_address_at(
+      return Memory<Address>(target_constant_pool_address_at(
           pc, constant_pool, access, ConstantPoolEntry::INTPTR));
   }
 
@@ -449,7 +441,7 @@ void Assembler::deserialization_set_target_internal_reference_at(
   if (RelocInfo::IsInternalReferenceEncoded(mode)) {
     set_target_address_at(pc, kNullAddress, target, SKIP_ICACHE_FLUSH);
   } else {
-    Memory::Address_at(pc) = target;
+    Memory<Address>(pc) = target;
   }
 }
 
@@ -461,7 +453,7 @@ void Assembler::set_target_address_at(Address pc, Address constant_pool,
   if (FLAG_enable_embedded_constant_pool && constant_pool) {
     ConstantPoolEntry::Access access;
     if (IsConstantPoolLoadStart(pc, &access)) {
-      Memory::Address_at(target_constant_pool_address_at(
+      Memory<Address>(target_constant_pool_address_at(
           pc, constant_pool, access, ConstantPoolEntry::INTPTR)) = target;
       return;
     }

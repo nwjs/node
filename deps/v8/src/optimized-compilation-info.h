@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "src/bailout-reason.h"
-#include "src/compilation-dependencies.h"
+#include "src/code-reference.h"
 #include "src/feedback-vector.h"
 #include "src/frames.h"
 #include "src/globals.h"
@@ -56,18 +56,7 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
     kTraceTurboJson = 1 << 14,
     kTraceTurboGraph = 1 << 15,
     kTraceTurboScheduled = 1 << 16,
-  };
-
-  // TODO(mtrofin): investigate if this might be generalized outside wasm, with
-  // the goal of better separating the compiler from where compilation lands. At
-  // that point, the Handle<Code> member of OptimizedCompilationInfo would also
-  // be removed.
-  struct WasmCodeDesc {
-    CodeDesc code_desc;
-    size_t safepoint_table_offset = 0;
-    size_t handler_table_offset = 0;
-    uint32_t frame_slot_count = 0;
-    Handle<ByteArray> source_positions_table;
+    kWasmRuntimeExceptionSupport = 1 << 17
   };
 
   // Construct a compilation info for optimized compilation.
@@ -85,7 +74,11 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
   Handle<SharedFunctionInfo> shared_info() const { return shared_info_; }
   bool has_shared_info() const { return !shared_info().is_null(); }
   Handle<JSFunction> closure() const { return closure_; }
-  Handle<Code> code() const { return code_; }
+  Handle<Code> code() const { return code_.as_js_code(); }
+
+  wasm::WasmCode* wasm_code() const {
+    return const_cast<wasm::WasmCode*>(code_.as_wasm_code());
+  }
   AbstractCode::Kind abstract_code_kind() const { return code_kind_; }
   Code::Kind code_kind() const {
     DCHECK(code_kind_ < static_cast<AbstractCode::Kind>(Code::NUMBER_OF_KINDS));
@@ -174,6 +167,14 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
     return GetFlag(kAnalyzeEnvironmentLiveness);
   }
 
+  void SetWasmRuntimeExceptionSupport() {
+    SetFlag(kWasmRuntimeExceptionSupport);
+  }
+
+  bool wasm_runtime_exception_support() {
+    return GetFlag(kWasmRuntimeExceptionSupport);
+  }
+
   bool trace_turbo_json_enabled() const { return GetFlag(kTraceTurboJson); }
 
   bool trace_turbo_graph_enabled() const { return GetFlag(kTraceTurboGraph); }
@@ -184,7 +185,10 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
 
   // Code getters and setters.
 
-  void SetCode(Handle<Code> code) { code_ = code; }
+  template <typename T>
+  void SetCode(T code) {
+    code_ = CodeReference(code);
+  }
 
   bool has_context() const;
   Context* context() const;
@@ -218,7 +222,7 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
     return deferred_handles_;
   }
 
-  void ReopenHandlesInNewHandleScope();
+  void ReopenHandlesInNewHandleScope(Isolate* isolate);
 
   void AbortOptimization(BailoutReason reason) {
     DCHECK_NE(reason, BailoutReason::kNoReason);
@@ -233,8 +237,6 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
   }
 
   BailoutReason bailout_reason() const { return bailout_reason_; }
-
-  CompilationDependencies* dependencies() { return dependencies_.get(); }
 
   int optimization_id() const {
     DCHECK(IsOptimizing());
@@ -270,7 +272,13 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
 
   StackFrame::Type GetOutputStackFrameType() const;
 
-  WasmCodeDesc* wasm_code_desc() { return &wasm_code_desc_; }
+  const char* trace_turbo_filename() const {
+    return trace_turbo_filename_.get();
+  }
+
+  void set_trace_turbo_filename(std::unique_ptr<char[]> filename) {
+    trace_turbo_filename_ = std::move(filename);
+  }
 
  private:
   OptimizedCompilationInfo(Vector<const char> debug_name,
@@ -295,8 +303,7 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
   Handle<JSFunction> closure_;
 
   // The compiled code.
-  Handle<Code> code_;
-  WasmCodeDesc wasm_code_desc_;
+  CodeReference code_;
 
   // Entry point when compiling for OSR, {BailoutId::None} otherwise.
   BailoutId osr_offset_;
@@ -306,9 +313,6 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
   Zone* zone_;
 
   std::shared_ptr<DeferredHandles> deferred_handles_;
-
-  // Dependencies for this compilation, e.g. stable maps.
-  std::unique_ptr<CompilationDependencies> dependencies_;
 
   BailoutReason bailout_reason_;
 
@@ -320,6 +324,7 @@ class V8_EXPORT_PRIVATE OptimizedCompilationInfo final {
   JavaScriptFrame* osr_frame_ = nullptr;
 
   Vector<const char> debug_name_;
+  std::unique_ptr<char[]> trace_turbo_filename_;
 
   DISALLOW_COPY_AND_ASSIGN(OptimizedCompilationInfo);
 };

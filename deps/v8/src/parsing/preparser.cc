@@ -11,7 +11,6 @@
 #include "src/globals.h"
 #include "src/parsing/duplicate-finder.h"
 #include "src/parsing/parser-base.h"
-#include "src/parsing/preparse-data.h"
 #include "src/parsing/preparsed-scope-data.h"
 #include "src/parsing/preparser.h"
 #include "src/unicode.h"
@@ -124,19 +123,21 @@ PreParser::PreParseResult PreParser::PreParseFunction(
     int script_id) {
   DCHECK_EQ(FUNCTION_SCOPE, function_scope->scope_type());
   use_counts_ = use_counts;
-  DCHECK(!track_unresolved_variables_);
-  track_unresolved_variables_ = is_inner_function;
   set_script_id(script_id);
 #ifdef DEBUG
   function_scope->set_is_being_lazily_parsed(true);
 #endif
+
+  DCHECK(!track_unresolved_variables_);
+  track_unresolved_variables_ =
+      ShouldTrackUnresolvedVariables(is_inner_function);
 
   // Start collecting data for a new function which might contain skippable
   // functions.
   std::unique_ptr<ProducedPreParsedScopeData::DataGatheringScope>
       produced_preparsed_scope_data_scope;
   if (FLAG_preparser_scope_analysis && !IsArrowFunction(kind)) {
-    track_unresolved_variables_ = true;
+    DCHECK(track_unresolved_variables_);
     produced_preparsed_scope_data_scope.reset(
         new ProducedPreParsedScopeData::DataGatheringScope(function_scope,
                                                            this));
@@ -268,7 +269,7 @@ PreParser::Expression PreParser::ParseFunctionLiteral(
     FunctionNameValidity function_name_validity, FunctionKind kind,
     int function_token_pos, FunctionLiteral::FunctionType function_type,
     LanguageMode language_mode,
-    ZoneList<const AstRawString*>* arguments_for_wrapped_function, bool* ok) {
+    ZonePtrList<const AstRawString>* arguments_for_wrapped_function, bool* ok) {
   // Wrapped functions are not parsed in the preparser.
   DCHECK_NULL(arguments_for_wrapped_function);
   DCHECK_NE(FunctionLiteral::kWrapped, function_type);
@@ -366,7 +367,7 @@ PreParser::Expression PreParser::ParseFunctionLiteral(
       name_byte_length = string->byte_length();
     }
     logger_->FunctionEvent(
-        event_name, nullptr, script_id(), ms, function_scope->start_position(),
+        event_name, script_id(), ms, function_scope->start_position(),
         function_scope->end_position(), name, name_byte_length);
   }
 
@@ -429,7 +430,7 @@ void PreParser::DeclareAndInitializeVariables(
     PreParserStatement block,
     const DeclarationDescriptor* declaration_descriptor,
     const DeclarationParsingResult::Declaration* declaration,
-    ZoneList<const AstRawString*>* names, bool* ok) {
+    ZonePtrList<const AstRawString>* names, bool* ok) {
   if (declaration->pattern.variables_ != nullptr) {
     DCHECK(FLAG_lazy_inner_functions);
     DCHECK(track_unresolved_variables_);

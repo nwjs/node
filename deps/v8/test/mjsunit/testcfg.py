@@ -41,6 +41,7 @@ SELF_SCRIPT_PATTERN = re.compile(r"//\s+Env: TEST_FILE_NAME")
 MODULE_PATTERN = re.compile(r"^// MODULE$", flags=re.MULTILINE)
 NO_HARNESS_PATTERN = re.compile(r"^// NO HARNESS$", flags=re.MULTILINE)
 
+
 # Flags known to misbehave when combining arbitrary mjsunit tests. Can also
 # be compiled regular expressions.
 COMBINE_TESTS_FLAGS_BLACKLIST = [
@@ -84,7 +85,7 @@ class TestSuite(testsuite.TestSuite):
     return SuppressedTestCase
 
 
-class TestCase(testcase.TestCase):
+class TestCase(testcase.D8TestCase):
   def __init__(self, *args, **kwargs):
     super(TestCase, self).__init__(*args, **kwargs)
 
@@ -187,7 +188,7 @@ class TestCombiner(testsuite.TestCombiner):
     return CombinedTest
 
 
-class CombinedTest(testcase.TestCase):
+class CombinedTest(testcase.D8TestCase):
   """Behaves like normal mjsunit tests except:
     1. Expected outcome is always PASS
     2. Instead of one file there is a try-catch wrapper with all combined tests
@@ -202,7 +203,7 @@ class CombinedTest(testcase.TestCase):
     self._statusfile_outcomes = outproc.OUTCOMES_PASS_OR_TIMEOUT
     self.expected_outcomes = outproc.OUTCOMES_PASS_OR_TIMEOUT
 
-  def _get_shell_with_flags(self):
+  def _get_shell_flags(self):
     """In addition to standard set of shell flags it appends:
       --disable-abortjs: %AbortJS can abort the test even inside
         trycatch-wrapper, so we disable it.
@@ -212,15 +213,13 @@ class CombinedTest(testcase.TestCase):
       --quiet-load: suppress any stdout from load() function used by
         trycatch-wrapper.
     """
-    shell = 'd8'
-    shell_flags = [
+    return [
       '--test',
       '--disable-abortjs',
       '--es-staging',
       '--omit-quit',
       '--quiet-load',
     ]
-    return shell, shell_flags
 
   def _get_cmd_params(self):
     return (

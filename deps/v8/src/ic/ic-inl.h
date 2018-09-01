@@ -39,17 +39,21 @@ Address IC::raw_constant_pool() const {
   }
 }
 
-bool IC::IsHandler(MaybeObject* object, bool from_stub_cache) {
+void IC::update_receiver_map(Handle<Object> receiver) {
+  if (receiver->IsSmi()) {
+    receiver_map_ = isolate_->factory()->heap_number_map();
+  } else {
+    receiver_map_ = handle(HeapObject::cast(*receiver)->map(), isolate_);
+  }
+}
+
+bool IC::IsHandler(MaybeObject* object) {
   HeapObject* heap_object;
   return (object->IsSmi() && (object != nullptr)) ||
          (object->ToWeakHeapObject(&heap_object) &&
           (heap_object->IsMap() || heap_object->IsPropertyCell())) ||
          (object->ToStrongHeapObject(&heap_object) &&
           (heap_object->IsDataHandler() ||
-           (from_stub_cache && heap_object->IsWeakCell() &&
-            (WeakCell::cast(heap_object)->cleared() ||
-             WeakCell::cast(heap_object)->value()->IsMap() ||
-             WeakCell::cast(heap_object)->value()->IsPropertyCell())) ||
            heap_object->IsCode()));
 }
 

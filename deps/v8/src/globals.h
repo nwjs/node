@@ -17,32 +17,6 @@
 #include "src/base/logging.h"
 #include "src/base/macros.h"
 
-#ifdef V8_OS_WIN
-
-// Setup for Windows shared library export.
-#ifdef BUILDING_V8_SHARED
-#define V8_EXPORT_PRIVATE __declspec(dllexport)
-#elif USING_V8_SHARED
-#define V8_EXPORT_PRIVATE __declspec(dllimport)
-#else
-#define V8_EXPORT_PRIVATE
-#endif  // BUILDING_V8_SHARED
-
-#else  // V8_OS_WIN
-
-// Setup for Linux shared library export.
-#if V8_HAS_ATTRIBUTE_VISIBILITY
-#ifdef BUILDING_V8_SHARED
-#define V8_EXPORT_PRIVATE __attribute__((visibility("default")))
-#else
-#define V8_EXPORT_PRIVATE
-#endif
-#else
-#define V8_EXPORT_PRIVATE
-#endif
-
-#endif  // V8_OS_WIN
-
 #define V8_INFINITY std::numeric_limits<double>::infinity()
 
 namespace v8 {
@@ -183,7 +157,7 @@ constexpr int kDoubleSizeLog2 = 3;
 // ARM64 only supports direct calls within a 128 MB range.
 constexpr size_t kMaxWasmCodeMemory = 128 * MB;
 #else
-constexpr size_t kMaxWasmCodeMemory = 256 * MB;
+constexpr size_t kMaxWasmCodeMemory = 512 * MB;
 #endif
 
 #if V8_HOST_ARCH_64_BIT
@@ -250,6 +224,10 @@ constexpr int kExternalAllocationSoftLimit = 64 * MB;
 //
 // Current value: Page::kAllocatableMemory (on 32-bit arch) - 512 (slack).
 constexpr int kMaxRegularHeapObjectSize = 507136;
+
+// Objects smaller or equal kMaxNewSpaceHeapObjectSize are allocated in the
+// new large object space.
+constexpr int kMaxNewSpaceHeapObjectSize = 32 * KB;
 
 STATIC_ASSERT(kPointerSize == (1 << kPointerSizeLog2));
 
@@ -373,8 +351,20 @@ constexpr int kNoSourcePosition = -1;
 // This constant is used to indicate missing deoptimization information.
 constexpr int kNoDeoptimizationId = -1;
 
-// Deoptimize bailout kind.
-enum class DeoptimizeKind : uint8_t { kEager, kSoft, kLazy };
+// Deoptimize bailout kind:
+// - Eager: a check failed in the optimized code and deoptimization happens
+//   immediately.
+// - Lazy: the code has been marked as dependent on some assumption which
+//   is checked elsewhere and can trigger deoptimization the next time the
+//   code is executed.
+// - Soft: similar to lazy deoptimization, but does not contribute to the
+//   total deopt count which can lead to disabling optimization for a function.
+enum class DeoptimizeKind : uint8_t {
+  kEager,
+  kSoft,
+  kLazy,
+  kLastDeoptimizeKind = kLazy
+};
 inline size_t hash_value(DeoptimizeKind kind) {
   return static_cast<size_t>(kind);
 }
@@ -405,8 +395,26 @@ inline std::ostream& operator<<(std::ostream& os,
   UNREACHABLE();
 }
 
+static_assert(kSmiValueSize <= 32, "Unsupported Smi tagging scheme");
+// Smi sign bit position must be 32-bit aligned so we can use sign extension
+// instructions on 64-bit architectures without additional shifts.
+static_assert((kSmiValueSize + kSmiShiftSize + kSmiTagSize) % 32 == 0,
+              "Unsupported Smi tagging scheme");
+
+constexpr bool kIsSmiValueInUpper32Bits =
+    (kSmiValueSize + kSmiShiftSize + kSmiTagSize) == 64;
+constexpr bool kIsSmiValueInLower32Bits =
+    (kSmiValueSize + kSmiShiftSize + kSmiTagSize) == 32;
+static_assert(!SmiValuesAre32Bits() == SmiValuesAre31Bits(),
+              "Unsupported Smi tagging scheme");
+static_assert(SmiValuesAre32Bits() == kIsSmiValueInUpper32Bits,
+              "Unsupported Smi tagging scheme");
+static_assert(SmiValuesAre31Bits() == kIsSmiValueInLower32Bits,
+              "Unsupported Smi tagging scheme");
+
 // Mask for the sign bit in a smi.
-constexpr intptr_t kSmiSignMask = kIntptrSignBit;
+constexpr intptr_t kSmiSignMask = static_cast<intptr_t>(
+    uintptr_t{1} << (kSmiValueSize + kSmiShiftSize + kSmiTagSize - 1));
 
 constexpr int kObjectAlignmentBits = kPointerSizeLog2;
 constexpr intptr_t kObjectAlignment = 1 << kObjectAlignmentBits;
@@ -453,6 +461,9 @@ constexpr uint32_t kFreeListZapValue = 0xfeed1eaf;
 
 constexpr int kCodeZapValue = 0xbadc0de;
 constexpr uint32_t kPhantomReferenceZap = 0xca11bac;
+
+// Page constants.
+static const intptr_t kPageAlignmentMask = (intptr_t{1} << kPageSizeBits) - 1;
 
 // On Intel architecture, cache line size is 64 bytes.
 // On ARM it may be less (32 bytes), but as far this constant is
@@ -506,6 +517,7 @@ class MapSpace;
 class MarkCompactCollector;
 class MaybeObject;
 class NewSpace;
+class NewLargeObjectSpace;
 class Object;
 class OldSpace;
 class ParameterCount;
@@ -540,18 +552,20 @@ typedef bool (*WeakSlotCallbackWithHeap)(Heap* heap, Object** pointer);
 enum AllocationSpace {
   // TODO(v8:7464): Actually map this space's memory as read-only.
   RO_SPACE,    // Immortal, immovable and immutable objects,
-  NEW_SPACE,   // Semispaces collected with copying collector.
-  OLD_SPACE,   // May contain pointers to new space.
-  CODE_SPACE,  // No pointers to new space, marked executable.
-  MAP_SPACE,   // Only and all map objects.
-  LO_SPACE,    // Promoted large objects.
+  NEW_SPACE,   // Young generation semispaces for regular objects collected with
+               // Scavenger.
+  OLD_SPACE,   // Old generation regular object space.
+  CODE_SPACE,  // Old generation code object space, marked executable.
+  MAP_SPACE,   // Old generation map object space, non-movable.
+  LO_SPACE,    // Old generation large object space.
+  NEW_LO_SPACE,  // Young generation large object space.
 
   FIRST_SPACE = RO_SPACE,
-  LAST_SPACE = LO_SPACE,
+  LAST_SPACE = NEW_LO_SPACE,
   FIRST_GROWABLE_PAGED_SPACE = OLD_SPACE,
   LAST_GROWABLE_PAGED_SPACE = MAP_SPACE
 };
-constexpr int kSpaceTagSize = 4;
+constexpr int kSpaceTagSize = 3;
 STATIC_ASSERT(FIRST_SPACE == 0);
 
 enum AllocationAlignment { kWordAligned, kDoubleAligned, kDoubleUnaligned };
@@ -935,26 +949,26 @@ constexpr uint64_t kHoleNanInt64 =
 constexpr double kMaxSafeInteger = 9007199254740991.0;  // 2^53-1
 
 // The order of this enum has to be kept in sync with the predicates below.
-enum VariableMode : uint8_t {
+enum class VariableMode : uint8_t {
   // User declared variables:
-  LET,  // declared via 'let' declarations (first lexical)
+  kLet,  // declared via 'let' declarations (first lexical)
 
-  CONST,  // declared via 'const' declarations (last lexical)
+  kConst,  // declared via 'const' declarations (last lexical)
 
-  VAR,  // declared via 'var', and 'function' declarations
+  kVar,  // declared via 'var', and 'function' declarations
 
   // Variables introduced by the compiler:
-  TEMPORARY,  // temporary variables (not user-visible), stack-allocated
-              // unless the scope as a whole has forced context allocation
+  kTemporary,  // temporary variables (not user-visible), stack-allocated
+               // unless the scope as a whole has forced context allocation
 
-  DYNAMIC,  // always require dynamic lookup (we don't know
-            // the declaration)
+  kDynamic,  // always require dynamic lookup (we don't know
+             // the declaration)
 
-  DYNAMIC_GLOBAL,  // requires dynamic lookup, but we know that the
+  kDynamicGlobal,  // requires dynamic lookup, but we know that the
                    // variable is global unless it has been shadowed
                    // by an eval-introduced variable
 
-  DYNAMIC_LOCAL  // requires dynamic lookup, but we know that the
+  kDynamicLocal  // requires dynamic lookup, but we know that the
                  // variable is local and where it is unless it
                  // has been shadowed by an eval-introduced
                  // variable
@@ -964,19 +978,19 @@ enum VariableMode : uint8_t {
 #ifdef DEBUG
 inline const char* VariableMode2String(VariableMode mode) {
   switch (mode) {
-    case VAR:
+    case VariableMode::kVar:
       return "VAR";
-    case LET:
+    case VariableMode::kLet:
       return "LET";
-    case CONST:
+    case VariableMode::kConst:
       return "CONST";
-    case DYNAMIC:
+    case VariableMode::kDynamic:
       return "DYNAMIC";
-    case DYNAMIC_GLOBAL:
+    case VariableMode::kDynamicGlobal:
       return "DYNAMIC_GLOBAL";
-    case DYNAMIC_LOCAL:
+    case VariableMode::kDynamicLocal:
       return "DYNAMIC_LOCAL";
-    case TEMPORARY:
+    case VariableMode::kTemporary:
       return "TEMPORARY";
   }
   UNREACHABLE();
@@ -991,19 +1005,19 @@ enum VariableKind : uint8_t {
 };
 
 inline bool IsDynamicVariableMode(VariableMode mode) {
-  return mode >= DYNAMIC && mode <= DYNAMIC_LOCAL;
+  return mode >= VariableMode::kDynamic && mode <= VariableMode::kDynamicLocal;
 }
-
 
 inline bool IsDeclaredVariableMode(VariableMode mode) {
-  STATIC_ASSERT(LET == 0);  // Implies that mode >= LET.
-  return mode <= VAR;
+  STATIC_ASSERT(static_cast<uint8_t>(VariableMode::kLet) ==
+                0);  // Implies that mode >= VariableMode::kLet.
+  return mode <= VariableMode::kVar;
 }
 
-
 inline bool IsLexicalVariableMode(VariableMode mode) {
-  STATIC_ASSERT(LET == 0);  // Implies that mode >= LET.
-  return mode <= CONST;
+  STATIC_ASSERT(static_cast<uint8_t>(VariableMode::kLet) ==
+                0);  // Implies that mode >= VariableMode::kLet.
+  return mode <= VariableMode::kConst;
 }
 
 enum VariableLocation : uint8_t {
@@ -1064,7 +1078,6 @@ enum InitializationFlag : uint8_t { kNeedsInitialization, kCreatedInitialized };
 
 enum MaybeAssignedFlag : uint8_t { kNotAssigned, kMaybeAssigned };
 
-// Serialized in PreparseData, so numeric values should not be changed.
 enum ParseErrorType { kSyntaxError = 0, kReferenceError = 1 };
 
 enum FunctionKind : uint8_t {
@@ -1514,7 +1527,7 @@ V8_INLINE static bool HasWeakHeapObjectTag(const Object* value) {
           kWeakHeapObjectTag);
 }
 
-V8_INLINE static bool IsClearedWeakHeapObject(MaybeObject* value) {
+V8_INLINE static bool IsClearedWeakHeapObject(const MaybeObject* value) {
   return reinterpret_cast<intptr_t>(value) == kClearedWeakHeapObject;
 }
 
@@ -1544,6 +1557,7 @@ enum class PoisoningMitigationLevel {
   kDontPoison,
   kPoisonCriticalOnly
 };
+
 enum class LoadSensitivity {
   kCritical,  // Critical loads are poisoned whenever we can run untrusted
               // code (i.e., when --untrusted-code-mitigations is on).
@@ -1551,6 +1565,17 @@ enum class LoadSensitivity {
               // (--branch-load-poisoning).
   kSafe       // Safe loads are never poisoned.
 };
+
+// The reason for a WebAssembly trap.
+#define FOREACH_WASM_TRAPREASON(V) \
+  V(TrapUnreachable)               \
+  V(TrapMemOutOfBounds)            \
+  V(TrapDivByZero)                 \
+  V(TrapDivUnrepresentable)        \
+  V(TrapRemByZero)                 \
+  V(TrapFloatUnrepresentable)      \
+  V(TrapFuncInvalid)               \
+  V(TrapFuncSigMismatch)
 
 }  // namespace internal
 }  // namespace v8

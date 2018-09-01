@@ -37,11 +37,13 @@ namespace internal {
 // cleared when the map they refer to is not otherwise reachable.
 class TransitionsAccessor {
  public:
-  TransitionsAccessor(Map* map, DisallowHeapAllocation* no_gc) : map_(map) {
+  TransitionsAccessor(Isolate* isolate, Map* map, DisallowHeapAllocation* no_gc)
+      : isolate_(isolate), map_(map) {
     Initialize();
     USE(no_gc);
   }
-  explicit TransitionsAccessor(Handle<Map> map) : map_handle_(map), map_(*map) {
+  TransitionsAccessor(Isolate* isolate, Handle<Map> map)
+      : isolate_(isolate), map_handle_(map), map_(*map) {
     Initialize();
   }
 
@@ -57,7 +59,7 @@ class TransitionsAccessor {
   Map* SearchSpecial(Symbol* name);
   // Returns true for non-property transitions like elements kind, or
   // or frozen/sealed transitions.
-  static bool IsSpecialTransition(Name* name);
+  static bool IsSpecialTransition(ReadOnlyRoots roots, Name* name);
 
   enum RequestedLocation { kAnyLocation, kFieldOnly };
   MaybeHandle<Map> FindTransitionToDataProperty(
@@ -177,6 +179,7 @@ class TransitionsAccessor {
 
   inline TransitionArray* transitions();
 
+  Isolate* isolate_;
   Handle<Map> map_handle_;
   Map* map_;
   MaybeObject* raw_transitions_;
@@ -232,11 +235,7 @@ class TransitionArray : public WeakFixedArray {
 
   void Sort();
 
-#if defined(DEBUG) || defined(OBJECT_PRINT)
-  // For our gdb macros.
-  void Print();
-  void Print(std::ostream& os);
-#endif
+  void PrintInternal(std::ostream& os);
 
   DECL_PRINTER(TransitionArray)
   DECL_VERIFIER(TransitionArray)
@@ -313,7 +312,8 @@ class TransitionArray : public WeakFixedArray {
 
   inline int number_of_transitions() const;
 
-  static bool CompactPrototypeTransitionArray(WeakFixedArray* array);
+  static bool CompactPrototypeTransitionArray(Isolate* isolate,
+                                              WeakFixedArray* array);
 
   static Handle<WeakFixedArray> GrowPrototypeTransitionArray(
       Handle<WeakFixedArray> array, int new_capacity, Isolate* isolate);
@@ -339,7 +339,7 @@ class TransitionArray : public WeakFixedArray {
 
   inline void Set(int transition_number, Name* key, MaybeObject* target);
 
-  void Zap();
+  void Zap(Isolate* isolate);
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(TransitionArray);
 };

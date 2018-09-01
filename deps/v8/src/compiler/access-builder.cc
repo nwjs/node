@@ -10,6 +10,10 @@
 #include "src/handles-inl.h"
 #include "src/heap/heap.h"
 #include "src/objects-inl.h"
+#include "src/objects/arguments.h"
+#include "src/objects/js-collection.h"
+#include "src/objects/js-generator.h"
+#include "src/objects/module.h"
 
 namespace v8 {
 namespace internal {
@@ -82,9 +86,9 @@ FieldAccess AccessBuilder::ForJSObjectElements() {
 
 
 // static
-FieldAccess AccessBuilder::ForJSObjectInObjectProperty(Handle<Map> map,
+FieldAccess AccessBuilder::ForJSObjectInObjectProperty(const MapRef& map,
                                                        int index) {
-  int const offset = map->GetInObjectPropertyOffset(index);
+  int const offset = map.GetInObjectPropertyOffset(index);
   FieldAccess access = {kTaggedBase,         offset,
                         MaybeHandle<Name>(), MaybeHandle<Map>(),
                         Type::NonInternal(), MachineType::AnyTagged(),
@@ -259,9 +263,9 @@ FieldAccess AccessBuilder::ForJSGeneratorObjectInputOrDebugPos() {
 
 
 // static
-FieldAccess AccessBuilder::ForJSGeneratorObjectRegisterFile() {
+FieldAccess AccessBuilder::ForJSGeneratorObjectParametersAndRegisters() {
   FieldAccess access = {
-      kTaggedBase,         JSGeneratorObject::kRegisterFileOffset,
+      kTaggedBase,         JSGeneratorObject::kParametersAndRegistersOffset,
       Handle<Name>(),      MaybeHandle<Map>(),
       Type::Internal(),    MachineType::AnyTagged(),
       kPointerWriteBarrier};
@@ -730,13 +734,11 @@ FieldAccess AccessBuilder::ForJSGlobalProxyNativeContext() {
 
 // static
 FieldAccess AccessBuilder::ForJSArrayIteratorIteratedObject() {
-  FieldAccess access = {kTaggedBase,
-                        JSArrayIterator::kIteratedObjectOffset,
-                        Handle<Name>(),
-                        MaybeHandle<Map>(),
-                        Type::ReceiverOrUndefined(),
-                        MachineType::TaggedPointer(),
-                        kPointerWriteBarrier};
+  FieldAccess access = {
+      kTaggedBase,         JSArrayIterator::kIteratedObjectOffset,
+      Handle<Name>(),      MaybeHandle<Map>(),
+      Type::Receiver(),    MachineType::TaggedPointer(),
+      kPointerWriteBarrier};
   return access;
 }
 

@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "src/runtime/runtime-utils.h"
-
-#include "src/arguments.h"
+#include "src/arguments-inl.h"
 #include "src/code-stubs.h"
 #include "src/conversions-inl.h"
 #include "src/debug/debug.h"
@@ -13,8 +11,11 @@
 #include "src/isolate-inl.h"
 #include "src/keys.h"
 #include "src/messages.h"
+#include "src/objects/arguments-inl.h"
 #include "src/objects/hash-table-inl.h"
+#include "src/objects/js-array-inl.h"
 #include "src/prototype.h"
+#include "src/runtime/runtime-utils.h"
 
 namespace v8 {
 namespace internal {
@@ -60,20 +61,14 @@ Object* RemoveArrayHolesGeneric(Isolate* isolate, Handle<JSReceiver> receiver,
   // For proxies, we do not collect the keys, instead we use all indices in
   // the full range of [0, limit).
   Handle<FixedArray> keys;
-  if (receiver->IsJSProxy()) {
-    CHECK(Smi::IsValid(limit));
-    keys = isolate->factory()->NewFixedArray(limit);
-    for (uint32_t i = 0; i < limit; ++i) {
-      keys->set(i, Smi::FromInt(i));
-    }
-  } else {
+  if (!receiver->IsJSProxy()) {
     keys = JSReceiver::GetOwnElementIndices(isolate, receiver,
                                             Handle<JSObject>::cast(receiver));
   }
 
   uint32_t num_undefined = 0;
   uint32_t current_pos = 0;
-  int num_indices = keys->length();
+  int num_indices = keys.is_null() ? limit : keys->length();
 
   // Compact keys with undefined values and moves non-undefined
   // values to the front.
@@ -85,14 +80,14 @@ Object* RemoveArrayHolesGeneric(Isolate* isolate, Handle<JSReceiver> receiver,
   //       Holes and 'undefined' are considered free spots.
   //       A hole is when HasElement(receiver, key) is false.
   for (int i = 0; i < num_indices; ++i) {
-    uint32_t key = NumberToUint32(keys->get(i));
+    uint32_t key = keys.is_null() ? i : NumberToUint32(keys->get(i));
 
     // We only care about array indices that are smaller than the limit.
     // The keys are sorted, so we can break as soon as we encounter the first.
     if (key >= limit) break;
 
     Maybe<bool> has_element = JSReceiver::HasElement(receiver, key);
-    MAYBE_RETURN(has_element, isolate->heap()->exception());
+    MAYBE_RETURN(has_element, ReadOnlyRoots(isolate).exception());
     if (!has_element.FromJust()) {
       continue;
     }
@@ -107,7 +102,7 @@ Object* RemoveArrayHolesGeneric(Isolate* isolate, Handle<JSReceiver> receiver,
       // Find next free position to move elements to.
       Maybe<uint32_t> free_position =
           FindNextFreePosition(isolate, receiver, current_pos);
-      MAYBE_RETURN(free_position, isolate->heap()->exception());
+      MAYBE_RETURN(free_position, ReadOnlyRoots(isolate).exception());
       current_pos = free_position.FromJust();
 
       // Do not move elements that are already in the "packed" area.
@@ -142,12 +137,12 @@ Object* RemoveArrayHolesGeneric(Isolate* isolate, Handle<JSReceiver> receiver,
 
   // Deleting everything after the undefineds up unto the limit.
   for (int i = num_indices - 1; i >= 0; --i) {
-    uint32_t key = NumberToUint32(keys->get(i));
+    uint32_t key = keys.is_null() ? i : NumberToUint32(keys->get(i));
     if (key < current_pos) break;
     if (key >= limit) continue;
 
     Maybe<bool> delete_result = JSReceiver::DeleteElement(receiver, key);
-    MAYBE_RETURN(delete_result, isolate->heap()->exception());
+    MAYBE_RETURN(delete_result, ReadOnlyRoots(isolate).exception());
   }
 
   return *isolate->factory()->NewNumberFromUint(result);
@@ -178,7 +173,7 @@ Object* RemoveArrayHoles(Isolate* isolate, Handle<JSReceiver> receiver,
   if (object->HasDictionaryElements()) {
     // Convert to fast elements containing only the existing properties.
     // Ordering is irrelevant, since we are going to sort anyway.
-    Handle<NumberDictionary> dict(object->element_dictionary());
+    Handle<NumberDictionary> dict(object->element_dictionary(), isolate);
     if (object->IsJSArray() || dict->requires_slow_elements() ||
         dict->max_number_key() >= limit) {
       return RemoveArrayHolesGeneric(isolate, receiver, limit);
@@ -187,8 +182,7 @@ Object* RemoveArrayHoles(Isolate* isolate, Handle<JSReceiver> receiver,
     Handle<Map> new_map =
         JSObject::GetElementsTransitionMap(object, HOLEY_ELEMENTS);
 
-    PretenureFlag tenure =
-        isolate->heap()->InNewSpace(*object) ? NOT_TENURED : TENURED;
+    PretenureFlag tenure = Heap::InNewSpace(*object) ? NOT_TENURED : TENURED;
     Handle<FixedArray> fast_elements =
         isolate->factory()->NewFixedArray(dict->NumberOfElements(), tenure);
     dict->CopyValuesTo(*fast_elements);
@@ -207,7 +201,7 @@ Object* RemoveArrayHoles(Isolate* isolate, Handle<JSReceiver> receiver,
   // Collect holes at the end, undefined before that and the rest at the
   // start, and return the number of non-hole, non-undefined values.
 
-  Handle<FixedArrayBase> elements_base(object->elements());
+  Handle<FixedArrayBase> elements_base(object->elements(), isolate);
   uint32_t elements_length = static_cast<uint32_t>(elements_base->length());
   if (limit > elements_length) {
     limit = elements_length;
@@ -217,7 +211,7 @@ Object* RemoveArrayHoles(Isolate* isolate, Handle<JSReceiver> receiver,
   }
 
   uint32_t result = 0;
-  if (elements_base->map() == isolate->heap()->fixed_double_array_map()) {
+  if (elements_base->map() == ReadOnlyRoots(isolate).fixed_double_array_map()) {
     FixedDoubleArray* elements = FixedDoubleArray::cast(*elements_base);
     // Split elements into defined and the_hole, in that order.
     unsigned int holes = limit;
@@ -309,7 +303,7 @@ Maybe<bool> ConditionalCopy(Isolate* isolate, Handle<JSReceiver> source,
 
   Handle<Object> source_element;
   ASSIGN_RETURN_ON_EXCEPTION_VALUE(
-      isolate, source_element, JSReceiver::GetElement(isolate, source, index),
+      isolate, source_element, JSReceiver::GetElement(isolate, target, index),
       Nothing<bool>());
 
   Handle<Object> set_result;
@@ -366,7 +360,7 @@ RUNTIME_FUNCTION(Runtime_PrepareElementsForSort) {
 
   if (isolate->debug_execution_mode() == DebugInfo::kSideEffects) {
     if (!isolate->debug()->PerformSideEffectCheckForObject(object)) {
-      return isolate->heap()->exception();
+      return ReadOnlyRoots(isolate).exception();
     }
   }
 
@@ -400,7 +394,7 @@ RUNTIME_FUNCTION(Runtime_MoveArrayContents) {
   JSObject::ValidateElements(*from);
   JSObject::ValidateElements(*to);
 
-  Handle<FixedArrayBase> new_elements(from->elements());
+  Handle<FixedArrayBase> new_elements(from->elements(), isolate);
   ElementsKind from_kind = from->GetElementsKind();
   Handle<Map> new_map = JSObject::GetElementsTransitionMap(to, from_kind);
   JSObject::SetMapAndElements(to, new_map, new_elements);
@@ -422,7 +416,7 @@ RUNTIME_FUNCTION(Runtime_EstimateNumberOfElements) {
   CONVERT_ARG_CHECKED(JSArray, array, 0);
   FixedArrayBase* elements = array->elements();
   SealHandleScope shs(isolate);
-  if (elements->IsDictionary()) {
+  if (elements->IsNumberDictionary()) {
     int result = NumberDictionary::cast(elements)->NumberOfElements();
     return Smi::FromInt(result);
   } else {
@@ -500,10 +494,7 @@ RUNTIME_FUNCTION(Runtime_GetArrayKeys) {
     j++;
   }
 
-  if (j != keys->length()) {
-    isolate->heap()->RightTrimFixedArray(*keys, keys->length() - j);
-  }
-
+  keys = FixedArray::ShrinkOrEmpty(isolate, keys, j);
   return *isolate->factory()->NewJSArrayWithElements(keys);
 }
 
@@ -608,9 +599,7 @@ RUNTIME_FUNCTION(Runtime_NewArray) {
   // We should allocate with an initial map that reflects the allocation site
   // advice. Therefore we use AllocateJSObjectFromMap instead of passing
   // the constructor.
-  if (to_kind != initial_map->elements_kind()) {
-    initial_map = Map::AsElementsKind(initial_map, to_kind);
-  }
+  initial_map = Map::AsElementsKind(isolate, initial_map, to_kind);
 
   // If we don't care to track arrays of to_kind ElementsKind, then
   // don't emit a memento for them.
@@ -631,7 +620,7 @@ RUNTIME_FUNCTION(Runtime_NewArray) {
     if ((old_kind != array->GetElementsKind() || !can_use_type_feedback ||
          !can_inline_array_constructor)) {
       // The arguments passed in caused a transition. This kind of complexity
-      // can't be dealt with in the inlined hydrogen array constructor case.
+      // can't be dealt with in the inlined optimized array constructor case.
       // We must mark the allocationsite as un-inlinable.
       site->SetDoNotInlineCall();
     }
@@ -691,10 +680,10 @@ RUNTIME_FUNCTION(Runtime_HasComplexElements) {
   for (PrototypeIterator iter(isolate, array, kStartAtReceiver);
        !iter.IsAtEnd(); iter.Advance()) {
     if (PrototypeIterator::GetCurrent<JSReceiver>(iter)->HasComplexElements()) {
-      return isolate->heap()->true_value();
+      return ReadOnlyRoots(isolate).true_value();
     }
   }
-  return isolate->heap()->false_value();
+  return ReadOnlyRoots(isolate).false_value();
 }
 
 // ES6 22.1.2.2 Array.isArray
@@ -703,7 +692,7 @@ RUNTIME_FUNCTION(Runtime_ArrayIsArray) {
   DCHECK_EQ(1, args.length());
   CONVERT_ARG_HANDLE_CHECKED(Object, object, 0);
   Maybe<bool> result = Object::IsArray(object);
-  MAYBE_RETURN(result, isolate->heap()->exception());
+  MAYBE_RETURN(result, ReadOnlyRoots(isolate).exception());
   return isolate->heap()->ToBoolean(result.FromJust());
 }
 
@@ -747,7 +736,8 @@ RUNTIME_FUNCTION(Runtime_ArrayIncludes_Slow) {
       Handle<Object> len_;
       ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
           isolate, len_,
-          Object::GetProperty(object, isolate->factory()->length_string()));
+          Object::GetProperty(isolate, object,
+                              isolate->factory()->length_string()));
 
       ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, len_,
                                          Object::ToLength(isolate, len_));
@@ -756,7 +746,7 @@ RUNTIME_FUNCTION(Runtime_ArrayIncludes_Slow) {
     }
   }
 
-  if (len == 0) return isolate->heap()->false_value();
+  if (len == 0) return ReadOnlyRoots(isolate).false_value();
 
   // Let n be ? ToInteger(fromIndex). (If fromIndex is undefined, this step
   // produces the value 0.)
@@ -775,7 +765,7 @@ RUNTIME_FUNCTION(Runtime_ArrayIncludes_Slow) {
     } else {
       DCHECK(from_index->IsHeapNumber());
       double start_from = from_index->Number();
-      if (start_from >= len) return isolate->heap()->false_value();
+      if (start_from >= len) return ReadOnlyRoots(isolate).false_value();
       if (V8_LIKELY(std::isfinite(start_from))) {
         if (start_from < 0) {
           index = static_cast<int64_t>(std::max<double>(start_from + len, 0));
@@ -797,7 +787,7 @@ RUNTIME_FUNCTION(Runtime_ArrayIncludes_Slow) {
     Maybe<bool> result = elements->IncludesValue(isolate, obj, search_element,
                                                  static_cast<uint32_t>(index),
                                                  static_cast<uint32_t>(len));
-    MAYBE_RETURN(result, isolate->heap()->exception());
+    MAYBE_RETURN(result, ReadOnlyRoots(isolate).exception());
     return *isolate->factory()->ToBoolean(result.FromJust());
   }
 
@@ -817,10 +807,10 @@ RUNTIME_FUNCTION(Runtime_ArrayIncludes_Slow) {
 
     // If SameValueZero(searchElement, elementK) is true, return true.
     if (search_element->SameValueZero(*element_k)) {
-      return isolate->heap()->true_value();
+      return ReadOnlyRoots(isolate).true_value();
     }
   }
-  return isolate->heap()->false_value();
+  return ReadOnlyRoots(isolate).false_value();
 }
 
 RUNTIME_FUNCTION(Runtime_ArrayIndexOf) {
@@ -848,7 +838,8 @@ RUNTIME_FUNCTION(Runtime_ArrayIndexOf) {
       Handle<Object> len_;
       ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
           isolate, len_,
-          Object::GetProperty(object, isolate->factory()->length_string()));
+          Object::GetProperty(isolate, object,
+                              isolate->factory()->length_string()));
 
       ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, len_,
                                          Object::ToLength(isolate, len_));
@@ -895,7 +886,7 @@ RUNTIME_FUNCTION(Runtime_ArrayIndexOf) {
     Maybe<int64_t> result = elements->IndexOfValue(isolate, obj, search_element,
                                                    static_cast<uint32_t>(index),
                                                    static_cast<uint32_t>(len));
-    MAYBE_RETURN(result, isolate->heap()->exception());
+    MAYBE_RETURN(result, ReadOnlyRoots(isolate).exception());
     return *isolate->factory()->NewNumberFromInt64(result.FromJust());
   }
 
@@ -910,7 +901,7 @@ RUNTIME_FUNCTION(Runtime_ArrayIndexOf) {
           isolate, object, index_obj, &success);
       DCHECK(success);
       Maybe<bool> present = JSReceiver::HasProperty(&it);
-      MAYBE_RETURN(present, isolate->heap()->exception());
+      MAYBE_RETURN(present, ReadOnlyRoots(isolate).exception());
       if (!present.FromJust()) continue;
       ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, element_k,
                                          Object::GetProperty(&it));

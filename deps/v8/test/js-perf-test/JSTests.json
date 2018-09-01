@@ -60,6 +60,74 @@
       "results_regexp": "^Generators\\-Generators\\(Score\\): (.+)$"
     },
     {
+      "name": "ArrayLiteralInitialSpreadSmallPacked",
+      "path": ["ArrayLiteralInitialSpreadSmallPacked"],
+      "main": "run.js",
+      "resources": [],
+      "results_regexp": "^%s\\-ArrayLiteralInitialSpreadSmallPacked\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "Spread"},
+        {"name": "ForLength"},
+        {"name": "ForLengthEmpty"},
+        {"name": "Slice"},
+        {"name": "Slice0"},
+        {"name": "ConcatReceive"},
+        {"name": "ConcatArg"},
+        {"name": "ForOfPush"},
+        {"name": "MapId"}
+      ]
+    },
+    {
+      "name": "ArrayLiteralInitialSpreadLargePacked",
+      "path": ["ArrayLiteralInitialSpreadLargePacked"],
+      "main": "run.js",
+      "resources": [],
+      "results_regexp": "^%s\\-ArrayLiteralInitialSpreadLargePacked\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "Spread"},
+        {"name": "ForLength"},
+        {"name": "ForLengthEmpty"},
+        {"name": "Slice"},
+        {"name": "Slice0"},
+        {"name": "ConcatReceive"},
+        {"name": "ConcatArg"}
+      ]
+    },
+    {
+      "name": "ArrayLiteralInitialSpreadSmallHoley",
+      "path": ["ArrayLiteralInitialSpreadSmallHoley"],
+      "main": "run.js",
+      "resources": [],
+      "results_regexp": "^%s\\-ArrayLiteralInitialSpreadSmallHoley\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "Spread"},
+        {"name": "ForLength"},
+        {"name": "ForLengthEmpty"},
+        {"name": "Slice"},
+        {"name": "Slice0"},
+        {"name": "ConcatReceive"},
+        {"name": "ConcatArg"},
+        {"name": "ForOfPush"},
+        {"name": "MapId"}
+      ]
+    },
+    {
+      "name": "ArrayLiteralInitialSpreadLargeHoley",
+      "path": ["ArrayLiteralInitialSpreadLargeHoley"],
+      "main": "run.js",
+      "resources": [],
+      "results_regexp": "^%s\\-ArrayLiteralInitialSpreadLargeHoley\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "Spread"},
+        {"name": "ForLength"},
+        {"name": "ForLengthEmpty"},
+        {"name": "Slice"},
+        {"name": "Slice0"},
+        {"name": "ConcatReceive"},
+        {"name": "ConcatArg"}
+      ]
+    },
+    {
       "name": "ArrayLiteralSpread",
       "path": ["ArrayLiteralSpread"],
       "main": "run.js",
@@ -141,7 +209,7 @@
       "path": ["Closures"],
       "main": "run.js",
       "resources": ["closures.js"],
-      "flags": ["--mark_shared_functions_for_tier_up"],
+      "flags": [],
       "results_regexp": "^%s\\-Closures\\(Score\\): (.+)$",
       "tests": [
         {"name": "Closures"}
@@ -488,8 +556,10 @@
       "tests": [
 	{"name": "DataViewTest-DataView-BigEndian"},
 	{"name": "DataViewTest-DataView-LittleEndian"},
+	{"name": "DataViewTest-DataView-Floats"},
 	{"name": "DataViewTest-TypedArray-BigEndian"},
-	{"name": "DataViewTest-TypedArray-LittleEndian"}
+	{"name": "DataViewTest-TypedArray-LittleEndian"},
+	{"name": "DataViewTest-TypedArray-Floats"}
       ]
     },
     {
@@ -612,9 +682,9 @@
       "path": ["Array"],
       "main": "run.js",
       "resources": [
-        "filter.js", "map.js", "every.js", "join.js", "some.js",
-        "reduce.js", "reduce-right.js", "to-string.js", "find.js",
-        "find-index.js", "from.js", "of.js", "for-each.js"
+        "filter.js", "map.js", "every.js", "join.js", "some.js", "reduce.js",
+        "reduce-right.js", "to-string.js", "find.js", "find-index.js",
+        "from.js", "of.js", "for-each.js", "slice.js", "copy-within.js"
       ],
       "flags": [
         "--allow-natives-syntax"
@@ -699,7 +769,21 @@
         {"name": "DoubleFrom"},
         {"name": "StringFrom"},
         {"name": "StringNoMapFrom"},
-        {"name": "MixedFrom"}
+        {"name": "MixedFrom"},
+        {"name": "Array.slice(500)"},
+        {"name": "Array.slice(500,999)"},
+        {"name": "Array.slice(-500)"},
+        {"name": "Array.slice(200,700)"},
+        {"name": "Array.slice(200,-300)"},
+        {"name": "Array.slice(4,1)"},
+        {"name": "Array.slice(500,999)-dict"},
+        {"name": "Array.slice(200,700)-dict"},
+        {"name": "Array.slice(200,-300)-dict"},
+        {"name": "Array.slice(4,1)-dict"},
+        {"name": "SmiCopyWithin"},
+        {"name": "StringCopyWithin"},
+        {"name": "SparseSmiCopyWithin"},
+        {"name": "SparseStringCopyWithin"}
       ]
     },
     {
@@ -771,8 +855,18 @@
         "--allow-natives-syntax"
       ],
       "tests": [
-        {"name": "PackedSmiPreSorted"},
-        {"name": "PackedSmiPreSortedReversed"}
+        {"name": "Random"},
+        {"name": "Up"},
+        {"name": "Down"},
+        {"name": "Saw1000"},
+        {"name": "Saw500"},
+        {"name": "Saw200"},
+        {"name": "Saw200Symmetric"},
+        {"name": "Saw200Down"},
+        {"name": "UpDown"},
+        {"name": "UpUp"},
+        {"name": "DownDown"},
+        {"name": "DownUp"}
       ]
     },
     {
@@ -788,6 +882,29 @@
       "tests": [
         {"name": "Base"},
         {"name": "MultipleCompareFns"}
+      ]
+    },
+    {
+      "name": "ArraySortDifferentLengths",
+      "path": ["ArraySort"],
+      "main": "run.js",
+      "resources": ["sort-base.js", "sort-lengths.js"],
+      "test_flags": ["sort-lengths"],
+      "results_regexp": "^%s\\-ArraySort\\(Score\\): (.+)$",
+      "flags": [
+        "--allow-natives-syntax"
+      ],
+      "tests": [
+        {"name": "Random10"},
+        {"name": "Sorted10"},
+        {"name": "Random100"},
+        {"name": "Sorted100"},
+        {"name": "Random1000"},
+        {"name": "Sorted1000"},
+        {"name": "Random10000"},
+        {"name": "Sorted10000"},
+        {"name": "Random100000"},
+        {"name": "Sorted100000"}
       ]
     },
     {
@@ -987,12 +1104,45 @@
       "path": ["Parsing"],
       "main": "run.js",
       "flags": ["--no-compilation-cache", "--allow-natives-syntax"],
-      "resources": [ "comments.js"],
+      "resources": [ "comments.js", "strings.js", "arrowfunctions.js"],
       "results_regexp": "^%s\\-Parsing\\(Score\\): (.+)$",
       "tests": [
         {"name": "OneLineComment"},
         {"name": "OneLineComments"},
-        {"name": "MultiLineComment"}
+        {"name": "MultiLineComment"},
+        {"name": "SingleLineString"},
+        {"name": "SingleLineStrings"},
+        {"name": "MultiLineString"},
+        {"name": "ArrowFunctionShort"},
+        {"name": "ArrowFunctionLong"},
+        {"name": "CommaSepExpressionListShort"},
+        {"name": "CommaSepExpressionListLong"},
+        {"name": "CommaSepExpressionListLate"},
+        {"name": "FakeArrowFunction"}
+      ]
+    },
+    {
+      "name": "Numbers",
+      "path": ["Numbers"],
+      "main": "run.js",
+      "flags": ["--allow-natives-syntax"],
+      "resources": [ "toNumber.js"],
+      "results_regexp": "^%s\\-Numbers\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "Constructor"},
+        {"name": "UnaryPlus"},
+        {"name": "ParseFloat"}
+      ]
+    },
+    {
+      "name": "TurboFan",
+      "path": ["TurboFan"],
+      "main": "run.js",
+      "flags": [],
+      "resources": [ "typedLowering.js"],
+      "results_regexp": "^%s\\-TurboFan\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "NumberToString"}
       ]
     }
   ]

@@ -17,7 +17,10 @@ namespace torque {
 
 typedef std::vector<std::string> NameVector;
 
-void ReportError(const std::string& error);
+std::string StringLiteralUnquote(const std::string& s);
+std::string StringLiteralQuote(const std::string& s);
+
+[[noreturn]] void ReportError(const std::string& error);
 
 std::string CamelifyString(const std::string& underscore_string);
 std::string DashifyString(const std::string& underscore_string);
@@ -35,6 +38,49 @@ class Deduplicator {
  private:
   std::unordered_set<T, base::hash<T>> storage_;
 };
+
+template <class C, class T>
+void PrintCommaSeparatedList(std::ostream& os, const T& list, C transform) {
+  bool first = true;
+  for (auto& e : list) {
+    if (first) {
+      first = false;
+    } else {
+      os << ", ";
+    }
+    os << transform(e);
+  }
+}
+
+template <class T,
+          typename std::enable_if<
+              std::is_pointer<typename T::value_type>::value, int>::type = 0>
+void PrintCommaSeparatedList(std::ostream& os, const T& list) {
+  bool first = true;
+  for (auto& e : list) {
+    if (first) {
+      first = false;
+    } else {
+      os << ", ";
+    }
+    os << *e;
+  }
+}
+
+template <class T,
+          typename std::enable_if<
+              !std::is_pointer<typename T::value_type>::value, int>::type = 0>
+void PrintCommaSeparatedList(std::ostream& os, const T& list) {
+  bool first = true;
+  for (auto& e : list) {
+    if (first) {
+      first = false;
+    } else {
+      os << ", ";
+    }
+    os << e;
+  }
+}
 
 }  // namespace torque
 }  // namespace internal

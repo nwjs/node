@@ -8,6 +8,7 @@
 #include "src/assembler.h"
 #include "src/globals.h"
 #include "src/mips/assembler-mips.h"
+#include "src/turbo-assembler.h"
 
 namespace v8 {
 namespace internal {
@@ -24,17 +25,21 @@ constexpr Register kInterpreterAccumulatorRegister = v0;
 constexpr Register kInterpreterBytecodeOffsetRegister = t4;
 constexpr Register kInterpreterBytecodeArrayRegister = t5;
 constexpr Register kInterpreterDispatchTableRegister = t6;
+
 constexpr Register kJavaScriptCallArgCountRegister = a0;
 constexpr Register kJavaScriptCallCodeStartRegister = a2;
+constexpr Register kJavaScriptCallTargetRegister = kJSFunctionRegister;
 constexpr Register kJavaScriptCallNewTargetRegister = a3;
+constexpr Register kJavaScriptCallExtraArg1Register = a2;
+
 constexpr Register kOffHeapTrampolineRegister = at;
 constexpr Register kRuntimeCallFunctionRegister = a1;
 constexpr Register kRuntimeCallArgCountRegister = a0;
+constexpr Register kRuntimeCallArgvRegister = a2;
 constexpr Register kWasmInstanceRegister = a0;
 
 // Forward declarations
-enum class AbortReason;
-class JumpTarget;
+enum class AbortReason : uint8_t;
 
 // Reserved Register Usage Summary.
 //
@@ -53,14 +58,6 @@ class JumpTarget;
 enum LeaveExitFrameMode {
   EMIT_RETURN = true,
   NO_EMIT_RETURN = false
-};
-
-// Flags used for AllocateHeapNumber
-enum TaggingMode {
-  // Tag the result.
-  TAG_RESULT,
-  // Don't tag
-  DONT_TAG_RESULT
 };
 
 // Allow programmer to use Branch Delay Slot of Branches, Jumps, Calls.
@@ -91,13 +88,6 @@ Register GetRegisterThatIsNotOneOf(Register reg1,
                                    Register reg5 = no_reg,
                                    Register reg6 = no_reg);
 
-bool AreAliased(Register reg1, Register reg2, Register reg3 = no_reg,
-                Register reg4 = no_reg, Register reg5 = no_reg,
-                Register reg6 = no_reg, Register reg7 = no_reg,
-                Register reg8 = no_reg, Register reg9 = no_reg,
-                Register reg10 = no_reg);
-
-
 // -----------------------------------------------------------------------------
 // Static helper functions.
 
@@ -126,20 +116,13 @@ inline MemOperand CFunctionArgumentOperand(int index) {
   return MemOperand(sp, offset);
 }
 
-class TurboAssembler : public Assembler {
+class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
  public:
-  TurboAssembler(Isolate* isolate, void* buffer, int buffer_size,
-                 CodeObjectRequired create_code_object);
-
-  void set_has_frame(bool value) { has_frame_ = value; }
-  bool has_frame() const { return has_frame_; }
-
-  Isolate* isolate() const { return isolate_; }
-
-  Handle<HeapObject> CodeObject() {
-    DCHECK(!code_object_.is_null());
-    return code_object_;
-  }
+  TurboAssembler(Isolate* isolate, const AssemblerOptions& options,
+                 void* buffer, int buffer_size,
+                 CodeObjectRequired create_code_object)
+      : TurboAssemblerBase(isolate, options, buffer, buffer_size,
+                           create_code_object) {}
 
   // Activation support.
   void EnterFrame(StackFrame::Type type);
@@ -157,6 +140,7 @@ class TurboAssembler : public Assembler {
     ExternalReference roots_array_start =
         ExternalReference::roots_array_start(isolate());
     li(kRootRegister, Operand(roots_array_start));
+    Addu(kRootRegister, kRootRegister, kRootRegisterBias);
   }
 
   // Jump unconditionally to given label.
@@ -250,11 +234,10 @@ class TurboAssembler : public Assembler {
   void li(Register dst, Handle<HeapObject> value, LiFlags mode = OPTIMIZE_SIZE);
   void li(Register dst, ExternalReference value, LiFlags mode = OPTIMIZE_SIZE);
 
-#ifdef V8_EMBEDDED_BUILTINS
-  void LookupConstant(Register destination, Handle<Object> object);
-  void LookupExternalReference(Register destination,
-                               ExternalReference reference);
-#endif  // V8_EMBEDDED_BUILTINS
+  void LoadFromConstantsTable(Register destination,
+                              int constant_index) override;
+  void LoadRootRegisterOffset(Register destination, intptr_t offset) override;
+  void LoadRootRelative(Register destination, int32_t offset) override;
 
 // Jump, Call, and Ret pseudo instructions implementing inter-working.
 #define COND_ARGS Condition cond = al, Register rs = zero_reg, \
@@ -266,20 +249,17 @@ class TurboAssembler : public Assembler {
   void Jump(intptr_t target, RelocInfo::Mode rmode, COND_ARGS);
   void Jump(Address target, RelocInfo::Mode rmode, COND_ARGS);
   void Jump(Handle<Code> code, RelocInfo::Mode rmode, COND_ARGS);
-  static int CallSize(Register target, int16_t offset = 0, COND_ARGS);
   void Call(Register target, int16_t offset = 0, COND_ARGS);
   void Call(Register target, Register base, int16_t offset = 0, COND_ARGS);
-  static int CallSize(Address target, RelocInfo::Mode rmode, COND_ARGS);
   void Call(Address target, RelocInfo::Mode rmode, COND_ARGS);
-  int CallSize(Handle<Code> code,
-               RelocInfo::Mode rmode = RelocInfo::CODE_TARGET,
-               COND_ARGS);
   void Call(Handle<Code> code,
             RelocInfo::Mode rmode = RelocInfo::CODE_TARGET,
             COND_ARGS);
   void Call(Label* target);
 
-  void CallForDeoptimization(Address target, RelocInfo::Mode rmode) {
+  void CallForDeoptimization(Address target, int deopt_id,
+                             RelocInfo::Mode rmode) {
+    USE(deopt_id);
     Call(target, rmode);
   }
 
@@ -551,9 +531,9 @@ class TurboAssembler : public Assembler {
   void CallStubDelayed(CodeStub* stub, COND_ARGS);
 #undef COND_ARGS
 
-  // TODO(jgruber): Remove in favor of MacroAssembler::CallRuntime.
-  void CallRuntimeDelayed(Zone* zone, Runtime::FunctionId fid,
-                          SaveFPRegsMode save_doubles = kDontSaveFPRegs);
+  // Call a runtime routine. This expects {centry} to contain a fitting CEntry
+  // builtin for the target runtime function and uses an indirect call.
+  void CallRuntimeWithCEntry(Runtime::FunctionId fid, Register centry);
 
   // Performs a truncating conversion of a floating point number as used by
   // the JS bitwise operations. See ECMA-262 9.5: ToInt32. Goes to 'done' if it
@@ -568,7 +548,7 @@ class TurboAssembler : public Assembler {
   // the JS bitwise operations. See ECMA-262 9.5: ToInt32.
   // Exits with 'result' holding the answer.
   void TruncateDoubleToI(Isolate* isolate, Zone* zone, Register result,
-                         DoubleRegister double_input);
+                         DoubleRegister double_input, StubCallMode stub_mode);
 
   // Conditional move.
   void Movz(Register rd, Register rs, Register rt);
@@ -813,7 +793,7 @@ class TurboAssembler : public Assembler {
                            Func GetLabelFunction);
 
   // Load an object from the root table.
-  void LoadRoot(Register destination, Heap::RootListIndex index);
+  void LoadRoot(Register destination, Heap::RootListIndex index) override;
   void LoadRoot(Register destination, Heap::RootListIndex index, Condition cond,
                 Register src1, const Operand& src2);
 
@@ -834,6 +814,16 @@ class TurboAssembler : public Assembler {
   void JumpIfSmi(Register value, Label* smi_label, Register scratch = at,
                  BranchDelaySlot bd = PROTECT);
 
+  void JumpIfEqual(Register a, int32_t b, Label* dest) {
+    li(kScratchReg, Operand(b));
+    Branch(dest, eq, a, Operand(kScratchReg));
+  }
+
+  void JumpIfLessThan(Register a, int32_t b, Label* dest) {
+    li(kScratchReg, Operand(b));
+    Branch(dest, lt, a, Operand(kScratchReg));
+  }
+
   // Push a standard frame, consisting of ra, fp, context and JS function.
   void PushStandardFrame(Register function_reg);
 
@@ -846,9 +836,6 @@ class TurboAssembler : public Assembler {
 
   void ResetSpeculationPoisonRegister();
 
-  bool root_array_available() const { return root_array_available_; }
-  void set_root_array_available(bool v) { root_array_available_ = v; }
-
  protected:
   void BranchLong(Label* L, BranchDelaySlot bdslot);
 
@@ -856,14 +843,8 @@ class TurboAssembler : public Assembler {
 
   inline int32_t GetOffset(int32_t offset, Label* L, OffsetSize bits);
 
-  // This handle will be patched with the code object on installation.
-  Handle<HeapObject> code_object_;
-
  private:
-  bool has_frame_ = false;
-  bool root_array_available_ = true;
-  Isolate* const isolate_;
-  bool has_double_zero_reg_set_;
+  bool has_double_zero_reg_set_ = false;
 
   void CallCFunctionHelper(Register function_base, int16_t function_offset,
                            int num_reg_arguments, int num_double_arguments);
@@ -921,7 +902,11 @@ class TurboAssembler : public Assembler {
 class MacroAssembler : public TurboAssembler {
  public:
   MacroAssembler(Isolate* isolate, void* buffer, int size,
-                 CodeObjectRequired create_code_object);
+                 CodeObjectRequired create_code_object)
+      : MacroAssembler(isolate, AssemblerOptions::Default(isolate), buffer,
+                       size, create_code_object) {}
+  MacroAssembler(Isolate* isolate, const AssemblerOptions& options,
+                 void* buffer, int size, CodeObjectRequired create_code_object);
 
   // Swap two registers.  If the scratch register is omitted then a slightly
   // less efficient form using xor instead of mov is emitted.
@@ -1140,9 +1125,6 @@ const Operand& rt = Operand(zero_reg), BranchDelaySlot bd = PROTECT
   void AssertNotSmi(Register object);
   void AssertSmi(Register object);
 
-  // Abort execution if argument is not a FixedArray, enabled via --debug-code.
-  void AssertFixedArray(Register object);
-
   // Abort execution if argument is not a Constructor, enabled via --debug-code.
   void AssertConstructor(Register object);
 
@@ -1207,7 +1189,7 @@ void TurboAssembler::GenerateSwitchTable(Register index, size_t case_count,
     bind(&here);
     addu(scratch, scratch, ra);
     pop(ra);
-    lw(scratch, MemOperand(scratch, 6 * v8::internal::Assembler::kInstrSize));
+    lw(scratch, MemOperand(scratch, 6 * v8::internal::kInstrSize));
   }
   jr(scratch);
   nop();  // Branch delay slot nop.

@@ -14,6 +14,7 @@
 #include "src/double.h"
 #include "src/heap/heap-inl.h"
 #include "src/optimized-compilation-info.h"
+#include "src/wasm/wasm-objects.h"
 
 namespace v8 {
 namespace internal {
@@ -415,6 +416,43 @@ void ComputePoisonedAddressForLoad(CodeGenerator* codegen,
     __ dmb(ISH);                                                             \
   } while (0)
 
+#define ASSEMBLE_ATOMIC64_ARITH_BINOP(instr1, instr2)                       \
+  do {                                                                      \
+    Label binop;                                                            \
+    __ add(i.TempRegister(0), i.InputRegister(2), i.InputRegister(3));      \
+    __ dmb(ISH);                                                            \
+    __ bind(&binop);                                                        \
+    __ ldrexd(i.OutputRegister(0), i.OutputRegister(1), i.TempRegister(0)); \
+    __ instr1(i.TempRegister(1), i.OutputRegister(0), i.InputRegister(0),   \
+              SBit::SetCC);                                                 \
+    __ instr2(i.TempRegister(2), i.OutputRegister(1),                       \
+              Operand(i.InputRegister(1)));                                 \
+    DCHECK_EQ(LeaveCC, i.OutputSBit());                                     \
+    __ strexd(i.TempRegister(3), i.TempRegister(1), i.TempRegister(2),      \
+              i.TempRegister(0));                                           \
+    __ teq(i.TempRegister(3), Operand(0));                                  \
+    __ b(ne, &binop);                                                       \
+    __ dmb(ISH);                                                            \
+  } while (0)
+
+#define ASSEMBLE_ATOMIC64_LOGIC_BINOP(instr)                                \
+  do {                                                                      \
+    Label binop;                                                            \
+    __ add(i.TempRegister(0), i.InputRegister(2), i.InputRegister(3));      \
+    __ dmb(ISH);                                                            \
+    __ bind(&binop);                                                        \
+    __ ldrexd(i.OutputRegister(0), i.OutputRegister(1), i.TempRegister(0)); \
+    __ instr(i.TempRegister(1), i.OutputRegister(0),                        \
+             Operand(i.InputRegister(0)));                                  \
+    __ instr(i.TempRegister(2), i.OutputRegister(1),                        \
+             Operand(i.InputRegister(1)));                                  \
+    __ strexd(i.TempRegister(3), i.TempRegister(1), i.TempRegister(2),      \
+              i.TempRegister(0));                                           \
+    __ teq(i.TempRegister(3), Operand(0));                                  \
+    __ b(ne, &binop);                                                       \
+    __ dmb(ISH);                                                            \
+  } while (0)
+
 #define ASSEMBLE_IEEE754_BINOP(name)                                           \
   do {                                                                         \
     /* TODO(bmeurer): We should really get rid of this special instruction, */ \
@@ -669,19 +707,15 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
   ArchOpcode arch_opcode = ArchOpcodeField::decode(opcode);
   switch (arch_opcode) {
     case kArchCallCodeObject: {
-      // We must not share code targets for calls to builtins for wasm code, as
-      // they might need to be patched individually.
-      internal::Assembler::BlockCodeTargetSharingScope scope;
-      if (info()->IsWasm()) scope.Open(tasm());
-
       if (instr->InputAt(0)->IsImmediate()) {
         __ Call(i.InputCode(0), RelocInfo::CODE_TARGET);
       } else {
-        UseScratchRegisterScope temps(tasm());
-        Register scratch = temps.Acquire();
-        __ add(scratch, i.InputRegister(0),
-               Operand(Code::kHeaderSize - kHeapObjectTag));
-        __ Call(scratch);
+        Register reg = i.InputRegister(0);
+        DCHECK_IMPLIES(
+            HasCallDescriptorFlag(instr, CallDescriptor::kFixedTargetRegister),
+            reg == kJavaScriptCallCodeStartRegister);
+        __ add(reg, reg, Operand(Code::kHeaderSize - kHeapObjectTag));
+        __ Call(reg);
       }
       RecordCallPosition(instr);
       DCHECK_EQ(LeaveCC, i.OutputSBit());
@@ -689,19 +723,10 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       break;
     }
     case kArchCallWasmFunction: {
-      // We must not share code targets for calls to builtins for wasm code, as
-      // they might need to be patched individually.
-      internal::Assembler::BlockCodeTargetSharingScope scope;
-      RelocInfo::Mode rmode = RelocInfo::JS_TO_WASM_CALL;
-      if (info()->IsWasm()) {
-        scope.Open(tasm());
-        rmode = RelocInfo::WASM_CALL;
-      }
-
       if (instr->InputAt(0)->IsImmediate()) {
-        Address wasm_code =
-            static_cast<Address>(i.ToConstant(instr->InputAt(0)).ToInt32());
-        __ Call(wasm_code, rmode);
+        Constant constant = i.ToConstant(instr->InputAt(0));
+        Address wasm_code = static_cast<Address>(constant.ToInt32());
+        __ Call(wasm_code, constant.rmode());
       } else {
         __ Call(i.InputRegister(0));
       }
@@ -712,11 +737,6 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     }
     case kArchTailCallCodeObjectFromJSFunction:
     case kArchTailCallCodeObject: {
-      // We must not share code targets for calls to builtins for wasm code, as
-      // they might need to be patched individually.
-      internal::Assembler::BlockCodeTargetSharingScope scope;
-      if (info()->IsWasm()) scope.Open(tasm());
-
       if (arch_opcode == kArchTailCallCodeObjectFromJSFunction) {
         AssemblePopArgumentsAdaptorFrame(kJavaScriptCallArgCountRegister,
                                          i.TempRegister(0), i.TempRegister(1),
@@ -725,11 +745,12 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       if (instr->InputAt(0)->IsImmediate()) {
         __ Jump(i.InputCode(0), RelocInfo::CODE_TARGET);
       } else {
-        UseScratchRegisterScope temps(tasm());
-        Register scratch = temps.Acquire();
-        __ add(scratch, i.InputRegister(0),
-               Operand(Code::kHeaderSize - kHeapObjectTag));
-        __ Jump(scratch);
+        Register reg = i.InputRegister(0);
+        DCHECK_IMPLIES(
+            HasCallDescriptorFlag(instr, CallDescriptor::kFixedTargetRegister),
+            reg == kJavaScriptCallCodeStartRegister);
+        __ add(reg, reg, Operand(Code::kHeaderSize - kHeapObjectTag));
+        __ Jump(reg);
       }
       DCHECK_EQ(LeaveCC, i.OutputSBit());
       unwinding_info_writer_.MarkBlockWillExit();
@@ -738,19 +759,10 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       break;
     }
     case kArchTailCallWasm: {
-      // We must not share code targets for calls to builtins for wasm code, as
-      // they might need to be patched individually.
-      internal::Assembler::BlockCodeTargetSharingScope scope;
-      RelocInfo::Mode rmode = RelocInfo::JS_TO_WASM_CALL;
-      if (info()->IsWasm()) {
-        scope.Open(tasm());
-        rmode = RelocInfo::WASM_CALL;
-      }
-
       if (instr->InputAt(0)->IsImmediate()) {
-        Address wasm_code =
-            static_cast<Address>(i.ToConstant(instr->InputAt(0)).ToInt32());
-        __ Jump(wasm_code, rmode);
+        Constant constant = i.ToConstant(instr->InputAt(0));
+        Address wasm_code = static_cast<Address>(constant.ToInt32());
+        __ Jump(wasm_code, constant.rmode());
       } else {
         __ Jump(i.InputRegister(0));
       }
@@ -762,7 +774,11 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     }
     case kArchTailCallAddress: {
       CHECK(!instr->InputAt(0)->IsImmediate());
-      __ Jump(i.InputRegister(0));
+      Register reg = i.InputRegister(0);
+      DCHECK_IMPLIES(
+          HasCallDescriptorFlag(instr, CallDescriptor::kFixedTargetRegister),
+          reg == kJavaScriptCallCodeStartRegister);
+      __ Jump(reg);
       unwinding_info_writer_.MarkBlockWillExit();
       frame_access_state()->ClearSPDelta();
       frame_access_state()->SetFrameAccessToDefault();
@@ -854,6 +870,9 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       AssembleArchJump(i.InputRpo(0));
       DCHECK_EQ(LeaveCC, i.OutputSBit());
       break;
+    case kArchBinarySearchSwitch:
+      AssembleArchBinarySearchSwitch(instr);
+      break;
     case kArchLookupSwitch:
       AssembleArchLookupSwitch(instr);
       DCHECK_EQ(LeaveCC, i.OutputSBit());
@@ -919,13 +938,9 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         __ mov(i.OutputRegister(), fp);
       }
       break;
-    case kArchRootsPointer:
-      __ mov(i.OutputRegister(), kRootRegister);
-      DCHECK_EQ(LeaveCC, i.OutputSBit());
-      break;
     case kArchTruncateDoubleToI:
       __ TruncateDoubleToI(isolate(), zone(), i.OutputRegister(),
-                           i.InputDoubleRegister(0));
+                           i.InputDoubleRegister(0), DetermineStubCallMode());
       DCHECK_EQ(LeaveCC, i.OutputSBit());
       break;
     case kArchStoreWithWriteBarrier: {
@@ -1171,6 +1186,10 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       DCHECK_EQ(LeaveCC, i.OutputSBit());
       break;
     }
+    case kArmRev:
+      __ rev(i.OutputRegister(), i.InputRegister(0));
+      DCHECK_EQ(LeaveCC, i.OutputSBit());
+      break;
     case kArmClz:
       __ clz(i.OutputRegister(), i.InputRegister(0));
       DCHECK_EQ(LeaveCC, i.OutputSBit());
@@ -2354,18 +2373,8 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       Simd128Register dst = i.OutputSimd128Register(),
                       src0 = i.InputSimd128Register(0),
                       src1 = i.InputSimd128Register(1);
-      UseScratchRegisterScope temps(tasm());
-      // Check for in-place shuffles.
-      // If dst == src0 == src1, then the shuffle is unary and we only use src0.
-      if (dst == src0) {
-        Simd128Register scratch = temps.AcquireQ();
-        __ vmov(scratch, src0);
-        src0 = scratch;
-      } else if (dst == src1) {
-        Simd128Register scratch = temps.AcquireQ();
-        __ vmov(scratch, src1);
-        src1 = scratch;
-      }
+      DCHECK_NE(dst, src0);
+      DCHECK_NE(dst, src1);
       // Perform shuffle as a vmov per lane.
       int dst_code = dst.code() * 4;
       int src0_code = src0.code() * 4;
@@ -2656,7 +2665,6 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     case kWord32AtomicLoadWord32:
       ASSEMBLE_ATOMIC_LOAD_INTEGER(ldr);
       break;
-
     case kWord32AtomicStoreWord8:
       ASSEMBLE_ATOMIC_STORE_INTEGER(strb);
       break;
@@ -2738,11 +2746,80 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       ATOMIC_BINOP_CASE(Or, orr)
       ATOMIC_BINOP_CASE(Xor, eor)
 #undef ATOMIC_BINOP_CASE
+    case kArmWord32AtomicPairLoad:
+      __ add(i.TempRegister(0), i.InputRegister(0), i.InputRegister(1));
+      __ ldrexd(i.OutputRegister(0), i.OutputRegister(1), i.TempRegister(0));
+      __ dmb(ISH);
+      break;
+    case kArmWord32AtomicPairStore: {
+      Label store;
+      __ add(i.TempRegister(0), i.InputRegister(0), i.InputRegister(1));
+      __ dmb(ISH);
+      __ bind(&store);
+      __ ldrexd(i.TempRegister(1), i.TempRegister(2), i.TempRegister(0));
+      __ strexd(i.TempRegister(1), i.InputRegister(2), i.InputRegister(3),
+                i.TempRegister(0));
+      __ teq(i.TempRegister(1), Operand(0));
+      __ b(ne, &store);
+      __ dmb(ISH);
+      break;
+    }
+#define ATOMIC_ARITH_BINOP_CASE(op, instr1, instr2) \
+  case kArmWord32AtomicPair##op: {                  \
+    ASSEMBLE_ATOMIC64_ARITH_BINOP(instr1, instr2);  \
+    break;                                          \
+  }
+      ATOMIC_ARITH_BINOP_CASE(Add, add, adc)
+      ATOMIC_ARITH_BINOP_CASE(Sub, sub, sbc)
+#undef ATOMIC_ARITH_BINOP_CASE
+#define ATOMIC_LOGIC_BINOP_CASE(op, instr) \
+  case kArmWord32AtomicPair##op: {         \
+    ASSEMBLE_ATOMIC64_LOGIC_BINOP(instr);  \
+    break;                                 \
+  }
+      ATOMIC_LOGIC_BINOP_CASE(And, and_)
+      ATOMIC_LOGIC_BINOP_CASE(Or, orr)
+      ATOMIC_LOGIC_BINOP_CASE(Xor, eor)
+    case kArmWord32AtomicPairExchange: {
+      Label exchange;
+      __ add(i.TempRegister(0), i.InputRegister(2), i.InputRegister(3));
+      __ dmb(ISH);
+      __ bind(&exchange);
+      __ ldrexd(i.OutputRegister(0), i.OutputRegister(1), i.TempRegister(0));
+      __ strexd(i.TempRegister(1), i.InputRegister(0), i.InputRegister(1),
+                i.TempRegister(0));
+      __ teq(i.TempRegister(1), Operand(0));
+      __ b(ne, &exchange);
+      __ dmb(ISH);
+      break;
+    }
+    case kArmWord32AtomicPairCompareExchange: {
+      __ add(i.TempRegister(0), i.InputRegister(4), i.InputRegister(5));
+      Label compareExchange;
+      Label exit;
+      __ dmb(ISH);
+      __ bind(&compareExchange);
+      __ ldrexd(i.OutputRegister(0), i.OutputRegister(1), i.TempRegister(0));
+      __ teq(i.InputRegister(0), Operand(i.OutputRegister(0)));
+      __ b(ne, &exit);
+      __ teq(i.InputRegister(1), Operand(i.OutputRegister(1)));
+      __ b(ne, &exit);
+      __ strexd(i.TempRegister(1), i.InputRegister(2), i.InputRegister(3),
+                i.TempRegister(0));
+      __ teq(i.TempRegister(1), Operand(0));
+      __ b(ne, &compareExchange);
+      __ bind(&exit);
+      __ dmb(ISH);
+      break;
+    }
+#undef ATOMIC_LOGIC_BINOP_CASE
 #undef ASSEMBLE_ATOMIC_LOAD_INTEGER
 #undef ASSEMBLE_ATOMIC_STORE_INTEGER
 #undef ASSEMBLE_ATOMIC_EXCHANGE_INTEGER
 #undef ASSEMBLE_ATOMIC_COMPARE_EXCHANGE_INTEGER
 #undef ASSEMBLE_ATOMIC_BINOP
+#undef ASSEMBLE_ATOMIC64_ARITH_BINOP
+#undef ASSEMBLE_ATOMIC64_LOGIC_BINOP
 #undef ASSEMBLE_IEEE754_BINOP
 #undef ASSEMBLE_IEEE754_UNOP
 #undef ASSEMBLE_NEON_NARROWING_OP
@@ -2789,31 +2866,19 @@ void CodeGenerator::AssembleArchTrap(Instruction* instr,
                                      FlagsCondition condition) {
   class OutOfLineTrap final : public OutOfLineCode {
    public:
-    OutOfLineTrap(CodeGenerator* gen, bool frame_elided, Instruction* instr)
-        : OutOfLineCode(gen),
-          frame_elided_(frame_elided),
-          instr_(instr),
-          gen_(gen) {}
+    OutOfLineTrap(CodeGenerator* gen, Instruction* instr)
+        : OutOfLineCode(gen), instr_(instr), gen_(gen) {}
 
     void Generate() final {
       ArmOperandConverter i(gen_, instr_);
-
-      Builtins::Name trap_id =
-          static_cast<Builtins::Name>(i.InputInt32(instr_->InputCount() - 1));
-      bool old_has_frame = __ has_frame();
-      if (frame_elided_) {
-        __ set_has_frame(true);
-        __ EnterFrame(StackFrame::WASM_COMPILED);
-      }
+      TrapId trap_id =
+          static_cast<TrapId>(i.InputInt32(instr_->InputCount() - 1));
       GenerateCallToTrap(trap_id);
-      if (frame_elided_) {
-        __ set_has_frame(old_has_frame);
-      }
     }
 
    private:
-    void GenerateCallToTrap(Builtins::Name trap_id) {
-      if (trap_id == Builtins::builtin_count) {
+    void GenerateCallToTrap(TrapId trap_id) {
+      if (trap_id == TrapId::kInvalid) {
         // We cannot test calls to the runtime in cctest/test-run-wasm.
         // Therefore we emit a call to C here instead of a call to the runtime.
         // We use the context register as the scratch register, because we do
@@ -2829,8 +2894,9 @@ void CodeGenerator::AssembleArchTrap(Instruction* instr,
         __ Ret();
       } else {
         gen_->AssembleSourcePosition(instr_);
-        __ Call(__ isolate()->builtins()->builtin_handle(trap_id),
-                RelocInfo::CODE_TARGET);
+        // A direct call to a wasm runtime stub defined in this module.
+        // Just encode the stub index. This will be patched at relocation.
+        __ Call(static_cast<Address>(trap_id), RelocInfo::WASM_STUB_CALL);
         ReferenceMap* reference_map =
             new (gen_->zone()) ReferenceMap(gen_->zone());
         gen_->RecordSafepoint(reference_map, Safepoint::kSimple, 0,
@@ -2841,12 +2907,10 @@ void CodeGenerator::AssembleArchTrap(Instruction* instr,
       }
     }
 
-    bool frame_elided_;
     Instruction* instr_;
     CodeGenerator* gen_;
   };
-  bool frame_elided = !frame_access_state()->has_frame();
-  auto ool = new (zone()) OutOfLineTrap(this, frame_elided, instr);
+  auto ool = new (zone()) OutOfLineTrap(this, instr);
   Label* tlabel = ool->entry();
   Condition cc = FlagsConditionToCondition(condition);
   __ b(cc, tlabel);
@@ -2866,6 +2930,16 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
   __ mov(reg, Operand(1), LeaveCC, cc);
 }
 
+void CodeGenerator::AssembleArchBinarySearchSwitch(Instruction* instr) {
+  ArmOperandConverter i(this, instr);
+  Register input = i.InputRegister(0);
+  std::vector<std::pair<int32_t, Label*>> cases;
+  for (size_t index = 2; index < instr->InputCount(); index += 2) {
+    cases.push_back({i.InputInt32(index + 0), GetLabel(i.InputRpo(index + 1))});
+  }
+  AssembleArchBinarySearchSwitchRange(input, i.InputRpo(1), cases.data(),
+                                      cases.data() + cases.size());
+}
 
 void CodeGenerator::AssembleArchLookupSwitch(Instruction* instr) {
   ArmOperandConverter i(this, instr);
@@ -2959,47 +3033,42 @@ void CodeGenerator::AssembleConstructFrame() {
   const RegList saves_fp = call_descriptor->CalleeSavedFPRegisters();
 
   if (shrink_slots > 0) {
-    if (info()->IsWasm()) {
-      if (shrink_slots > 128) {
-        // For WebAssembly functions with big frames we have to do the stack
-        // overflow check before we construct the frame. Otherwise we may not
-        // have enough space on the stack to call the runtime for the stack
-        // overflow.
-        Label done;
+    DCHECK(frame_access_state()->has_frame());
+    if (info()->IsWasm() && shrink_slots > 128) {
+      // For WebAssembly functions with big frames we have to do the stack
+      // overflow check before we construct the frame. Otherwise we may not
+      // have enough space on the stack to call the runtime for the stack
+      // overflow.
+      Label done;
 
-        // If the frame is bigger than the stack, we throw the stack overflow
-        // exception unconditionally. Thereby we can avoid the integer overflow
-        // check in the condition code.
-        if ((shrink_slots * kPointerSize) < (FLAG_stack_size * 1024)) {
-          UseScratchRegisterScope temps(tasm());
-          Register scratch = temps.Acquire();
-          __ Move(scratch,
-                  Operand(ExternalReference::address_of_real_stack_limit(
-                      __ isolate())));
-          __ ldr(scratch, MemOperand(scratch));
-          __ add(scratch, scratch, Operand(shrink_slots * kPointerSize));
-          __ cmp(sp, scratch);
-          __ b(cs, &done);
-        }
-
-        if (!frame_access_state()->has_frame()) {
-          __ set_has_frame(true);
-          // There is no need to leave the frame, we will not return from the
-          // runtime call.
-          __ EnterFrame(StackFrame::WASM_COMPILED);
-        }
-        __ Move(cp, Smi::kZero);
-        __ CallRuntimeDelayed(zone(), Runtime::kThrowWasmStackOverflow);
-        // We come from WebAssembly, there are no references for the GC.
-        ReferenceMap* reference_map = new (zone()) ReferenceMap(zone());
-        RecordSafepoint(reference_map, Safepoint::kSimple, 0,
-                        Safepoint::kNoLazyDeopt);
-        if (FLAG_debug_code) {
-          __ stop(GetAbortReason(AbortReason::kUnexpectedReturnFromThrow));
-        }
-
-        __ bind(&done);
+      // If the frame is bigger than the stack, we throw the stack overflow
+      // exception unconditionally. Thereby we can avoid the integer overflow
+      // check in the condition code.
+      if ((shrink_slots * kPointerSize) < (FLAG_stack_size * 1024)) {
+        UseScratchRegisterScope temps(tasm());
+        Register scratch = temps.Acquire();
+        __ ldr(scratch, FieldMemOperand(
+                            kWasmInstanceRegister,
+                            WasmInstanceObject::kRealStackLimitAddressOffset));
+        __ ldr(scratch, MemOperand(scratch));
+        __ add(scratch, scratch, Operand(shrink_slots * kPointerSize));
+        __ cmp(sp, scratch);
+        __ b(cs, &done);
       }
+
+      __ ldr(r2, FieldMemOperand(kWasmInstanceRegister,
+                                 WasmInstanceObject::kCEntryStubOffset));
+      __ Move(cp, Smi::kZero);
+      __ CallRuntimeWithCEntry(Runtime::kThrowWasmStackOverflow, r2);
+      // We come from WebAssembly, there are no references for the GC.
+      ReferenceMap* reference_map = new (zone()) ReferenceMap(zone());
+      RecordSafepoint(reference_map, Safepoint::kSimple, 0,
+                      Safepoint::kNoLazyDeopt);
+      if (FLAG_debug_code) {
+        __ stop(GetAbortReason(AbortReason::kUnexpectedReturnFromThrow));
+      }
+
+      __ bind(&done);
     }
 
     // Skip callee-saved and return slots, which are pushed below.
@@ -3105,6 +3174,8 @@ void CodeGenerator::AssembleMove(InstructionOperand* source,
       } else {
         __ Move(dst, src_object);
       }
+    } else if (src.type() == Constant::kExternalReference) {
+      __ Move(dst, src.ToExternalReference());
     } else {
       __ mov(dst, g.ToImmediate(source));
     }

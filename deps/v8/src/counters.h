@@ -406,8 +406,7 @@ class HistogramTimerScope BASE_EMBEDDED {
   explicit HistogramTimerScope(HistogramTimer* timer,
                                bool allow_nesting = false)
 #ifdef DEBUG
-      : timer_(timer),
-        skipped_timer_start_(false) {
+      : timer_(timer), skipped_timer_start_(false) {
     if (timer_->timer()->IsStarted() && allow_nesting) {
       skipped_timer_start_ = true;
     } else {
@@ -434,6 +433,27 @@ class HistogramTimerScope BASE_EMBEDDED {
 #ifdef DEBUG
   bool skipped_timer_start_;
 #endif
+};
+
+enum class OptionalHistogramTimerScopeMode { TAKE_TIME, DONT_TAKE_TIME };
+
+// Helper class for scoping a HistogramTimer.
+// It will not take time if take_time is set to false.
+class OptionalHistogramTimerScope BASE_EMBEDDED {
+ public:
+  OptionalHistogramTimerScope(HistogramTimer* timer,
+                              OptionalHistogramTimerScopeMode mode)
+      : timer_(timer), mode_(mode) {
+    if (mode == OptionalHistogramTimerScopeMode::TAKE_TIME) timer_->Start();
+  }
+
+  ~OptionalHistogramTimerScope() {
+    if (mode_ == OptionalHistogramTimerScopeMode::TAKE_TIME) timer_->Stop();
+  }
+
+ private:
+  HistogramTimer* timer_;
+  OptionalHistogramTimerScopeMode mode_;
 };
 
 // A histogram timer that can aggregate events within a larger scope.
@@ -1003,7 +1023,7 @@ enum RuntimeCallCounterId {
                           kNumberOfCounters
 };
 
-class RuntimeCallStats final : public ZoneObject {
+class RuntimeCallStats final {
  public:
   V8_EXPORT_PRIVATE RuntimeCallStats();
 
@@ -1055,6 +1075,42 @@ class RuntimeCallStats final : public ZoneObject {
   RuntimeCallCounter counters_[kNumberOfCounters];
 };
 
+class WorkerThreadRuntimeCallStats final {
+ public:
+  WorkerThreadRuntimeCallStats();
+  ~WorkerThreadRuntimeCallStats();
+
+  // Returns the TLS key associated with this WorkerThreadRuntimeCallStats.
+  base::Thread::LocalStorageKey GetKey() const { return tls_key_; }
+
+  // Returns a new worker thread runtime call stats table managed by this
+  // WorkerThreadRuntimeCallStats.
+  RuntimeCallStats* NewTable();
+
+  // Adds the counters from the worker thread tables to |main_call_stats|.
+  void AddToMainTable(RuntimeCallStats* main_call_stats);
+
+ private:
+  base::Mutex mutex_;
+  std::vector<std::unique_ptr<RuntimeCallStats>> tables_;
+  base::Thread::LocalStorageKey tls_key_;
+};
+
+// Creating a WorkerThreadRuntimeCallStatsScope will provide a thread-local
+// runtime call stats table, and will dump the table to an immediate trace event
+// when it is destroyed.
+class WorkerThreadRuntimeCallStatsScope final {
+ public:
+  WorkerThreadRuntimeCallStatsScope(
+      WorkerThreadRuntimeCallStats* off_thread_stats);
+  ~WorkerThreadRuntimeCallStatsScope();
+
+  RuntimeCallStats* Get() const { return table_; }
+
+ private:
+  RuntimeCallStats* table_;
+};
+
 #define CHANGE_CURRENT_RUNTIME_COUNTER(runtime_call_stats, counter_id) \
   do {                                                                 \
     if (V8_UNLIKELY(FLAG_runtime_stats) && runtime_call_stats) {       \
@@ -1075,7 +1131,7 @@ class RuntimeCallTimerScope {
                                RuntimeCallCounterId counter_id);
   // This constructor is here just to avoid calling GetIsolate() when the
   // stats are disabled and the isolate is not directly available.
-  inline RuntimeCallTimerScope(HeapObject* heap_object,
+  inline RuntimeCallTimerScope(Isolate* isolate, HeapObject* heap_object,
                                RuntimeCallCounterId counter_id);
   inline RuntimeCallTimerScope(RuntimeCallStats* stats,
                                RuntimeCallCounterId counter_id) {
@@ -1109,6 +1165,13 @@ class RuntimeCallTimerScope {
   HR(incremental_marking_reason, V8.GCIncrementalMarkingReason, 0, 21, 22)     \
   HR(incremental_marking_sum, V8.GCIncrementalMarkingSum, 0, 10000, 101)       \
   HR(mark_compact_reason, V8.GCMarkCompactReason, 0, 21, 22)                   \
+  HR(gc_finalize_clear, V8.GCFinalizeMC.Clear, 0, 10000, 101)                  \
+  HR(gc_finalize_epilogue, V8.GCFinalizeMC.Epilogue, 0, 10000, 101)            \
+  HR(gc_finalize_evacuate, V8.GCFinalizeMC.Evacuate, 0, 10000, 101)            \
+  HR(gc_finalize_finish, V8.GCFinalizeMC.Finish, 0, 10000, 101)                \
+  HR(gc_finalize_mark, V8.GCFinalizeMC.Mark, 0, 10000, 101)                    \
+  HR(gc_finalize_prologue, V8.GCFinalizeMC.Prologue, 0, 10000, 101)            \
+  HR(gc_finalize_sweep, V8.GCFinalizeMC.Sweep, 0, 10000, 101)                  \
   HR(scavenge_reason, V8.GCScavengeReason, 0, 21, 22)                          \
   HR(young_generation_handling, V8.GCYoungGenerationHandling, 0, 2, 3)         \
   /* Asm/Wasm. */                                                              \
@@ -1144,8 +1207,8 @@ class RuntimeCallTimerScope {
      20)                                                                       \
   HR(wasm_lazy_compilation_throughput, V8.WasmLazyCompilationThroughput, 1,    \
      10000, 50)                                                                \
-  HR(compile_script_cache_behaviour, V8.CompileScript.CacheBehaviour, 0, 19,   \
-     20)                                                                       \
+  HR(compile_script_cache_behaviour, V8.CompileScript.CacheBehaviour, 0, 20,   \
+     21)                                                                       \
   HR(wasm_memory_allocation_result, V8.WasmMemoryAllocationResult, 0, 3, 4)    \
   HR(wasm_address_space_usage_mb, V8.WasmAddressSpaceUsageMiB, 0, 1 << 20,     \
      128)                                                                      \
@@ -1263,12 +1326,6 @@ class RuntimeCallTimerScope {
   HM(heap_sample_code_space_committed, V8.MemoryHeapSampleCodeSpaceCommitted) \
   HM(heap_sample_maximum_committed, V8.MemoryHeapSampleMaximumCommitted)
 
-// Note: These define both Histogram and AggregatedMemoryHistogram<Histogram>
-// histograms with options (min=4000, max=2000000, buckets=100).
-#define HISTOGRAM_MEMORY_LIST(HM)                   \
-  HM(memory_heap_committed, V8.MemoryHeapCommitted) \
-  HM(memory_heap_used, V8.MemoryHeapUsed)
-
 // WARNING: STATS_COUNTER_LIST_* is a very large macro that is causing MSVC
 // Intellisense to crash.  It was broken into two macros (each of length 40
 // lines) rather than one macro (of length about 80 lines) to work around
@@ -1289,7 +1346,6 @@ class RuntimeCallTimerScope {
   SC(objs_since_last_full, V8.ObjsSinceLastFull)                    \
   SC(string_table_capacity, V8.StringTableCapacity)                 \
   SC(number_of_symbols, V8.NumberOfSymbols)                         \
-  SC(script_wrappers, V8.ScriptWrappers)                            \
   SC(inlined_copied_elements, V8.InlinedCopiedElements)             \
   SC(arguments_adaptors, V8.ArgumentsAdaptors)                      \
   SC(compilation_cache_hits, V8.CompilationCacheHits)               \
@@ -1357,8 +1413,6 @@ class RuntimeCallTimerScope {
   SC(sub_string_native, V8.SubStringNative)                                    \
   SC(regexp_entry_runtime, V8.RegExpEntryRuntime)                              \
   SC(regexp_entry_native, V8.RegExpEntryNative)                                \
-  SC(number_to_string_native, V8.NumberToStringNative)                         \
-  SC(number_to_string_runtime, V8.NumberToStringRuntime)                       \
   SC(math_exp_runtime, V8.MathExpRuntime)                                      \
   SC(math_log_runtime, V8.MathLogRuntime)                                      \
   SC(math_pow_runtime, V8.MathPowRuntime)                                      \
@@ -1450,14 +1504,6 @@ class Counters : public std::enable_shared_from_this<Counters> {
 #define HM(name, caption) \
   Histogram* name() { return &name##_; }
   HISTOGRAM_LEGACY_MEMORY_LIST(HM)
-  HISTOGRAM_MEMORY_LIST(HM)
-#undef HM
-
-#define HM(name, caption)                                     \
-  AggregatedMemoryHistogram<Histogram>* aggregated_##name() { \
-    return &aggregated_##name##_;                             \
-  }
-  HISTOGRAM_MEMORY_LIST(HM)
 #undef HM
 
 #define SC(name, caption) \
@@ -1485,7 +1531,6 @@ class Counters : public std::enable_shared_from_this<Counters> {
 #undef PERCENTAGE_ID
 #define MEMORY_ID(name, caption) k_##name,
     HISTOGRAM_LEGACY_MEMORY_LIST(MEMORY_ID)
-    HISTOGRAM_MEMORY_LIST(MEMORY_ID)
 #undef MEMORY_ID
 #define COUNTER_ID(name, caption) k_##name,
     STATS_COUNTER_LIST_1(COUNTER_ID)
@@ -1508,6 +1553,10 @@ class Counters : public std::enable_shared_from_this<Counters> {
   // clang-format on
 
   RuntimeCallStats* runtime_call_stats() { return &runtime_call_stats_; }
+
+  WorkerThreadRuntimeCallStats* worker_thread_runtime_call_stats() {
+    return &worker_thread_runtime_call_stats_;
+  }
 
  private:
   friend class StatsTable;
@@ -1557,12 +1606,6 @@ class Counters : public std::enable_shared_from_this<Counters> {
 #define HM(name, caption) \
   Histogram name##_;
   HISTOGRAM_LEGACY_MEMORY_LIST(HM)
-  HISTOGRAM_MEMORY_LIST(HM)
-#undef HM
-
-#define HM(name, caption) \
-  AggregatedMemoryHistogram<Histogram> aggregated_##name##_;
-  HISTOGRAM_MEMORY_LIST(HM)
 #undef HM
 
 #define SC(name, caption) \
@@ -1594,6 +1637,7 @@ class Counters : public std::enable_shared_from_this<Counters> {
 #undef SC
 
   RuntimeCallStats runtime_call_stats_;
+  WorkerThreadRuntimeCallStats worker_thread_runtime_call_stats_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(Counters);
 };

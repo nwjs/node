@@ -59,8 +59,7 @@ class IC {
            IsKeyedStoreIC() || IsStoreInArrayLiteralICKind(kind());
   }
 
-  static inline bool IsHandler(MaybeObject* object,
-                               bool from_stub_cache = false);
+  static inline bool IsHandler(MaybeObject* object);
 
   // Nofity the IC system that a feedback has changed.
   static void OnFeedbackChanged(Isolate* isolate, FeedbackVector* vector,
@@ -94,6 +93,8 @@ class IC {
 
   // Configure for most states.
   bool ConfigureVectorState(IC::State new_state, Handle<Object> key);
+  // Configure the vector for PREMONOMORPHIC.
+  void ConfigureVectorState(Handle<Map> map);
   // Configure the vector for MONOMORPHIC.
   void ConfigureVectorState(Handle<Name> name, Handle<Map> map,
                             Handle<Object> handler);
@@ -141,13 +142,7 @@ class IC {
   bool ShouldRecomputeHandler(Handle<String> name);
 
   Handle<Map> receiver_map() { return receiver_map_; }
-  void update_receiver_map(Handle<Object> receiver) {
-    if (receiver->IsSmi()) {
-      receiver_map_ = isolate_->factory()->heap_number_map();
-    } else {
-      receiver_map_ = handle(HeapObject::cast(*receiver)->map());
-    }
-  }
+  inline void update_receiver_map(Handle<Object> receiver);
 
   void TargetMaps(MapHandles* list) {
     FindTargetMaps();

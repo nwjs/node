@@ -141,7 +141,9 @@ const ElementAccess& ElementAccessOf(const Operator* op) {
 
 ExternalArrayType ExternalArrayTypeOf(const Operator* op) {
   DCHECK(op->opcode() == IrOpcode::kLoadTypedElement ||
-         op->opcode() == IrOpcode::kStoreTypedElement);
+         op->opcode() == IrOpcode::kLoadDataViewElement ||
+         op->opcode() == IrOpcode::kStoreTypedElement ||
+         op->opcode() == IrOpcode::kStoreDataViewElement);
   return OpParameter<ExternalArrayType>(op);
 }
 
@@ -164,9 +166,31 @@ std::ostream& operator<<(std::ostream& os, CheckFloat64HoleMode mode) {
   UNREACHABLE();
 }
 
-CheckFloat64HoleMode CheckFloat64HoleModeOf(const Operator* op) {
+CheckFloat64HoleParameters const& CheckFloat64HoleParametersOf(
+    Operator const* op) {
   DCHECK_EQ(IrOpcode::kCheckFloat64Hole, op->opcode());
-  return OpParameter<CheckFloat64HoleMode>(op);
+  return OpParameter<CheckFloat64HoleParameters>(op);
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         CheckFloat64HoleParameters const& params) {
+  os << params.mode();
+  if (params.feedback().IsValid()) os << "; " << params.feedback();
+  return os;
+}
+
+size_t hash_value(const CheckFloat64HoleParameters& params) {
+  return base::hash_combine(params.mode(), params.feedback());
+}
+
+bool operator==(CheckFloat64HoleParameters const& lhs,
+                CheckFloat64HoleParameters const& rhs) {
+  return lhs.mode() == rhs.mode() && lhs.feedback() == rhs.feedback();
+}
+
+bool operator!=(CheckFloat64HoleParameters const& lhs,
+                CheckFloat64HoleParameters const& rhs) {
+  return !(lhs == rhs);
 }
 
 CheckForMinusZeroMode CheckMinusZeroModeOf(const Operator* op) {
@@ -581,11 +605,6 @@ AbortReason AbortReasonOf(const Operator* op) {
   return static_cast<AbortReason>(OpParameter<int>(op));
 }
 
-DeoptimizeReason DeoptimizeReasonOf(const Operator* op) {
-  DCHECK_EQ(IrOpcode::kCheckIf, op->opcode());
-  return OpParameter<DeoptimizeReason>(op);
-}
-
 const CheckTaggedInputParameters& CheckTaggedInputParametersOf(
     const Operator* op) {
   DCHECK(op->opcode() == IrOpcode::kCheckedTruncateTaggedToWord32 ||
@@ -771,7 +790,8 @@ bool operator==(CheckMinusZeroParameters const& lhs,
   V(CheckedInt32Mod, 2, 1)               \
   V(CheckedInt32Sub, 2, 1)               \
   V(CheckedUint32Div, 2, 1)              \
-  V(CheckedUint32Mod, 2, 1)
+  V(CheckedUint32Mod, 2, 1)              \
+  V(CheckStringAdd, 2, 1)
 
 #define CHECKED_WITH_FEEDBACK_OP_LIST(V) \
   V(CheckBounds, 2, 1)                   \
@@ -834,11 +854,12 @@ struct SimplifiedOperatorGlobalCache final {
 #undef CHECKED_WITH_FEEDBACK
 
   template <DeoptimizeReason kDeoptimizeReason>
-  struct CheckIfOperator final : public Operator1<DeoptimizeReason> {
+  struct CheckIfOperator final : public Operator1<CheckIfParameters> {
     CheckIfOperator()
-        : Operator1<DeoptimizeReason>(
+        : Operator1<CheckIfParameters>(
               IrOpcode::kCheckIf, Operator::kFoldable | Operator::kNoThrow,
-              "CheckIf", 1, 1, 1, 0, 1, 0, kDeoptimizeReason) {}
+              "CheckIf", 1, 1, 1, 0, 1, 0,
+              CheckIfParameters(kDeoptimizeReason, VectorSlotPair())) {}
   };
 #define CHECK_IF(Name, message) \
   CheckIfOperator<DeoptimizeReason::k##Name> kCheckIf##Name;
@@ -1007,12 +1028,13 @@ struct SimplifiedOperatorGlobalCache final {
 
   template <CheckFloat64HoleMode kMode>
   struct CheckFloat64HoleNaNOperator final
-      : public Operator1<CheckFloat64HoleMode> {
+      : public Operator1<CheckFloat64HoleParameters> {
     CheckFloat64HoleNaNOperator()
-        : Operator1<CheckFloat64HoleMode>(
+        : Operator1<CheckFloat64HoleParameters>(
               IrOpcode::kCheckFloat64Hole,
               Operator::kFoldable | Operator::kNoThrow, "CheckFloat64Hole", 1,
-              1, 1, 1, 1, 0, kMode) {}
+              1, 1, 1, 1, 0,
+              CheckFloat64HoleParameters(kMode, VectorSlotPair())) {}
   };
   CheckFloat64HoleNaNOperator<CheckFloat64HoleMode::kAllowReturnHole>
       kCheckFloat64HoleAllowReturnHoleOperator;
@@ -1144,15 +1166,20 @@ const Operator* SimplifiedOperatorBuilder::RuntimeAbort(AbortReason reason) {
       static_cast<int>(reason));                // parameter
 }
 
-const Operator* SimplifiedOperatorBuilder::CheckIf(DeoptimizeReason reason) {
-  switch (reason) {
+const Operator* SimplifiedOperatorBuilder::CheckIf(
+    DeoptimizeReason reason, const VectorSlotPair& feedback) {
+  if (!feedback.IsValid()) {
+    switch (reason) {
 #define CHECK_IF(Name, message)   \
   case DeoptimizeReason::k##Name: \
     return &cache_.kCheckIf##Name;
     DEOPTIMIZE_REASON_LIST(CHECK_IF)
 #undef CHECK_IF
+    }
   }
-  UNREACHABLE();
+  return new (zone()) Operator1<CheckIfParameters>(
+      IrOpcode::kCheckIf, Operator::kFoldable | Operator::kNoThrow, "CheckIf",
+      1, 1, 1, 0, 1, 0, CheckIfParameters(reason, feedback));
 }
 
 const Operator* SimplifiedOperatorBuilder::ChangeFloat64ToTagged(
@@ -1286,14 +1313,20 @@ const Operator* SimplifiedOperatorBuilder::ConvertReceiver(
 }
 
 const Operator* SimplifiedOperatorBuilder::CheckFloat64Hole(
-    CheckFloat64HoleMode mode) {
-  switch (mode) {
-    case CheckFloat64HoleMode::kAllowReturnHole:
-      return &cache_.kCheckFloat64HoleAllowReturnHoleOperator;
-    case CheckFloat64HoleMode::kNeverReturnHole:
-      return &cache_.kCheckFloat64HoleNeverReturnHoleOperator;
+    CheckFloat64HoleMode mode, VectorSlotPair const& feedback) {
+  if (!feedback.IsValid()) {
+    switch (mode) {
+      case CheckFloat64HoleMode::kAllowReturnHole:
+        return &cache_.kCheckFloat64HoleAllowReturnHoleOperator;
+      case CheckFloat64HoleMode::kNeverReturnHole:
+        return &cache_.kCheckFloat64HoleNeverReturnHoleOperator;
+    }
+    UNREACHABLE();
   }
-  UNREACHABLE();
+  return new (zone()) Operator1<CheckFloat64HoleParameters>(
+      IrOpcode::kCheckFloat64Hole, Operator::kFoldable | Operator::kNoThrow,
+      "CheckFloat64Hole", 1, 1, 1, 1, 1, 0,
+      CheckFloat64HoleParameters(mode, feedback));
 }
 
 const Operator* SimplifiedOperatorBuilder::SpeculativeToNumber(
@@ -1412,6 +1445,23 @@ CheckParameters const& CheckParametersOf(Operator const* op) {
   return OpParameter<CheckParameters>(op);
 }
 
+bool operator==(CheckIfParameters const& lhs, CheckIfParameters const& rhs) {
+  return lhs.reason() == rhs.reason() && lhs.feedback() == rhs.feedback();
+}
+
+size_t hash_value(CheckIfParameters const& p) {
+  return base::hash_combine(p.reason(), p.feedback());
+}
+
+std::ostream& operator<<(std::ostream& os, CheckIfParameters const& p) {
+  return os << p.reason() << p.feedback();
+}
+
+CheckIfParameters const& CheckIfParametersOf(Operator const* op) {
+  CHECK(op->opcode() == IrOpcode::kCheckIf);
+  return OpParameter<CheckIfParameters>(op);
+}
+
 const Operator* SimplifiedOperatorBuilder::NewDoubleElements(
     PretenureFlag pretenure) {
   return new (zone()) Operator1<PretenureFlag>(  // --
@@ -1505,13 +1555,15 @@ const Operator* SimplifiedOperatorBuilder::StringFromSingleCodePoint(
 SPECULATIVE_NUMBER_BINOP_LIST(SPECULATIVE_NUMBER_BINOP)
 #undef SPECULATIVE_NUMBER_BINOP
 
-#define ACCESS_OP_LIST(V)                                             \
-  V(LoadField, FieldAccess, Operator::kNoWrite, 1, 1, 1)              \
-  V(StoreField, FieldAccess, Operator::kNoRead, 2, 1, 0)              \
-  V(LoadElement, ElementAccess, Operator::kNoWrite, 2, 1, 1)          \
-  V(StoreElement, ElementAccess, Operator::kNoRead, 3, 1, 0)          \
-  V(LoadTypedElement, ExternalArrayType, Operator::kNoWrite, 4, 1, 1) \
-  V(StoreTypedElement, ExternalArrayType, Operator::kNoRead, 5, 1, 0)
+#define ACCESS_OP_LIST(V)                                                \
+  V(LoadField, FieldAccess, Operator::kNoWrite, 1, 1, 1)                 \
+  V(StoreField, FieldAccess, Operator::kNoRead, 2, 1, 0)                 \
+  V(LoadElement, ElementAccess, Operator::kNoWrite, 2, 1, 1)             \
+  V(StoreElement, ElementAccess, Operator::kNoRead, 3, 1, 0)             \
+  V(LoadTypedElement, ExternalArrayType, Operator::kNoWrite, 4, 1, 1)    \
+  V(StoreTypedElement, ExternalArrayType, Operator::kNoRead, 5, 1, 0)    \
+  V(LoadDataViewElement, ExternalArrayType, Operator::kNoWrite, 4, 1, 1) \
+  V(StoreDataViewElement, ExternalArrayType, Operator::kNoRead, 5, 1, 0)
 
 #define ACCESS(Name, Type, properties, value_input_count, control_input_count, \
                output_count)                                                   \

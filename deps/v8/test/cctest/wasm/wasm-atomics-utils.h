@@ -5,7 +5,6 @@
 #ifndef WASM_ATOMICOP_UTILS_H
 #define WASM_ATOMICOP_UTILS_H
 
-#include "src/objects-inl.h"
 #include "test/cctest/cctest.h"
 #include "test/cctest/compiler/value-helper.h"
 #include "test/cctest/wasm/wasm-run-utils.h"
@@ -13,6 +12,14 @@
 namespace v8 {
 namespace internal {
 namespace wasm {
+
+#define OPERATION_LIST(V) \
+  V(Add)                  \
+  V(Sub)                  \
+  V(And)                  \
+  V(Or)                   \
+  V(Xor)                  \
+  V(Exchange)
 
 typedef uint64_t (*Uint64BinOp)(uint64_t, uint64_t);
 typedef uint32_t (*Uint32BinOp)(uint32_t, uint32_t);

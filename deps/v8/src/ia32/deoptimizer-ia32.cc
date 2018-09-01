@@ -47,7 +47,7 @@ void Deoptimizer::TableEntryGenerator::Generate() {
 
   ExternalReference c_entry_fp_address =
       ExternalReference::Create(IsolateAddressId::kCEntryFPAddress, isolate());
-  __ mov(Operand::StaticVariable(c_entry_fp_address), ebp);
+  __ mov(masm()->StaticVariable(c_entry_fp_address), ebp);
 
   const int kSavedRegistersAreaSize =
       kNumberOfRegisters * kPointerSize + kDoubleRegsSize + kFloatRegsSize;
@@ -72,7 +72,8 @@ void Deoptimizer::TableEntryGenerator::Generate() {
   __ mov(eax, Operand(ebp, JavaScriptFrameConstants::kFunctionOffset));
   __ bind(&context_check);
   __ mov(Operand(esp, 0 * kPointerSize), eax);  // Function.
-  __ mov(Operand(esp, 1 * kPointerSize), Immediate(type()));  // Bailout type.
+  __ mov(Operand(esp, 1 * kPointerSize),
+         Immediate(static_cast<int>(deopt_kind())));
   __ mov(Operand(esp, 2 * kPointerSize), ebx);  // Bailout id.
   __ mov(Operand(esp, 3 * kPointerSize), ecx);  // Code address or 0.
   __ mov(Operand(esp, 4 * kPointerSize), edx);  // Fp-to-sp delta.

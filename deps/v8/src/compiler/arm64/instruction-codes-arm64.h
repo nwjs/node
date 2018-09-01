@@ -77,6 +77,8 @@ namespace compiler {
   V(Arm64Bfi)                               \
   V(Arm64Rbit)                              \
   V(Arm64Rbit32)                            \
+  V(Arm64Rev)                               \
+  V(Arm64Rev32)                             \
   V(Arm64TestAndBranch32)                   \
   V(Arm64TestAndBranch)                     \
   V(Arm64CompareAndBranch32)                \
@@ -362,7 +364,8 @@ namespace compiler {
   V(Operand2_R_UXTH)  /* %r0 UXTH (unsigned extend halfword) */ \
   V(Operand2_R_SXTB)  /* %r0 SXTB (signed extend byte) */       \
   V(Operand2_R_SXTH)  /* %r0 SXTH (signed extend halfword) */   \
-  V(Operand2_R_SXTW)  /* %r0 SXTW (signed extend word) */
+  V(Operand2_R_SXTW)  /* %r0 SXTW (signed extend word) */       \
+  V(Root)             /* [%rr + K] */
 
 }  // namespace compiler
 }  // namespace internal

@@ -5,14 +5,18 @@
 #ifndef V8_HEAP_FACTORY_H_
 #define V8_HEAP_FACTORY_H_
 
+// Clients of this interface shouldn't depend on lots of heap internals.
+// Do not include anything from src/heap here!
 #include "src/builtins/builtins.h"
 #include "src/globals.h"
 #include "src/handles.h"
 #include "src/heap/heap.h"
+#include "src/maybe-handles.h"
 #include "src/messages.h"
 #include "src/objects/code.h"
 #include "src/objects/dictionary.h"
 #include "src/objects/hash-table.h"
+#include "src/objects/js-array-buffer.h"
 #include "src/objects/js-array.h"
 #include "src/objects/js-regexp.h"
 #include "src/objects/ordered-hash-table.h"
@@ -23,26 +27,30 @@ namespace internal {
 
 // Forward declarations.
 class AliasedArgumentsEntry;
-class BoilerplateDescription;
+class ObjectBoilerplateDescription;
 class BreakPoint;
 class BreakPointInfo;
 class CallableTask;
 class CallbackTask;
 class CallHandlerInfo;
-class ConstantElementsPair;
+class Expression;
+class ArrayBoilerplateDescription;
 class CoverageInfo;
 class DebugInfo;
 class EnumCache;
 class FreshlyAllocatedBigInt;
 class Isolate;
+class JSGeneratorObject;
 class JSMap;
 class JSMapIterator;
 class JSModuleNamespace;
+class JSProxy;
 class JSSet;
 class JSSetIterator;
 class JSWeakMap;
 class LoadHandler;
 class ModuleInfo;
+class NativeContext;
 class NewFunctionArgs;
 class PreParsedScopeData;
 class PromiseResolveThenableJobTask;
@@ -50,6 +58,8 @@ class RegExpMatchInfo;
 class ScriptContextTable;
 class StoreHandler;
 class TemplateObjectDescription;
+class UncompiledDataWithoutPreParsedScope;
+class UncompiledDataWithPreParsedScope;
 class WasmExportedFunctionData;
 struct SourceRange;
 template <typename T>
@@ -143,10 +153,8 @@ class V8_EXPORT_PRIVATE Factory {
 
   // Allocates a fixed array for name-value pairs of boilerplate properties and
   // calculates the number of properties we need to store in the backing store.
-  Handle<BoilerplateDescription> NewBoilerplateDescription(int boilerplate,
-                                                           int all_properties,
-                                                           int index_keys,
-                                                           bool has_seen_proto);
+  Handle<ObjectBoilerplateDescription> NewObjectBoilerplateDescription(
+      int boilerplate, int all_properties, int index_keys, bool has_seen_proto);
 
   // Allocate a new uninitialized fixed double array.
   // The function returns a pre-allocated empty fixed array for length = 0,
@@ -190,8 +198,8 @@ class V8_EXPORT_PRIVATE Factory {
   Handle<Tuple3> NewTuple3(Handle<Object> value1, Handle<Object> value2,
                            Handle<Object> value3, PretenureFlag pretenure);
 
-  // Create a new ConstantElementsPair struct.
-  Handle<ConstantElementsPair> NewConstantElementsPair(
+  // Create a new ArrayBoilerplateDescription struct.
+  Handle<ArrayBoilerplateDescription> NewArrayBoilerplateDescription(
       ElementsKind elements_kind, Handle<FixedArrayBase> constant_values);
 
   // Create a new TemplateObjectDescription struct.
@@ -354,17 +362,18 @@ class V8_EXPORT_PRIVATE Factory {
   Handle<Symbol> NewPrivateFieldSymbol();
 
   // Create a global (but otherwise uninitialized) context.
-  Handle<Context> NewNativeContext();
+  Handle<NativeContext> NewNativeContext();
 
   // Create a script context.
-  Handle<Context> NewScriptContext(Handle<Context> outer,
+  Handle<Context> NewScriptContext(Handle<NativeContext> outer,
                                    Handle<ScopeInfo> scope_info);
 
   // Create an empty script context table.
   Handle<ScriptContextTable> NewScriptContextTable();
 
   // Create a module context.
-  Handle<Context> NewModuleContext(Handle<Module> module, Handle<Context> outer,
+  Handle<Context> NewModuleContext(Handle<Module> module,
+                                   Handle<NativeContext> outer,
                                    Handle<ScopeInfo> scope_info);
 
   // Create a function or eval context.
@@ -391,6 +400,14 @@ class V8_EXPORT_PRIVATE Factory {
   Handle<Context> NewBlockContext(Handle<Context> previous,
                                   Handle<ScopeInfo> scope_info);
 
+  // Create a context that's used by builtin functions.
+  //
+  // These are similar to function context but don't have a previous
+  // context or any scope info. These are used to store spec defined
+  // context values.
+  Handle<Context> NewBuiltinContext(Handle<NativeContext> native_context,
+                                    int length);
+
   Handle<Struct> NewStruct(InstanceType type,
                            PretenureFlag pretenure = NOT_TENURED);
 
@@ -401,6 +418,9 @@ class V8_EXPORT_PRIVATE Factory {
 
   Handle<Script> NewScript(Handle<String> source,
                            PretenureFlag tenure = TENURED);
+  Handle<Script> NewScriptWithId(Handle<String> source, int script_id,
+                                 PretenureFlag tenure = TENURED);
+  Handle<Script> CloneScript(Handle<Script> script);
 
   Handle<BreakPointInfo> NewBreakPointInfo(int source_position);
   Handle<BreakPoint> NewBreakPoint(int id, Handle<String> condition);
@@ -443,9 +463,6 @@ class V8_EXPORT_PRIVATE Factory {
   Handle<PropertyCell> NewPropertyCell(Handle<Name> name,
                                        PretenureFlag pretenure = TENURED);
 
-  Handle<WeakCell> NewWeakCell(Handle<HeapObject> value,
-                               PretenureFlag pretenure = TENURED);
-
   Handle<FeedbackCell> NewNoClosuresCell(Handle<HeapObject> value);
   Handle<FeedbackCell> NewOneClosureCell(Handle<HeapObject> value);
   Handle<FeedbackCell> NewManyClosuresCell(Handle<HeapObject> value);
@@ -454,7 +471,7 @@ class V8_EXPORT_PRIVATE Factory {
                                              int slack = 0);
 
   // Allocate a tenured AllocationSite. Its payload is null.
-  Handle<AllocationSite> NewAllocationSite();
+  Handle<AllocationSite> NewAllocationSite(bool with_weak_next);
 
   // Allocates and initializes a new Map.
   Handle<Map> NewMap(InstanceType type, int instance_size,
@@ -525,18 +542,21 @@ class V8_EXPORT_PRIVATE Factory {
   inline Handle<Object> NewNumberFromInt64(
       int64_t value, PretenureFlag pretenure = NOT_TENURED);
   inline Handle<HeapNumber> NewHeapNumber(
-      double value, MutableMode mode = IMMUTABLE,
-      PretenureFlag pretenure = NOT_TENURED);
+      double value, PretenureFlag pretenure = NOT_TENURED);
   inline Handle<HeapNumber> NewHeapNumberFromBits(
-      uint64_t bits, MutableMode mode = IMMUTABLE,
-      PretenureFlag pretenure = NOT_TENURED);
-  // Creates mutable heap number object with value field set to hole NaN.
-  inline Handle<HeapNumber> NewMutableHeapNumber(
-      PretenureFlag pretenure = NOT_TENURED);
+      uint64_t bits, PretenureFlag pretenure = NOT_TENURED);
 
   // Creates heap number object with not yet set value field.
-  Handle<HeapNumber> NewHeapNumber(MutableMode mode,
-                                   PretenureFlag pretenure = NOT_TENURED);
+  Handle<HeapNumber> NewHeapNumber(PretenureFlag pretenure = NOT_TENURED);
+
+  Handle<MutableHeapNumber> NewMutableHeapNumber(
+      PretenureFlag pretenure = NOT_TENURED);
+  inline Handle<MutableHeapNumber> NewMutableHeapNumber(
+      double value, PretenureFlag pretenure = NOT_TENURED);
+  inline Handle<MutableHeapNumber> NewMutableHeapNumberFromBits(
+      uint64_t bits, PretenureFlag pretenure = NOT_TENURED);
+  inline Handle<MutableHeapNumber> NewMutableHeapNumberWithHoleNaN(
+      PretenureFlag pretenure = NOT_TENURED);
 
   // Allocates a new BigInt with {length} digits. Only to be used by
   // MutableBigInt::New*.
@@ -710,7 +730,18 @@ class V8_EXPORT_PRIVATE Factory {
 
   Handle<ModuleInfo> NewModuleInfo();
 
-  Handle<PreParsedScopeData> NewPreParsedScopeData();
+  Handle<PreParsedScopeData> NewPreParsedScopeData(int length);
+
+  Handle<UncompiledDataWithoutPreParsedScope>
+  NewUncompiledDataWithoutPreParsedScope(Handle<String> inferred_name,
+                                         int32_t start_position,
+                                         int32_t end_position,
+                                         int32_t function_literal_id);
+
+  Handle<UncompiledDataWithPreParsedScope> NewUncompiledDataWithPreParsedScope(
+      Handle<String> inferred_name, int32_t start_position,
+      int32_t end_position, int32_t function_literal_id,
+      Handle<PreParsedScopeData>);
 
   // Create an External object for V8's external API.
   Handle<JSObject> NewExternal(void* value);
@@ -755,12 +786,10 @@ class V8_EXPORT_PRIVATE Factory {
   // initialization by the caller.
   Handle<Code> NewCodeForDeserialization(uint32_t size);
 
-#ifdef V8_EMBEDDED_BUILTINS
   // Allocates a new code object and initializes it as the trampoline to the
   // given off-heap entry point.
   Handle<Code> NewOffHeapTrampolineFor(Handle<Code> code,
                                        Address off_heap_entry);
-#endif
 
   Handle<Code> CopyCode(Handle<Code> code);
 
@@ -796,10 +825,10 @@ class V8_EXPORT_PRIVATE Factory {
   DECLARE_ERROR(WasmRuntimeError)
 #undef DECLARE_ERROR
 
-  Handle<String> NumberToString(Handle<Object> number,
-                                bool check_number_string_cache = true);
+  Handle<String> NumberToString(Handle<Object> number, bool check_cache = true);
+  Handle<String> NumberToString(Smi* number, bool check_cache = true);
 
-  inline Handle<String> Uint32ToString(uint32_t value);
+  inline Handle<String> Uint32ToString(uint32_t value, bool check_cache = true);
 
 #define ROOT_ACCESSOR(type, name, camel_name) inline Handle<type> name();
   ROOT_LIST(ROOT_ACCESSOR)
@@ -808,6 +837,11 @@ class V8_EXPORT_PRIVATE Factory {
 #define STRUCT_MAP_ACCESSOR(NAME, Name, name) inline Handle<Map> name##_map();
   STRUCT_LIST(STRUCT_MAP_ACCESSOR)
 #undef STRUCT_MAP_ACCESSOR
+
+#define ALLOCATION_SITE_MAP_ACCESSOR(NAME, Name, Size, name) \
+  inline Handle<Map> name##_map();
+  ALLOCATION_SITE_LIST(ALLOCATION_SITE_MAP_ACCESSOR)
+#undef ALLOCATION_SITE_MAP_ACCESSOR
 
 #define DATA_HANDLER_MAP_ACCESSOR(NAME, Name, Size, name) \
   inline Handle<Map> name##_map();
@@ -873,7 +907,7 @@ class V8_EXPORT_PRIVATE Factory {
                                              Handle<Object> argument,
                                              int start_position,
                                              int end_position,
-                                             Handle<Object> script,
+                                             Handle<Script> script,
                                              Handle<Object> stack_frames);
 
   Handle<DebugInfo> NewDebugInfo(Handle<SharedFunctionInfo> shared);
@@ -882,7 +916,7 @@ class V8_EXPORT_PRIVATE Factory {
 
   // Return a map for given number of properties using the map cache in the
   // native context.
-  Handle<Map> ObjectLiteralMapFromCache(Handle<Context> native_context,
+  Handle<Map> ObjectLiteralMapFromCache(Handle<NativeContext> native_context,
                                         int number_of_properties);
 
   Handle<LoadHandler> NewLoadHandler(int data_count);
@@ -969,10 +1003,11 @@ class V8_EXPORT_PRIVATE Factory {
 
   // Attempt to find the number in a small cache.  If we finds it, return
   // the string representation of the number.  Otherwise return undefined.
-  Handle<Object> GetNumberStringCache(Handle<Object> number);
+  Handle<Object> NumberToStringCacheGet(Object* number, int hash);
 
   // Update the cache with a new number-string pair.
-  void SetNumberStringCache(Handle<Object> number, Handle<String> string);
+  Handle<String> NumberToStringCacheSet(Handle<Object> number, int hash,
+                                        const char* string, bool check_cache);
 
   // Create a JSArray with no elements and no length.
   Handle<JSArray> NewJSArray(ElementsKind elements_kind,

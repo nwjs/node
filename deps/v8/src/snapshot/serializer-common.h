@@ -9,7 +9,8 @@
 #include "src/base/bits.h"
 #include "src/external-reference-table.h"
 #include "src/globals.h"
-#include "src/utils.h"
+#include "src/snapshot/references.h"
+#include "src/v8memory.h"
 #include "src/visitors.h"
 
 namespace v8 {
@@ -105,8 +106,12 @@ class SerializerDeserializer : public RootVisitor {
   // No reservation for large object space necessary.
   // We also handle map space differenly.
   STATIC_ASSERT(MAP_SPACE == CODE_SPACE + 1);
+
+  // We do not support young generation large objects.
+  STATIC_ASSERT(LAST_SPACE == NEW_LO_SPACE);
+  STATIC_ASSERT(LAST_SPACE - 1 == LO_SPACE);
   static const int kNumberOfPreallocatedSpaces = CODE_SPACE + 1;
-  static const int kNumberOfSpaces = LAST_SPACE + 1;
+  static const int kNumberOfSpaces = LO_SPACE + 1;
 
  protected:
   static bool CanBeDeferred(HeapObject* o);
@@ -295,8 +300,10 @@ class SerializedData {
   SerializedData(byte* data, int size)
       : data_(data), size_(size), owns_data_(false) {}
   SerializedData() : data_(nullptr), size_(0), owns_data_(false) {}
-  SerializedData(SerializedData&& other)
-      : data_(other.data_), size_(other.size_), owns_data_(other.owns_data_) {
+  SerializedData(SerializedData&& other) V8_NOEXCEPT
+      : data_(other.data_),
+        size_(other.size_),
+        owns_data_(other.owns_data_) {
     // Ensure |other| will not attempt to destroy our data in destructor.
     other.owns_data_ = false;
   }

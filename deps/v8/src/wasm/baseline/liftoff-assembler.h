@@ -14,16 +14,20 @@
 #include "src/wasm/baseline/liftoff-assembler-defs.h"
 #include "src/wasm/baseline/liftoff-register.h"
 #include "src/wasm/function-body-decoder.h"
+#include "src/wasm/wasm-code-manager.h"
 #include "src/wasm/wasm-module.h"
 #include "src/wasm/wasm-opcodes.h"
 #include "src/wasm/wasm-value.h"
 
 namespace v8 {
 namespace internal {
-namespace wasm {
 
 // Forward declarations.
-struct ModuleEnv;
+namespace compiler {
+class CallDescriptor;
+}
+
+namespace wasm {
 
 class LiftoffAssembler : public TurboAssembler {
  public:
@@ -243,7 +247,7 @@ class LiftoffAssembler : public TurboAssembler {
     CacheState(const CacheState&) = delete;
   };
 
-  explicit LiftoffAssembler(Isolate* isolate);
+  LiftoffAssembler();
   ~LiftoffAssembler();
 
   LiftoffRegister PopToRegister(LiftoffRegList pinned = {});
@@ -294,16 +298,6 @@ class LiftoffAssembler : public TurboAssembler {
     return SpillOneRegister(candidates, pinned);
   }
 
-  void DropStackSlot(VarState* slot) {
-    // The only loc we care about is register. Other types don't occupy
-    // anything.
-    if (!slot->is_reg()) return;
-    // Free the register, then set the loc to "stack".
-    // No need to write back, the value should be dropped.
-    cache_state_.dec_used(slot->reg());
-    slot->MakeStack();
-  }
-
   void MergeFullStackWith(CacheState&);
   void MergeStackWith(CacheState&, uint32_t arity);
 
@@ -320,11 +314,11 @@ class LiftoffAssembler : public TurboAssembler {
   // Load parameters into the right registers / stack slots for the call.
   // Move {*target} into another register if needed and update {*target} to that
   // register, or {no_reg} if target was spilled to the stack.
-  void PrepareCall(wasm::FunctionSig*, compiler::CallDescriptor*,
+  void PrepareCall(FunctionSig*, compiler::CallDescriptor*,
                    Register* target = nullptr,
                    LiftoffRegister* target_instance = nullptr);
   // Process return values of the call.
-  void FinishCall(wasm::FunctionSig*, compiler::CallDescriptor*);
+  void FinishCall(FunctionSig*, compiler::CallDescriptor*);
 
   // Move {src} into {dst}. {src} and {dst} must be different.
   void Move(LiftoffRegister dst, LiftoffRegister src, ValueType);
@@ -339,6 +333,9 @@ class LiftoffAssembler : public TurboAssembler {
   };
   void ParallelRegisterMove(std::initializer_list<ParallelRegisterMoveTuple>);
 
+  // Validate that the register use counts reflect the state of the cache.
+  bool ValidateCacheState() const;
+
   ////////////////////////////////////
   // Platform-specific part.        //
   ////////////////////////////////////
@@ -347,8 +344,8 @@ class LiftoffAssembler : public TurboAssembler {
   // size of the stack frame is known. It returns an offset in the machine code
   // which can later be patched (via {PatchPrepareStackFrame)} when the size of
   // the frame is known.
-  inline uint32_t PrepareStackFrame();
-  inline void PatchPrepareStackFrame(uint32_t offset, uint32_t stack_slots);
+  inline int PrepareStackFrame();
+  inline void PatchPrepareStackFrame(int offset, uint32_t stack_slots);
   inline void FinishCode();
   inline void AbortCompilation();
 
@@ -365,10 +362,6 @@ class LiftoffAssembler : public TurboAssembler {
                     LiftoffRegister src, StoreType type, LiftoffRegList pinned,
                     uint32_t* protected_store_pc = nullptr,
                     bool is_store_mem = false);
-  inline void ChangeEndiannessLoad(LiftoffRegister dst, LoadType type,
-                                   LiftoffRegList pinned);
-  inline void ChangeEndiannessStore(LiftoffRegister src, StoreType type,
-                                    LiftoffRegList pinned);
   inline void LoadCallerFrameSlot(LiftoffRegister, uint32_t caller_slot_idx,
                                   ValueType);
   inline void MoveStackValue(uint32_t dst_index, uint32_t src_index, ValueType);
@@ -441,12 +434,22 @@ class LiftoffAssembler : public TurboAssembler {
   inline void emit_i64_shr(LiftoffRegister dst, LiftoffRegister src,
                            Register amount, LiftoffRegList pinned = {});
 
+  inline void emit_i32_to_intptr(Register dst, Register src);
+
   inline void emit_ptrsize_add(Register dst, Register lhs, Register rhs) {
     if (kPointerSize == 8) {
       emit_i64_add(LiftoffRegister(dst), LiftoffRegister(lhs),
                    LiftoffRegister(rhs));
     } else {
       emit_i32_add(dst, lhs, rhs);
+    }
+  }
+  inline void emit_ptrsize_sub(Register dst, Register lhs, Register rhs) {
+    if (kPointerSize == 8) {
+      emit_i64_sub(LiftoffRegister(dst), LiftoffRegister(lhs),
+                   LiftoffRegister(rhs));
+    } else {
+      emit_i32_sub(dst, lhs, rhs);
     }
   }
 
@@ -517,7 +520,7 @@ class LiftoffAssembler : public TurboAssembler {
   inline void emit_f64_set_cond(Condition condition, Register dst,
                                 DoubleRegister lhs, DoubleRegister rhs);
 
-  inline void StackCheck(Label* ool_code);
+  inline void StackCheck(Label* ool_code, Register limit_address);
 
   inline void CallTrapCallbackForTesting();
 
@@ -533,16 +536,16 @@ class LiftoffAssembler : public TurboAssembler {
   // this is the return value of the C function, stored in {rets[0]}. Further
   // outputs (specified in {sig->returns()}) are read from the buffer and stored
   // in the remaining {rets} registers.
-  inline void CallC(wasm::FunctionSig* sig, const LiftoffRegister* args,
+  inline void CallC(FunctionSig* sig, const LiftoffRegister* args,
                     const LiftoffRegister* rets, ValueType out_argument_type,
                     int stack_bytes, ExternalReference ext_ref);
 
   inline void CallNativeWasmCode(Address addr);
-  inline void CallRuntime(Zone* zone, Runtime::FunctionId fid);
   // Indirect call: If {target == no_reg}, then pop the target from the stack.
-  inline void CallIndirect(wasm::FunctionSig* sig,
+  inline void CallIndirect(FunctionSig* sig,
                            compiler::CallDescriptor* call_descriptor,
                            Register target);
+  inline void CallRuntimeStub(WasmCode::RuntimeStubId sid);
 
   // Reserve space in the current frame, store address to space in {addr}.
   inline void AllocateStackSlot(Register addr, uint32_t size);
@@ -573,12 +576,15 @@ class LiftoffAssembler : public TurboAssembler {
   }
 
   CacheState* cache_state() { return &cache_state_; }
+  const CacheState* cache_state() const { return &cache_state_; }
 
   bool did_bailout() { return bailout_reason_ != nullptr; }
   const char* bailout_reason() const { return bailout_reason_; }
 
   void bailout(const char* reason) {
-    if (bailout_reason_ == nullptr) bailout_reason_ = reason;
+    if (bailout_reason_ != nullptr) return;
+    AbortCompilation();
+    bailout_reason_ = reason;
   }
 
  private:

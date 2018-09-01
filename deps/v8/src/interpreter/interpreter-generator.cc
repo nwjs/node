@@ -19,6 +19,8 @@
 #include "src/interpreter/interpreter-assembler.h"
 #include "src/interpreter/interpreter-intrinsics-generator.h"
 #include "src/objects-inl.h"
+#include "src/objects/js-generator.h"
+#include "src/objects/module.h"
 
 namespace v8 {
 namespace internal {
@@ -153,7 +155,7 @@ class InterpreterLoadGlobalAssembler : public InterpreterAssembler {
 
   void LdaGlobal(int slot_operand_index, int name_operand_index,
                  TypeofMode typeof_mode) {
-    TNode<FeedbackVector> feedback_vector = CAST(LoadFeedbackVector());
+    TNode<FeedbackVector> feedback_vector = LoadFeedbackVector();
     Node* feedback_slot = BytecodeOperandIdx(slot_operand_index);
 
     AccessorAssembler accessor_asm(state());
@@ -679,8 +681,8 @@ IGNITION_HANDLER(LdaModuleVariable, InterpreterAssembler) {
 
   BIND(&if_export);
   {
-    Node* regular_exports =
-        LoadObjectField(module, Module::kRegularExportsOffset);
+    TNode<FixedArray> regular_exports =
+        CAST(LoadObjectField(module, Module::kRegularExportsOffset));
     // The actual array index is (cell_index - 1).
     Node* export_index = IntPtrSub(cell_index, IntPtrConstant(1));
     Node* cell = LoadFixedArrayElement(regular_exports, export_index);
@@ -690,8 +692,8 @@ IGNITION_HANDLER(LdaModuleVariable, InterpreterAssembler) {
 
   BIND(&if_import);
   {
-    Node* regular_imports =
-        LoadObjectField(module, Module::kRegularImportsOffset);
+    TNode<FixedArray> regular_imports =
+        CAST(LoadObjectField(module, Module::kRegularImportsOffset));
     // The actual array index is (-cell_index - 1).
     Node* import_index = IntPtrSub(IntPtrConstant(-1), cell_index);
     Node* cell = LoadFixedArrayElement(regular_imports, import_index);
@@ -721,8 +723,8 @@ IGNITION_HANDLER(StaModuleVariable, InterpreterAssembler) {
 
   BIND(&if_export);
   {
-    Node* regular_exports =
-        LoadObjectField(module, Module::kRegularExportsOffset);
+    TNode<FixedArray> regular_exports =
+        CAST(LoadObjectField(module, Module::kRegularExportsOffset));
     // The actual array index is (cell_index - 1).
     Node* export_index = IntPtrSub(cell_index, IntPtrConstant(1));
     Node* cell = LoadFixedArrayElement(regular_exports, export_index);
@@ -1068,7 +1070,7 @@ IGNITION_HANDLER(BitwiseNot, InterpreterAssembler) {
   // Number case.
   BIND(&if_number);
   TNode<Number> result =
-      ChangeInt32ToTagged(Signed(Word32Not(var_word32.value())));
+      ChangeInt32ToTagged(Signed(Word32BitwiseNot(var_word32.value())));
   TNode<Smi> result_type = SelectSmiConstant(
       TaggedIsSmi(result), BinaryOperationFeedback::kSignedSmall,
       BinaryOperationFeedback::kNumber);
@@ -1271,7 +1273,7 @@ IGNITION_HANDLER(Negate, NegateAssemblerImpl) { UnaryOpWithFeedback(); }
 IGNITION_HANDLER(ToName, InterpreterAssembler) {
   Node* object = GetAccumulator();
   Node* context = GetContext();
-  Node* result = ToName(context, object);
+  Node* result = CallBuiltin(Builtins::kToName, context, object);
   StoreRegisterAtOperandIndex(result, 0);
   Dispatch();
 }
@@ -1813,7 +1815,7 @@ IGNITION_HANDLER(TestIn, InterpreterAssembler) {
   Node* object = GetAccumulator();
   Node* context = GetContext();
 
-  SetAccumulator(HasProperty(object, property, context, kHasProperty));
+  SetAccumulator(HasProperty(context, object, property, kHasProperty));
   Dispatch();
 }
 
@@ -2407,7 +2409,8 @@ IGNITION_HANDLER(CreateObjectLiteral, InterpreterAssembler) {
   BIND(&if_not_fast_clone);
   {
     // If we can't do a fast clone, call into the runtime.
-    Node* boilerplate_description = LoadConstantPoolEntryAtOperandIndex(0);
+    Node* object_boilerplate_description =
+        LoadConstantPoolEntryAtOperandIndex(0);
     Node* context = GetContext();
 
     Node* flags_raw = DecodeWordFromWord32<CreateObjectLiteralFlags::FlagsBits>(
@@ -2416,7 +2419,7 @@ IGNITION_HANDLER(CreateObjectLiteral, InterpreterAssembler) {
 
     Node* result =
         CallRuntime(Runtime::kCreateObjectLiteral, context, feedback_vector,
-                    SmiTag(slot_id), boilerplate_description, flags);
+                    SmiTag(slot_id), object_boilerplate_description, flags);
     StoreRegisterAtOperandIndex(result, 3);
     // TODO(klaasb) build a single dispatch once the call is inlined
     Dispatch();
@@ -2434,6 +2437,26 @@ IGNITION_HANDLER(CreateEmptyObjectLiteral, InterpreterAssembler) {
   Dispatch();
 }
 
+// CloneObject <source_idx> <flags> <feedback_slot>
+//
+// Allocates a new JSObject with each enumerable own property copied from
+// {source}, converting getters into data properties.
+IGNITION_HANDLER(CloneObject, InterpreterAssembler) {
+  Node* source = LoadRegisterAtOperandIndex(0);
+  Node* bytecode_flags = BytecodeOperandFlag(1);
+  Node* raw_flags =
+      DecodeWordFromWord32<CreateObjectLiteralFlags::FlagsBits>(bytecode_flags);
+  Node* smi_flags = SmiTag(raw_flags);
+  Node* raw_slot = BytecodeOperandIdx(2);
+  Node* smi_slot = SmiTag(raw_slot);
+  Node* feedback_vector = LoadFeedbackVector();
+  Node* context = GetContext();
+  Node* result = CallBuiltin(Builtins::kCloneObjectIC, context, source,
+                             smi_flags, smi_slot, feedback_vector);
+  SetAccumulator(result);
+  Dispatch();
+}
+
 // GetTemplateObject <descriptor_idx> <literal_idx>
 //
 // Creates the template to pass for tagged templates and returns it in the
@@ -2442,8 +2465,8 @@ IGNITION_HANDLER(CreateEmptyObjectLiteral, InterpreterAssembler) {
 IGNITION_HANDLER(GetTemplateObject, InterpreterAssembler) {
   Node* feedback_vector = LoadFeedbackVector();
   Node* slot = BytecodeOperandIdx(1);
-  TNode<Object> cached_value = ToObject(
-      LoadFeedbackVectorSlot(feedback_vector, slot, 0, INTPTR_PARAMETERS));
+  TNode<Object> cached_value =
+      CAST(LoadFeedbackVectorSlot(feedback_vector, slot, 0, INTPTR_PARAMETERS));
 
   Label call_runtime(this, Label::kDeferred);
   GotoIf(WordEqual(cached_value, SmiConstant(0)), &call_runtime);
@@ -2474,7 +2497,7 @@ IGNITION_HANDLER(CreateClosure, InterpreterAssembler) {
   Node* slot = BytecodeOperandIdx(1);
   Node* feedback_vector = LoadFeedbackVector();
   TNode<Object> feedback_cell =
-      ToObject(LoadFeedbackVectorSlot(feedback_vector, slot));
+      CAST(LoadFeedbackVectorSlot(feedback_vector, slot));
 
   Label if_fast(this), if_slow(this, Label::kDeferred);
   Branch(IsSetWord32<CreateClosureFlags::FastNewClosureBit>(flags), &if_fast,
@@ -2645,7 +2668,7 @@ IGNITION_HANDLER(CreateRestParameter, InterpreterAssembler) {
 //
 // Performs a stack guard check.
 IGNITION_HANDLER(StackCheck, InterpreterAssembler) {
-  Node* context = GetContext();
+  TNode<Context> context = CAST(GetContext());
   PerformStackCheck(context);
   Dispatch();
 }
@@ -2909,7 +2932,7 @@ IGNITION_HANDLER(ForInNext, InterpreterAssembler) {
   Node* feedback_vector = LoadFeedbackVector();
 
   // Load the next key from the enumeration array.
-  Node* key = LoadFixedArrayElement(cache_array, index, 0,
+  Node* key = LoadFixedArrayElement(CAST(cache_array), index, 0,
                                     CodeStubAssembler::SMI_PARAMETERS);
 
   // Check if we can use the for-in fast path potentially using the enum cache.
@@ -2996,18 +3019,26 @@ IGNITION_HANDLER(Illegal, InterpreterAssembler) {
 // SuspendGenerator <generator> <first input register> <register count>
 // <suspend_id>
 //
-// Exports the register file and stores it into the generator.  Also stores the
-// current context, |suspend_id|, and the current bytecode offset (for debugging
-// purposes) into the generator. Then, returns the value in the accumulator.
+// Stores the parameters and the register file in the generator. Also stores
+// the current context, |suspend_id|, and the current bytecode offset
+// (for debugging purposes) into the generator. Then, returns the value
+// in the accumulator.
 IGNITION_HANDLER(SuspendGenerator, InterpreterAssembler) {
   Node* generator = LoadRegisterAtOperandIndex(0);
-  Node* array =
-      LoadObjectField(generator, JSGeneratorObject::kRegisterFileOffset);
+  TNode<FixedArray> array = CAST(LoadObjectField(
+      generator, JSGeneratorObject::kParametersAndRegistersOffset));
+  Node* closure = LoadRegister(Register::function_closure());
   Node* context = GetContext();
   RegListNodePair registers = GetRegisterListAtOperandIndex(1);
   Node* suspend_id = BytecodeOperandUImmSmi(3);
 
-  ExportRegisterFile(array, registers);
+  Node* shared =
+      LoadObjectField(closure, JSFunction::kSharedFunctionInfoOffset);
+  TNode<Int32T> formal_parameter_count = UncheckedCast<Int32T>(
+      LoadObjectField(shared, SharedFunctionInfo::kFormalParameterCountOffset,
+                      MachineType::Uint16()));
+
+  ExportParametersAndRegisterFile(array, registers, formal_parameter_count);
   StoreObjectField(generator, JSGeneratorObject::kContextOffset, context);
   StoreObjectField(generator, JSGeneratorObject::kContinuationOffset,
                    suspend_id);
@@ -3072,11 +3103,19 @@ IGNITION_HANDLER(SwitchOnGeneratorState, InterpreterAssembler) {
 // state as executing.
 IGNITION_HANDLER(ResumeGenerator, InterpreterAssembler) {
   Node* generator = LoadRegisterAtOperandIndex(0);
+  Node* closure = LoadRegister(Register::function_closure());
   RegListNodePair registers = GetRegisterListAtOperandIndex(1);
 
+  Node* shared =
+      LoadObjectField(closure, JSFunction::kSharedFunctionInfoOffset);
+  TNode<Int32T> formal_parameter_count = UncheckedCast<Int32T>(
+      LoadObjectField(shared, SharedFunctionInfo::kFormalParameterCountOffset,
+                      MachineType::Uint16()));
+
   ImportRegisterFile(
-      LoadObjectField(generator, JSGeneratorObject::kRegisterFileOffset),
-      registers);
+      CAST(LoadObjectField(generator,
+                           JSGeneratorObject::kParametersAndRegistersOffset)),
+      registers, formal_parameter_count);
 
   // Return the generator's input_or_debug_pos in the accumulator.
   SetAccumulator(
@@ -3088,16 +3127,17 @@ IGNITION_HANDLER(ResumeGenerator, InterpreterAssembler) {
 }  // namespace
 
 Handle<Code> GenerateBytecodeHandler(Isolate* isolate, Bytecode bytecode,
-                                     OperandScale operand_scale) {
+                                     OperandScale operand_scale,
+                                     int builtin_index,
+                                     const AssemblerOptions& options) {
   Zone zone(isolate->allocator(), ZONE_NAME);
-  InterpreterDispatchDescriptor descriptor(isolate);
   compiler::CodeAssemblerState state(
-      isolate, &zone, descriptor, Code::BYTECODE_HANDLER,
+      isolate, &zone, InterpreterDispatchDescriptor{}, Code::BYTECODE_HANDLER,
       Bytecodes::ToString(bytecode),
       FLAG_untrusted_code_mitigations
           ? PoisoningMitigationLevel::kPoisonCriticalOnly
           : PoisoningMitigationLevel::kDontPoison,
-      Bytecodes::ReturnCount(bytecode));
+      0, builtin_index);
 
   switch (bytecode) {
 #define CALL_GENERATOR(Name, ...)                     \
@@ -3108,14 +3148,14 @@ Handle<Code> GenerateBytecodeHandler(Isolate* isolate, Bytecode bytecode,
 #undef CALL_GENERATOR
   }
 
-  Handle<Code> code = compiler::CodeAssembler::GenerateCode(&state);
+  Handle<Code> code = compiler::CodeAssembler::GenerateCode(&state, options);
   PROFILE(isolate, CodeCreateEvent(
                        CodeEventListener::BYTECODE_HANDLER_TAG,
                        AbstractCode::cast(*code),
                        Bytecodes::ToString(bytecode, operand_scale).c_str()));
 #ifdef ENABLE_DISASSEMBLER
   if (FLAG_trace_ignition_codegen) {
-    OFStream os(stdout);
+    StdoutStream os;
     code->Disassemble(Bytecodes::ToString(bytecode), os);
     os << std::flush;
   }
@@ -3157,7 +3197,6 @@ class DeserializeLazyAssembler : public InterpreterAssembler {
 Handle<Code> GenerateDeserializeLazyHandler(Isolate* isolate,
                                             OperandScale operand_scale) {
   Zone zone(isolate->allocator(), ZONE_NAME);
-  const size_t return_count = 0;
 
   std::string debug_name = std::string("DeserializeLazy");
   if (operand_scale > OperandScale::kSingle) {
@@ -3166,23 +3205,23 @@ Handle<Code> GenerateDeserializeLazyHandler(Isolate* isolate,
     debug_name = debug_name.append(Bytecodes::ToString(prefix_bytecode));
   }
 
-  InterpreterDispatchDescriptor descriptor(isolate);
   compiler::CodeAssemblerState state(
-      isolate, &zone, descriptor, Code::BYTECODE_HANDLER, debug_name.c_str(),
+      isolate, &zone, InterpreterDispatchDescriptor{}, Code::BYTECODE_HANDLER,
+      debug_name.c_str(),
       FLAG_untrusted_code_mitigations
           ? PoisoningMitigationLevel::kPoisonCriticalOnly
-          : PoisoningMitigationLevel::kDontPoison,
-      return_count);
+          : PoisoningMitigationLevel::kDontPoison);
 
   DeserializeLazyAssembler::Generate(&state, operand_scale);
-  Handle<Code> code = compiler::CodeAssembler::GenerateCode(&state);
+  Handle<Code> code = compiler::CodeAssembler::GenerateCode(
+      &state, AssemblerOptions::Default(isolate));
   PROFILE(isolate,
           CodeCreateEvent(CodeEventListener::BYTECODE_HANDLER_TAG,
                           AbstractCode::cast(*code), debug_name.c_str()));
 
 #ifdef ENABLE_DISASSEMBLER
   if (FLAG_trace_ignition_codegen) {
-    OFStream os(stdout);
+    StdoutStream os;
     code->Disassemble(debug_name.c_str(), os);
     os << std::flush;
   }

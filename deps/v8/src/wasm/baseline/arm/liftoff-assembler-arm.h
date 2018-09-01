@@ -13,12 +13,12 @@ namespace v8 {
 namespace internal {
 namespace wasm {
 
-uint32_t LiftoffAssembler::PrepareStackFrame() {
+int LiftoffAssembler::PrepareStackFrame() {
   BAILOUT("PrepareStackFrame");
   return 0;
 }
 
-void LiftoffAssembler::PatchPrepareStackFrame(uint32_t offset,
+void LiftoffAssembler::PatchPrepareStackFrame(int offset,
                                               uint32_t stack_slots) {
   BAILOUT("PatchPrepareStackFrame");
 }
@@ -57,17 +57,6 @@ void LiftoffAssembler::Store(Register dst_addr, Register offset_reg,
                              StoreType type, LiftoffRegList pinned,
                              uint32_t* protected_store_pc, bool is_store_mem) {
   BAILOUT("Store");
-}
-
-void LiftoffAssembler::ChangeEndiannessLoad(LiftoffRegister dst, LoadType type,
-                                            LiftoffRegList pinned) {
-  BAILOUT("ChangeEndiannessLoad");
-}
-
-void LiftoffAssembler::ChangeEndiannessStore(LiftoffRegister src,
-                                             StoreType type,
-                                             LiftoffRegList pinned) {
-  BAILOUT("ChangeEndiannessStore");
 }
 
 void LiftoffAssembler::LoadCallerFrameSlot(LiftoffRegister dst,
@@ -248,6 +237,10 @@ bool LiftoffAssembler::emit_i64_remu(LiftoffRegister dst, LiftoffRegister lhs,
   return false;
 }
 
+void LiftoffAssembler::emit_i32_to_intptr(Register dst, Register src) {
+  // This is a nop on arm.
+}
+
 bool LiftoffAssembler::emit_type_conversion(WasmOpcode opcode,
                                             LiftoffRegister dst,
                                             LiftoffRegister src, Label* trap) {
@@ -296,7 +289,9 @@ void LiftoffAssembler::emit_f64_set_cond(Condition cond, Register dst,
   BAILOUT("emit_f64_set_cond");
 }
 
-void LiftoffAssembler::StackCheck(Label* ool_code) { BAILOUT("StackCheck"); }
+void LiftoffAssembler::StackCheck(Label* ool_code, Register limit_address) {
+  BAILOUT("StackCheck");
+}
 
 void LiftoffAssembler::CallTrapCallbackForTesting() {
   BAILOUT("CallTrapCallbackForTesting");
@@ -330,14 +325,14 @@ void LiftoffAssembler::CallNativeWasmCode(Address addr) {
   BAILOUT("CallNativeWasmCode");
 }
 
-void LiftoffAssembler::CallRuntime(Zone* zone, Runtime::FunctionId fid) {
-  BAILOUT("CallRuntime");
-}
-
 void LiftoffAssembler::CallIndirect(wasm::FunctionSig* sig,
                                     compiler::CallDescriptor* call_descriptor,
                                     Register target) {
   BAILOUT("CallIndirect");
+}
+
+void LiftoffAssembler::CallRuntimeStub(WasmCode::RuntimeStubId sid) {
+  BAILOUT("CallRuntimeStub");
 }
 
 void LiftoffAssembler::AllocateStackSlot(Register addr, uint32_t size) {

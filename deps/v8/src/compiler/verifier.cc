@@ -629,6 +629,7 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       CheckTypeIs(node, Type::Name());
       break;
     case IrOpcode::kJSToNumber:
+    case IrOpcode::kJSToNumberConvertBigInt:
       // Type is Number.
       CheckTypeIs(node, Type::Number());
       break;
@@ -645,12 +646,15 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       CheckTypeIs(node, Type::Receiver());
       break;
     case IrOpcode::kJSParseInt:
-      // Type is Receiver.
       CheckValueInputIs(node, 0, Type::Any());
       CheckValueInputIs(node, 1, Type::Any());
       CheckTypeIs(node, Type::Number());
       break;
-
+    case IrOpcode::kJSRegExpTest:
+      CheckValueInputIs(node, 0, Type::Any());
+      CheckValueInputIs(node, 1, Type::String());
+      CheckTypeIs(node, Type::Boolean());
+      break;
     case IrOpcode::kJSCreate:
       // Type is Object.
       CheckTypeIs(node, Type::Object());
@@ -713,6 +717,7 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       break;
     case IrOpcode::kJSCreateLiteralObject:
     case IrOpcode::kJSCreateEmptyLiteralObject:
+    case IrOpcode::kJSCloneObject:
     case IrOpcode::kJSCreateLiteralRegExp:
       // Type is OtherObject.
       CheckTypeIs(node, Type::OtherObject());
@@ -1425,7 +1430,11 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       CheckValueInputIs(node, 0, Type::Any());
       CheckTypeIs(node, Type::Symbol());
       break;
-
+    case IrOpcode::kCheckStringAdd:
+      CheckValueInputIs(node, 0, Type::String());
+      CheckValueInputIs(node, 1, Type::String());
+      CheckTypeIs(node, Type::String());
+      break;
     case IrOpcode::kConvertReceiver:
       // (Any, Any) -> Receiver
       CheckValueInputIs(node, 0, Type::Any());
@@ -1495,6 +1504,8 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       break;
     case IrOpcode::kLoadTypedElement:
       break;
+    case IrOpcode::kLoadDataViewElement:
+      break;
     case IrOpcode::kStoreField:
       // (Object, fieldtype) -> _|_
       // TODO(rossberg): activate once machine ops are typed.
@@ -1522,6 +1533,9 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       CheckNotTyped(node);
       break;
     case IrOpcode::kStoreTypedElement:
+      CheckNotTyped(node);
+      break;
+    case IrOpcode::kStoreDataViewElement:
       CheckNotTyped(node);
       break;
     case IrOpcode::kNumberSilenceNaN:
@@ -1708,7 +1722,6 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
     case IrOpcode::kLoadStackPointer:
     case IrOpcode::kLoadFramePointer:
     case IrOpcode::kLoadParentFramePointer:
-    case IrOpcode::kLoadRootsPointer:
     case IrOpcode::kUnalignedLoad:
     case IrOpcode::kUnalignedStore:
     case IrOpcode::kWord32AtomicLoad:
@@ -1729,6 +1742,15 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
     case IrOpcode::kWord64AtomicXor:
     case IrOpcode::kWord64AtomicExchange:
     case IrOpcode::kWord64AtomicCompareExchange:
+    case IrOpcode::kWord32AtomicPairLoad:
+    case IrOpcode::kWord32AtomicPairStore:
+    case IrOpcode::kWord32AtomicPairAdd:
+    case IrOpcode::kWord32AtomicPairSub:
+    case IrOpcode::kWord32AtomicPairAnd:
+    case IrOpcode::kWord32AtomicPairOr:
+    case IrOpcode::kWord32AtomicPairXor:
+    case IrOpcode::kWord32AtomicPairExchange:
+    case IrOpcode::kWord32AtomicPairCompareExchange:
     case IrOpcode::kSpeculationFence:
     case IrOpcode::kSignExtendWord8ToInt32:
     case IrOpcode::kSignExtendWord16ToInt32:

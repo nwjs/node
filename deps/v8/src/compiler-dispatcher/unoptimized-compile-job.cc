@@ -73,6 +73,8 @@ UnoptimizedCompileJob::UnoptimizedCompileJob(Isolate* isolate,
       allocator_(isolate->allocator()),
       context_(isolate->global_handles()->Create(isolate->context())),
       shared_(isolate->global_handles()->Create(*shared)),
+      worker_thread_runtime_stats_(
+          isolate->counters()->worker_thread_runtime_call_stats()),
       max_stack_size_(max_stack_size),
       trace_compiler_dispatcher_jobs_(FLAG_trace_compiler_dispatcher_jobs) {
   DCHECK(!shared_->is_toplevel());
@@ -116,20 +118,24 @@ void UnoptimizedCompileJob::PrepareOnMainThread(Isolate* isolate) {
            static_cast<void*>(this));
   }
 
-  HandleScope scope(isolate);
-  unicode_cache_.reset(new UnicodeCache());
-  Handle<Script> script(Script::cast(shared_->script()), isolate);
-  DCHECK(script->type() != Script::TYPE_NATIVE);
+  ParseInfo* parse_info = new ParseInfo(isolate, shared_);
+  parse_info_.reset(parse_info);
 
+  unicode_cache_.reset(new UnicodeCache());
+  parse_info_->set_unicode_cache(unicode_cache_.get());
+  parse_info_->set_function_literal_id(shared_->FunctionLiteralId(isolate));
+
+  Handle<Script> script = parse_info->script();
+  HandleScope scope(isolate);
+
+  DCHECK(script->type() != Script::TYPE_NATIVE);
   Handle<String> source(String::cast(script->source()), isolate);
-  parse_info_.reset(new ParseInfo(isolate->allocator()));
-  parse_info_->InitFromIsolate(isolate);
   if (source->IsExternalTwoByteString() || source->IsExternalOneByteString()) {
     std::unique_ptr<Utf16CharacterStream> stream(ScannerStream::For(
-        source, shared_->StartPosition(), shared_->EndPosition()));
+        isolate, source, shared_->StartPosition(), shared_->EndPosition()));
     parse_info_->set_character_stream(std::move(stream));
   } else {
-    source = String::Flatten(source);
+    source = String::Flatten(isolate, source);
     const void* data;
     int offset = 0;
     int length = source->length();
@@ -172,47 +178,33 @@ void UnoptimizedCompileJob::PrepareOnMainThread(Isolate* isolate) {
     if (source->IsOneByteRepresentation()) {
       ExternalOneByteString::Resource* resource =
           new OneByteWrapper(data, length);
-      source_wrapper_.reset(resource);
       wrapper = isolate->factory()
                     ->NewExternalStringFromOneByte(resource)
                     .ToHandleChecked();
     } else {
       ExternalTwoByteString::Resource* resource =
           new TwoByteWrapper(data, length);
-      source_wrapper_.reset(resource);
       wrapper = isolate->factory()
                     ->NewExternalStringFromTwoByte(resource)
                     .ToHandleChecked();
     }
     wrapper_ = isolate->global_handles()->Create(*wrapper);
     std::unique_ptr<Utf16CharacterStream> stream(
-        ScannerStream::For(wrapper_, shared_->StartPosition() - offset,
+        ScannerStream::For(isolate, wrapper_, shared_->StartPosition() - offset,
                            shared_->EndPosition() - offset));
     parse_info_->set_character_stream(std::move(stream));
-  }
-  parse_info_->set_hash_seed(isolate->heap()->HashSeed());
-  parse_info_->set_is_named_expression(shared_->is_named_expression());
-  parse_info_->set_function_flags(shared_->flags());
-  parse_info_->set_start_position(shared_->StartPosition());
-  parse_info_->set_end_position(shared_->EndPosition());
-  parse_info_->set_unicode_cache(unicode_cache_.get());
-  parse_info_->set_language_mode(shared_->language_mode());
-  parse_info_->set_function_literal_id(shared_->function_literal_id());
-  if (V8_UNLIKELY(FLAG_runtime_stats)) {
-    parse_info_->set_runtime_call_stats(new (parse_info_->zone())
-                                            RuntimeCallStats());
+    // Set script to null in parse_info so that it's not dereferenced on the
+    // background thread.
   }
 
-  parser_.reset(new Parser(parse_info_.get()));
-  MaybeHandle<ScopeInfo> outer_scope_info;
-  if (shared_->HasOuterScopeInfo()) {
-    outer_scope_info = handle(shared_->GetOuterScopeInfo());
-  }
-  parser_->DeserializeScopeChain(parse_info_.get(), outer_scope_info);
-
-  Handle<String> name(shared_->Name());
+  // Initailize the name after setting up the ast_value_factory.
+  Handle<String> name(shared_->Name(), isolate);
   parse_info_->set_function_name(
-      parse_info_->ast_value_factory()->GetString(name));
+      parse_info_->GetOrCreateAstValueFactory()->GetString(name));
+  // Clear the parse info's script handle to ensure it's not dereferenced
+  // on the background thread.
+  parse_info->ClearScriptHandle();
+
   set_status(Status::kPrepared);
 }
 
@@ -230,9 +222,19 @@ void UnoptimizedCompileJob::Compile(bool on_background_thread) {
   DisallowHandleDereference no_deref;
 
   parse_info_->set_on_background_thread(on_background_thread);
+
+  base::Optional<WorkerThreadRuntimeCallStatsScope> runtime_call_stats_scope;
+  if (V8_UNLIKELY(FLAG_runtime_stats && on_background_thread)) {
+    runtime_call_stats_scope.emplace(worker_thread_runtime_stats_);
+    parse_info_->set_runtime_call_stats(runtime_call_stats_scope->Get());
+  }
+
   uintptr_t stack_limit = GetCurrentStackPosition() - max_stack_size_ * KB;
-  parser_->set_stack_limit(stack_limit);
   parse_info_->set_stack_limit(stack_limit);
+
+  parser_.reset(new Parser(parse_info_.get()));
+  parser_->set_stack_limit(stack_limit);
+  parser_->InitializeEmptyScopeChain(parse_info_.get());
   parser_->ParseOnBackground(parse_info_.get());
 
   if (parse_info_->literal() == nullptr) {
@@ -279,8 +281,8 @@ void UnoptimizedCompileJob::FinalizeOnMainThread(Isolate* isolate) {
 
   Handle<Script> script(Script::cast(shared_->script()), isolate);
   parse_info_->set_script(script);
+
   parser_->UpdateStatistics(isolate, script);
-  parse_info_->UpdateBackgroundParseStatisticsOnMainThread(isolate);
   parser_->HandleSourceURLComments(isolate, script);
 
   {
@@ -288,8 +290,7 @@ void UnoptimizedCompileJob::FinalizeOnMainThread(Isolate* isolate) {
     // Internalize ast values onto the heap.
     parse_info_->ast_value_factory()->Internalize(isolate);
     // Allocate scope infos for the literal.
-    DeclarationScope::AllocateScopeInfos(parse_info_.get(), isolate,
-                                         AnalyzeMode::kRegular);
+    DeclarationScope::AllocateScopeInfos(parse_info_.get(), isolate);
     if (compilation_job_->state() == CompilationJob::State::kFailed ||
         !Compiler::FinalizeCompilationJob(compilation_job_.release(), shared_,
                                           isolate)) {

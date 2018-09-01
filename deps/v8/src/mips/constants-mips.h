@@ -145,6 +145,9 @@ const uint32_t kLeastSignificantByteInInt32Offset = 3;
 namespace v8 {
 namespace internal {
 
+// TODO(sigurds): Change this value once we use relative jumps.
+constexpr size_t kMaxPCRelativeCodeRangeInMB = 0;
+
 // -----------------------------------------------------------------------------
 // Registers and FPURegisters.
 
@@ -218,6 +221,11 @@ const int32_t kPrefHintLoadRetained = 6;
 const int32_t kPrefHintStoreRetained = 7;
 const int32_t kPrefHintWritebackInvalidate = 25;
 const int32_t kPrefHintPrepareForStore = 30;
+
+// Actual value of root register is offset from the root array's start
+// to take advantage of negative displacement values.
+// TODO(sigurds): Choose best value.
+constexpr int kRootRegisterBias = 256;
 
 // Helper functions for converting between register numbers and names.
 class Registers {
@@ -1112,30 +1120,6 @@ enum MSABranchDF {
   MSA_BRANCH_V
 };
 
-// Commute a condition such that {a cond b == b cond' a}.
-inline Condition CommuteCondition(Condition cc) {
-  switch (cc) {
-    case Uless:
-      return Ugreater;
-    case Ugreater:
-      return Uless;
-    case Ugreater_equal:
-      return Uless_equal;
-    case Uless_equal:
-      return Ugreater_equal;
-    case less:
-      return greater;
-    case greater:
-      return less;
-    case greater_equal:
-      return less_equal;
-    case less_equal:
-      return greater_equal;
-    default:
-      return cc;
-  }
-}
-
 
 // ----- Coprocessor conditions.
 enum FPUCondition {
@@ -1236,11 +1220,12 @@ static constexpr uint64_t OpcodeToBitNumber(Opcode opcode) {
   return 1ULL << (static_cast<uint32_t>(opcode) >> kOpcodeShift);
 }
 
+constexpr uint8_t kInstrSize = 4;
+constexpr uint8_t kInstrSizeLog2 = 2;
+
 class InstructionBase {
  public:
   enum {
-    kInstrSize = 4,
-    kInstrSizeLog2 = 2,
     // On MIPS PC cannot actually be directly accessed. We behave as if PC was
     // always the value of the current instruction being executed.
     kPCReadOffset = 0
@@ -1699,14 +1684,14 @@ class Instruction : public InstructionGetters<InstructionBase> {
 
 // C/C++ argument slots size.
 const int kCArgSlotCount = 4;
-const int kCArgsSlotsSize = kCArgSlotCount * Instruction::kInstrSize;
+const int kCArgsSlotsSize = kCArgSlotCount * kInstrSize;
 const int kInvalidStackOffset = -1;
 // JS argument slots size.
-const int kJSArgsSlotsSize = 0 * Instruction::kInstrSize;
+const int kJSArgsSlotsSize = 0 * kInstrSize;
 // Assembly builtins argument slots size.
-const int kBArgsSlotsSize = 0 * Instruction::kInstrSize;
+const int kBArgsSlotsSize = 0 * kInstrSize;
 
-const int kBranchReturnOffset = 2 * Instruction::kInstrSize;
+const int kBranchReturnOffset = 2 * kInstrSize;
 
 InstructionBase::Type InstructionBase::InstructionType() const {
   switch (OpcodeFieldRaw()) {

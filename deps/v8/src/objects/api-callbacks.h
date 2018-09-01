@@ -37,8 +37,7 @@ class AccessorInfo : public Struct {
   DECL_ACCESSORS(js_getter, Object)
   DECL_ACCESSORS(data, Object)
 
-  static Address redirect(Isolate* isolate, Address address,
-                          AccessorComponent component);
+  static Address redirect(Address address, AccessorComponent component);
   Address redirected_getter() const;
 
   // Dispatched behavior.
@@ -58,8 +57,7 @@ class AccessorInfo : public Struct {
   inline void set_initial_property_attributes(PropertyAttributes attributes);
 
   // Checks whether the given receiver is compatible with this accessor.
-  static bool IsCompatibleReceiverMap(Isolate* isolate,
-                                      Handle<AccessorInfo> info,
+  static bool IsCompatibleReceiverMap(Handle<AccessorInfo> info,
                                       Handle<Map> map);
   inline bool IsCompatibleReceiver(Object* receiver);
 
@@ -70,8 +68,8 @@ class AccessorInfo : public Struct {
 
   // Append all descriptors to the array that are not already there.
   // Return number added.
-  static int AppendUnique(Handle<Object> descriptors, Handle<FixedArray> array,
-                          int valid_descriptors);
+  static int AppendUnique(Isolate* isolate, Handle<Object> descriptors,
+                          Handle<FixedArray> array, int valid_descriptors);
 
 // Layout description.
 #define ACCESSOR_INFO_FIELDS(V)                \

@@ -21,6 +21,10 @@
   V(InvalidatedSlotsEvacuationCandidate)                  \
   V(InvalidatedSlotsNoInvalidatedRanges)                  \
   V(InvalidatedSlotsResetObjectRegression)                \
+  V(InvalidatedSlotsRightTrimFixedArray)                  \
+  V(InvalidatedSlotsRightTrimLargeFixedArray)             \
+  V(InvalidatedSlotsLeftTrimFixedArray)                   \
+  V(InvalidatedSlotsFastToSlow)                           \
   V(InvalidatedSlotsSomeInvalidatedRanges)                \
   V(TestNewSpaceRefsInCopiedCode)                         \
   V(GCFlags)                                              \
@@ -96,6 +100,8 @@ class HeapTester {
   static AllocationResult AllocateMapForTest(v8::internal::Isolate* isolate);
   static AllocationResult AllocateFixedArrayForTest(Heap* heap, int length,
                                                     PretenureFlag pretenure);
+
+  static void UncommitFromSpace(Heap* heap);
 };
 
 }  // namespace heap

@@ -33,12 +33,14 @@ struct Tests {
 
   Isolate* isolate;
   HandleScope scope;
+  CanonicalHandleScope canonical;
   Zone zone;
   Types T;
 
   Tests()
       : isolate(CcTest::InitIsolateOnce()),
         scope(isolate),
+        canonical(isolate),
         zone(isolate->allocator(), ZONE_NAME),
         T(&zone, isolate, isolate->random_number_generator()) {}
 
@@ -325,39 +327,6 @@ struct Tests {
             CHECK(Equal(type1, type2) == (min1 == min2 && max1 == max2));
           }
         }
-      }
-    }
-  }
-
-  void Of() {
-    // Constant(V).Is(Of(V))
-    for (ValueIterator vt = T.values.begin(); vt != T.values.end(); ++vt) {
-      Handle<i::Object> value = *vt;
-      Type const_type = T.NewConstant(value);
-      Type of_type = T.Of(value);
-      CHECK(const_type.Is(of_type));
-    }
-
-    // If Of(V).Is(T), then Constant(V).Is(T)
-    for (ValueIterator vt = T.values.begin(); vt != T.values.end(); ++vt) {
-      for (TypeIterator it = T.types.begin(); it != T.types.end(); ++it) {
-        Handle<i::Object> value = *vt;
-        Type type = *it;
-        Type const_type = T.NewConstant(value);
-        Type of_type = T.Of(value);
-        CHECK(!of_type.Is(type) || const_type.Is(type));
-      }
-    }
-
-    // If Constant(V).Is(T), then Of(V).Is(T) or T.Maybe(Constant(V))
-    for (ValueIterator vt = T.values.begin(); vt != T.values.end(); ++vt) {
-      for (TypeIterator it = T.types.begin(); it != T.types.end(); ++it) {
-        Handle<i::Object> value = *vt;
-        Type type = *it;
-        Type const_type = T.NewConstant(value);
-        Type of_type = T.Of(value);
-        CHECK(!const_type.Is(type) || of_type.Is(type) ||
-              type.Maybe(const_type));
       }
     }
   }
@@ -1082,8 +1051,6 @@ TEST(BitsetType) { Tests().Bitset(); }
 TEST(ConstantType) { Tests().Constant(); }
 
 TEST(RangeType) { Tests().Range(); }
-
-TEST(Of) { Tests().Of(); }
 
 TEST(MinMax) { Tests().MinMax(); }
 

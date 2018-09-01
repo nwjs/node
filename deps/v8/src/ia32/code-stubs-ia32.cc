@@ -4,7 +4,7 @@
 
 #if V8_TARGET_ARCH_IA32
 
-#include "src/api-arguments.h"
+#include "src/api-arguments-inl.h"
 #include "src/assembler-inl.h"
 #include "src/base/bits.h"
 #include "src/bootstrapper.h"
@@ -25,22 +25,6 @@ namespace internal {
 
 #define __ ACCESS_MASM(masm)
 
-void ArrayNArgumentsConstructorStub::Generate(MacroAssembler* masm) {
-  __ pop(ecx);
-  __ mov(MemOperand(esp, eax, times_4, 0), edi);
-  __ push(edi);
-  __ push(ebx);
-  __ push(ecx);
-  __ add(eax, Immediate(3));
-  __ TailCallRuntime(Runtime::kNewArray);
-}
-
-void CodeStub::GenerateStubsAheadOfTime(Isolate* isolate) {
-  // It is important that the store buffer overflow stubs are generated first.
-  CommonArrayConstructorStub::GenerateStubsAheadOfTime(isolate);
-  StoreFastElementStub::GenerateAheadOfTime(isolate);
-}
-
 void JSEntryStub::Generate(MacroAssembler* masm) {
   Label invoke, handler_entry, exit;
   Label not_outermost_js, not_outermost_js_2;
@@ -56,23 +40,25 @@ void JSEntryStub::Generate(MacroAssembler* masm) {
   __ push(Immediate(StackFrame::TypeToMarker(marker)));  // marker
   ExternalReference context_address =
       ExternalReference::Create(IsolateAddressId::kContextAddress, isolate());
-  __ push(Operand::StaticVariable(context_address));  // context
+  __ push(__ StaticVariable(context_address));  // context
   // Save callee-saved registers (C calling conventions).
   __ push(edi);
   __ push(esi);
   __ push(ebx);
 
+  __ InitializeRootRegister();
+
   // Save copies of the top frame descriptor on the stack.
   ExternalReference c_entry_fp =
       ExternalReference::Create(IsolateAddressId::kCEntryFPAddress, isolate());
-  __ push(Operand::StaticVariable(c_entry_fp));
+  __ push(__ StaticVariable(c_entry_fp));
 
   // If this is the outermost JS call, set js_entry_sp value.
   ExternalReference js_entry_sp =
       ExternalReference::Create(IsolateAddressId::kJSEntrySPAddress, isolate());
-  __ cmp(Operand::StaticVariable(js_entry_sp), Immediate(0));
+  __ cmp(__ StaticVariable(js_entry_sp), Immediate(0));
   __ j(not_equal, &not_outermost_js, Label::kNear);
-  __ mov(Operand::StaticVariable(js_entry_sp), ebp);
+  __ mov(__ StaticVariable(js_entry_sp), ebp);
   __ push(Immediate(StackFrame::OUTERMOST_JSENTRY_FRAME));
   __ jmp(&invoke, Label::kNear);
   __ bind(&not_outermost_js);
@@ -87,7 +73,7 @@ void JSEntryStub::Generate(MacroAssembler* masm) {
   // field in the JSEnv and return a failure sentinel.
   ExternalReference pending_exception = ExternalReference::Create(
       IsolateAddressId::kPendingExceptionAddress, isolate());
-  __ mov(Operand::StaticVariable(pending_exception), eax);
+  __ mov(__ StaticVariable(pending_exception), eax);
   __ mov(eax, Immediate(isolate()->factory()->exception()));
   __ jmp(&exit);
 
@@ -105,15 +91,18 @@ void JSEntryStub::Generate(MacroAssembler* masm) {
   __ PopStackHandler();
 
   __ bind(&exit);
+
+  __ VerifyRootRegister();
+
   // Check if the current stack frame is marked as the outermost JS frame.
   __ pop(ebx);
   __ cmp(ebx, Immediate(StackFrame::OUTERMOST_JSENTRY_FRAME));
   __ j(not_equal, &not_outermost_js_2);
-  __ mov(Operand::StaticVariable(js_entry_sp), Immediate(0));
+  __ mov(__ StaticVariable(js_entry_sp), Immediate(0));
   __ bind(&not_outermost_js_2);
 
   // Restore the top frame descriptor from the stack.
-  __ pop(Operand::StaticVariable(ExternalReference::Create(
+  __ pop(__ StaticVariable(ExternalReference::Create(
       IsolateAddressId::kCEntryFPAddress, isolate())));
 
   // Restore callee-saved registers (C calling conventions).
@@ -173,303 +162,6 @@ void ProfileEntryHookStub::Generate(MacroAssembler* masm) {
   __ ret(0);
 }
 
-
-template<class T>
-static void CreateArrayDispatch(MacroAssembler* masm,
-                                AllocationSiteOverrideMode mode) {
-  if (mode == DISABLE_ALLOCATION_SITES) {
-    T stub(masm->isolate(),
-           GetInitialFastElementsKind(),
-           mode);
-    __ TailCallStub(&stub);
-  } else if (mode == DONT_OVERRIDE) {
-    int last_index =
-        GetSequenceIndexFromFastElementsKind(TERMINAL_FAST_ELEMENTS_KIND);
-    for (int i = 0; i <= last_index; ++i) {
-      Label next;
-      ElementsKind kind = GetFastElementsKindFromSequenceIndex(i);
-      __ cmp(edx, kind);
-      __ j(not_equal, &next);
-      T stub(masm->isolate(), kind);
-      __ TailCallStub(&stub);
-      __ bind(&next);
-    }
-
-    // If we reached this point there is a problem.
-    __ Abort(AbortReason::kUnexpectedElementsKindInArrayConstructor);
-  } else {
-    UNREACHABLE();
-  }
-}
-
-
-static void CreateArrayDispatchOneArgument(MacroAssembler* masm,
-                                           AllocationSiteOverrideMode mode) {
-  // ebx - allocation site (if mode != DISABLE_ALLOCATION_SITES)
-  // edx - kind (if mode != DISABLE_ALLOCATION_SITES)
-  // eax - number of arguments
-  // edi - constructor?
-  // esp[0] - return address
-  // esp[4] - last argument
-  STATIC_ASSERT(PACKED_SMI_ELEMENTS == 0);
-  STATIC_ASSERT(HOLEY_SMI_ELEMENTS == 1);
-  STATIC_ASSERT(PACKED_ELEMENTS == 2);
-  STATIC_ASSERT(HOLEY_ELEMENTS == 3);
-  STATIC_ASSERT(PACKED_DOUBLE_ELEMENTS == 4);
-  STATIC_ASSERT(HOLEY_DOUBLE_ELEMENTS == 5);
-
-  if (mode == DISABLE_ALLOCATION_SITES) {
-    ElementsKind initial = GetInitialFastElementsKind();
-    ElementsKind holey_initial = GetHoleyElementsKind(initial);
-
-    ArraySingleArgumentConstructorStub stub_holey(masm->isolate(),
-                                                  holey_initial,
-                                                  DISABLE_ALLOCATION_SITES);
-    __ TailCallStub(&stub_holey);
-  } else if (mode == DONT_OVERRIDE) {
-    // is the low bit set? If so, we are holey and that is good.
-    Label normal_sequence;
-    __ test_b(edx, Immediate(1));
-    __ j(not_zero, &normal_sequence);
-
-    // We are going to create a holey array, but our kind is non-holey.
-    // Fix kind and retry.
-    __ inc(edx);
-
-    if (FLAG_debug_code) {
-      Handle<Map> allocation_site_map =
-          masm->isolate()->factory()->allocation_site_map();
-      __ cmp(FieldOperand(ebx, 0), Immediate(allocation_site_map));
-      __ Assert(equal, AbortReason::kExpectedAllocationSite);
-    }
-
-    // Save the resulting elements kind in type info. We can't just store r3
-    // in the AllocationSite::transition_info field because elements kind is
-    // restricted to a portion of the field...upper bits need to be left alone.
-    STATIC_ASSERT(AllocationSite::ElementsKindBits::kShift == 0);
-    __ add(
-        FieldOperand(ebx, AllocationSite::kTransitionInfoOrBoilerplateOffset),
-        Immediate(Smi::FromInt(kFastElementsKindPackedToHoley)));
-
-    __ bind(&normal_sequence);
-    int last_index =
-        GetSequenceIndexFromFastElementsKind(TERMINAL_FAST_ELEMENTS_KIND);
-    for (int i = 0; i <= last_index; ++i) {
-      Label next;
-      ElementsKind kind = GetFastElementsKindFromSequenceIndex(i);
-      __ cmp(edx, kind);
-      __ j(not_equal, &next);
-      ArraySingleArgumentConstructorStub stub(masm->isolate(), kind);
-      __ TailCallStub(&stub);
-      __ bind(&next);
-    }
-
-    // If we reached this point there is a problem.
-    __ Abort(AbortReason::kUnexpectedElementsKindInArrayConstructor);
-  } else {
-    UNREACHABLE();
-  }
-}
-
-
-template<class T>
-static void ArrayConstructorStubAheadOfTimeHelper(Isolate* isolate) {
-  int to_index =
-      GetSequenceIndexFromFastElementsKind(TERMINAL_FAST_ELEMENTS_KIND);
-  for (int i = 0; i <= to_index; ++i) {
-    ElementsKind kind = GetFastElementsKindFromSequenceIndex(i);
-    T stub(isolate, kind);
-    stub.GetCode();
-    if (AllocationSite::ShouldTrack(kind)) {
-      T stub1(isolate, kind, DISABLE_ALLOCATION_SITES);
-      stub1.GetCode();
-    }
-  }
-}
-
-void CommonArrayConstructorStub::GenerateStubsAheadOfTime(Isolate* isolate) {
-  ArrayConstructorStubAheadOfTimeHelper<ArrayNoArgumentConstructorStub>(
-      isolate);
-  ArrayConstructorStubAheadOfTimeHelper<ArraySingleArgumentConstructorStub>(
-      isolate);
-  ArrayNArgumentsConstructorStub stub(isolate);
-  stub.GetCode();
-
-  ElementsKind kinds[2] = {PACKED_ELEMENTS, HOLEY_ELEMENTS};
-  for (int i = 0; i < 2; i++) {
-    // For internal arrays we only need a few things
-    InternalArrayNoArgumentConstructorStub stubh1(isolate, kinds[i]);
-    stubh1.GetCode();
-    InternalArraySingleArgumentConstructorStub stubh2(isolate, kinds[i]);
-    stubh2.GetCode();
-  }
-}
-
-void ArrayConstructorStub::GenerateDispatchToArrayStub(
-    MacroAssembler* masm, AllocationSiteOverrideMode mode) {
-  Label not_zero_case, not_one_case;
-  __ test(eax, eax);
-  __ j(not_zero, &not_zero_case);
-  CreateArrayDispatch<ArrayNoArgumentConstructorStub>(masm, mode);
-
-  __ bind(&not_zero_case);
-  __ cmp(eax, 1);
-  __ j(greater, &not_one_case);
-  CreateArrayDispatchOneArgument(masm, mode);
-
-  __ bind(&not_one_case);
-  ArrayNArgumentsConstructorStub stub(masm->isolate());
-  __ TailCallStub(&stub);
-}
-
-void ArrayConstructorStub::Generate(MacroAssembler* masm) {
-  // ----------- S t a t e -------------
-  //  -- eax : argc (only if argument_count() is ANY or MORE_THAN_ONE)
-  //  -- ebx : AllocationSite or undefined
-  //  -- edi : constructor
-  //  -- edx : Original constructor
-  //  -- esp[0] : return address
-  //  -- esp[4] : last argument
-  // -----------------------------------
-  if (FLAG_debug_code) {
-    // The array construct code is only set for the global and natives
-    // builtin Array functions which always have maps.
-
-    // Initial map for the builtin Array function should be a map.
-    __ mov(ecx, FieldOperand(edi, JSFunction::kPrototypeOrInitialMapOffset));
-    // Will both indicate a nullptr and a Smi.
-    __ test(ecx, Immediate(kSmiTagMask));
-    __ Assert(not_zero, AbortReason::kUnexpectedInitialMapForArrayFunction);
-    __ CmpObjectType(ecx, MAP_TYPE, ecx);
-    __ Assert(equal, AbortReason::kUnexpectedInitialMapForArrayFunction);
-
-    // We should either have undefined in ebx or a valid AllocationSite
-    __ AssertUndefinedOrAllocationSite(ebx);
-  }
-
-  Label subclassing;
-
-  // Enter the context of the Array function.
-  __ mov(esi, FieldOperand(edi, JSFunction::kContextOffset));
-
-  __ cmp(edx, edi);
-  __ j(not_equal, &subclassing);
-
-  Label no_info;
-  // If the feedback vector is the undefined value call an array constructor
-  // that doesn't use AllocationSites.
-  __ cmp(ebx, isolate()->factory()->undefined_value());
-  __ j(equal, &no_info);
-
-  // Only look at the lower 16 bits of the transition info.
-  __ mov(edx,
-         FieldOperand(ebx, AllocationSite::kTransitionInfoOrBoilerplateOffset));
-  __ SmiUntag(edx);
-  STATIC_ASSERT(AllocationSite::ElementsKindBits::kShift == 0);
-  __ and_(edx, Immediate(AllocationSite::ElementsKindBits::kMask));
-  GenerateDispatchToArrayStub(masm, DONT_OVERRIDE);
-
-  __ bind(&no_info);
-  GenerateDispatchToArrayStub(masm, DISABLE_ALLOCATION_SITES);
-
-  // Subclassing.
-  __ bind(&subclassing);
-  __ mov(Operand(esp, eax, times_pointer_size, kPointerSize), edi);
-  __ add(eax, Immediate(3));
-  __ PopReturnAddressTo(ecx);
-  __ Push(edx);
-  __ Push(ebx);
-  __ PushReturnAddressFrom(ecx);
-  __ JumpToExternalReference(ExternalReference::Create(Runtime::kNewArray));
-}
-
-
-void InternalArrayConstructorStub::GenerateCase(
-    MacroAssembler* masm, ElementsKind kind) {
-  Label not_zero_case, not_one_case;
-  Label normal_sequence;
-
-  __ test(eax, eax);
-  __ j(not_zero, &not_zero_case);
-  InternalArrayNoArgumentConstructorStub stub0(isolate(), kind);
-  __ TailCallStub(&stub0);
-
-  __ bind(&not_zero_case);
-  __ cmp(eax, 1);
-  __ j(greater, &not_one_case);
-
-  if (IsFastPackedElementsKind(kind)) {
-    // We might need to create a holey array
-    // look at the first argument
-    __ mov(ecx, Operand(esp, kPointerSize));
-    __ test(ecx, ecx);
-    __ j(zero, &normal_sequence);
-
-    InternalArraySingleArgumentConstructorStub
-        stub1_holey(isolate(), GetHoleyElementsKind(kind));
-    __ TailCallStub(&stub1_holey);
-  }
-
-  __ bind(&normal_sequence);
-  InternalArraySingleArgumentConstructorStub stub1(isolate(), kind);
-  __ TailCallStub(&stub1);
-
-  __ bind(&not_one_case);
-  ArrayNArgumentsConstructorStub stubN(isolate());
-  __ TailCallStub(&stubN);
-}
-
-
-void InternalArrayConstructorStub::Generate(MacroAssembler* masm) {
-  // ----------- S t a t e -------------
-  //  -- eax : argc
-  //  -- edi : constructor
-  //  -- esp[0] : return address
-  //  -- esp[4] : last argument
-  // -----------------------------------
-
-  if (FLAG_debug_code) {
-    // The array construct code is only set for the global and natives
-    // builtin Array functions which always have maps.
-
-    // Initial map for the builtin Array function should be a map.
-    __ mov(ecx, FieldOperand(edi, JSFunction::kPrototypeOrInitialMapOffset));
-    // Will both indicate a nullptr and a Smi.
-    __ test(ecx, Immediate(kSmiTagMask));
-    __ Assert(not_zero, AbortReason::kUnexpectedInitialMapForArrayFunction);
-    __ CmpObjectType(ecx, MAP_TYPE, ecx);
-    __ Assert(equal, AbortReason::kUnexpectedInitialMapForArrayFunction);
-  }
-
-  // Figure out the right elements kind
-  __ mov(ecx, FieldOperand(edi, JSFunction::kPrototypeOrInitialMapOffset));
-
-  // Load the map's "bit field 2" into |result|. We only need the first byte,
-  // but the following masking takes care of that anyway.
-  __ mov(ecx, FieldOperand(ecx, Map::kBitField2Offset));
-  // Retrieve elements_kind from bit field 2.
-  __ DecodeField<Map::ElementsKindBits>(ecx);
-
-  if (FLAG_debug_code) {
-    Label done;
-    __ cmp(ecx, Immediate(PACKED_ELEMENTS));
-    __ j(equal, &done);
-    __ cmp(ecx, Immediate(HOLEY_ELEMENTS));
-    __ Assert(
-        equal,
-        AbortReason::kInvalidElementsKindForInternalArrayOrInternalPackedArray);
-    __ bind(&done);
-  }
-
-  Label fast_elements_case;
-  __ cmp(ecx, Immediate(PACKED_ELEMENTS));
-  __ j(equal, &fast_elements_case);
-  GenerateCase(masm, HOLEY_ELEMENTS);
-
-  __ bind(&fast_elements_case);
-  GenerateCase(masm, PACKED_ELEMENTS);
-}
-
 // Generates an Operand for saving parameters after PrepareCallApiFunction.
 static Operand ApiParameterOperand(int index) {
   return Operand(esp, index * kPointerSize);
@@ -510,9 +202,9 @@ static void CallApiFunctionAndReturn(MacroAssembler* masm,
 
   DCHECK(edx == function_address);
   // Allocate HandleScope in callee-save registers.
-  __ mov(ebx, Operand::StaticVariable(next_address));
-  __ mov(edi, Operand::StaticVariable(limit_address));
-  __ add(Operand::StaticVariable(level_address), Immediate(1));
+  __ mov(ebx, __ StaticVariable(next_address));
+  __ mov(edi, __ StaticVariable(limit_address));
+  __ add(__ StaticVariable(level_address), Immediate(1));
 
   if (FLAG_log_timer_events) {
     FrameScope frame(masm, StackFrame::MANUAL);
@@ -564,10 +256,10 @@ static void CallApiFunctionAndReturn(MacroAssembler* masm,
   __ bind(&prologue);
   // No more valid handles (the result handle was the last one). Restore
   // previous handle scope.
-  __ mov(Operand::StaticVariable(next_address), ebx);
-  __ sub(Operand::StaticVariable(level_address), Immediate(1));
+  __ mov(__ StaticVariable(next_address), ebx);
+  __ sub(__ StaticVariable(level_address), Immediate(1));
   __ Assert(above_equal, AbortReason::kInvalidHandleScopeLevel);
-  __ cmp(edi, Operand::StaticVariable(limit_address));
+  __ cmp(edi, __ StaticVariable(limit_address));
   __ j(not_equal, &delete_allocated_handles);
 
   // Leave the API exit frame.
@@ -580,7 +272,7 @@ static void CallApiFunctionAndReturn(MacroAssembler* masm,
   // Check if the function scheduled an exception.
   ExternalReference scheduled_exception_address =
       ExternalReference::scheduled_exception_address(isolate);
-  __ cmp(Operand::StaticVariable(scheduled_exception_address),
+  __ cmp(__ StaticVariable(scheduled_exception_address),
          Immediate(isolate->factory()->the_hole_value()));
   __ j(not_equal, &promote_scheduled_exception);
 
@@ -636,7 +328,7 @@ static void CallApiFunctionAndReturn(MacroAssembler* masm,
   ExternalReference delete_extensions =
       ExternalReference::delete_handle_scope_extensions();
   __ bind(&delete_allocated_handles);
-  __ mov(Operand::StaticVariable(limit_address), edi);
+  __ mov(__ StaticVariable(limit_address), edi);
   __ mov(edi, eax);
   __ mov(Operand(esp, 0),
          Immediate(ExternalReference::isolate_address(isolate)));
@@ -648,7 +340,7 @@ static void CallApiFunctionAndReturn(MacroAssembler* masm,
 
 void CallApiCallbackStub::Generate(MacroAssembler* masm) {
   // ----------- S t a t e -------------
-  //  -- ebx                 : call_data
+  //  -- eax                 : call_data
   //  -- ecx                 : holder
   //  -- edx                 : api_function_address
   //  -- esi                 : context
@@ -660,10 +352,10 @@ void CallApiCallbackStub::Generate(MacroAssembler* masm) {
   //  -- esp[(argc + 1) * 4] : receiver
   // -----------------------------------
 
-  Register call_data = ebx;
+  Register call_data = eax;
   Register holder = ecx;
   Register api_function_address = edx;
-  Register return_address = eax;
+  Register return_address = ebx;
 
   typedef FunctionCallbackArguments FCA;
 

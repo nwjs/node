@@ -88,10 +88,119 @@ inline void push(LiftoffAssembler* assm, LiftoffRegister reg, ValueType type) {
   }
 }
 
+#if defined(V8_TARGET_BIG_ENDIAN)
+inline void ChangeEndiannessLoad(LiftoffAssembler* assm, LiftoffRegister dst,
+                                 LoadType type, LiftoffRegList pinned) {
+  bool is_float = false;
+  LiftoffRegister tmp = dst;
+  switch (type.value()) {
+    case LoadType::kI64Load8U:
+    case LoadType::kI64Load8S:
+    case LoadType::kI32Load8U:
+    case LoadType::kI32Load8S:
+      // No need to change endianness for byte size.
+      return;
+    case LoadType::kF32Load:
+      is_float = true;
+      tmp = assm->GetUnusedRegister(kGpReg, pinned);
+      assm->emit_type_conversion(kExprI32ReinterpretF32, tmp, dst);
+      V8_FALLTHROUGH;
+    case LoadType::kI64Load32U:
+      assm->TurboAssembler::ByteSwapUnsigned(tmp.gp(), tmp.gp(), 4);
+      assm->dsrl32(tmp.gp(), tmp.gp(), 0);
+      break;
+    case LoadType::kI32Load:
+    case LoadType::kI64Load32S:
+      assm->TurboAssembler::ByteSwapSigned(tmp.gp(), tmp.gp(), 4);
+      assm->dsra32(tmp.gp(), tmp.gp(), 0);
+      break;
+    case LoadType::kI32Load16S:
+    case LoadType::kI64Load16S:
+      assm->TurboAssembler::ByteSwapSigned(tmp.gp(), tmp.gp(), 2);
+      assm->dsra32(tmp.gp(), tmp.gp(), 0);
+      break;
+    case LoadType::kI32Load16U:
+    case LoadType::kI64Load16U:
+      assm->TurboAssembler::ByteSwapUnsigned(tmp.gp(), tmp.gp(), 2);
+      assm->dsrl32(tmp.gp(), tmp.gp(), 0);
+      break;
+    case LoadType::kF64Load:
+      is_float = true;
+      tmp = assm->GetUnusedRegister(kGpReg, pinned);
+      assm->emit_type_conversion(kExprI64ReinterpretF64, tmp, dst);
+      V8_FALLTHROUGH;
+    case LoadType::kI64Load:
+      assm->TurboAssembler::ByteSwapSigned(tmp.gp(), tmp.gp(), 8);
+      break;
+    default:
+      UNREACHABLE();
+  }
+
+  if (is_float) {
+    switch (type.value()) {
+      case LoadType::kF32Load:
+        assm->emit_type_conversion(kExprF32ReinterpretI32, dst, tmp);
+        break;
+      case LoadType::kF64Load:
+        assm->emit_type_conversion(kExprF64ReinterpretI64, dst, tmp);
+        break;
+      default:
+        UNREACHABLE();
+    }
+  }
+}
+
+inline void ChangeEndiannessStore(LiftoffAssembler* assm, LiftoffRegister src,
+                                  StoreType type, LiftoffRegList pinned) {
+  bool is_float = false;
+  LiftoffRegister tmp = src;
+  switch (type.value()) {
+    case StoreType::kI64Store8:
+    case StoreType::kI32Store8:
+      // No need to change endianness for byte size.
+      return;
+    case StoreType::kF32Store:
+      is_float = true;
+      tmp = assm->GetUnusedRegister(kGpReg, pinned);
+      assm->emit_type_conversion(kExprI32ReinterpretF32, tmp, src);
+      V8_FALLTHROUGH;
+    case StoreType::kI32Store:
+    case StoreType::kI32Store16:
+      assm->TurboAssembler::ByteSwapSigned(tmp.gp(), tmp.gp(), 4);
+      break;
+    case StoreType::kF64Store:
+      is_float = true;
+      tmp = assm->GetUnusedRegister(kGpReg, pinned);
+      assm->emit_type_conversion(kExprI64ReinterpretF64, tmp, src);
+      V8_FALLTHROUGH;
+    case StoreType::kI64Store:
+    case StoreType::kI64Store32:
+    case StoreType::kI64Store16:
+      assm->TurboAssembler::ByteSwapSigned(tmp.gp(), tmp.gp(), 8);
+      break;
+    default:
+      UNREACHABLE();
+  }
+
+  if (is_float) {
+    switch (type.value()) {
+      case StoreType::kF32Store:
+        assm->emit_type_conversion(kExprF32ReinterpretI32, src, tmp);
+        break;
+      case StoreType::kF64Store:
+        assm->emit_type_conversion(kExprF64ReinterpretI64, src, tmp);
+        break;
+      default:
+        UNREACHABLE();
+    }
+  }
+}
+#endif  // V8_TARGET_BIG_ENDIAN
+
 }  // namespace liftoff
 
-uint32_t LiftoffAssembler::PrepareStackFrame() {
-  uint32_t offset = static_cast<uint32_t>(pc_offset());
+int LiftoffAssembler::PrepareStackFrame() {
+  int offset = pc_offset();
   // When constant that represents size of stack frame can't be represented
   // as 16bit we need three instructions to add it to sp, so we reserve space
   // for this case.
@@ -101,15 +210,16 @@ uint32_t LiftoffAssembler::PrepareStackFrame() {
   return offset;
 }
 
-void LiftoffAssembler::PatchPrepareStackFrame(uint32_t offset,
+void LiftoffAssembler::PatchPrepareStackFrame(int offset,
                                               uint32_t stack_slots) {
   uint64_t bytes = liftoff::kConstantStackSpace + kStackSlotSize * stack_slots;
   DCHECK_LE(bytes, kMaxInt);
   // We can't run out of space, just pass anything big enough to not cause the
   // assembler to try to grow the buffer.
   constexpr int kAvailableSpace = 256;
-  TurboAssembler patching_assembler(isolate(), buffer_ + offset,
-                                    kAvailableSpace, CodeObjectRequired::kNo);
+  TurboAssembler patching_assembler(nullptr, AssemblerOptions{},
+                                    buffer_ + offset, kAvailableSpace,
+                                    CodeObjectRequired::kNo);
   // If bytes can be represented as 16bit, daddiu will be generated and two
   // nops will stay untouched. Otherwise, lui-ori sequence will load it to
   // register and, as third instruction, daddu will be generated.
@@ -211,7 +321,7 @@ void LiftoffAssembler::Load(LiftoffRegister dst, Register src_addr,
 
 #if defined(V8_TARGET_BIG_ENDIAN)
   if (is_load_mem) {
-    ChangeEndiannessLoad(dst, type, pinned);
+    liftoff::ChangeEndiannessLoad(this, dst, type, pinned);
   }
 #endif
 }
@@ -236,7 +346,7 @@ void LiftoffAssembler::Store(Register dst_addr, Register offset_reg,
 
     src = tmp;
     pinned.set(tmp);
-    ChangeEndiannessStore(src, type, pinned);
+    liftoff::ChangeEndiannessStore(this, src, type, pinned);
   }
 #endif
 
@@ -265,114 +375,6 @@ void LiftoffAssembler::Store(Register dst_addr, Register offset_reg,
       break;
     default:
       UNREACHABLE();
-  }
-}
-
-void LiftoffAssembler::ChangeEndiannessLoad(LiftoffRegister dst, LoadType type,
-                                            LiftoffRegList pinned) {
-  bool is_float = false;
-  LiftoffRegister tmp = dst;
-  switch (type.value()) {
-    case LoadType::kI64Load8U:
-    case LoadType::kI64Load8S:
-    case LoadType::kI32Load8U:
-    case LoadType::kI32Load8S:
-      // No need to change endianness for byte size.
-      return;
-    case LoadType::kF32Load:
-      is_float = true;
-      tmp = GetUnusedRegister(kGpReg, pinned);
-      emit_type_conversion(kExprI32ReinterpretF32, tmp, dst);
-      V8_FALLTHROUGH;
-    case LoadType::kI64Load32U:
-      TurboAssembler::ByteSwapUnsigned(tmp.gp(), tmp.gp(), 4);
-      dsrl32(tmp.gp(), tmp.gp(), 0);
-      break;
-    case LoadType::kI32Load:
-    case LoadType::kI64Load32S:
-      TurboAssembler::ByteSwapSigned(tmp.gp(), tmp.gp(), 4);
-      dsra32(tmp.gp(), tmp.gp(), 0);
-      break;
-    case LoadType::kI32Load16S:
-    case LoadType::kI64Load16S:
-      TurboAssembler::ByteSwapSigned(tmp.gp(), tmp.gp(), 2);
-      dsra32(tmp.gp(), tmp.gp(), 0);
-      break;
-    case LoadType::kI32Load16U:
-    case LoadType::kI64Load16U:
-      TurboAssembler::ByteSwapUnsigned(tmp.gp(), tmp.gp(), 2);
-      dsrl32(tmp.gp(), tmp.gp(), 0);
-      break;
-    case LoadType::kF64Load:
-      is_float = true;
-      tmp = GetUnusedRegister(kGpReg, pinned);
-      emit_type_conversion(kExprI64ReinterpretF64, tmp, dst);
-      V8_FALLTHROUGH;
-    case LoadType::kI64Load:
-      TurboAssembler::ByteSwapSigned(tmp.gp(), tmp.gp(), 8);
-      break;
-    default:
-      UNREACHABLE();
-  }
-
-  if (is_float) {
-    switch (type.value()) {
-      case LoadType::kF32Load:
-        emit_type_conversion(kExprF32ReinterpretI32, dst, tmp);
-        break;
-      case LoadType::kF64Load:
-        emit_type_conversion(kExprF64ReinterpretI64, dst, tmp);
-        break;
-      default:
-        UNREACHABLE();
-    }
-  }
-}
-
-void LiftoffAssembler::ChangeEndiannessStore(LiftoffRegister src,
-                                             StoreType type,
-                                             LiftoffRegList pinned) {
-  bool is_float = false;
-  LiftoffRegister tmp = src;
-  switch (type.value()) {
-    case StoreType::kI64Store8:
-    case StoreType::kI32Store8:
-      // No need to change endianness for byte size.
-      return;
-    case StoreType::kF32Store:
-      is_float = true;
-      tmp = GetUnusedRegister(kGpReg, pinned);
-      emit_type_conversion(kExprI32ReinterpretF32, tmp, src);
-      V8_FALLTHROUGH;
-    case StoreType::kI32Store:
-    case StoreType::kI32Store16:
-      TurboAssembler::ByteSwapSigned(tmp.gp(), tmp.gp(), 4);
-      break;
-    case StoreType::kF64Store:
-      is_float = true;
-      tmp = GetUnusedRegister(kGpReg, pinned);
-      emit_type_conversion(kExprI64ReinterpretF64, tmp, src);
-      V8_FALLTHROUGH;
-    case StoreType::kI64Store:
-    case StoreType::kI64Store32:
-    case StoreType::kI64Store16:
-      TurboAssembler::ByteSwapSigned(tmp.gp(), tmp.gp(), 8);
-      break;
-    default:
-      UNREACHABLE();
-  }
-
-  if (is_float) {
-    switch (type.value()) {
-      case StoreType::kF32Store:
-        emit_type_conversion(kExprF32ReinterpretI32, src, tmp);
-        break;
-      case StoreType::kF64Store:
-        emit_type_conversion(kExprF64ReinterpretI64, src, tmp);
-        break;
-      default:
-        UNREACHABLE();
-    }
   }
 }
 
@@ -632,6 +634,10 @@ I64_SHIFTOP(sar, dsrav)
 I64_SHIFTOP(shr, dsrlv)
 
 #undef I64_SHIFTOP
+
+void LiftoffAssembler::emit_i32_to_intptr(Register dst, Register src) {
+  addu(dst, src, zero_reg);
+}
 
 void LiftoffAssembler::emit_f32_neg(DoubleRegister dst, DoubleRegister src) {
   TurboAssembler::Neg_s(dst, src);
@@ -1074,12 +1080,9 @@ void LiftoffAssembler::emit_f64_set_cond(Condition cond, Register dst,
   bind(&cont);
 }
 
-void LiftoffAssembler::StackCheck(Label* ool_code) {
-  LiftoffRegister tmp = GetUnusedRegister(kGpReg);
-  TurboAssembler::li(
-      tmp.gp(), Operand(ExternalReference::address_of_stack_limit(isolate())));
-  TurboAssembler::Uld(tmp.gp(), MemOperand(tmp.gp()));
-  TurboAssembler::Branch(ool_code, ule, sp, Operand(tmp.gp()));
+void LiftoffAssembler::StackCheck(Label* ool_code, Register limit_address) {
+  TurboAssembler::Uld(limit_address, MemOperand(limit_address));
+  TurboAssembler::Branch(ool_code, ule, sp, Operand(limit_address));
 }
 
 void LiftoffAssembler::CallTrapCallbackForTesting() {
@@ -1193,12 +1196,6 @@ void LiftoffAssembler::CallNativeWasmCode(Address addr) {
   Call(addr, RelocInfo::WASM_CALL);
 }
 
-void LiftoffAssembler::CallRuntime(Zone* zone, Runtime::FunctionId fid) {
-  // Set instance to zero.
-  TurboAssembler::Move(cp, zero_reg);
-  CallRuntimeDelayed(zone, fid);
-}
-
 void LiftoffAssembler::CallIndirect(wasm::FunctionSig* sig,
                                     compiler::CallDescriptor* call_descriptor,
                                     Register target) {
@@ -1208,6 +1205,12 @@ void LiftoffAssembler::CallIndirect(wasm::FunctionSig* sig,
   } else {
     Call(target);
   }
+}
+
+void LiftoffAssembler::CallRuntimeStub(WasmCode::RuntimeStubId sid) {
+  // A direct call to a wasm runtime stub defined in this module.
+  // Just encode the stub index. This will be patched at relocation.
+  Call(static_cast<Address>(sid), RelocInfo::WASM_STUB_CALL);
 }
 
 void LiftoffAssembler::AllocateStackSlot(Register addr, uint32_t size) {

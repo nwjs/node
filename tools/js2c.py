@@ -217,7 +217,7 @@ static struct : public v8::String::ExternalOneByteStringResource {{
   size_t length() const override {{ return arraysize(raw_{var}); }}
   void Dispose() override {{ /* Default calls `delete this`. */ }}
   v8::Local<v8::String> ToStringChecked(v8::Isolate* isolate) {{
-    return v8::String::NewExternalOneByte(isolate, this).ToLocalChecked();
+    return v8::String::NewFromOneByte(isolate, raw_{var}, v8::NewStringType::kNormal, length()).ToLocalChecked();
   }}
 }} {var};
 """
@@ -229,7 +229,7 @@ static struct : public v8::String::ExternalStringResource {{
   size_t length() const override {{ return arraysize(raw_{var}); }}
   void Dispose() override {{ /* Default calls `delete this`. */ }}
   v8::Local<v8::String> ToStringChecked(v8::Isolate* isolate) {{
-    return v8::String::NewExternalTwoByte(isolate, this).ToLocalChecked();
+    return v8::String::NewFromTwoByte(isolate, data(), v8::NewStringType::kNormal, length()).ToLocalChecked();
   }}
 }} {var};
 """

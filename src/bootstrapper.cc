@@ -28,7 +28,7 @@ void SetupProcessObject(const FunctionCallbackInfo<Value>& args) {
 }
 
 void RunMicrotasks(const FunctionCallbackInfo<Value>& args) {
-  args.GetIsolate()->RunMicrotasks();
+  v8::MicrotasksScope::PerformCheckpoint(args.GetIsolate());
 }
 
 void SetupNextTick(const FunctionCallbackInfo<Value>& args) {
@@ -104,7 +104,7 @@ void SetupPromises(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[0]->IsFunction());
   CHECK(args[1]->IsFunction());
 
-  isolate->SetPromiseRejectCallback(PromiseRejectCallback);
+  //isolate->SetPromiseRejectCallback(PromiseRejectCallback);
   env->set_promise_reject_unhandled_function(args[0].As<Function>());
   env->set_promise_reject_handled_function(args[1].As<Function>());
 }

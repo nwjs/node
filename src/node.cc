@@ -32,6 +32,11 @@
 #include "node_context_data.h"
 #include "tracing/traced_value.h"
 
+#include <iostream>
+
+#include <vector>
+#include "node_webkit.h"
+
 #if defined HAVE_PERFCTR
 #include "node_counters.h"
 #endif
@@ -42,6 +47,7 @@
 
 #if defined(NODE_HAVE_I18N_SUPPORT)
 #include "node_i18n.h"
+#include <unicode/udata.h>
 #endif
 
 #if HAVE_INSPECTOR
@@ -132,6 +138,23 @@ extern char **environ;
   NODE_BUILTIN_MODULES(V)
 #undef V
 
+static uv_key_t thread_ctx_key;
+static int thread_ctx_created = 0;
+static int g_worker_support = 0;
+
+struct thread_ctx_st {
+  node::Environment* env;
+  node::node_module* modpending;
+  node::node_module* modlist_builtin;
+  node::node_module* modlist_linked;
+  node::node_module* modlist_addon;
+  node::node_module* modlist_internal;
+  int handle_counter;
+  int quit_flag;
+  int close_quit_timer_done;
+  int close_async_handle_done;
+};
+
 namespace node {
 
 using v8::Array;
@@ -187,11 +210,13 @@ static int v8_thread_pool_size = v8_default_thread_pool_size;
 static bool prof_process = false;
 static bool v8_is_profiling = false;
 static bool node_is_initialized = false;
+static bool node_is_nwjs = false;
 static node_module* modpending;
 static node_module* modlist_builtin;
 static node_module* modlist_internal;
 static node_module* modlist_linked;
 static node_module* modlist_addon;
+static bool trace_enabled = false;
 static std::string trace_enabled_categories;  // NOLINT(runtime/string)
 static std::string trace_file_pattern =  // NOLINT(runtime/string)
   "node_trace.${rotation}.log";
@@ -199,6 +224,13 @@ static bool abort_on_uncaught_exception = false;
 
 // Bit flag used to track security reverts (see node_revert.h)
 unsigned int reverted = 0;
+
+
+NODE_EXTERN v8::Persistent<Context> g_context;
+NODE_EXTERN v8::Persistent<Context> g_dom_context;
+static UVRunFn g_nw_uv_run = nullptr;
+static NWTickCallback g_nw_tick_callback = nullptr;
+static const char* g_native_blob_path = nullptr;
 
 #if defined(NODE_HAVE_I18N_SUPPORT)
 // Path to ICU data (for i18n / Intl)
@@ -291,6 +323,7 @@ static v8::Isolate* node_isolate;
 
 DebugOptions debug_options;
 
+#if 0
 // Ensures that __metadata trace events are only emitted
 // when tracing is enabled.
 class NodeTraceStateObserver :
@@ -385,27 +418,30 @@ class NodeTraceStateObserver :
   v8::TracingController* controller_;
 };
 
+#endif
+
+void PromiseRejectCallback(v8::PromiseRejectMessage message);
+
 static struct {
 #if NODE_USE_V8_PLATFORM
   void Initialize(int thread_pool_size) {
-    tracing_agent_.reset(new tracing::Agent());
-    auto controller = tracing_agent_->GetTracingController();
-    controller->AddTraceStateObserver(new NodeTraceStateObserver(controller));
-    tracing::TraceEventHelper::SetTracingController(controller);
-    StartTracingAgent();
-    platform_ = new NodePlatform(thread_pool_size, controller);
-    V8::InitializePlatform(platform_);
+      tracing_agent_.reset(nullptr);
+      platform_ = new NodePlatform(thread_pool_size, new v8::TracingController());
+      V8::InitializePlatform(platform_);
+      //      tracing::TraceEventHelper::SetTracingController(
+      //  new v8::TracingController());
+      //    }
   }
 
   void Dispose() {
-    tracing_agent_.reset(nullptr);
+    //tracing_agent_.reset(nullptr);
     platform_->Shutdown();
     delete platform_;
     platform_ = nullptr;
   }
 
   void DrainVMTasks(Isolate* isolate) {
-    platform_->DrainBackgroundTasks(isolate);
+    platform_->DrainTasks(isolate);
   }
 
   void CancelVMTasks(Isolate* isolate) {
@@ -428,6 +464,7 @@ static struct {
 #endif  // HAVE_INSPECTOR
 
   void StartTracingAgent() {
+#if 0
     if (trace_enabled_categories.empty()) {
       tracing_file_writer_ = tracing_agent_->DefaultHandle();
     } else {
@@ -437,10 +474,13 @@ static struct {
               new tracing::NodeTraceWriter(trace_file_pattern)),
           tracing::Agent::kUseDefaultCategories);
     }
+#endif
   }
 
   void StopTracingAgent() {
+#if 0
     tracing_file_writer_.reset();
+#endif
   }
 
   tracing::AgentWriterHandle* GetTracingAgentWriter() {
@@ -718,12 +758,14 @@ void* ArrayBufferAllocator::Allocate(size_t size) {
 
 namespace {
 
+#if 0
 bool ShouldAbortOnUncaughtException(Isolate* isolate) {
   HandleScope scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
   return env->should_abort_on_uncaught_toggle()[0] &&
          !env->inside_should_not_abort_on_uncaught_scope();
 }
+#endif
 
 }  // anonymous namespace
 
@@ -1239,22 +1281,37 @@ static void Exit(const FunctionCallbackInfo<Value>& args) {
 }
 
 extern "C" void node_module_register(void* m) {
-  struct node_module* mp = reinterpret_cast<struct node_module*>(m);
+  struct node_module* mp;
+  if (g_worker_support) {
+    mp = (struct node_module*)malloc(sizeof(struct node_module));
+    memcpy(mp, m, sizeof(struct node_module));
+  } else
+    mp = reinterpret_cast<struct node_module*>(m);
+  if (!thread_ctx_created) {
+    thread_ctx_created = 1;
+    uv_key_create(&thread_ctx_key);
+  }
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  if (!tls_ctx) {
+    tls_ctx = (struct thread_ctx_st*)malloc(sizeof(struct thread_ctx_st));
+    memset(tls_ctx, 0, sizeof(struct thread_ctx_st));
+    uv_key_set(&thread_ctx_key, tls_ctx);
+  }
 
   if (mp->nm_flags & NM_F_BUILTIN) {
-    mp->nm_link = modlist_builtin;
-    modlist_builtin = mp;
+    mp->nm_link = tls_ctx->modlist_builtin;
+    tls_ctx->modlist_builtin = mp;
   } else if (mp->nm_flags & NM_F_INTERNAL) {
-    mp->nm_link = modlist_internal;
-    modlist_internal = mp;
+    mp->nm_link = tls_ctx->modlist_internal;
+    tls_ctx->modlist_internal = mp;
   } else if (!node_is_initialized) {
     // "Linked" modules are included as part of the node project.
     // Like builtins they are registered *before* node::Init runs.
     mp->nm_flags = NM_F_LINKED;
-    mp->nm_link = modlist_linked;
-    modlist_linked = mp;
+    mp->nm_link = tls_ctx->modlist_linked;
+    tls_ctx->modlist_linked = mp;
   } else {
-    modpending = mp;
+    tls_ctx->modpending = mp;
   }
 }
 
@@ -1273,13 +1330,16 @@ inline struct node_module* FindModule(struct node_module* list,
 }
 
 node_module* get_builtin_module(const char* name) {
-  return FindModule(modlist_builtin, name, NM_F_BUILTIN);
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  return FindModule(tls_ctx->modlist_builtin, name, NM_F_BUILTIN);
 }
 node_module* get_internal_module(const char* name) {
-  return FindModule(modlist_internal, name, NM_F_INTERNAL);
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  return FindModule(tls_ctx->modlist_internal, name, NM_F_INTERNAL);
 }
 node_module* get_linked_module(const char* name) {
-  return FindModule(modlist_linked, name, NM_F_LINKED);
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  return FindModule(tls_ctx->modlist_linked, name, NM_F_LINKED);
 }
 
 class DLib {
@@ -1376,7 +1436,10 @@ inline napi_addon_register_func GetNapiInitializerCallback(DLib* dlib) {
 // cache that's a plain C list or hash table that's shared across contexts?
 static void DLOpen(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
+
   auto context = env->context();
+
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
 
   CHECK_NULL(modpending);
 
@@ -1406,8 +1469,8 @@ static void DLOpen(const FunctionCallbackInfo<Value>& args) {
   // Objects containing v14 or later modules will have registered themselves
   // on the pending list.  Activate all of them now.  At present, only one
   // module per object is supported.
-  node_module* const mp = modpending;
-  modpending = nullptr;
+  node_module* const mp = tls_ctx->modpending;
+  tls_ctx->modpending = nullptr;
 
   if (!is_opened) {
     Local<String> errmsg = OneByteString(env->isolate(), dlib.errmsg_.c_str());
@@ -1466,8 +1529,8 @@ static void DLOpen(const FunctionCallbackInfo<Value>& args) {
   }
 
   mp->nm_dso_handle = dlib.handle_;
-  mp->nm_link = modlist_addon;
-  modlist_addon = mp;
+  mp->nm_link = tls_ctx->modlist_addon;
+  tls_ctx->modlist_addon = mp;
 
   if (mp->nm_context_register_func != nullptr) {
     mp->nm_context_register_func(exports, module, context, mp->nm_priv);
@@ -1517,17 +1580,21 @@ void FatalException(Isolate* isolate,
   HandleScope scope(isolate);
 
   Environment* env = Environment::GetCurrent(isolate);
+  if (!env) //FIXME: check why env is null #4912
+    return;
   Local<Object> process_object = env->process_object();
   Local<String> fatal_exception_string = env->fatal_exception_string();
-  Local<Function> fatal_exception_function =
-      process_object->Get(fatal_exception_string).As<Function>();
+  Local<Value> fatal_exception_function_value =
+    process_object->Get(fatal_exception_string);
 
-  if (!fatal_exception_function->IsFunction()) {
+  int exit_code = 0;
+  if (!fatal_exception_function_value->IsFunction()) {
     // Failed before the process._fatalException function was added!
     // this is probably pretty bad.  Nothing to do but report and exit.
     ReportException(env, error, message);
-    exit(6);
+    exit_code = 6;
   } else {
+    Local<Function> fatal_exception_function = Local<Function>::Cast(fatal_exception_function_value);
     TryCatch fatal_try_catch(isolate);
 
     // Do not call FatalException when _fatalException handler throws
@@ -1543,20 +1610,25 @@ void FatalException(Isolate* isolate,
     if (fatal_try_catch.HasCaught()) {
       // The fatal exception function threw, so we must exit
       ReportException(env, fatal_try_catch);
-      exit(7);
+      exit_code = 7;
     } else if (caught->IsFalse()) {
       ReportException(env, error, message);
 
       // fatal_exception_function call before may have set a new exit code ->
       // read it again, otherwise use default for uncaughtException 1
-      Local<String> exit_code = env->exit_code_string();
+      Local<String> exit_code_val = env->exit_code_string();
       Local<Value> code;
-      if (!process_object->Get(env->context(), exit_code).ToLocal(&code) ||
+      if (!process_object->Get(env->context(), exit_code_val).ToLocal(&code) ||
           !code->IsInt32()) {
-        exit(1);
+        exit_code = 1;
+        return;
       }
-      exit(code.As<v8::Int32>()->Value());
+      exit_code = code.As<v8::Int32>()->Value();
     }
+  }
+
+  if (!node_is_nwjs && exit_code) {
+    exit(exit_code);
   }
 }
 
@@ -1575,7 +1647,7 @@ void FatalException(Isolate* isolate, const TryCatch& try_catch) {
 }
 
 
-static void OnMessage(Local<Message> message, Local<Value> error) {
+NODE_EXTERN void OnMessage(Local<Message> message, Local<Value> error) {
   // The current version of V8 sends messages for errors only
   // (thus `error` is always set).
   FatalException(Isolate::GetCurrent(), error, message);
@@ -2085,6 +2157,9 @@ void SetupProcessObject(Environment* env,
       v8::DEFAULT,
       v8::None,
       SideEffectType::kHasNoSideEffect).FromJust());
+
+  if (node_is_nwjs)
+    READONLY_PROPERTY(process, "__nwjs", Integer::New(env->isolate(), 1));
 
   // process.version
   READONLY_PROPERTY(process,
@@ -3385,8 +3460,10 @@ void Init(int* argc,
   // Register built-in modules
   RegisterBuiltinModules();
 
+  if (!node_is_nwjs) {
   // Make inherited handles noninheritable.
   uv_disable_stdio_inheritance();
+  } //node_is_nwjs
 
 #if defined(NODE_V8_OPTIONS)
   // Should come before the call to V8::SetFlagsFromCommandLine()
@@ -3452,11 +3529,7 @@ void Init(int* argc,
 
   ProcessArgv(argc, argv, exec_argc, exec_argv);
 
-  // Set the process.title immediately after processing argv if --title is set.
-  if (!config_process_title.empty())
-    uv_set_process_title(config_process_title.c_str());
-
-#if defined(NODE_HAVE_I18N_SUPPORT)
+#if 0 //defined(NODE_HAVE_I18N_SUPPORT)
   // If the parameter isn't given, use the env variable.
   if (icu_data_dir.empty())
     SafeGetenv("NODE_ICU_DATA", &icu_data_dir);
@@ -3493,8 +3566,11 @@ uv_loop_t* GetCurrentEventLoop(v8::Isolate* isolate) {
 
 
 void AtExit(void (*cb)(void* arg), void* arg) {
-  auto env = Environment::GetThreadLocalEnv();
-  AtExit(env, cb, arg);
+  //auto env = Environment::GetThreadLocalEnv();
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  if (tls_ctx && tls_ctx->env) {
+    AtExit(tls_ctx->env, cb, arg);
+  }
 }
 
 
@@ -3737,20 +3813,27 @@ bool AllowWasmCodeGenerationCallback(
   return wasm_code_gen->IsUndefined() || wasm_code_gen->IsTrue();
 }
 
-Isolate* NewIsolate(ArrayBufferAllocator* allocator) {
+Isolate* NewIsolate(ArrayBufferAllocator* allocator, uv_loop_t* event_loop) {
   Isolate::CreateParams params;
+  if (!node_is_nwjs) {
   params.array_buffer_allocator = allocator;
+  }
 #ifdef NODE_ENABLE_VTUNE_PROFILING
   params.code_event_handler = vTune::GetVtuneCodeEventHandler();
 #endif
 
-  Isolate* isolate = Isolate::New(params);
+  Isolate* isolate = Isolate::Allocate();
   if (isolate == nullptr)
     return nullptr;
 
+  v8_platform.Platform()->RegisterIsolate(isolate, event_loop);
+  Isolate::Initialize(isolate, params);
   isolate->AddMessageListener(OnMessage);
+#if 0
   isolate->SetAbortOnUncaughtExceptionCallback(ShouldAbortOnUncaughtException);
   isolate->SetMicrotasksPolicy(v8::MicrotasksPolicy::kExplicit);
+#endif
+  isolate->SetAutorunMicrotasks(false);
   isolate->SetFatalErrorHandler(OnFatalError);
   isolate->SetAllowWasmCodeGenerationCallback(AllowWasmCodeGenerationCallback);
 
@@ -3762,7 +3845,7 @@ inline int Start(uv_loop_t* event_loop,
                  int exec_argc, const char* const* exec_argv) {
   std::unique_ptr<ArrayBufferAllocator, decltype(&FreeArrayBufferAllocator)>
       allocator(CreateArrayBufferAllocator(), &FreeArrayBufferAllocator);
-  Isolate* const isolate = NewIsolate(allocator.get());
+  Isolate* const isolate = NewIsolate(allocator.get(), event_loop);
   if (isolate == nullptr)
     return 12;  // Signal internal error.
 
@@ -3781,8 +3864,7 @@ inline int Start(uv_loop_t* event_loop,
         CreateIsolateData(
             isolate,
             event_loop,
-            v8_platform.Platform(),
-            allocator.get()),
+            v8_platform.Platform()),
         &FreeIsolateData);
     if (track_heap_objects) {
       isolate->GetHeapProfiler()->StartTrackingHeapObjects(true);
@@ -3798,14 +3880,124 @@ inline int Start(uv_loop_t* event_loop,
   }
 
   isolate->Dispose();
+  v8_platform.Platform()->UnregisterIsolate(isolate);
 
   return exit_code;
 }
 
+#ifdef V8_USE_EXTERNAL_STARTUP_DATA
+// Helper class to load the startup data files from disk.
+//
+// This is meant as a convenience for stand-alone binaries like d8, cctest,
+// unittest. A V8 embedder would likely either handle startup data on their
+// own or just disable the feature if they don't want to handle it at all,
+// while tools like cctest need to work in either configuration. Hence this is
+// not meant for inclusion in the general v8 library.
+class StartupDataHandler {
+ public:
+  // Load startup data, and call the v8::V8::Set*DataBlob API functions.
+  //
+  // natives_blob and snapshot_blob will be loaded realitive to exec_path,
+  // which would usually be the equivalent of argv[0].
+  StartupDataHandler(const char* exec_path, const char* natives_blob,
+                     const char* snapshot_blob);
+  ~StartupDataHandler();
+
+ private:
+  static char* RelativePath(char** buffer, const char* exec_path,
+                            const char* name);
+
+  void LoadFromFiles(const char* natives_blob, const char* snapshot_blob);
+
+  void Load(const char* blob_file, v8::StartupData* startup_data,
+            void (*setter_fn)(v8::StartupData*));
+
+  v8::StartupData natives_;
+  v8::StartupData snapshot_;
+
+  // Disallow copy & assign.
+  StartupDataHandler(const StartupDataHandler& other);
+  void operator=(const StartupDataHandler& other);
+};
+
+StartupDataHandler::StartupDataHandler(const char* exec_path,
+                                       const char* natives_blob,
+                                       const char* snapshot_blob) {
+  // If we have (at least one) explicitly given blob, use those.
+  // If not, use the default blob locations next to the d8 binary.
+  if (natives_blob || snapshot_blob) {
+    LoadFromFiles(natives_blob, snapshot_blob);
+  } else {
+    char* natives;
+    char* snapshot;
+    LoadFromFiles(RelativePath(&natives, exec_path, "natives_blob.bin"),
+                  RelativePath(&snapshot, exec_path, "snapshot_blob.bin"));
+
+    free(natives);
+    free(snapshot);
+  }
+}
+
+
+StartupDataHandler::~StartupDataHandler() {
+  delete[] natives_.data;
+  delete[] snapshot_.data;
+}
+
+
+char* StartupDataHandler::RelativePath(char** buffer, const char* exec_path,
+                                       const char* name) {
+  const char* last_slash = strrchr(exec_path, '/');
+  if (last_slash) {
+    int after_slash = last_slash - exec_path + 1;
+    int name_length = static_cast<int>(strlen(name));
+    *buffer = reinterpret_cast<char*>(calloc(after_slash + name_length + 1, 1));
+    strncpy(*buffer, exec_path, after_slash);
+    strncat(*buffer, name, name_length);
+  } else {
+    *buffer = strdup(name);
+  }
+  return *buffer;
+}
+
+
+void StartupDataHandler::LoadFromFiles(const char* natives_blob,
+                                       const char* snapshot_blob) {
+  Load(natives_blob, &natives_, v8::V8::SetNativesDataBlob);
+  Load(snapshot_blob, &snapshot_, v8::V8::SetSnapshotDataBlob);
+}
+
+
+void StartupDataHandler::Load(const char* blob_file,
+                              v8::StartupData* startup_data,
+                              void (*setter_fn)(v8::StartupData*)) {
+  startup_data->data = NULL;
+  startup_data->raw_size = 0;
+
+  if (!blob_file) return;
+
+  FILE* file = fopen(blob_file, "rb");
+  if (!file) return;
+
+  fseek(file, 0, SEEK_END);
+  startup_data->raw_size = ftell(file);
+  rewind(file);
+
+  startup_data->data = new char[startup_data->raw_size];
+  int read_size = static_cast<int>(fread(const_cast<char*>(startup_data->data),
+                                         1, startup_data->raw_size, file));
+  fclose(file);
+
+  if (startup_data->raw_size == read_size) (*setter_fn)(startup_data);
+}
+
+#endif  // V8_USE_EXTERNAL_STARTUP_DATA
+
+
 int Start(int argc, char** argv) {
   atexit([] () { uv_tty_reset_mode(); });
   PlatformInit();
-  performance::performance_node_start = PERFORMANCE_NOW();
+  //performance::performance_node_start = PERFORMANCE_NOW();
 
   CHECK_GT(argc, 0);
 
@@ -3834,9 +4026,23 @@ int Start(int argc, char** argv) {
   V8::SetEntropySource(crypto::EntropySource);
 #endif  // HAVE_OPENSSL
 
+#ifdef V8_USE_EXTERNAL_STARTUP_DATA
+  //StartupDataHandler startup_data(argv[0], nullptr, nullptr);
+#if defined(__APPLE__)
+  V8::InitializeExternalStartupData(g_native_blob_path);
+#else
+  V8::InitializeExternalStartupData(argv[0]);
+#endif
+#endif
+  V8::InitializeICUDefaultLocation(argv[0]);
+  UErrorCode err = U_ZERO_ERROR;
+  void* icu_data = V8::RawICUData();
+  if (icu_data)
+    udata_setCommonData((uint8_t*)icu_data, &err);
+
   v8_platform.Initialize(v8_thread_pool_size);
   V8::Initialize();
-  performance::performance_v8_start = PERFORMANCE_NOW();
+  //performance::performance_v8_start = PERFORMANCE_NOW();
   v8_initialized = true;
   const int exit_code =
       Start(uv_default_loop(), argc, argv, exec_argc, exec_argv);
@@ -3866,6 +4072,11 @@ void RegisterBuiltinModules() {
 #undef V
 }
 
+NODE_EXTERN v8::Handle<v8::Value> CallNWTickCallback(Environment* env, const v8::Handle<v8::Value> ret) {
+  return (*g_nw_tick_callback)(env, ret);
+}
+
+
 }  // namespace node
 
 #if !HAVE_INSPECTOR
@@ -3873,3 +4084,445 @@ void Initialize() {}
 
 NODE_BUILTIN_MODULE_CONTEXT_AWARE(inspector, Initialize)
 #endif  // !HAVE_INSPECTOR
+
+extern "C" {
+void wakeup_callback(uv_async_t* handle) {
+  // do nothing, just make libuv exit loop.
+}
+
+void idle_callback(uv_idle_t* handle) {
+  // do nothing, just make libuv exit loop.
+}
+
+void timer_callback(uv_timer_t* timer) {
+  // libuv would block unexpectedly with zero-timeout timer
+  // this is a workaround of libuv bug #574:
+  // https://github.com/joyent/libuv/issues/574
+  uv_idle_start(static_cast<uv_idle_t*>(timer->data), idle_callback);
+}
+
+void close_async_cb(uv_handle_t* handle) {
+  delete reinterpret_cast<uv_async_t*>(handle);
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  if (tls_ctx)
+    tls_ctx->close_async_handle_done = 1;
+}
+
+void close_timer_cb(uv_handle_t* handle) {
+  delete reinterpret_cast<uv_timer_t*>(handle);
+}
+
+void close_quit_timer_cb(uv_handle_t* handle) {
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  if (tls_ctx)
+    tls_ctx->close_quit_timer_done = 1;
+}
+
+void close_idle_cb(uv_handle_t* handle) {
+  delete reinterpret_cast<uv_idle_t*>(handle);
+}
+
+NODE_EXTERN int g_uv_run(void* loop, int mode) {
+  return uv_run((uv_loop_t*)loop, (uv_run_mode)mode);
+}
+
+NODE_EXTERN void g_set_uv_run(UVRunFn uv_run_fn) {
+  node::g_nw_uv_run = uv_run_fn;
+}
+
+NODE_EXTERN int g_node_start(int argc, char** argv) {
+  return node::Start(argc, argv);
+}
+
+NODE_EXTERN void g_set_blob_path(const char* path) {
+  node::g_native_blob_path = path;
+}
+
+NODE_EXTERN void g_msg_pump_nest_enter(msg_pump_context_t* ctx) {
+  ctx->loop = uv_loop_new();
+
+  ctx->wakeup_events->push_back((uv_async_t*)ctx->wakeup_event);
+  ctx->wakeup_event = new uv_async_t;
+  uv_async_init((uv_loop_t*)ctx->loop, (uv_async_t*)ctx->wakeup_event, wakeup_callback);
+}
+
+NODE_EXTERN void g_msg_pump_pre_loop(msg_pump_context_t* ctx) {
+  ctx->idle_handle = new uv_idle_t;
+  uv_idle_init((uv_loop_t*)ctx->loop, (uv_idle_t*)ctx->idle_handle);
+
+  ctx->delay_timer = new uv_timer_t;
+  ((uv_timer_t*)ctx->delay_timer)->data = ctx->idle_handle;
+  uv_timer_init((uv_loop_t*)ctx->loop, (uv_timer_t*)ctx->delay_timer);
+}
+
+NODE_EXTERN void g_msg_pump_did_work(msg_pump_context_t* ctx) {
+  if (!thread_ctx_created) return;
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  if (tls_ctx && tls_ctx->env) {
+    v8::Isolate* isolate = tls_ctx->env->isolate();
+    if (!isolate)
+      return;
+    v8::HandleScope handleScope(isolate);
+    v8::Context::Scope cscope(tls_ctx->env->context());
+    (*node::g_nw_uv_run)((uv_loop_t*)ctx->loop, UV_RUN_NOWAIT);
+    node::CallNWTickCallback(tls_ctx->env, v8::Undefined(isolate));
+  }
+}
+
+NODE_EXTERN void g_msg_pump_need_work(msg_pump_context_t* ctx) {
+  struct thread_ctx_st* tls_ctx = nullptr;
+  if (thread_ctx_created) {
+    tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+    if (tls_ctx && tls_ctx->env) {
+      tls_ctx->env->context()->Enter();
+    }
+  }
+  (*node::g_nw_uv_run)((uv_loop_t*)ctx->loop, UV_RUN_ONCE);
+  if (tls_ctx && tls_ctx->env) {
+    tls_ctx->env->context()->Exit();
+  }
+}
+
+NODE_EXTERN void g_msg_pump_delay_work(msg_pump_context_t* ctx, int sec) {
+  struct thread_ctx_st* tls_ctx = nullptr;
+  if (thread_ctx_created) {
+    tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+    if (tls_ctx && tls_ctx->env) {
+      tls_ctx->env->context()->Enter();
+    }
+  }
+  uv_timer_start((uv_timer_t*)ctx->delay_timer, timer_callback, sec, 0);
+  (*node::g_nw_uv_run)((uv_loop_t*)ctx->loop, UV_RUN_ONCE);
+  uv_idle_stop((uv_idle_t*)ctx->idle_handle);
+  uv_timer_stop((uv_timer_t*)ctx->delay_timer);
+  if (tls_ctx && tls_ctx->env) {
+    tls_ctx->env->context()->Exit();
+  }
+}
+
+NODE_EXTERN void g_msg_pump_nest_leave(msg_pump_context_t* ctx) {
+  uv_close((uv_handle_t*)(ctx->wakeup_event), close_async_cb);
+  // Delete external loop.
+  uv_loop_close((uv_loop_t*)ctx->loop);
+  free((uv_loop_t*)ctx->loop);
+  ctx->loop = nullptr;
+    // // Restore previous async handle.
+  ctx->wakeup_event = ctx->wakeup_events->back();
+  ctx->wakeup_events->pop_back();
+}
+
+NODE_EXTERN uv_loop_t* g_uv_default_loop() {
+  return uv_default_loop();
+}
+
+NODE_EXTERN void g_msg_pump_clean_ctx(msg_pump_context_t* ctx) {
+  uv_close((uv_handle_t*)ctx->idle_handle, close_idle_cb);
+  uv_run((uv_loop_t*)ctx->loop, UV_RUN_NOWAIT);
+  ctx->idle_handle = nullptr;
+
+  uv_close((uv_handle_t*)ctx->delay_timer, close_timer_cb);
+  uv_run((uv_loop_t*)ctx->loop, UV_RUN_NOWAIT);
+  ctx->delay_timer = nullptr;
+}
+
+NODE_EXTERN void g_msg_pump_sched_work(uv_async_t* wakeup_event) {
+#ifdef _WIN32
+  uv_async_send_nw(wakeup_event);
+#else
+  uv_async_send(wakeup_event);
+#endif
+}
+
+NODE_EXTERN void g_msg_pump_ctor(uv_async_t** wakeup_event, int worker_support) {
+  uv_init_nw(worker_support);
+  g_worker_support = worker_support;
+  *wakeup_event = new uv_async_t;
+  uv_async_init(uv_default_loop(), *wakeup_event, wakeup_callback);
+  node::g_nw_uv_run = (UVRunFn)uv_run;
+}
+
+NODE_EXTERN void g_msg_pump_dtor(uv_async_t** wakeup_event) {
+  thread_ctx_st* tls_ctx = nullptr;
+  tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  tls_ctx->close_async_handle_done = 0;
+  uv_close(reinterpret_cast<uv_handle_t*>(*wakeup_event), close_async_cb);
+  while (!tls_ctx->close_async_handle_done)
+    uv_run(uv_default_loop(), UV_RUN_NOWAIT);
+  uv_loop_close(uv_default_loop());
+  *wakeup_event = nullptr;
+  free(tls_ctx);
+  uv_key_set(&thread_ctx_key, NULL);
+}
+
+NODE_EXTERN bool g_is_node_initialized() {
+  return node::node_is_initialized;
+}
+
+NODE_EXTERN void g_call_tick_callback(node::Environment* env) {
+  v8::HandleScope scope(env->isolate());
+  v8::Context::Scope context_scope(env->context());
+  node::Environment::AsyncCallbackScope callback_scope(env);
+
+  env->KickNextTick();
+}
+
+// copied beginning of Start() until v8::Initialize()
+NODE_EXTERN void g_setup_nwnode(int argc, char** argv, bool worker) {
+  node::prog_start_time = static_cast<double>(uv_now(uv_default_loop()));
+  node::node_is_initialized = true;
+  node::node_is_nwjs = true;
+  node::node_isolate = v8::Isolate::GetCurrent();
+}
+
+static void walk_cb(uv_handle_t* handle, void* arg) {
+  struct thread_ctx_st* tls_ctx = (struct thread_ctx_st*)arg;
+  if (uv_is_active(handle))
+    tls_ctx->handle_counter++;  
+}
+
+static void quit_timer_cb(uv_timer_t* timer) {
+  struct thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  assert(tls_ctx);
+  tls_ctx->quit_flag = 1;
+  //std::cerr << "quit timer timeout";
+}
+
+NODE_EXTERN void g_stop_nw_instance() {
+  if (!g_worker_support)
+    return;
+  struct thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  if (!tls_ctx) //NWJS#6615
+    return;
+  bool more;
+  uv_timer_t quit_timer;
+  uv_loop_t* loop = tls_ctx->env->event_loop();
+  uv_timer_init(loop, &quit_timer);
+  uv_timer_start(&quit_timer, quit_timer_cb, 10000, 0);
+  do {
+    tls_ctx->handle_counter = 0;
+    uv_walk(loop, walk_cb, tls_ctx);
+    //std::cerr << "handles: " << tls_ctx->handle_counter;
+    // quit timer and async hanle for loop wakeup
+    if (tls_ctx->handle_counter <= 2)
+      more = false;
+    else
+    //uv_print_active_handles(tls_ctx->env->event_loop(), stderr);
+      more = uv_run(loop, UV_RUN_ONCE);
+    if (more == false) {
+      node::EmitBeforeExit(tls_ctx->env);
+
+      // Emit `beforeExit` if the loop became alive either after emitting
+      // event, or after running some callbacks.
+      more = uv_loop_alive(loop);
+      if (uv_run(loop, UV_RUN_NOWAIT) != 0)
+        more = true;
+      tls_ctx->handle_counter = 0;
+      uv_walk(loop, walk_cb, tls_ctx);
+      //std::cerr << "handles: " << tls_ctx->handle_counter;
+      if (tls_ctx->handle_counter <= 2)
+        more = false;
+    }
+  } while (more == true && !tls_ctx->quit_flag);
+  uv_timer_stop(&quit_timer);
+  tls_ctx->close_quit_timer_done = 0;
+  uv_close(reinterpret_cast<uv_handle_t*>(&quit_timer), close_quit_timer_cb);
+  while (!tls_ctx->close_quit_timer_done)
+    uv_run(loop, UV_RUN_NOWAIT);
+  struct node::node_module* mp, *mp2;
+  for (mp = tls_ctx->modlist_builtin; mp != nullptr;) {
+    mp2 = mp->nm_link;
+    free(mp);
+    mp = mp2;
+  }
+  for (mp = tls_ctx->modlist_linked; mp != nullptr;) {
+    mp2 = mp->nm_link;
+    free(mp);
+    mp = mp2;
+  }
+  node::FreeEnvironment(tls_ctx->env);
+  tls_ctx->env = nullptr;
+  //std::cerr << "QUIT LOOP" << std::endl;
+}
+
+NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Context> context, void* icu_data) {
+
+  UErrorCode err = U_ZERO_ERROR;
+  if (icu_data)
+    udata_setCommonData((uint8_t*)icu_data, &err);
+
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::HandleScope handle_scope(isolate);
+  v8::Context::Scope context_scope(context);
+
+  argv = uv_setup_args(argc, argv);
+
+  if (!thread_ctx_created) {
+    thread_ctx_created = 1;
+    uv_key_create(&thread_ctx_key);
+  }
+  struct thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  if (!tls_ctx) {
+    tls_ctx = (struct thread_ctx_st*)malloc(sizeof(struct thread_ctx_st));
+    memset(tls_ctx, 0, sizeof(struct thread_ctx_st));
+    uv_key_set(&thread_ctx_key, tls_ctx);
+    node::RegisterBuiltinModules();
+  }
+  node::IsolateData* isolate_data = node::CreateIsolateData(isolate, uv_default_loop());
+  tls_ctx->env = node::CreateEnvironment(isolate_data, context, argc, argv, 0, nullptr);
+  isolate->SetFatalErrorHandler(node::OnFatalError);
+  isolate->AddMessageListener(node::OnMessage);
+  //isolate->SetAutorunMicrotasks(false);
+#if 0
+  const char* path = argc > 1 ? argv[1] : nullptr;
+  StartInspector(tls_ctx->env, path, node::debug_options);
+#endif
+  {
+    node::Environment::AsyncCallbackScope callback_scope(tls_ctx->env);
+    tls_ctx->env->async_hooks()->push_async_ids(1, 0);
+    node::LoadEnvironment(tls_ctx->env);
+    tls_ctx->env->async_hooks()->pop_async_id(1);
+  }
+}
+
+NODE_EXTERN void g_set_nw_tick_callback(NWTickCallback tick_callback) {
+  node::g_nw_tick_callback = tick_callback;
+}
+
+NODE_EXTERN void* g_get_node_env() {
+  if (!thread_ctx_created)
+    return nullptr;
+  struct thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  return tls_ctx->env;
+}
+
+NODE_EXTERN void g_get_node_context(v8::Local<v8::Context>* ret) {
+  *ret = v8::Local<v8::Context>::New(v8::Isolate::GetCurrent(), node::g_context);
+}
+
+NODE_EXTERN void g_set_node_context(v8::Isolate* isolate, v8::Local<v8::Context>* context) {
+  node::g_context.Reset(isolate, *context);
+}
+
+NODE_EXTERN void* g_get_current_env(v8::Handle<v8::Context> context) {
+  return node::Environment::GetCurrent(context);
+}
+
+NODE_EXTERN void g_emit_exit(node::Environment* env) {
+  node::EmitExit(env);
+}
+
+NODE_EXTERN void g_run_at_exit(node::Environment* env) {
+  node::RunAtExit(env);
+}
+
+NODE_EXTERN void g_promise_reject_callback(v8::PromiseRejectMessage* data) {
+  node::PromiseRejectCallback(*data);
+}
+
+NODE_EXTERN void g_uv_init_nw(int worker) {
+  uv_init_nw(worker);
+}
+
+#ifdef __APPLE__
+
+void UvNoOp(uv_async_t* handle) {
+}
+
+NODE_EXTERN bool g_nw_enter_dom() {
+  if (!thread_ctx_created)
+    return false;
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  if (tls_ctx && tls_ctx->env) {
+    v8::Isolate* isolate = tls_ctx->env->isolate();
+    v8::HandleScope handleScope(isolate);
+    v8::Local<v8::Context> context = isolate->GetEnteredContext();
+    if (context == tls_ctx->env->context()) {
+      context->Exit();
+      return true;
+    }
+  }
+  return false;
+}
+
+NODE_EXTERN void g_nw_leave_dom(bool reenter) {
+  if (!thread_ctx_created)
+    return;
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  if (reenter && tls_ctx && tls_ctx->env) {
+    v8::Isolate* isolate = tls_ctx->env->isolate();
+    v8::HandleScope handleScope(isolate);
+    tls_ctx->env->context()->Enter();
+  }
+}
+
+NODE_EXTERN void g_msg_pump_ctor_osx(msg_pump_context_t* ctx, void* EmbedThreadRunner, void* kevent_hook, void* data, int worker_support) {
+  uv_init_nw(worker_support);
+  g_worker_support = worker_support;
+  // Add dummy handle for libuv, otherwise libuv would quit when there is
+  // nothing to do.
+  ctx->dummy_uv_handle = new uv_async_t;
+  uv_async_init(uv_default_loop(), (uv_async_t*)ctx->dummy_uv_handle, UvNoOp);
+
+  // Start worker that will interrupt main loop when having uv events.
+  ctx->embed_sem = new uv_sem_t;
+  uv_sem_init((uv_sem_t*)ctx->embed_sem, 0);
+  ctx->embed_thread = new uv_thread_t;
+  uv_thread_create((uv_thread_t*)ctx->embed_thread, (uv_thread_cb)EmbedThreadRunner, data);
+
+  uv_loop_t* uvloop = uv_default_loop();
+  uvloop->keventfunc = kevent_hook;
+
+  ctx->loop = uvloop;
+
+  // Execute loop for once.
+  uv_run(uv_default_loop(), UV_RUN_NOWAIT);
+  node::g_nw_uv_run = (UVRunFn)uv_run;
+}
+
+NODE_EXTERN void g_msg_pump_dtor_osx(msg_pump_context_t* ctx) {
+  uv_thread_join((uv_thread_t*)ctx->embed_thread);
+
+  delete (uv_async_t*)ctx->dummy_uv_handle;
+  ctx->dummy_uv_handle = nullptr;
+
+  delete (uv_sem_t*)ctx->embed_sem;
+  ctx->embed_sem = nullptr;
+
+  delete (uv_thread_t*)ctx->embed_thread;
+  ctx->embed_thread = nullptr;
+}
+
+NODE_EXTERN int g_nw_uvrun_nowait() {
+  return (*node::g_nw_uv_run)(uv_default_loop(), UV_RUN_NOWAIT);
+}
+
+NODE_EXTERN int g_uv_runloop_once() {
+  if (thread_ctx_created) {
+    struct thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+    if (tls_ctx && tls_ctx->env) {
+      v8::Isolate* isolate = tls_ctx->env->isolate();
+      v8::HandleScope handleScope(isolate);
+      v8::Context::Scope cscope(tls_ctx->env->context());
+      return (*node::g_nw_uv_run)(uv_default_loop(), UV_RUN_ONCE);
+    }
+  }
+  return (*node::g_nw_uv_run)(uv_default_loop(), UV_RUN_ONCE);
+}
+
+NODE_EXTERN int g_uv_backend_timeout() {
+  return  uv_backend_timeout(uv_default_loop());
+}
+
+NODE_EXTERN void g_uv_sem_post(msg_pump_context_t* ctx) {
+  uv_sem_post((uv_sem_t*)ctx->embed_sem);
+}
+
+NODE_EXTERN int g_uv_backend_fd() {
+  return uv_backend_fd(uv_default_loop());
+}
+
+NODE_EXTERN void g_uv_sem_wait(msg_pump_context_t* ctx) {
+  uv_sem_wait((uv_sem_t*)ctx->embed_sem);
+}
+#endif
+}

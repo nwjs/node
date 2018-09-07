@@ -13,20 +13,10 @@
       'Debug': {
         'defines': [ 'DEBUG', '_DEBUG' ],
         'cflags': [ '-Wall', '-Wextra', '-O0', '-g', '-ftrapv' ],
-        'msvs_settings': {
-          'VCCLCompilerTool': {
-            'RuntimeLibrary': 1, # static debug
-          },
-        },
       },
       'Release': {
         'defines': [ 'NDEBUG' ],
         'cflags': [ '-Wall', '-Wextra', '-O3' ],
-        'msvs_settings': {
-          'VCCLCompilerTool': {
-            'RuntimeLibrary': 0, # static release
-          },
-        },
       }
     },
     'msvs_settings': {
@@ -39,6 +29,9 @@
       },
     },
     'conditions': [
+      ['clang==1', {
+        'cflags': ['-Wno-error=string-conversion'],
+      }],
       ['OS == "win"', {
         'defines': [
           'WIN32'

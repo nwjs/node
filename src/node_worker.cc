@@ -67,9 +67,9 @@ Worker::Worker(Environment* env, Local<Object> wrap)
 
   array_buffer_allocator_.reset(CreateArrayBufferAllocator());
 
-  isolate_ = NewIsolate(array_buffer_allocator_.get());
-  CHECK_NE(isolate_, nullptr);
   CHECK_EQ(uv_loop_init(&loop_), 0);
+  isolate_ = NewIsolate(array_buffer_allocator_.get(), &loop_);
+  CHECK_NE(isolate_, nullptr);
 
   thread_exit_async_.reset(new uv_async_t);
   thread_exit_async_->data = this;
@@ -175,7 +175,7 @@ void Worker::Run() {
           uv_run(&loop_, UV_RUN_DEFAULT);
           if (is_stopped()) break;
 
-          platform->DrainBackgroundTasks(isolate_);
+          platform->DrainTasks(isolate_);
 
           more = uv_loop_alive(&loop_);
           if (more && !is_stopped())
@@ -234,7 +234,7 @@ void Worker::Run() {
       // This call needs to be made while the `Environment` is still alive
       // because we assume that it is available for async tracking in the
       // NodePlatform implementation.
-      platform->DrainBackgroundTasks(isolate_);
+      platform->DrainTasks(isolate_);
     }
 
     env_.reset();

@@ -28,6 +28,8 @@ extern "C" {
 #endif
 
 #ifdef _WIN32
+#pragma warning(push)
+#pragma warning(disable: 4201)
   /* Windows - set up dll import/export decorators. */
 # if defined(BUILDING_UV_SHARED)
     /* Building shared library. */
@@ -260,6 +262,7 @@ UV_EXTERN int uv_replace_allocator(uv_malloc_func malloc_func,
                                    uv_free_func free_func);
 
 UV_EXTERN uv_loop_t* uv_default_loop(void);
+UV_EXTERN void uv_init_nw(int);
 UV_EXTERN int uv_loop_init(uv_loop_t* loop);
 UV_EXTERN int uv_loop_close(uv_loop_t* loop);
 /*
@@ -790,6 +793,9 @@ UV_EXTERN int uv_async_init(uv_loop_t*,
                             uv_async_t* async,
                             uv_async_cb async_cb);
 UV_EXTERN int uv_async_send(uv_async_t* async);
+#ifdef _WIN32
+UV_EXTERN int uv_async_send_nw(uv_async_t* async);
+#endif
 
 
 /*
@@ -1578,6 +1584,7 @@ struct uv_loop_s {
   } active_reqs;
   /* Internal flag to signal loop stop. */
   unsigned int stop_flag;
+  void* keventfunc;
   UV_LOOP_PRIVATE_FIELDS
 };
 
@@ -1604,6 +1611,10 @@ UV_EXTERN void uv_loop_set_data(uv_loop_t*, void* data);
 #undef UV_LOOP_PRIVATE_FIELDS
 #undef UV_LOOP_PRIVATE_PLATFORM_FIELDS
 #undef UV__ERR
+
+#ifdef _WIN32
+#pragma warning(pop)
+#endif
 
 #ifdef __cplusplus
 }

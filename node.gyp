@@ -1,5 +1,6 @@
 {
   'variables': {
+    'icu_gyp_path%': '../icu/icu.gyp',
     'v8_use_snapshot%': 'false',
     'v8_trace_maps%': 0,
     'node_use_dtrace%': 'false',
@@ -8,22 +9,39 @@
     'node_no_browser_globals%': 'false',
     'node_code_cache_path%': '',
     'node_use_v8_platform%': 'true',
-    'node_use_bundled_v8%': 'true',
-    'node_shared%': 'false',
     'force_dynamic_crt%': 0,
+    'node_use_bundled_v8': 'false',
+    'node_shared': 'true',
+    'v8_enable_inspector': 1,
+    'debug_http2': 0,
+    'debug_nghttp2': 0,
+    'node_enable_d8': 'false',
+    'enable_lto': 'false',
     'node_module_version%': '',
     'node_shared_zlib%': 'false',
     'node_shared_http_parser%': 'false',
     'node_shared_cares%': 'false',
     'node_shared_libuv%': 'false',
     'node_shared_nghttp2%': 'false',
-    'node_use_openssl%': 'true',
-    'node_shared_openssl%': 'false',
+    'node_use_openssl': 'true',
+    'node_shared_openssl': 'false',
+    'openssl_fips': '',
     'node_v8_options%': '',
     'node_enable_v8_vtunejit%': 'false',
-    'node_core_target_name%': 'node',
-    'node_lib_target_name%': 'node_lib',
-    'node_intermediate_lib_type%': 'static_library',
+    'node_core_target_name%': 'nodebin',
+    'node_lib_target_name%': 'node',
+    'node_intermediate_lib_type%': 'shared_library',
+    'node_target_type%': 'shared_library',
+    'node_tag%': '',
+    'node_release_urlbase%': '',
+    'node_byteorder%': 'little',
+    'python%': 'python',
+    'icu_small%': 'false',
+    'v8_postmortem_support%' : 'false',
+    'V8_LIBBASE%': '<(PRODUCT_DIR)/../nw/obj/v8/libv8_libbase.a',
+    'V8_PLTFRM%': '<(PRODUCT_DIR)/../nw/obj/v8/libv8_libplatform.a',
+    'LIBCXX%': '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libc++.a',
+    'LIBCXXABI%': '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++abi/libc++abi.a',
     'library_files': [
       'lib/internal/per_context.js',
       'lib/internal/bootstrap/cache.js',
@@ -40,6 +58,7 @@
       'lib/dgram.js',
       'lib/dns.js',
       'lib/domain.js',
+      'lib/dummystream.js',
       'lib/events.js',
       'lib/fs.js',
       'lib/http.js',
@@ -224,6 +243,10 @@
     ],
   },
 
+  'includes': [
+    '../../build/util/version.gypi',
+  ],
+
   'targets': [
     {
       'target_name': '<(node_core_target_name)',
@@ -306,7 +329,7 @@
     {
       'target_name': '<(node_lib_target_name)',
       'type': '<(node_intermediate_lib_type)',
-      'product_name': '<(node_core_target_name)',
+      'product_name': '<(node_lib_target_name)',
 
       'dependencies': [
         'node_js2c#host',
@@ -315,11 +338,32 @@
       'includes': [
         'node.gypi'
       ],
+      'msvs_disabled_warnings': [4146, 4267, 4003, 4065, 4477],
+
+      'xcode_settings': {
+        'WARNING_CFLAGS': [ '-Wno-error=deprecated-declarations' ],
+      },
 
       'include_dirs': [
         'src',
+        'deps/openssl/openssl/include',
+        #'../boringssl/src/include',
         '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
+        '../../v8', # include/v8_platform.h
+        '../../v8/include'
       ],
+
+      'direct_dependent_settings': {
+        'include_dirs': [
+          '../../v8/include',
+          'deps/uv/include',
+          'deps/cares/include',
+        ],
+        'defines': [
+          'BUILDING_NW_NODE=1',
+        ],
+
+      },
 
       'sources': [
         'src/async_wrap.cc',
@@ -358,7 +402,7 @@
         'src/node_postmortem_metadata.cc',
         'src/node_process.cc',
         'src/node_serdes.cc',
-        'src/node_trace_events.cc',
+        #'src/node_trace_events.cc',
         'src/node_types.cc',
         'src/node_url.cc',
         'src/node_util.cc',
@@ -380,11 +424,11 @@
         'src/stream_wrap.cc',
         'src/tcp_wrap.cc',
         'src/timer_wrap.cc',
-        'src/tracing/agent.cc',
-        'src/tracing/node_trace_buffer.cc',
-        'src/tracing/node_trace_writer.cc',
-        'src/tracing/trace_event.cc',
-        'src/tracing/traced_value.cc',
+        #'src/tracing/agent.cc',
+        #'src/tracing/node_trace_buffer.cc',
+        #'src/tracing/node_trace_writer.cc',
+        #'src/tracing/trace_event.cc',
+        #'src/tracing/traced_value.cc',
         'src/tty_wrap.cc',
         'src/udp_wrap.cc',
         'src/util.cc',
@@ -452,7 +496,7 @@
         'src/util.h',
         'src/util-inl.h',
         'deps/http_parser/http_parser.h',
-        'deps/v8/include/v8.h',
+        #'deps/v8/include/v8.h',
         # javascript files to make for an even more pleasant IDE experience
         '<@(library_files)',
         # node.gyp is added to the project by default.
@@ -470,6 +514,10 @@
         'NODE_WANT_INTERNALS=1',
         # Warn when using deprecated V8 APIs.
         'V8_DEPRECATION_WARNINGS=1',
+        'BUILDING_NW_NODE=1',
+        'V8_SHARED',
+        'USING_V8_SHARED',
+        'V8_USE_EXTERNAL_STARTUP_DATA',
         'NODE_OPENSSL_SYSTEM_CERT_PATH="<(openssl_system_ca_path)"',
       ],
       'conditions': [
@@ -526,11 +574,11 @@
           'conditions': [
             [ 'node_intermediate_lib_type!="static_library"', {
               'sources': [
-                'src/res/node.rc',
+                #'src/res/node.rc',
               ],
             }],
           ],
-          'libraries': [ '-lpsapi.lib' ]
+          'libraries': [ '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/nw.dll.lib' ]
         }],
         [ 'node_use_etw=="true"', {
           'defines': [ 'HAVE_ETW=1' ],
@@ -735,7 +783,8 @@
           'inputs': [
             '<@(library_files)',
             './config.gypi',
-            'tools/check_macros.py'
+            'tools/check_macros.py',
+            'tools/js2c.py',
           ],
           'outputs': [
             '<(SHARED_INTERMEDIATE_DIR)/node_javascript.cc',
@@ -935,7 +984,6 @@
       'dependencies': [
         '<(node_lib_target_name)',
         'rename_node_bin_win',
-        'deps/gtest/gtest.gyp:gtest',
         'node_js2c#host',
         'node_dtrace_header',
         'node_dtrace_ustack',
@@ -949,7 +997,7 @@
       'include_dirs': [
         'src',
         'tools/msvs/genfiles',
-        'deps/v8/include',
+        '../../v8/include',
         'deps/cares/include',
         'deps/uv/include',
         '<(SHARED_INTERMEDIATE_DIR)', # for node_natives.h
@@ -1106,7 +1154,7 @@
               ],
               'action': [
                 'python',
-                'tools/inspector_protocol/ConvertProtocolToJSON.py',
+                '../../v8/third_party/inspector_protocol/convert_protocol_to_json.py',
                 '<@(_inputs)',
                 '<@(_outputs)',
               ],
@@ -1144,10 +1192,11 @@
           'target_name': 'v8_inspector_compress_protocol_json',
           'type': 'none',
           'toolsets': ['host'],
+          'dependencies': ['prepare_protocol_json'],
           'copies': [
             {
               'destination': '<(SHARED_INTERMEDIATE_DIR)',
-              'files': ['deps/v8/src/inspector/js_protocol.pdl']
+              'files': ['../../v8/src/inspector/js_protocol.pdl']
             }
           ],
           'actions': [
@@ -1161,7 +1210,7 @@
               ],
               'action': [
                 'python',
-                'tools/inspector_protocol/ConvertProtocolToJSON.py',
+                '../../v8/third_party/inspector_protocol/convert_protocol_to_json.py',
                 '<@(_inputs)',
                 '<@(_outputs)',
               ],
@@ -1177,7 +1226,7 @@
               ],
               'action': [
                 'python',
-                'tools/inspector_protocol/ConcatenateProtocols.py',
+                '../../v8/third_party/inspector_protocol/concatenate_protocols.py',
                 '<@(_inputs)',
                 '<@(_outputs)',
               ],

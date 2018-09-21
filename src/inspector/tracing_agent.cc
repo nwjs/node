@@ -21,7 +21,7 @@ class InspectorTraceWriter : public node::tracing::AsyncTraceWriter {
   void AppendTraceEvent(
       v8::platform::tracing::TraceObject* trace_event) override {
     if (!json_writer_)
-      json_writer_.reset(TraceWriter::CreateJSONTraceWriter(stream_, "value"));
+      json_writer_.reset(TraceWriter::CreateJSONTraceWriter(stream_));
     json_writer_->AppendTraceEvent(trace_event);
   }
 
@@ -74,11 +74,13 @@ DispatchResponse TracingAgent::start(
   if (categories_set.empty())
     return DispatchResponse::Error("At least one category should be enabled");
 
+#if 0
   trace_writer_ = env_->tracing_agent_writer()->agent()->AddClient(
       categories_set,
       std::unique_ptr<InspectorTraceWriter>(
           new InspectorTraceWriter(frontend_.get())),
       tracing::Agent::kIgnoreDefaultCategories);
+#endif
   return DispatchResponse::OK();
 }
 

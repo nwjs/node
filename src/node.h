@@ -29,7 +29,7 @@
 #   define NODE_EXTERN __declspec(dllimport)
 # endif
 #else
-# define NODE_EXTERN /* nothing */
+# define NODE_EXTERN __attribute__((visibility("default")))
 #endif
 
 #ifdef BUILDING_NODE_EXTENSION
@@ -404,10 +404,6 @@ NODE_DEPRECATED("Use ParseEncoding(isolate, ...)",
 NODE_EXTERN void FatalException(v8::Isolate* isolate,
                                 const v8::TryCatch& try_catch);
 
-NODE_DEPRECATED("Use FatalException(isolate, ...)",
-                inline void FatalException(const v8::TryCatch& try_catch) {
-  return FatalException(v8::Isolate::GetCurrent(), try_catch);
-})
 
 // Don't call with encoding=UCS2.
 NODE_EXTERN v8::Local<v8::Value> Encode(v8::Isolate* isolate,
@@ -552,6 +548,13 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
     }                                                                 \
   }
 
+#define NODE_MODULE_REF(modname)                \
+  extern void _node_ref_ ## modname();
+
+#define NODE_MODULE_REF2(modname)                                      \
+  _node_ref_ ## modname();
+
+
 #define NODE_MODULE_CONTEXT_AWARE_X(modname, regfunc, priv, flags)    \
   extern "C" {                                                        \
     static node::node_module _module =                                \
@@ -569,6 +572,9 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
     NODE_C_CTOR(_register_ ## modname) {                              \
       node_module_register(&_module);                                 \
     }                                                                 \
+  }                                                                   \
+  void _node_ref_ ## modname() { \
+    node_module_register(&_module); \
   }
 
 // Usage: `NODE_MODULE(NODE_GYP_MODULE_NAME, InitializerFunction)`

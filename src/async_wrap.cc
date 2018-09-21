@@ -130,6 +130,7 @@ void AsyncWrap::EmitPromiseResolve(Environment* env, double async_id) {
 
 
 void AsyncWrap::EmitTraceEventBefore() {
+#if 0
   switch (provider_type()) {
 #define V(PROVIDER)                                                           \
     case PROVIDER_ ## PROVIDER:                                               \
@@ -142,6 +143,7 @@ void AsyncWrap::EmitTraceEventBefore() {
     default:
       UNREACHABLE();
   }
+#endif
 }
 
 
@@ -152,6 +154,7 @@ void AsyncWrap::EmitBefore(Environment* env, double async_id) {
 
 
 void AsyncWrap::EmitTraceEventAfter(ProviderType type, double async_id) {
+#if 0
   switch (type) {
 #define V(PROVIDER)                                                           \
     case PROVIDER_ ## PROVIDER:                                               \
@@ -164,6 +167,7 @@ void AsyncWrap::EmitTraceEventAfter(ProviderType type, double async_id) {
     default:
       UNREACHABLE();
   }
+#endif
 }
 
 
@@ -227,6 +231,8 @@ void PromiseWrap::getIsChainedPromise(Local<String> property,
 }
 
 static PromiseWrap* extractPromiseWrap(Local<Promise> promise) {
+  if (!promise->InternalFieldCount())
+    return nullptr;
   Local<Value> resource_object_value = promise->GetInternalField(0);
   if (resource_object_value->IsObject()) {
     return Unwrap<PromiseWrap>(resource_object_value.As<Object>());
@@ -570,6 +576,7 @@ AsyncWrap::~AsyncWrap() {
 }
 
 void AsyncWrap::EmitTraceEventDestroy() {
+#if 0
   switch (provider_type()) {
   #define V(PROVIDER)                                                         \
     case PROVIDER_ ## PROVIDER:                                               \
@@ -582,6 +589,7 @@ void AsyncWrap::EmitTraceEventDestroy() {
     default:
       UNREACHABLE();
   }
+#endif
 }
 
 void AsyncWrap::EmitDestroy(Environment* env, double async_id) {
@@ -606,6 +614,7 @@ void AsyncWrap::AsyncReset(double execution_async_id, bool silent) {
     execution_async_id == -1 ? env()->new_async_id() : execution_async_id;
   trigger_async_id_ = env()->get_default_trigger_async_id();
 
+#if 0
   switch (provider_type()) {
 #define V(PROVIDER)                                                           \
     case PROVIDER_ ## PROVIDER:                                               \
@@ -627,7 +636,7 @@ void AsyncWrap::AsyncReset(double execution_async_id, bool silent) {
     default:
       UNREACHABLE();
   }
-
+#endif
   if (silent) return;
 
   EmitAsyncInit(env(), object(),

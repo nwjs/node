@@ -295,10 +295,11 @@ MaybeLocal<Object> New(Environment* env, size_t length) {
   }
 
   Local<ArrayBuffer> ab =
-    ArrayBuffer::New(env->isolate(),
+    ArrayBuffer::NewNode(env->isolate(),
         data,
         length,
         ArrayBufferCreationMode::kInternalized);
+  ab->set_nodejs(true);
   MaybeLocal<Uint8Array> ui = Buffer::New(env, ab, 0, length);
 
   if (ui.IsEmpty()) {
@@ -340,10 +341,11 @@ MaybeLocal<Object> Copy(Environment* env, const char* data, size_t length) {
   }
 
   Local<ArrayBuffer> ab =
-    ArrayBuffer::New(env->isolate(),
+    ArrayBuffer::NewNode(env->isolate(),
         new_data,
         length,
         ArrayBufferCreationMode::kInternalized);
+  ab->set_nodejs(true);
   MaybeLocal<Uint8Array> ui = Buffer::New(env, ab, 0, length);
 
   if (ui.IsEmpty()) {
@@ -380,7 +382,8 @@ MaybeLocal<Object> New(Environment* env,
     return Local<Object>();
   }
 
-  Local<ArrayBuffer> ab = ArrayBuffer::New(env->isolate(), data, length);
+  Local<ArrayBuffer> ab = ArrayBuffer::NewNode(env->isolate(), data, length);
+  ab->set_nodejs(true);
   // `Neuter()`ing is required here to prevent materialization of the backing
   // store in v8. `nullptr` buffers are not writable, so this is semantically
   // correct.
@@ -414,10 +417,11 @@ MaybeLocal<Object> New(Environment* env, char* data, size_t length) {
   }
 
   Local<ArrayBuffer> ab =
-      ArrayBuffer::New(env->isolate(),
+      ArrayBuffer::NewNode(env->isolate(),
                        data,
                        length,
                        ArrayBufferCreationMode::kInternalized);
+  ab->set_nodejs(true);
   return Buffer::New(env, ab, 0, length).FromMaybe(Local<Object>());
 }
 
@@ -1074,8 +1078,9 @@ static void EncodeUtf8String(const FunctionCallbackInfo<Value>& args) {
                  -1,  // We are certain that `data` is sufficiently large
                  nullptr,
                  String::NO_NULL_TERMINATION | String::REPLACE_INVALID_UTF8);
-  auto array_buf = ArrayBuffer::New(
+  auto array_buf = ArrayBuffer::NewNode(
       isolate, data, length, ArrayBufferCreationMode::kInternalized);
+  array_buf->set_nodejs(true);
   auto array = Uint8Array::New(array_buf, 0, length);
   args.GetReturnValue().Set(array);
 }

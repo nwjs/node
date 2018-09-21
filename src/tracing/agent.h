@@ -68,7 +68,7 @@ class AgentWriterHandle {
 class Agent {
  public:
   Agent();
-  ~Agent();
+  ~Agent() {};
 
   TracingController* GetTracingController() { return tracing_controller_; }
 
@@ -132,8 +132,8 @@ class Agent {
 };
 
 void AgentWriterHandle::reset() {
-  if (agent_ != nullptr)
-    agent_->Disconnect(id_);
+  //if (agent_ != nullptr)
+  //  agent_->Disconnect(id_);
   agent_ = nullptr;
 }
 

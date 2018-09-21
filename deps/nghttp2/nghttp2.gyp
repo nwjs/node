@@ -26,7 +26,7 @@
             },
           },
         }],
-        ['debug_nghttp2 == 1', {
+        ['0 == 1', {
           'defines': [ 'DEBUGBUILD=1' ]
         }]
       ],

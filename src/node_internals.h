@@ -133,7 +133,6 @@ struct sockaddr;
     V(symbols)                                                                \
     V(tcp_wrap)                                                               \
     V(timer_wrap)                                                             \
-    V(trace_events)                                                           \
     V(tty_wrap)                                                               \
     V(types)                                                                  \
     V(udp_wrap)                                                               \
@@ -190,6 +189,8 @@ template <class TypeName>
 inline v8::Local<TypeName> PersistentToLocal(
     v8::Isolate* isolate,
     const Persistent<TypeName>& persistent);
+
+NODE_EXTERN v8::Handle<v8::Value> CallTickCallback(Environment* env, const v8::Handle<v8::Value> ret);
 
 // Convert a struct sockaddr to a { address: '1.2.3.4', port: 1234 } JS object.
 // Sets address and port properties on the info object and returns it.
@@ -403,6 +404,7 @@ class ArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
   virtual void* AllocateUninitialized(size_t size)
     { return node::UncheckedMalloc(size); }
   virtual void Free(void* data, size_t) { free(data); }
+  virtual void Free(void* data, size_t, v8::ArrayBuffer::Allocator::AllocationMode) { free(data); }
 
  private:
   uint32_t zero_fill_field_ = 1;  // Boolean but exposed as uint32 to JS land.

@@ -176,6 +176,9 @@ Local<Context> ContextifyContext::CreateV8Context(
   // directly in an Object, we instead hold onto the new context's global
   // object instead (which then has a reference to the context).
   ctx->SetEmbedderData(ContextEmbedderIndex::kSandboxObject, sandbox_obj);
+  void* data = env->context()->GetAlignedPointerFromEmbedderData(2); //v8ContextPerContextDataIndex
+  ctx->SetAlignedPointerInEmbedderData(2, data);
+  ctx->SetAlignedPointerInEmbedderData(50, (void*)0x08110800);
   sandbox_obj->SetPrivate(env->context(),
                           env->contextify_global_private_symbol(),
                           ctx->Global());
@@ -667,11 +670,13 @@ class ContextifyScript : public BaseObject {
     if (*TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
             TRACING_CATEGORY_NODE2(vm, script)) != 0) {
       Utf8Value fn(isolate, filename);
+#if 0
       TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
           TRACING_CATEGORY_NODE2(vm, script),
           "ContextifyScript::New",
           contextify_script,
           "filename", TRACE_STR_COPY(*fn));
+#endif
     }
 
     ScriptCompiler::CachedData* cached_data = nullptr;
@@ -717,7 +722,7 @@ class ContextifyScript : public BaseObject {
           Boolean::New(isolate, source.GetCachedData()->rejected));
     } else if (produce_cached_data) {
       const ScriptCompiler::CachedData* cached_data =
-        ScriptCompiler::CreateCodeCache(v8_script.ToLocalChecked());
+        ScriptCompiler::CreateCodeCache(v8_script.ToLocalChecked(), code);
       bool cached_data_produced = cached_data != nullptr;
       if (cached_data_produced) {
         MaybeLocal<Object> buf = Buffer::Copy(
@@ -730,10 +735,12 @@ class ContextifyScript : public BaseObject {
           env->cached_data_produced_string(),
           Boolean::New(isolate, cached_data_produced));
     }
+#if 0
     TRACE_EVENT_NESTABLE_ASYNC_END0(
         TRACING_CATEGORY_NODE2(vm, script),
         "ContextifyScript::New",
         contextify_script);
+#endif
   }
 
 
@@ -749,8 +756,9 @@ class ContextifyScript : public BaseObject {
     ASSIGN_OR_RETURN_UNWRAP(&wrapped_script, args.Holder());
     Local<UnboundScript> unbound_script =
         PersistentToLocal(env->isolate(), wrapped_script->script_);
+    Local<String> code = args[0].As<String>();
     std::unique_ptr<ScriptCompiler::CachedData> cached_data(
-        ScriptCompiler::CreateCodeCache(unbound_script));
+                                                            ScriptCompiler::CreateCodeCache(unbound_script, code));
     if (!cached_data) {
       args.GetReturnValue().Set(Buffer::New(env, 0).ToLocalChecked());
     } else {
@@ -769,9 +777,10 @@ class ContextifyScript : public BaseObject {
     ContextifyScript* wrapped_script;
     ASSIGN_OR_RETURN_UNWRAP(&wrapped_script, args.Holder());
 
+#if 0
     TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
         TRACING_CATEGORY_NODE2(vm, script), "RunInThisContext", wrapped_script);
-
+#endif
     CHECK_EQ(args.Length(), 3);
 
     CHECK(args[0]->IsNumber());
@@ -786,8 +795,10 @@ class ContextifyScript : public BaseObject {
     // Do the eval within this context
     EvalMachine(env, timeout, display_errors, break_on_sigint, args);
 
+#if 0
     TRACE_EVENT_NESTABLE_ASYNC_END0(
         TRACING_CATEGORY_NODE2(vm, script), "RunInThisContext", wrapped_script);
+#endif
   }
 
   static void RunInContext(const FunctionCallbackInfo<Value>& args) {

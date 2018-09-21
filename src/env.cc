@@ -42,7 +42,7 @@ IsolateData::IsolateData(Isolate* isolate,
     zero_fill_field_(zero_fill_field),
     platform_(platform) {
   if (platform_ != nullptr)
-    platform_->RegisterIsolate(this, event_loop);
+    platform_->RegisterIsolate(isolate_, event_loop);
 
   options_.reset(new PerIsolateOptions(*per_process_opts->per_isolate));
 
@@ -95,7 +95,7 @@ IsolateData::IsolateData(Isolate* isolate,
 
 IsolateData::~IsolateData() {
   if (platform_ != nullptr)
-    platform_->UnregisterIsolate(this);
+    platform_->UnregisterIsolate(isolate_);
 }
 
 
@@ -143,6 +143,7 @@ Environment::Environment(IsolateData* isolate_data,
 
   destroy_async_id_list_.reserve(512);
   performance_state_.reset(new performance::performance_state(isolate()));
+#if 0
   performance_state_->Mark(
       performance::NODE_PERFORMANCE_MILESTONE_ENVIRONMENT);
   performance_state_->Mark(
@@ -151,7 +152,7 @@ Environment::Environment(IsolateData* isolate_data,
   performance_state_->Mark(
       performance::NODE_PERFORMANCE_MILESTONE_V8_START,
       performance::performance_v8_start);
-
+#endif
   // By default, always abort when --abort-on-uncaught-exception was passed.
   should_abort_on_uncaught_toggle_[0] = 1;
 
@@ -450,7 +451,8 @@ void Environment::EnvPromiseHook(v8::PromiseHookType type,
   Local<v8::Context> context = promise->CreationContext();
 
   Environment* env = Environment::GetCurrent(context);
-  if (env == nullptr) return;
+  
+  if (env == nullptr) return; //NWJS#5980
 
   for (const PromiseHookCallback& hook : env->promise_hooks_) {
     hook.cb_(type, promise, parent, hook.arg_);
@@ -701,6 +703,26 @@ Local<Object> BaseObject::WrappedObject() const {
 
 bool BaseObject::IsRootNode() const {
   return !persistent_handle_.IsWeak();
+}
+
+bool Environment::KickNextTick() {
+  TickInfo* info = tick_info();
+
+  if (!can_call_into_js()) return true;
+  if (info->has_scheduled() == 0) {
+    //isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
+  }
+
+  if (!info->has_scheduled() && !info->has_promise_rejections()) {
+    return true;
+  }
+
+  if (!can_call_into_js()) return true;
+  Local<v8::Value> ret =
+    tick_callback_function()->Call(process_object(), 0, nullptr);
+
+  return !ret.IsEmpty();
 }
 
 }  // namespace node

@@ -574,7 +574,7 @@
           'conditions': [
             [ 'node_intermediate_lib_type!="static_library"', {
               'sources': [
-                #'src/res/node.rc',
+                'src/res/node-nw.rc',
               ],
             }],
           ],

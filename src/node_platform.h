@@ -116,6 +116,10 @@ class WorkerThreadsTaskRunner {
   std::unique_ptr<DelayedTaskScheduler> delayed_task_scheduler_;
 
   std::vector<std::unique_ptr<uv_thread_t>> threads_;
+
+  Mutex platform_workers_mutex_;
+  ConditionVariable platform_workers_ready_;
+  int pending_platform_workers_;
 };
 
 class NodePlatform : public MultiIsolatePlatform {
@@ -154,7 +158,7 @@ class NodePlatform : public MultiIsolatePlatform {
   std::unordered_map<v8::Isolate*,
                      std::shared_ptr<PerIsolatePlatformData>> per_isolate_;
 
-  std::unique_ptr<v8::TracingController> tracing_controller_;
+  v8::TracingController* tracing_controller_;
   std::shared_ptr<WorkerThreadsTaskRunner> worker_thread_task_runner_;
 };
 

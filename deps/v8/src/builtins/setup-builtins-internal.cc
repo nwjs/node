@@ -258,8 +258,7 @@ Code* GenerateBytecodeHandler(Isolate* isolate, int builtin_index,
   }
 
   Handle<Code> code = interpreter::GenerateBytecodeHandler(
-      isolate, bytecode, operand_scale, builtin_index,
-      BuiltinAssemblerOptions(isolate, builtin_index));
+      isolate, bytecode, operand_scale, builtin_index);
 
   PostBuildProfileAndTracing(isolate, *code, name);
 

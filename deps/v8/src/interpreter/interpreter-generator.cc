@@ -1273,7 +1273,7 @@ IGNITION_HANDLER(Negate, NegateAssemblerImpl) { UnaryOpWithFeedback(); }
 IGNITION_HANDLER(ToName, InterpreterAssembler) {
   Node* object = GetAccumulator();
   Node* context = GetContext();
-  Node* result = CallBuiltin(Builtins::kToName, context, object);
+  Node* result = ToName(context, object);
   StoreRegisterAtOperandIndex(result, 0);
   Dispatch();
 }
@@ -3128,8 +3128,7 @@ IGNITION_HANDLER(ResumeGenerator, InterpreterAssembler) {
 
 Handle<Code> GenerateBytecodeHandler(Isolate* isolate, Bytecode bytecode,
                                      OperandScale operand_scale,
-                                     int builtin_index,
-                                     const AssemblerOptions& options) {
+                                     int builtin_index) {
   Zone zone(isolate->allocator(), ZONE_NAME);
   compiler::CodeAssemblerState state(
       isolate, &zone, InterpreterDispatchDescriptor{}, Code::BYTECODE_HANDLER,
@@ -3148,7 +3147,8 @@ Handle<Code> GenerateBytecodeHandler(Isolate* isolate, Bytecode bytecode,
 #undef CALL_GENERATOR
   }
 
-  Handle<Code> code = compiler::CodeAssembler::GenerateCode(&state, options);
+  Handle<Code> code = compiler::CodeAssembler::GenerateCode(
+      &state, AssemblerOptions::Default(isolate));
   PROFILE(isolate, CodeCreateEvent(
                        CodeEventListener::BYTECODE_HANDLER_TAG,
                        AbstractCode::cast(*code),

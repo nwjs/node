@@ -1208,13 +1208,14 @@ namespace internal {
   /* Wasm */                                                                   \
   ASM(WasmCompileLazy)                                                         \
   TFC(WasmAllocateHeapNumber, AllocateHeapNumber, 1)                           \
-  TFC(WasmArgumentsAdaptor, ArgumentsAdaptor, 1)                               \
+  TFC(WasmArgumentsAdaptor, ArgumentAdaptor, 1)                                \
   TFC(WasmCallJavaScript, CallTrampoline, 1)                                   \
   TFC(WasmGrowMemory, WasmGrowMemory, 1)                                       \
   TFC(WasmStackGuard, NoContext, 1)                                            \
   TFC(WasmToNumber, TypeConversion, 1)                                         \
   TFS(ThrowWasmTrapUnreachable)                                                \
   TFS(ThrowWasmTrapMemOutOfBounds)                                             \
+  TFS(ThrowWasmTrapUnalignedAccess)                                            \
   TFS(ThrowWasmTrapDivByZero)                                                  \
   TFS(ThrowWasmTrapDivUnrepresentable)                                         \
   TFS(ThrowWasmTrapRemByZero)                                                  \
@@ -1327,10 +1328,6 @@ namespace internal {
 #define BUILTIN_LIST_INTL(CPP, TFJ, TFS)                               \
   /* ecma402 #sec-intl.collator */                                     \
   CPP(CollatorConstructor)                                             \
-  /* ecma402 #sec-intl.v8breakiterator.supportedlocalesof */           \
-  CPP(v8BreakIteratorSupportedLocalesOf)                               \
-  /* ecma402 #sec-intl.collator.supportedlocalesof */                  \
-  CPP(CollatorSupportedLocalesOf)                                      \
   TFS(StringToLowerCaseIntl, kString)                                  \
   /* ES #sec-string.prototype.tolowercase */                           \
   TFJ(StringPrototypeToLowerCaseIntl, 0, kReceiver)                    \
@@ -1342,12 +1339,6 @@ namespace internal {
   CPP(NumberFormatPrototypeFormatToParts)                              \
   /* ecma402 #sec-intl.datetimeformat.prototype.formattoparts */       \
   CPP(DateTimeFormatPrototypeFormatToParts)                            \
-  /* ecma402 #sup-date.prototype.tolocaledatestring */                 \
-  CPP(DatePrototypeToLocaleDateString)                                 \
-  /* ecma402 #sup-date.prototype.tolocalestring */                     \
-  CPP(DatePrototypeToLocaleString)                                     \
-  /* ecma402 #sup-date.prototype.tolocaletimestring */                 \
-  CPP(DatePrototypeToLocaleTimeString)                                 \
   /* ecma402 #new proposal */                                          \
   /* ecma402 #sec-intl-listformat-constructor */                       \
   CPP(ListFormatConstructor)                                           \
@@ -1359,8 +1350,6 @@ namespace internal {
   /* ecma402 #sec-intl-list-format.prototype.formattoparts */          \
   TFJ(ListFormatPrototypeFormatToParts,                                \
       SharedFunctionInfo::kDontAdaptArgumentsSentinel)                 \
-  /* ecma402 #sec-intl.ListFormat.supportedlocalesof */                \
-  CPP(ListFormatSupportedLocalesOf)                                    \
   /* ecma402 #sec-intl-locale-constructor */                           \
   CPP(LocaleConstructor)                                               \
   CPP(LocalePrototypeLanguage)                                         \
@@ -1380,24 +1369,16 @@ namespace internal {
   CPP(LocalePrototypeMinimize)                                         \
   /* ecma402 #sec-number-format-functions */                           \
   CPP(NumberFormatInternalFormatNumber)                                \
-  /* ecma402 #sec-intl.numberformat.supportedlocalesof */              \
-  CPP(NumberFormatSupportedLocalesOf)                                  \
   /* ecma402 #sec-intl.numberformat.prototype.format */                \
   CPP(NumberFormatPrototypeFormatNumber)                               \
   /* ecma402 #sec-datetime-format-functions */                         \
   CPP(DateTimeFormatInternalFormat)                                    \
-  /* ecma402 #sec-intl.datetimeformat.supportedlocalesof */            \
-  CPP(DateTimeFormatSupportedLocalesOf)                                \
   /* ecma402 #sec-intl.datetimeformat.prototype.format */              \
   CPP(DateTimeFormatPrototypeFormat)                                   \
   /* ecma402 #sec-intl.pluralrules */                                  \
   CPP(PluralRulesConstructor)                                          \
-  /* ecma402 #sec-intl.pluralrules.supportedlocalesof */               \
-  CPP(PluralRulesSupportedLocalesOf)                                   \
   /* ecma402 #sec-intl.RelativeTimeFormat.constructor */               \
   CPP(RelativeTimeFormatConstructor)                                   \
-  /* ecma402 #sec-intl.RelativeTimeFormat.supportedlocalesof */        \
-  CPP(RelativeTimeFormatSupportedLocalesOf)                            \
   /* ecma402 #sec-intl.RelativeTimeFormat.prototype.resolvedOptions */ \
   CPP(RelativeTimeFormatPrototypeResolvedOptions)                      \
   /* ecma402 #sec-intl.RelativeTimeFormat.prototype.format */          \
@@ -1413,15 +1394,7 @@ namespace internal {
   /* ecma 402 #sec-collator-compare-functions*/                        \
   CPP(CollatorInternalCompare)                                         \
   CPP(BreakIteratorInternalAdoptText)                                  \
-  CPP(BreakIteratorPrototypeAdoptText)                                 \
-  CPP(BreakIteratorInternalFirst)                                      \
-  CPP(BreakIteratorPrototypeFirst)                                     \
-  CPP(BreakIteratorInternalNext)                                       \
-  CPP(BreakIteratorPrototypeNext)                                      \
-  CPP(BreakIteratorInternalCurrent)                                    \
-  CPP(BreakIteratorPrototypeCurrent)                                   \
-  CPP(BreakIteratorInternalBreakType)                                  \
-  CPP(BreakIteratorPrototypeBreakType)
+  CPP(BreakIteratorPrototypeAdoptText)
 #else
 #define BUILTIN_LIST_INTL(CPP, TFJ, TFS)      \
   /* no-op fallback version */                \

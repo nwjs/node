@@ -169,8 +169,7 @@ namespace compiler {
                                   kNumber | kNullOrUndefined | kBoolean) \
   V(PlainPrimitive,               kNumber | kString | kBoolean | \
                                   kNullOrUndefined) \
-  V(NonBigIntPrimitive,           kSymbol | kPlainPrimitive) \
-  V(Primitive,                    kBigInt | kNonBigIntPrimitive) \
+  V(Primitive,                    kSymbol | kBigInt | kPlainPrimitive) \
   V(OtherUndetectableOrUndefined, kOtherUndetectable | kUndefined) \
   V(Proxy,                        kCallableProxy | kOtherProxy) \
   V(ArrayOrOtherObject,           kArray | kOtherObject) \

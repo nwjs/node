@@ -433,7 +433,7 @@ class ParserBase {
       return destructuring_assignments_to_rewrite_;
     }
 
-    ZoneList<typename ExpressionClassifier::Error>* GetReportedErrorList() {
+    ZoneVector<typename ExpressionClassifier::Error>* GetReportedErrorList() {
       return &reported_errors_;
     }
 
@@ -490,7 +490,8 @@ class ParserBase {
 
     ZoneChunkList<RewritableExpressionT> destructuring_assignments_to_rewrite_;
 
-    ZoneList<typename ExpressionClassifier::Error> reported_errors_;
+    // We use a ZoneVector here because we need to do a lot of random access.
+    ZoneVector<typename ExpressionClassifier::Error> reported_errors_;
 
     // A reason, if any, why this function should not be optimized.
     BailoutReason dont_optimize_reason_;
@@ -719,7 +720,7 @@ class ParserBase {
     Token::Value next = Next();
     USE(next);
     USE(token);
-    DCHECK_EQ(next, token);
+    DCHECK(next == token);
   }
 
   bool Check(Token::Value token) {
@@ -752,14 +753,22 @@ class ParserBase {
       return;
     }
 
+    Token::Value current = scanner()->current_token();
+    Scanner::Location current_location = scanner()->location();
+    Token::Value next = Next();
+
+    if (next == Token::SEMICOLON) {
+      return;
+    }
+
     *ok = false;
-    if (scanner()->current_token() == Token::AWAIT && !is_async_function()) {
-      ReportMessageAt(scanner()->location(),
+    if (current == Token::AWAIT && !is_async_function()) {
+      ReportMessageAt(current_location,
                       MessageTemplate::kAwaitNotInAsyncFunction, kSyntaxError);
       return;
     }
 
-    ReportUnexpectedToken(Next());
+    ReportUnexpectedToken(next);
   }
 
   // Dummy functions, just useful as arguments to CHECK_OK_CUSTOM.
@@ -769,7 +778,14 @@ class ParserBase {
     return result;
   }
 
-  bool peek_any_identifier() { return Token::IsAnyIdentifier(peek()); }
+  bool is_any_identifier(Token::Value token) {
+    return token == Token::IDENTIFIER || token == Token::ENUM ||
+           token == Token::AWAIT || token == Token::ASYNC ||
+           token == Token::ESCAPED_STRICT_RESERVED_WORD ||
+           token == Token::FUTURE_STRICT_RESERVED_WORD || token == Token::LET ||
+           token == Token::STATIC || token == Token::YIELD;
+  }
+  bool peek_any_identifier() { return is_any_identifier(peek()); }
 
   bool CheckContextualKeyword(Token::Value token) {
     if (PeekContextualKeyword(token)) {
@@ -990,7 +1006,7 @@ class ParserBase {
   }
 
   bool IsValidArrowFormalParametersStart(Token::Value token) {
-    return Token::IsAnyIdentifier(token) || token == Token::LPAREN;
+    return is_any_identifier(token) || token == Token::LPAREN;
   }
 
   void ValidateArrowFormalParameters(ExpressionT expr,
@@ -1576,12 +1592,13 @@ ParserBase<Impl>::FunctionState::FunctionState(
       outer_function_state_(*function_state_stack),
       scope_(scope),
       destructuring_assignments_to_rewrite_(scope->zone()),
-      reported_errors_(16, scope->zone()),
+      reported_errors_(scope_->zone()),
       dont_optimize_reason_(BailoutReason::kNoReason),
       next_function_is_likely_called_(false),
       previous_function_was_likely_called_(false),
       contains_function_or_eval_(false) {
   *function_state_stack = this;
+  reported_errors_.reserve(16);
   if (outer_function_state_) {
     outer_function_state_->previous_function_was_likely_called_ =
         outer_function_state_->next_function_is_likely_called_;
@@ -2080,7 +2097,7 @@ typename ParserBase<Impl>::ExpressionT ParserBase<Impl>::ParseArrayLiteral(
   int pos = peek_position();
   ExpressionListT values = impl()->NewExpressionList(4);
   int first_spread_index = -1;
-  Consume(Token::LBRACK);
+  Expect(Token::LBRACK, CHECK_OK);
   while (peek() != Token::RBRACK) {
     ExpressionT elem;
     if (peek() == Token::COMMA) {
@@ -2543,7 +2560,7 @@ ParserBase<Impl>::ParseObjectPropertyDefinition(ObjectLiteralChecker* checker,
     case PropertyKind::kSpreadProperty:
       DCHECK(!is_get && !is_set && !is_generator && !is_async &&
              !*is_computed_name);
-      DCHECK_EQ(Token::ELLIPSIS, name_token);
+      DCHECK(name_token == Token::ELLIPSIS);
 
       *is_computed_name = true;
       *is_rest_property = true;
@@ -2726,7 +2743,7 @@ typename ParserBase<Impl>::ExpressionT ParserBase<Impl>::ParseObjectLiteral(
   bool has_rest_property = false;
   ObjectLiteralChecker checker(this);
 
-  Consume(Token::LBRACE);
+  Expect(Token::LBRACE, CHECK_OK);
 
   while (peek() != Token::RBRACE) {
     FuncNameInferrer::State fni_state(fni_);
@@ -4298,7 +4315,7 @@ void ParserBase<Impl>::CheckArityRestrictions(int param_count,
 
 template <typename Impl>
 bool ParserBase<Impl>::IsNextLetKeyword() {
-  DCHECK_EQ(Token::LET, peek());
+  DCHECK(peek() == Token::LET);
   Token::Value next_next = PeekAhead();
   switch (next_next) {
     case Token::LBRACE:
@@ -4323,9 +4340,14 @@ bool ParserBase<Impl>::IsNextLetKeyword() {
 
 template <typename Impl>
 bool ParserBase<Impl>::IsTrivialExpression() {
-  if (Token::IsTrivialExpressionToken(peek())) {
-    // PeekAhead() may not always be called, so we only call it after checking
-    // peek().
+  Token::Value peek_token = peek();
+  if (peek_token == Token::SMI || peek_token == Token::NUMBER ||
+      peek_token == Token::BIGINT || peek_token == Token::NULL_LITERAL ||
+      peek_token == Token::TRUE_LITERAL || peek_token == Token::FALSE_LITERAL ||
+      peek_token == Token::STRING || peek_token == Token::IDENTIFIER ||
+      peek_token == Token::THIS) {
+    // PeekAhead() is expensive & may not always be called, so we only call it
+    // after checking peek().
     Token::Value peek_ahead = PeekAhead();
     if (peek_ahead == Token::COMMA || peek_ahead == Token::RPAREN ||
         peek_ahead == Token::SEMICOLON || peek_ahead == Token::RBRACK) {
@@ -5839,7 +5861,7 @@ ParserBase<Impl>::ParseForEachStatementWithDeclarations(
   Scope* for_scope = nullptr;
   if (inner_block_scope != nullptr) {
     for_scope = inner_block_scope->outer_scope();
-    DCHECK_EQ(for_scope, scope());
+    DCHECK(for_scope == scope());
     inner_block_scope->set_start_position(scanner()->location().beg_pos);
   }
 

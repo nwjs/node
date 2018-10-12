@@ -367,6 +367,10 @@ set of APIs that are used by the native code. Instead of using the V8
 or [Native Abstractions for Node.js][] APIs, the functions available
 in the N-API are used.
 
+Creating and maintaining an addon that benefits from the ABI stability
+provided by N-API carries with it certain
+[implementation considerations](n-api.html#n_api_implications_of_abi_stability).
+
 To use N-API in the above "Hello world" example, replace the content of
 `hello.cc` with the following. All other instructions remain the same.
 
@@ -456,7 +460,6 @@ JavaScript and how to return a result:
 
 namespace demo {
 
-using v8::Context;
 using v8::Exception;
 using v8::FunctionCallbackInfo;
 using v8::Isolate;
@@ -471,7 +474,6 @@ using v8::Value;
 // const FunctionCallbackInfo<Value>& args struct
 void Add(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
-  Local<Context> context = isolate->GetCurrentContext();
 
   // Check the number of arguments passed.
   if (args.Length() < 2) {
@@ -489,9 +491,9 @@ void Add(const FunctionCallbackInfo<Value>& args) {
   }
 
   // Perform the operation
-  double first = args[0]->NumberValue(context).FromJust();
-  double second = args[1]->NumberValue(context).FromJust();
-  Local<Number> num = Number::New(isolate, first + second);
+  double value =
+      args[0].As<Number>()->Value() + args[1].As<Number>()->Value();
+  Local<Number> num = Number::New(isolate, value);
 
   // Set the return value (using the passed in
   // FunctionCallbackInfo<Value>&)
@@ -633,6 +635,7 @@ functions and returning those back to JavaScript:
 
 namespace demo {
 
+using v8::Context;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
@@ -650,8 +653,9 @@ void MyFunction(const FunctionCallbackInfo<Value>& args) {
 void CreateFunction(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
 
+  Local<Context> context = isolate->GetCurrentContext();
   Local<FunctionTemplate> tpl = FunctionTemplate::New(isolate, MyFunction);
-  Local<Function> fn = tpl->GetFunction();
+  Local<Function> fn = tpl->GetFunction(context).ToLocalChecked();
 
   // omit this to make it anonymous
   fn->SetName(String::NewFromUtf8(isolate, "theFunction"));
@@ -775,9 +779,10 @@ void MyObject::Init(Local<Object> exports) {
   // Prototype
   NODE_SET_PROTOTYPE_METHOD(tpl, "plusOne", PlusOne);
 
-  constructor.Reset(isolate, tpl->GetFunction());
+  Local<Context> context = isolate->GetCurrentContext();
+  constructor.Reset(isolate, tpl->GetFunction(context).ToLocalChecked());
   exports->Set(String::NewFromUtf8(isolate, "MyObject"),
-               tpl->GetFunction());
+               tpl->GetFunction(context).ToLocalChecked());
 }
 
 void MyObject::New(const FunctionCallbackInfo<Value>& args) {
@@ -787,7 +792,7 @@ void MyObject::New(const FunctionCallbackInfo<Value>& args) {
   if (args.IsConstructCall()) {
     // Invoked as constructor: `new MyObject(...)`
     double value = args[0]->IsUndefined() ?
-        0 : args[0]->NumberValue(context).FromJust();
+        0 : args[0]->NumberValue(context).FromMaybe(0);
     MyObject* obj = new MyObject(value);
     obj->Wrap(args.This());
     args.GetReturnValue().Set(args.This());
@@ -845,6 +850,13 @@ console.log(obj.plusOne());
 console.log(obj.plusOne());
 // Prints: 13
 ```
+
+The destructor for a wrapper object will run when the object is
+garbage-collected. For destructor testing, there are command-line flags that
+can be used to make it possible to force garbage collection. These flags are
+provided by the underlying V8 JavaScript engine. They are subject to change
+or removal at any time. They are not documented by Node.js or V8, and they
+should never be used outside of testing.
 
 ### Factory of wrapped objects
 
@@ -960,7 +972,8 @@ void MyObject::Init(Isolate* isolate) {
   // Prototype
   NODE_SET_PROTOTYPE_METHOD(tpl, "plusOne", PlusOne);
 
-  constructor.Reset(isolate, tpl->GetFunction());
+  Local<Context> context = isolate->GetCurrentContext();
+  constructor.Reset(isolate, tpl->GetFunction(context).ToLocalChecked());
 }
 
 void MyObject::New(const FunctionCallbackInfo<Value>& args) {
@@ -970,7 +983,7 @@ void MyObject::New(const FunctionCallbackInfo<Value>& args) {
   if (args.IsConstructCall()) {
     // Invoked as constructor: `new MyObject(...)`
     double value = args[0]->IsUndefined() ?
-        0 : args[0]->NumberValue(context).FromJust();
+        0 : args[0]->NumberValue(context).FromMaybe(0);
     MyObject* obj = new MyObject(value);
     obj->Wrap(args.This());
     args.GetReturnValue().Set(args.This());
@@ -1168,7 +1181,8 @@ void MyObject::Init(Isolate* isolate) {
   tpl->SetClassName(String::NewFromUtf8(isolate, "MyObject"));
   tpl->InstanceTemplate()->SetInternalFieldCount(1);
 
-  constructor.Reset(isolate, tpl->GetFunction());
+  Local<Context> context = isolate->GetCurrentContext();
+  constructor.Reset(isolate, tpl->GetFunction(context).ToLocalChecked());
 }
 
 void MyObject::New(const FunctionCallbackInfo<Value>& args) {
@@ -1178,7 +1192,7 @@ void MyObject::New(const FunctionCallbackInfo<Value>& args) {
   if (args.IsConstructCall()) {
     // Invoked as constructor: `new MyObject(...)`
     double value = args[0]->IsUndefined() ?
-        0 : args[0]->NumberValue(context).FromJust();
+        0 : args[0]->NumberValue(context).FromMaybe(0);
     MyObject* obj = new MyObject(value);
     obj->Wrap(args.This());
     args.GetReturnValue().Set(args.This());

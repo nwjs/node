@@ -5,7 +5,6 @@
     'v8_trace_maps%': 0,
     'node_use_dtrace%': 'false',
     'node_use_etw%': 'false',
-    'node_use_perfctr%': 'false',
     'node_no_browser_globals%': 'false',
     'node_code_cache_path%': '',
     'node_use_v8_platform%': 'true',
@@ -104,6 +103,7 @@
       'lib/zlib.js',
       'lib/internal/assert.js',
       'lib/internal/async_hooks.js',
+      'lib/internal/bash_completion.js',
       'lib/internal/buffer.js',
       'lib/internal/cli_table.js',
       'lib/internal/child_process.js',
@@ -117,6 +117,7 @@
       'lib/internal/crypto/cipher.js',
       'lib/internal/crypto/diffiehellman.js',
       'lib/internal/crypto/hash.js',
+      'lib/internal/crypto/keygen.js',
       'lib/internal/crypto/pbkdf2.js',
       'lib/internal/crypto/random.js',
       'lib/internal/crypto/scrypt.js',
@@ -163,6 +164,8 @@
       'lib/internal/process/worker_thread_only.js',
       'lib/internal/querystring.js',
       'lib/internal/process/write-coverage.js',
+      'lib/internal/process/coverage.js',
+      'lib/internal/queue_microtask.js',
       'lib/internal/readline.js',
       'lib/internal/repl.js',
       'lib/internal/repl/await.js',
@@ -178,6 +181,7 @@
       'lib/internal/url.js',
       'lib/internal/util.js',
       'lib/internal/util/comparisons.js',
+      'lib/internal/util/inspect.js',
       'lib/internal/util/inspector.js',
       'lib/internal/util/types.js',
       'lib/internal/http2/core.js',
@@ -261,6 +265,11 @@
         'src',
         'deps/v8/include',
       ],
+
+      # - "C4244: conversion from 'type1' to 'type2', possible loss of data"
+      #   Ususaly safe. Disable for `dep`, enable for `src`
+      'msvs_disabled_warnings!': [4244],
+
       'conditions': [
         [ 'node_intermediate_lib_type=="static_library" and '
             'node_shared=="true" and OS=="aix"', {
@@ -283,8 +292,7 @@
           'msvs_settings': {
             'VCLinkerTool': {
               'AdditionalOptions': [
-                '/WHOLEARCHIVE:<(PRODUCT_DIR)\\lib\\'
-                    '<(node_core_target_name)<(STATIC_LIB_SUFFIX)',
+                '/WHOLEARCHIVE:<(node_core_target_name)<(STATIC_LIB_SUFFIX)',
               ],
             },
           },
@@ -304,11 +312,6 @@
                     'tools/msvs/genfiles/node_etw_provider.rc'
                   ],
                 }],
-                [ 'node_use_perfctr=="true"', {
-                  'sources': [
-                    'tools/msvs/genfiles/node_perfctr_provider.rc',
-                   ],
-                }]
               ],
             }],
           ],
@@ -325,15 +328,11 @@
           'product_name': '<(node_core_target_name)-win',
         }],
       ],
-    },
+    }, # node_core_target_name
     {
       'target_name': '<(node_lib_target_name)',
       'type': '<(node_intermediate_lib_type)',
       'product_name': '<(node_lib_target_name)',
-
-      'dependencies': [
-        'node_js2c#host',
-      ],
 
       'includes': [
         'node.gypi'
@@ -468,7 +467,6 @@
         'src/node_root_certs.h',
         'src/node_version.h',
         'src/node_watchdog.h',
-        'src/node_wrap.h',
         'src/node_revert.h',
         'src/node_i18n.h',
         'src/node_worker.h',
@@ -501,7 +499,6 @@
         '<@(library_files)',
         # node.gyp is added to the project by default.
         'common.gypi',
-        '<(SHARED_INTERMEDIATE_DIR)/node_javascript.cc',
       ],
 
       'variables': {
@@ -520,6 +517,11 @@
         'V8_USE_EXTERNAL_STARTUP_DATA',
         'NODE_OPENSSL_SYSTEM_CERT_PATH="<(openssl_system_ca_path)"',
       ],
+
+      # - "C4244: conversion from 'type1' to 'type2', possible loss of data"
+      #   Ususaly safe. Disable for `dep`, enable for `src`
+      'msvs_disabled_warnings!': [4244],
+
       'conditions': [
         [ 'node_code_cache_path!=""', {
           'sources': [ '<(node_code_cache_path)' ]
@@ -537,36 +539,7 @@
           'product_name': 'node_base',
         }],
         [ 'v8_enable_inspector==1', {
-          'defines': [
-            'HAVE_INSPECTOR=1',
-          ],
-          'sources': [
-            'src/inspector_agent.cc',
-            'src/inspector_io.cc',
-            'src/inspector_js_api.cc',
-            'src/inspector_socket.cc',
-            'src/inspector_socket_server.cc',
-            'src/inspector/main_thread_interface.cc',
-            'src/inspector/node_string.cc',
-            'src/inspector/tracing_agent.cc',
-            'src/inspector_agent.h',
-            'src/inspector_io.h',
-            'src/inspector_socket.h',
-            'src/inspector_socket_server.h',
-            'src/inspector/main_thread_interface.h',
-            'src/inspector/node_string.h',
-            'src/inspector/tracing_agent.h',
-            '<@(node_inspector_generated_sources)'
-          ],
-          'dependencies': [
-            'node_protocol_generated_sources#host',
-            'v8_inspector_compress_protocol_json#host',
-          ],
-          'include_dirs': [
-            '<(SHARED_INTERMEDIATE_DIR)/include', # for inspector
-            '<(SHARED_INTERMEDIATE_DIR)',
-            '<(SHARED_INTERMEDIATE_DIR)/src', # for inspector
-          ],
+          'includes' : [ 'src/inspector/node_inspector.gypi' ],
         }, {
           'defines': [ 'HAVE_INSPECTOR=0' ]
         }],
@@ -599,28 +572,6 @@
             ['node_intermediate_lib_type != "static_library"', {
               'sources': [
                 'tools/msvs/genfiles/node_etw_provider.rc',
-              ],
-            }],
-          ],
-        }],
-        [ 'node_use_perfctr=="true"', {
-          'defines': [ 'HAVE_PERFCTR=1' ],
-          'dependencies': [ 'node_perfctr' ],
-          'include_dirs': [
-            'src',
-            'tools/msvs/genfiles',
-            '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
-          ],
-          'sources': [
-            'src/node_win32_perfctr_provider.h',
-            'src/node_win32_perfctr_provider.cc',
-            'src/node_counters.cc',
-            'src/node_counters.h',
-          ],
-          'conditions': [
-            ['node_intermediate_lib_type != "static_library"', {
-              'sources': [
-                'tools/msvs/genfiles/node_perfctr_provider.rc',
               ],
             }],
           ],
@@ -676,15 +627,9 @@
             'src/tls_wrap.h'
           ],
         }],
-      ],
-    },
-    {
-      'target_name': 'mkssldef',
-      'type': 'none',
-      # TODO(bnoordhuis) Make all platforms export the same list of symbols.
-      # Teach mkssldef.py to generate linker maps that UNIX linkers understand.
-      'conditions': [
         [ 'use_openssl_def==1', {
+          # TODO(bnoordhuis) Make all platforms export the same list of symbols.
+          # Teach mkssldef.py to generate linker maps that UNIX linkers understand.
           'variables': {
             'mkssldef_flags': [
               # Categories to export.
@@ -714,6 +659,7 @@
                 'deps/openssl/openssl/util/libssl.num',
               ],
               'outputs': ['<(SHARED_INTERMEDIATE_DIR)/openssl.def'],
+              'process_outputs_as_sources': 1,
               'action': [
                 'python',
                 'tools/mkssldef.py',
@@ -726,9 +672,39 @@
           ],
         }],
       ],
-    },
-    # generate ETW header and resource files
+      'actions': [
+        {
+          'action_name': 'node_js2c',
+          'process_outputs_as_sources': 1,
+          'inputs': [
+            '<@(library_files)',
+            'config.gypi',
+            'tools/check_macros.py'
+          ],
+          'outputs': [
+            '<(SHARED_INTERMEDIATE_DIR)/node_javascript.cc',
+          ],
+          'conditions': [
+            [ 'node_use_dtrace=="false" and node_use_etw=="false"', {
+              'inputs': [ 'src/notrace_macros.py' ]
+            }],
+            [ 'node_debug_lib=="false"', {
+              'inputs': [ 'tools/nodcheck_macros.py' ]
+            }],
+            [ 'node_debug_lib=="true"', {
+              'inputs': [ 'tools/dcheck_macros.py' ]
+            }]
+          ],
+          'action': [
+            'python', 'tools/js2c.py',
+            '<@(_outputs)',
+            '<@(_inputs)',
+          ],
+        },
+      ],
+    }, # node_lib_target_name
     {
+       # generate ETW header and resource files
       'target_name': 'node_etw',
       'type': 'none',
       'conditions': [
@@ -747,71 +723,7 @@
           ]
         } ]
       ]
-    },
-    # generate perf counter header and resource files
-    {
-      'target_name': 'node_perfctr',
-      'type': 'none',
-      'conditions': [
-        [ 'node_use_perfctr=="true"', {
-          'actions': [
-            {
-              'action_name': 'node_perfctr_man',
-              'inputs': [ 'src/res/node_perfctr_provider.man' ],
-              'outputs': [
-                'tools/msvs/genfiles/node_perfctr_provider.h',
-                'tools/msvs/genfiles/node_perfctr_provider.rc',
-                'tools/msvs/genfiles/MSG00001.BIN',
-              ],
-              'action': [ 'ctrpp <@(_inputs) '
-                          '-o tools/msvs/genfiles/node_perfctr_provider.h '
-                          '-rc tools/msvs/genfiles/node_perfctr_provider.rc'
-              ]
-            },
-          ],
-        } ]
-      ]
-    },
-    {
-      'target_name': 'node_js2c',
-      'type': 'none',
-      'toolsets': ['host'],
-      'actions': [
-        {
-          'action_name': 'node_js2c',
-          'process_outputs_as_sources': 1,
-          'inputs': [
-            '<@(library_files)',
-            './config.gypi',
-            'tools/check_macros.py',
-            'tools/js2c.py',
-          ],
-          'outputs': [
-            '<(SHARED_INTERMEDIATE_DIR)/node_javascript.cc',
-          ],
-          'conditions': [
-            [ 'node_use_dtrace=="false" and node_use_etw=="false"', {
-              'inputs': [ 'src/notrace_macros.py' ]
-            }],
-            [ 'node_use_perfctr=="false"', {
-              'inputs': [ 'src/noperfctr_macros.py' ]
-            }],
-            [ 'node_debug_lib=="false"', {
-              'inputs': [ 'tools/nodcheck_macros.py' ]
-            }],
-            [ 'node_debug_lib=="true"', {
-              'inputs': [ 'tools/dcheck_macros.py' ]
-            }]
-          ],
-          'action': [
-            'python',
-            'tools/js2c.py',
-            '<@(_outputs)',
-            '<@(_inputs)',
-          ],
-        },
-      ],
-    }, # end node_js2c
+    }, # node_etw
     {
       'target_name': 'node_dtrace_header',
       'type': 'none',
@@ -839,7 +751,7 @@
           ]
         } ],
       ]
-    },
+    }, # node_dtrace_header
     {
       'target_name': 'node_dtrace_provider',
       'type': 'none',
@@ -874,7 +786,7 @@
           ],
         }],
       ]
-    },
+    }, # node_dtrace_provider
     {
       'target_name': 'node_dtrace_ustack',
       'type': 'none',
@@ -922,7 +834,7 @@
           ]
         } ],
       ]
-    },
+    }, # node_dtrace_ustack
     {
       'target_name': 'specialize_node_d',
       'type': 'none',
@@ -948,7 +860,7 @@
           ],
         } ],
       ]
-    },
+    }, # specialize_node_d
     {
       # When using shared lib to build executable in Windows, in order to avoid
       # filename collision, the executable name is node-win.exe. Need to rename
@@ -976,7 +888,7 @@
           ],
         } ],
       ]
-    },
+    }, # rename_node_bin_win
     {
       'target_name': 'cctest',
       'type': 'executable',
@@ -984,7 +896,7 @@
       'dependencies': [
         '<(node_lib_target_name)',
         'rename_node_bin_win',
-        'node_js2c#host',
+        'deps/gtest/gtest.gyp:gtest',
         'node_dtrace_header',
         'node_dtrace_ustack',
         'node_dtrace_provider',
@@ -1023,9 +935,6 @@
             'HAVE_OPENSSL=1',
           ],
         }],
-        [ 'node_use_perfctr=="true"', {
-          'defines': [ 'HAVE_PERFCTR=1' ],
-        }],
         ['v8_enable_inspector==1', {
           'sources': [
             'test/cctest/test_inspector_socket.cc',
@@ -1040,8 +949,17 @@
         ['OS=="solaris"', {
           'ldflags': [ '-I<(SHARED_INTERMEDIATE_DIR)' ]
         }],
+        # Skip cctest while building shared lib node for Windows
+        [ 'OS=="win" and node_shared=="true"', {
+          'type': 'none',
+        }],
+        [ 'node_shared=="true"', {
+          'xcode_settings': {
+            'OTHER_LDFLAGS': [ '-Wl,-rpath,@loader_path', ],
+          },
+        }],
       ],
-    }
+    }, # cctest
   ], # end targets
 
   'conditions': [
@@ -1092,163 +1010,5 @@
         },
       ]
     }], # end aix section
-    [ 'v8_enable_inspector==1', {
-      'variables': {
-        'protocol_path': 'tools/inspector_protocol',
-        'node_inspector_path': 'src/inspector',
-        'node_inspector_generated_sources': [
-          '<(SHARED_INTERMEDIATE_DIR)/src/node/inspector/protocol/Forward.h',
-          '<(SHARED_INTERMEDIATE_DIR)/src/node/inspector/protocol/Protocol.cpp',
-          '<(SHARED_INTERMEDIATE_DIR)/src/node/inspector/protocol/Protocol.h',
-          '<(SHARED_INTERMEDIATE_DIR)/src/node/inspector/protocol/NodeTracing.cpp',
-          '<(SHARED_INTERMEDIATE_DIR)/src/node/inspector/protocol/NodeTracing.h',
-        ],
-        'node_protocol_files': [
-          '<(protocol_path)/lib/Allocator_h.template',
-          '<(protocol_path)/lib/Array_h.template',
-          '<(protocol_path)/lib/DispatcherBase_cpp.template',
-          '<(protocol_path)/lib/DispatcherBase_h.template',
-          '<(protocol_path)/lib/ErrorSupport_cpp.template',
-          '<(protocol_path)/lib/ErrorSupport_h.template',
-          '<(protocol_path)/lib/Forward_h.template',
-          '<(protocol_path)/lib/FrontendChannel_h.template',
-          '<(protocol_path)/lib/Maybe_h.template',
-          '<(protocol_path)/lib/Object_cpp.template',
-          '<(protocol_path)/lib/Object_h.template',
-          '<(protocol_path)/lib/Parser_cpp.template',
-          '<(protocol_path)/lib/Parser_h.template',
-          '<(protocol_path)/lib/Protocol_cpp.template',
-          '<(protocol_path)/lib/ValueConversions_h.template',
-          '<(protocol_path)/lib/Values_cpp.template',
-          '<(protocol_path)/lib/Values_h.template',
-          '<(protocol_path)/templates/Exported_h.template',
-          '<(protocol_path)/templates/Imported_h.template',
-          '<(protocol_path)/templates/TypeBuilder_cpp.template',
-          '<(protocol_path)/templates/TypeBuilder_h.template',
-          '<(protocol_path)/code_generator.py',
-        ]
-      },
-      'targets': [
-        {
-          'target_name': 'prepare_protocol_json',
-          'type': 'none',
-          'toolsets': ['host'],
-          'copies': [
-            {
-              'files': [
-                '<(node_inspector_path)/node_protocol_config.json',
-                '<(node_inspector_path)/node_protocol.pdl'
-              ],
-              'destination': '<(SHARED_INTERMEDIATE_DIR)',
-            }
-          ],
-          'actions': [
-            {
-              'action_name': 'convert_node_protocol_to_json',
-              'inputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/node_protocol.pdl',
-              ],
-              'outputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/node_protocol.json',
-              ],
-              'action': [
-                'python',
-                '../../v8/third_party/inspector_protocol/convert_protocol_to_json.py',
-                '<@(_inputs)',
-                '<@(_outputs)',
-              ],
-            },
-          ]
-        },
-        {
-          'target_name': 'node_protocol_generated_sources',
-          'type': 'none',
-          'toolsets': ['host'],
-          'dependencies': ['prepare_protocol_json'],
-          'actions': [
-            {
-              'action_name': 'node_protocol_generated_sources',
-              'inputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/node_protocol_config.json',
-                '<(SHARED_INTERMEDIATE_DIR)/node_protocol.json',
-                '<@(node_protocol_files)',
-              ],
-              'outputs': [
-                '<@(node_inspector_generated_sources)',
-              ],
-              'action': [
-                'python',
-                '<(protocol_path)/code_generator.py',
-                '--jinja_dir', '<@(protocol_path)/..',
-                '--output_base', '<(SHARED_INTERMEDIATE_DIR)/src/',
-                '--config', '<(SHARED_INTERMEDIATE_DIR)/node_protocol_config.json',
-              ],
-              'message': 'Generating node protocol sources from protocol json',
-            },
-          ]
-        },
-        {
-          'target_name': 'v8_inspector_compress_protocol_json',
-          'type': 'none',
-          'toolsets': ['host'],
-          'dependencies': ['prepare_protocol_json'],
-          'copies': [
-            {
-              'destination': '<(SHARED_INTERMEDIATE_DIR)',
-              'files': ['../../v8/src/inspector/js_protocol.pdl']
-            }
-          ],
-          'actions': [
-            {
-              'action_name': 'v8_inspector_convert_protocol_to_json',
-              'inputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/js_protocol.pdl',
-              ],
-              'outputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/js_protocol.json',
-              ],
-              'action': [
-                'python',
-                '../../v8/third_party/inspector_protocol/convert_protocol_to_json.py',
-                '<@(_inputs)',
-                '<@(_outputs)',
-              ],
-            },
-            {
-              'action_name': 'concatenate_protocols',
-              'inputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/js_protocol.json',
-                '<(SHARED_INTERMEDIATE_DIR)/node_protocol.json',
-              ],
-              'outputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/concatenated_protocol.json',
-              ],
-              'action': [
-                'python',
-                '../../v8/third_party/inspector_protocol/concatenate_protocols.py',
-                '<@(_inputs)',
-                '<@(_outputs)',
-              ],
-            },
-            {
-              'action_name': 'v8_inspector_compress_protocol_json',
-              'process_outputs_as_sources': 1,
-              'inputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/concatenated_protocol.json',
-              ],
-              'outputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/v8_inspector_protocol_json.h',
-              ],
-              'action': [
-                'python',
-                'tools/compress_json.py',
-                '<@(_inputs)',
-                '<@(_outputs)',
-              ],
-            },
-          ],
-        },
-      ]
-    }]
   ], # end conditions block
 }

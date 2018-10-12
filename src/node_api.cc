@@ -946,7 +946,7 @@ class ThreadSafeFunction : public node::AsyncResource {
         return napi_ok;
       }
 
-      node::Environment::GetCurrent(env->isolate)->CloseHandle(
+      NodeEnv()->CloseHandle(
           reinterpret_cast<uv_handle_t*>(&async),
           [](uv_handle_t* handle) -> void {
             ThreadSafeFunction* ts_fn =
@@ -1036,9 +1036,12 @@ class ThreadSafeFunction : public node::AsyncResource {
   }
 
   node::Environment* NodeEnv() {
-    // For some reason grabbing the Node.js environment requires a handle scope.
+    // Grabbing the Node.js environment requires a handle scope because it
+    // looks up fields on the current context.
     v8::HandleScope scope(env->isolate);
-    return node::Environment::GetCurrent(env->isolate);
+    node::Environment* node_env = node::Environment::GetCurrent(env->isolate);
+    CHECK_NOT_NULL(node_env);
+    return node_env;
   }
 
   void MaybeStartIdle() {
@@ -1157,6 +1160,63 @@ class ThreadSafeFunction : public node::AsyncResource {
   bool handles_closing;
 };
 
+enum WrapType {
+  retrievable,
+  anonymous
+};
+
+template <WrapType wrap_type> static inline
+napi_status Wrap(napi_env env,
+                 napi_value js_object,
+                 void* native_object,
+                 napi_finalize finalize_cb,
+                 void* finalize_hint,
+                 napi_ref* result) {
+  NAPI_PREAMBLE(env);
+  CHECK_ARG(env, js_object);
+
+  v8::Isolate* isolate = env->isolate;
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+  v8::Local<v8::Value> value = v8impl::V8LocalValueFromJsValue(js_object);
+  RETURN_STATUS_IF_FALSE(env, value->IsObject(), napi_invalid_arg);
+  v8::Local<v8::Object> obj = value.As<v8::Object>();
+
+  if (wrap_type == retrievable) {
+    // If we've already wrapped this object, we error out.
+    RETURN_STATUS_IF_FALSE(env,
+        !obj->HasPrivate(context, NAPI_PRIVATE_KEY(context, wrapper))
+            .FromJust(),
+        napi_invalid_arg);
+  } else if (wrap_type == anonymous) {
+    // If no finalize callback is provided, we error out.
+    CHECK_ARG(env, finalize_cb);
+  }
+
+  v8impl::Reference* reference = nullptr;
+  if (result != nullptr) {
+    // The returned reference should be deleted via napi_delete_reference()
+    // ONLY in response to the finalize callback invocation. (If it is deleted
+    // before then, then the finalize callback will never be invoked.)
+    // Therefore a finalize callback is required when returning a reference.
+    CHECK_ARG(env, finalize_cb);
+    reference = v8impl::Reference::New(
+        env, obj, 0, false, finalize_cb, native_object, finalize_hint);
+    *result = reinterpret_cast<napi_ref>(reference);
+  } else {
+    // Create a self-deleting reference.
+    reference = v8impl::Reference::New(env, obj, 0, true, finalize_cb,
+        native_object, finalize_cb == nullptr ? nullptr : finalize_hint);
+  }
+
+  if (wrap_type == retrievable) {
+    CHECK(obj->SetPrivate(context, NAPI_PRIVATE_KEY(context, wrapper),
+          v8::External::New(isolate, reference)).FromJust());
+  }
+
+  return GET_RETURN_STATUS(env);
+}
+
 }  // end of namespace v8impl
 
 // Intercepts the Node-V8 module registration callback. Converts parameters
@@ -1177,7 +1237,9 @@ void napi_module_register_by_symbol(v8::Local<v8::Object> exports,
                                     v8::Local<v8::Context> context,
                                     napi_addon_register_func init) {
   if (init == nullptr) {
-    node::Environment::GetCurrent(context)->ThrowError(
+    node::Environment* node_env = node::Environment::GetCurrent(context);
+    CHECK_NOT_NULL(node_env);
+    node_env->ThrowError(
         "Module has no declared entry point.");
     return;
   }
@@ -1456,7 +1518,9 @@ napi_status napi_define_class(napi_env env,
     }
   }
 
-  *result = v8impl::JsValueFromV8LocalValue(scope.Escape(tpl->GetFunction()));
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
+  *result = v8impl::JsValueFromV8LocalValue(
+      scope.Escape(tpl->GetFunction(context).ToLocalChecked()));
 
   if (static_property_count > 0) {
     std::vector<napi_property_descriptor> static_descriptors;
@@ -2173,11 +2237,11 @@ static napi_status set_error_code(napi_env env,
       }
     }
     name_string = v8::String::Concat(
-        isolate, name_string, FIXED_ONE_BYTE_STRING(isolate, " ["));
+        isolate, name_string, node::FIXED_ONE_BYTE_STRING(isolate, " ["));
     name_string =
         v8::String::Concat(isolate, name_string, code_value.As<v8::String>());
     name_string = v8::String::Concat(
-        isolate, name_string, FIXED_ONE_BYTE_STRING(isolate, "]"));
+        isolate, name_string, node::FIXED_ONE_BYTE_STRING(isolate, "]"));
 
     set_maybe = err_object->Set(context, name_key, name_string);
     RETURN_STATUS_IF_FALSE(env,
@@ -2682,7 +2746,7 @@ napi_status napi_get_value_string_latin1(napi_env env,
                                          char* buf,
                                          size_t bufsize,
                                          size_t* result) {
-  NAPI_PREAMBLE(env);
+  CHECK_ENV(env);
   CHECK_ARG(env, value);
 
   v8::Local<v8::Value> val = v8impl::V8LocalValueFromJsValue(value);
@@ -2705,7 +2769,7 @@ napi_status napi_get_value_string_latin1(napi_env env,
     }
   }
 
-  return GET_RETURN_STATUS(env);
+  return napi_clear_last_error(env);
 }
 
 // Copies a JavaScript string into a UTF-8 string buffer. The result is the
@@ -2721,7 +2785,7 @@ napi_status napi_get_value_string_utf8(napi_env env,
                                        char* buf,
                                        size_t bufsize,
                                        size_t* result) {
-  NAPI_PREAMBLE(env);
+  CHECK_ENV(env);
   CHECK_ARG(env, value);
 
   v8::Local<v8::Value> val = v8impl::V8LocalValueFromJsValue(value);
@@ -2744,7 +2808,7 @@ napi_status napi_get_value_string_utf8(napi_env env,
     }
   }
 
-  return GET_RETURN_STATUS(env);
+  return napi_clear_last_error(env);
 }
 
 // Copies a JavaScript string into a UTF-16 string buffer. The result is the
@@ -2760,7 +2824,7 @@ napi_status napi_get_value_string_utf16(napi_env env,
                                         char16_t* buf,
                                         size_t bufsize,
                                         size_t* result) {
-  NAPI_PREAMBLE(env);
+  CHECK_ENV(env);
   CHECK_ARG(env, value);
 
   v8::Local<v8::Value> val = v8impl::V8LocalValueFromJsValue(value);
@@ -2783,7 +2847,7 @@ napi_status napi_get_value_string_utf16(napi_env env,
     }
   }
 
-  return GET_RETURN_STATUS(env);
+  return napi_clear_last_error(env);
 }
 
 napi_status napi_coerce_to_object(napi_env env,
@@ -2859,41 +2923,12 @@ napi_status napi_wrap(napi_env env,
                       napi_finalize finalize_cb,
                       void* finalize_hint,
                       napi_ref* result) {
-  NAPI_PREAMBLE(env);
-  CHECK_ARG(env, js_object);
-
-  v8::Isolate* isolate = env->isolate;
-  v8::Local<v8::Context> context = isolate->GetCurrentContext();
-
-  v8::Local<v8::Value> value = v8impl::V8LocalValueFromJsValue(js_object);
-  RETURN_STATUS_IF_FALSE(env, value->IsObject(), napi_invalid_arg);
-  v8::Local<v8::Object> obj = value.As<v8::Object>();
-
-  // If we've already wrapped this object, we error out.
-  RETURN_STATUS_IF_FALSE(env,
-      !obj->HasPrivate(context, NAPI_PRIVATE_KEY(context, wrapper)).FromJust(),
-      napi_invalid_arg);
-
-  v8impl::Reference* reference = nullptr;
-  if (result != nullptr) {
-    // The returned reference should be deleted via napi_delete_reference()
-    // ONLY in response to the finalize callback invocation. (If it is deleted
-    // before then, then the finalize callback will never be invoked.)
-    // Therefore a finalize callback is required when returning a reference.
-    CHECK_ARG(env, finalize_cb);
-    reference = v8impl::Reference::New(
-        env, obj, 0, false, finalize_cb, native_object, finalize_hint);
-    *result = reinterpret_cast<napi_ref>(reference);
-  } else {
-    // Create a self-deleting reference.
-    reference = v8impl::Reference::New(env, obj, 0, true, finalize_cb,
-        native_object, finalize_cb == nullptr ? nullptr : finalize_hint);
-  }
-
-  CHECK(obj->SetPrivate(context, NAPI_PRIVATE_KEY(context, wrapper),
-        v8::External::New(isolate, reference)).FromJust());
-
-  return GET_RETURN_STATUS(env);
+  return v8impl::Wrap<v8impl::retrievable>(env,
+                                           js_object,
+                                           native_object,
+                                           finalize_cb,
+                                           finalize_hint,
+                                           result);
 }
 
 napi_status napi_unwrap(napi_env env, napi_value obj, void** result) {
@@ -4138,4 +4173,18 @@ napi_status
 napi_ref_threadsafe_function(napi_env env, napi_threadsafe_function func) {
   CHECK(func != nullptr);
   return reinterpret_cast<v8impl::ThreadSafeFunction*>(func)->Ref();
+}
+
+napi_status napi_add_finalizer(napi_env env,
+                               napi_value js_object,
+                               void* native_object,
+                               napi_finalize finalize_cb,
+                               void* finalize_hint,
+                               napi_ref* result) {
+  return v8impl::Wrap<v8impl::anonymous>(env,
+                                         js_object,
+                                         native_object,
+                                         finalize_cb,
+                                         finalize_hint,
+                                         result);
 }

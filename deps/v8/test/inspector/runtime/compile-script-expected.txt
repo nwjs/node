@@ -6,7 +6,7 @@ compilation result:
     id : <messageId>
     result : {
         exceptionDetails : {
-            columnNumber : 3
+            columnNumber : 2
             exception : {
                 className : SyntaxError
                 description : SyntaxError: Unexpected end of input

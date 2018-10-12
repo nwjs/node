@@ -34,6 +34,7 @@ var InternalArray = utils.InternalArray;
 var MathMax = global.Math.max;
 var ObjectHasOwnProperty = global.Object.prototype.hasOwnProperty;
 var ObjectKeys = global.Object.keys;
+var patternSymbol = utils.ImportNow("intl_pattern_symbol");
 var resolvedSymbol = utils.ImportNow("intl_resolved_symbol");
 var StringSubstr = GlobalString.prototype.substr;
 var StringSubstring = GlobalString.prototype.substring;
@@ -54,6 +55,48 @@ endmacro
 macro ANONYMOUS_FUNCTION(fn)
 (0, (fn))
 endmacro
+
+/**
+ * Adds bound method to the prototype of the given object.
+ */
+function AddBoundMethod(obj, methodName, implementation, length, type,
+                        compat) {
+  %CheckIsBootstrapping();
+  var internalName = %CreatePrivateSymbol(methodName);
+
+  DEFINE_METHOD(
+    obj.prototype,
+    get [methodName]() {
+      if(!IS_RECEIVER(this)) {
+        throw %make_type_error(kIncompatibleMethodReceiver, methodName, this);
+      }
+      var receiver = %IntlUnwrapReceiver(this, type, obj, methodName, compat);
+      if (IS_UNDEFINED(receiver[internalName])) {
+        var boundMethod;
+        if (IS_UNDEFINED(length) || length === 2) {
+          boundMethod =
+            ANONYMOUS_FUNCTION((fst, snd) => implementation(receiver, fst, snd));
+        } else if (length === 1) {
+          boundMethod = ANONYMOUS_FUNCTION(fst => implementation(receiver, fst));
+        } else {
+          boundMethod = ANONYMOUS_FUNCTION((...args) => {
+            // DateTimeFormat.format needs to be 0 arg method, but can still
+            // receive an optional dateValue param. If one was provided, pass it
+            // along.
+            if (args.length > 0) {
+              return implementation(receiver, args[0]);
+            } else {
+              return implementation(receiver);
+            }
+          });
+        }
+        %SetNativeFlag(boundMethod);
+        receiver[internalName] = boundMethod;
+      }
+      return receiver[internalName];
+    }
+  );
+}
 
 function IntlConstruct(receiver, constructor, create, newTarget, args,
                        compat) {
@@ -110,6 +153,18 @@ function GetAnyExtensionRE() {
     ANY_EXTENSION_RE = new GlobalRegExp('-[a-z0-9]{1}-.*', 'g');
   }
   return ANY_EXTENSION_RE;
+}
+
+/**
+ * Replace quoted text (single quote, anything but the quote and quote again).
+ */
+var QUOTED_STRING_RE = UNDEFINED;
+
+function GetQuotedStringRE() {
+  if (IS_UNDEFINED(QUOTED_STRING_RE)) {
+    QUOTED_STRING_RE = new GlobalRegExp("'[^']+'", 'g');
+  }
+  return QUOTED_STRING_RE;
 }
 
 /**
@@ -458,6 +513,7 @@ function getAvailableLocalesOf(service) {
   return available;
 }
 
+
 /**
  * Defines a property and sets writable, enumerable and configurable to true.
  */
@@ -467,6 +523,18 @@ function defineWECProperty(object, property, value) {
                                              enumerable: true,
                                              configurable: true});
 }
+
+
+/**
+ * Adds property to an object if the value is not undefined.
+ * Sets all descriptors to true.
+ */
+function addWECPropertyIfDefined(object, property, value) {
+  if (!IS_UNDEFINED(value)) {
+    defineWECProperty(object, property, value);
+  }
+}
+
 
 /**
  * Returns titlecased word, aMeRricA -> America.
@@ -570,10 +638,31 @@ DEFINE_METHOD(
 );
 
 
+/**
+ * Returns the subset of the given locale list for which this locale list
+ * has a matching (possibly fallback) locale. Locales appear in the same
+ * order in the returned list as in the input list.
+ * Options are optional parameter.
+ */
+DEFINE_METHOD(
+  GlobalIntlCollator,
+  supportedLocalesOf(locales) {
+    return %SupportedLocalesOf('collator', locales, arguments[1]);
+  }
+);
+
+
 DEFINE_METHOD(
   GlobalIntlPluralRules.prototype,
   resolvedOptions() {
     return %PluralRulesResolvedOptions(this);
+  }
+);
+
+DEFINE_METHOD(
+  GlobalIntlPluralRules,
+  supportedLocalesOf(locales) {
+    return %SupportedLocalesOf('pluralrules', locales, arguments[1]);
   }
 );
 
@@ -771,6 +860,19 @@ DEFINE_METHOD(
 
 
 /**
+ * Returns the subset of the given locale list for which this locale list
+ * has a matching (possibly fallback) locale. Locales appear in the same
+ * order in the returned list as in the input list.
+ * Options are optional parameter.
+ */
+DEFINE_METHOD(
+  GlobalIntlNumberFormat,
+  supportedLocalesOf(locales) {
+    return %SupportedLocalesOf('numberformat', locales, arguments[1]);
+  }
+);
+
+/**
  * Returns a string that matches LDML representation of the options object.
  */
 function toLDMLString(options) {
@@ -832,6 +934,144 @@ function appendToLDMLString(option, pairs) {
   }
 }
 
+
+/**
+ * Returns object that matches LDML representation of the date.
+ */
+function fromLDMLString(ldmlString) {
+  // First remove '' quoted text, so we lose 'Uhr' strings.
+  ldmlString = %RegExpInternalReplace(GetQuotedStringRE(), ldmlString, '');
+
+  var options = {__proto__: null};
+  var match = %regexp_internal_match(/E{3,5}/, ldmlString);
+  options = appendToDateTimeObject(
+      options, 'weekday', match, {EEEEE: 'narrow', EEE: 'short', EEEE: 'long'});
+
+  match = %regexp_internal_match(/G{3,5}/, ldmlString);
+  options = appendToDateTimeObject(
+      options, 'era', match, {GGGGG: 'narrow', GGG: 'short', GGGG: 'long'});
+
+  match = %regexp_internal_match(/y{1,2}/, ldmlString);
+  options = appendToDateTimeObject(
+      options, 'year', match, {y: 'numeric', yy: '2-digit'});
+
+  match = %regexp_internal_match(/M{1,5}/, ldmlString);
+  options = appendToDateTimeObject(options, 'month', match, {MM: '2-digit',
+      M: 'numeric', MMMMM: 'narrow', MMM: 'short', MMMM: 'long'});
+
+  // Sometimes we get L instead of M for month - standalone name.
+  match = %regexp_internal_match(/L{1,5}/, ldmlString);
+  options = appendToDateTimeObject(options, 'month', match, {LL: '2-digit',
+      L: 'numeric', LLLLL: 'narrow', LLL: 'short', LLLL: 'long'});
+
+  match = %regexp_internal_match(/d{1,2}/, ldmlString);
+  options = appendToDateTimeObject(
+      options, 'day', match, {d: 'numeric', dd: '2-digit'});
+
+  match = %regexp_internal_match(/h{1,2}/, ldmlString);
+  if (match !== null) {
+    options['hour12'] = true;
+  }
+  options = appendToDateTimeObject(
+      options, 'hour', match, {h: 'numeric', hh: '2-digit'});
+
+  match = %regexp_internal_match(/H{1,2}/, ldmlString);
+  if (match !== null) {
+    options['hour12'] = false;
+  }
+  options = appendToDateTimeObject(
+      options, 'hour', match, {H: 'numeric', HH: '2-digit'});
+
+  match = %regexp_internal_match(/m{1,2}/, ldmlString);
+  options = appendToDateTimeObject(
+      options, 'minute', match, {m: 'numeric', mm: '2-digit'});
+
+  match = %regexp_internal_match(/s{1,2}/, ldmlString);
+  options = appendToDateTimeObject(
+      options, 'second', match, {s: 'numeric', ss: '2-digit'});
+
+  match = %regexp_internal_match(/z|zzzz/, ldmlString);
+  options = appendToDateTimeObject(
+      options, 'timeZoneName', match, {z: 'short', zzzz: 'long'});
+
+  return options;
+}
+
+
+function appendToDateTimeObject(options, option, match, pairs) {
+  if (IS_NULL(match)) {
+    if (!HAS_OWN_PROPERTY(options, option)) {
+      %DefineWEProperty(options, option, UNDEFINED);
+    }
+    return options;
+  }
+
+  var property = match[0];
+  %DefineWEProperty(options, option, pairs[property]);
+
+  return options;
+}
+
+
+/**
+ * Returns options with at least default values in it.
+ */
+function toDateTimeOptions(options, required, defaults) {
+  if (IS_UNDEFINED(options)) {
+    options = {__proto__: null};
+  } else {
+    options = TO_OBJECT(options);
+  }
+
+  options = %object_create(options);
+
+  var needsDefault = true;
+  if ((required === 'date' || required === 'any') &&
+      (!IS_UNDEFINED(options.weekday) || !IS_UNDEFINED(options.year) ||
+       !IS_UNDEFINED(options.month) || !IS_UNDEFINED(options.day))) {
+    needsDefault = false;
+  }
+
+  if ((required === 'time' || required === 'any') &&
+      (!IS_UNDEFINED(options.hour) || !IS_UNDEFINED(options.minute) ||
+       !IS_UNDEFINED(options.second))) {
+    needsDefault = false;
+  }
+
+  if (needsDefault && (defaults === 'date' || defaults === 'all')) {
+    %object_define_property(options, 'year', {value: 'numeric',
+                                              writable: true,
+                                              enumerable: true,
+                                              configurable: true});
+    %object_define_property(options, 'month', {value: 'numeric',
+                                               writable: true,
+                                               enumerable: true,
+                                               configurable: true});
+    %object_define_property(options, 'day', {value: 'numeric',
+                                             writable: true,
+                                             enumerable: true,
+                                             configurable: true});
+  }
+
+  if (needsDefault && (defaults === 'time' || defaults === 'all')) {
+    %object_define_property(options, 'hour', {value: 'numeric',
+                                              writable: true,
+                                              enumerable: true,
+                                              configurable: true});
+    %object_define_property(options, 'minute', {value: 'numeric',
+                                                writable: true,
+                                                enumerable: true,
+                                                configurable: true});
+    %object_define_property(options, 'second', {value: 'numeric',
+                                                writable: true,
+                                                enumerable: true,
+                                                configurable: true});
+  }
+
+  return options;
+}
+
+
 /**
  * Initializes the given object so it's a valid DateTimeFormat instance.
  * Useful for subclassing.
@@ -879,18 +1119,35 @@ function CreateDateTimeFormat(locales, options) {
                              getOption, internalOptions);
 
   var requestedLocale = locale.locale + extension;
-  // Still need to store locale and numberingSystem till we move the storage
-  // to JSDateTimeFormat
-  var resolved = {__proto__: null};
+  var resolved = %object_define_properties({__proto__: null}, {
+    calendar: {writable: true},
+    day: {writable: true},
+    era: {writable: true},
+    hour12: {writable: true},
+    hour: {writable: true},
+    locale: {writable: true},
+    minute: {writable: true},
+    month: {writable: true},
+    numberingSystem: {writable: true},
+    [patternSymbol]: {writable: true},
+    requestedLocale: {value: requestedLocale, writable: true},
+    second: {writable: true},
+    timeZone: {writable: true},
+    timeZoneName: {writable: true},
+    tz: {value: tz, writable: true},
+    weekday: {writable: true},
+    year: {writable: true}
+  });
 
   var dateFormat = %CreateDateTimeFormat(
     requestedLocale,
     {__proto__: null, skeleton: ldmlString, timeZone: tz}, resolved);
 
-  %MarkAsInitializedIntlObjectOfType(dateFormat, DATE_TIME_FORMAT_TYPE);
+  if (resolved.timeZone === "Etc/Unknown") {
+    throw %make_range_error(kInvalidTimeZone, tz);
+  }
 
-  // Still need to store locale and numberingSystem till we move the storage
-  // to JSDateTimeFormat
+  %MarkAsInitializedIntlObjectOfType(dateFormat, DATE_TIME_FORMAT_TYPE);
   dateFormat[resolvedSymbol] = resolved;
 
   return dateFormat;
@@ -909,13 +1166,73 @@ function DateTimeFormatConstructor() {
 }
 %SetCode(GlobalIntlDateTimeFormat, DateTimeFormatConstructor);
 
+
 /**
  * DateTimeFormat resolvedOptions method.
  */
 DEFINE_METHOD(
   GlobalIntlDateTimeFormat.prototype,
   resolvedOptions() {
-    return %DateTimeFormatResolvedOptions(this);
+    var methodName = 'resolvedOptions';
+    if(!IS_RECEIVER(this)) {
+      throw %make_type_error(kIncompatibleMethodReceiver, methodName, this);
+    }
+    var format = %IntlUnwrapReceiver(this, DATE_TIME_FORMAT_TYPE,
+                                     GlobalIntlDateTimeFormat,
+                                     methodName, true);
+
+    /**
+     * Maps ICU calendar names to LDML/BCP47 types for key 'ca'.
+     * See typeMap section in third_party/icu/source/data/misc/keyTypeData.txt
+     * and
+     * http://www.unicode.org/repos/cldr/tags/latest/common/bcp47/calendar.xml
+     */
+    var ICU_CALENDAR_MAP = {
+      __proto__: null,
+      'gregorian': 'gregory',
+      'ethiopic-amete-alem': 'ethioaa'
+    };
+
+    var fromPattern = fromLDMLString(format[resolvedSymbol][patternSymbol]);
+    var userCalendar = ICU_CALENDAR_MAP[format[resolvedSymbol].calendar];
+    if (IS_UNDEFINED(userCalendar)) {
+      // No match means that ICU's legacy name is identical to LDML/BCP type.
+      userCalendar = format[resolvedSymbol].calendar;
+    }
+
+    var result = {
+      locale: format[resolvedSymbol].locale,
+      numberingSystem: format[resolvedSymbol].numberingSystem,
+      calendar: userCalendar,
+      timeZone: format[resolvedSymbol].timeZone
+    };
+
+    addWECPropertyIfDefined(result, 'timeZoneName', fromPattern.timeZoneName);
+    addWECPropertyIfDefined(result, 'era', fromPattern.era);
+    addWECPropertyIfDefined(result, 'year', fromPattern.year);
+    addWECPropertyIfDefined(result, 'month', fromPattern.month);
+    addWECPropertyIfDefined(result, 'day', fromPattern.day);
+    addWECPropertyIfDefined(result, 'weekday', fromPattern.weekday);
+    addWECPropertyIfDefined(result, 'hour12', fromPattern.hour12);
+    addWECPropertyIfDefined(result, 'hour', fromPattern.hour);
+    addWECPropertyIfDefined(result, 'minute', fromPattern.minute);
+    addWECPropertyIfDefined(result, 'second', fromPattern.second);
+
+    return result;
+  }
+);
+
+
+/**
+ * Returns the subset of the given locale list for which this locale list
+ * has a matching (possibly fallback) locale. Locales appear in the same
+ * order in the returned list as in the input list.
+ * Options are optional parameter.
+ */
+DEFINE_METHOD(
+  GlobalIntlDateTimeFormat,
+  supportedLocalesOf(locales) {
+    return %SupportedLocalesOf('dateformat', locales, arguments[1]);
   }
 );
 
@@ -1042,6 +1359,65 @@ DEFINE_METHOD(
 );
 
 
+/**
+ * Returns the subset of the given locale list for which this locale list
+ * has a matching (possibly fallback) locale. Locales appear in the same
+ * order in the returned list as in the input list.
+ * Options are optional parameter.
+ */
+DEFINE_METHOD(
+  GlobalIntlv8BreakIterator,
+  supportedLocalesOf(locales) {
+    if (!IS_UNDEFINED(new.target)) {
+      throw %make_type_error(kOrdinaryFunctionCalledAsConstructor);
+    }
+
+    return %SupportedLocalesOf('breakiterator', locales, arguments[1]);
+  }
+);
+
+
+/**
+ * Returns index of the first break in the string and moves current pointer.
+ */
+function first(iterator) {
+  return %BreakIteratorFirst(iterator);
+}
+
+
+/**
+ * Returns the index of the next break and moves the pointer.
+ */
+function next(iterator) {
+  return %BreakIteratorNext(iterator);
+}
+
+
+/**
+ * Returns index of the current break.
+ */
+function current(iterator) {
+  return %BreakIteratorCurrent(iterator);
+}
+
+
+/**
+ * Returns type of the current break.
+ */
+function breakType(iterator) {
+  return %BreakIteratorBreakType(iterator);
+}
+
+
+AddBoundMethod(GlobalIntlv8BreakIterator, 'first', first, 0,
+               BREAK_ITERATOR_TYPE, false);
+AddBoundMethod(GlobalIntlv8BreakIterator, 'next', next, 0,
+               BREAK_ITERATOR_TYPE, false);
+AddBoundMethod(GlobalIntlv8BreakIterator, 'current', current, 0,
+               BREAK_ITERATOR_TYPE, false);
+AddBoundMethod(GlobalIntlv8BreakIterator, 'breakType', breakType, 0,
+               BREAK_ITERATOR_TYPE, false);
+
 // Save references to Intl objects and methods we use, for added security.
 var savedObjects = {
   __proto__: null,
@@ -1103,5 +1479,52 @@ function cachedOrNewService(service, locales, options, defaults) {
 %InstallToContext([
   "cached_or_new_service", cachedOrNewService
 ]);
+
+/**
+ * Formats a Date object (this) using locale and options values.
+ * If locale or options are omitted, defaults are used - both date and time are
+ * present in the output.
+ */
+DEFINE_METHOD(
+  GlobalDate.prototype,
+  toLocaleString() {
+    var locales = arguments[0];
+    var options = arguments[1];
+    return %ToLocaleDateTime(
+        this, locales, options, 'any', 'all', 'dateformatall');
+  }
+);
+
+
+/**
+ * Formats a Date object (this) using locale and options values.
+ * If locale or options are omitted, defaults are used - only date is present
+ * in the output.
+ */
+DEFINE_METHOD(
+  GlobalDate.prototype,
+  toLocaleDateString() {
+    var locales = arguments[0];
+    var options = arguments[1];
+    return %ToLocaleDateTime(
+        this, locales, options, 'date', 'date', 'dateformatdate');
+  }
+);
+
+
+/**
+ * Formats a Date object (this) using locale and options values.
+ * If locale or options are omitted, defaults are used - only time is present
+ * in the output.
+ */
+DEFINE_METHOD(
+  GlobalDate.prototype,
+  toLocaleTimeString() {
+    var locales = arguments[0];
+    var options = arguments[1];
+    return %ToLocaleDateTime(
+        this, locales, options, 'time', 'time', 'dateformattime');
+  }
+);
 
 })

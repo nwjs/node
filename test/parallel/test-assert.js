@@ -34,8 +34,8 @@ const a = assert;
 if (process.stdout.isTTY)
   process.env.NODE_DISABLE_COLORS = '1';
 
-const strictEqualMessageStart = 'Expected inputs to be strictly equal:\n';
-const start = 'Expected inputs to be strictly deep-equal:';
+const strictEqualMessageStart = 'Expected values to be strictly equal:\n';
+const start = 'Expected values to be strictly deep-equal:';
 const actExp = '+ actual - expected';
 
 assert.ok(a.AssertionError.prototype instanceof Error,
@@ -293,7 +293,7 @@ testAssertionMessage(-Infinity, '-Infinity');
 testAssertionMessage([1, 2, 3], '[\n+   1,\n+   2,\n+   3\n+ ]');
 testAssertionMessage(function f() {}, '[Function: f]');
 testAssertionMessage(function() {}, '[Function]');
-testAssertionMessage(circular, '{\n+   y: 1,\n+   x: [Circular]\n+ }');
+testAssertionMessage(circular, '{\n+   x: [Circular],\n+   y: 1\n+ }');
 testAssertionMessage({ a: undefined, b: null },
                      '{\n+   a: undefined,\n+   b: null\n+ }');
 testAssertionMessage({ a: NaN, b: Infinity, c: -Infinity },
@@ -311,11 +311,11 @@ try {
 }
 
 try {
-  assert.strictEqual(1, 2, 'oh no');
+  assert.strictEqual(1, 2, 'oh no'); // eslint-disable-line no-restricted-syntax
 } catch (e) {
   assert.strictEqual(e.message, 'oh no');
-  assert.strictEqual(e.generatedMessage, false,
-                     'Message incorrectly marked as generated');
+  // Message should not be marked as generated.
+  assert.strictEqual(e.generatedMessage, false);
 }
 
 {
@@ -348,15 +348,15 @@ try {
 }
 
 {
-  // Verify that throws() and doesNotThrow() throw on non-function block.
-  const testBlockTypeError = (method, block) => {
+  // Verify that throws() and doesNotThrow() throw on non-functions.
+  const testBlockTypeError = (method, fn) => {
     common.expectsError(
-      () => method(block),
+      () => method(fn),
       {
         code: 'ERR_INVALID_ARG_TYPE',
         type: TypeError,
-        message: 'The "block" argument must be of type Function. Received ' +
-                 `type ${typeof block}`
+        message: 'The "fn" argument must be of type Function. Received ' +
+                 `type ${typeof fn}`
       }
     );
   };
@@ -415,9 +415,9 @@ assert.throws(
   {
     code: 'ERR_ASSERTION',
     name: 'AssertionError [ERR_ASSERTION]',
-    message: strictEqualMessageStart +
+    message: 'Expected "actual" to be reference-equal to "expected":\n' +
              '+ actual - expected\n\n' +
-             '+ [Error: foo]\n- [Error: foobar]\n             ^'
+             '+ [Error: foo]\n- [Error: foobar]'
   }
 );
 
@@ -602,8 +602,8 @@ assert.throws(
     '\n' +
     '+ {}\n' +
     '- {\n' +
-    "-   loop: 'forever',\n" +
-    '-   [Symbol(util.inspect.custom)]: [Function]\n' +
+    '-   [Symbol(nodejs.util.inspect.custom)]: [Function],\n' +
+    "-   loop: 'forever'\n" +
     '- }'
   });
 
@@ -885,9 +885,12 @@ common.expectsError(
       code: 'ERR_ASSERTION',
       name: 'AssertionError [ERR_ASSERTION]',
       message: `${start}\n${actExp}\n\n` +
-               "  Comparison {\n    name: 'TypeError',\n" +
-               "    message: 'Wrong value',\n+   code: 404\n" +
-               '-   code: 404,\n-   foo: undefined\n  }'
+               '  Comparison {\n' +
+               '    code: 404,\n' +
+               '-   foo: undefined,\n' +
+               "    message: 'Wrong value',\n" +
+               "    name: 'TypeError'\n" +
+               '  }'
     }
   );
 
@@ -899,9 +902,13 @@ common.expectsError(
       code: 'ERR_ASSERTION',
       name: 'AssertionError [ERR_ASSERTION]',
       message: `${start}\n${actExp}\n\n` +
-               "  Comparison {\n    name: 'TypeError',\n" +
-               "    message: 'Wrong value',\n+   code: 404\n" +
-               "-   code: '404',\n-   foo: undefined\n  }"
+               '  Comparison {\n' +
+               '+   code: 404,\n' +
+               "-   code: '404',\n" +
+               '-   foo: undefined,\n' +
+               "    message: 'Wrong value',\n" +
+               "    name: 'TypeError'\n" +
+               '  }'
     }
   );
 
@@ -931,8 +938,11 @@ common.expectsError(
       name: 'AssertionError [ERR_ASSERTION]',
       code: 'ERR_ASSERTION',
       message: `${start}\n${actExp}\n\n` +
-               "  Comparison {\n+   name: 'TypeError',\n-   name: 'Error'," +
-               "\n    message: 'e'\n  }"
+               '  Comparison {\n' +
+               "    message: 'e',\n" +
+               "+   name: 'TypeError'\n" +
+               "-   name: 'Error'\n" +
+               '  }'
     }
   );
   assert.throws(
@@ -942,8 +952,11 @@ common.expectsError(
       code: 'ERR_ASSERTION',
       generatedMessage: true,
       message: `${start}\n${actExp}\n\n` +
-               "  Comparison {\n    name: 'Error',\n+   message: 'foo'" +
-               "\n-   message: ''\n  }"
+               '  Comparison {\n' +
+               "+   message: 'foo',\n" +
+               "-   message: '',\n" +
+               "    name: 'Error'\n" +
+               '  }'
     }
   );
 
@@ -1000,7 +1013,7 @@ assert.throws(() => { throw null; }, 'foo');
 assert.throws(
   () => assert.strictEqual([], []),
   {
-    message: 'Inputs identical but not reference equal:\n\n[]\n'
+    message: 'Values identical but not reference-equal:\n\n[]\n'
   }
 );
 
@@ -1009,7 +1022,8 @@ assert.throws(
   assert.throws(
     () => assert.strictEqual(args, { 0: 'a' }),
     {
-      message: `${strictEqualMessageStart}+ actual - expected\n\n` +
+      message: 'Expected "actual" to be reference-equal to "expected":\n' +
+               '+ actual - expected\n\n' +
                "+ [Arguments] {\n- {\n    '0': 'a'\n  }"
     }
   );
@@ -1078,3 +1092,43 @@ assert.throws(
     }
   );
 }
+
+// Indicate where the strings diverge.
+assert.throws(
+  () => assert.strictEqual('test test', 'test foobar'),
+  {
+    code: 'ERR_ASSERTION',
+    name: 'AssertionError [ERR_ASSERTION]',
+    message: strictEqualMessageStart +
+             '+ actual - expected\n\n' +
+             "+ 'test test'\n" +
+             "- 'test foobar'\n" +
+             '        ^'
+  }
+);
+
+// Check for reference-equal objects in `notStrictEqual()`
+assert.throws(
+  () => {
+    const obj = {};
+    assert.notStrictEqual(obj, obj);
+  },
+  {
+    code: 'ERR_ASSERTION',
+    name: 'AssertionError [ERR_ASSERTION]',
+    message: 'Expected "actual" not to be reference-equal to "expected": {}'
+  }
+);
+
+assert.throws(
+  () => {
+    const obj = { a: true };
+    assert.notStrictEqual(obj, obj);
+  },
+  {
+    code: 'ERR_ASSERTION',
+    name: 'AssertionError [ERR_ASSERTION]',
+    message: 'Expected "actual" not to be reference-equal to "expected":\n\n' +
+             '{\n  a: true\n}\n'
+  }
+);

@@ -22,7 +22,6 @@
 #include "src/objects/intl-objects.h"
 #include "src/objects/js-array-inl.h"
 #include "src/objects/js-collator-inl.h"
-#include "src/objects/js-date-time-format-inl.h"
 #include "src/objects/js-list-format-inl.h"
 #include "src/objects/js-list-format.h"
 #include "src/objects/js-plural-rules-inl.h"
@@ -43,6 +42,7 @@
 #include "unicode/numfmt.h"
 #include "unicode/numsys.h"
 #include "unicode/plurrule.h"
+#include "unicode/rbbi.h"
 #include "unicode/smpdtfmt.h"
 #include "unicode/timezone.h"
 #include "unicode/uchar.h"
@@ -217,13 +217,6 @@ RUNTIME_FUNCTION(Runtime_CreateDateTimeFormat) {
   icu::SimpleDateFormat* date_format =
       DateFormat::InitializeDateTimeFormat(isolate, locale, options, resolved);
   CHECK_NOT_NULL(date_format);
-  if (!DateFormat::IsValidTimeZone(date_format)) {
-    delete date_format;
-    THROW_NEW_ERROR_RETURN_FAILURE(
-        isolate,
-        NewRangeError(MessageTemplate::kInvalidTimeZone,
-                      isolate->factory()->NewStringFromStaticChars("Etc/GMT")));
-  }
 
   local_object->SetEmbedderField(DateFormat::kSimpleDateFormatIndex,
                                  reinterpret_cast<Smi*>(date_format));
@@ -234,25 +227,6 @@ RUNTIME_FUNCTION(Runtime_CreateDateTimeFormat) {
                           DateFormat::DeleteDateFormat,
                           WeakCallbackType::kInternalFields);
   return *local_object;
-}
-
-// ecma402/#sec-intl.datetimeformat.prototype.resolvedoptions
-RUNTIME_FUNCTION(Runtime_DateTimeFormatResolvedOptions) {
-  HandleScope scope(isolate);
-  DCHECK_EQ(1, args.length());
-  // 1. Let dtf be this value.
-  CONVERT_ARG_HANDLE_CHECKED(Object, dtf, 0);
-  // 2. If Type(dtf) is not Object, throw a TypeError exception.
-  if (!dtf->IsJSReceiver()) {
-    Handle<String> method_str = isolate->factory()->NewStringFromStaticChars(
-        "Intl.DateTimeFormat.prototype.resolvedOptions");
-    THROW_NEW_ERROR_RETURN_FAILURE(
-        isolate, NewTypeError(MessageTemplate::kIncompatibleMethodReceiver,
-                              method_str, dtf));
-  }
-  Handle<JSReceiver> date_format_holder = Handle<JSReceiver>::cast(dtf);
-  RETURN_RESULT_OR_FAILURE(
-      isolate, JSDateTimeFormat::ResolvedOptions(isolate, date_format_holder));
 }
 
 RUNTIME_FUNCTION(Runtime_CreateNumberFormat) {
@@ -400,6 +374,97 @@ RUNTIME_FUNCTION(Runtime_CreateBreakIterator) {
   return *local_object;
 }
 
+RUNTIME_FUNCTION(Runtime_BreakIteratorFirst) {
+  HandleScope scope(isolate);
+
+  DCHECK_EQ(1, args.length());
+
+  CONVERT_ARG_HANDLE_CHECKED(JSObject, break_iterator_holder, 0);
+
+  icu::BreakIterator* break_iterator =
+      V8BreakIterator::UnpackBreakIterator(break_iterator_holder);
+  CHECK_NOT_NULL(break_iterator);
+
+  return *isolate->factory()->NewNumberFromInt(break_iterator->first());
+}
+
+RUNTIME_FUNCTION(Runtime_BreakIteratorNext) {
+  HandleScope scope(isolate);
+
+  DCHECK_EQ(1, args.length());
+
+  CONVERT_ARG_HANDLE_CHECKED(JSObject, break_iterator_holder, 0);
+
+  icu::BreakIterator* break_iterator =
+      V8BreakIterator::UnpackBreakIterator(break_iterator_holder);
+  CHECK_NOT_NULL(break_iterator);
+
+  return *isolate->factory()->NewNumberFromInt(break_iterator->next());
+}
+
+RUNTIME_FUNCTION(Runtime_BreakIteratorCurrent) {
+  HandleScope scope(isolate);
+
+  DCHECK_EQ(1, args.length());
+
+  CONVERT_ARG_HANDLE_CHECKED(JSObject, break_iterator_holder, 0);
+
+  icu::BreakIterator* break_iterator =
+      V8BreakIterator::UnpackBreakIterator(break_iterator_holder);
+  CHECK_NOT_NULL(break_iterator);
+
+  return *isolate->factory()->NewNumberFromInt(break_iterator->current());
+}
+
+RUNTIME_FUNCTION(Runtime_BreakIteratorBreakType) {
+  HandleScope scope(isolate);
+
+  DCHECK_EQ(1, args.length());
+
+  CONVERT_ARG_HANDLE_CHECKED(JSObject, break_iterator_holder, 0);
+
+  icu::BreakIterator* break_iterator =
+      V8BreakIterator::UnpackBreakIterator(break_iterator_holder);
+  CHECK_NOT_NULL(break_iterator);
+
+  // TODO(cira): Remove cast once ICU fixes base BreakIterator class.
+  icu::RuleBasedBreakIterator* rule_based_iterator =
+      static_cast<icu::RuleBasedBreakIterator*>(break_iterator);
+  int32_t status = rule_based_iterator->getRuleStatus();
+  // Keep return values in sync with JavaScript BreakType enum.
+  if (status >= UBRK_WORD_NONE && status < UBRK_WORD_NONE_LIMIT) {
+    return *isolate->factory()->NewStringFromStaticChars("none");
+  } else if (status >= UBRK_WORD_NUMBER && status < UBRK_WORD_NUMBER_LIMIT) {
+    return ReadOnlyRoots(isolate).number_string();
+  } else if (status >= UBRK_WORD_LETTER && status < UBRK_WORD_LETTER_LIMIT) {
+    return *isolate->factory()->NewStringFromStaticChars("letter");
+  } else if (status >= UBRK_WORD_KANA && status < UBRK_WORD_KANA_LIMIT) {
+    return *isolate->factory()->NewStringFromStaticChars("kana");
+  } else if (status >= UBRK_WORD_IDEO && status < UBRK_WORD_IDEO_LIMIT) {
+    return *isolate->factory()->NewStringFromStaticChars("ideo");
+  } else {
+    return *isolate->factory()->NewStringFromStaticChars("unknown");
+  }
+}
+
+RUNTIME_FUNCTION(Runtime_ToLocaleDateTime) {
+  HandleScope scope(isolate);
+
+  DCHECK_EQ(6, args.length());
+
+  CONVERT_ARG_HANDLE_CHECKED(Object, date, 0);
+  CONVERT_ARG_HANDLE_CHECKED(Object, locales, 1);
+  CONVERT_ARG_HANDLE_CHECKED(Object, options, 2);
+  CONVERT_ARG_HANDLE_CHECKED(String, required, 3);
+  CONVERT_ARG_HANDLE_CHECKED(String, defaults, 4);
+  CONVERT_ARG_HANDLE_CHECKED(String, service, 5);
+
+  RETURN_RESULT_OR_FAILURE(
+      isolate, DateFormat::ToLocaleDateTime(
+                   isolate, date, locales, options, required->ToCString().get(),
+                   defaults->ToCString().get(), service->ToCString().get()));
+}
+
 RUNTIME_FUNCTION(Runtime_ToDateTimeOptions) {
   HandleScope scope(isolate);
   DCHECK_EQ(args.length(), 3);
@@ -459,6 +524,19 @@ RUNTIME_FUNCTION(Runtime_IntlUnwrapReceiver) {
       isolate, Intl::UnwrapReceiver(isolate, receiver, constructor,
                                     Intl::TypeFromInt(type_int), method,
                                     check_legacy_constructor));
+}
+
+RUNTIME_FUNCTION(Runtime_SupportedLocalesOf) {
+  HandleScope scope(isolate);
+
+  DCHECK_EQ(args.length(), 3);
+
+  CONVERT_ARG_HANDLE_CHECKED(String, service, 0);
+  CONVERT_ARG_HANDLE_CHECKED(Object, locales, 1);
+  CONVERT_ARG_HANDLE_CHECKED(Object, options, 2);
+
+  RETURN_RESULT_OR_FAILURE(
+      isolate, Intl::SupportedLocalesOf(isolate, service, locales, options));
 }
 
 }  // namespace internal

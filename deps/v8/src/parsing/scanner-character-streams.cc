@@ -52,16 +52,11 @@ class OnHeapStream {
   OnHeapStream(Handle<String> string, size_t start_offset, size_t end)
       : string_(string), start_offset_(start_offset), length_(end) {}
 
-  OnHeapStream(const OnHeapStream& other) : start_offset_(0), length_(0) {
-    UNREACHABLE();
-  }
-
   Range<Char> GetDataAt(size_t pos) {
     return {&string_->GetChars()[start_offset_ + Min(length_, pos)],
             &string_->GetChars()[start_offset_ + length_]};
   }
 
-  static const bool kCanBeCloned = false;
   static const bool kCanAccessHeap = true;
 
  private:
@@ -78,14 +73,10 @@ class ExternalStringStream {
   ExternalStringStream(const Char* data, size_t end)
       : data_(data), length_(end) {}
 
-  ExternalStringStream(const ExternalStringStream& other)
-      : data_(other.data_), length_(other.length_) {}
-
   Range<Char> GetDataAt(size_t pos) {
     return {&data_[Min(length_, pos)], &data_[length_]};
   }
 
-  static const bool kCanBeCloned = true;
   static const bool kCanAccessHeap = false;
 
  private:
@@ -101,11 +92,6 @@ class ChunkedStream {
                 RuntimeCallStats* stats)
       : source_(source), stats_(stats) {}
 
-  ChunkedStream(const ChunkedStream& other) {
-    // TODO(rmcilroy): Implement cloning for chunked streams.
-    UNREACHABLE();
-  }
-
   Range<Char> GetDataAt(size_t pos) {
     Chunk chunk = FindChunk(pos);
     size_t buffer_end = chunk.length;
@@ -117,7 +103,6 @@ class ChunkedStream {
     for (Chunk& chunk : chunks_) delete[] chunk.data;
   }
 
-  static const bool kCanBeCloned = false;
   static const bool kCanAccessHeap = false;
 
  private:
@@ -276,16 +261,6 @@ class BufferedCharacterStream : public Utf16CharacterStream {
     buffer_pos_ = pos;
   }
 
-  bool can_be_cloned() const final {
-    return ByteStream<uint16_t>::kCanBeCloned;
-  }
-
-  std::unique_ptr<Utf16CharacterStream> Clone() const override {
-    CHECK(can_be_cloned());
-    return std::unique_ptr<Utf16CharacterStream>(
-        new BufferedCharacterStream<ByteStream>(*this));
-  }
-
  protected:
   bool ReadBlock() final {
     size_t position = pos();
@@ -305,14 +280,9 @@ class BufferedCharacterStream : public Utf16CharacterStream {
     return true;
   }
 
-  bool can_access_heap() const final {
-    return ByteStream<uint8_t>::kCanAccessHeap;
-  }
+  bool can_access_heap() final { return ByteStream<uint8_t>::kCanAccessHeap; }
 
  private:
-  BufferedCharacterStream(const BufferedCharacterStream<ByteStream>& other)
-      : byte_stream_(other.byte_stream_) {}
-
   static const size_t kBufferSize = 512;
   uc16 buffer_[kBufferSize];
   ByteStream<uint8_t> byte_stream_;
@@ -326,19 +296,6 @@ class UnbufferedCharacterStream : public Utf16CharacterStream {
   template <class... TArgs>
   UnbufferedCharacterStream(size_t pos, TArgs... args) : byte_stream_(args...) {
     buffer_pos_ = pos;
-  }
-
-  bool can_access_heap() const final {
-    return ByteStream<uint16_t>::kCanAccessHeap;
-  }
-
-  bool can_be_cloned() const final {
-    return ByteStream<uint16_t>::kCanBeCloned;
-  }
-
-  std::unique_ptr<Utf16CharacterStream> Clone() const override {
-    return std::unique_ptr<Utf16CharacterStream>(
-        new UnbufferedCharacterStream<ByteStream>(*this));
   }
 
  protected:
@@ -356,8 +313,7 @@ class UnbufferedCharacterStream : public Utf16CharacterStream {
     return true;
   }
 
-  UnbufferedCharacterStream(const UnbufferedCharacterStream<ByteStream>& other)
-      : byte_stream_(other.byte_stream_) {}
+  bool can_access_heap() final { return ByteStream<uint16_t>::kCanAccessHeap; }
 
   ByteStream<uint16_t> byte_stream_;
 };
@@ -465,13 +421,7 @@ class Utf8ExternalStreamingStream : public BufferedUtf16CharacterStream {
     for (size_t i = 0; i < chunks_.size(); i++) delete[] chunks_[i].data;
   }
 
-  bool can_access_heap() const final { return false; }
-
-  bool can_be_cloned() const final { return false; }
-
-  std::unique_ptr<Utf16CharacterStream> Clone() const override {
-    UNREACHABLE();
-  }
+  bool can_access_heap() final { return false; }
 
  protected:
   size_t FillBuffer(size_t position) final;

@@ -99,12 +99,6 @@ class WasmGraphBuildingInterface {
     // instance parameter.
     TFNode* start = builder_->Start(
         static_cast<int>(decoder->sig_->parameter_count() + 1 + 1));
-    ssa_env->effect = start;
-    ssa_env->control = start;
-    // Initialize effect and control before initializing the locals default
-    // values (which might require instance loads) or loading the context.
-    builder_->set_effect_ptr(&ssa_env->effect);
-    builder_->set_control_ptr(&ssa_env->control);
     // Initialize the instance parameter (index 0).
     builder_->set_instance_node(builder_->Param(kWasmInstanceParameterIndex));
     // Initialize local variables. Parameters are shifted by 1 because of the
@@ -121,6 +115,11 @@ class WasmGraphBuildingInterface {
         ssa_env->locals[index++] = node;
       }
     }
+    ssa_env->effect = start;
+    ssa_env->control = start;
+    // Initialize effect and control before loading the context.
+    builder_->set_effect_ptr(&ssa_env->effect);
+    builder_->set_control_ptr(&ssa_env->control);
     LoadContextIntoSsa(ssa_env);
     SetEnv(ssa_env);
   }
@@ -428,13 +427,12 @@ class WasmGraphBuildingInterface {
                       const ExceptionIndexImmediate<validate>& imm,
                       Control* block, Vector<Value> values) {
     DCHECK(block->is_try_catch());
-    TFNode* exception = block->try_info->exception;
     current_catch_ = block->previous_catch;
     SsaEnv* catch_env = block->try_info->catch_env;
     SetEnv(catch_env);
 
     TFNode* compare_i32 = nullptr;
-    if (exception == nullptr) {
+    if (block->try_info->exception == nullptr) {
       // Catch not applicable, no possible throws in the try
       // block. Create dummy code so that body of catch still
       // compiles. Note: This only happens because the current
@@ -445,7 +443,7 @@ class WasmGraphBuildingInterface {
       compare_i32 = BUILD(Int32Constant, 0);
     } else {
       // Get the exception and see if wanted exception.
-      TFNode* caught_tag = BUILD(GetExceptionRuntimeId, exception);
+      TFNode* caught_tag = BUILD(GetExceptionRuntimeId);
       TFNode* exception_tag = BUILD(ConvertExceptionTagToRuntimeId, imm.index);
       compare_i32 = BUILD(Binop, kExprI32Eq, caught_tag, exception_tag);
     }
@@ -462,13 +460,13 @@ class WasmGraphBuildingInterface {
     // TODO(kschimpf): Generalize to allow more catches. Will force
     // moving no_catch code to END opcode.
     SetEnv(if_no_catch_env);
-    BUILD(Rethrow, exception);
+    BUILD(Rethrow);
     Unreachable(decoder);
     EndControl(decoder, block);
 
     SetEnv(if_catch_env);
 
-    if (exception == nullptr) {
+    if (block->try_info->exception == nullptr) {
       // No caught value, make up filler nodes so that catch block still
       // compiles.
       for (Value& value : values) {
@@ -477,8 +475,7 @@ class WasmGraphBuildingInterface {
     } else {
       // TODO(kschimpf): Can't use BUILD() here, GetExceptionValues() returns
       // TFNode** rather than TFNode*. Fix to add landing pads.
-      TFNode** caught_values =
-          builder_->GetExceptionValues(exception, imm.exception);
+      TFNode** caught_values = builder_->GetExceptionValues(imm.exception);
       for (size_t i = 0, e = values.size(); i < e; ++i) {
         values[i].node = caught_values[i];
       }
@@ -597,8 +594,6 @@ class WasmGraphBuildingInterface {
         return builder_->Float64Constant(0);
       case kWasmS128:
         return builder_->S128Zero();
-      case kWasmExceptRef:
-        return builder_->RefNull();
       default:
         UNREACHABLE();
     }
@@ -796,9 +791,11 @@ class WasmGraphBuildingInterface {
       arg_nodes[i + 1] = args[i].node;
     }
     if (index_node) {
-      BUILD(CallIndirect, index, arg_nodes, &return_nodes, decoder->position());
+      builder_->CallIndirect(index, arg_nodes, &return_nodes,
+                             decoder->position());
     } else {
-      BUILD(CallDirect, index, arg_nodes, &return_nodes, decoder->position());
+      builder_->CallDirect(index, arg_nodes, &return_nodes,
+                           decoder->position());
     }
     int return_count = static_cast<int>(sig->return_count());
     for (int i = 0; i < return_count; ++i) {

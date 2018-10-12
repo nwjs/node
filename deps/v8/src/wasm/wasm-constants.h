@@ -25,8 +25,7 @@ enum ValueTypeCode : uint8_t {
   kLocalF64 = 0x7c,
   kLocalS128 = 0x7b,
   kLocalAnyFunc = 0x70,
-  kLocalAnyRef = 0x6f,
-  kLocalExceptRef = 0x68,
+  kLocalAnyRef = 0x6f
 };
 // Binary encoding of other types.
 constexpr uint8_t kWasmFunctionTypeCode = 0x60;

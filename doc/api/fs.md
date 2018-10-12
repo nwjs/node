@@ -285,7 +285,7 @@ performance implications for some applications. See the
 
 ## Class: fs.Dirent
 <!-- YAML
-added: REPLACEME
+added: v10.10.0
 -->
 
 When [`fs.readdir()`][] or [`fs.readdirSync()`][] is called with the
@@ -294,7 +294,7 @@ When [`fs.readdir()`][] or [`fs.readdirSync()`][] is called with the
 
 ### dirent.isBlockDevice()
 <!-- YAML
-added: REPLACEME
+added: v10.10.0
 -->
 
 * Returns: {boolean}
@@ -303,7 +303,7 @@ Returns `true` if the `fs.Dirent` object describes a block device.
 
 ### dirent.isCharacterDevice()
 <!-- YAML
-added: REPLACEME
+added: v10.10.0
 -->
 
 * Returns: {boolean}
@@ -312,7 +312,7 @@ Returns `true` if the `fs.Dirent` object describes a character device.
 
 ### dirent.isDirectory()
 <!-- YAML
-added: REPLACEME
+added: v10.10.0
 -->
 
 * Returns: {boolean}
@@ -322,7 +322,7 @@ directory.
 
 ### dirent.isFIFO()
 <!-- YAML
-added: REPLACEME
+added: v10.10.0
 -->
 
 * Returns: {boolean}
@@ -332,7 +332,7 @@ Returns `true` if the `fs.Dirent` object describes a first-in-first-out
 
 ### dirent.isFile()
 <!-- YAML
-added: REPLACEME
+added: v10.10.0
 -->
 
 * Returns: {boolean}
@@ -341,7 +341,7 @@ Returns `true` if the `fs.Dirent` object describes a regular file.
 
 ### dirent.isSocket()
 <!-- YAML
-added: REPLACEME
+added: v10.10.0
 -->
 
 * Returns: {boolean}
@@ -350,7 +350,7 @@ Returns `true` if the `fs.Dirent` object describes a socket.
 
 ### dirent.isSymbolicLink()
 <!-- YAML
-added: REPLACEME
+added: v10.10.0
 -->
 
 * Returns: {boolean}
@@ -360,7 +360,7 @@ Returns `true` if the `fs.Dirent` object describes a symbolic link.
 
 ### dirent.name
 <!-- YAML
-added: REPLACEME
+added: v10.10.0
 -->
 
 * {string|Buffer}
@@ -829,7 +829,7 @@ added: v0.1.93
 -->
 
 The path to the file the stream is writing to as specified in the first
-argument to `fs.createWriteStream()`. If `path` is passed as a string, then
+argument to [`fs.createWriteStream()`][]. If `path` is passed as a string, then
 `writeStream.path` will be a string. If `path` is passed as a `Buffer`, then
 `writeStream.path` will be a `Buffer`.
 
@@ -2148,6 +2148,10 @@ Synchronous lstat(2).
 <!-- YAML
 added: v0.1.8
 changes:
+  - version: v10.12.0
+    pr-url: https://github.com/nodejs/node/pull/21875
+    description: The second argument can now be an `options` object with
+                 `recursive` and `mode` properties.
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/12562
     description: The `callback` parameter is no longer optional. Not passing
@@ -2189,6 +2193,10 @@ See also: mkdir(2).
 <!-- YAML
 added: v0.1.21
 changes:
+  - version: v10.12.0
+    pr-url: https://github.com/nodejs/node/pull/21875
+    description: The second argument can now be an `options` object with
+                 `recursive` and `mode` properties.
   - version: v7.6.0
     pr-url: https://github.com/nodejs/node/pull/10739
     description: The `path` parameter can be a WHATWG `URL` object using `file:`
@@ -2356,7 +2364,7 @@ this API: [`fs.open()`][].
 <!-- YAML
 added: v0.0.2
 changes:
-  - version: REPLACEME
+  - version: v10.10.0
     pr-url: https://github.com/nodejs/node/pull/22150
     description: The `buffer` parameter can now be any `TypedArray`, or a
                  `DataView`.
@@ -2400,6 +2408,9 @@ a `Promise` for an `Object` with `bytesRead` and `buffer` properties.
 <!-- YAML
 added: v0.1.8
 changes:
+  - version: v10.10.0
+    pr-url: https://github.com/nodejs/node/pull/22020
+    description: New option `withFileTypes` was added.
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/12562
     description: The `callback` parameter is no longer optional. Not passing
@@ -2441,6 +2452,9 @@ If `options.withFileTypes` is set to `true`, the `files` array will contain
 <!-- YAML
 added: v0.1.21
 changes:
+  - version: v10.10.0
+    pr-url: https://github.com/nodejs/node/pull/22020
+    description: New option `withFileTypes` was added.
   - version: v7.6.0
     pr-url: https://github.com/nodejs/node/pull/10739
     description: The `path` parameter can be a WHATWG `URL` object using `file:`
@@ -2639,7 +2653,7 @@ the link path returned will be passed as a `Buffer` object.
 <!-- YAML
 added: v0.1.21
 changes:
-  - version: REPLACEME
+  - version: v10.10.0
     pr-url: https://github.com/nodejs/node/pull/22150
     description: The `buffer` parameter can now be any `TypedArray` or a
                  `DataView`.
@@ -3373,7 +3387,7 @@ This happens when:
 <!-- YAML
 added: v0.0.2
 changes:
-  - version: REPLACEME
+  - version: v10.10.0
     pr-url: https://github.com/nodejs/node/pull/22150
     description: The `buffer` parameter can now be any `TypedArray` or a
                  `DataView`
@@ -3419,7 +3433,8 @@ If this method is invoked as its [`util.promisify()`][]ed version, it returns
 a `Promise` for an `Object` with `bytesWritten` and `buffer` properties.
 
 It is unsafe to use `fs.write()` multiple times on the same file without waiting
-for the callback. For this scenario, `fs.createWriteStream()` is recommended.
+for the callback. For this scenario, [`fs.createWriteStream()`][] is
+recommended.
 
 On Linux, positional writes don't work when the file is opened in append mode.
 The kernel ignores the position argument and always appends the data to
@@ -3466,7 +3481,8 @@ written is not necessarily the same as string characters written. See
 [`Buffer.byteLength`][].
 
 It is unsafe to use `fs.write()` multiple times on the same file without waiting
-for the callback. For this scenario, `fs.createWriteStream()` is recommended.
+for the callback. For this scenario, [`fs.createWriteStream()`][] is
+recommended.
 
 On Linux, positional writes don't work when the file is opened in append mode.
 The kernel ignores the position argument and always appends the data to
@@ -3476,7 +3492,7 @@ the end of the file.
 <!-- YAML
 added: v0.1.29
 changes:
-  - version: REPLACEME
+  - version: v10.10.0
     pr-url: https://github.com/nodejs/node/pull/22150
     description: The `data` parameter can now be any `TypedArray` or a
                  `DataView`.
@@ -3527,7 +3543,7 @@ fs.writeFile('message.txt', 'Hello Node.js', 'utf8', callback);
 Any specified file descriptor has to support writing.
 
 It is unsafe to use `fs.writeFile()` multiple times on the same file without
-waiting for the callback. For this scenario, `fs.createWriteStream()` is
+waiting for the callback. For this scenario, [`fs.createWriteStream()`][] is
 recommended.
 
 If a file descriptor is specified as the `file`, it will not be closed
@@ -3537,7 +3553,7 @@ automatically.
 <!-- YAML
 added: v0.1.29
 changes:
-  - version: REPLACEME
+  - version: v10.10.0
     pr-url: https://github.com/nodejs/node/pull/22150
     description: The `data` parameter can now be any `TypedArray` or a
                  `DataView`.
@@ -3565,7 +3581,7 @@ this API: [`fs.writeFile()`][].
 <!-- YAML
 added: v0.1.21
 changes:
-  - version: REPLACEME
+  - version: v10.10.0
     pr-url: https://github.com/nodejs/node/pull/22150
     description: The `buffer` parameter can now be any `TypedArray` or a
                  `DataView`.
@@ -3896,7 +3912,7 @@ at the current position. See pwrite(2).
 
 It is unsafe to use `filehandle.write()` multiple times on the same file
 without waiting for the `Promise` to be resolved (or rejected). For this
-scenario, `fs.createWriteStream` is strongly recommended.
+scenario, [`fs.createWriteStream()`][] is strongly recommended.
 
 On Linux, positional writes do not work when the file is opened in append mode.
 The kernel ignores the position argument and always appends the data to
@@ -4190,11 +4206,16 @@ a colon, Node.js will open a file system stream, as described by
 ### fsPromises.readdir(path[, options])
 <!-- YAML
 added: v10.0.0
+changes:
+  - version: v10.11.0
+    pr-url: https://github.com/nodejs/node/pull/22020
+    description: New option `withFileTypes` was added.
 -->
 
 * `path` {string|Buffer|URL}
 * `options` {string|Object}
   * `encoding` {string} **Default:** `'utf8'`
+  * `withFileTypes` {boolean} **Default:** `false`
 * Returns: {Promise}
 
 Reads the contents of a directory then resolves the `Promise` with an array
@@ -4204,6 +4225,9 @@ The optional `options` argument can be a string specifying an encoding, or an
 object with an `encoding` property specifying the character encoding to use for
 the filenames. If the `encoding` is set to `'buffer'`, the filenames returned
 will be passed as `Buffer` objects.
+
+If `options.withFileTypes` is set to `true`, the resolved array will contain
+[`fs.Dirent`][] objects.
 
 ### fsPromises.readFile(path[, options])
 <!-- YAML
@@ -4749,7 +4773,7 @@ On Windows, opening an existing hidden file using the `'w'` flag (either
 through `fs.open()` or `fs.writeFile()` or `fsPromises.open()`) will fail with
 `EPERM`. Existing hidden files can be opened for writing with the `'r+'` flag.
 
-A call to `fs.ftruncate()` or `fsPromises.ftruncate()` can be used to reset
+A call to `fs.ftruncate()` or `filehandle.truncate()` can be used to reset
 the file contents.
 
 [`AHAFS`]: https://www.ibm.com/developerworks/aix/library/au-aix_event_infrastructure/
@@ -4770,6 +4794,7 @@ the file contents.
 [`fs.chmod()`]: #fs_fs_chmod_path_mode_callback
 [`fs.chown()`]: #fs_fs_chown_path_uid_gid_callback
 [`fs.copyFile()`]: #fs_fs_copyfile_src_dest_flags_callback
+[`fs.createWriteStream()`]: #fs_fs_createwritestream_path_options
 [`fs.exists()`]: fs.html#fs_fs_exists_path_callback
 [`fs.fstat()`]: #fs_fs_fstat_fd_options_callback
 [`fs.ftruncate()`]: #fs_fs_ftruncate_fd_len_callback

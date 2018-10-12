@@ -1074,8 +1074,8 @@ Node* InterpreterAssembler::Construct(Node* target, Node* context,
         isolate(), InterpreterPushArgsMode::kArrayFunction);
     Node* code_target = HeapConstant(callable.code());
     var_result.Bind(CallStub(callable.descriptor(), code_target, context,
-                             args.reg_count(), args.base_reg_location(), target,
-                             new_target, var_site.value()));
+                             args.reg_count(), new_target, target,
+                             var_site.value(), args.base_reg_location()));
     Goto(&return_result);
   }
 
@@ -1087,8 +1087,8 @@ Node* InterpreterAssembler::Construct(Node* target, Node* context,
         isolate(), InterpreterPushArgsMode::kOther);
     Node* code_target = HeapConstant(callable.code());
     var_result.Bind(CallStub(callable.descriptor(), code_target, context,
-                             args.reg_count(), args.base_reg_location(), target,
-                             new_target, UndefinedConstant()));
+                             args.reg_count(), new_target, target,
+                             UndefinedConstant(), args.base_reg_location()));
     Goto(&return_result);
   }
 
@@ -1212,8 +1212,8 @@ Node* InterpreterAssembler::ConstructWithSpread(Node* target, Node* context,
       isolate(), InterpreterPushArgsMode::kWithFinalSpread);
   Node* code_target = HeapConstant(callable.code());
   return CallStub(callable.descriptor(), code_target, context, args.reg_count(),
-                  args.base_reg_location(), target, new_target,
-                  UndefinedConstant());
+                  new_target, target, UndefinedConstant(),
+                  args.base_reg_location());
 }
 
 Node* InterpreterAssembler::CallRuntimeN(Node* function_id, Node* context,

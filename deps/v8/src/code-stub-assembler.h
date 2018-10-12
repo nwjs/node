@@ -450,10 +450,6 @@ class V8_EXPORT_PRIVATE CodeStubAssembler : public compiler::CodeAssembler {
   HEAP_IMMOVABLE_OBJECT_LIST(HEAP_CONSTANT_TEST)
 #undef HEAP_CONSTANT_TEST
 
-  TNode<Int64T> HashSeed();
-  TNode<Int32T> HashSeedHigh();
-  TNode<Int32T> HashSeedLow();
-
   Node* IntPtrOrSmiConstant(int value, ParameterMode mode);
   TNode<Smi> LanguageModeConstant(LanguageMode mode) {
     return SmiConstant(static_cast<int>(mode));
@@ -1310,8 +1306,8 @@ class V8_EXPORT_PRIVATE CodeStubAssembler : public compiler::CodeAssembler {
 
   // Allocate an appropriate one- or two-byte ConsString with the first and
   // second parts specified by |left| and |right|.
-  TNode<String> NewConsString(TNode<Smi> length, TNode<String> left,
-                              TNode<String> right,
+  TNode<String> NewConsString(Node* context, TNode<Smi> length,
+                              TNode<String> left, TNode<String> right,
                               AllocationFlags flags = kNone);
 
   TNode<NameDictionary> AllocateNameDictionary(int at_least_space_for);
@@ -1422,7 +1418,7 @@ class V8_EXPORT_PRIVATE CodeStubAssembler : public compiler::CodeAssembler {
   TNode<FixedDoubleArray> AllocateZeroedFixedDoubleArray(
       TNode<IntPtrT> capacity) {
     TNode<FixedDoubleArray> result = UncheckedCast<FixedDoubleArray>(
-        AllocateFixedArray(PACKED_DOUBLE_ELEMENTS, capacity,
+        AllocateFixedArray(FLOAT64_ELEMENTS, capacity,
                            AllocationFlag::kAllowLargeObjectAllocation));
     FillFixedDoubleArrayWithZero(result, capacity);
     return result;
@@ -1760,8 +1756,6 @@ class V8_EXPORT_PRIVATE CodeStubAssembler : public compiler::CodeAssembler {
   TNode<BoolT> IsHashTable(SloppyTNode<HeapObject> object);
   TNode<BoolT> IsEphemeronHashTable(SloppyTNode<HeapObject> object);
   TNode<BoolT> IsHeapNumber(SloppyTNode<HeapObject> object);
-  TNode<BoolT> IsHeapNumberInstanceType(SloppyTNode<Int32T> instance_type);
-  TNode<BoolT> IsOddballInstanceType(SloppyTNode<Int32T> instance_type);
   TNode<BoolT> IsIndirectStringInstanceType(SloppyTNode<Int32T> instance_type);
   TNode<BoolT> IsJSArrayBuffer(SloppyTNode<HeapObject> object);
   TNode<BoolT> IsJSDataView(TNode<HeapObject> object);
@@ -1794,7 +1788,6 @@ class V8_EXPORT_PRIVATE CodeStubAssembler : public compiler::CodeAssembler {
   TNode<BoolT> IsMap(SloppyTNode<HeapObject> object);
   TNode<BoolT> IsMutableHeapNumber(SloppyTNode<HeapObject> object);
   TNode<BoolT> IsName(SloppyTNode<HeapObject> object);
-  TNode<BoolT> IsNameInstanceType(SloppyTNode<Int32T> instance_type);
   TNode<BoolT> IsNativeContext(SloppyTNode<HeapObject> object);
   TNode<BoolT> IsNullOrJSReceiver(SloppyTNode<HeapObject> object);
   TNode<BoolT> IsNullOrUndefined(SloppyTNode<Object> object);
@@ -1811,7 +1804,7 @@ class V8_EXPORT_PRIVATE CodeStubAssembler : public compiler::CodeAssembler {
                                               SloppyTNode<Map> map);
   TNode<BoolT> IsSequentialStringInstanceType(
       SloppyTNode<Int32T> instance_type);
-  TNode<BoolT> IsUncachedExternalStringInstanceType(
+  TNode<BoolT> IsShortExternalStringInstanceType(
       SloppyTNode<Int32T> instance_type);
   TNode<BoolT> IsSpecialReceiverInstanceType(TNode<Int32T> instance_type);
   TNode<BoolT> IsCustomElementsReceiverInstanceType(
@@ -1936,6 +1929,8 @@ class V8_EXPORT_PRIVATE CodeStubAssembler : public compiler::CodeAssembler {
   TNode<Number> StringToNumber(TNode<String> input);
   // Convert a Number to a String.
   TNode<String> NumberToString(TNode<Number> input);
+  // Convert an object to a name.
+  TNode<Name> ToName(SloppyTNode<Context> context, SloppyTNode<Object> value);
   // Convert a Non-Number object to a Number.
   TNode<Number> NonNumberToNumber(
       SloppyTNode<Context> context, SloppyTNode<HeapObject> input,
@@ -2289,8 +2284,8 @@ class V8_EXPORT_PRIVATE CodeStubAssembler : public compiler::CodeAssembler {
                             int inlined_probes = kInlinedDictionaryProbes,
                             LookupMode mode = kFindExisting);
 
-  Node* ComputeIntegerHash(Node* key);
-  Node* ComputeIntegerHash(Node* key, Node* seed);
+  Node* ComputeUnseededHash(Node* key);
+  Node* ComputeSeededHash(Node* key);
 
   void NumberDictionaryLookup(TNode<NumberDictionary> dictionary,
                               TNode<IntPtrT> intptr_index, Label* if_found,

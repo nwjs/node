@@ -694,9 +694,6 @@ bool EffectControlLinearizer::TryWireInStateEffect(Node* node,
     case IrOpcode::kCheckIf:
       LowerCheckIf(node, frame_state);
       break;
-    case IrOpcode::kCheckStringAdd:
-      result = LowerCheckStringAdd(node, frame_state);
-      break;
     case IrOpcode::kCheckedInt32Add:
       result = LowerCheckedInt32Add(node, frame_state);
       break;
@@ -1545,32 +1542,6 @@ void EffectControlLinearizer::LowerCheckIf(Node* node, Node* frame_state) {
   Node* value = node->InputAt(0);
   const CheckIfParameters& p = CheckIfParametersOf(node->op());
   __ DeoptimizeIfNot(p.reason(), p.feedback(), value, frame_state);
-}
-
-Node* EffectControlLinearizer::LowerCheckStringAdd(Node* node,
-                                                   Node* frame_state) {
-  Node* lhs = node->InputAt(0);
-  Node* rhs = node->InputAt(1);
-
-  Node* lhs_length = __ LoadField(AccessBuilder::ForStringLength(), lhs);
-  Node* rhs_length = __ LoadField(AccessBuilder::ForStringLength(), rhs);
-  Node* check = __ IntLessThan(__ IntAdd(lhs_length, rhs_length),
-                               __ SmiConstant(String::kMaxLength));
-
-  __ DeoptimizeIfNot(DeoptimizeReason::kOverflow, VectorSlotPair(), check,
-                     frame_state);
-
-  Callable const callable =
-      CodeFactory::StringAdd(isolate(), STRING_ADD_CHECK_NONE, NOT_TENURED);
-  auto call_descriptor = Linkage::GetStubCallDescriptor(
-      graph()->zone(), callable.descriptor(), 0, CallDescriptor::kNoFlags,
-      Operator::kNoDeopt | Operator::kNoWrite | Operator::kNoThrow);
-
-  Node* value =
-      __ Call(call_descriptor, jsgraph()->HeapConstant(callable.code()), lhs,
-              rhs, __ NoContextConstant());
-
-  return value;
 }
 
 Node* EffectControlLinearizer::LowerCheckedInt32Add(Node* node,
@@ -2926,11 +2897,11 @@ Node* EffectControlLinearizer::LowerStringCharCodeAt(Node* node) {
 
     __ Bind(&if_externalstring);
     {
-      // We need to bailout to the runtime for uncached external strings.
+      // We need to bailout to the runtime for short external strings.
       __ GotoIf(__ Word32Equal(
                     __ Word32And(receiver_instance_type,
-                                 __ Int32Constant(kUncachedExternalStringMask)),
-                    __ Int32Constant(kUncachedExternalStringTag)),
+                                 __ Int32Constant(kShortExternalStringMask)),
+                    __ Int32Constant(kShortExternalStringTag)),
                 &if_runtime);
 
       Node* receiver_data = __ LoadField(
@@ -4797,8 +4768,8 @@ Node* EffectControlLinearizer::LowerFindOrderedHashMapEntry(Node* node) {
   }
 }
 
-Node* EffectControlLinearizer::ComputeIntegerHash(Node* value) {
-  // See v8::internal::ComputeIntegerHash()
+Node* EffectControlLinearizer::ComputeUnseededHash(Node* value) {
+  // See v8::internal::ComputeUnseededHash()
   value = __ Int32Add(__ Word32Xor(value, __ Int32Constant(0xFFFFFFFF)),
                       __ Word32Shl(value, __ Int32Constant(15)));
   value = __ Word32Xor(value, __ Word32Shr(value, __ Int32Constant(12)));
@@ -4816,7 +4787,7 @@ Node* EffectControlLinearizer::LowerFindOrderedHashMapEntryForInt32Key(
   Node* key = NodeProperties::GetValueInput(node, 1);
 
   // Compute the integer hash code.
-  Node* hash = ChangeUint32ToUintPtr(ComputeIntegerHash(key));
+  Node* hash = ChangeUint32ToUintPtr(ComputeUnseededHash(key));
 
   Node* number_of_buckets = ChangeSmiToIntPtr(__ LoadField(
       AccessBuilder::ForOrderedHashTableBaseNumberOfBuckets(), table));

@@ -253,40 +253,6 @@ HEAP_IMMUTABLE_IMMOVABLE_OBJECT_LIST(HEAP_CONSTANT_ACCESSOR);
 HEAP_IMMOVABLE_OBJECT_LIST(HEAP_CONSTANT_TEST);
 #undef HEAP_CONSTANT_TEST
 
-TNode<Int64T> CodeStubAssembler::HashSeed() {
-  DCHECK(Is64());
-  TNode<HeapObject> hash_seed_root =
-      TNode<HeapObject>::UncheckedCast(LoadRoot(Heap::kHashSeedRootIndex));
-  return TNode<Int64T>::UncheckedCast(LoadObjectField(
-      hash_seed_root, ByteArray::kHeaderSize, MachineType::Int64()));
-}
-
-TNode<Int32T> CodeStubAssembler::HashSeedHigh() {
-  DCHECK(!Is64());
-#ifdef V8_TARGET_BIG_ENDIAN
-  static int kOffset = 0;
-#else
-  static int kOffset = kInt32Size;
-#endif
-  TNode<HeapObject> hash_seed_root =
-      TNode<HeapObject>::UncheckedCast(LoadRoot(Heap::kHashSeedRootIndex));
-  return TNode<Int32T>::UncheckedCast(LoadObjectField(
-      hash_seed_root, ByteArray::kHeaderSize + kOffset, MachineType::Int32()));
-}
-
-TNode<Int32T> CodeStubAssembler::HashSeedLow() {
-  DCHECK(!Is64());
-#ifdef V8_TARGET_BIG_ENDIAN
-  static int kOffset = kInt32Size;
-#else
-  static int kOffset = 0;
-#endif
-  TNode<HeapObject> hash_seed_root =
-      TNode<HeapObject>::UncheckedCast(LoadRoot(Heap::kHashSeedRootIndex));
-  return TNode<Int32T>::UncheckedCast(LoadObjectField(
-      hash_seed_root, ByteArray::kHeaderSize + kOffset, MachineType::Int32()));
-}
-
 Node* CodeStubAssembler::IntPtrOrSmiConstant(int value, ParameterMode mode) {
   if (mode == SMI_PARAMETERS) {
     return SmiConstant(value);
@@ -3286,10 +3252,11 @@ TNode<String> CodeStubAssembler::AllocateTwoByteConsString(
                             second, flags);
 }
 
-TNode<String> CodeStubAssembler::NewConsString(TNode<Smi> length,
+TNode<String> CodeStubAssembler::NewConsString(Node* context, TNode<Smi> length,
                                                TNode<String> left,
                                                TNode<String> right,
                                                AllocationFlags flags) {
+  CSA_ASSERT(this, IsContext(context));
   // Added string can be a cons string.
   Comment("Allocating ConsString");
   Node* left_instance_type = LoadInstanceType(left);
@@ -5435,11 +5402,11 @@ TNode<BoolT> CodeStubAssembler::IsExternalStringInstanceType(
       Int32Constant(kExternalStringTag));
 }
 
-TNode<BoolT> CodeStubAssembler::IsUncachedExternalStringInstanceType(
+TNode<BoolT> CodeStubAssembler::IsShortExternalStringInstanceType(
     SloppyTNode<Int32T> instance_type) {
   CSA_ASSERT(this, IsStringInstanceType(instance_type));
-  STATIC_ASSERT(kUncachedExternalStringTag != 0);
-  return IsSetWord32(instance_type, kUncachedExternalStringMask);
+  STATIC_ASSERT(kShortExternalStringTag != 0);
+  return IsSetWord32(instance_type, kShortExternalStringMask);
 }
 
 TNode<BoolT> CodeStubAssembler::IsJSReceiverInstanceType(
@@ -5652,16 +5619,6 @@ TNode<BoolT> CodeStubAssembler::IsHeapNumber(SloppyTNode<HeapObject> object) {
   return IsHeapNumberMap(LoadMap(object));
 }
 
-TNode<BoolT> CodeStubAssembler::IsHeapNumberInstanceType(
-    SloppyTNode<Int32T> instance_type) {
-  return InstanceTypeEqual(instance_type, HEAP_NUMBER_TYPE);
-}
-
-TNode<BoolT> CodeStubAssembler::IsOddballInstanceType(
-    SloppyTNode<Int32T> instance_type) {
-  return InstanceTypeEqual(instance_type, ODDBALL_TYPE);
-}
-
 TNode<BoolT> CodeStubAssembler::IsMutableHeapNumber(
     SloppyTNode<HeapObject> object) {
   return IsMutableHeapNumberMap(LoadMap(object));
@@ -5677,12 +5634,8 @@ TNode<BoolT> CodeStubAssembler::IsFeedbackVector(
 }
 
 TNode<BoolT> CodeStubAssembler::IsName(SloppyTNode<HeapObject> object) {
-  return IsNameInstanceType(LoadInstanceType(object));
-}
-
-TNode<BoolT> CodeStubAssembler::IsNameInstanceType(
-    SloppyTNode<Int32T> instance_type) {
-  return Int32LessThanOrEqual(instance_type, Int32Constant(LAST_NAME_TYPE));
+  return Int32LessThanOrEqual(LoadInstanceType(object),
+                              Int32Constant(LAST_NAME_TYPE));
 }
 
 TNode<BoolT> CodeStubAssembler::IsString(SloppyTNode<HeapObject> object) {
@@ -6361,7 +6314,7 @@ TNode<RawPtrT> ToDirectStringAssembler::TryToSequential(
 
   BIND(&if_isexternal);
   {
-    GotoIf(IsUncachedExternalStringInstanceType(var_instance_type_.value()),
+    GotoIf(IsShortExternalStringInstanceType(var_instance_type_.value()),
            if_bailout);
 
     TNode<String> string = CAST(var_string_.value());
@@ -6499,8 +6452,8 @@ TNode<String> CodeStubAssembler::StringAdd(Node* context, TNode<String> left,
     GotoIf(SmiLessThan(new_length, SmiConstant(ConsString::kMinLength)),
            &non_cons);
 
-    result =
-        NewConsString(new_length, var_left.value(), var_right.value(), flags);
+    result = NewConsString(context, new_length, var_left.value(),
+                           var_right.value(), flags);
     Goto(&done_native);
 
     BIND(&non_cons);
@@ -6733,6 +6686,52 @@ TNode<String> CodeStubAssembler::NumberToString(TNode<Number> input) {
   }
   BIND(&done);
   return result.value();
+}
+
+TNode<Name> CodeStubAssembler::ToName(SloppyTNode<Context> context,
+                                      SloppyTNode<Object> value) {
+  Label end(this);
+  TVARIABLE(Name, var_result);
+
+  Label is_number(this);
+  GotoIf(TaggedIsSmi(value), &is_number);
+
+  Label not_name(this);
+  TNode<Int32T> value_instance_type = LoadInstanceType(CAST(value));
+  STATIC_ASSERT(FIRST_NAME_TYPE == FIRST_TYPE);
+  GotoIf(Int32GreaterThan(value_instance_type, Int32Constant(LAST_NAME_TYPE)),
+         &not_name);
+
+  var_result = CAST(value);
+  Goto(&end);
+
+  BIND(&is_number);
+  {
+    var_result = CAST(CallBuiltin(Builtins::kNumberToString, context, value));
+    Goto(&end);
+  }
+
+  BIND(&not_name);
+  {
+    GotoIf(InstanceTypeEqual(value_instance_type, HEAP_NUMBER_TYPE),
+           &is_number);
+
+    Label not_oddball(this);
+    GotoIfNot(InstanceTypeEqual(value_instance_type, ODDBALL_TYPE),
+              &not_oddball);
+
+    var_result = LoadObjectField<String>(CAST(value), Oddball::kToStringOffset);
+    Goto(&end);
+
+    BIND(&not_oddball);
+    {
+      var_result = CAST(CallRuntime(Runtime::kToName, context, value));
+      Goto(&end);
+    }
+  }
+
+  BIND(&end);
+  return var_result.value();
 }
 
 Node* CodeStubAssembler::NonNumberToNumberOrNumeric(
@@ -7676,14 +7675,9 @@ template void CodeStubAssembler::NameDictionaryLookup<GlobalDictionary>(
     TNode<GlobalDictionary>, TNode<Name>, Label*, TVariable<IntPtrT>*, Label*,
     int, LookupMode);
 
-Node* CodeStubAssembler::ComputeIntegerHash(Node* key) {
-  return ComputeIntegerHash(key, IntPtrConstant(kZeroHashSeed));
-}
-
-Node* CodeStubAssembler::ComputeIntegerHash(Node* key, Node* seed) {
-  // See v8::internal::ComputeIntegerHash()
+Node* CodeStubAssembler::ComputeUnseededHash(Node* key) {
+  // See v8::internal::ComputeUnseededHash()
   Node* hash = TruncateIntPtrToInt32(key);
-  hash = Word32Xor(hash, seed);
   hash = Int32Add(Word32Xor(hash, Int32Constant(0xFFFFFFFF)),
                   Word32Shl(hash, Int32Constant(15)));
   hash = Word32Xor(hash, Word32Shr(hash, Int32Constant(12)));
@@ -7692,6 +7686,21 @@ Node* CodeStubAssembler::ComputeIntegerHash(Node* key, Node* seed) {
   hash = Int32Mul(hash, Int32Constant(2057));
   hash = Word32Xor(hash, Word32Shr(hash, Int32Constant(16)));
   return Word32And(hash, Int32Constant(0x3FFFFFFF));
+}
+
+Node* CodeStubAssembler::ComputeSeededHash(Node* key) {
+  Node* const function_addr =
+      ExternalConstant(ExternalReference::compute_integer_hash());
+  Node* const isolate_ptr =
+      ExternalConstant(ExternalReference::isolate_address(isolate()));
+
+  MachineType type_ptr = MachineType::Pointer();
+  MachineType type_uint32 = MachineType::Uint32();
+
+  Node* const result =
+      CallCFunction2(type_uint32, type_ptr, type_uint32, function_addr,
+                     isolate_ptr, TruncateIntPtrToInt32(key));
+  return result;
 }
 
 void CodeStubAssembler::NumberDictionaryLookup(
@@ -7704,16 +7713,7 @@ void CodeStubAssembler::NumberDictionaryLookup(
   TNode<IntPtrT> capacity = SmiUntag(GetCapacity<NumberDictionary>(dictionary));
   TNode<WordT> mask = IntPtrSub(capacity, IntPtrConstant(1));
 
-  TNode<Int32T> int32_seed;
-
-  if (Is64()) {
-    int32_seed = TruncateInt64ToInt32(HashSeed());
-  } else {
-    int32_seed = HashSeedLow();
-  }
-
-  TNode<WordT> hash =
-      ChangeUint32ToWord(ComputeIntegerHash(intptr_index, int32_seed));
+  TNode<WordT> hash = ChangeUint32ToWord(ComputeSeededHash(intptr_index));
   Node* key_as_float64 = RoundIntPtrToFloat64(intptr_index);
 
   // See Dictionary::FirstProbe().
@@ -11448,7 +11448,7 @@ TNode<Oddball> CodeStubAssembler::HasProperty(SloppyTNode<Context> context,
 
   BIND(&if_proxy);
   {
-    TNode<Name> name = CAST(CallBuiltin(Builtins::kToName, context, key));
+    TNode<Name> name = ToName(context, key);
     switch (mode) {
       case kHasProperty:
         GotoIf(IsPrivateSymbol(name), &return_false);

@@ -98,10 +98,10 @@ This on callFrame:
 }
 This in evaluateOnCallFrame:
 {
-    className : global
-    description : global
+    className : Object
+    description : Object
     objectId : <objectId>
     type : object
 }
-Values equal: true
+Values equal: false
 

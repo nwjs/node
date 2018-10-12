@@ -729,6 +729,11 @@ be called no more than one time per instance of a `Hash` object.
 
 [`hash.update()`][] failed for any reason. This should rarely, if ever, happen.
 
+<a id="ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS"></a>
+### ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS
+
+The selected public or private key encoding is incompatible with other options.
+
 <a id="ERR_CRYPTO_INVALID_DIGEST"></a>
 ### ERR_CRYPTO_INVALID_DIGEST
 
@@ -794,13 +799,13 @@ The stack trace is extended to include the point in time at which the
 <a id="ERR_ENCODING_INVALID_ENCODED_DATA"></a>
 ### ERR_ENCODING_INVALID_ENCODED_DATA
 
-Data provided to `util.TextDecoder()` API was invalid according to the encoding
+Data provided to `TextDecoder()` API was invalid according to the encoding
 provided.
 
 <a id="ERR_ENCODING_NOT_SUPPORTED"></a>
 ### ERR_ENCODING_NOT_SUPPORTED
 
-Encoding provided to `util.TextDecoder()` API was not one of the
+Encoding provided to `TextDecoder()` API was not one of the
 [WHATWG Supported Encodings][].
 
 <a id="ERR_FALSY_VALUE_REJECTION"></a>
@@ -920,6 +925,11 @@ An invalid HTTP/2 header value was specified.
 An invalid HTTP informational status code has been specified. Informational
 status codes must be an integer between `100` and `199` (inclusive).
 
+<a id="ERR_HTTP2_INVALID_ORIGIN"></a>
+### ERR_HTTP2_INVALID_ORIGIN
+
+HTTP/2 `ORIGIN` frames require a valid origin.
+
 <a id="ERR_HTTP2_INVALID_PACKED_SETTINGS_LENGTH"></a>
 ### ERR_HTTP2_INVALID_PACKED_SETTINGS_LENGTH
 
@@ -969,6 +979,11 @@ Nested push streams are not permitted.
 
 An attempt was made to directly manipulate (read, write, pause, resume, etc.) a
 socket attached to an `Http2Session`.
+
+<a id="ERR_HTTP2_ORIGIN_LENGTH"></a>
+### ERR_HTTP2_ORIGIN_LENGTH
+
+HTTP/2 `ORIGIN` frames are limited to a length of 16382 bytes.
 
 <a id="ERR_HTTP2_OUT_OF_STREAMS"></a>
 ### ERR_HTTP2_OUT_OF_STREAMS
@@ -1086,11 +1101,6 @@ is set for the `Http2Stream`.
 
 `http2.connect()` was passed a URL that uses any protocol other than `http:` or
 `https:`.
-
-<a id="ERR_INDEX_OUT_OF_RANGE"></a>
-### ERR_INDEX_OUT_OF_RANGE
-
-A given index was out of the accepted range (e.g. negative offsets).
 
 <a id="ERR_INSPECTOR_ALREADY_CONNECTED"></a>
 ### ERR_INSPECTOR_ALREADY_CONNECTED
@@ -1506,7 +1516,7 @@ An invalid (negative) size was passed for either the `recvBufferSize` or
 <a id="ERR_SOCKET_BAD_PORT"></a>
 ### ERR_SOCKET_BAD_PORT
 
-An API function expecting a port > 0 and < 65536 received an invalid value.
+An API function expecting a port >= 0 and < 65536 received an invalid value.
 
 <a id="ERR_SOCKET_BAD_TYPE"></a>
 ### ERR_SOCKET_BAD_TYPE
@@ -1534,18 +1544,6 @@ An attempt was made to operate on an already closed socket.
 ### ERR_SOCKET_DGRAM_NOT_RUNNING
 
 A call was made and the UDP subsystem was not running.
-
-<a id="ERR_STDERR_CLOSE"></a>
-### ERR_STDERR_CLOSE
-
-An attempt was made to close the `process.stderr` stream. By design, Node.js
-does not allow `stdout` or `stderr` streams to be closed by user code.
-
-<a id="ERR_STDOUT_CLOSE"></a>
-### ERR_STDOUT_CLOSE
-
-An attempt was made to close the `process.stdout` stream. By design, Node.js
-does not allow `stdout` or `stderr` streams to be closed by user code.
 
 <a id="ERR_STREAM_CANNOT_PIPE"></a>
 ### ERR_STREAM_CANNOT_PIPE
@@ -1698,12 +1696,6 @@ A `Transform` stream finished with data still in the write buffer.
 
 The initialization of a TTY failed due to a system error.
 
-<a id="ERR_TTY_WRITABLE_NOT_READABLE"></a>
-### ERR_TTY_WRITABLE_NOT_READABLE
-
-This `Error` is thrown when a read is attempted on a TTY `WriteStream`,
-such as `process.stdout.on('data')`.
-
 <a id="ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET"></a>
 ### ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET
 
@@ -1786,6 +1778,11 @@ The V8 `BreakIterator` API was used but the full ICU data set is not installed.
 
 While using the Performance Timing API (`perf_hooks`), no valid performance
 entry types were found.
+
+<a id="ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING"></a>
+### ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING
+
+A dynamic import callback was not specified.
 
 <a id="ERR_VM_MODULE_ALREADY_LINKED"></a>
 ### ERR_VM_MODULE_ALREADY_LINKED
@@ -1915,6 +1912,14 @@ removed: v10.0.0
 Used when an invalid character is found in an HTTP response status message
 (reason phrase).
 
+<a id="ERR_INDEX_OUT_OF_RANGE"></a>
+### ERR_INDEX_OUT_OF_RANGE
+<!-- YAML
+  added: v10.0.0
+  removed: REPLACEME
+-->
+A given index was out of the accepted range (e.g. negative offsets).
+
 <a id="ERR_NAPI_CONS_PROTOTYPE_OBJECT"></a>
 ### ERR_NAPI_CONS_PROTOTYPE_OBJECT
 <!-- YAML
@@ -1942,6 +1947,37 @@ removed: v10.0.0
 -->
 
 The `repl` module was unable to parse data from the REPL history file.
+
+
+<a id="ERR_STDERR_CLOSE"></a>
+### ERR_STDERR_CLOSE
+<!-- YAML
+removed: v10.12.0
+changes:
+  - version: v10.12.0
+    pr-url: https://github.com/nodejs/node/pull/23053
+    description: Rather than emitting an error, `process.stderr.end()` now
+                 only closes the stream side but not the underlying resource,
+                 making this error obsolete.
+-->
+
+An attempt was made to close the `process.stderr` stream. By design, Node.js
+does not allow `stdout` or `stderr` streams to be closed by user code.
+
+<a id="ERR_STDOUT_CLOSE"></a>
+### ERR_STDOUT_CLOSE
+<!-- YAML
+removed: v10.12.0
+changes:
+  - version: v10.12.0
+    pr-url: https://github.com/nodejs/node/pull/23053
+    description: Rather than emitting an error, `process.stderr.end()` now
+                 only closes the stream side but not the underlying resource,
+                 making this error obsolete.
+-->
+
+An attempt was made to close the `process.stdout` stream. By design, Node.js
+does not allow `stdout` or `stderr` streams to be closed by user code.
 
 <a id="ERR_STREAM_READ_NOT_IMPLEMENTED"></a>
 ### ERR_STREAM_READ_NOT_IMPLEMENTED
@@ -2049,6 +2085,13 @@ instance.setEncoding('utf8');
 
 An attempt has been made to create a string larger than the maximum allowed
 size.
+
+<a id="ERR_TTY_WRITABLE_NOT_READABLE"></a>
+#### ERR_TTY_WRITABLE_NOT_READABLE
+
+This `Error` is thrown when a read is attempted on a TTY `WriteStream`,
+such as `process.stdout.on('data')`.
+
 
 [`--force-fips`]: cli.html#cli_force_fips
 [`'uncaughtException'`]: process.html#process_event_uncaughtexception

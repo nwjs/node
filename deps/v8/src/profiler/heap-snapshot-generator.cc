@@ -535,7 +535,7 @@ SnapshotObjectId HeapObjectsMap::GenerateId(v8::RetainedObjectInfo* info) {
                                            heap_->HashSeed());
   intptr_t element_count = info->GetElementCount();
   if (element_count != -1) {
-    id ^= ComputeIntegerHash(static_cast<uint32_t>(element_count));
+    id ^= ComputeUnseededHash(static_cast<uint32_t>(element_count));
   }
   return id << 1;
 }
@@ -1077,8 +1077,8 @@ void V8HeapExplorer::ExtractEphemeronHashTableReferences(
     Object* value = table->get(value_index);
     SetWeakReference(table, entry, key_index, key,
                      table->OffsetOfElementAt(key_index));
-    SetWeakReference(table, entry, value_index, value,
-                     table->OffsetOfElementAt(value_index));
+    SetInternalReference(table, entry, value_index, value,
+                         table->OffsetOfElementAt(value_index));
     HeapEntry* key_entry = GetEntry(key);
     int key_entry_index = key_entry->index();
     HeapEntry* value_entry = GetEntry(value);

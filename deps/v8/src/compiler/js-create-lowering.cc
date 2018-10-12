@@ -1648,7 +1648,7 @@ Node* JSCreateLowering::AllocateFastLiteral(Node* effect, Node* control,
         MaybeHandle<Map>(), Type::Any(),    MachineType::AnyTagged(),
         kFullWriteBarrier};
     Node* value;
-    if (boilerplate.map().IsUnboxedDoubleField(index)) {
+    if (boilerplate.IsUnboxedDoubleField(index)) {
       access.machine_type = MachineType::Float64();
       access.type = Type::Number();
       value = jsgraph()->Constant(boilerplate.RawFastDoublePropertyAt(index));
@@ -1744,12 +1744,16 @@ Node* JSCreateLowering::AllocateFastLiteralElements(Node* effect, Node* control,
   } else {
     FixedArrayRef elements = boilerplate_elements.AsFixedArray();
     for (int i = 0; i < elements_length; ++i) {
-      ObjectRef element_value = elements.get(i);
-      if (element_value.IsJSObject()) {
-        elements_values[i] = effect = AllocateFastLiteral(
-            effect, control, element_value.AsJSObject(), pretenure);
+      if (elements.is_the_hole(i)) {
+        elements_values[i] = jsgraph()->TheHoleConstant();
       } else {
-        elements_values[i] = jsgraph()->Constant(element_value);
+        ObjectRef element_value = elements.get(i);
+        if (element_value.IsJSObject()) {
+          elements_values[i] = effect = AllocateFastLiteral(
+              effect, control, element_value.AsJSObject(), pretenure);
+        } else {
+          elements_values[i] = jsgraph()->Constant(element_value);
+        }
       }
     }
   }

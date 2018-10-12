@@ -390,8 +390,8 @@ bool Heap::CreateInitialMaps() {
 
     {  // Create a separate external one byte string map for native sources.
       AllocationResult allocation =
-          AllocateMap(UNCACHED_EXTERNAL_ONE_BYTE_STRING_TYPE,
-                      ExternalOneByteString::kUncachedSize);
+          AllocateMap(SHORT_EXTERNAL_ONE_BYTE_STRING_TYPE,
+                      ExternalOneByteString::kShortSize);
       if (!allocation.To(&obj)) return false;
       Map* map = Map::cast(obj);
       map->SetConstructorFunctionIndex(Context::STRING_FUNCTION_INDEX);

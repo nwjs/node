@@ -14,18 +14,15 @@
 #include "src/interpreter/bytecodes.h"
 #include "src/objects-inl.h"
 #include "src/objects/arguments-inl.h"
+#ifdef V8_INTL_SUPPORT
+#include "src/objects/js-collator-inl.h"
+#endif  // V8_INTL_SUPPORT
 #include "src/objects/data-handler-inl.h"
 #include "src/objects/debug-objects-inl.h"
 #include "src/objects/hash-table-inl.h"
 #include "src/objects/js-array-buffer-inl.h"
 #include "src/objects/js-array-inl.h"
-#ifdef V8_INTL_SUPPORT
-#include "src/objects/js-collator-inl.h"
-#endif  // V8_INTL_SUPPORT
 #include "src/objects/js-collection-inl.h"
-#ifdef V8_INTL_SUPPORT
-#include "src/objects/js-date-time-format-inl.h"
-#endif  // V8_INTL_SUPPORT
 #include "src/objects/js-generator-inl.h"
 #ifdef V8_INTL_SUPPORT
 #include "src/objects/js-list-format-inl.h"
@@ -315,9 +312,6 @@ void HeapObject::HeapObjectPrint(std::ostream& os) {  // NOLINT
     case JS_INTL_COLLATOR_TYPE:
       JSCollator::cast(this)->JSCollatorPrint(os);
       break;
-    case JS_INTL_DATE_TIME_FORMAT_TYPE:
-      JSDateTimeFormat::cast(this)->JSDateTimeFormatPrint(os);
-      break;
     case JS_INTL_LIST_FORMAT_TYPE:
       JSListFormat::cast(this)->JSListFormatPrint(os);
       break;
@@ -364,9 +358,9 @@ void HeapObject::HeapObjectPrint(std::ostream& os) {  // NOLINT
     case ONE_BYTE_INTERNALIZED_STRING_TYPE:
     case EXTERNAL_ONE_BYTE_INTERNALIZED_STRING_TYPE:
     case EXTERNAL_INTERNALIZED_STRING_WITH_ONE_BYTE_DATA_TYPE:
-    case UNCACHED_EXTERNAL_INTERNALIZED_STRING_TYPE:
-    case UNCACHED_EXTERNAL_ONE_BYTE_INTERNALIZED_STRING_TYPE:
-    case UNCACHED_EXTERNAL_INTERNALIZED_STRING_WITH_ONE_BYTE_DATA_TYPE:
+    case SHORT_EXTERNAL_INTERNALIZED_STRING_TYPE:
+    case SHORT_EXTERNAL_ONE_BYTE_INTERNALIZED_STRING_TYPE:
+    case SHORT_EXTERNAL_INTERNALIZED_STRING_WITH_ONE_BYTE_DATA_TYPE:
     case STRING_TYPE:
     case CONS_STRING_TYPE:
     case EXTERNAL_STRING_TYPE:
@@ -378,9 +372,9 @@ void HeapObject::HeapObjectPrint(std::ostream& os) {  // NOLINT
     case SLICED_ONE_BYTE_STRING_TYPE:
     case THIN_ONE_BYTE_STRING_TYPE:
     case EXTERNAL_STRING_WITH_ONE_BYTE_DATA_TYPE:
-    case UNCACHED_EXTERNAL_STRING_TYPE:
-    case UNCACHED_EXTERNAL_ONE_BYTE_STRING_TYPE:
-    case UNCACHED_EXTERNAL_STRING_WITH_ONE_BYTE_DATA_TYPE:
+    case SHORT_EXTERNAL_STRING_TYPE:
+    case SHORT_EXTERNAL_ONE_BYTE_STRING_TYPE:
+    case SHORT_EXTERNAL_STRING_WITH_ONE_BYTE_DATA_TYPE:
     case SMALL_ORDERED_HASH_MAP_TYPE:
     case SMALL_ORDERED_HASH_SET_TYPE:
     case JS_ASYNC_FROM_SYNC_ITERATOR_TYPE:
@@ -1961,13 +1955,10 @@ void Script::ScriptPrint(std::ostream& os) {  // NOLINT
 #ifdef V8_INTL_SUPPORT
 void JSCollator::JSCollatorPrint(std::ostream& os) {  // NOLINT
   JSObjectPrintHeader(os, this, "JSCollator");
+  os << "\n - usage: " << JSCollator::UsageToString(usage());
   os << "\n - icu collator: " << Brief(icu_collator());
   os << "\n - bound compare: " << Brief(bound_compare());
   os << "\n";
-}
-
-void JSDateTimeFormat::JSDateTimeFormatPrint(std::ostream& os) {  // NOLINT
-  JSObjectPrintHeader(os, this, "JSDateTimeFormat");
 }
 
 void JSListFormat::JSListFormatPrint(std::ostream& os) {  // NOLINT

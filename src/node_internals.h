@@ -101,7 +101,7 @@ struct sockaddr;
 // in node::Init(), need to add built-in modules in the following list.
 // Then in node::RegisterBuiltinModules(), it calls modules' registration
 // function. This helps the built-in modules are loaded properly when
-// node is built as static library. No need to depends on the
+// node is built as static library. No need to depend on the
 // __attribute__((constructor)) like mechanism in GCC.
 #define NODE_BUILTIN_STANDARD_MODULES(V)                                      \
     V(async_wrap)                                                             \
@@ -132,7 +132,7 @@ struct sockaddr;
     V(string_decoder)                                                         \
     V(symbols)                                                                \
     V(tcp_wrap)                                                               \
-    V(timers)                                                             \
+    V(timers)                                                                 \
     V(tty_wrap)                                                               \
     V(types)                                                                  \
     V(udp_wrap)                                                               \
@@ -178,11 +178,6 @@ extern bool v8_initialized;
 
 extern Mutex per_process_opts_mutex;
 extern std::shared_ptr<PerProcessOptions> per_process_opts;
-
-extern const char* const environment_flags[];
-extern int environment_flags_count;
-extern const char* const v8_environment_flags[];
-extern int v8_environment_flags_count;
 
 // Forward declaration
 class Environment;
@@ -508,7 +503,9 @@ class InternalCallbackScope {
 
 class ThreadPoolWork {
  public:
-  explicit inline ThreadPoolWork(Environment* env) : env_(env) {}
+  explicit inline ThreadPoolWork(Environment* env) : env_(env) {
+    CHECK_NOT_NULL(env);
+  }
   inline virtual ~ThreadPoolWork() = default;
 
   inline void ScheduleWork();
@@ -890,6 +887,8 @@ void Abort(const v8::FunctionCallbackInfo<v8::Value>& args);
 void Chdir(const v8::FunctionCallbackInfo<v8::Value>& args);
 void CPUUsage(const v8::FunctionCallbackInfo<v8::Value>& args);
 void Cwd(const v8::FunctionCallbackInfo<v8::Value>& args);
+void GetActiveHandles(const v8::FunctionCallbackInfo<v8::Value>& args);
+void GetActiveRequests(const v8::FunctionCallbackInfo<v8::Value>& args);
 void Hrtime(const v8::FunctionCallbackInfo<v8::Value>& args);
 void HrtimeBigInt(const v8::FunctionCallbackInfo<v8::Value>& args);
 void Kill(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -910,6 +909,11 @@ void EnvSetter(v8::Local<v8::Name> property,
 void EnvQuery(v8::Local<v8::Name> property,
               const v8::PropertyCallbackInfo<v8::Integer>& info);
 void EnvEnumerator(const v8::PropertyCallbackInfo<v8::Array>& info);
+void DebugPortGetter(v8::Local<v8::Name> property,
+                     const v8::PropertyCallbackInfo<v8::Value>& info);
+void DebugPortSetter(v8::Local<v8::Name> property,
+                     v8::Local<v8::Value> value,
+                     const v8::PropertyCallbackInfo<void>& info);
 
 void GetParentProcessId(v8::Local<v8::Name> property,
                         const v8::PropertyCallbackInfo<v8::Value>& info);
@@ -933,6 +937,8 @@ void GetEUid(const v8::FunctionCallbackInfo<v8::Value>& args);
 void GetEGid(const v8::FunctionCallbackInfo<v8::Value>& args);
 void GetGroups(const v8::FunctionCallbackInfo<v8::Value>& args);
 #endif  // __POSIX__ && !defined(__ANDROID__) && !defined(__CloudABI__)
+
+void DefineZlibConstants(v8::Local<v8::Object> target);
 
 }  // namespace node
 

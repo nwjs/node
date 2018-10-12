@@ -7,7 +7,10 @@
 <!--name=vm-->
 
 The `vm` module provides APIs for compiling and running code within V8 Virtual
-Machine contexts.
+Machine contexts. **Note that the `vm` module is not a security mechanism. Do
+not use it to run untrusted code**. The term "sandbox" is used throughout these
+docs simply to refer to a separate context, and does not confer any security
+guarantees.
 
 JavaScript code can be compiled and run immediately or
 compiled, saved, and run later.
@@ -39,9 +42,6 @@ console.log(sandbox.y); // 17
 
 console.log(x); // 1; y is not defined.
 ```
-
-**The vm module is not a security mechanism. Do not use it to run untrusted
-code**.
 
 ## Class: vm.SourceTextModule
 <!-- YAML
@@ -167,10 +167,19 @@ const contextifiedSandbox = vm.createContext({ secret: 42 });
     in stack traces produced by this `Module`.
   * `columnOffset` {integer} Specifies the column number offset that is
     displayed in stack traces produced by this `Module`.
-  * `initalizeImportMeta` {Function} Called during evaluation of this `Module`
+  * `initializeImportMeta` {Function} Called during evaluation of this `Module`
     to initialize the `import.meta`. This function has the signature `(meta,
     module)`, where `meta` is the `import.meta` object in the `Module`, and
     `module` is this `vm.SourceTextModule` object.
+  * `importModuleDynamically` {Function} Called during evaluation of this
+    module when `import()` is called. This function has the signature
+    `(specifier, module)` where `specifier` is the specifier passed to
+    `import()` and `module` is this `vm.SourceTextModule`. If this option is
+    not specified, calls to `import()` will reject with
+    [`ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`][]. This method can return a
+    [Module Namespace Object][], but returning a `vm.SourceTextModule` is
+    recommended in order to take advantage of error tracking, and to avoid
+    issues with namespaces that contain `then` function exports.
 
 Creates a new ES `Module` object.
 
@@ -436,6 +445,15 @@ changes:
     The `cachedDataProduced` value will be set to either `true` or `false`
     depending on whether code cache data is produced successfully.
     This option is deprecated in favor of `script.createCachedData()`.
+  * `importModuleDynamically` {Function} Called during evaluation of this
+    module when `import()` is called. This function has the signature
+    `(specifier, module)` where `specifier` is the specifier passed to
+    `import()` and `module` is this `vm.SourceTextModule`. If this option is
+    not specified, calls to `import()` will reject with
+    [`ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`][]. This method can return a
+    [Module Namespace Object][], but returning a `vm.SourceTextModule` is
+    recommended in order to take advantage of error tracking, and to avoid
+    issues with namespaces that contain `then` function exports.
 
 Creating a new `vm.Script` object compiles `code` but does not run it. The
 compiled `vm.Script` can be run later multiple times. The `code` is not bound to
@@ -639,7 +657,7 @@ console.log(globalVar);
 
 ## vm.compileFunction(code[, params[, options]])
 <!-- YAML
-added: REPLACEME
+added: v10.10.0
 -->
 * `code` {string} The body of the function to compile.
 * `params` {string[]} An array of strings containing all parameters for the
@@ -944,49 +962,8 @@ within which it can operate. The process of creating the V8 Context and
 associating it with the `sandbox` object is what this document refers to as
 "contextifying" the `sandbox`.
 
-## vm module and Proxy object
-
-Leveraging a `Proxy` object as the sandbox of a VM context could result in a
-very powerful runtime environment that intercepts all accesses to the global
-object. However, there are some restrictions in the JavaScript engine that one
-needs to be aware of to prevent unexpected results. In particular, providing a
-`Proxy` object with a `get` handler could disallow any access to the original
-global properties of the new VM context, as the `get` hook does not distinguish
-between the `undefined` value and "requested property is not present" &ndash;
-the latter of which would ordinarily trigger a lookup on the context global
-object.
-
-Included below is a sample for how to work around this restriction. It
-initializes the sandbox as a `Proxy` object without any hooks, only to add them
-after the relevant properties have been saved.
-
-```js
-'use strict';
-const { createContext, runInContext } = require('vm');
-
-function createProxySandbox(handlers) {
-  // Create a VM context with a Proxy object with no hooks specified.
-  const sandbox = {};
-  const proxyHandlers = {};
-  const contextifiedProxy = createContext(new Proxy(sandbox, proxyHandlers));
-
-  // Save the initial globals onto our sandbox object.
-  const contextThis = runInContext('this', contextifiedProxy);
-  for (const prop of Reflect.ownKeys(contextThis)) {
-    const descriptor = Object.getOwnPropertyDescriptor(contextThis, prop);
-    Object.defineProperty(sandbox, prop, descriptor);
-  }
-
-  // Now that `sandbox` contains all the initial global properties, assign the
-  // provided handlers to the handlers we used to create the Proxy.
-  Object.assign(proxyHandlers, handlers);
-
-  // Return the created contextified Proxy object.
-  return contextifiedProxy;
-}
-```
-
 [`Error`]: errors.html#errors_class_error
+[`ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`]: errors.html#ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING
 [`URL`]: url.html#url_class_url
 [`eval()`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/eval
 [`script.runInContext()`]: #vm_script_runincontext_contextifiedsandbox_options
@@ -996,6 +973,7 @@ function createProxySandbox(handlers) {
 [`vm.runInContext()`]: #vm_vm_runincontext_code_contextifiedsandbox_options
 [`vm.runInThisContext()`]: #vm_vm_runinthiscontext_code_options
 [GetModuleNamespace]: https://tc39.github.io/ecma262/#sec-getmodulenamespace
+[Module Namespace Object]: https://tc39.github.io/ecma262/#sec-module-namespace-exotic-objects
 [ECMAScript Module Loader]: esm.html#esm_ecmascript_modules
 [Evaluate() concrete method]: https://tc39.github.io/ecma262/#sec-moduleevaluation
 [HostResolveImportedModule]: https://tc39.github.io/ecma262/#sec-hostresolveimportedmodule

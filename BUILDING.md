@@ -1,12 +1,49 @@
 # Building Node.js
 
-Depending on what platform or features you require, the build process may
-differ slightly. After you've successfully built a binary, running the
-test suite to validate that the binary works as intended is a good next step.
+Depending on what platform or features you need, the build process may
+differ. After you've built a binary, running the
+test suite to confirm that the binary works as intended is a good next step.
 
-If you can reproduce a test failure consistently, search for it in the
+If you can reproduce a test failure, search for it in the
 [Node.js issue tracker](https://github.com/nodejs/node/issues) or
 file a new issue.
+
+## Table of Contents
+
+* [Supported platforms](#supported-platforms)
+  * [Input](#input)
+  * [Strategy](#strategy)
+  * [Supported platforms](#supported-platforms-1)
+  * [Supported toolchains](#supported-toolchains)
+    * [Unix](#unix)
+    * [AIX](#aix)
+    * [Windows](#windows)
+    * [OpenSSL asm support](#openssl-asm-support)
+* [Building Node.js on supported platforms](#building-nodejs-on-supported-platforms)
+  * [Unix/macOS](#unixmacos)
+    * [Prerequisites](#prerequisites)
+    * [Building Node.js](#building-nodejs-1)
+    * [Running Tests](#running-tests)
+    * [Building the documentation](#building-the-documentation)
+    * [Building a debug build](#building-a-debug-build)
+  * [Windows](#windows-1)
+  * [Android/Android-based devices (e.g. Firefox OS)](#androidandroid-based-devices-eg-firefox-os)
+  * [`Intl` (ECMA-402) support](#intl-ecma-402-support)
+    * [Default: `small-icu` (English only) support](#default-small-icu-english-only-support)
+    * [Build with full ICU support (all locales supported by ICU)](#build-with-full-icu-support-all-locales-supported-by-icu)
+      * [Unix/macOS](#unixmacos-1)
+      * [Windows](#windows-2)
+    * [Building without Intl support](#building-without-intl-support)
+      * [Unix/macOS](#unixmacos-2)
+      * [Windows](#windows-3)
+    * [Use existing installed ICU (Unix/macOS only)](#use-existing-installed-icu-unixmacos-only)
+    * [Build with a specific ICU](#build-with-a-specific-icu)
+      * [Unix/macOS](#unixmacos-3)
+      * [Windows](#windows-4)
+* [Building Node.js with FIPS-compliant OpenSSL](#building-nodejs-with-fips-compliant-openssl)
+* [Building Node.js with external core modules](#building-nodejs-with-external-core-modules)
+  * [Unix/macOS](#unixmacos-4)
+  * [Windows](#windows-5)
 
 ## Supported platforms
 
@@ -44,7 +81,7 @@ platforms in production.
 | macOS/OS X   | Tier 1       | >= 10.11                         | x64                  |                  |
 | Windows      | Tier 1       | >= Windows 7/2008 R2/2012 R2     | x86, x64             | [2](#fn2),[3](#fn3),[4](#fn4) |
 | SmartOS      | Tier 2       | >= 15 < 16.4                     | x86, x64             | [1](#fn1) |
-| FreeBSD      | Tier 2       | >= 10                            | x64                  |                  |
+| FreeBSD      | Tier 2       | >= 11                            | x64                  |                  |
 | GNU/Linux    | Tier 2       | kernel >= 3.13.0, glibc >= 2.19  | ppc64le >=power8     |                  |
 | AIX          | Tier 2       | >= 7.1 TL04                      | ppc64be >=power7     |                  |
 | GNU/Linux    | Tier 2       | kernel >= 3.10, glibc >= 2.17    | s390x                |                  |

@@ -67,7 +67,6 @@ class V8_EXPORT_PRIVATE EffectControlLinearizer {
   Node* LowerCheckString(Node* node, Node* frame_state);
   Node* LowerCheckSymbol(Node* node, Node* frame_state);
   void LowerCheckIf(Node* node, Node* frame_state);
-  Node* LowerCheckStringAdd(Node* node, Node* frame_state);
   Node* LowerCheckedInt32Add(Node* node, Node* frame_state);
   Node* LowerCheckedInt32Sub(Node* node, Node* frame_state);
   Node* LowerCheckedInt32Div(Node* node, Node* frame_state);
@@ -183,7 +182,7 @@ class V8_EXPORT_PRIVATE EffectControlLinearizer {
   Node* BuildFloat64RoundDown(Node* value);
   Node* BuildFloat64RoundTruncate(Node* input);
   Node* BuildUint32Mod(Node* lhs, Node* rhs);
-  Node* ComputeIntegerHash(Node* value);
+  Node* ComputeUnseededHash(Node* value);
   Node* LowerStringComparison(Callable const& callable, Node* node);
   Node* IsElementsKindGreaterThan(Node* kind, ElementsKind reference_kind);
 

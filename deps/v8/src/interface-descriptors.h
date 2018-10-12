@@ -60,7 +60,7 @@ namespace internal {
   V(StringAt)                         \
   V(StringSubstring)                  \
   V(GetProperty)                      \
-  V(ArgumentsAdaptor)                 \
+  V(ArgumentAdaptor)                  \
   V(ApiCallback)                      \
   V(ApiGetter)                        \
   V(GrowArrayElements)                \
@@ -601,15 +601,6 @@ class LoadWithVectorDescriptor : public LoadDescriptor {
   DECLARE_DESCRIPTOR(LoadWithVectorDescriptor, LoadDescriptor)
 
   static const Register VectorRegister();
-
-#if V8_TARGET_ARCH_IA32
-  static const bool kPassLastArgsOnStack = true;
-#else
-  static const bool kPassLastArgsOnStack = false;
-#endif
-
-  // Pass vector through the stack.
-  static const int kStackArgumentsCount = kPassLastArgsOnStack ? 1 : 0;
 };
 
 class LoadGlobalWithVectorDescriptor : public LoadGlobalDescriptor {
@@ -620,15 +611,9 @@ class LoadGlobalWithVectorDescriptor : public LoadGlobalDescriptor {
                          MachineType::AnyTagged())     // kVector
   DECLARE_DESCRIPTOR(LoadGlobalWithVectorDescriptor, LoadGlobalDescriptor)
 
-#if V8_TARGET_ARCH_IA32
-  // On ia32, LoadWithVectorDescriptor passes vector on the stack and thus we
-  // need to choose a new register here.
-  static const Register VectorRegister() { return edx; }
-#else
   static const Register VectorRegister() {
     return LoadWithVectorDescriptor::VectorRegister();
   }
-#endif
 };
 
 class FastNewFunctionContextDescriptor : public CallInterfaceDescriptor {
@@ -654,9 +639,6 @@ class FastNewObjectDescriptor : public CallInterfaceDescriptor {
 
 class RecordWriteDescriptor final : public CallInterfaceDescriptor {
  public:
-  // TODO(v8:6666): Remove the isolate argument once kRootRegister is
-  // fully supported on ia32. Then the isolate can be determined through a
-  // simple register addition instead.
   DEFINE_PARAMETERS(kObject, kSlot, kIsolate, kRememberedSet, kFPMode)
   DEFINE_PARAMETER_TYPES(MachineType::TaggedPointer(),  // kObject
                          MachineType::Pointer(),        // kSlot
@@ -708,12 +690,12 @@ class CallTrampolineDescriptor : public CallInterfaceDescriptor {
 
 class CallVarargsDescriptor : public CallInterfaceDescriptor {
  public:
-  DEFINE_PARAMETERS(kTarget, kActualArgumentsCount, kArgumentsLength,
-                    kArgumentsList)
+  DEFINE_PARAMETERS(kTarget, kActualArgumentsCount, kArgumentsList,
+                    kArgumentsLength)
   DEFINE_PARAMETER_TYPES(MachineType::AnyTagged(),  // kTarget
                          MachineType::Int32(),      // kActualArgumentsCount
-                         MachineType::Int32(),      // kArgumentsLength
-                         MachineType::AnyTagged())  // kArgumentsList
+                         MachineType::AnyTagged(),  // kArgumentsList
+                         MachineType::Int32())      // kArgumentsLength
   DECLARE_DESCRIPTOR(CallVarargsDescriptor, CallInterfaceDescriptor)
 };
 
@@ -745,10 +727,9 @@ class CallWithArrayLikeDescriptor : public CallInterfaceDescriptor {
 
 class ConstructVarargsDescriptor : public CallInterfaceDescriptor {
  public:
-  DEFINE_JS_PARAMETERS(kArgumentsLength, kArgumentsList)
-  DEFINE_JS_PARAMETER_TYPES(MachineType::Int32(),      // kArgumentsLength
-                            MachineType::AnyTagged())  // kArgumentsList
-
+  DEFINE_JS_PARAMETERS(kArgumentsList, kArgumentsLength)
+  DEFINE_JS_PARAMETER_TYPES(MachineType::AnyTagged(),  // kArgumentsList
+                            MachineType::Int32())      // kArgumentsLength
   DECLARE_DESCRIPTOR(ConstructVarargsDescriptor, CallInterfaceDescriptor)
 };
 
@@ -778,7 +759,6 @@ class ConstructWithArrayLikeDescriptor : public CallInterfaceDescriptor {
 // TODO(ishell): consider merging this with ArrayConstructorDescriptor
 class ConstructStubDescriptor : public CallInterfaceDescriptor {
  public:
-  // TODO(jgruber): Remove the unused allocation site parameter.
   DEFINE_JS_PARAMETERS(kAllocationSite)
   DEFINE_JS_PARAMETER_TYPES(MachineType::AnyTagged());
 
@@ -899,11 +879,11 @@ class StringSubstringDescriptor final : public CallInterfaceDescriptor {
   DECLARE_DESCRIPTOR(StringSubstringDescriptor, CallInterfaceDescriptor)
 };
 
-class ArgumentsAdaptorDescriptor : public CallInterfaceDescriptor {
+class ArgumentAdaptorDescriptor : public CallInterfaceDescriptor {
  public:
   DEFINE_JS_PARAMETERS(kExpectedArgumentsCount)
   DEFINE_JS_PARAMETER_TYPES(MachineType::Int32())
-  DECLARE_DESCRIPTOR(ArgumentsAdaptorDescriptor, CallInterfaceDescriptor)
+  DECLARE_DESCRIPTOR(ArgumentAdaptorDescriptor, CallInterfaceDescriptor)
 };
 
 class CppBuiltinAdaptorDescriptor : public CallInterfaceDescriptor {
@@ -933,9 +913,6 @@ class CEntry1ArgvOnStackDescriptor : public CallInterfaceDescriptor {
 
 class ApiCallbackDescriptor : public CallInterfaceDescriptor {
  public:
-  // TODO(jgruber): This could be simplified to pass call data on the stack
-  // since this is what the CallApiCallbackStub anyways. This would free a
-  // register.
   DEFINE_PARAMETERS_NO_CONTEXT(kTargetContext, kCallData, kHolder,
                                kApiFunctionAddress)
   DEFINE_PARAMETER_TYPES(MachineType::AnyTagged(),  // kTargetContext
@@ -1004,13 +981,13 @@ class InterpreterPushArgsThenCallDescriptor : public CallInterfaceDescriptor {
 class InterpreterPushArgsThenConstructDescriptor
     : public CallInterfaceDescriptor {
  public:
-  DEFINE_PARAMETERS(kNumberOfArguments, kFirstArgument, kConstructor,
-                    kNewTarget, kFeedbackElement)
+  DEFINE_PARAMETERS(kNumberOfArguments, kNewTarget, kConstructor,
+                    kFeedbackElement, kFirstArgument)
   DEFINE_PARAMETER_TYPES(MachineType::Int32(),      // kNumberOfArguments
-                         MachineType::Pointer(),    // kFirstArgument
-                         MachineType::AnyTagged(),  // kConstructor
                          MachineType::AnyTagged(),  // kNewTarget
-                         MachineType::AnyTagged())  // kFeedbackElement
+                         MachineType::AnyTagged(),  // kConstructor
+                         MachineType::AnyTagged(),  // kFeedbackElement
+                         MachineType::Pointer())    // kFirstArgument
   DECLARE_DESCRIPTOR(InterpreterPushArgsThenConstructDescriptor,
                      CallInterfaceDescriptor)
 };

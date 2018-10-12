@@ -445,7 +445,7 @@ is invalid according to [NIST SP 800-38D][] or does not match the value of the
 `authTagLength` option, `decipher.setAuthTag()` will throw an error.
 
 The `decipher.setAuthTag()` method must be called before
-[`decipher.final()`][].
+[`decipher.final()`][] and can only be called once.
 
 ### decipher.setAutoPadding([autoPadding])
 <!-- YAML
@@ -703,9 +703,9 @@ If the `inputEncoding` is not provided, `key` is expected to be a [`Buffer`][],
 Example (uncompressing a key):
 
 ```js
-const { ECDH } = require('crypto');
+const { createECDH, ECDH } = require('crypto');
 
-const ecdh = ECDH('secp256k1');
+const ecdh = createECDH('secp256k1');
 ecdh.generateKeys();
 
 const compressedKey = ecdh.getPublicKey('hex', 'compressed');
@@ -1121,6 +1121,8 @@ changes:
 * `privateKey` {string | Object}
   - `key` {string}
   - `passphrase` {string}
+  - `padding` {integer}
+  - `saltLength` {integer}
 * `outputFormat` {string}
 * Returns: {Buffer | string}
 
@@ -1321,7 +1323,7 @@ This property is deprecated. Please use `crypto.setFips()` and
 added: v0.1.94
 deprecated: v10.0.0
 changes:
-  - version: REPLACEME
+  - version: v10.10.0
     pr-url: https://github.com/nodejs/node/pull/21447
     description: Ciphers in OCB mode are now supported.
   - version: v10.2.0
@@ -1376,7 +1378,7 @@ Adversaries][] for details.
 <!-- YAML
 added: v0.1.94
 changes:
-  - version: REPLACEME
+  - version: v10.10.0
     pr-url: https://github.com/nodejs/node/pull/21447
     description: Ciphers in OCB mode are now supported.
   - version: v10.2.0
@@ -1426,7 +1428,7 @@ of time what a given IV will be.
 added: v0.1.94
 deprecated: v10.0.0
 changes:
-  - version: REPLACEME
+  - version: v10.10.0
     pr-url: https://github.com/nodejs/node/pull/21447
     description: Ciphers in OCB mode are now supported.
 -->
@@ -1462,7 +1464,7 @@ to create the `Decipher` object.
 <!-- YAML
 added: v0.1.94
 changes:
-  - version: REPLACEME
+  - version: v10.10.0
     pr-url: https://github.com/nodejs/node/pull/21447
     description: Ciphers in OCB mode are now supported.
   - version: v10.2.0
@@ -1671,6 +1673,119 @@ Use [`crypto.getHashes()`][] to obtain an array of names of the available
 signing algorithms. Optional `options` argument controls the
 `stream.Writable` behavior.
 
+### crypto.generateKeyPair(type, options, callback)
+<!-- YAML
+added: v10.12.0
+-->
+* `type`: {string} Must be `'rsa'`, `'dsa'` or `'ec'`.
+* `options`: {Object}
+  - `modulusLength`: {number} Key size in bits (RSA, DSA).
+  - `publicExponent`: {number} Public exponent (RSA). **Default:** `0x10001`.
+  - `divisorLength`: {number} Size of `q` in bits (DSA).
+  - `namedCurve`: {string} Name of the curve to use (EC).
+  - `publicKeyEncoding`: {Object}
+    - `type`: {string} Must be one of `'pkcs1'` (RSA only) or `'spki'`.
+    - `format`: {string} Must be `'pem'` or `'der'`.
+  - `privateKeyEncoding`: {Object}
+    - `type`: {string} Must be one of `'pkcs1'` (RSA only), `'pkcs8'` or
+      `'sec1'` (EC only).
+    - `format`: {string} Must be `'pem'` or `'der'`.
+    - `cipher`: {string} If specified, the private key will be encrypted with
+      the given `cipher` and `passphrase` using PKCS#5 v2.0 password based
+      encryption.
+    - `passphrase`: {string} The passphrase to use for encryption, see `cipher`.
+* `callback`: {Function}
+  - `err`: {Error}
+  - `publicKey`: {string|Buffer}
+  - `privateKey`: {string|Buffer}
+
+Generates a new asymmetric key pair of the given `type`. Only RSA, DSA and EC
+are currently supported.
+
+It is recommended to encode public keys as `'spki'` and private keys as
+`'pkcs8'` with encryption:
+
+```js
+const { generateKeyPair } = require('crypto');
+generateKeyPair('rsa', {
+  modulusLength: 4096,
+  publicKeyEncoding: {
+    type: 'spki',
+    format: 'pem'
+  },
+  privateKeyEncoding: {
+    type: 'pkcs8',
+    format: 'pem',
+    cipher: 'aes-256-cbc',
+    passphrase: 'top secret'
+  }
+}, (err, publicKey, privateKey) => {
+  // Handle errors and use the generated key pair.
+});
+```
+
+On completion, `callback` will be called with `err` set to `undefined` and
+`publicKey` / `privateKey` representing the generated key pair. When PEM
+encoding was selected, the result will be a string, otherwise it will be a
+buffer containing the data encoded as DER. Note that Node.js itself does not
+accept DER, it is supported for interoperability with other libraries such as
+WebCrypto only.
+
+If this method is invoked as its [`util.promisify()`][]ed version, it returns
+a `Promise` for an `Object` with `publicKey` and `privateKey` properties.
+
+### crypto.generateKeyPairSync(type, options)
+<!-- YAML
+added: v10.12.0
+-->
+* `type`: {string} Must be `'rsa'`, `'dsa'` or `'ec'`.
+* `options`: {Object}
+  - `modulusLength`: {number} Key size in bits (RSA, DSA).
+  - `publicExponent`: {number} Public exponent (RSA). **Default:** `0x10001`.
+  - `divisorLength`: {number} Size of `q` in bits (DSA).
+  - `namedCurve`: {string} Name of the curve to use (EC).
+  - `publicKeyEncoding`: {Object}
+    - `type`: {string} Must be one of `'pkcs1'` (RSA only) or `'spki'`.
+    - `format`: {string} Must be `'pem'` or `'der'`.
+  - `privateKeyEncoding`: {Object}
+    - `type`: {string} Must be one of `'pkcs1'` (RSA only), `'pkcs8'` or
+      `'sec1'` (EC only).
+    - `format`: {string} Must be `'pem'` or `'der'`.
+    - `cipher`: {string} If specified, the private key will be encrypted with
+      the given `cipher` and `passphrase` using PKCS#5 v2.0 password based
+      encryption.
+    - `passphrase`: {string} The passphrase to use for encryption, see `cipher`.
+* Returns: {Object}
+  - `publicKey`: {string|Buffer}
+  - `privateKey`: {string|Buffer}
+
+Generates a new asymmetric key pair of the given `type`. Only RSA, DSA and EC
+are currently supported.
+
+It is recommended to encode public keys as `'spki'` and private keys as
+`'pkcs8'` with encryption:
+
+```js
+const { generateKeyPairSync } = require('crypto');
+const { publicKey, privateKey } = generateKeyPairSync('rsa', {
+  modulusLength: 4096,
+  publicKeyEncoding: {
+    type: 'spki',
+    format: 'pem'
+  },
+  privateKeyEncoding: {
+    type: 'pkcs8',
+    format: 'pem',
+    cipher: 'aes-256-cbc',
+    passphrase: 'top secret'
+  }
+});
+```
+
+The return value `{ publicKey, privateKey }` represents the generated key pair.
+When PEM encoding was selected, the respective key will be a string, otherwise
+it will be a buffer containing the data encoded as DER.
+
 ### crypto.getCiphers()
 <!-- YAML
 added: v0.9.3
@@ -1784,6 +1899,9 @@ otherwise `err` will be `null`. By default, the successfully generated
 `derivedKey` will be passed to the callback as a [`Buffer`][]. An error will be
 thrown if any of the input arguments specify invalid values or types.
 
+If `digest` is `null`, `'sha1'` will be used. This behavior is deprecated,
+please specify a `digest` explicitely.
+
 The `iterations` argument must be a number set as high as possible. The
 higher the number of iterations, the more secure the derived key will be,
 but will take a longer amount of time to complete.
@@ -1847,6 +1965,9 @@ applied to derive a key of the requested byte length (`keylen`) from the
 If an error occurs an `Error` will be thrown, otherwise the derived key will be
 returned as a [`Buffer`][].
 
+If `digest` is `null`, `'sha1'` will be used. This behavior is deprecated,
+please specify a `digest` explicitely.
+
 The `iterations` argument must be a number set as high as possible. The
 higher the number of iterations, the more secure the derived key will be,
 but will take a longer amount of time to complete.
@@ -1888,7 +2009,8 @@ added: v0.11.14
 * `buffer` {Buffer | TypedArray | DataView}
 * Returns: {Buffer} A new `Buffer` with the decrypted content.
 
-Decrypts `buffer` with `privateKey`.
+Decrypts `buffer` with `privateKey`. `buffer` was previously encrypted using
+the corresponding public key, for example using [`crypto.publicEncrypt()`][].
 
 `privateKey` can be an object or a string. If `privateKey` is a string, it is
 treated as the key with no passphrase and will use `RSA_PKCS1_OAEP_PADDING`.
@@ -1906,7 +2028,8 @@ added: v1.1.0
 * `buffer` {Buffer | TypedArray | DataView}
 * Returns: {Buffer} A new `Buffer` with the encrypted content.
 
-Encrypts `buffer` with `privateKey`.
+Encrypts `buffer` with `privateKey`. The returned data can be decrypted using
+the corresponding public key, for example using [`crypto.publicDecrypt()`][].
 
 `privateKey` can be an object or a string. If `privateKey` is a string, it is
 treated as the key with no passphrase and will use `RSA_PKCS1_PADDING`.
@@ -1924,7 +2047,8 @@ added: v1.1.0
 * `buffer` {Buffer | TypedArray | DataView}
 * Returns: {Buffer} A new `Buffer` with the decrypted content.
 
-Decrypts `buffer` with `key`.
+Decrypts `buffer` with `key`.`buffer` was previously encrypted using
+the corresponding private key, for example using [`crypto.privateEncrypt()`][].
 
 `key` can be an object or a string. If `key` is a string, it is treated as
 the key with no passphrase and will use `RSA_PKCS1_PADDING`.
@@ -1947,7 +2071,8 @@ added: v0.11.14
 * Returns: {Buffer} A new `Buffer` with the encrypted content.
 
 Encrypts the content of `buffer` with `key` and returns a new
-[`Buffer`][] with encrypted content.
+[`Buffer`][] with encrypted content. The returned data can be decrypted using
+the corresponding private key, for example using [`crypto.privateDecrypt()`][].
 
 `key` can be an object or a string. If `key` is a string, it is treated as
 the key with no passphrase and will use `RSA_PKCS1_OAEP_PADDING`.
@@ -2739,6 +2864,10 @@ the `crypto`, `tls`, and `https` modules and are generally specific to OpenSSL.
 [`crypto.createVerify()`]: #crypto_crypto_createverify_algorithm_options
 [`crypto.getCurves()`]: #crypto_crypto_getcurves
 [`crypto.getHashes()`]: #crypto_crypto_gethashes
+[`crypto.privateDecrypt()`]: #crypto_crypto_privatedecrypt_privatekey_buffer
+[`crypto.privateEncrypt()`]: #crypto_crypto_privateencrypt_privatekey_buffer
+[`crypto.publicDecrypt()`]: #crypto_crypto_publicdecrypt_key_buffer
+[`crypto.publicEncrypt()`]: #crypto_crypto_publicencrypt_key_buffer
 [`crypto.randomBytes()`]: #crypto_crypto_randombytes_size_callback
 [`crypto.randomFill()`]: #crypto_crypto_randomfill_buffer_offset_size_callback
 [`crypto.scrypt()`]: #crypto_crypto_scrypt_password_salt_keylen_options_callback
@@ -2756,6 +2885,7 @@ the `crypto`, `tls`, and `https` modules and are generally specific to OpenSSL.
 [`sign.update()`]: #crypto_sign_update_data_inputencoding
 [`stream.transform` options]: stream.html#stream_new_stream_transform_options
 [`stream.Writable` options]: stream.html#stream_constructor_new_stream_writable_options
+[`util.promisify()`]: util.html#util_util_promisify_original
 [`verify.update()`]: #crypto_verify_update_data_inputencoding
 [`verify.verify()`]: #crypto_verify_verify_object_signature_signatureformat
 [AEAD algorithms]: https://en.wikipedia.org/wiki/Authenticated_encryption

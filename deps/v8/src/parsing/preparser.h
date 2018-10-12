@@ -10,6 +10,7 @@
 #include "src/parsing/parser-base.h"
 #include "src/parsing/preparser-logger.h"
 #include "src/pending-compilation-error-handler.h"
+#include "src/zone/zone-containers.h"
 
 namespace v8 {
 namespace internal {
@@ -979,10 +980,6 @@ class PreParser : public ParserBase<PreParser> {
       ProducedPreParsedScopeData** produced_preparser_scope_data,
       int script_id);
 
-  V8_INLINE static bool ShouldTrackUnresolvedVariables(bool is_inner_function) {
-    return FLAG_preparser_scope_analysis || is_inner_function;
-  }
-
   ProducedPreParsedScopeData* produced_preparsed_scope_data() const {
     return produced_preparsed_scope_data_;
   }
@@ -1736,7 +1733,7 @@ class PreParser : public ParserBase<PreParser> {
       const PreParserExpression& value, const PreParserExpression& identifier) {
   }
 
-  V8_INLINE ZoneList<typename ExpressionClassifier::Error>*
+  V8_INLINE ZoneVector<typename ExpressionClassifier::Error>*
   GetReportedErrorList() const {
     return function_state_->GetReportedErrorList();
   }

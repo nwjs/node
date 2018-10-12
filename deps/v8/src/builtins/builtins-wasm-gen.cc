@@ -63,7 +63,7 @@ TF_BUILTIN(WasmArgumentsAdaptor, WasmBuiltinsAssembler) {
   TNode<Object> argc2 = UncheckedParameter(Descriptor::kExpectedArgumentsCount);
   TNode<Code> target =
       LoadBuiltinFromFrame(Builtins::kArgumentsAdaptorTrampoline);
-  TailCallStub(ArgumentsAdaptorDescriptor{}, target, context, function,
+  TailCallStub(ArgumentAdaptorDescriptor{}, target, context, function,
                new_target, argc1, argc2);
 }
 

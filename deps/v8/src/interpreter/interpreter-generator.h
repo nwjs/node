@@ -10,15 +10,11 @@
 
 namespace v8 {
 namespace internal {
-
-struct AssemblerOptions;
-
 namespace interpreter {
 
 extern Handle<Code> GenerateBytecodeHandler(Isolate* isolate, Bytecode bytecode,
                                             OperandScale operand_scale,
-                                            int builtin_index,
-                                            const AssemblerOptions& options);
+                                            int builtin_index);
 
 extern Handle<Code> GenerateDeserializeLazyHandler(Isolate* isolate,
                                                    OperandScale operand_scale);

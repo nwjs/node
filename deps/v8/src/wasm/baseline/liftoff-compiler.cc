@@ -63,8 +63,10 @@ constexpr LoadType::LoadTypeValue kPointerLoadType =
 // thus store the label on the heap and keep a unique_ptr.
 class MovableLabel {
  public:
-  Label* get() { return label_.get(); }
+  MOVE_ONLY_NO_DEFAULT_CONSTRUCTOR(MovableLabel);
   MovableLabel() : label_(new Label()) {}
+
+  Label* get() { return label_.get(); }
 
  private:
   std::unique_ptr<Label> label_;
@@ -73,6 +75,8 @@ class MovableLabel {
 // On all other platforms, just store the Label directly.
 class MovableLabel {
  public:
+  MOVE_ONLY_WITH_DEFAULT_CONSTRUCTORS(MovableLabel);
+
   Label* get() { return &label_; }
 
  private:
@@ -1494,7 +1498,7 @@ class LiftoffCompiler {
     }
     __ PushRegister(value_type, value);
 
-    if (FLAG_trace_wasm_memory) {
+    if (FLAG_wasm_trace_memory) {
       TraceMemoryOperation(false, type.mem_type().representation(), index.gp(),
                            offset, decoder->position());
     }
@@ -1524,7 +1528,7 @@ class LiftoffCompiler {
                        WasmCode::kThrowWasmTrapMemOutOfBounds,
                        protected_store_pc);
     }
-    if (FLAG_trace_wasm_memory) {
+    if (FLAG_wasm_trace_memory) {
       TraceMemoryOperation(true, type.mem_rep(), index.gp(), offset,
                            decoder->position());
     }

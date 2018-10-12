@@ -166,11 +166,10 @@ class WasmGraphBuilder {
   Node* GrowMemory(Node* input);
   Node* Throw(uint32_t tag, const wasm::WasmException* exception,
               const Vector<Node*> values);
-  Node* Rethrow(Node* except_obj);
+  Node* Rethrow();
   Node* ConvertExceptionTagToRuntimeId(uint32_t tag);
-  Node* GetExceptionRuntimeId(Node* except_obj);
-  Node** GetExceptionValues(Node* except_obj,
-                            const wasm::WasmException* except_decl);
+  Node* GetExceptionRuntimeId();
+  Node** GetExceptionValues(const wasm::WasmException* except_decl);
   bool IsPhiWithMerge(Node* phi, Node* merge);
   bool ThrowsException(Node* node, Node** if_success, Node** if_exception);
   void AppendToMerge(Node* merge, Node* from);
@@ -353,6 +352,8 @@ class WasmGraphBuilder {
   // BoundsCheckMem receives a uint32 {index} node and returns a ptrsize index.
   Node* BoundsCheckMem(uint8_t access_size, Node* index, uint32_t offset,
                        wasm::WasmCodePosition, EnforceBoundsCheck);
+  Node* CheckBoundsAndAlignment(uint8_t access_size, Node* index,
+                                uint32_t offset, wasm::WasmCodePosition);
   Node* Uint32ToUintptr(Node*);
   const Operator* GetSafeLoadOperator(int offset, wasm::ValueType type);
   const Operator* GetSafeStoreOperator(int offset, wasm::ValueType type);
@@ -450,8 +451,7 @@ class WasmGraphBuilder {
   Node* BuildAsmjsStoreMem(MachineType type, Node* index, Node* val);
 
   uint32_t GetExceptionEncodedSize(const wasm::WasmException* exception) const;
-  void BuildEncodeException32BitValue(Node* except_obj, uint32_t* index,
-                                      Node* value);
+  void BuildEncodeException32BitValue(uint32_t* index, Node* value);
   Node* BuildDecodeException32BitValue(Node* const* values, uint32_t* index);
 
   Node** Realloc(Node* const* buffer, size_t old_count, size_t new_count) {

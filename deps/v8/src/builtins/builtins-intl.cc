@@ -32,10 +32,12 @@
 #include "unicode/listformatter.h"
 #include "unicode/normalizer2.h"
 #include "unicode/numfmt.h"
+#include "unicode/reldatefmt.h"
 #include "unicode/smpdtfmt.h"
 #include "unicode/udat.h"
 #include "unicode/ufieldpositer.h"
 #include "unicode/unistr.h"
+#include "unicode/ureldatefmt.h"
 #include "unicode/ustring.h"
 
 namespace v8 {
@@ -344,37 +346,7 @@ MaybeHandle<Object> FormatDateToParts(Isolate* isolate, icu::DateFormat* format,
   return result;
 }
 
-MaybeHandle<JSObject> SupportedLocalesOfCommon(Isolate* isolate,
-                                               const char* service_in,
-                                               BuiltinArguments args) {
-  Factory* factory = isolate->factory();
-  Handle<String> service = factory->NewStringFromAsciiChecked(service_in);
-  Handle<Object> locales = args.atOrUndefined(isolate, 1);
-  Handle<Object> options = args.atOrUndefined(isolate, 2);
-
-  MaybeHandle<JSObject> result =
-      Intl::SupportedLocalesOf(isolate, service, locales, options);
-  Handle<JSObject> elements;
-  ASSIGN_RETURN_ON_EXCEPTION(isolate, elements, result, JSObject);
-  return elements;
-}
-
 }  // namespace
-
-BUILTIN(v8BreakIteratorSupportedLocalesOf) {
-  HandleScope scope(isolate);
-  // 1. If NewTarget is defined, throw a TypeError exception.
-  if (!args.new_target()->IsUndefined(isolate)) {  // [[Call]]
-    THROW_NEW_ERROR_RETURN_FAILURE(
-        isolate,
-        NewTypeError(MessageTemplate::kOrdinaryFunctionCalledAsConstructor,
-                     isolate->factory()->NewStringFromStaticChars(
-                         "Intl.v8BreakIterator")));
-  }
-
-  RETURN_RESULT_OR_FAILURE(
-      isolate, SupportedLocalesOfCommon(isolate, "breakiterator", args));
-}
 
 // Flattens a list of possibly-overlapping "regions" to a list of
 // non-overlapping "parts". At least one of the input regions must span the
@@ -466,12 +438,6 @@ std::vector<NumberFormatSpan> FlattenRegionsToParts(
   return out_parts;
 }
 
-BUILTIN(NumberFormatSupportedLocalesOf) {
-  HandleScope scope(isolate);
-  RETURN_RESULT_OR_FAILURE(
-      isolate, SupportedLocalesOfCommon(isolate, "numberformat", args));
-}
-
 BUILTIN(NumberFormatPrototypeFormatToParts) {
   const char* const method = "Intl.NumberFormat.prototype.formatToParts";
   HandleScope handle_scope(isolate);
@@ -500,12 +466,6 @@ BUILTIN(NumberFormatPrototypeFormatToParts) {
 
   RETURN_RESULT_OR_FAILURE(
       isolate, FormatNumberToParts(isolate, number_format, x->Number()));
-}
-
-BUILTIN(DateTimeFormatSupportedLocalesOf) {
-  HandleScope scope(isolate);
-  RETURN_RESULT_OR_FAILURE(
-      isolate, SupportedLocalesOfCommon(isolate, "dateformat", args));
 }
 
 BUILTIN(DateTimeFormatPrototypeFormatToParts) {
@@ -544,33 +504,6 @@ BUILTIN(DateTimeFormatPrototypeFormatToParts) {
                            FormatDateToParts(isolate, date_format, date_value));
 }
 
-namespace {
-Handle<JSFunction> CreateBoundFunction(Isolate* isolate,
-                                       Handle<JSObject> object,
-                                       Builtins::Name builtin_id, int len) {
-  Handle<NativeContext> native_context(isolate->context()->native_context(),
-                                       isolate);
-  Handle<Context> context = isolate->factory()->NewBuiltinContext(
-      native_context,
-      static_cast<int>(Intl::BoundFunctionContextSlot::kLength));
-
-  context->set(static_cast<int>(Intl::BoundFunctionContextSlot::kBoundFunction),
-               *object);
-
-  Handle<SharedFunctionInfo> info =
-      isolate->factory()->NewSharedFunctionInfoForBuiltin(
-          isolate->factory()->empty_string(), builtin_id, kNormalFunction);
-  info->set_internal_formal_parameter_count(len);
-  info->set_length(len);
-
-  Handle<Map> map = isolate->strict_function_without_prototype_map();
-
-  Handle<JSFunction> new_bound_function =
-      isolate->factory()->NewFunctionFromSharedFunctionInfo(map, info, context);
-  return new_bound_function;
-}
-}  // namespace
-
 BUILTIN(NumberFormatPrototypeFormatNumber) {
   const char* const method = "get Intl.NumberFormat.prototype.format";
   HandleScope scope(isolate);
@@ -599,9 +532,25 @@ BUILTIN(NumberFormatPrototypeFormatNumber) {
     return *bound_format;
   }
 
+  Handle<NativeContext> native_context(isolate->context()->native_context(),
+                                       isolate);
+
+  Handle<Context> context = isolate->factory()->NewBuiltinContext(
+      native_context, NumberFormat::ContextSlot::kLength);
+
+  // 4. b. Set F.[[NumberFormat]] to nf.
+  context->set(NumberFormat::ContextSlot::kNumberFormat, *number_format_holder);
+
+  Handle<SharedFunctionInfo> info = Handle<SharedFunctionInfo>(
+      native_context->number_format_internal_format_number_shared_fun(),
+      isolate);
+
+  Handle<Map> map = isolate->strict_function_without_prototype_map();
+
+  // 4. a. Let F be a new built-in function object as defined in
+  // Number Format Functions (11.1.4).
   Handle<JSFunction> new_bound_format_function =
-      CreateBoundFunction(isolate, number_format_holder,
-                          Builtins::kNumberFormatInternalFormatNumber, 1);
+      isolate->factory()->NewFunctionFromSharedFunctionInfo(map, info, context);
 
   // 4. c. Set nf.[[BoundFormat]] to F.
   number_format_holder->SetEmbedderField(NumberFormat::kBoundFormatIndex,
@@ -618,8 +567,7 @@ BUILTIN(NumberFormatInternalFormatNumber) {
 
   // 1. Let nf be F.[[NumberFormat]].
   Handle<JSObject> number_format_holder = Handle<JSObject>(
-      JSObject::cast(context->get(
-          static_cast<int>(Intl::BoundFunctionContextSlot::kBoundFunction))),
+      JSObject::cast(context->get(NumberFormat::ContextSlot::kNumberFormat)),
       isolate);
 
   // 2. Assert: Type(nf) is Object and nf has an
@@ -673,8 +621,22 @@ BUILTIN(DateTimeFormatPrototypeFormat) {
     return *bound_format;
   }
 
-  Handle<JSFunction> new_bound_format_function = CreateBoundFunction(
-      isolate, date_format_holder, Builtins::kDateTimeFormatInternalFormat, 1);
+  Handle<NativeContext> native_context(isolate->context()->native_context(),
+                                       isolate);
+  Handle<Context> context = isolate->factory()->NewBuiltinContext(
+      native_context, DateFormat::ContextSlot::kLength);
+
+  // 4.b. Set F.[[DateTimeFormat]] to dtf.
+  context->set(DateFormat::ContextSlot::kDateFormat, *date_format_holder);
+
+  Handle<SharedFunctionInfo> info = Handle<SharedFunctionInfo>(
+      native_context->date_format_internal_format_shared_fun(), isolate);
+  Handle<Map> map = isolate->strict_function_without_prototype_map();
+
+  // 4.a. Let F be a new built-in function object as defined in DateTime Format
+  // Functions (12.1.5).
+  Handle<JSFunction> new_bound_format_function =
+      isolate->factory()->NewFunctionFromSharedFunctionInfo(map, info, context);
 
   // 4.c. Set dtf.[[BoundFormat]] to F.
   date_format_holder->SetEmbedderField(DateFormat::kBoundFormatIndex,
@@ -690,8 +652,7 @@ BUILTIN(DateTimeFormatInternalFormat) {
 
   // 1. Let dtf be F.[[DateTimeFormat]].
   Handle<JSObject> date_format_holder = Handle<JSObject>(
-      JSObject::cast(context->get(
-          static_cast<int>(Intl::BoundFunctionContextSlot::kBoundFunction))),
+      JSObject::cast(context->get(DateFormat::ContextSlot::kDateFormat)),
       isolate);
 
   // 2. Assert: Type(dtf) is Object and dtf has an [[InitializedDateTimeFormat]]
@@ -739,12 +700,6 @@ BUILTIN(ListFormatPrototypeResolvedOptions) {
   CHECK_RECEIVER(JSListFormat, format_holder,
                  "Intl.ListFormat.prototype.resolvedOptions");
   return *JSListFormat::ResolvedOptions(isolate, format_holder);
-}
-
-BUILTIN(ListFormatSupportedLocalesOf) {
-  HandleScope scope(isolate);
-  RETURN_RESULT_OR_FAILURE(
-      isolate, SupportedLocalesOfCommon(isolate, "listformat", args));
 }
 
 namespace {
@@ -831,11 +786,185 @@ BUILTIN(LocalePrototypeMinimize) {
                    isolate->factory()->NewJSObjectWithNullProto()));
 }
 
-BUILTIN(RelativeTimeFormatSupportedLocalesOf) {
-  HandleScope scope(isolate);
-  RETURN_RESULT_OR_FAILURE(
-      isolate, SupportedLocalesOfCommon(isolate, "relativetimeformat", args));
+namespace {
+
+MaybeHandle<JSArray> GenerateRelativeTimeFormatParts(
+    Isolate* isolate, icu::UnicodeString formatted,
+    icu::UnicodeString integer_part, Handle<String> unit) {
+  Factory* factory = isolate->factory();
+  Handle<JSArray> array = factory->NewJSArray(0);
+  int32_t found = formatted.indexOf(integer_part);
+
+  Handle<String> substring;
+  if (found < 0) {
+    // Cannot find the integer_part in the formatted.
+    // Return [{'type': 'literal', 'value': formatted}]
+    ASSIGN_RETURN_ON_EXCEPTION(isolate, substring,
+                               Intl::ToString(isolate, formatted), JSArray);
+    Intl::AddElement(isolate, array,
+                     0,                          // index
+                     factory->literal_string(),  // field_type_string
+                     substring);
+  } else {
+    // Found the formatted integer in the result.
+    int index = 0;
+
+    // array.push({
+    //     'type': 'literal',
+    //     'value': formatted.substring(0, found)})
+    if (found > 0) {
+      ASSIGN_RETURN_ON_EXCEPTION(isolate, substring,
+                                 Intl::ToString(isolate, formatted, 0, found),
+                                 JSArray);
+      Intl::AddElement(isolate, array, index++,
+                       factory->literal_string(),  // field_type_string
+                       substring);
+    }
+
+    // array.push({
+    //     'type': 'integer',
+    //     'value': formatted.substring(found, found + integer_part.length),
+    //     'unit': unit})
+    ASSIGN_RETURN_ON_EXCEPTION(isolate, substring,
+                               Intl::ToString(isolate, formatted, found,
+                                              found + integer_part.length()),
+                               JSArray);
+    Intl::AddElement(isolate, array, index++,
+                     factory->integer_string(),  // field_type_string
+                     substring, factory->unit_string(), unit);
+
+    // array.push({
+    //     'type': 'literal',
+    //     'value': formatted.substring(
+    //         found + integer_part.length, formatted.length)})
+    if (found + integer_part.length() < formatted.length()) {
+      ASSIGN_RETURN_ON_EXCEPTION(
+          isolate, substring,
+          Intl::ToString(isolate, formatted, found + integer_part.length(),
+                         formatted.length()),
+          JSArray);
+      Intl::AddElement(isolate, array, index,
+                       factory->literal_string(),  // field_type_string
+                       substring);
+    }
+  }
+  return array;
 }
+
+bool GetURelativeDateTimeUnit(Handle<String> unit,
+                              URelativeDateTimeUnit* unit_enum) {
+  std::unique_ptr<char[]> unit_str = unit->ToCString();
+  if ((strcmp("second", unit_str.get()) == 0) ||
+      (strcmp("seconds", unit_str.get()) == 0)) {
+    *unit_enum = UDAT_REL_UNIT_SECOND;
+  } else if ((strcmp("minute", unit_str.get()) == 0) ||
+             (strcmp("minutes", unit_str.get()) == 0)) {
+    *unit_enum = UDAT_REL_UNIT_MINUTE;
+  } else if ((strcmp("hour", unit_str.get()) == 0) ||
+             (strcmp("hours", unit_str.get()) == 0)) {
+    *unit_enum = UDAT_REL_UNIT_HOUR;
+  } else if ((strcmp("day", unit_str.get()) == 0) ||
+             (strcmp("days", unit_str.get()) == 0)) {
+    *unit_enum = UDAT_REL_UNIT_DAY;
+  } else if ((strcmp("week", unit_str.get()) == 0) ||
+             (strcmp("weeks", unit_str.get()) == 0)) {
+    *unit_enum = UDAT_REL_UNIT_WEEK;
+  } else if ((strcmp("month", unit_str.get()) == 0) ||
+             (strcmp("months", unit_str.get()) == 0)) {
+    *unit_enum = UDAT_REL_UNIT_MONTH;
+  } else if ((strcmp("quarter", unit_str.get()) == 0) ||
+             (strcmp("quarters", unit_str.get()) == 0)) {
+    *unit_enum = UDAT_REL_UNIT_QUARTER;
+  } else if ((strcmp("year", unit_str.get()) == 0) ||
+             (strcmp("years", unit_str.get()) == 0)) {
+    *unit_enum = UDAT_REL_UNIT_YEAR;
+  } else {
+    return false;
+  }
+  return true;
+}
+
+MaybeHandle<Object> RelativeTimeFormatPrototypeFormatCommon(
+    BuiltinArguments args, Isolate* isolate,
+    Handle<JSRelativeTimeFormat> format_holder, const char* func_name,
+    bool to_parts) {
+  Factory* factory = isolate->factory();
+  Handle<Object> value_obj = args.atOrUndefined(isolate, 1);
+  Handle<Object> unit_obj = args.atOrUndefined(isolate, 2);
+
+  // 3. Let value be ? ToNumber(value).
+  Handle<Object> value;
+  ASSIGN_RETURN_ON_EXCEPTION(isolate, value,
+                             Object::ToNumber(isolate, value_obj), Object);
+  double number = value->Number();
+  // 4. Let unit be ? ToString(unit).
+  Handle<String> unit;
+  ASSIGN_RETURN_ON_EXCEPTION(isolate, unit, Object::ToString(isolate, unit_obj),
+                             Object);
+
+  // 4. If isFinite(value) is false, then throw a RangeError exception.
+  if (!std::isfinite(number)) {
+    THROW_NEW_ERROR(
+        isolate,
+        NewRangeError(MessageTemplate::kNotFiniteNumber,
+                      isolate->factory()->NewStringFromAsciiChecked(func_name)),
+        Object);
+  }
+
+  icu::RelativeDateTimeFormatter* formatter =
+      JSRelativeTimeFormat::UnpackFormatter(format_holder);
+  CHECK_NOT_NULL(formatter);
+
+  URelativeDateTimeUnit unit_enum;
+  if (!GetURelativeDateTimeUnit(unit, &unit_enum)) {
+    THROW_NEW_ERROR(
+        isolate,
+        NewRangeError(MessageTemplate::kInvalidUnit,
+                      isolate->factory()->NewStringFromAsciiChecked(func_name),
+                      unit),
+        Object);
+  }
+
+  UErrorCode status = U_ZERO_ERROR;
+  icu::UnicodeString formatted;
+  if (unit_enum == UDAT_REL_UNIT_QUARTER) {
+    // ICU have not yet implement UDAT_REL_UNIT_QUARTER.
+  } else {
+    if (format_holder->numeric() == JSRelativeTimeFormat::Numeric::ALWAYS) {
+      formatter->formatNumeric(number, unit_enum, formatted, status);
+    } else {
+      DCHECK_EQ(JSRelativeTimeFormat::Numeric::AUTO, format_holder->numeric());
+      formatter->format(number, unit_enum, formatted, status);
+    }
+  }
+
+  if (U_FAILURE(status)) {
+    THROW_NEW_ERROR(isolate, NewTypeError(MessageTemplate::kIcuError), Object);
+  }
+
+  if (to_parts) {
+    icu::UnicodeString integer;
+    icu::FieldPosition pos;
+    formatter->getNumberFormat().format(std::abs(number), integer, pos, status);
+    if (U_FAILURE(status)) {
+      THROW_NEW_ERROR(isolate, NewTypeError(MessageTemplate::kIcuError),
+                      Object);
+    }
+
+    Handle<JSArray> elements;
+    ASSIGN_RETURN_ON_EXCEPTION(
+        isolate, elements,
+        GenerateRelativeTimeFormatParts(isolate, formatted, integer, unit),
+        Object);
+    return elements;
+  }
+
+  return factory->NewStringFromTwoByte(Vector<const uint16_t>(
+      reinterpret_cast<const uint16_t*>(formatted.getBuffer()),
+      formatted.length()));
+}
+
+}  // namespace
 
 BUILTIN(RelativeTimeFormatPrototypeFormat) {
   HandleScope scope(isolate);
@@ -845,12 +974,9 @@ BUILTIN(RelativeTimeFormatPrototypeFormat) {
   //    true, throw a TypeError exception.
   CHECK_RECEIVER(JSRelativeTimeFormat, format_holder,
                  "Intl.RelativeTimeFormat.prototype.format");
-  Handle<Object> value_obj = args.atOrUndefined(isolate, 1);
-  Handle<Object> unit_obj = args.atOrUndefined(isolate, 2);
-
-  RETURN_RESULT_OR_FAILURE(
-      isolate, JSRelativeTimeFormat::Format(isolate, value_obj, unit_obj,
-                                            format_holder, "format", false));
+  RETURN_RESULT_OR_FAILURE(isolate,
+                           RelativeTimeFormatPrototypeFormatCommon(
+                               args, isolate, format_holder, "format", false));
 }
 
 BUILTIN(RelativeTimeFormatPrototypeFormatToParts) {
@@ -861,11 +987,9 @@ BUILTIN(RelativeTimeFormatPrototypeFormatToParts) {
   //    true, throw a TypeError exception.
   CHECK_RECEIVER(JSRelativeTimeFormat, format_holder,
                  "Intl.RelativeTimeFormat.prototype.formatToParts");
-  Handle<Object> value_obj = args.atOrUndefined(isolate, 1);
-  Handle<Object> unit_obj = args.atOrUndefined(isolate, 2);
-  RETURN_RESULT_OR_FAILURE(isolate, JSRelativeTimeFormat::Format(
-                                        isolate, value_obj, unit_obj,
-                                        format_holder, "formatToParts", true));
+  RETURN_RESULT_OR_FAILURE(
+      isolate, RelativeTimeFormatPrototypeFormatCommon(
+                   args, isolate, format_holder, "formatToParts", true));
 }
 
 // Locale getters.
@@ -1039,12 +1163,6 @@ BUILTIN(PluralRulesConstructor) {
                                                     locales, options));
 }
 
-BUILTIN(PluralRulesSupportedLocalesOf) {
-  HandleScope scope(isolate);
-  RETURN_RESULT_OR_FAILURE(
-      isolate, SupportedLocalesOfCommon(isolate, "pluralrules", args));
-}
-
 BUILTIN(CollatorConstructor) {
   HandleScope scope(isolate);
   Handle<JSReceiver> new_target;
@@ -1068,16 +1186,11 @@ BUILTIN(CollatorConstructor) {
   ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, collator_obj,
                                      JSObject::New(target, new_target));
   Handle<JSCollator> collator = Handle<JSCollator>::cast(collator_obj);
+  collator->set_flags(0);
 
   // 6. Return ? InitializeCollator(collator, locales, options).
   RETURN_RESULT_OR_FAILURE(isolate, JSCollator::InitializeCollator(
                                         isolate, collator, locales, options));
-}
-
-BUILTIN(CollatorSupportedLocalesOf) {
-  HandleScope scope(isolate);
-  RETURN_RESULT_OR_FAILURE(isolate,
-                           SupportedLocalesOfCommon(isolate, "collator", args));
 }
 
 BUILTIN(CollatorPrototypeCompare) {
@@ -1098,8 +1211,21 @@ BUILTIN(CollatorPrototypeCompare) {
     return *bound_compare;
   }
 
-  Handle<JSFunction> new_bound_compare_function = CreateBoundFunction(
-      isolate, collator, Builtins::kCollatorInternalCompare, 2);
+  Handle<NativeContext> native_context(isolate->context()->native_context(),
+                                       isolate);
+  Handle<Context> context = isolate->factory()->NewBuiltinContext(
+      native_context, JSCollator::ContextSlot::kLength);
+
+  // 4.b. Set F.[[Collator]] to collator.
+  context->set(JSCollator::ContextSlot::kCollator, *collator);
+
+  Handle<SharedFunctionInfo> info = Handle<SharedFunctionInfo>(
+      native_context->collator_internal_compare_shared_fun(), isolate);
+  Handle<Map> map = isolate->strict_function_without_prototype_map();
+
+  // 4.a. Let F be a new built-in function object as defined in 10.3.3.1.
+  Handle<JSFunction> new_bound_compare_function =
+      isolate->factory()->NewFunctionFromSharedFunctionInfo(map, info, context);
 
   // 4.c. Set collator.[[BoundCompare]] to F.
   collator->set_bound_compare(*new_bound_compare_function);
@@ -1116,8 +1242,7 @@ BUILTIN(CollatorInternalCompare) {
   // 2. Assert: Type(collator) is Object and collator has an
   // [[InitializedCollator]] internal slot.
   Handle<JSCollator> collator_holder = Handle<JSCollator>(
-      JSCollator::cast(context->get(
-          static_cast<int>(Intl::BoundFunctionContextSlot::kBoundFunction))),
+      JSCollator::cast(context->get(JSCollator::ContextSlot::kCollator)),
       isolate);
 
   // 3. If x is not provided, let x be undefined.
@@ -1162,9 +1287,20 @@ BUILTIN(BreakIteratorPrototypeAdoptText) {
     return *bound_adopt_text;
   }
 
+  Handle<NativeContext> native_context(isolate->context()->native_context(),
+                                       isolate);
+  Handle<Context> context = isolate->factory()->NewBuiltinContext(
+      native_context, static_cast<int>(V8BreakIterator::ContextSlot::kLength));
+
+  context->set(static_cast<int>(V8BreakIterator::ContextSlot::kV8BreakIterator),
+               *break_iterator_holder);
+
+  Handle<SharedFunctionInfo> info = Handle<SharedFunctionInfo>(
+      native_context->break_iterator_internal_adopt_text_shared_fun(), isolate);
+  Handle<Map> map = isolate->strict_function_without_prototype_map();
+
   Handle<JSFunction> new_bound_adopt_text_function =
-      CreateBoundFunction(isolate, break_iterator_holder,
-                          Builtins::kBreakIteratorInternalAdoptText, 1);
+      isolate->factory()->NewFunctionFromSharedFunctionInfo(map, info, context);
 
   break_iterator_holder->SetEmbedderField(V8BreakIterator::kBoundAdoptTextIndex,
                                           *new_bound_adopt_text_function);
@@ -1178,7 +1314,7 @@ BUILTIN(BreakIteratorInternalAdoptText) {
 
   Handle<JSObject> break_iterator_holder = Handle<JSObject>(
       JSObject::cast(context->get(
-          static_cast<int>(Intl::BoundFunctionContextSlot::kBoundFunction))),
+          static_cast<int>(V8BreakIterator::ContextSlot::kV8BreakIterator))),
       isolate);
 
   DCHECK(Intl::IsObjectOfType(isolate, break_iterator_holder,
@@ -1191,229 +1327,6 @@ BUILTIN(BreakIteratorInternalAdoptText) {
 
   V8BreakIterator::AdoptText(isolate, break_iterator_holder, text);
   return ReadOnlyRoots(isolate).undefined_value();
-}
-
-BUILTIN(BreakIteratorPrototypeFirst) {
-  const char* const method = "get Intl.v8BreakIterator.prototype.first";
-  HandleScope scope(isolate);
-
-  CHECK_RECEIVER(JSObject, break_iterator_holder, method);
-  if (!Intl::IsObjectOfType(isolate, break_iterator_holder,
-                            Intl::Type::kBreakIterator)) {
-    THROW_NEW_ERROR_RETURN_FAILURE(
-        isolate,
-        NewTypeError(MessageTemplate::kIncompatibleMethodReceiver,
-                     isolate->factory()->NewStringFromAsciiChecked(method),
-                     break_iterator_holder));
-  }
-
-  Handle<Object> bound_first =
-      Handle<Object>(break_iterator_holder->GetEmbedderField(
-                         V8BreakIterator::kBoundFirstIndex),
-                     isolate);
-
-  if (!bound_first->IsUndefined(isolate)) {
-    DCHECK(bound_first->IsJSFunction());
-    return *bound_first;
-  }
-
-  Handle<JSFunction> new_bound_first_function = CreateBoundFunction(
-      isolate, break_iterator_holder, Builtins::kBreakIteratorInternalFirst, 0);
-
-  break_iterator_holder->SetEmbedderField(V8BreakIterator::kBoundFirstIndex,
-                                          *new_bound_first_function);
-
-  return *new_bound_first_function;
-}
-
-BUILTIN(BreakIteratorInternalFirst) {
-  HandleScope scope(isolate);
-  Handle<Context> context = Handle<Context>(isolate->context(), isolate);
-
-  Handle<JSObject> break_iterator_holder = Handle<JSObject>(
-      JSObject::cast(context->get(
-          static_cast<int>(Intl::BoundFunctionContextSlot::kBoundFunction))),
-      isolate);
-
-  DCHECK(Intl::IsObjectOfType(isolate, break_iterator_holder,
-                              Intl::Type::kBreakIterator));
-
-  icu::BreakIterator* break_iterator =
-      V8BreakIterator::UnpackBreakIterator(break_iterator_holder);
-  CHECK_NOT_NULL(break_iterator);
-
-  return *isolate->factory()->NewNumberFromInt(break_iterator->first());
-}
-
-BUILTIN(BreakIteratorPrototypeNext) {
-  const char* const method = "get Intl.v8BreakIterator.prototype.next";
-  HandleScope scope(isolate);
-
-  CHECK_RECEIVER(JSObject, break_iterator_holder, method);
-  if (!Intl::IsObjectOfType(isolate, break_iterator_holder,
-                            Intl::Type::kBreakIterator)) {
-    THROW_NEW_ERROR_RETURN_FAILURE(
-        isolate,
-        NewTypeError(MessageTemplate::kIncompatibleMethodReceiver,
-                     isolate->factory()->NewStringFromAsciiChecked(method),
-                     break_iterator_holder));
-  }
-
-  Handle<Object> bound_next = Handle<Object>(
-      break_iterator_holder->GetEmbedderField(V8BreakIterator::kBoundNextIndex),
-      isolate);
-
-  if (!bound_next->IsUndefined(isolate)) {
-    DCHECK(bound_next->IsJSFunction());
-    return *bound_next;
-  }
-
-  Handle<JSFunction> new_bound_next_function = CreateBoundFunction(
-      isolate, break_iterator_holder, Builtins::kBreakIteratorInternalNext, 0);
-
-  break_iterator_holder->SetEmbedderField(V8BreakIterator::kBoundNextIndex,
-                                          *new_bound_next_function);
-
-  return *new_bound_next_function;
-}
-
-BUILTIN(BreakIteratorInternalNext) {
-  HandleScope scope(isolate);
-  Handle<Context> context = Handle<Context>(isolate->context(), isolate);
-
-  Handle<JSObject> break_iterator_holder = Handle<JSObject>(
-      JSObject::cast(context->get(
-          static_cast<int>(Intl::BoundFunctionContextSlot::kBoundFunction))),
-      isolate);
-
-  DCHECK(Intl::IsObjectOfType(isolate, break_iterator_holder,
-                              Intl::Type::kBreakIterator));
-
-  icu::BreakIterator* break_iterator =
-      V8BreakIterator::UnpackBreakIterator(break_iterator_holder);
-  CHECK_NOT_NULL(break_iterator);
-
-  return *isolate->factory()->NewNumberFromInt(break_iterator->next());
-}
-
-BUILTIN(BreakIteratorPrototypeCurrent) {
-  const char* const method = "get Intl.v8BreakIterator.prototype.current";
-  HandleScope scope(isolate);
-
-  CHECK_RECEIVER(JSObject, break_iterator_holder, method);
-  if (!Intl::IsObjectOfType(isolate, break_iterator_holder,
-                            Intl::Type::kBreakIterator)) {
-    THROW_NEW_ERROR_RETURN_FAILURE(
-        isolate,
-        NewTypeError(MessageTemplate::kIncompatibleMethodReceiver,
-                     isolate->factory()->NewStringFromAsciiChecked(method),
-                     break_iterator_holder));
-  }
-
-  Handle<Object> bound_current =
-      Handle<Object>(break_iterator_holder->GetEmbedderField(
-                         V8BreakIterator::kBoundCurrentIndex),
-                     isolate);
-
-  if (!bound_current->IsUndefined(isolate)) {
-    DCHECK(bound_current->IsJSFunction());
-    return *bound_current;
-  }
-
-  Handle<JSFunction> new_bound_current_function =
-      CreateBoundFunction(isolate, break_iterator_holder,
-                          Builtins::kBreakIteratorInternalCurrent, 0);
-
-  break_iterator_holder->SetEmbedderField(V8BreakIterator::kBoundCurrentIndex,
-                                          *new_bound_current_function);
-
-  return *new_bound_current_function;
-}
-
-BUILTIN(BreakIteratorInternalCurrent) {
-  HandleScope scope(isolate);
-  Handle<Context> context = Handle<Context>(isolate->context(), isolate);
-
-  Handle<JSObject> break_iterator_holder = Handle<JSObject>(
-      JSObject::cast(context->get(
-          static_cast<int>(Intl::BoundFunctionContextSlot::kBoundFunction))),
-      isolate);
-
-  DCHECK(Intl::IsObjectOfType(isolate, break_iterator_holder,
-                              Intl::Type::kBreakIterator));
-
-  icu::BreakIterator* break_iterator =
-      V8BreakIterator::UnpackBreakIterator(break_iterator_holder);
-  CHECK_NOT_NULL(break_iterator);
-
-  return *isolate->factory()->NewNumberFromInt(break_iterator->current());
-}
-
-BUILTIN(BreakIteratorPrototypeBreakType) {
-  const char* const method = "get Intl.v8BreakIterator.prototype.breakType";
-  HandleScope scope(isolate);
-
-  CHECK_RECEIVER(JSObject, break_iterator_holder, method);
-  if (!Intl::IsObjectOfType(isolate, break_iterator_holder,
-                            Intl::Type::kBreakIterator)) {
-    THROW_NEW_ERROR_RETURN_FAILURE(
-        isolate,
-        NewTypeError(MessageTemplate::kIncompatibleMethodReceiver,
-                     isolate->factory()->NewStringFromAsciiChecked(method),
-                     break_iterator_holder));
-  }
-
-  Handle<Object> bound_break_type =
-      Handle<Object>(break_iterator_holder->GetEmbedderField(
-                         V8BreakIterator::kBoundBreakTypeIndex),
-                     isolate);
-
-  if (!bound_break_type->IsUndefined(isolate)) {
-    DCHECK(bound_break_type->IsJSFunction());
-    return *bound_break_type;
-  }
-
-  Handle<JSFunction> new_bound_break_type_function =
-      CreateBoundFunction(isolate, break_iterator_holder,
-                          Builtins::kBreakIteratorInternalBreakType, 0);
-
-  break_iterator_holder->SetEmbedderField(V8BreakIterator::kBoundBreakTypeIndex,
-                                          *new_bound_break_type_function);
-
-  return *new_bound_break_type_function;
-}
-
-BUILTIN(BreakIteratorInternalBreakType) {
-  HandleScope scope(isolate);
-  Handle<Context> context = Handle<Context>(isolate->context(), isolate);
-
-  Handle<JSObject> break_iterator_holder = Handle<JSObject>(
-      JSObject::cast(context->get(
-          static_cast<int>(Intl::BoundFunctionContextSlot::kBoundFunction))),
-      isolate);
-
-  DCHECK(Intl::IsObjectOfType(isolate, break_iterator_holder,
-                              Intl::Type::kBreakIterator));
-
-  icu::BreakIterator* break_iterator =
-      V8BreakIterator::UnpackBreakIterator(break_iterator_holder);
-  CHECK_NOT_NULL(break_iterator);
-
-  int32_t status = break_iterator->getRuleStatus();
-  // Keep return values in sync with JavaScript BreakType enum.
-  if (status >= UBRK_WORD_NONE && status < UBRK_WORD_NONE_LIMIT) {
-    return *isolate->factory()->NewStringFromStaticChars("none");
-  } else if (status >= UBRK_WORD_NUMBER && status < UBRK_WORD_NUMBER_LIMIT) {
-    return ReadOnlyRoots(isolate).number_string();
-  } else if (status >= UBRK_WORD_LETTER && status < UBRK_WORD_LETTER_LIMIT) {
-    return *isolate->factory()->NewStringFromStaticChars("letter");
-  } else if (status >= UBRK_WORD_KANA && status < UBRK_WORD_KANA_LIMIT) {
-    return *isolate->factory()->NewStringFromStaticChars("kana");
-  } else if (status >= UBRK_WORD_IDEO && status < UBRK_WORD_IDEO_LIMIT) {
-    return *isolate->factory()->NewStringFromStaticChars("ideo");
-  } else {
-    return *isolate->factory()->NewStringFromStaticChars("unknown");
-  }
 }
 
 }  // namespace internal

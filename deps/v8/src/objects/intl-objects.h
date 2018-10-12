@@ -45,9 +45,6 @@ class DateFormat {
   // Unpacks date format object from corresponding JavaScript object.
   static icu::SimpleDateFormat* UnpackDateFormat(Handle<JSObject> obj);
 
-  // Determine the TimeZone is valid.
-  static bool IsValidTimeZone(icu::SimpleDateFormat* date_format);
-
   // Release memory we allocated for the DateFormat once the JS object that
   // holds the pointer gets garbage collected.
   static void DeleteDateFormat(const v8::WeakCallbackInfo<void>& data);
@@ -89,6 +86,14 @@ class DateFormat {
 
   DEFINE_FIELD_OFFSET_CONSTANTS(JSObject::kHeaderSize, DATE_FORMAT_FIELDS)
 #undef DATE_FORMAT_FIELDS
+
+  // ContextSlot defines the context structure for the bound
+  // DateTimeFormat.prototype.format function
+  enum ContextSlot {
+    kDateFormat = Context::MIN_CONTEXT_SLOTS,
+
+    kLength
+  };
 
   // TODO(ryzokuken): Remove this and use regular accessors once DateFormat is a
   // subclass of JSObject
@@ -142,6 +147,16 @@ class NumberFormat {
   DEFINE_FIELD_OFFSET_CONSTANTS(JSObject::kHeaderSize, NUMBER_FORMAT_FIELDS)
 #undef NUMBER_FORMAT_FIELDS
 
+  // ContextSlot defines the context structure for the bound
+  // NumberFormat.prototype.format function.
+  enum ContextSlot {
+    // The number format instance that the function holding this
+    // context is bound to.
+    kNumberFormat = Context::MIN_CONTEXT_SLOTS,
+
+    kLength
+  };
+
   // TODO(gsathya): Remove this and use regular accessors once
   // NumberFormat is a sub class of JSObject.
   //
@@ -179,14 +194,18 @@ class V8BreakIterator {
   V(kBreakIterator, kPointerSize)  \
   V(kUnicodeString, kPointerSize)  \
   V(kBoundAdoptText, kPointerSize) \
-  V(kBoundFirst, kPointerSize)     \
-  V(kBoundNext, kPointerSize)      \
-  V(kBoundCurrent, kPointerSize)   \
-  V(kBoundBreakType, kPointerSize) \
   V(kSize, 0)
 
   DEFINE_FIELD_OFFSET_CONSTANTS(JSObject::kHeaderSize, BREAK_ITERATOR_FIELDS)
 #undef BREAK_ITERATOR_FIELDS
+
+  // ContextSlot defines the context structure for the bound
+  // v8BreakIterator.prototype.adoptText function
+  enum class ContextSlot {
+    kV8BreakIterator = Context::MIN_CONTEXT_SLOTS,
+
+    kLength
+  };
 
   // TODO(ryzokuken): Remove this and use regular accessors once v8BreakIterator
   // is a subclass of JSObject
@@ -195,10 +214,6 @@ class V8BreakIterator {
   static const int kBreakIteratorIndex = 0;
   static const int kUnicodeStringIndex = 1;
   static const int kBoundAdoptTextIndex = 2;
-  static const int kBoundFirstIndex = 3;
-  static const int kBoundNextIndex = 4;
-  static const int kBoundCurrentIndex = 5;
-  static const int kBoundBreakTypeIndex = 6;
 
  private:
   V8BreakIterator();
@@ -215,11 +230,6 @@ class Intl {
     kLocale,
 
     kTypeCount
-  };
-
-  enum class BoundFunctionContextSlot {
-    kBoundFunction = Context::MIN_CONTEXT_SLOTS,
-    kLength
   };
 
   inline static Intl::Type TypeFromInt(int type);
@@ -424,24 +434,6 @@ class Intl {
                          Handle<String> field_type_string, Handle<String> value,
                          Handle<String> additional_property_name,
                          Handle<String> additional_property_value);
-
-  // A helper function to help handle Unicode Extensions in locale.
-  static std::map<std::string, std::string> LookupUnicodeExtensions(
-    const icu::Locale& icu_locale, const std::set<std::string>& relevant_keys);
-
-  // In ECMA 402 v1, Intl constructors supported a mode of operation
-  // where calling them with an existing object as a receiver would
-  // transform the receiver into the relevant Intl instance with all
-  // internal slots. In ECMA 402 v2, this capability was removed, to
-  // avoid adding internal slots on existing objects. In ECMA 402 v3,
-  // the capability was re-added as "normative optional" in a mode
-  // which chains the underlying Intl instance on any object, when the
-  // constructor is called
-  //
-  // See ecma402/#legacy-constructor.
-  V8_WARN_UNUSED_RESULT static MaybeHandle<Object> LegacyUnwrapReceiver(
-      Isolate* isolate, Handle<JSReceiver> receiver,
-      Handle<JSFunction> constructor, bool has_initialized_slot);
 };
 
 }  // namespace internal

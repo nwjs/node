@@ -200,6 +200,10 @@ namespace internal {
 #ifdef V8_INTL_SUPPORT
 #define FOR_EACH_INTRINSIC_INTL(F)           \
   F(AvailableLocalesOf, 1, 1)                \
+  F(BreakIteratorBreakType, 1, 1)            \
+  F(BreakIteratorCurrent, 1, 1)              \
+  F(BreakIteratorFirst, 1, 1)                \
+  F(BreakIteratorNext, 1, 1)                 \
   F(CanonicalizeLanguageTag, 1, 1)           \
   F(CollatorResolvedOptions, 1, 1)           \
   F(CreateBreakIterator, 3, 1)               \
@@ -207,7 +211,6 @@ namespace internal {
   F(CreateNumberFormat, 3, 1)                \
   F(CurrencyDigits, 1, 1)                    \
   F(DateCacheVersion, 0, 1)                  \
-  F(DateTimeFormatResolvedOptions, 1, 1)     \
   F(DefaultNumberOption, 5, 1)               \
   F(DefineWEProperty, 3, 1)                  \
   F(FormatList, 2, 1)                        \
@@ -222,8 +225,10 @@ namespace internal {
   F(PluralRulesResolvedOptions, 1, 1)        \
   F(PluralRulesSelect, 2, 1)                 \
   F(ToDateTimeOptions, 3, 1)                 \
+  F(ToLocaleDateTime, 6, 1)                  \
   F(StringToLowerCaseIntl, 1, 1)             \
   F(StringToUpperCaseIntl, 1, 1)             \
+  F(SupportedLocalesOf, 3, 1)                \
 // End of macro.
 #else
 #define FOR_EACH_INTRINSIC_INTL(F)
@@ -324,11 +329,13 @@ namespace internal {
   F(GetOwnPropertyDescriptor, 2, 1)                             \
   F(GetOwnPropertyKeys, 2, 1)                                   \
   F(GetProperty, 2, 1)                                          \
+  F(GetPrototype, 1, 1)                                         \
   F(HasFastPackedElements, 1, 1)                                \
   F(HasInPrototypeChain, 2, 1)                                  \
   F(HasProperty, 2, 1)                                          \
   F(InternalSetPrototype, 2, 1)                                 \
   F(IsJSReceiver, 1, 1)                                         \
+  F(KeyedGetProperty, 2, 1)                                     \
   F(NewObject, 2, 1)                                            \
   F(ObjectCreate, 2, 1)                                         \
   F(ObjectEntries, 1, 1)                                        \
@@ -554,13 +561,13 @@ namespace internal {
 #define FOR_EACH_INTRINSIC_WASM(F)   \
   F(ThrowWasmError, 1, 1)            \
   F(ThrowWasmStackOverflow, 0, 1)    \
-  F(WasmExceptionGetElement, 2, 1)   \
-  F(WasmExceptionSetElement, 3, 1)   \
-  F(WasmGetExceptionRuntimeId, 1, 1) \
+  F(WasmExceptionGetElement, 1, 1)   \
+  F(WasmExceptionSetElement, 2, 1)   \
+  F(WasmGetExceptionRuntimeId, 0, 1) \
   F(WasmGrowMemory, 2, 1)            \
   F(WasmRunInterpreter, 2, 1)        \
   F(WasmStackGuard, 0, 1)            \
-  F(WasmThrow, 1, 1)                 \
+  F(WasmThrow, 0, 1)                 \
   F(WasmThrowCreate, 2, 1)           \
   F(WasmThrowTypeError, 0, 1)        \
   F(WasmCompileLazy, 2, 1)

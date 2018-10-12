@@ -828,7 +828,8 @@ class V8_EXPORT_PRIVATE Factory {
   Handle<String> NumberToString(Handle<Object> number, bool check_cache = true);
   Handle<String> NumberToString(Smi* number, bool check_cache = true);
 
-  inline Handle<String> Uint32ToString(uint32_t value, bool check_cache = true);
+  inline Handle<String> Uint32ToString(uint32_t value,
+                                       bool check_cache = false);
 
 #define ROOT_ACCESSOR(type, name, camel_name) inline Handle<type> name();
   ROOT_LIST(ROOT_ACCESSOR)

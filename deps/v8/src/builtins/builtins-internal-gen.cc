@@ -1207,23 +1207,27 @@ void Builtins::Generate_CallApiCallback_Argc1(MacroAssembler* masm) {
 
 // ES6 [[Get]] operation.
 TF_BUILTIN(GetProperty, CodeStubAssembler) {
+  Label call_runtime(this, Label::kDeferred), return_undefined(this), end(this);
+
   Node* object = Parameter(Descriptor::kObject);
   Node* key = Parameter(Descriptor::kKey);
   Node* context = Parameter(Descriptor::kContext);
-  Label if_notfound(this), if_proxy(this, Label::kDeferred),
-      if_slow(this, Label::kDeferred);
+  VARIABLE(var_result, MachineRepresentation::kTagged);
 
   CodeStubAssembler::LookupInHolder lookup_property_in_holder =
-      [=](Node* receiver, Node* holder, Node* holder_map,
-          Node* holder_instance_type, Node* unique_name, Label* next_holder,
-          Label* if_bailout) {
+      [=, &var_result, &end](Node* receiver, Node* holder, Node* holder_map,
+                             Node* holder_instance_type, Node* unique_name,
+                             Label* next_holder, Label* if_bailout) {
         VARIABLE(var_value, MachineRepresentation::kTagged);
         Label if_found(this);
         TryGetOwnProperty(context, receiver, holder, holder_map,
                           holder_instance_type, unique_name, &if_found,
                           &var_value, next_holder, if_bailout);
         BIND(&if_found);
-        Return(var_value.value());
+        {
+          var_result.Bind(var_value.value());
+          Goto(&end);
+        }
       };
 
   CodeStubAssembler::LookupInHolder lookup_element_in_holder =
@@ -1236,26 +1240,23 @@ TF_BUILTIN(GetProperty, CodeStubAssembler) {
       };
 
   TryPrototypeChainLookup(object, key, lookup_property_in_holder,
-                          lookup_element_in_holder, &if_notfound, &if_slow,
-                          &if_proxy);
+                          lookup_element_in_holder, &return_undefined,
+                          &call_runtime);
 
-  BIND(&if_notfound);
-  Return(UndefinedConstant());
-
-  BIND(&if_slow);
-  TailCallRuntime(Runtime::kGetProperty, context, object, key);
-
-  BIND(&if_proxy);
+  BIND(&return_undefined);
   {
-    // Convert the {key} to a Name first.
-    Node* name = CallBuiltin(Builtins::kToName, context, key);
-
-    // The {object} is a JSProxy instance, look up the {name} on it, passing
-    // {object} both as receiver and holder. If {name} is absent we can safely
-    // return undefined from here.
-    TailCallBuiltin(Builtins::kProxyGetProperty, context, object, name, object,
-                    SmiConstant(OnNonExistent::kReturnUndefined));
+    var_result.Bind(UndefinedConstant());
+    Goto(&end);
   }
+
+  BIND(&call_runtime);
+  {
+    var_result.Bind(CallRuntime(Runtime::kGetProperty, context, object, key));
+    Goto(&end);
+  }
+
+  BIND(&end);
+  Return(var_result.value());
 }
 
 // ES6 [[Set]] operation.

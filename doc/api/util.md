@@ -183,6 +183,10 @@ property take precedence over `--trace-deprecation` and
 <!-- YAML
 added: v0.5.3
 changes:
+  - version: REPLACEME
+    pr-url: https://github.com/nodejs/node/pull/17907
+    description: The `%o` specifier's `depth` option will now fall back to the
+                 default depth.
   - version: v8.4.0
     pr-url: https://github.com/nodejs/node/pull/14558
     description: The `%o` and `%O` specifiers are supported now.
@@ -198,8 +202,8 @@ Each placeholder token is replaced with the converted value from the
 corresponding argument. Supported placeholders are:
 
 * `%s` - `String`.
-* `%d` - `Number` (integer or floating point value).
-* `%i` - Integer.
+* `%d` - `Number` (integer or floating point value) or `BigInt`.
+* `%i` - Integer or `BigInt`.
 * `%f` - Floating point value.
 * `%j` - JSON. Replaced with the string `'[Circular]'` if the argument
 contains circular references.
@@ -357,9 +361,20 @@ stream.write('With ES6');
 ```
 
 ## util.inspect(object[, options])
+## util.inspect(object[, showHidden[, depth[, colors]]])
 <!-- YAML
 added: v0.3.0
 changes:
+  - version: REPLACEME
+    pr-url: https://github.com/nodejs/node/pull/22846
+    description: The `depth` default changed to `20`.
+  - version: v10.12.0
+    pr-url: https://github.com/nodejs/node/pull/22788
+    description: The `sorted` option is supported now.
+  - version: REPLACEME
+    pr-url: https://github.com/nodejs/node/pull/22756
+    description: The inspection output is now limited to about 128 MB. Data
+                 above that size will not be fully inspected.
   - version: v10.6.0
     pr-url: https://github.com/nodejs/node/pull/20725
     description: Inspecting linked lists and similar objects is now possible
@@ -394,7 +409,7 @@ changes:
   * `depth` {number} Specifies the number of times to recurse while formatting
     the `object`. This is useful for inspecting large complicated objects. To
     make it recurse up to the maximum call stack size pass `Infinity` or `null`.
-    **Default:** `2`.
+    **Default:** `20`.
   * `colors` {boolean} If `true`, the output will be styled with ANSI color
     codes. Colors are customizable, see [Customizing `util.inspect` colors][].
     **Default:** `false`.
@@ -408,11 +423,11 @@ changes:
     TODO(BridgeAR): Deprecate `maxArrayLength` and replace it with
                     `maxEntries`.
     -->
-  * `maxArrayLength` {number} Specifies the maximum number of `Array`,
+  * `maxArrayLength` {integer} Specifies the maximum number of `Array`,
     [`TypedArray`][], [`WeakMap`][] and [`WeakSet`][] elements to include when
     formatting. Set to `null` or `Infinity` to show all elements. Set to `0` or
     negative to show no elements. **Default:** `100`.
-  * `breakLength` {number} The length at which an object's keys are split
+  * `breakLength` {integer} The length at which an object's keys are split
     across multiple lines. Set to `Infinity` to format an object as a single
     line. **Default:** `60` for legacy compatibility.
   * `compact` {boolean} Setting this to `false` changes the default indentation
@@ -422,6 +437,10 @@ changes:
     objects the same as arrays. Note that no text will be reduced below 16
     characters, no matter the `breakLength` size. For more information, see the
     example below. **Default:** `true`.
+  * `sorted` {boolean|Function} If set to `true` or a function, all properties
+    of an object and Set and Map entries will be sorted in the returned string.
+    If set to `true` the [default sort][] is going to be used. If set to a
+    function, it is used as a [compare function][].
 * Returns: {string} The representation of passed object
 
 The `util.inspect()` method returns a string representation of `object` that is
@@ -447,12 +466,23 @@ util.inspect(new Bar()); // 'Bar {}'
 util.inspect(baz);       // '[foo] {}'
 ```
 
-The following example inspects all properties of the `util` object:
+The following example limits the inspected output of the `paths` property:
 
 ```js
 const util = require('util');
 
-console.log(util.inspect(util, { showHidden: true, depth: null }));
+console.log(util.inspect(module, { depth: 0 }));
+// Instead of showing all entries in `paths` `[Array]` is used to limit the
+// output for readability:
+
+// Module {
+//   id: '<repl>',
+//   exports: {},
+//   parent: undefined,
+//   filename: null,
+//   loaded: false,
+//   children: [],
+//   paths: [Array] }
 ```
 
 The following example highlights the difference with the `compact` option:
@@ -468,7 +498,7 @@ const o = {
     'foo']], 4],
   b: new Map([['za', 1], ['zb', 'test']])
 };
-console.log(util.inspect(o, { compact: true, depth: 5, breakLength: 80 }));
+console.log(util.inspect(o, { compact: true, breakLength: 80 }));
 
 // This will print
 
@@ -482,7 +512,7 @@ console.log(util.inspect(o, { compact: true, depth: 5, breakLength: 80 }));
 //   b: Map { 'za' => 1, 'zb' => 'test' } }
 
 // Setting `compact` to false changes the output to be more reader friendly.
-console.log(util.inspect(o, { compact: false, depth: 5, breakLength: 80 }));
+console.log(util.inspect(o, { compact: false, breakLength: 80 }));
 
 // {
 //   a: [
@@ -531,10 +561,39 @@ console.log(inspect(weakSet, { showHidden: true }));
 // WeakSet { { a: 1 }, { b: 2 } }
 ```
 
+The `sorted` option makes sure the output is identical, no matter of the
+properties insertion order:
+
+```js
+const { inspect } = require('util');
+const assert = require('assert');
+
+const o1 = {
+  b: [2, 3, 1],
+  a: '`a` comes before `b`',
+  c: new Set([2, 3, 1])
+};
+console.log(inspect(o1, { sorted: true }));
+// { a: '`a` comes before `b`', b: [ 2, 3, 1 ], c: Set { 1, 2, 3 } }
+console.log(inspect(o1, { sorted: (a, b) => b.localeCompare(a) }));
+// { c: Set { 3, 2, 1 }, b: [ 2, 3, 1 ], a: '`a` comes before `b`' }
+
+const o2 = {
+  c: new Set([2, 1, 3]),
+  a: '`a` comes before `b`',
+  b: [2, 3, 1]
+};
+assert.strict.equal(
+  inspect(o1, { sorted: true }),
+  inspect(o2, { sorted: true })
+);
+```
+
 Please note that `util.inspect()` is a synchronous method that is mainly
-intended as a debugging tool. Some input values can have a significant
-performance overhead that can block the event loop. Use this function
-with care and never in a hot code path.
+intended as a debugging tool. Its maximum output length is limited to
+approximately 128 MB and input values that result in output bigger than that
+will not be inspected fully. Such values can have a significant performance
+overhead that can block the event loop for a significant amount of time.
 
 ### Customizing `util.inspect` colors
 
@@ -569,9 +628,10 @@ terminals.
 
 <!-- type=misc -->
 
-Objects may also define their own `[util.inspect.custom](depth, opts)` function
-that `util.inspect()` will invoke and use the result of when inspecting the
-object:
+Objects may also define their own
+[`[util.inspect.custom](depth, opts)`][util.inspect.custom] function,
+which `util.inspect()` will invoke and use the result of when inspecting
+the object:
 
 ```js
 const util = require('util');
@@ -623,10 +683,41 @@ util.inspect(obj);
 ### util.inspect.custom
 <!-- YAML
 added: v6.6.0
+changes:
+  - version: v10.12.0
+    pr-url: https://github.com/nodejs/node/pull/20857
+    description: This is now defined as a shared symbol.
 -->
 
-* {symbol} that can be used to declare custom inspect functions, see
-[Custom inspection functions on Objects][].
+* {symbol} that can be used to declare custom inspect functions.
+
+In addition to being accessible through `util.inspect.custom`, this
+symbol is [registered globally][global symbol registry] and can be
+accessed in any environment as `Symbol.for('nodejs.util.inspect.custom')`.
+
+```js
+const inspect = Symbol.for('nodejs.util.inspect.custom');
+
+class Password {
+  constructor(value) {
+    this.value = value;
+  }
+
+  toString() {
+    return 'xxxxxxxx';
+  }
+
+  [inspect]() {
+    return `Password <${this.toString()}>`;
+  }
+}
+
+const password = new Password('r0sebud');
+console.log(password);
+// Prints Password <xxxxxxxx>
+```
+
+See [Custom inspection functions on Objects][] for more details.
 
 ### util.inspect.defaultOptions
 <!-- YAML
@@ -841,6 +932,13 @@ The `'iso-8859-16'` encoding listed in the [WHATWG Encoding Standard][]
 is not supported.
 
 ### new TextDecoder([encoding[, options]])
+<!-- YAML
+added: v8.3.0
+changes:
+  - version: REPLACEME
+    pr-url: REPLACEME
+    description: The class is now available on the global object.
+-->
 
 * `encoding` {string} Identifies the `encoding` that this `TextDecoder` instance
   supports. **Default:** `'utf-8'`.
@@ -855,6 +953,8 @@ is not supported.
 
 Creates an new `TextDecoder` instance. The `encoding` may specify one of the
 supported encodings or an alias.
+
+The `TextDecoder` class is also available on the global object.
 
 ### textDecoder.decode([input[, options]])
 
@@ -895,6 +995,10 @@ mark.
 ## Class: util.TextEncoder
 <!-- YAML
 added: v8.3.0
+changes:
+  - version: REPLACEME
+    pr-url: REPLACEME
+    description: The class is now available on the global object.
 -->
 
 An implementation of the [WHATWG Encoding Standard][] `TextEncoder` API. All
@@ -904,6 +1008,8 @@ instances of `TextEncoder` only support UTF-8 encoding.
 const encoder = new TextEncoder();
 const uint8array = encoder.encode('this is some data');
 ```
+
+The `TextEncoder` class is also available on the global object.
 
 ### textEncoder.encode([input])
 
@@ -1049,10 +1155,31 @@ by `new Boolean()`.
 ```js
 util.types.isBooleanObject(false);  // Returns false
 util.types.isBooleanObject(true);   // Returns false
-util.types.isBooleanObject(new Boolean(false));   // Returns true
-util.types.isBooleanObject(new Boolean(true));    // Returns true
+util.types.isBooleanObject(new Boolean(false)); // Returns true
+util.types.isBooleanObject(new Boolean(true));  // Returns true
 util.types.isBooleanObject(Boolean(false)); // Returns false
-util.types.isBooleanObject(Boolean(true)); // Returns false
+util.types.isBooleanObject(Boolean(true));  // Returns false
+```
+
+### util.types.isBoxedPrimitive(value)
+<!-- YAML
+added: v10.11.0
+-->
+
+* `value` {any}
+* Returns: {boolean}
+
+Returns `true` if the value is any boxed primitive object, e.g. created
+by `new Boolean()`, `new String()` or `Object(Symbol())`.
+
+For example:
+
+```js
+util.types.isBoxedPrimitive(false); // Returns false
+util.types.isBoxedPrimitive(new Boolean(false)); // Returns true
+util.types.isBoxedPrimitive(Symbol('foo')); // Returns false
+util.types.isBoxedPrimitive(Object(Symbol('foo'))); // Returns true
+util.types.isBoxedPrimitive(Object(BigInt(5))); // Returns true
 ```
 
 ### util.types.isDataView(value)
@@ -2050,7 +2177,6 @@ Deprecated predecessor of `console.log`.
 [`Array.isArray()`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/isArray
 [`ArrayBuffer`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer
 [`ArrayBuffer.isView()`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer/isView
-[async function]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function
 [`assert.deepStrictEqual()`]: assert.html#assert_assert_deepstrictequal_actual_expected_message
 [`Buffer.isBuffer()`]: buffer.html#buffer_class_method_buffer_isbuffer_obj
 [`console.error()`]: console.html#console_console_error_data_args
@@ -2092,6 +2218,11 @@ Deprecated predecessor of `console.log`.
 [Module Namespace Object]: https://tc39.github.io/ecma262/#sec-module-namespace-exotic-objects
 [WHATWG Encoding Standard]: https://encoding.spec.whatwg.org/
 [Common System Errors]: errors.html#errors_common_system_errors
+[async function]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function
+[compare function]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort#Parameters
 [constructor]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/constructor
+[default sort]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort
+[global symbol registry]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/for
 [list of deprecated APIS]: deprecations.html#deprecations_list_of_deprecated_apis
 [semantically incompatible]: https://github.com/nodejs/node/issues/4179
+[util.inspect.custom]: #util_util_inspect_custom

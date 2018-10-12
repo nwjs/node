@@ -107,6 +107,46 @@ added: v0.1.7
 
 The process object. See the [`process` object][] section.
 
+## queueMicrotask(callback)
+<!-- YAML
+added: REPLACEME
+-->
+
+<!-- type=global -->
+
+> Stability: 1 - Experimental
+
+* `callback` {Function} Function to be queued.
+
+The `queueMicrotask()` method queues a microtask to invoke `callback`. If
+`callback` throws an exception, the [`process` object][] `'error'` event will
+be emitted.
+
+In general, `queueMicrotask` is the idiomatic choice over `process.nextTick()`.
+`process.nextTick()` will always run before the microtask queue, and so
+unexpected execution order may be observed.
+
+```js
+// Here, `queueMicrotask()` is used to ensure the 'load' event is always
+// emitted asynchronously, and therefore consistently. Using
+// `process.nextTick()` here would result in the 'load' event always emitting
+// before any other promise jobs.
+
+DataHandler.prototype.load = async function load(key) {
+  const hit = this._cache.get(url);
+  if (hit !== undefined) {
+    queueMicrotask(() => {
+      this.emit('load', hit);
+    });
+    return;
+  }
+
+  const data = await fetchData(key);
+  this._cache.set(url, data);
+  this.emit('load', data);
+};
+```
+
 ## require()
 
 This variable may appear to be global but is not. See [`require()`].
@@ -138,6 +178,25 @@ added: v0.0.1
 
 [`setTimeout`] is described in the [timers][] section.
 
+## TextDecoder
+<!-- YAML
+added: REPLACEME
+-->
+
+<!-- type=global -->
+
+The WHATWG `TextDecoder` class. See the [`TextDecoder`][] section.
+
+## TextEncoder
+<!-- YAML
+added: REPLACEME
+-->
+
+<!-- type=global -->
+
+The WHATWG `TextEncoder` class. See the [`TextEncoder`][] section.
+
+
 ## URL
 <!-- YAML
 added: v10.0.0
@@ -156,6 +215,19 @@ added: v10.0.0
 
 The WHATWG `URLSearchParams` class. See the [`URLSearchParams`][] section.
 
+## WebAssembly
+<!-- YAML
+added: v8.0.0
+-->
+
+<!-- type=global -->
+
+* {Object}
+
+The object that acts as the namespace for all W3C
+[WebAssembly][webassembly-org] related functionality. See the
+[Mozilla Developer Network][webassembly-mdn] for usage and compatibility.
+
 [`__dirname`]: modules.html#modules_dirname
 [`__filename`]: modules.html#modules_filename
 [`clearImmediate`]: timers.html#timers_clearimmediate_immediate
@@ -169,9 +241,13 @@ The WHATWG `URLSearchParams` class. See the [`URLSearchParams`][] section.
 [`setImmediate`]: timers.html#timers_setimmediate_callback_args
 [`setInterval`]: timers.html#timers_setinterval_callback_delay_args
 [`setTimeout`]: timers.html#timers_settimeout_callback_delay_args
+[`TextDecoder`]: util.html#util_class_util_textdecoder
+[`TextEncoder`]: util.html#util_class_util_textencoder
 [`URL`]: url.html#url_class_url
 [`URLSearchParams`]: url.html#url_class_urlsearchparams
 [buffer section]: buffer.html
 [built-in objects]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects
 [module system documentation]: modules.html
 [timers]: timers.html
+[webassembly-mdn]: https://developer.mozilla.org/en-US/docs/WebAssembly
+[webassembly-org]: https://webassembly.org

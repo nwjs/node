@@ -435,6 +435,9 @@ class ThreadLocalTop BASE_EMBEDDED {
   Context* context_ = nullptr;
   ThreadId thread_id_ = ThreadId::Invalid();
   Object* pending_exception_ = nullptr;
+  // TODO(kschimpf): Change this to a stack of caught exceptions (rather than
+  // just innermost catching try block).
+  Object* wasm_caught_exception_ = nullptr;
 
   // Communication channel between Isolate::FindHandler and the CEntry.
   Context* pending_handler_context_ = nullptr;
@@ -713,6 +716,11 @@ class Isolate : private HiddenFactory {
   inline void set_pending_exception(Object* exception_obj);
   inline void clear_pending_exception();
 
+  // Interface to wasm caught exception.
+  inline Object* get_wasm_caught_exception();
+  inline void set_wasm_caught_exception(Object* exception);
+  inline void clear_wasm_caught_exception();
+
   bool AreWasmThreadsEnabled(Handle<Context> context);
 
   THREAD_LOCAL_TOP_ADDRESS(Object*, pending_exception)
@@ -749,6 +757,7 @@ class Isolate : private HiddenFactory {
   bool IsExternalHandlerOnTop(Object* exception);
 
   inline bool is_catchable_by_javascript(Object* exception);
+  bool is_catchable_by_wasm(Object* exception);
 
   // JS execution stack (see frames.h).
   static Address c_entry_fp(ThreadLocalTop* thread) {

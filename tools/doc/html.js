@@ -62,7 +62,7 @@ const gtocHTML = unified()
 const templatePath = path.join(docPath, 'template.html');
 const template = fs.readFileSync(templatePath, 'utf8');
 
-function toHTML({ input, content, filename, nodeVersion, analytics }, cb) {
+function toHTML({ input, content, filename, nodeVersion }, cb) {
   filename = path.basename(filename, '.md');
 
   const id = filename.replace(/\W+/g, '-');
@@ -76,22 +76,6 @@ function toHTML({ input, content, filename, nodeVersion, analytics }, cb) {
                        `class="nav-${id}`, `class="nav-${id} active`))
                      .replace('__EDIT_ON_GITHUB__', editOnGitHub(filename))
                      .replace('__CONTENT__', content.toString());
-
-  if (analytics) {
-    HTML = HTML.replace('<!-- __TRACKING__ -->', `
-    <script src="assets/dnt_helper.js"></script>
-    <script>
-      if (!_dntEnabled()) {
-        (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;
-        i[r]=i[r]||function(){(i[r].q=i[r].q||[]).push(arguments)},
-        i[r].l=1*new Date();a=s.createElement(o),m=s.getElementsByTagName(o)[0];
-        a.async=1;a.src=g;m.parentNode.insertBefore(a,m)})(window,document,
-        'script','//www.google-analytics.com/analytics.js','ga');
-        ga('create', '${analytics}', 'auto');
-        ga('send', 'pageview');
-      }
-    </script>`);
-  }
 
   const docCreated = input.match(
     /<!--\s*introduced_in\s*=\s*v([0-9]+)\.([0-9]+)\.[0-9]+\s*-->/);
@@ -300,7 +284,9 @@ function parseYAML(text) {
         .use(htmlStringify)
         .processSync(change.description).toString();
 
-      result += `<tr><td>${change.version}</td>\n` +
+      const version = common.arrify(change.version).join(', ');
+
+      result += `<tr><td>${version}</td>\n` +
                   `<td>${description}</td></tr>\n`;
     });
 
@@ -318,10 +304,16 @@ function parseYAML(text) {
   return result;
 }
 
+function minVersion(a) {
+  return common.arrify(a).reduce((min, e) => {
+    return !min || versionSort(min, e) < 0 ? e : min;
+  });
+}
+
 const numberRe = /^\d*/;
 function versionSort(a, b) {
-  a = a.trim();
-  b = b.trim();
+  a = minVersion(a).trim();
+  b = minVersion(b).trim();
   let i = 0; // Common prefix length.
   while (i < a.length && i < b.length && a[i] === b[i]) i++;
   a = a.substr(i);

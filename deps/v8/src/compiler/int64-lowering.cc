@@ -127,10 +127,9 @@ void Int64Lowering::LowerWord64AtomicBinop(Node* node, const Operator* op) {
 }
 
 void Int64Lowering::LowerWord64AtomicNarrowOp(Node* node, const Operator* op) {
-  Node* value = node->InputAt(2);
-  node->ReplaceInput(2, GetReplacementLow(value));
+  DefaultLowering(node, true);
   NodeProperties::ChangeOp(node, op);
-  ReplaceNode(node, node, graph()->NewNode(common()->Int32Constant(0)));
+  ReplaceNodeWithProjections(node);
 }
 
 // static
@@ -916,7 +915,8 @@ void Int64Lowering::LowerNode(Node* node) {
     if (type == MachineType::Uint64()) {                                    \
       LowerWord64AtomicBinop(node, machine()->Word32AtomicPair##name());    \
     } else {                                                                \
-      LowerWord64AtomicNarrowOp(node, machine()->Word32Atomic##name(type)); \
+      LowerWord64AtomicNarrowOp(node,                                       \
+                                machine()->Word64AtomicNarrow##name(type)); \
     }                                                                       \
     break;                                                                  \
   }
@@ -940,8 +940,8 @@ void Int64Lowering::LowerNode(Node* node) {
                                  machine()->Word32AtomicPairCompareExchange());
         ReplaceNodeWithProjections(node);
       } else {
-        LowerWord64AtomicNarrowOp(node,
-                                  machine()->Word32AtomicCompareExchange(type));
+        LowerWord64AtomicNarrowOp(
+            node, machine()->Word64AtomicNarrowCompareExchange(type));
       }
       break;
     }

@@ -2042,9 +2042,8 @@ Node* WasmGraphBuilder::Throw(uint32_t tag,
   Node* create_parameters[] = {
       BuildChangeUint31ToSmi(ConvertExceptionTagToRuntimeId(tag)),
       BuildChangeUint31ToSmi(Uint32Constant(encoded_size))};
-  Node* except_obj =
-      BuildCallToRuntime(Runtime::kWasmThrowCreate, create_parameters,
-                         arraysize(create_parameters));
+  BuildCallToRuntime(Runtime::kWasmThrowCreate, create_parameters,
+                     arraysize(create_parameters));
   uint32_t index = 0;
   const wasm::WasmExceptionSig* sig = exception->sig;
   MachineOperatorBuilder* m = mcgraph()->machine();
@@ -2055,7 +2054,7 @@ Node* WasmGraphBuilder::Throw(uint32_t tag,
         value = graph()->NewNode(m->BitcastFloat32ToInt32(), value);
         V8_FALLTHROUGH;
       case wasm::kWasmI32:
-        BuildEncodeException32BitValue(except_obj, &index, value);
+        BuildEncodeException32BitValue(&index, value);
         break;
       case wasm::kWasmF64:
         value = graph()->NewNode(m->BitcastFloat64ToInt64(), value);
@@ -2064,9 +2063,9 @@ Node* WasmGraphBuilder::Throw(uint32_t tag,
         Node* upper32 = graph()->NewNode(
             m->TruncateInt64ToInt32(),
             Binop(wasm::kExprI64ShrU, value, Int64Constant(32)));
-        BuildEncodeException32BitValue(except_obj, &index, upper32);
+        BuildEncodeException32BitValue(&index, upper32);
         Node* lower32 = graph()->NewNode(m->TruncateInt64ToInt32(), value);
-        BuildEncodeException32BitValue(except_obj, &index, lower32);
+        BuildEncodeException32BitValue(&index, lower32);
         break;
       }
       default:
@@ -2074,15 +2073,14 @@ Node* WasmGraphBuilder::Throw(uint32_t tag,
     }
   }
   DCHECK_EQ(encoded_size, index);
-  return BuildCallToRuntime(Runtime::kWasmThrow, &except_obj, 1);
+  return BuildCallToRuntime(Runtime::kWasmThrow, nullptr, 0);
 }
 
-void WasmGraphBuilder::BuildEncodeException32BitValue(Node* except_obj,
-                                                      uint32_t* index,
+void WasmGraphBuilder::BuildEncodeException32BitValue(uint32_t* index,
                                                       Node* value) {
   MachineOperatorBuilder* machine = mcgraph()->machine();
   Node* upper_parameters[] = {
-      except_obj, BuildChangeUint31ToSmi(Int32Constant(*index)),
+      BuildChangeUint31ToSmi(Int32Constant(*index)),
       BuildChangeUint31ToSmi(
           graph()->NewNode(machine->Word32Shr(), value, Int32Constant(16))),
   };
@@ -2090,7 +2088,7 @@ void WasmGraphBuilder::BuildEncodeException32BitValue(Node* except_obj,
                      arraysize(upper_parameters));
   ++(*index);
   Node* lower_parameters[] = {
-      except_obj, BuildChangeUint31ToSmi(Int32Constant(*index)),
+      BuildChangeUint31ToSmi(Int32Constant(*index)),
       BuildChangeUint31ToSmi(graph()->NewNode(machine->Word32And(), value,
                                               Int32Constant(0xFFFFu))),
   };
@@ -2111,9 +2109,9 @@ Node* WasmGraphBuilder::BuildDecodeException32BitValue(Node* const* values,
   return value;
 }
 
-Node* WasmGraphBuilder::Rethrow(Node* except_obj) {
+Node* WasmGraphBuilder::Rethrow() {
   SetNeedsStackCheck();
-  Node* result = BuildCallToRuntime(Runtime::kWasmThrow, &except_obj, 1);
+  Node* result = BuildCallToRuntime(Runtime::kWasmThrow, nullptr, 0);
   return result;
 }
 
@@ -2123,14 +2121,14 @@ Node* WasmGraphBuilder::ConvertExceptionTagToRuntimeId(uint32_t tag) {
   return Uint32Constant(tag);
 }
 
-Node* WasmGraphBuilder::GetExceptionRuntimeId(Node* except_obj) {
+Node* WasmGraphBuilder::GetExceptionRuntimeId() {
   SetNeedsStackCheck();
   return BuildChangeSmiToInt32(
-      BuildCallToRuntime(Runtime::kWasmGetExceptionRuntimeId, &except_obj, 1));
+      BuildCallToRuntime(Runtime::kWasmGetExceptionRuntimeId, nullptr, 0));
 }
 
 Node** WasmGraphBuilder::GetExceptionValues(
-    Node* except_obj, const wasm::WasmException* except_decl) {
+    const wasm::WasmException* except_decl) {
   // TODO(kschimpf): We need to move this code to the function-body-decoder.cc
   // in order to build landing-pad (exception) edges in case the runtime
   // call causes an exception.
@@ -2139,8 +2137,7 @@ Node** WasmGraphBuilder::GetExceptionValues(
   uint32_t encoded_size = GetExceptionEncodedSize(except_decl);
   Node** values = Buffer(encoded_size);
   for (uint32_t i = 0; i < encoded_size; ++i) {
-    Node* parameters[] = {except_obj,
-                          BuildChangeUint31ToSmi(Uint32Constant(i))};
+    Node* parameters[] = {BuildChangeUint31ToSmi(Uint32Constant(i))};
     values[i] = BuildCallToRuntime(Runtime::kWasmExceptionGetElement,
                                    parameters, arraysize(parameters));
   }
@@ -3037,6 +3034,29 @@ Node* WasmGraphBuilder::SetGlobal(uint32_t index, Node* val) {
       graph()->NewNode(op, base, offset, val, Effect(), Control()));
 }
 
+Node* WasmGraphBuilder::CheckBoundsAndAlignment(
+    uint8_t access_size, Node* index, uint32_t offset,
+    wasm::WasmCodePosition position) {
+  // Atomic operations access the memory, need to be bound checked till
+  // TrapHandlers are enabled on atomic operations
+  index =
+      BoundsCheckMem(access_size, index, offset, position, kNeedsBoundsCheck);
+  Node* effective_address =
+      graph()->NewNode(mcgraph()->machine()->IntAdd(), MemBuffer(offset),
+                       Uint32ToUintptr(index));
+  // Unlike regular memory accesses, unaligned memory accesses for atomic
+  // operations should trap
+  // Access sizes are in powers of two, calculate mod without using division
+  Node* cond =
+      graph()->NewNode(mcgraph()->machine()->WordAnd(), effective_address,
+                       IntPtrConstant(access_size - 1));
+  TrapIfFalse(wasm::kTrapUnalignedAccess,
+              graph()->NewNode(mcgraph()->machine()->Word32Equal(), cond,
+                               mcgraph()->Int32Constant(0)),
+              position);
+  return index;
+}
+
 Node* WasmGraphBuilder::BoundsCheckMem(uint8_t access_size, Node* index,
                                        uint32_t offset,
                                        wasm::WasmCodePosition position,
@@ -3206,7 +3226,7 @@ Node* WasmGraphBuilder::LoadMem(wasm::ValueType type, MachineType memtype,
     }
   }
 
-  if (FLAG_trace_wasm_memory) {
+  if (FLAG_wasm_trace_memory) {
     TraceMemoryOperation(false, memtype.representation(), index, offset,
                          position);
   }
@@ -3251,7 +3271,7 @@ Node* WasmGraphBuilder::StoreMem(MachineRepresentation mem_rep, Node* index,
 
   SetEffect(store);
 
-  if (FLAG_trace_wasm_memory) {
+  if (FLAG_wasm_trace_memory) {
     TraceMemoryOperation(true, mem_rep, index, offset, position);
   }
 
@@ -3878,14 +3898,13 @@ Node* WasmGraphBuilder::Simd8x16ShuffleOp(const uint8_t shuffle[16],
 Node* WasmGraphBuilder::AtomicOp(wasm::WasmOpcode opcode, Node* const* inputs,
                                  uint32_t alignment, uint32_t offset,
                                  wasm::WasmCodePosition position) {
-  // TODO(gdeepti): Add alignment validation, traps on misalignment
   Node* node;
   switch (opcode) {
 #define BUILD_ATOMIC_BINOP(Name, Operation, Type, Prefix)                     \
   case wasm::kExpr##Name: {                                                   \
-    Node* index =                                                             \
-        BoundsCheckMem(wasm::ValueTypes::MemSize(MachineType::Type()),        \
-                       inputs[0], offset, position, kNeedsBoundsCheck);       \
+    Node* index = CheckBoundsAndAlignment(                                    \
+        wasm::ValueTypes::MemSize(MachineType::Type()), inputs[0], offset,    \
+        position);                                                            \
     node = graph()->NewNode(                                                  \
         mcgraph()->machine()->Prefix##Atomic##Operation(MachineType::Type()), \
         MemBuffer(offset), index, inputs[1], Effect(), Control());            \
@@ -3896,9 +3915,9 @@ Node* WasmGraphBuilder::AtomicOp(wasm::WasmOpcode opcode, Node* const* inputs,
 
 #define BUILD_ATOMIC_CMP_EXCHG(Name, Type, Prefix)                            \
   case wasm::kExpr##Name: {                                                   \
-    Node* index =                                                             \
-        BoundsCheckMem(wasm::ValueTypes::MemSize(MachineType::Type()),        \
-                       inputs[0], offset, position, kNeedsBoundsCheck);       \
+    Node* index = CheckBoundsAndAlignment(                                    \
+        wasm::ValueTypes::MemSize(MachineType::Type()), inputs[0], offset,    \
+        position);                                                            \
     node = graph()->NewNode(                                                  \
         mcgraph()->machine()->Prefix##AtomicCompareExchange(                  \
             MachineType::Type()),                                             \
@@ -3908,24 +3927,24 @@ Node* WasmGraphBuilder::AtomicOp(wasm::WasmOpcode opcode, Node* const* inputs,
     ATOMIC_CMP_EXCHG_LIST(BUILD_ATOMIC_CMP_EXCHG)
 #undef BUILD_ATOMIC_CMP_EXCHG
 
-#define BUILD_ATOMIC_LOAD_OP(Name, Type, Prefix)                        \
-  case wasm::kExpr##Name: {                                             \
-    Node* index =                                                       \
-        BoundsCheckMem(wasm::ValueTypes::MemSize(MachineType::Type()),  \
-                       inputs[0], offset, position, kNeedsBoundsCheck); \
-    node = graph()->NewNode(                                            \
-        mcgraph()->machine()->Prefix##AtomicLoad(MachineType::Type()),  \
-        MemBuffer(offset), index, Effect(), Control());                 \
-    break;                                                              \
+#define BUILD_ATOMIC_LOAD_OP(Name, Type, Prefix)                           \
+  case wasm::kExpr##Name: {                                                \
+    Node* index = CheckBoundsAndAlignment(                                 \
+        wasm::ValueTypes::MemSize(MachineType::Type()), inputs[0], offset, \
+        position);                                                         \
+    node = graph()->NewNode(                                               \
+        mcgraph()->machine()->Prefix##AtomicLoad(MachineType::Type()),     \
+        MemBuffer(offset), index, Effect(), Control());                    \
+    break;                                                                 \
   }
     ATOMIC_LOAD_LIST(BUILD_ATOMIC_LOAD_OP)
 #undef BUILD_ATOMIC_LOAD_OP
 
 #define BUILD_ATOMIC_STORE_OP(Name, Type, Rep, Prefix)                         \
   case wasm::kExpr##Name: {                                                    \
-    Node* index =                                                              \
-        BoundsCheckMem(wasm::ValueTypes::MemSize(MachineType::Type()),         \
-                       inputs[0], offset, position, kNeedsBoundsCheck);        \
+    Node* index = CheckBoundsAndAlignment(                                     \
+        wasm::ValueTypes::MemSize(MachineType::Type()), inputs[0], offset,     \
+        position);                                                             \
     node = graph()->NewNode(                                                   \
         mcgraph()->machine()->Prefix##AtomicStore(MachineRepresentation::Rep), \
         MemBuffer(offset), index, inputs[1], Effect(), Control());             \
@@ -4536,7 +4555,7 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
           }
 
           call_descriptor = Linkage::GetStubCallDescriptor(
-              mcgraph()->zone(), ArgumentsAdaptorDescriptor{}, 1 + wasm_count,
+              mcgraph()->zone(), ArgumentAdaptorDescriptor{}, 1 + wasm_count,
               CallDescriptor::kNoFlags, Operator::kNoProperties,
               StubCallMode::kCallWasmRuntimeStub);
 

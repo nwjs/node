@@ -410,8 +410,8 @@ void MacroAssembler::MaybeDropFrames() {
   // Check whether we need to drop frames to restart a function on the stack.
   ExternalReference restart_fp =
       ExternalReference::debug_restart_fp_address(isolate());
-  mov(eax, StaticVariable(restart_fp));
-  test(eax, eax);
+  mov(ebx, StaticVariable(restart_fp));
+  test(ebx, ebx);
   j(not_zero, BUILTIN_CODE(isolate(), FrameDropperTrampoline),
     RelocInfo::CODE_TARGET);
 }
@@ -742,7 +742,7 @@ void MacroAssembler::EnterExitFramePrologue(StackFrame::Type frame_type) {
       ExternalReference::Create(IsolateAddressId::kCFunctionAddress, isolate());
   mov(StaticVariable(c_entry_fp_address), ebp);
   mov(StaticVariable(context_address), esi);
-  mov(StaticVariable(c_function_address), ebx);
+  mov(StaticVariable(c_function_address), edx);
 }
 
 
@@ -1079,9 +1079,6 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
   }
 
   if (!definitely_matches) {
-    // TODO(v8:6666): All call-sites should be updated to pass in ecx as the
-    // expected register to avoid this useless move.
-    MoveForRootRegisterRefactoring(ecx, ebx);
     Handle<Code> adaptor = BUILTIN_CODE(isolate(), ArgumentsAdaptorTrampoline);
     if (flag == CALL_FUNCTION) {
       Call(adaptor, RelocInfo::CODE_TARGET);

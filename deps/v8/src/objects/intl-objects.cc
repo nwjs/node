@@ -169,9 +169,66 @@ void SetResolvedDateSettings(Isolate* isolate, const icu::Locale& icu_locale,
                              Handle<JSObject> resolved) {
   Factory* factory = isolate->factory();
   UErrorCode status = U_ZERO_ERROR;
+  icu::UnicodeString pattern;
+  date_format->toPattern(pattern);
+  JSObject::SetProperty(
+      isolate, resolved, factory->intl_pattern_symbol(),
+      factory
+          ->NewStringFromTwoByte(Vector<const uint16_t>(
+              reinterpret_cast<const uint16_t*>(pattern.getBuffer()),
+              pattern.length()))
+          .ToHandleChecked(),
+      LanguageMode::kSloppy)
+      .Assert();
+
+  // Set time zone and calendar.
+  const icu::Calendar* calendar = date_format->getCalendar();
+  // getType() returns legacy calendar type name instead of LDML/BCP47 calendar
+  // key values. intl.js maps them to BCP47 values for key "ca".
+  // TODO(jshin): Consider doing it here, instead.
+  const char* calendar_name = calendar->getType();
+  JSObject::SetProperty(
+      isolate, resolved, factory->NewStringFromStaticChars("calendar"),
+      factory->NewStringFromAsciiChecked(calendar_name), LanguageMode::kSloppy)
+      .Assert();
+
+  const icu::TimeZone& tz = calendar->getTimeZone();
+  icu::UnicodeString time_zone;
+  tz.getID(time_zone);
+
+  icu::UnicodeString canonical_time_zone;
+  icu::TimeZone::getCanonicalID(time_zone, canonical_time_zone, status);
+  if (U_SUCCESS(status)) {
+    // In CLDR (http://unicode.org/cldr/trac/ticket/9943), Etc/UTC is made
+    // a separate timezone ID from Etc/GMT even though they're still the same
+    // timezone. We have Etc/UTC because 'UTC', 'Etc/Universal',
+    // 'Etc/Zulu' and others are turned to 'Etc/UTC' by ICU. Etc/GMT comes
+    // from Etc/GMT0, Etc/GMT+0, Etc/GMT-0, Etc/Greenwich.
+    // ecma402##sec-canonicalizetimezonename step 3
+    if (canonical_time_zone == UNICODE_STRING_SIMPLE("Etc/UTC") ||
+        canonical_time_zone == UNICODE_STRING_SIMPLE("Etc/GMT")) {
+      JSObject::SetProperty(
+          isolate, resolved, factory->NewStringFromStaticChars("timeZone"),
+          factory->NewStringFromStaticChars("UTC"), LanguageMode::kSloppy)
+          .Assert();
+    } else {
+      JSObject::SetProperty(isolate, resolved,
+                            factory->NewStringFromStaticChars("timeZone"),
+                            factory
+                                ->NewStringFromTwoByte(Vector<const uint16_t>(
+                                    reinterpret_cast<const uint16_t*>(
+                                        canonical_time_zone.getBuffer()),
+                                    canonical_time_zone.length()))
+                                .ToHandleChecked(),
+                            LanguageMode::kSloppy)
+          .Assert();
+    }
+  }
+
   // Ugly hack. ICU doesn't expose numbering system in any way, so we have
   // to assume that for given locale NumberingSystem constructor produces the
   // same digits as NumberFormat/Calendar would.
+  status = U_ZERO_ERROR;
   icu::NumberingSystem* numbering_system =
       icu::NumberingSystem::createInstance(icu_locale, status);
   if (U_SUCCESS(status)) {
@@ -512,7 +569,6 @@ MaybeHandle<JSObject> CachedOrNewService(Isolate* isolate,
       JSArray);
   return Handle<JSObject>::cast(result);
 }
-
 }  // namespace
 
 icu::Locale Intl::CreateICULocale(Isolate* isolate,
@@ -542,21 +598,6 @@ icu::Locale Intl::CreateICULocale(Isolate* isolate,
   }
 
   return icu_locale;
-}
-
-bool DateFormat::IsValidTimeZone(icu::SimpleDateFormat* date_format) {
-  UErrorCode status = U_ZERO_ERROR;
-  // Set time zone and calendar.
-  const icu::Calendar* calendar = date_format->getCalendar();
-  const icu::TimeZone& tz = calendar->getTimeZone();
-  icu::UnicodeString time_zone;
-  tz.getID(time_zone);
-  icu::UnicodeString canonical_time_zone;
-  icu::TimeZone::getCanonicalID(time_zone, canonical_time_zone, status);
-  std::string timezone_str;
-  canonical_time_zone.toUTF8String(timezone_str);
-  if (U_SUCCESS(status)) return timezone_str != "Etc/Unknown";
-  return true;
 }
 
 // static
@@ -1155,11 +1196,24 @@ bool Intl::IsObjectOfType(Isolate* isolate, Handle<Object> input,
   return type == expected_type;
 }
 
+namespace {
+
+// In ECMA 402 v1, Intl constructors supported a mode of operation
+// where calling them with an existing object as a receiver would
+// transform the receiver into the relevant Intl instance with all
+// internal slots. In ECMA 402 v2, this capability was removed, to
+// avoid adding internal slots on existing objects. In ECMA 402 v3,
+// the capability was re-added as "normative optional" in a mode
+// which chains the underlying Intl instance on any object, when the
+// constructor is called
+//
 // See ecma402/#legacy-constructor.
-MaybeHandle<Object> Intl::LegacyUnwrapReceiver(Isolate* isolate,
-                                               Handle<JSReceiver> receiver,
-                                               Handle<JSFunction> constructor,
-                                               bool has_initialized_slot) {
+MaybeHandle<Object> LegacyUnwrapReceiver(Isolate* isolate,
+                                         Handle<JSReceiver> receiver,
+                                         Handle<JSFunction> constructor,
+                                         Intl::Type type) {
+  bool has_initialized_slot = Intl::IsObjectOfType(isolate, receiver, type);
+
   Handle<Object> obj_is_instance_of;
   ASSIGN_RETURN_ON_EXCEPTION(isolate, obj_is_instance_of,
                              Object::InstanceOf(isolate, receiver, constructor),
@@ -1182,6 +1236,8 @@ MaybeHandle<Object> Intl::LegacyUnwrapReceiver(Isolate* isolate,
   return receiver;
 }
 
+}  // namespace
+
 MaybeHandle<JSObject> Intl::UnwrapReceiver(Isolate* isolate,
                                            Handle<JSReceiver> receiver,
                                            Handle<JSFunction> constructor,
@@ -1193,13 +1249,9 @@ MaybeHandle<JSObject> Intl::UnwrapReceiver(Isolate* isolate,
          type == Intl::Type::kBreakIterator);
   Handle<Object> new_receiver = receiver;
   if (check_legacy_constructor) {
-    bool has_initialized_slot = Intl::IsObjectOfType(isolate, receiver, type);
-
     ASSIGN_RETURN_ON_EXCEPTION(
         isolate, new_receiver,
-        LegacyUnwrapReceiver(isolate, receiver, constructor,
-                             has_initialized_slot),
-        JSObject);
+        LegacyUnwrapReceiver(isolate, receiver, constructor, type), JSObject);
   }
 
   // Collator has been ported to use regular instance types. We
@@ -2388,12 +2440,9 @@ MaybeHandle<JSObject> SupportedLocales(
 }
 }  // namespace
 
-// ECMA 402 Intl.*.supportedLocalesOf
+// ECMA 402 10.2.2 Intl.Collator.supportedLocalesOf
 // https://tc39.github.io/ecma402/#sec-intl.collator.supportedlocalesof
-// https://tc39.github.io/ecma402/#sec-intl.numberformat.supportedlocalesof
-// https://tc39.github.io/ecma402/#sec-intl.datetimeformat.supportedlocalesof
-// https://tc39.github.io/ecma402/#sec-intl.pluralrules.supportedlocalesof
-// http://tc39.github.io/proposal-intl-relative-time/#sec-Intl.RelativeTimeFormat.supportedLocalesOf
+// of Intl::SupportedLocalesOf thru JS
 MaybeHandle<JSObject> Intl::SupportedLocalesOf(Isolate* isolate,
                                                Handle<String> service,
                                                Handle<Object> locales_in,
@@ -2413,53 +2462,6 @@ MaybeHandle<JSObject> Intl::SupportedLocalesOf(Isolate* isolate,
   std::string service_str(service->ToCString().get());
   return SupportedLocales(isolate, service_str, available_locales,
                           requested_locales, options_in);
-}
-
-std::map<std::string, std::string> Intl::LookupUnicodeExtensions(
-    const icu::Locale& icu_locale, const std::set<std::string>& relevant_keys) {
-  std::map<std::string, std::string> extensions;
-
-  UErrorCode status = U_ZERO_ERROR;
-  std::unique_ptr<icu::StringEnumeration> keywords(
-      icu_locale.createKeywords(status));
-  if (U_FAILURE(status)) return extensions;
-
-  if (!keywords) return extensions;
-  char value[ULOC_FULLNAME_CAPACITY];
-
-  int32_t length;
-  status = U_ZERO_ERROR;
-  for (const char* keyword = keywords->next(&length, status);
-       keyword != nullptr; keyword = keywords->next(&length, status)) {
-    // Ignore failures in ICU and skip to the next keyword.
-    //
-    // This is fine.™
-    if (U_FAILURE(status)) {
-      status = U_ZERO_ERROR;
-      continue;
-    }
-
-    icu_locale.getKeywordValue(keyword, value, ULOC_FULLNAME_CAPACITY, status);
-
-    // Ignore failures in ICU and skip to the next keyword.
-    //
-    // This is fine.™
-    if (U_FAILURE(status)) {
-      status = U_ZERO_ERROR;
-      continue;
-    }
-
-    const char* bcp47_key = uloc_toUnicodeLocaleKey(keyword);
-
-    // Ignore keywords that we don't recognize - spec allows that.
-    if (bcp47_key && (relevant_keys.find(bcp47_key) != relevant_keys.end())) {
-      const char* bcp47_value = uloc_toUnicodeLocaleType(bcp47_key, value);
-      extensions.insert(
-          std::pair<std::string, std::string>(bcp47_key, bcp47_value));
-    }
-  }
-
-  return extensions;
 }
 
 }  // namespace internal

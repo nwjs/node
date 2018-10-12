@@ -7,9 +7,6 @@
 load("test/mjsunit/wasm/wasm-constants.js");
 load("test/mjsunit/wasm/wasm-module-builder.js");
 
-// V8 internal memory size limit.
-var kV8MaxPages = 32767;
-
 (function TestOne() {
   print("TestOne");
   let memory = new WebAssembly.Memory({initial: 1});

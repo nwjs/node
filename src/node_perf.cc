@@ -314,6 +314,7 @@ void TimerFunctionCall(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
   HandleScope scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
+  CHECK_NOT_NULL(env);  // TODO(addaleax): Verify that this is correct.
   Local<Context> context = env->context();
   Local<Function> fn = args.Data().As<Function>();
   size_t count = args.Length();
@@ -408,7 +409,7 @@ void Initialize(Local<Object> target,
 
   Local<FunctionTemplate> pe = FunctionTemplate::New(isolate);
   pe->SetClassName(performanceEntryString);
-  Local<Function> fn = pe->GetFunction();
+  Local<Function> fn = pe->GetFunction(context).ToLocalChecked();
   target->Set(context, performanceEntryString, fn).FromJust();
   env->set_performance_entry_template(fn);
 

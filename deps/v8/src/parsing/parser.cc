@@ -458,27 +458,22 @@ Parser::Parser(ParseInfo* info)
   }
 }
 
-void Parser::InitializeEmptyScopeChain(ParseInfo* info) {
-  DCHECK_NULL(original_scope_);
-  DCHECK_NULL(info->script_scope());
+void Parser::DeserializeScopeChain(
+    Isolate* isolate, ParseInfo* info,
+    MaybeHandle<ScopeInfo> maybe_outer_scope_info) {
   // TODO(wingo): Add an outer SCRIPT_SCOPE corresponding to the native
   // context, which will have the "this" binding for script scopes.
   DeclarationScope* script_scope = NewScriptScope();
   info->set_script_scope(script_scope);
-  original_scope_ = script_scope;
-}
-
-void Parser::DeserializeScopeChain(
-    Isolate* isolate, ParseInfo* info,
-    MaybeHandle<ScopeInfo> maybe_outer_scope_info) {
-  InitializeEmptyScopeChain(info);
+  Scope* scope = script_scope;
   Handle<ScopeInfo> outer_scope_info;
   if (maybe_outer_scope_info.ToHandle(&outer_scope_info)) {
     DCHECK(ThreadId::Current().Equals(isolate->thread_id()));
-    original_scope_ = Scope::DeserializeScopeChain(
-        isolate, zone(), *outer_scope_info, info->script_scope(),
-        ast_value_factory(), Scope::DeserializationMode::kScopesOnly);
+    scope = Scope::DeserializeScopeChain(
+        isolate, zone(), *outer_scope_info, script_scope, ast_value_factory(),
+        Scope::DeserializationMode::kScopesOnly);
   }
+  original_scope_ = scope;
 }
 
 namespace {
@@ -2670,16 +2665,19 @@ FunctionLiteral* Parser::ParseFunctionLiteral(
     }
     if (V8_UNLIKELY(FLAG_runtime_stats)) {
       if (should_preparse) {
-        const RuntimeCallCounterId counters[2][2] = {
-            {RuntimeCallCounterId::kPreParseBackgroundNoVariableResolution,
-             RuntimeCallCounterId::kPreParseNoVariableResolution},
-            {RuntimeCallCounterId::kPreParseBackgroundWithVariableResolution,
-             RuntimeCallCounterId::kPreParseWithVariableResolution}};
+        RuntimeCallCounterId counter_id =
+            parsing_on_main_thread_
+                ? RuntimeCallCounterId::kPreParseWithVariableResolution
+                : RuntimeCallCounterId::
+                      kPreParseBackgroundWithVariableResolution;
+        if (is_top_level) {
+          counter_id = parsing_on_main_thread_
+                           ? RuntimeCallCounterId::kPreParseNoVariableResolution
+                           : RuntimeCallCounterId::
+                                 kPreParseBackgroundNoVariableResolution;
+        }
         if (runtime_call_stats_) {
-          bool tracked_variables = PreParser::ShouldTrackUnresolvedVariables(
-              is_lazy_top_level_function);
-          runtime_call_stats_->CorrectCurrentCounterId(
-              counters[tracked_variables][parsing_on_main_thread_]);
+          runtime_call_stats_->CorrectCurrentCounterId(counter_id);
         }
       }
     }

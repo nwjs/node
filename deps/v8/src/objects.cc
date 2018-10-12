@@ -64,9 +64,6 @@
 #include "src/objects/js-collator.h"
 #endif  // V8_INTL_SUPPORT
 #include "src/objects/js-collection-inl.h"
-#ifdef V8_INTL_SUPPORT
-#include "src/objects/js-date-time-format.h"
-#endif  // V8_INTL_SUPPORT
 #include "src/objects/js-generator-inl.h"
 #ifdef V8_INTL_SUPPORT
 #include "src/objects/js-list-format.h"
@@ -367,17 +364,8 @@ Handle<String> Object::NoSideEffectsToString(Isolate* isolate,
                                              Handle<Object> input) {
   DisallowJavascriptExecution no_js(isolate);
 
-  if (input->IsString() || input->IsNumber() || input->IsOddball()) {
+  if (input->IsString() || input->IsNumeric() || input->IsOddball()) {
     return Object::ToString(isolate, input).ToHandleChecked();
-  } else if (input->IsBigInt()) {
-    MaybeHandle<String> maybe_string =
-        BigInt::ToString(isolate, Handle<BigInt>::cast(input), 10, kDontThrow);
-    Handle<String> result;
-    if (maybe_string.ToHandle(&result)) return result;
-    // BigInt-to-String conversion can fail on 32-bit platforms where
-    // String::kMaxLength is too small to fit this BigInt.
-    return isolate->factory()->NewStringFromStaticChars(
-        "<a very large BigInt>");
   } else if (input->IsFunction()) {
     // -- F u n c t i o n
     Handle<String> fun_str;
@@ -1458,8 +1446,6 @@ int JSObject::GetHeaderSize(InstanceType type,
 #ifdef V8_INTL_SUPPORT
     case JS_INTL_COLLATOR_TYPE:
       return JSCollator::kSize;
-    case JS_INTL_DATE_TIME_FORMAT_TYPE:
-      return JSDateTimeFormat::kSize;
     case JS_INTL_LIST_FORMAT_TYPE:
       return JSListFormat::kSize;
     case JS_INTL_LOCALE_TYPE:
@@ -2626,7 +2612,7 @@ bool String::MakeExternal(v8::String::ExternalStringResource* resource) {
 #endif  // DEBUG
   int size = this->Size();  // Byte size of the original string.
   // Abort if size does not allow in-place conversion.
-  if (size < ExternalString::kUncachedSize) return false;
+  if (size < ExternalString::kShortSize) return false;
   Isolate* isolate;
   // Read-only strings cannot be made external, since that would mutate the
   // string.
@@ -2640,25 +2626,23 @@ bool String::MakeExternal(v8::String::ExternalStringResource* resource) {
   }
   // Morph the string to an external string by replacing the map and
   // reinitializing the fields.  This won't work if the space the existing
-  // string occupies is too small for a regular external string.  Instead, we
-  // resort to an uncached external string instead, omitting the field caching
-  // the address of the backing store.  When we encounter uncached external
-  // strings in generated code, we need to bailout to runtime.
+  // string occupies is too small for a regular  external string.
+  // Instead, we resort to a short external string instead, omitting
+  // the field caching the address of the backing store.  When we encounter
+  // short external strings in generated code, we need to bailout to runtime.
   Map* new_map;
   ReadOnlyRoots roots(heap);
   if (size < ExternalString::kSize) {
     if (is_internalized) {
-      if (is_one_byte) {
-        new_map =
-            roots
-                .uncached_external_internalized_string_with_one_byte_data_map();
-      } else {
-        new_map = roots.uncached_external_internalized_string_map();
-      }
+      new_map =
+          is_one_byte
+              ? roots
+                    .short_external_internalized_string_with_one_byte_data_map()
+              : roots.short_external_internalized_string_map();
     } else {
       new_map = is_one_byte
-                    ? roots.uncached_external_string_with_one_byte_data_map()
-                    : roots.uncached_external_string_map();
+                    ? roots.short_external_string_with_one_byte_data_map()
+                    : roots.short_external_string_map();
     }
   } else {
     new_map =
@@ -2713,7 +2697,7 @@ bool String::MakeExternal(v8::String::ExternalOneByteStringResource* resource) {
 #endif  // DEBUG
   int size = this->Size();  // Byte size of the original string.
   // Abort if size does not allow in-place conversion.
-  if (size < ExternalString::kUncachedSize) return false;
+  if (size < ExternalString::kShortSize) return false;
   Isolate* isolate;
   // Read-only strings cannot be made external, since that would mutate the
   // string.
@@ -2728,16 +2712,16 @@ bool String::MakeExternal(v8::String::ExternalOneByteStringResource* resource) {
 
   // Morph the string to an external string by replacing the map and
   // reinitializing the fields.  This won't work if the space the existing
-  // string occupies is too small for a regular external string.  Instead, we
-  // resort to an uncached external string instead, omitting the field caching
-  // the address of the backing store.  When we encounter uncached external
-  // strings in generated code, we need to bailout to runtime.
+  // string occupies is too small for a regular  external string.
+  // Instead, we resort to a short external string instead, omitting
+  // the field caching the address of the backing store.  When we encounter
+  // short external strings in generated code, we need to bailout to runtime.
   Map* new_map;
   ReadOnlyRoots roots(heap);
   if (size < ExternalString::kSize) {
     new_map = is_internalized
-                  ? roots.uncached_external_one_byte_internalized_string_map()
-                  : roots.uncached_external_one_byte_string_map();
+                  ? roots.short_external_one_byte_internalized_string_map()
+                  : roots.short_external_one_byte_string_map();
   } else {
     new_map = is_internalized
                   ? roots.external_one_byte_internalized_string_map()
@@ -3204,7 +3188,6 @@ VisitorId Map::GetVisitorId(Map* map) {
     case JS_REGEXP_STRING_ITERATOR_TYPE:
 #ifdef V8_INTL_SUPPORT
     case JS_INTL_COLLATOR_TYPE:
-    case JS_INTL_DATE_TIME_FORMAT_TYPE:
     case JS_INTL_LIST_FORMAT_TYPE:
     case JS_INTL_LOCALE_TYPE:
     case JS_INTL_PLURAL_RULES_TYPE:
@@ -6712,11 +6695,6 @@ Object* SetHashAndUpdateProperties(Isolate* isolate, HeapObject* properties,
   if (properties->IsPropertyArray()) {
     PropertyArray::cast(properties)->SetHash(hash);
     DCHECK_LT(0, PropertyArray::cast(properties)->length());
-    return properties;
-  }
-
-  if (properties->IsGlobalDictionary()) {
-    GlobalDictionary::cast(properties)->SetHash(hash);
     return properties;
   }
 
@@ -13150,7 +13128,6 @@ bool CanSubclassHaveInobjectProperties(InstanceType instance_type) {
     case JS_GENERATOR_OBJECT_TYPE:
 #ifdef V8_INTL_SUPPORT
     case JS_INTL_COLLATOR_TYPE:
-    case JS_INTL_DATE_TIME_FORMAT_TYPE:
     case JS_INTL_LIST_FORMAT_TYPE:
     case JS_INTL_PLURAL_RULES_TYPE:
     case JS_INTL_RELATIVE_TIME_FORMAT_TYPE:

@@ -240,13 +240,6 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
 
   void LoadRoot(Register destination, Heap::RootListIndex index) override;
 
-  void MoveForRootRegisterRefactoring(Register dst, Register src) {
-    // TODO(v8:6666): When rewriting ia32 ASM builtins to not clobber the
-    // kRootRegister ebx, most call sites of this wrapper function can probably
-    // be removed.
-    Move(dst, src);
-  }
-
   // Indirect root-relative loads.
   void LoadFromConstantsTable(Register destination,
                               int constant_index) override;
@@ -254,17 +247,6 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void LoadRootRelative(Register destination, int32_t offset) override;
 
   void LoadAddress(Register destination, ExternalReference source);
-
-  void PushRootRegister() {
-    // Check that a NoRootArrayScope exists.
-    CHECK(!root_array_available());
-    push(kRootRegister);
-  }
-  void PopRootRegister() {
-    // Check that a NoRootArrayScope exists.
-    CHECK(!root_array_available());
-    pop(kRootRegister);
-  }
 
   // Wrapper functions to ensure external reference operands produce
   // isolate-independent code if needed.

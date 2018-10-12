@@ -109,16 +109,8 @@ class Utf16CharacterStream {
     }
   }
 
-  // Returns true if the stream can be cloned with Clone.
-  // TODO(rmcilroy): Remove this once ChunkedStreams can be cloned.
-  virtual bool can_be_cloned() const = 0;
-
-  // Clones the character stream to enable another independent scanner to access
-  // the same underlying stream.
-  virtual std::unique_ptr<Utf16CharacterStream> Clone() const = 0;
-
   // Returns true if the stream could access the V8 heap after construction.
-  virtual bool can_access_heap() const = 0;
+  virtual bool can_access_heap() = 0;
 
  protected:
   Utf16CharacterStream(const uint16_t* buffer_start,
@@ -248,12 +240,12 @@ class Scanner {
 
   // Returns the location information for the current token
   // (the token last returned by Next()).
-  const Location& location() const { return current().location; }
+  Location location() const { return current().location; }
 
   // This error is specifically an invalid hex or unicode escape sequence.
   bool has_error() const { return scanner_error_ != MessageTemplate::kNone; }
   MessageTemplate::Template error() const { return scanner_error_; }
-  const Location& error_location() const { return scanner_error_location_; }
+  Location error_location() const { return scanner_error_location_; }
 
   bool has_invalid_template_escape() const {
     return current().invalid_template_escape_message != MessageTemplate::kNone;
@@ -272,14 +264,13 @@ class Scanner {
   // One token look-ahead (past the token returned by Next()).
   Token::Value peek() const { return next().token; }
 
-  const Location& peek_location() const { return next().location; }
+  Location peek_location() const { return next().location; }
 
   bool literal_contains_escapes() const {
     return LiteralContainsEscapes(current());
   }
 
   const AstRawString* CurrentSymbol(AstValueFactory* ast_value_factory) const;
-
   const AstRawString* NextSymbol(AstValueFactory* ast_value_factory) const;
   const AstRawString* CurrentRawSymbol(
       AstValueFactory* ast_value_factory) const;
@@ -371,9 +362,10 @@ class Scanner {
   Maybe<RegExp::Flags> ScanRegExpFlags();
 
   // Scans the input as a template literal
+  Token::Value ScanTemplateStart();
   Token::Value ScanTemplateContinuation() {
     DCHECK_EQ(next().token, Token::RBRACE);
-    DCHECK_EQ(source_pos() - 1, next().location.beg_pos);
+    next().location.beg_pos = source_pos() - 1;  // We already consumed }
     return ScanTemplateSpan();
   }
 
@@ -397,13 +389,28 @@ class Scanner {
     allow_harmony_numeric_separator_ = allow;
   }
 
-  const Utf16CharacterStream* stream() const { return source_; }
-
  private:
   // Scoped helper for saving & restoring scanner error state.
   // This is used for tagged template literals, in which normally forbidden
   // escape sequences are allowed.
   class ErrorState;
+
+  // Scoped helper for literal recording. Automatically drops the literal
+  // if aborting the scanning before it's complete.
+  class LiteralScope {
+   public:
+    explicit LiteralScope(Scanner* self) : scanner_(self), complete_(false) {
+      scanner_->StartLiteral();
+    }
+    ~LiteralScope() {
+      if (!complete_) scanner_->DropLiteral();
+    }
+    void Complete() { complete_ = true; }
+
+   private:
+    Scanner* scanner_;
+    bool complete_;
+  };
 
   // LiteralBuffer -  Collector of chars of literals.
   class LiteralBuffer {
@@ -507,24 +514,6 @@ class Scanner {
     DISALLOW_COPY_AND_ASSIGN(LiteralBuffer);
   };
 
-  // Scoped helper for literal recording. Automatically drops the literal
-  // if aborting the scanning before it's complete.
-  class LiteralScope {
-   public:
-    explicit LiteralScope(Scanner* scanner)
-        : buffer_(&scanner->next().literal_chars), complete_(false) {
-      buffer_->Start();
-    }
-    ~LiteralScope() {
-      if (!complete_) buffer_->Drop();
-    }
-    void Complete() { complete_ = true; }
-
-   private:
-    LiteralBuffer* buffer_;
-    bool complete_;
-  };
-
   // The current and look-ahead token.
   struct TokenDesc {
     Location location = {0, 0};
@@ -585,6 +574,11 @@ class Scanner {
   // Seek to the next_ token at the given position.
   void SeekNext(size_t position);
 
+  // Literal buffer support
+  inline void StartLiteral() { next().literal_chars.Start(); }
+
+  inline void StartRawLiteral() { next().raw_literal_chars.Start(); }
+
   V8_INLINE void AddLiteralChar(uc32 c) { next().literal_chars.AddChar(c); }
 
   V8_INLINE void AddLiteralChar(char c) { next().literal_chars.AddChar(c); }
@@ -593,7 +587,14 @@ class Scanner {
     next().raw_literal_chars.AddChar(c);
   }
 
-  V8_INLINE void AddLiteralCharAdvance() {
+  // Stops scanning of a literal and drop the collected characters,
+  // e.g., due to an encountered error.
+  inline void DropLiteral() {
+    next().literal_chars.Drop();
+    next().raw_literal_chars.Drop();
+  }
+
+  inline void AddLiteralCharAdvance() {
     AddLiteralChar(c0_);
     Advance();
   }
@@ -713,8 +714,7 @@ class Scanner {
   uc32 ScanUnlimitedLengthHexNumber(int max_value, int beg_pos);
 
   // Scans a single JavaScript token.
-  V8_INLINE Token::Value ScanSingleToken();
-  V8_INLINE void Scan();
+  void Scan();
 
   V8_INLINE Token::Value SkipWhiteSpace();
   Token::Value SkipSingleHTMLComment();
@@ -738,10 +738,8 @@ class Scanner {
   bool ScanImplicitOctalDigits(int start_pos, NumberKind* kind);
 
   Token::Value ScanNumber(bool seen_period);
-  V8_INLINE Token::Value ScanIdentifierOrKeyword();
-  V8_INLINE Token::Value ScanIdentifierOrKeywordInner(LiteralScope* literal);
-  Token::Value ScanIdentifierOrKeywordInnerSlow(LiteralScope* literal,
-                                                bool escaped);
+  Token::Value ScanIdentifierOrKeyword();
+  Token::Value ScanIdentifierOrKeywordInner(LiteralScope* literal);
 
   Token::Value ScanString();
   Token::Value ScanPrivateName();

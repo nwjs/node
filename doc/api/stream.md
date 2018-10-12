@@ -70,7 +70,7 @@ buffer that can be retrieved using `writable.writableBuffer` or
 `readable.readableBuffer`, respectively.
 
 The amount of data potentially buffered depends on the `highWaterMark` option
-passed into the streams constructor. For normal streams, the `highWaterMark`
+passed into the stream's constructor. For normal streams, the `highWaterMark`
 option specifies a [total number of bytes][hwm-gotcha]. For streams operating
 in object mode, the `highWaterMark` specifies a total number of objects.
 
@@ -576,15 +576,18 @@ Examples of `Readable` streams include:
 All [`Readable`][] streams implement the interface defined by the
 `stream.Readable` class.
 
-#### Two Modes
+#### Two Reading Modes
 
-`Readable` streams effectively operate in one of two modes: flowing and paused.
+`Readable` streams effectively operate in one of two modes: flowing and
+paused. These modes are separate from [object mode][object-mode].
+A [`Readable`][] stream can be in object mode or not, regardless of whether
+it is in flowing mode or paused mode.
 
-When in flowing mode, data is read from the underlying system automatically
+* In flowing mode, data is read from the underlying system automatically
 and provided to an application as quickly as possible using events via the
 [`EventEmitter`][] interface.
 
-In paused mode, the [`stream.read()`][stream-read] method must be called
+* In paused mode, the [`stream.read()`][stream-read] method must be called
 explicitly to read chunks of data from the stream.
 
 All [`Readable`][] streams begin in paused mode but can be switched to flowing
@@ -633,22 +636,22 @@ within the `Readable` stream implementation.
 Specifically, at any given point in time, every `Readable` is in one of three
 possible states:
 
-* `readable.readableFlowing = null`
-* `readable.readableFlowing = false`
-* `readable.readableFlowing = true`
+* `readable.readableFlowing === null`
+* `readable.readableFlowing === false`
+* `readable.readableFlowing === true`
 
 When `readable.readableFlowing` is `null`, no mechanism for consuming the
-streams data is provided so the stream will not generate its data. While in this
-state, attaching a listener for the `'data'` event, calling the
+stream's data is provided. Therefore, the stream will not generate data.
+While in this state, attaching a listener for the `'data'` event, calling the
 `readable.pipe()` method, or calling the `readable.resume()` method will switch
-`readable.readableFlowing` to `true`, causing the `Readable` to begin
-actively emitting events as data is generated.
+`readable.readableFlowing` to `true`, causing the `Readable` to begin actively
+emitting events as data is generated.
 
 Calling `readable.pause()`, `readable.unpipe()`, or receiving backpressure
 will cause the `readable.readableFlowing` to be set as `false`,
 temporarily halting the flowing of events but *not* halting the generation of
 data. While in this state, attaching a listener for the `'data'` event
-would not cause `readable.readableFlowing` to switch to `true`.
+will not switch `readable.readableFlowing` to `true`.
 
 ```js
 const { PassThrough, Writable } = require('stream');
@@ -660,20 +663,20 @@ pass.unpipe(writable);
 // readableFlowing is now false
 
 pass.on('data', (chunk) => { console.log(chunk.toString()); });
-pass.write('ok'); // will not emit 'data'
-pass.resume(); // must be called to make 'data' being emitted
+pass.write('ok');  // will not emit 'data'
+pass.resume();     // must be called to make stream emit 'data'
 ```
 
 While `readable.readableFlowing` is `false`, data may be accumulating
-within the streams internal buffer.
+within the stream's internal buffer.
 
-#### Choose One
+#### Choose One API Style
 
 The `Readable` stream API evolved across multiple Node.js versions and provides
 multiple methods of consuming stream data. In general, developers should choose
 *one* of the methods of consuming data and *should never* use multiple methods
 to consume data from a single stream. Specifically, using a combination
-of `on('data')`, `on('readable')`, `pipe()` or async iterators could
+of `on('data')`, `on('readable')`, `pipe()`, or async iterators could
 lead to unintuitive behavior.
 
 Use of the `readable.pipe()` method is recommended for most users as it has been
@@ -832,7 +835,7 @@ In general, the `readable.pipe()` and `'data'` event mechanisms are easier to
 understand than the `'readable'` event. However, handling `'readable'` might
 result in increased throughput.
 
-If both `'readable'` and [`'data'`][]  are used at the same time, `'readable'`
+If both `'readable'` and [`'data'`][] are used at the same time, `'readable'`
 takes precedence in controlling the flow, i.e. `'data'` will be emitted
 only when [`stream.read()`][stream-read] is called. The
 `readableFlowing` property would become `false`.
@@ -1202,9 +1205,8 @@ added: v0.9.4
 * `stream` {Stream} An "old style" readable stream
 * Returns: {this}
 
-Versions of Node.js prior to v0.10 had streams that did not implement the
-entire `stream` module API as it is currently defined. (See [Compatibility][]
-for more information.)
+Prior to Node.js 0.10, streams did not implement the entire `stream` module API
+as it is currently defined. (See [Compatibility][] for more information.)
 
 When using an older Node.js library that emits [`'data'`][] events and has a
 [`stream.pause()`][stream-pause] method that is advisory only, the
@@ -1304,7 +1306,7 @@ added: v8.0.0
 
 Destroy the stream, and emit `'error'`. After this call, the
 transform stream would release any internal resources.
-implementors should not override this method, but instead implement
+Implementors should not override this method, but instead implement
 [`readable._destroy()`][readable-_destroy].
 The default implementation of `_destroy()` for `Transform` also emit `'close'`.
 
@@ -1497,9 +1499,13 @@ changes:
   * `highWaterMark` {number} Buffer level when
     [`stream.write()`][stream-write] starts returning `false`. **Default:**
     `16384` (16kb), or `16` for `objectMode` streams.
-  * `decodeStrings` {boolean} Whether or not to decode strings into
-    `Buffer`s before passing them to [`stream._write()`][stream-_write].
+  * `decodeStrings` {boolean} Whether or not to encode strings as
+    `Buffer`s before passing them to [`stream._write()`][stream-_write],
+    using the encoding specified in the [`stream.write()`][stream-write] call.
     **Default:** `true`.
+  * `defaultEncoding` {string} The default encoding that is used when no
+    encoding is specified as an argument to [`stream.write()`][stream-write].
+    **Default:** `'utf8'`.
   * `objectMode` {boolean} Whether or not the
     [`stream.write(anyObj)`][stream-write] is a valid operation. When set,
     it becomes possible to write JavaScript values other than string,
@@ -2318,10 +2324,10 @@ primarily for examples and testing, but there are some use cases where
 
 <!--type=misc-->
 
-In versions of Node.js prior to v0.10, the `Readable` stream interface was
-simpler, but also less powerful and less useful.
+Prior to Node.js 0.10, the `Readable` stream interface was simpler, but also
+less powerful and less useful.
 
-* Rather than waiting for calls the [`stream.read()`][stream-read] method,
+* Rather than waiting for calls to the [`stream.read()`][stream-read] method,
   [`'data'`][] events would begin emitting immediately. Applications that
   would need to perform some amount of work to decide how to handle data
   were required to store read data into buffers so the data would not be lost.
@@ -2329,7 +2335,7 @@ simpler, but also less powerful and less useful.
   guaranteed. This meant that it was still necessary to be prepared to receive
   [`'data'`][] events *even when the stream was in a paused state*.
 
-In Node.js v0.10, the [`Readable`][] class was added. For backwards
+In Node.js 0.10, the [`Readable`][] class was added. For backwards
 compatibility with older Node.js programs, `Readable` streams switch into
 "flowing mode" when a [`'data'`][] event handler is added, or when the
 [`stream.resume()`][stream-resume] method is called. The effect is that, even
@@ -2359,9 +2365,8 @@ net.createServer((socket) => {
 }).listen(1337);
 ```
 
-In versions of Node.js prior to v0.10, the incoming message data would be
-simply discarded. However, in Node.js v0.10 and beyond, the socket remains
-paused forever.
+Prior to Node.js 0.10, the incoming message data would be simply discarded.
+However, in Node.js 0.10 and beyond, the socket remains paused forever.
 
 The workaround in this situation is to call the
 [`stream.resume()`][stream-resume] method to begin the flow of data:
@@ -2379,7 +2384,7 @@ net.createServer((socket) => {
 ```
 
 In addition to new `Readable` streams switching into flowing mode,
-pre-v0.10 style streams can be wrapped in a `Readable` class using the
+pre-0.10 style streams can be wrapped in a `Readable` class using the
 [`readable.wrap()`][`stream.wrap()`] method.
 
 ### `readable.read(0)`
@@ -2478,3 +2483,4 @@ contain multi-byte characters.
 [readable-destroy]: #stream_readable_destroy_error
 [writable-_destroy]: #stream_writable_destroy_err_callback
 [writable-destroy]: #stream_writable_destroy_error
+[object-mode]: #stream_object_mode

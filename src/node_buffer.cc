@@ -33,37 +33,35 @@
 #include <string.h>
 #include <limits.h>
 
-#define BUFFER_ID 0xB0E4
-
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 #define THROW_AND_RETURN_UNLESS_BUFFER(env, obj)                            \
-  THROW_AND_RETURN_IF_NOT_BUFFER(env, obj, "argument")
+  THROW_AND_RETURN_IF_NOT_BUFFER(env, obj, "argument")                      \
 
 #define THROW_AND_RETURN_IF_OOB(r)                                          \
   do {                                                                      \
-    if (!(r)) return node::THROW_ERR_INDEX_OUT_OF_RANGE(env);               \
-  } while (0)
+    if (!(r))                                                               \
+      return node::THROW_ERR_OUT_OF_RANGE_WITH_TEXT(env,                    \
+                                                    "Index out of range");  \
+  } while (0)                                                               \
 
-#define SLICE_START_END(context, start_arg, end_arg, end_max)                  \
-  size_t start;                                                                \
-  size_t end;                                                                  \
-  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(context, start_arg, 0, &start));     \
-  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(context, end_arg, end_max, &end));   \
-  if (end < start) end = start;                                                \
-  THROW_AND_RETURN_IF_OOB(end <= end_max);                                     \
+#define SLICE_START_END(start_arg, end_arg, end_max)                        \
+  size_t start;                                                             \
+  size_t end;                                                               \
+  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(start_arg, 0, &start));           \
+  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(end_arg, end_max, &end));         \
+  if (end < start) end = start;                                             \
+  THROW_AND_RETURN_IF_OOB(end <= end_max);                                  \
   size_t length = end - start;
 
 namespace node {
 
-// if true, all Buffer and SlowBuffer instances will automatically zero-fill
-bool zero_fill_all_buffers = false;
-
 namespace {
 
 inline void* BufferMalloc(size_t length) {
-  return zero_fill_all_buffers ? node::UncheckedCalloc(length) :
-                                 node::UncheckedMalloc(length);
+  return per_process_opts->zero_fill_all_buffers ?
+      node::UncheckedCalloc(length) :
+      node::UncheckedMalloc(length);
 }
 
 }  // namespace
@@ -83,6 +81,7 @@ using v8::Maybe;
 using v8::MaybeLocal;
 using v8::Object;
 using v8::String;
+using v8::Uint32;
 using v8::Uint32Array;
 using v8::Uint8Array;
 using v8::Value;
@@ -143,7 +142,6 @@ CallbackInfo::CallbackInfo(Isolate* isolate,
     CHECK_NOT_NULL(data_);
 
   persistent_.SetWeak(this, WeakCallback, v8::WeakCallbackType::kParameter);
-  persistent_.SetWrapperClassId(BUFFER_ID);
   isolate->AdjustAmountOfExternalAllocatedMemory(sizeof(*this));
 }
 
@@ -164,8 +162,7 @@ void CallbackInfo::WeakCallback(Isolate* isolate) {
 
 
 // Parse index for external array data.
-inline MUST_USE_RESULT bool ParseArrayIndex(Local<Context> context,
-                                            Local<Value> arg,
+inline MUST_USE_RESULT bool ParseArrayIndex(Local<Value> arg,
                                             size_t def,
                                             size_t* ret) {
   if (arg->IsUndefined()) {
@@ -173,7 +170,8 @@ inline MUST_USE_RESULT bool ParseArrayIndex(Local<Context> context,
     return true;
   }
 
-  int64_t tmp_i = arg->IntegerValue(context).FromJust();
+  CHECK(arg->IsNumber());
+  int64_t tmp_i = arg.As<Integer>()->Value();
 
   if (tmp_i < 0)
     return false;
@@ -237,7 +235,9 @@ MaybeLocal<Object> New(Isolate* isolate,
                        enum encoding enc) {
   EscapableHandleScope scope(isolate);
 
-  const size_t length = StringBytes::Size(isolate, string, enc);
+  size_t length;
+  if (!StringBytes::Size(isolate, string, enc).To(&length))
+    return Local<Object>();
   size_t actual = 0;
   char* data = nullptr;
 
@@ -271,7 +271,9 @@ MaybeLocal<Object> New(Isolate* isolate,
 MaybeLocal<Object> New(Isolate* isolate, size_t length) {
   EscapableHandleScope handle_scope(isolate);
   Local<Object> obj;
-  if (Buffer::New(Environment::GetCurrent(isolate), length).ToLocal(&obj))
+  Environment* env = Environment::GetCurrent(isolate);
+  CHECK_NOT_NULL(env);  // TODO(addaleax): Handle nullptr here.
+  if (Buffer::New(env, length).ToLocal(&obj))
     return handle_scope.Escape(obj);
   return Local<Object>();
 }
@@ -314,6 +316,7 @@ MaybeLocal<Object> New(Environment* env, size_t length) {
 MaybeLocal<Object> Copy(Isolate* isolate, const char* data, size_t length) {
   EscapableHandleScope handle_scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
+  CHECK_NOT_NULL(env);  // TODO(addaleax): Handle nullptr here.
   Local<Object> obj;
   if (Buffer::Copy(env, data, length).ToLocal(&obj))
     return handle_scope.Escape(obj);
@@ -364,6 +367,7 @@ MaybeLocal<Object> New(Isolate* isolate,
                        void* hint) {
   EscapableHandleScope handle_scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
+  CHECK_NOT_NULL(env);  // TODO(addaleax): Handle nullptr here.
   Local<Object> obj;
   if (Buffer::New(env, data, length, callback, hint).ToLocal(&obj))
     return handle_scope.Escape(obj);
@@ -403,6 +407,7 @@ MaybeLocal<Object> New(Environment* env,
 MaybeLocal<Object> New(Isolate* isolate, char* data, size_t length) {
   EscapableHandleScope handle_scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
+  CHECK_NOT_NULL(env);  // TODO(addaleax): Handle nullptr here.
   Local<Object> obj;
   if (Buffer::New(env, data, length).ToLocal(&obj))
     return handle_scope.Escape(obj);
@@ -451,7 +456,7 @@ void StringSlice(const FunctionCallbackInfo<Value>& args) {
   if (ts_obj_length == 0)
     return args.GetReturnValue().SetEmptyString();
 
-  SLICE_START_END(env->context(), args[0], args[1], ts_obj_length)
+  SLICE_START_END(args[0], args[1], ts_obj_length)
 
   Local<Value> error;
   MaybeLocal<Value> ret =
@@ -463,61 +468,6 @@ void StringSlice(const FunctionCallbackInfo<Value>& args) {
   if (ret.IsEmpty()) {
     CHECK(!error.IsEmpty());
     isolate->ThrowException(error);
-    return;
-  }
-  args.GetReturnValue().Set(ret.ToLocalChecked());
-}
-
-
-template <>
-void StringSlice<UCS2>(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  THROW_AND_RETURN_UNLESS_BUFFER(env, args.This());
-  SPREAD_BUFFER_ARG(args.This(), ts_obj);
-
-  if (ts_obj_length == 0)
-    return args.GetReturnValue().SetEmptyString();
-
-  SLICE_START_END(env->context(), args[0], args[1], ts_obj_length)
-  length /= 2;
-
-  const char* data = ts_obj_data + start;
-  const uint16_t* buf;
-  bool release = false;
-
-  // Node's "ucs2" encoding expects LE character data inside a Buffer, so we
-  // need to reorder on BE platforms.  See https://nodejs.org/api/buffer.html
-  // regarding Node's "ucs2" encoding specification.
-  const bool aligned = (reinterpret_cast<uintptr_t>(data) % sizeof(*buf) == 0);
-  if (IsLittleEndian() && !aligned) {
-    // Make a copy to avoid unaligned accesses in v8::String::NewFromTwoByte().
-    // This applies ONLY to little endian platforms, as misalignment will be
-    // handled by a byte-swapping operation in StringBytes::Encode on
-    // big endian platforms.
-    uint16_t* copy = new uint16_t[length];
-    for (size_t i = 0, k = 0; i < length; i += 1, k += 2) {
-      // Assumes that the input is little endian.
-      const uint8_t lo = static_cast<uint8_t>(data[k + 0]);
-      const uint8_t hi = static_cast<uint8_t>(data[k + 1]);
-      copy[i] = lo | hi << 8;
-    }
-    buf = copy;
-    release = true;
-  } else {
-    buf = reinterpret_cast<const uint16_t*>(data);
-  }
-
-  Local<Value> error;
-  MaybeLocal<Value> ret =
-      StringBytes::Encode(env->isolate(), buf, length, &error);
-
-  if (release)
-    delete[] buf;
-
-  if (ret.IsEmpty()) {
-    CHECK(!error.IsEmpty());
-    env->isolate()->ThrowException(error);
     return;
   }
   args.GetReturnValue().Set(ret.ToLocalChecked());
@@ -539,19 +489,17 @@ void Copy(const FunctionCallbackInfo<Value> &args) {
   size_t source_start;
   size_t source_end;
 
-  THROW_AND_RETURN_IF_OOB(
-      ParseArrayIndex(env->context(), args[2], 0, &target_start));
-  THROW_AND_RETURN_IF_OOB(
-      ParseArrayIndex(env->context(), args[3], 0, &source_start));
-  THROW_AND_RETURN_IF_OOB(
-      ParseArrayIndex(env->context(), args[4], ts_obj_length, &source_end));
+  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(args[2], 0, &target_start));
+  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(args[3], 0, &source_start));
+  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(args[4], ts_obj_length, &source_end));
 
   // Copy 0 bytes; we're done
   if (target_start >= target_length || source_start >= source_end)
     return args.GetReturnValue().Set(0);
 
   if (source_start > ts_obj_length)
-    return node::THROW_ERR_INDEX_OUT_OF_RANGE(env);
+    return node::THROW_ERR_OUT_OF_RANGE_WITH_TEXT(
+        env, "The value of \"sourceStart\" is out of range.");
 
   if (source_end - source_start > target_length - target_start)
     source_end = source_start + target_length - target_start;
@@ -567,12 +515,15 @@ void Copy(const FunctionCallbackInfo<Value> &args) {
 
 void Fill(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
+  Local<Context> ctx = env->context();
 
   THROW_AND_RETURN_UNLESS_BUFFER(env, args[0]);
   SPREAD_BUFFER_ARG(args[0], ts_obj);
 
-  size_t start = args[2]->Uint32Value(env->context()).FromJust();
-  size_t end = args[3]->Uint32Value(env->context()).FromJust();
+  uint32_t start;
+  if (!args[2]->Uint32Value(ctx).To(&start)) return;
+  uint32_t end;
+  if (!args[3]->Uint32Value(ctx).To(&end)) return;
   size_t fill_length = end - start;
   Local<String> str_obj;
   size_t str_length;
@@ -592,7 +543,9 @@ void Fill(const FunctionCallbackInfo<Value>& args) {
 
   // Then coerce everything that's not a string.
   if (!args[1]->IsString()) {
-    int value = args[1]->Uint32Value(env->context()).FromJust() & 255;
+    uint32_t val;
+    if (!args[1]->Uint32Value(ctx).To(&val)) return;
+    int value = val & 255;
     memset(ts_obj_data + start, value, fill_length);
     return;
   }
@@ -669,14 +622,14 @@ void StringWrite(const FunctionCallbackInfo<Value>& args) {
   size_t offset;
   size_t max_length;
 
-  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(env->context(), args[1], 0, &offset));
+  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(args[1], 0, &offset));
   if (offset > ts_obj_length) {
     return node::THROW_ERR_BUFFER_OUT_OF_BOUNDS(
         env, "\"offset\" is outside of buffer bounds");
   }
 
-  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(
-      env->context(), args[2], ts_obj_length - offset, &max_length));
+  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(args[2], ts_obj_length - offset,
+                                          &max_length));
 
   max_length = MIN(ts_obj_length - offset, max_length);
 
@@ -730,19 +683,17 @@ void CompareOffset(const FunctionCallbackInfo<Value> &args) {
   size_t source_end;
   size_t target_end;
 
-  THROW_AND_RETURN_IF_OOB(
-      ParseArrayIndex(env->context(), args[2], 0, &target_start));
-  THROW_AND_RETURN_IF_OOB(
-      ParseArrayIndex(env->context(), args[3], 0, &source_start));
-  THROW_AND_RETURN_IF_OOB(
-      ParseArrayIndex(env->context(), args[4], target_length, &target_end));
-  THROW_AND_RETURN_IF_OOB(
-      ParseArrayIndex(env->context(), args[5], ts_obj_length, &source_end));
+  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(args[2], 0, &target_start));
+  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(args[3], 0, &source_start));
+  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(args[4], target_length, &target_end));
+  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(args[5], ts_obj_length, &source_end));
 
   if (source_start > ts_obj_length)
-    return node::THROW_ERR_INDEX_OUT_OF_RANGE(env);
+    return node::THROW_ERR_OUT_OF_RANGE_WITH_TEXT(
+        env, "The value of \"sourceStart\" is out of range.");
   if (target_start > target_length)
-    return node::THROW_ERR_INDEX_OUT_OF_RANGE(env);
+    return node::THROW_ERR_OUT_OF_RANGE_WITH_TEXT(
+        env, "The value of \"targetStart\" is out of range.");
 
   CHECK_LE(source_start, source_end);
   CHECK_LE(target_start, target_end);
@@ -828,7 +779,7 @@ void IndexOfString(const FunctionCallbackInfo<Value>& args) {
   SPREAD_BUFFER_ARG(args[0], ts_obj);
 
   Local<String> needle = args[1].As<String>();
-  int64_t offset_i64 = args[2]->IntegerValue(env->context()).FromJust();
+  int64_t offset_i64 = args[2].As<Integer>()->Value();
   bool is_forward = args[4]->IsTrue();
 
   const char* haystack = ts_obj_data;
@@ -836,7 +787,8 @@ void IndexOfString(const FunctionCallbackInfo<Value>& args) {
   const size_t haystack_length = (enc == UCS2) ?
       ts_obj_length &~ 1 : ts_obj_length;  // NOLINT(whitespace/operators)
 
-  const size_t needle_length = StringBytes::Size(isolate, needle, enc);
+  size_t needle_length;
+  if (!StringBytes::Size(isolate, needle, enc).To(&needle_length)) return;
 
   int64_t opt_offset = IndexOfOffset(haystack_length,
                                      offset_i64,
@@ -876,7 +828,7 @@ void IndexOfString(const FunctionCallbackInfo<Value>& args) {
 
     if (IsBigEndian()) {
       StringBytes::InlineDecoder decoder;
-      decoder.Decode(env, needle, args[3], UCS2);
+      if (decoder.Decode(env, needle, args[3], UCS2).IsNothing()) return;
       const uint16_t* decoded_string =
           reinterpret_cast<const uint16_t*>(decoder.out());
 
@@ -931,18 +883,19 @@ void IndexOfString(const FunctionCallbackInfo<Value>& args) {
 }
 
 void IndexOfBuffer(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
   CHECK(args[1]->IsObject());
   CHECK(args[2]->IsNumber());
   CHECK(args[4]->IsBoolean());
 
-  enum encoding enc = ParseEncoding(env->isolate(), args[3], UTF8);
+  enum encoding enc = ParseEncoding(args.GetIsolate(),
+                                    args[3],
+                                    UTF8);
 
-  THROW_AND_RETURN_UNLESS_BUFFER(env, args[0]);
-  THROW_AND_RETURN_UNLESS_BUFFER(env, args[1]);
+  THROW_AND_RETURN_UNLESS_BUFFER(Environment::GetCurrent(args), args[0]);
+  THROW_AND_RETURN_UNLESS_BUFFER(Environment::GetCurrent(args), args[1]);
   SPREAD_BUFFER_ARG(args[0], ts_obj);
   SPREAD_BUFFER_ARG(args[1], buf);
-  int64_t offset_i64 = args[2]->IntegerValue(env->context()).FromJust();
+  int64_t offset_i64 = args[2].As<Integer>()->Value();
   bool is_forward = args[4]->IsTrue();
 
   const char* haystack = ts_obj_data;
@@ -1004,16 +957,15 @@ void IndexOfBuffer(const FunctionCallbackInfo<Value>& args) {
 }
 
 void IndexOfNumber(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-  CHECK(args[1]->IsNumber());
+  CHECK(args[1]->IsUint32());
   CHECK(args[2]->IsNumber());
   CHECK(args[3]->IsBoolean());
 
   THROW_AND_RETURN_UNLESS_BUFFER(Environment::GetCurrent(args), args[0]);
   SPREAD_BUFFER_ARG(args[0], ts_obj);
 
-  uint32_t needle = args[1]->Uint32Value(env->context()).FromJust();
-  int64_t offset_i64 = args[2]->IntegerValue(env->context()).FromJust();
+  uint32_t needle = args[1].As<Uint32>()->Value();
+  int64_t offset_i64 = args[2].As<Integer>()->Value();
   bool is_forward = args[3]->IsTrue();
 
   int64_t opt_offset = IndexOfOffset(ts_obj_length, offset_i64, 1, is_forward);

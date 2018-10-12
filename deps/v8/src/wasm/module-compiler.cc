@@ -2203,6 +2203,11 @@ std::shared_ptr<StreamingDecoder> AsyncCompileJob::CreateStreamingDecoder() {
 AsyncCompileJob::~AsyncCompileJob() {
   background_task_manager_.CancelAndWait();
   if (native_module_) native_module_->compilation_state()->Abort();
+  // Tell the streaming decoder that the AsyncCompileJob is not available
+  // anymore.
+  // TODO(ahaas): Is this notification really necessary? Check
+  // https://crbug.com/888170.
+  if (stream_) stream_->NotifyCompilationEnded();
   CancelPendingForegroundTask();
   for (auto d : deferred_handles_) delete d;
 }
@@ -2228,7 +2233,6 @@ void AsyncCompileJob::FinishCompile() {
 }
 
 void AsyncCompileJob::AsyncCompileFailed(Handle<Object> error_reason) {
-  if (stream_) stream_->NotifyError();
   // {job} keeps the {this} pointer alive.
   std::shared_ptr<AsyncCompileJob> job =
       isolate_->wasm_engine()->RemoveCompileJob(this);
@@ -2247,8 +2251,6 @@ class AsyncCompileJob::CompileStep {
 
   void Run(bool on_foreground) {
     if (on_foreground) {
-      DCHECK_NOT_NULL(job_->pending_foreground_task_);
-      job_->pending_foreground_task_ = nullptr;
       HandleScope scope(job_->isolate_);
       SaveContext saved_context(job_->isolate_);
       job_->isolate_->set_context(*job_->native_context_);
@@ -2276,8 +2278,17 @@ class AsyncCompileJob::CompileTask : public CancelableTask {
         job_(job),
         on_foreground_(on_foreground) {}
 
+  ~CompileTask() {
+    if (job_ != nullptr && on_foreground_) ResetPendingForegroundTask();
+  }
+
   void RunInternal() final {
-    if (job_) job_->step_->Run(on_foreground_);
+    if (!job_) return;
+    if (on_foreground_) ResetPendingForegroundTask();
+    job_->step_->Run(on_foreground_);
+    // After execution, reset {job_} such that we don't try to reset the pending
+    // foreground task when the task is deleted.
+    job_ = nullptr;
   }
 
   void Cancel() {
@@ -2289,6 +2300,11 @@ class AsyncCompileJob::CompileTask : public CancelableTask {
   // {job_} will be cleared to cancel a pending task.
   AsyncCompileJob* job_;
   bool on_foreground_;
+
+  void ResetPendingForegroundTask() const {
+    DCHECK_EQ(this, job_->pending_foreground_task_);
+    job_->pending_foreground_task_ = nullptr;
+  }
 };
 
 void AsyncCompileJob::StartForegroundTask() {

@@ -1,9 +1,15 @@
 #include "node.h"
 #include "node_internals.h"
+#include "base_object.h"
+#include "base_object-inl.h"
 #include "env-inl.h"
 #include "util-inl.h"
 #include "uv.h"
 #include "v8.h"
+
+#if HAVE_INSPECTOR
+#include "inspector_io.h"
+#endif
 
 #include <limits.h>  // PATH_MAX
 #include <stdio.h>
@@ -165,12 +171,15 @@ void HrtimeBigInt(const FunctionCallbackInfo<Value>& args) {
 
 void Kill(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
+  Local<Context> context = env->context();
 
   if (args.Length() != 2)
     return env->ThrowError("Bad argument.");
 
-  int pid = args[0]->Int32Value(env->context()).FromJust();
-  int sig = args[1]->Int32Value(env->context()).FromJust();
+  int pid;
+  if (!args[0]->Int32Value(context).To(&pid)) return;
+  int sig;
+  if (!args[1]->Int32Value(context).To(&sig)) return;
   int err = uv_kill(pid, sig);
   args.GetReturnValue().Set(err);
 }
@@ -332,20 +341,22 @@ static const char* name_by_gid(gid_t gid) {
 }
 #endif
 
-static uid_t uid_by_name(Environment* env, Local<Value> value) {
+
+static uid_t uid_by_name(Isolate* isolate, Local<Value> value) {
   if (value->IsUint32()) {
-    return static_cast<uid_t>(value->Uint32Value(env->context()).FromJust());
+    return static_cast<uid_t>(value.As<Uint32>()->Value());
   } else {
-    Utf8Value name(env->isolate(), value);
+    Utf8Value name(isolate, value);
     return uid_by_name(*name);
   }
 }
 
-static gid_t gid_by_name(Environment* env, Local<Value> value) {
+
+static gid_t gid_by_name(Isolate* isolate, Local<Value> value) {
   if (value->IsUint32()) {
-    return static_cast<gid_t>(value->Uint32Value(env->context()).FromJust());
+    return static_cast<gid_t>(value.As<Uint32>()->Value());
   } else {
-    Utf8Value name(env->isolate(), value);
+    Utf8Value name(isolate, value);
     return gid_by_name(*name);
   }
 }
@@ -381,7 +392,7 @@ void SetGid(const FunctionCallbackInfo<Value>& args) {
   CHECK_EQ(args.Length(), 1);
   CHECK(args[0]->IsUint32() || args[0]->IsString());
 
-  gid_t gid = gid_by_name(env, args[0]);
+  gid_t gid = gid_by_name(env->isolate(), args[0]);
 
   if (gid == gid_not_found) {
     // Tells JS to throw ERR_INVALID_CREDENTIAL
@@ -401,7 +412,7 @@ void SetEGid(const FunctionCallbackInfo<Value>& args) {
   CHECK_EQ(args.Length(), 1);
   CHECK(args[0]->IsUint32() || args[0]->IsString());
 
-  gid_t gid = gid_by_name(env, args[0]);
+  gid_t gid = gid_by_name(env->isolate(), args[0]);
 
   if (gid == gid_not_found) {
     // Tells JS to throw ERR_INVALID_CREDENTIAL
@@ -421,7 +432,7 @@ void SetUid(const FunctionCallbackInfo<Value>& args) {
   CHECK_EQ(args.Length(), 1);
   CHECK(args[0]->IsUint32() || args[0]->IsString());
 
-  uid_t uid = uid_by_name(env, args[0]);
+  uid_t uid = uid_by_name(env->isolate(), args[0]);
 
   if (uid == uid_not_found) {
     // Tells JS to throw ERR_INVALID_CREDENTIAL
@@ -441,7 +452,7 @@ void SetEUid(const FunctionCallbackInfo<Value>& args) {
   CHECK_EQ(args.Length(), 1);
   CHECK(args[0]->IsUint32() || args[0]->IsString());
 
-  uid_t uid = uid_by_name(env, args[0]);
+  uid_t uid = uid_by_name(env->isolate(), args[0]);
 
   if (uid == uid_not_found) {
     // Tells JS to throw ERR_INVALID_CREDENTIAL
@@ -501,7 +512,7 @@ void SetGroups(const FunctionCallbackInfo<Value>& args) {
   gid_t* groups = new gid_t[size];
 
   for (size_t i = 0; i < size; i++) {
-    gid_t gid = gid_by_name(env, groups_list->Get(i));
+    gid_t gid = gid_by_name(env->isolate(), groups_list->Get(i));
 
     if (gid == gid_not_found) {
       delete[] groups;
@@ -536,7 +547,7 @@ void InitGroups(const FunctionCallbackInfo<Value>& args) {
   char* user;
 
   if (args[0]->IsUint32()) {
-    user = name_by_uid(args[0]->Uint32Value(env->context()).FromJust());
+    user = name_by_uid(args[0].As<Uint32>()->Value());
     must_free = true;
   } else {
     user = *arg0;
@@ -548,7 +559,7 @@ void InitGroups(const FunctionCallbackInfo<Value>& args) {
     return args.GetReturnValue().Set(1);
   }
 
-  extra_group = gid_by_name(env, args[1]);
+  extra_group = gid_by_name(env->isolate(), args[1]);
 
   if (extra_group == gid_not_found) {
     if (must_free)
@@ -779,6 +790,84 @@ void EnvEnumerator(const PropertyCallbackInfo<Array>& info) {
 void GetParentProcessId(Local<Name> property,
                         const PropertyCallbackInfo<Value>& info) {
   info.GetReturnValue().Set(Integer::New(info.GetIsolate(), uv_os_getppid()));
+}
+
+void GetActiveRequests(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+
+  Local<Array> ary = Array::New(args.GetIsolate());
+  Local<Context> ctx = env->context();
+  Local<Function> fn = env->push_values_to_array_function();
+  Local<Value> argv[NODE_PUSH_VAL_TO_ARRAY_MAX];
+  size_t idx = 0;
+
+  for (auto w : *env->req_wrap_queue()) {
+    if (w->persistent().IsEmpty())
+      continue;
+    argv[idx] = w->GetOwner();
+    if (++idx >= arraysize(argv)) {
+      fn->Call(ctx, ary, idx, argv).ToLocalChecked();
+      idx = 0;
+    }
+  }
+
+  if (idx > 0) {
+    fn->Call(ctx, ary, idx, argv).ToLocalChecked();
+  }
+
+  args.GetReturnValue().Set(ary);
+}
+
+
+// Non-static, friend of HandleWrap. Could have been a HandleWrap method but
+// implemented here for consistency with GetActiveRequests().
+void GetActiveHandles(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+
+  Local<Array> ary = Array::New(env->isolate());
+  Local<Context> ctx = env->context();
+  Local<Function> fn = env->push_values_to_array_function();
+  Local<Value> argv[NODE_PUSH_VAL_TO_ARRAY_MAX];
+  size_t idx = 0;
+
+  for (auto w : *env->handle_wrap_queue()) {
+    if (!HandleWrap::HasRef(w))
+      continue;
+    argv[idx] = w->GetOwner();
+    if (++idx >= arraysize(argv)) {
+      fn->Call(ctx, ary, idx, argv).ToLocalChecked();
+      idx = 0;
+    }
+  }
+  if (idx > 0) {
+    fn->Call(ctx, ary, idx, argv).ToLocalChecked();
+  }
+
+  args.GetReturnValue().Set(ary);
+}
+
+void DebugPortGetter(Local<Name> property,
+                     const PropertyCallbackInfo<Value>& info) {
+  Environment* env = Environment::GetCurrent(info);
+  Mutex::ScopedLock lock(process_mutex);
+  int port = env->options()->debug_options->port();
+#if HAVE_INSPECTOR
+  if (port == 0) {
+    if (auto io = env->inspector_agent()->io())
+      port = io->port();
+  }
+#endif  // HAVE_INSPECTOR
+  info.GetReturnValue().Set(port);
+}
+
+
+void DebugPortSetter(Local<Name> property,
+                     Local<Value> value,
+                     const PropertyCallbackInfo<void>& info) {
+  Environment* env = Environment::GetCurrent(info);
+  Mutex::ScopedLock lock(process_mutex);
+  env->options()->debug_options->host_port.port =
+      value->Int32Value(env->context()).FromMaybe(0);
 }
 
 

@@ -157,7 +157,7 @@ constexpr int kDoubleSizeLog2 = 3;
 // ARM64 only supports direct calls within a 128 MB range.
 constexpr size_t kMaxWasmCodeMemory = 128 * MB;
 #else
-constexpr size_t kMaxWasmCodeMemory = 512 * MB;
+constexpr size_t kMaxWasmCodeMemory = 1024 * MB;
 #endif
 
 #if V8_HOST_ARCH_64_BIT
@@ -1570,6 +1570,7 @@ enum class LoadSensitivity {
 #define FOREACH_WASM_TRAPREASON(V) \
   V(TrapUnreachable)               \
   V(TrapMemOutOfBounds)            \
+  V(TrapUnalignedAccess)           \
   V(TrapDivByZero)                 \
   V(TrapDivUnrepresentable)        \
   V(TrapRemByZero)                 \

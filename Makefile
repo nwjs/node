@@ -74,9 +74,9 @@ available-node = \
 # BUILDTYPE=Debug builds both release and debug builds. If you want to compile
 # just the debug build, run `make -C out BUILDTYPE=Debug` instead.
 ifeq ($(BUILDTYPE),Release)
-all: out/Makefile $(NODE_EXE) ## Default target, builds node in out/Release/node.
+all: $(NODE_EXE) ## Default target, builds node in out/Release/node.
 else
-all: out/Makefile $(NODE_EXE) $(NODE_G_EXE)
+all: $(NODE_EXE) $(NODE_G_EXE)
 endif
 
 .PHONY: help
@@ -129,7 +129,7 @@ out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp \
               config.gypi
 	$(PYTHON) tools/gyp_node.py -f make
 
-config.gypi: configure
+config.gypi: configure configure.py
 	@if [ -x config.status ]; then \
 		./config.status; \
 	else \
@@ -278,8 +278,6 @@ jstest: build-addons build-addons-napi ## Runs addon tests and JS tests
 .PHONY: test
 # This does not run tests of third-party libraries inside deps.
 test: all ## Runs default tests, linters, and builds docs.
-	@echo "Build the addons before running the tests so the test results"
-	@echo "can be displayed together"
 	$(MAKE) -s test-doc
 	$(MAKE) -s build-addons
 	$(MAKE) -s build-addons-napi
@@ -288,8 +286,6 @@ test: all ## Runs default tests, linters, and builds docs.
 
 .PHONY: test-only
 test-only: all  ## For a quick test, does not run linter or build docs.
-	@echo "Build the addons before running the tests so the test results"
-	@echo "can be displayed together"
 	$(MAKE) build-addons
 	$(MAKE) build-addons-napi
 	$(MAKE) cctest
@@ -297,8 +293,6 @@ test-only: all  ## For a quick test, does not run linter or build docs.
 
 # Used by `make coverage-test`
 test-cov: all
-	@echo "Build the addons before running the tests so the test results"
-	@echo "can be displayed together"
 	$(MAKE) build-addons
 	$(MAKE) build-addons-napi
 	# $(MAKE) cctest
@@ -476,7 +470,7 @@ test-ci: | clear-stalled build-addons build-addons-napi doc-only
 # Prepare the build for running the tests.
 # Related CI jobs: most CI tests, excluding node-test-commit-arm-fanned
 build-ci:
-	$(PYTHON) ./configure $(CONFIG_FLAGS)
+	$(PYTHON) ./configure --verbose $(CONFIG_FLAGS)
 	$(MAKE)
 
 .PHONY: run-ci
@@ -603,17 +597,19 @@ test-v8 test-v8-intl test-v8-benchmarks test-v8-all:
 		"$ git clone https://github.com/nodejs/node.git"
 endif
 
-# Google Analytics ID used for tracking API docs page views, empty
-# DOCS_ANALYTICS means no tracking scripts will be included in the
-# generated .html files
-DOCS_ANALYTICS ?=
-
 apidoc_dirs = out/doc out/doc/api out/doc/api/assets
 apidoc_sources = $(wildcard doc/api/*.md)
 apidocs_html = $(addprefix out/,$(apidoc_sources:.md=.html))
 apidocs_json = $(addprefix out/,$(apidoc_sources:.md=.json))
 
 apiassets = $(subst api_assets,api/assets,$(addprefix out/,$(wildcard doc/api_assets/*)))
+
+tools/doc/node_modules: tools/doc/package.json
+ifeq ($(node_use_openssl),true)
+	cd tools/doc && $(call available-node,$(run-npm-ci))
+else
+	@echo "Skipping tools/doc/node_modules (no crypto)"
+endif
 
 .PHONY: doc-only
 doc-only: tools/doc/node_modules \
@@ -645,18 +641,19 @@ out/doc/api/assets/%: doc/api_assets/% out/doc/api/assets
 run-npm-ci = $(PWD)/$(NPM) ci
 
 gen-api = tools/doc/generate.js --node-version=$(FULLVERSION) \
-		--apilinks=out/apilinks.json \
-		--analytics=$(DOCS_ANALYTICS) $< --output-directory=out/doc/api
+		--apilinks=out/apilinks.json $< --output-directory=out/doc/api
 gen-apilink = tools/doc/apilinks.js $(wildcard lib/*.js) > $@
 
 out/apilinks.json: $(wildcard lib/*.js) tools/doc/apilinks.js
 	$(call available-node, $(gen-apilink))
 
 out/doc/api/%.json out/doc/api/%.html: doc/api/%.md tools/doc/generate.js \
-	tools/doc/html.js tools/doc/json.js | out/apilinks.json
+	tools/doc/html.js tools/doc/json.js tools/doc/apilinks.js | \
+	out/apilinks.json
 	$(call available-node, $(gen-api))
 
-out/doc/api/all.html: $(apidocs_html) tools/doc/allhtml.js
+out/doc/api/all.html: $(apidocs_html) tools/doc/allhtml.js \
+	tools/doc/apilinks.js
 	$(call available-node, tools/doc/allhtml.js)
 
 out/doc/api/all.json: $(apidocs_json) tools/doc/alljson.js
@@ -731,7 +728,7 @@ ifeq ($(findstring arm,$(UNAME_M)),arm)
 DESTCPU ?= arm
 else
 ifeq ($(findstring aarch64,$(UNAME_M)),aarch64)
-DESTCPU ?= aarch64
+DESTCPU ?= arm64
 else
 ifeq ($(findstring powerpc,$(shell uname -p)),powerpc)
 DESTCPU ?= ppc64
@@ -751,7 +748,7 @@ else
 ifeq ($(DESTCPU),arm)
 ARCH=arm
 else
-ifeq ($(DESTCPU),aarch64)
+ifeq ($(DESTCPU),arm64)
 ARCH=arm64
 else
 ifeq ($(DESTCPU),ppc64)
@@ -930,8 +927,6 @@ $(TARBALL): release-only $(NODE_EXE) doc
 	$(RM) -r $(TARNAME)/tools/osx-*
 	$(RM) -r $(TARNAME)/tools/osx-pkg.pmdoc
 	$(RM) -r $(TARNAME)/tools/pkgsrc
-	$(RM) -r $(TARNAME)/tools/remark-cli
-	$(RM) -r $(TARNAME)/tools/remark-preset-lint-node
 	find $(TARNAME)/ -name ".eslint*" -maxdepth 2 | xargs $(RM)
 	find $(TARNAME)/ -type l | xargs $(RM) # annoying on windows
 	tar -cf $(TARNAME).tar $(TARNAME)
@@ -1053,72 +1048,48 @@ bench-addons-clean:
 	$(RM) -r benchmark/napi/function_call/build
 	$(RM) -r benchmark/napi/function_args/build
 
+.PHONY: lint-md-rollup
+lint-md-rollup:
+	cd tools/node-lint-md-cli-rollup/remark-preset-lint-node && npm up
+	cd tools/node-lint-md-cli-rollup && npm up
+	cd tools/node-lint-md-cli-rollup && npm run build-node
+
 .PHONY: lint-md-clean
 lint-md-clean:
-	$(RM) -r tools/remark-cli/node_modules
-	$(RM) -r tools/remark-preset-lint-node/node_modules
+	$(RM) -r tools/node-lint-md-cli-rollup/remark-preset-lint-node/node_modules
+	$(RM) -r tools/node-lint-md-cli-rollup/node_modules
 	$(RM) tools/.*mdlintstamp
 
-tools/remark-cli/node_modules: tools/remark-cli/package.json
-	@echo "Markdown linter: installing remark-cli into tools/"
-	@cd tools/remark-cli && $(call available-node,$(run-npm-ci))
-
-tools/remark-preset-lint-node/node_modules: \
-	tools/remark-preset-lint-node/package.json
-	@echo "Markdown linter: installing remark-preset-lint-node into tools/"
-	@cd tools/remark-preset-lint-node && $(call available-node,$(run-npm-ci))
-
 .PHONY: lint-md-build
-lint-md-build: tools/remark-cli/node_modules \
-	tools/doc/node_modules \
-	tools/remark-preset-lint-node/node_modules
-
-tools/doc/node_modules: tools/doc/package.json
-ifeq ($(node_use_openssl),true)
-	cd tools/doc && $(call available-node,$(run-npm-ci))
-else
-	@echo "Skipping tools/doc/node_modules (no crypto)"
-endif
-
-.PHONY: lint-md
-ifneq ("","$(wildcard tools/remark-cli/node_modules/)")
+lint-md-build:
+	$(warning "Deprecated no-op target 'lint-md-build'")
 
 LINT_MD_DOC_FILES = $(shell ls doc/*.md doc/**/*.md)
-run-lint-doc-md = tools/remark-cli/cli.js -q -f $(LINT_MD_DOC_FILES)
+run-lint-doc-md = tools/lint-md.js -q -f $(LINT_MD_DOC_FILES)
 # Lint all changed markdown files under doc/
 tools/.docmdlintstamp: $(LINT_MD_DOC_FILES)
-ifeq ($(node_use_openssl),true)
 	@echo "Running Markdown linter on docs..."
 	@$(call available-node,$(run-lint-doc-md))
 	@touch $@
-else
-	@echo "Skipping Markdown linter on docs (no crypto)"
-endif
 
 LINT_MD_TARGETS = src lib benchmark test tools/doc tools/icu
 LINT_MD_ROOT_DOCS := $(wildcard *.md)
 LINT_MD_MISC_FILES := $(shell find $(LINT_MD_TARGETS) -type f \
-  -not -path '*node_modules*' -name '*.md') $(LINT_MD_ROOT_DOCS)
-run-lint-misc-md = tools/remark-cli/cli.js -q -f $(LINT_MD_MISC_FILES)
+  -not -path '*node_modules*' -not -path 'test/fixtures/*' -name '*.md') \
+  $(LINT_MD_ROOT_DOCS)
+run-lint-misc-md = tools/lint-md.js -q -f $(LINT_MD_MISC_FILES)
 # Lint other changed markdown files maintained by us
 tools/.miscmdlintstamp: $(LINT_MD_MISC_FILES)
-ifeq ($(node_use_openssl),true)
 	@echo "Running Markdown linter on misc docs..."
 	@$(call available-node,$(run-lint-misc-md))
 	@touch $@
-else
-	@echo "Skipping Markdown linter on misc docs (no crypto)"
-endif
 
 tools/.mdlintstamp: tools/.miscmdlintstamp tools/.docmdlintstamp
 
+.PHONY: lint-md
 # Lints the markdown documents maintained by us in the codebase.
 lint-md: | tools/.mdlintstamp
-else
-lint-md:
-	@echo "The markdown linter is not installed."
-	@echo "To install (requires internet access) run: $ make lint-md-build"
-endif
+
 
 LINT_JS_TARGETS = .eslintrc.js benchmark doc lib test tools
 
@@ -1210,19 +1181,25 @@ else
 	@echo "To install (requires internet access) run: $ make format-cpp-build"
 endif
 
+ifeq ($(V),1)
+  CPPLINT_QUIET =
+else
+  CPPLINT_QUIET = --quiet
+endif
 .PHONY: lint-cpp
 # Lints the C++ code with cpplint.py and check-imports.py.
 lint-cpp: tools/.cpplintstamp
 
 tools/.cpplintstamp: $(LINT_CPP_FILES)
 	@echo "Running C++ linter..."
-	@$(PYTHON) tools/cpplint.py $?
+	@$(PYTHON) tools/cpplint.py $(CPPLINT_QUIET) $?
 	@$(PYTHON) tools/check-imports.py
 	@touch $@
 
 lint-addon-docs: test/addons/.docbuildstamp
 	@echo "Running C++ linter on addon docs..."
-	@$(PYTHON) tools/cpplint.py --filter=$(ADDON_DOC_LINT_FLAGS) $(LINT_CPP_ADDON_DOC_FILES_GLOB)
+	@$(PYTHON) tools/cpplint.py $(CPPLINT_QUIET) --filter=$(ADDON_DOC_LINT_FLAGS) \
+		$(LINT_CPP_ADDON_DOC_FILES_GLOB)
 
 cpplint: lint-cpp
 	@echo "Please use lint-cpp instead of cpplint"

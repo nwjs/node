@@ -100,6 +100,12 @@ inline void ClearThreadInWasm() {
   }
 }
 
+class ThreadInWasmScope {
+ public:
+  ThreadInWasmScope() { SetThreadInWasm(); }
+  ~ThreadInWasmScope() { ClearThreadInWasm(); }
+};
+
 bool RegisterDefaultTrapHandler();
 V8_EXPORT_PRIVATE void RestoreOriginalSignalHandler();
 

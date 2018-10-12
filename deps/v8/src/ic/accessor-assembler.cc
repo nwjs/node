@@ -1455,7 +1455,7 @@ void AccessorAssembler::HandleStoreToProxy(const StoreICParameters* p,
     TailCallRuntime(Runtime::kSetPropertyWithReceiver, p->context, proxy,
                     p->name, p->value, p->receiver, language_mode);
   } else {
-    Node* name = CallBuiltin(Builtins::kToName, p->context, p->name);
+    Node* name = ToName(p->context, p->name);
     TailCallBuiltin(Builtins::kProxySetProperty, p->context, proxy, name,
                     p->value, p->receiver, language_mode);
   }
@@ -2738,40 +2738,29 @@ void AccessorAssembler::KeyedLoadIC(const LoadICParameters* p) {
 
 void AccessorAssembler::KeyedLoadICGeneric(const LoadICParameters* p) {
   VARIABLE(var_index, MachineType::PointerRepresentation());
-  VARIABLE(var_unique, MachineRepresentation::kTagged, p->name);
-  Label if_index(this), if_unique_name(this), if_notunique(this),
-      if_other(this, Label::kDeferred), if_runtime(this, Label::kDeferred);
+  VARIABLE(var_unique, MachineRepresentation::kTagged);
+  var_unique.Bind(p->name);  // Dummy initialization.
+  Label if_index(this), if_unique_name(this), if_notunique(this), slow(this);
 
   Node* receiver = p->receiver;
-  GotoIf(TaggedIsSmi(receiver), &if_runtime);
+  GotoIf(TaggedIsSmi(receiver), &slow);
+  Node* receiver_map = LoadMap(receiver);
+  Node* instance_type = LoadMapInstanceType(receiver_map);
 
-  TryToName(p->name, &if_index, &var_index, &if_unique_name, &var_unique,
-            &if_other, &if_notunique);
-
-  BIND(&if_other);
-  {
-    Node* name = CallBuiltin(Builtins::kToName, p->context, p->name);
-    var_unique.Bind(name);
-    TryToName(name, &if_index, &var_index, &if_unique_name, &var_unique,
-              &if_runtime, &if_notunique);
-  }
+  TryToName(p->name, &if_index, &var_index, &if_unique_name, &var_unique, &slow,
+            &if_notunique);
 
   BIND(&if_index);
   {
-    Node* receiver_map = LoadMap(receiver);
-    Node* instance_type = LoadMapInstanceType(receiver_map);
     GenericElementLoad(receiver, receiver_map, instance_type, var_index.value(),
-                       &if_runtime);
+                       &slow);
   }
 
   BIND(&if_unique_name);
   {
     LoadICParameters pp = *p;
     pp.name = var_unique.value();
-    Node* receiver_map = LoadMap(receiver);
-    Node* instance_type = LoadMapInstanceType(receiver_map);
-    GenericPropertyLoad(receiver, receiver_map, instance_type, &pp,
-                        &if_runtime);
+    GenericPropertyLoad(receiver, receiver_map, instance_type, &pp, &slow);
   }
 
   BIND(&if_notunique);
@@ -2780,11 +2769,10 @@ void AccessorAssembler::KeyedLoadICGeneric(const LoadICParameters* p) {
       // Ideally we could return undefined directly here if the name is not
       // found in the string table, i.e. it was never internalized, but that
       // invariant doesn't hold with named property interceptors (at this
-      // point), so we take the {if_runtime} path instead.
+      // point), so we take the {slow} path instead.
       Label if_in_string_table(this);
-      TryInternalizeString(var_unique.value(), &if_index, &var_index,
-                           &if_in_string_table, &var_unique, &if_runtime,
-                           &if_runtime);
+      TryInternalizeString(p->name, &if_index, &var_index, &if_in_string_table,
+                           &var_unique, &slow, &slow);
 
       BIND(&if_in_string_table);
       {
@@ -2795,23 +2783,21 @@ void AccessorAssembler::KeyedLoadICGeneric(const LoadICParameters* p) {
         // cache. We may want to re-evaluate that in the future.
         LoadICParameters pp = *p;
         pp.name = var_unique.value();
-        Node* receiver_map = LoadMap(receiver);
-        Node* instance_type = LoadMapInstanceType(receiver_map);
-        GenericPropertyLoad(receiver, receiver_map, instance_type, &pp,
-                            &if_runtime, kDontUseStubCache);
+        GenericPropertyLoad(receiver, receiver_map, instance_type, &pp, &slow,
+                            kDontUseStubCache);
       }
     } else {
-      Goto(&if_runtime);
+      Goto(&slow);
     }
   }
 
-  BIND(&if_runtime);
+  BIND(&slow);
   {
     Comment("KeyedLoadGeneric_slow");
     IncrementCounter(isolate()->counters()->ic_keyed_load_generic_slow(), 1);
     // TODO(jkummerow): Should we use the GetProperty TF stub instead?
-    TailCallRuntime(Runtime::kGetProperty, p->context, p->receiver,
-                    var_unique.value());
+    TailCallRuntime(Runtime::kKeyedGetProperty, p->context, p->receiver,
+                    p->name);
   }
 }
 

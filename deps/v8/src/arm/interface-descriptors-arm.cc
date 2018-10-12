@@ -88,9 +88,9 @@ void CallVarargsDescriptor::InitializePlatformSpecific(
     CallInterfaceDescriptorData* data) {
   // r0 : number of arguments (on the stack, not including receiver)
   // r1 : the target to call
-  // r4 : arguments list length (untagged)
   // r2 : arguments list (FixedArray)
-  Register registers[] = {r1, r0, r4, r2};
+  // r4 : arguments list length (untagged)
+  Register registers[] = {r1, r0, r2, r4};
   data->InitializePlatformSpecific(arraysize(registers), registers);
 }
 
@@ -125,9 +125,9 @@ void ConstructVarargsDescriptor::InitializePlatformSpecific(
   // r0 : number of arguments (on the stack, not including receiver)
   // r1 : the target to call
   // r3 : the new target
-  // r4 : arguments list length (untagged)
   // r2 : arguments list (FixedArray)
-  Register registers[] = {r1, r3, r0, r4, r2};
+  // r4 : arguments list length (untagged)
+  Register registers[] = {r1, r3, r0, r2, r4};
   data->InitializePlatformSpecific(arraysize(registers), registers);
 }
 
@@ -193,7 +193,7 @@ void BinaryOpDescriptor::InitializePlatformSpecific(
   data->InitializePlatformSpecific(arraysize(registers), registers);
 }
 
-void ArgumentsAdaptorDescriptor::InitializePlatformSpecific(
+void ArgumentAdaptorDescriptor::InitializePlatformSpecific(
     CallInterfaceDescriptorData* data) {
   Register registers[] = {
       r1,  // JSFunction
@@ -237,10 +237,10 @@ void InterpreterPushArgsThenConstructDescriptor::InitializePlatformSpecific(
     CallInterfaceDescriptorData* data) {
   Register registers[] = {
       r0,  // argument count (not including receiver)
-      r4,  // address of the first argument
-      r1,  // constructor to call
       r3,  // new target
+      r1,  // constructor to call
       r2,  // allocation site feedback if available, undefined otherwise
+      r4   // address of the first argument
   };
   data->InitializePlatformSpecific(arraysize(registers), registers);
 }

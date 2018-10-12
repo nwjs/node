@@ -161,6 +161,7 @@ void ThreadLocalTop::Initialize(Isolate* isolate) {
 }
 
 void ThreadLocalTop::Free() {
+  wasm_caught_exception_ = nullptr;
   // Match unmatched PopPromise calls.
   while (promise_on_stack_) isolate_->PopPromise();
 }
@@ -251,6 +252,7 @@ void Isolate::IterateThread(ThreadVisitor* v, char* t) {
 void Isolate::Iterate(RootVisitor* v, ThreadLocalTop* thread) {
   // Visit the roots from the top for a given thread.
   v->VisitRootPointer(Root::kTop, nullptr, &thread->pending_exception_);
+  v->VisitRootPointer(Root::kTop, nullptr, &thread->wasm_caught_exception_);
   v->VisitRootPointer(Root::kTop, nullptr, &thread->pending_message_obj_);
   v->VisitRootPointer(Root::kTop, nullptr,
                       bit_cast<Object**>(&(thread->context_)));
@@ -1122,6 +1124,19 @@ void ReportBootstrappingException(Handle<Object> exception,
 #endif
 }
 
+bool Isolate::is_catchable_by_wasm(Object* exception) {
+  // TODO(titzer): thread WASM features here, or just remove this check?
+  if (!FLAG_experimental_wasm_eh) return false;
+  if (!is_catchable_by_javascript(exception) || !exception->IsJSError())
+    return false;
+  HandleScope scope(this);
+  Handle<Object> exception_handle(exception, this);
+  return JSReceiver::HasProperty(Handle<JSReceiver>::cast(exception_handle),
+                                 factory()->InternalizeUtf8String(
+                                     wasm::WasmException::kRuntimeIdStr))
+      .IsJust();
+}
+
 Object* Isolate::Throw(Object* raw_exception, MessageLocation* location) {
   DCHECK(!has_pending_exception());
 
@@ -1295,10 +1310,11 @@ Object* Isolate::UnwindAndFindHandler() {
           trap_handler::ClearThreadInWasm();
         }
 
-        // For WebAssembly frames we perform a lookup in the handler table.
-        if (!catchable_by_js) break;
-        WasmCompiledFrame* wasm_frame = static_cast<WasmCompiledFrame*>(frame);
+        if (!is_catchable_by_wasm(exception)) {
+          break;
+        }
         int stack_slots = 0;  // Will contain stack slot count of frame.
+        WasmCompiledFrame* wasm_frame = static_cast<WasmCompiledFrame*>(frame);
         int offset = wasm_frame->LookupExceptionHandlerInTable(&stack_slots);
         if (offset < 0) break;
         // Compute the stack pointer from the frame pointer. This ensures that
@@ -1308,10 +1324,10 @@ Object* Isolate::UnwindAndFindHandler() {
                             stack_slots * kPointerSize;
 
         // This is going to be handled by Wasm, so we need to set the TLS flag
-        // again. It was cleared above assuming the frame would be unwound.
+        // again.
         trap_handler::SetThreadInWasm();
 
-        // Gather information from the frame.
+        set_wasm_caught_exception(exception);
         wasm::WasmCode* wasm_code =
             wasm_engine()->code_manager()->LookupCode(frame->pc());
         return FoundHandler(nullptr, wasm_code->instruction_start(), offset,
@@ -2592,13 +2608,13 @@ void Isolate::Deinit() {
 
   debug()->Unload();
 
-  wasm_engine()->DeleteCompileJobsOnIsolate(this);
-
   if (concurrent_recompilation_enabled()) {
     optimizing_compile_dispatcher_->Stop();
     delete optimizing_compile_dispatcher_;
     optimizing_compile_dispatcher_ = nullptr;
   }
+
+  wasm_engine()->DeleteCompileJobsOnIsolate(this);
 
   heap_.mark_compact_collector()->EnsureSweepingCompleted();
   heap_.memory_allocator()->unmapper()->EnsureUnmappingCompleted();
@@ -3211,8 +3227,6 @@ void Isolate::DumpAndResetStats() {
   }
   if (V8_UNLIKELY(FLAG_runtime_stats ==
                   v8::tracing::TracingCategoryObserver::ENABLED_BY_NATIVE)) {
-    counters()->worker_thread_runtime_call_stats()->AddToMainTable(
-        counters()->runtime_call_stats());
     counters()->runtime_call_stats()->Print();
     counters()->runtime_call_stats()->Reset();
   }

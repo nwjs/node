@@ -46,6 +46,7 @@ const { getSystemErrorName } = require('util');
     delete providers.WORKER;
     if (!common.isMainThread)
       delete providers.INSPECTORJSBINDING;
+    delete providers.KEYPAIRGENREQUEST;
 
     const objKeys = Object.keys(providers);
     if (objKeys.length > 0)
@@ -94,7 +95,7 @@ function testInitialized(req, ctor_name) {
 
 
 {
-  const JSStream = process.binding('js_stream').JSStream;
+  const JSStream = internalBinding('js_stream').JSStream;
   testInitialized(new JSStream(), 'JSStream');
 }
 
@@ -148,7 +149,7 @@ if (common.hasCrypto) { // eslint-disable-line node-core/crypto-check
 
 {
   const { HTTPParser } = internalBinding('http_parser');
-  testInitialized(new HTTPParser(), 'HTTPParser');
+  testInitialized(new HTTPParser(0), 'HTTPParser');
 }
 
 

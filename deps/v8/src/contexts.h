@@ -204,13 +204,21 @@ enum ContextLookupFlags {
   V(ITERATOR_RESULT_MAP_INDEX, Map, iterator_result_map)                       \
   V(INTL_DATE_TIME_FORMAT_FUNCTION_INDEX, JSFunction,                          \
     intl_date_time_format_function)                                            \
+  V(INTL_DATE_FORMAT_INTERNAL_FORMAT_SHARED_FUN, SharedFunctionInfo,           \
+    date_format_internal_format_shared_fun)                                    \
   V(INTL_NUMBER_FORMAT_FUNCTION_INDEX, JSFunction,                             \
     intl_number_format_function)                                               \
+  V(INTL_NUMBER_FORMAT_INTERNAL_FORMAT_NUMBER_SHARED_FUN, SharedFunctionInfo,  \
+    number_format_internal_format_number_shared_fun)                           \
   V(INTL_LOCALE_FUNCTION_INDEX, JSFunction, intl_locale_function)              \
   V(INTL_COLLATOR_FUNCTION_INDEX, JSFunction, intl_collator_function)          \
+  V(INTL_COLLATOR_INTERNAL_COMPARE_SHARED_FUN, SharedFunctionInfo,             \
+    collator_internal_compare_shared_fun)                                      \
   V(INTL_PLURAL_RULES_FUNCTION_INDEX, JSFunction, intl_plural_rules_function)  \
   V(INTL_V8_BREAK_ITERATOR_FUNCTION_INDEX, JSFunction,                         \
     intl_v8_break_iterator_function)                                           \
+  V(INTL_V8_BREAK_ITERATOR_INTERNAL_ADOPT_TEXT_SHARED_FUN, SharedFunctionInfo, \
+    break_iterator_internal_adopt_text_shared_fun)                             \
   V(JS_ARRAY_PACKED_SMI_ELEMENTS_MAP_INDEX, Map,                               \
     js_array_packed_smi_elements_map)                                          \
   V(JS_ARRAY_HOLEY_SMI_ELEMENTS_MAP_INDEX, Map,                                \

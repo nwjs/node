@@ -194,7 +194,7 @@ an integer.
 
 ## os.getPriority([pid])
 <!-- YAML
-added: REPLACEME
+added: v10.10.0
 -->
 
 * `pid` {integer} The process ID to retrieve scheduling priority for.
@@ -353,7 +353,7 @@ https://en.wikipedia.org/wiki/Uname#Examples for more information.
 
 ## os.setPriority([pid, ]priority)
 <!-- YAML
-added: REPLACEME
+added: v10.10.0
 -->
 
 * `pid` {integer} The process ID to set scheduling priority for.
@@ -370,6 +370,9 @@ priority classes, `priority` is mapped to one of six priority constants in
 `os.constants.priority`. When retrieving a process priority level, this range
 mapping may cause the return value to be slightly different on Windows. To avoid
 confusion, it is recommended to set `priority` to one of the priority constants.
+
+On Windows setting priority to `PRIORITY_HIGHEST` requires elevated user,
+otherwise the set priority will be silently reduced to `PRIORITY_HIGH`.
 
 ## os.tmpdir()
 <!-- YAML
@@ -1243,7 +1246,7 @@ information.
 
 ### Priority Constants
 <!-- YAML
-added: REPLACEME
+added: v10.10.0
 -->
 
 The following process scheduling constants are exported by

@@ -56,11 +56,9 @@ class SendWrap : public ReqWrap<uv_udp_send_t> {
   inline bool have_callback() const;
   size_t msg_size;
 
-  void MemoryInfo(MemoryTracker* tracker) const override {
-    tracker->TrackThis(this);
-  }
-
-  ADD_MEMORY_INFO_NAME(SendWrap)
+  SET_NO_MEMORY_INFO()
+  SET_MEMORY_INFO_NAME(SendWrap)
+  SET_SELF_SIZE(SendWrap)
 
  private:
   const bool have_callback_;
@@ -135,20 +133,21 @@ void UDPWrap::Initialize(Local<Object> target,
   env->SetProtoMethod(t, "setTTL", SetTTL);
   env->SetProtoMethod(t, "bufferSize", BufferSize);
 
-  AsyncWrap::AddWrapMethods(env, t);
-  HandleWrap::AddWrapMethods(env, t);
+  t->Inherit(HandleWrap::GetConstructorTemplate(env));
 
-  target->Set(udpString, t->GetFunction());
-  env->set_udp_constructor_function(t->GetFunction());
+  target->Set(udpString, t->GetFunction(env->context()).ToLocalChecked());
+  env->set_udp_constructor_function(
+      t->GetFunction(env->context()).ToLocalChecked());
 
   // Create FunctionTemplate for SendWrap
   Local<FunctionTemplate> swt =
       BaseObject::MakeLazilyInitializedJSTemplate(env);
-  AsyncWrap::AddWrapMethods(env, swt);
+  swt->Inherit(AsyncWrap::GetConstructorTemplate(env));
   Local<String> sendWrapString =
       FIXED_ONE_BYTE_STRING(env->isolate(), "SendWrap");
   swt->SetClassName(sendWrapString);
-  target->Set(sendWrapString, swt->GetFunction());
+  target->Set(sendWrapString,
+              swt->GetFunction(env->context()).ToLocalChecked());
 }
 
 
@@ -171,7 +170,6 @@ void UDPWrap::GetFD(const FunctionCallbackInfo<Value>& args) {
 
 
 void UDPWrap::DoBind(const FunctionCallbackInfo<Value>& args, int family) {
-  Environment* env = Environment::GetCurrent(args);
   UDPWrap* wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap,
                           args.Holder(),
@@ -181,8 +179,11 @@ void UDPWrap::DoBind(const FunctionCallbackInfo<Value>& args, int family) {
   CHECK_EQ(args.Length(), 3);
 
   node::Utf8Value address(args.GetIsolate(), args[0]);
-  const int port = args[1]->Uint32Value(env->context()).FromJust();
-  const int flags = args[2]->Uint32Value(env->context()).FromJust();
+  Local<Context> ctx = args.GetIsolate()->GetCurrentContext();
+  uint32_t port, flags;
+  if (!args[1]->Uint32Value(ctx).To(&port) ||
+      !args[2]->Uint32Value(ctx).To(&flags))
+    return;
   char addr[sizeof(sockaddr_in6)];
   int err;
 
@@ -209,12 +210,12 @@ void UDPWrap::DoBind(const FunctionCallbackInfo<Value>& args, int family) {
 
 
 void UDPWrap::Open(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
   UDPWrap* wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap,
                           args.Holder(),
                           args.GetReturnValue().Set(UV_EBADF));
-  int fd = static_cast<int>(args[0]->IntegerValue(env->context()).FromJust());
+  CHECK(args[0]->IsNumber());
+  int fd = static_cast<int>(args[0].As<Integer>()->Value());
   int err = uv_udp_open(&wrap->handle_, fd);
 
   args.GetReturnValue().Set(err);
@@ -268,10 +269,13 @@ void UDPWrap::BufferSize(const FunctionCallbackInfo<Value>& args) {
 
 #define X(name, fn)                                                            \
   void UDPWrap::name(const FunctionCallbackInfo<Value>& args) {                \
-    Environment* env = Environment::GetCurrent(args);                          \
     UDPWrap* wrap = Unwrap<UDPWrap>(args.Holder());                            \
+    Environment* env = wrap->env();                                            \
     CHECK_EQ(args.Length(), 1);                                                \
-    int flag = args[0]->Int32Value(env->context()).FromJust();                 \
+    int flag;                                                                  \
+    if (!args[0]->Int32Value(env->context()).To(&flag)) {                      \
+      return;                                                                  \
+    }                                                                          \
     int err = wrap == nullptr ? UV_EBADF : fn(&wrap->handle_, flag);           \
     args.GetReturnValue().Set(err);                                            \
   }

@@ -14,7 +14,7 @@ using v8::Local;
 using v8::Object;
 using v8::Platform;
 using v8::Task;
-using v8::TracingController;
+using node::tracing::TracingController;
 
 namespace {
 
@@ -167,8 +167,11 @@ class WorkerThreadsTaskRunner::DelayedTaskScheduler {
 };
 
 WorkerThreadsTaskRunner::WorkerThreadsTaskRunner(int thread_pool_size) {
-  Mutex::ScopedLock lock(platform_workers_mutex_);
-  pending_platform_workers_ = thread_pool_size;
+  Mutex platform_workers_mutex;
+  ConditionVariable platform_workers_ready;
+
+  Mutex::ScopedLock lock(platform_workers_mutex);
+  int pending_platform_workers = thread_pool_size;
 
   delayed_task_scheduler_.reset(
       new DelayedTaskScheduler(&pending_worker_tasks_));
@@ -176,8 +179,8 @@ WorkerThreadsTaskRunner::WorkerThreadsTaskRunner(int thread_pool_size) {
 
   for (int i = 0; i < thread_pool_size; i++) {
     PlatformWorkerData* worker_data = new PlatformWorkerData{
-      &pending_worker_tasks_, &platform_workers_mutex_,
-      &platform_workers_ready_, &pending_platform_workers_, i
+      &pending_worker_tasks_, &platform_workers_mutex,
+      &platform_workers_ready, &pending_platform_workers, i
     };
     std::unique_ptr<uv_thread_t> t { new uv_thread_t() };
     if (uv_thread_create(t.get(), PlatformWorkerThread,
@@ -189,8 +192,8 @@ WorkerThreadsTaskRunner::WorkerThreadsTaskRunner(int thread_pool_size) {
 
   // Wait for platform workers to initialize before continuing with the
   // bootstrap.
-  while (pending_platform_workers_ > 0) {
-    platform_workers_ready_.Wait(lock);
+  while (pending_platform_workers > 0) {
+    platform_workers_ready.Wait(lock);
   }
 }
 
@@ -281,7 +284,7 @@ int PerIsolatePlatformData::unref() {
 }
 
 NodePlatform::NodePlatform(int thread_pool_size,
-                           TracingController* tracing_controller) {
+                           v8::TracingController* tracing_controller) {
   if (tracing_controller) {
     tracing_controller_ = tracing_controller;
   } else {
@@ -454,7 +457,7 @@ double NodePlatform::CurrentClockTimeMillis() {
   return SystemClockTimeMillis();
 }
 
-TracingController* NodePlatform::GetTracingController() {
+v8::TracingController* NodePlatform::GetTracingController() {
   return tracing_controller_;
 }
 

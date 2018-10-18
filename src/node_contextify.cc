@@ -511,7 +511,12 @@ void ContextifyContext::PropertyEnumeratorCallback(
   if (ctx->context_.IsEmpty())
     return;
 
-  args.GetReturnValue().Set(ctx->sandbox()->GetPropertyNames());
+  Local<Array> properties;
+
+  if (!ctx->sandbox()->GetPropertyNames(ctx->context()).ToLocal(&properties))
+    return;
+
+  args.GetReturnValue().Set(properties);
 }
 
 // static
@@ -1077,7 +1082,7 @@ void ContextifyContext::CompileFunction(
   }
 
   MaybeLocal<Function> maybe_fun = ScriptCompiler::CompileFunctionInContext(
-      context, &source, params.size(), params.data(),
+      parsing_context, &source, params.size(), params.data(),
       context_extensions.size(), context_extensions.data(), options);
 
   Local<Function> fun;

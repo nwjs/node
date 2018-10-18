@@ -227,7 +227,7 @@ to the `constants` property exposed by the relevant module. For instance,
 ### DEP0009: crypto.pbkdf2 without digest
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/22861
     description: Runtime deprecation (for `digest === null`).
   - version: v8.0.0
@@ -249,7 +249,7 @@ in Node.js 6.0 because the method defaulted to using the non-recommended
 Node.js 8.0.0, calling `crypto.pbkdf2()` or `crypto.pbkdf2Sync()` with
 `digest` set to `undefined` will throw a `TypeError`.
 
-Beginning in Node.js REPLACEME, calling these functions with `digest` set to
+Beginning in Node.js v11.0.0, calling these functions with `digest` set to
 `null` will print a deprecation warning to align with the behavior when `digest`
 is `undefined`.
 
@@ -257,7 +257,7 @@ is `undefined`.
 ### DEP0010: crypto.createCredentials
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/21153
     description: End-of-Life.
   - version:
@@ -279,7 +279,7 @@ The `crypto.createCredentials()` API was removed. Please use
 ### DEP0011: crypto.Credentials
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/21153
     description: End-of-Life.
   - version:
@@ -334,7 +334,7 @@ changes:
 Type: End-of-Life
 
 Calling an asynchronous function without a callback throws a `TypeError`
-in Node.js 10.0.0 onwards. (See https://github.com/nodejs/node/pull/12562.)
+in Node.js 10.0.0 onwards. (See <https://github.com/nodejs/node/pull/12562>.)
 
 <a id="DEP0014"></a>
 ### DEP0014: fs.read legacy String interface
@@ -1240,7 +1240,7 @@ The [`util._extend()`][] API is deprecated.
 ### DEP0061: fs.SyncWriteStream
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/20735
     description: End-of-Life.
   - version: v8.0.0
@@ -1582,7 +1582,7 @@ Type: Runtime
 ### DEP0079: Custom inspection function on Objects via .inspect()
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/20722
     description: End-of-Life.
   - version: v10.0.0
@@ -1717,7 +1717,7 @@ changes:
 Type: End-of-Life
 
 The AsyncHooks Sensitive API was never documented and had various minor issues.
-(See https://github.com/nodejs/node/issues/15572.) Use the `AsyncResource`
+(See <https://github.com/nodejs/node/issues/15572>.) Use the `AsyncResource`
 API instead.
 
 <a id="DEP0086"></a>
@@ -1737,8 +1737,8 @@ changes:
 Type: End-of-Life
 
 `runInAsyncIdScope` doesn't emit the `'before'` or `'after'` event and can thus
-cause a lot of issues. See https://github.com/nodejs/node/issues/14328 for more
-details.
+cause a lot of issues. See <https://github.com/nodejs/node/issues/14328> for
+more details.
 
 <a id="DEP0089"></a>
 ### DEP0089: require('assert')
@@ -1761,7 +1761,7 @@ same as the legacy assert but it will always use strict equality checks.
 ### DEP0090: Invalid GCM authentication tag lengths
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/17825
     description: End-of-Life.
   - version: v10.0.0
@@ -1772,7 +1772,7 @@ changes:
 Type: End-of-Life
 
 Node.js used to support all GCM authentication tag lengths which are accepted by
-OpenSSL when calling [`decipher.setAuthTag()`][]. Beginning with node REPLACEME,
+OpenSSL when calling [`decipher.setAuthTag()`][]. Beginning with node v11.0.0,
 only authentication tag lengths of 128, 120, 112, 104, 96, 64, and 32 bits are
 allowed. Authentication tags whose length is not included in this list are
 considered invalid in compliance with [NIST SP 800-38D][].
@@ -1897,7 +1897,7 @@ to unrecoverable errors.
 
 Use [`asyncResource.runInAsyncScope()`][] API instead which provides a much
 safer, and more convenient, alternative. See
-https://github.com/nodejs/node/pull/18513 for more details.
+<https://github.com/nodejs/node/pull/18513> for more details.
 
 <a id="DEP0099"></a>
 ### DEP0099: async context-unaware node::MakeCallback C++ APIs
@@ -2000,7 +2000,7 @@ assigning it to `process.env`.
 ### DEP0105: decipher.finaltol
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/19941
     description: End-of-Life.
   - version: v10.0.0
@@ -2018,7 +2018,7 @@ Type: End-of-Life
 ### DEP0106: crypto.createCipher and crypto.createDecipher
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/22089
     description: Runtime deprecation.
   - version: v10.0.0
@@ -2039,7 +2039,7 @@ initialization vectors. It is recommended to derive a key using
 ### DEP0107: tls.convertNPNProtocols()
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/20736
     description: End-of-Life.
   - version: v10.0.0
@@ -2056,12 +2056,15 @@ core and obsoleted by the removal of NPN (Next Protocol Negotiation) support.
 ### DEP0108: zlib.bytesRead
 <!-- YAML
 changes:
+  - version: v11.0.0
+    pr-url: https://github.com/nodejs/node/pull/23308
+    description: Runtime deprecation.
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/19414
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 Deprecated alias for [`zlib.bytesWritten`][]. This original name was chosen
 because it also made sense to interpret the value as the number of bytes
@@ -2072,7 +2075,7 @@ expose values under these names.
 ### DEP0109: http, https, and tls support for invalid URLs
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/20270
     description: Runtime deprecation.
 -->
@@ -2118,7 +2121,7 @@ only. Use of `process.binding()` by userland code is unsupported.
 ### DEP0112: dgram private APIs
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/22011
     description: Runtime deprecation.
 -->
@@ -2136,7 +2139,7 @@ accessed outside of Node.js core: `Socket.prototype._handle`,
 ### DEP0113: Cipher.setAuthTag(), Decipher.getAuthTag()
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/22126
     description: Runtime deprecation.
 -->
@@ -2152,7 +2155,7 @@ release.
 ### DEP0114: crypto._toBuf()
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/22501
     description: Runtime deprecation.
 -->
@@ -2166,7 +2169,7 @@ of Node.js core and will be removed in the future.
 ### DEP0115: crypto.prng(), crypto.pseudoRandomBytes(), crypto.rng()
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url:
       - https://github.com/nodejs/node/pull/22519
       - https://github.com/nodejs/node/pull/23017
@@ -2201,7 +2204,7 @@ use the [WHATWG URL API][] instead.
 ### DEP0117: Native crypto handles
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/22747
     description: Runtime deprecation.
 -->
@@ -2218,7 +2221,7 @@ improper use of the native object can lead to crashing the application.
 ### DEP0118: dns.lookup() support for a falsy hostname
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/23173
     description: Runtime deprecation.
 -->
@@ -2229,6 +2232,21 @@ Previous versions of Node.js supported `dns.lookup()` with a falsy hostname
 like `dns.lookup(false)` due to backward compatibility.
 This behavior is undocumented and is thought to be unused in real world apps.
 It will become an error in future versions of Node.js.
+
+<a id="DEP0119"></a>
+### DEP0119: process.binding('uv').errname() private API
+<!--
+changes:
+  - version: v11.0.0
+    pr-url: https://github.com/nodejs/node/pull/23597
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only (supports [`--pending-deprecation`][])
+
+Directly calling `process.binding('uv').errname(<val>)` is deprecated.
+Please make sure to use [`util.getSystemErrorName()`][] instead.
+
 
 [`--pending-deprecation`]: cli.html#cli_pending_deprecation
 [`Buffer.allocUnsafeSlow(size)`]: buffer.html#buffer_class_method_buffer_allocunsafeslow_size
@@ -2297,6 +2315,7 @@ It will become an error in future versions of Node.js.
 [`util._extend()`]: util.html#util_util_extend_target_source
 [`util.debug()`]: util.html#util_util_debug_string
 [`util.error()`]: util.html#util_util_error_strings
+[`util.getSystemErrorName()`]: util.html#util_util_getsystemerrorname_err
 [`util.inspect()`]: util.html#util_util_inspect_object_options
 [`util.inspect.custom`]: util.html#util_util_inspect_custom
 [`util.isArray()`]: util.html#util_util_isarray_object

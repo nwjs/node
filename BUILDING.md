@@ -10,40 +10,42 @@ file a new issue.
 
 ## Table of Contents
 
-* [Supported platforms](#supported-platforms)
-  * [Input](#input)
-  * [Strategy](#strategy)
-  * [Supported platforms](#supported-platforms-1)
-  * [Supported toolchains](#supported-toolchains)
-    * [Unix](#unix)
-    * [AIX](#aix)
-    * [Windows](#windows)
-    * [OpenSSL asm support](#openssl-asm-support)
-* [Building Node.js on supported platforms](#building-nodejs-on-supported-platforms)
-  * [Unix/macOS](#unixmacos)
-    * [Prerequisites](#prerequisites)
-    * [Building Node.js](#building-nodejs-1)
-    * [Running Tests](#running-tests)
-    * [Building the documentation](#building-the-documentation)
-    * [Building a debug build](#building-a-debug-build)
-  * [Windows](#windows-1)
-  * [Android/Android-based devices (e.g. Firefox OS)](#androidandroid-based-devices-eg-firefox-os)
-  * [`Intl` (ECMA-402) support](#intl-ecma-402-support)
-    * [Default: `small-icu` (English only) support](#default-small-icu-english-only-support)
-    * [Build with full ICU support (all locales supported by ICU)](#build-with-full-icu-support-all-locales-supported-by-icu)
-      * [Unix/macOS](#unixmacos-1)
-      * [Windows](#windows-2)
-    * [Building without Intl support](#building-without-intl-support)
-      * [Unix/macOS](#unixmacos-2)
-      * [Windows](#windows-3)
-    * [Use existing installed ICU (Unix/macOS only)](#use-existing-installed-icu-unixmacos-only)
-    * [Build with a specific ICU](#build-with-a-specific-icu)
-      * [Unix/macOS](#unixmacos-3)
-      * [Windows](#windows-4)
-* [Building Node.js with FIPS-compliant OpenSSL](#building-nodejs-with-fips-compliant-openssl)
-* [Building Node.js with external core modules](#building-nodejs-with-external-core-modules)
-  * [Unix/macOS](#unixmacos-4)
-  * [Windows](#windows-5)
+- [Building Node.js](#building-nodejs)
+  - [Table of Contents](#table-of-contents)
+  - [Supported platforms](#supported-platforms)
+    - [Input](#input)
+    - [Strategy](#strategy)
+    - [Supported platforms](#supported-platforms)
+    - [Supported toolchains](#supported-toolchains)
+      - [Unix](#unix)
+      - [AIX](#aix)
+      - [Windows](#windows)
+      - [OpenSSL asm support](#openssl-asm-support)
+  - [Building Node.js on supported platforms](#building-nodejs-on-supported-platforms)
+    - [Unix/macOS](#unixmacos)
+      - [Prerequisites](#prerequisites)
+      - [Building Node.js](#building-nodejs)
+      - [Running Tests](#running-tests)
+      - [Building the documentation](#building-the-documentation)
+      - [Building a debug build](#building-a-debug-build)
+    - [Windows](#windows)
+    - [Android/Android-based devices (e.g. Firefox OS)](#androidandroid-based-devices-eg-firefox-os)
+    - [`Intl` (ECMA-402) support:](#intl-ecma-402-support)
+      - [Default: `small-icu` (English only) support](#default-small-icu-english-only-support)
+      - [Build with full ICU support (all locales supported by ICU):](#build-with-full-icu-support-all-locales-supported-by-icu)
+        - [Unix/macOS:](#unixmacos)
+        - [Windows:](#windows)
+      - [Building without Intl support](#building-without-intl-support)
+        - [Unix/macOS:](#unixmacos)
+        - [Windows:](#windows)
+      - [Use existing installed ICU (Unix/macOS only):](#use-existing-installed-icu-unixmacos-only)
+      - [Build with a specific ICU:](#build-with-a-specific-icu)
+        - [Unix/macOS](#unixmacos)
+        - [Windows](#windows)
+  - [Building Node.js with FIPS-compliant OpenSSL](#building-nodejs-with-fips-compliant-openssl)
+  - [Building Node.js with external core modules](#building-nodejs-with-external-core-modules)
+    - [Unix/macOS](#unixmacos)
+    - [Windows](#windows)
 
 ## Supported platforms
 
@@ -52,8 +54,7 @@ which it is attached.
 
 ### Input
 
-Node.js relies on V8 and libuv. Therefore, we adopt a subset of their
-supported platforms.
+Node.js relies on V8 and libuv. We adopt a subset of their supported platforms.
 
 ### Strategy
 
@@ -74,19 +75,19 @@ The community does not build or test against end-of-life distributions (EoL).
 Thus, we do not recommend that you use Node on end-of-life or unsupported
 platforms in production.
 
-|  System      | Support type | Version                          | Architectures        | Notes            |
-|--------------|--------------|----------------------------------|----------------------|------------------|
-| GNU/Linux    | Tier 1       | kernel >= 2.6.32, glibc >= 2.12  | x64, arm             |                  |
-| GNU/Linux    | Tier 1       | kernel >= 3.10, glibc >= 2.17    | arm64                |                  |
-| macOS/OS X   | Tier 1       | >= 10.11                         | x64                  |                  |
-| Windows      | Tier 1       | >= Windows 7/2008 R2/2012 R2     | x86, x64             | [2](#fn2),[3](#fn3),[4](#fn4) |
-| SmartOS      | Tier 2       | >= 15 < 16.4                     | x86, x64             | [1](#fn1) |
-| FreeBSD      | Tier 2       | >= 11                            | x64                  |                  |
-| GNU/Linux    | Tier 2       | kernel >= 3.13.0, glibc >= 2.19  | ppc64le >=power8     |                  |
-| AIX          | Tier 2       | >= 7.1 TL04                      | ppc64be >=power7     |                  |
-| GNU/Linux    | Tier 2       | kernel >= 3.10, glibc >= 2.17    | s390x                |                  |
-| GNU/Linux    | Experimental | kernel >= 2.6.32, glibc >= 2.12  | x86                  | limited CI       |
-| Linux (musl) | Experimental | musl >= 1.0                      | x64                  |                  |
+| System       | Support type | Version                         | Architectures    | Notes                         |
+| ------------ | ------------ | ------------------------------- | ---------------- | ----------------------------- |
+| GNU/Linux    | Tier 1       | kernel >= 2.6.32, glibc >= 2.12 | x64, arm         |                               |
+| GNU/Linux    | Tier 1       | kernel >= 3.10, glibc >= 2.17   | arm64            |                               |
+| macOS/OS X   | Tier 1       | >= 10.11                        | x64              |                               |
+| Windows      | Tier 1       | >= Windows 7/2008 R2/2012 R2    | x86, x64         | [2](#fn2),[3](#fn3),[4](#fn4) |
+| SmartOS      | Tier 2       | >= 15 < 16.4                    | x86, x64         | [1](#fn1)                     |
+| FreeBSD      | Tier 2       | >= 11                           | x64              |                               |
+| GNU/Linux    | Tier 2       | kernel >= 3.13.0, glibc >= 2.19 | ppc64le >=power8 |                               |
+| AIX          | Tier 2       | >= 7.1 TL04                     | ppc64be >=power7 |                               |
+| GNU/Linux    | Tier 2       | kernel >= 3.10, glibc >= 2.17   | s390x            |                               |
+| GNU/Linux    | Experimental | kernel >= 2.6.32, glibc >= 2.12 | x86              | limited CI                    |
+| Linux (musl) | Experimental | musl >= 1.0                     | x64              |                               |
 
 <em id="fn1">1</em>: The gcc4.8-libs package needs to be installed, because node
   binaries have been built with GCC 4.8, for which runtime libraries are not
@@ -111,8 +112,8 @@ platforms in production.
   community will only address issues that reproduce on native GNU/Linux
   systems. Issues that only reproduce on WSL should be reported in the
   [WSL issue tracker](https://github.com/Microsoft/WSL/issues). Running the
-  Windows binary (`node.exe`) in WSL is not recommended, and will not work
-  without adjustment (such as stdio redirection).
+  Windows binary (`node.exe`) in WSL is not recommended. It will not work
+  without workarounds such as stdio redirection.
 
 ### Supported toolchains
 
@@ -144,10 +145,8 @@ Otherwise `configure` will fail with an error. This can be avoided by
 either providing a newer assembler as per the list above or by
 using the `--openssl-no-asm` flag.
 
-*Note:* The forthcoming OpenSSL-1.1.1 will require higher
- version. Please refer
- https://www.openssl.org/docs/man1.1.1/man3/OPENSSL_ia32cap.html for
- details.
+The forthcoming OpenSSL-1.1.1 will have different requirements. Please refer to
+ https://www.openssl.org/docs/man1.1.1/man3/OPENSSL_ia32cap.html for details.
 
 ## Building Node.js on supported platforms
 
@@ -216,7 +215,7 @@ $ make test-only
 
 At this point, you are ready to make code changes and re-run the tests.
 
-If you are running tests prior to submitting a Pull Request, the recommended
+If you are running tests before submitting a Pull Request, the recommended
 command is:
 
 ```console
@@ -225,6 +224,32 @@ $ make -j4 test
 
 `make -j4 test` does a full check on the codebase, including running linters and
 documentation tests.
+
+If you are updating tests and just want to run a single test to check it:
+
+```text
+$ python tools/test.py -J --mode=release parallel/test-stream2-transform
+```
+
+You can execute the entire suite of tests for a given subsystem
+by providing the name of a subsystem:
+
+```text
+$ python tools/test.py -J --mode=release child-process
+```
+
+If you want to check the other options, please refer to the help by using
+the `--help` option
+
+```text
+$ python tools/test.py --help
+```
+
+You can usually run tests directly with node:
+
+```text
+$ ./node ./test/parallel/test-stream2-transform.js
+```
 
 Optionally, continue below.
 
@@ -344,7 +369,7 @@ Prerequisites:
   and tools which can be included in the global `PATH`.
 * The [NetWide Assembler](http://www.nasm.us/), for OpenSSL assembler modules.
   If not installed in the default location, it needs to be manually added
-  to `PATH`. Build with `openssl-no-asm` option does not require this.
+  to `PATH`. A build with the `openssl-no-asm` option does not need this.
 * **Optional** (to build the MSI): the [WiX Toolset v3.11](http://wixtoolset.org/releases/)
   and the [Wix Toolset Visual Studio 2017 Extension](https://marketplace.visualstudio.com/items?itemName=RobMensching.WixToolsetVisualStudio2017Extension).
 
@@ -369,12 +394,10 @@ To test if Node.js was built correctly:
 
 ### Android/Android-based devices (e.g. Firefox OS)
 
-Although these instructions for building on Android are provided, please note
-that Android is not an officially supported platform at this time. Patches to
-improve the Android build are accepted. However, there is no testing on Android
-in the current continuous integration environment. The participation of people
-dedicated and determined to improve Android building, testing, and support is
-encouraged.
+Android is not a supported platform. Patches to improve the Android build are
+welcome. There is no testing on Android in the current continuous integration
+environment. The participation of people dedicated and determined to improve
+Android building, testing, and support is encouraged.
 
 Be sure you have downloaded and extracted
 [Android NDK](https://developer.android.com/tools/sdk/ndk/index.html) before in

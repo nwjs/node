@@ -43,7 +43,8 @@ async function checkArgType() {
   });
 
   for (const invalidOptions of [
-    0, 1, null, true, 'str', () => {}, { url: 0 }, Symbol.iterator
+    0, 1, null, true, 'str', () => {}, { url: 0 }, Symbol.iterator,
+    { context: null }, { context: 'hucairz' }, { context: {} }
   ]) {
     common.expectsError(() => {
       new SourceTextModule('', invalidOptions);
@@ -129,6 +130,15 @@ async function checkModuleState() {
   }, {
     code: 'ERR_VM_MODULE_STATUS',
     message: 'Module status must be one of instantiated, evaluated, and errored'
+  });
+
+  await expectsRejection(async () => {
+    const m = new SourceTextModule('');
+    await m.evaluate(false);
+  }, {
+    code: 'ERR_INVALID_ARG_TYPE',
+    message: 'The "options" argument must be of type Object. ' +
+             'Received type boolean'
   });
 
   await expectsRejection(async () => {
@@ -221,6 +231,17 @@ async function checkLinking() {
     code: 'ERR_VM_MODULE_LINKING_ERRORED'
   });
 }
+
+common.expectsError(() => {
+  new SourceTextModule('', {
+    importModuleDynamically: 'hucairz'
+  });
+}, {
+  code: 'ERR_INVALID_ARG_TYPE',
+  type: TypeError,
+  message: 'The "options.importModuleDynamically"' +
+    ' property must be of type function. Received type string'
+});
 
 // Check the JavaScript engine deals with exceptions correctly
 async function checkExecution() {

@@ -84,6 +84,11 @@ using v8::Uint32;
 using v8::Undefined;
 using v8::Value;
 
+#ifdef OPENSSL_NO_OCB
+# define IS_OCB_MODE(mode) false
+#else
+# define IS_OCB_MODE(mode) ((mode) == EVP_CIPH_OCB_MODE)
+#endif
 
 struct StackOfX509Deleter {
   void operator()(STACK_OF(X509)* p) const { sk_X509_pop_free(p, X509_free); }
@@ -358,6 +363,19 @@ void SecureContext::Initialize(Environment* env, Local<Object> target) {
          Integer::NewFromUnsigned(env->isolate(), kTicketKeyNameIndex));
   t->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "kTicketKeyIVIndex"),
          Integer::NewFromUnsigned(env->isolate(), kTicketKeyIVIndex));
+
+  Local<FunctionTemplate> ctx_getter_templ =
+      FunctionTemplate::New(env->isolate(),
+                            CtxGetter,
+                            env->as_external(),
+                            Signature::New(env->isolate(), t));
+
+
+  t->PrototypeTemplate()->SetAccessorProperty(
+      FIXED_ONE_BYTE_STRING(env->isolate(), "_external"),
+      ctx_getter_templ,
+      Local<FunctionTemplate>(),
+      static_cast<PropertyAttribute>(ReadOnly | DontDelete));
 
   target->Set(secureContextString,
               t->GetFunction(env->context()).ToLocalChecked());
@@ -1328,6 +1346,14 @@ int SecureContext::TicketCompatibilityCallback(SSL* ssl,
     return -1;
   }
   return 1;
+}
+
+
+void SecureContext::CtxGetter(const FunctionCallbackInfo<Value>& info) {
+  SecureContext* sc;
+  ASSIGN_OR_RETURN_UNWRAP(&sc, info.This());
+  Local<External> ext = External::New(info.GetIsolate(), sc->ctx_.get());
+  info.GetReturnValue().Set(ext);
 }
 
 
@@ -2523,7 +2549,7 @@ int VerifyCallback(int preverify_ok, X509_STORE_CTX* ctx) {
 static bool IsSupportedAuthenticatedMode(int mode) {
   return mode == EVP_CIPH_CCM_MODE ||
          mode == EVP_CIPH_GCM_MODE ||
-         mode == EVP_CIPH_OCB_MODE;
+         IS_OCB_MODE(mode);
 }
 
 void CipherBase::Initialize(Environment* env, Local<Object> target) {
@@ -2748,7 +2774,7 @@ bool CipherBase::InitAuthenticated(const char* cipher_type, int iv_len,
   }
 
   const int mode = EVP_CIPHER_CTX_mode(ctx_.get());
-  if (mode == EVP_CIPH_CCM_MODE || mode == EVP_CIPH_OCB_MODE) {
+  if (mode == EVP_CIPH_CCM_MODE || IS_OCB_MODE(mode)) {
     if (auth_tag_len == kNoAuthTagLength) {
       char msg[128];
       snprintf(msg, sizeof(msg), "authTagLength required for %s", cipher_type);
@@ -2864,7 +2890,7 @@ void CipherBase::SetAuthTag(const FunctionCallbackInfo<Value>& args) {
   } else {
     // At this point, the tag length is already known and must match the
     // length of the given authentication tag.
-    CHECK(mode == EVP_CIPH_CCM_MODE || mode == EVP_CIPH_OCB_MODE);
+    CHECK(mode == EVP_CIPH_CCM_MODE || IS_OCB_MODE(mode));
     CHECK_NE(cipher->auth_tag_len_, kNoAuthTagLength);
     is_valid = cipher->auth_tag_len_ == tag_len;
   }
@@ -3919,8 +3945,7 @@ void DiffieHellman::Initialize(Environment* env, Local<Object> target) {
                             env->as_external(),
                             Signature::New(env->isolate(), t),
                             /* length */ 0,
-                            // TODO(TimothyGu): should be deny
-                            ConstructorBehavior::kAllow,
+                            ConstructorBehavior::kThrow,
                             SideEffectType::kHasNoSideEffect);
 
   t->InstanceTemplate()->SetAccessorProperty(
@@ -3948,8 +3973,7 @@ void DiffieHellman::Initialize(Environment* env, Local<Object> target) {
                             env->as_external(),
                             Signature::New(env->isolate(), t2),
                             /* length */ 0,
-                            // TODO(TimothyGu): should be deny
-                            ConstructorBehavior::kAllow,
+                            ConstructorBehavior::kThrow,
                             SideEffectType::kHasNoSideEffect);
 
   t2->InstanceTemplate()->SetAccessorProperty(
@@ -4081,10 +4105,7 @@ void DiffieHellman::GenerateKeys(const FunctionCallbackInfo<Value>& args) {
 
   DiffieHellman* diffieHellman;
   ASSIGN_OR_RETURN_UNWRAP(&diffieHellman, args.Holder());
-
-  if (!diffieHellman->initialised_) {
-    return ThrowCryptoError(env, ERR_get_error(), "Not initialized");
-  }
+  CHECK(diffieHellman->initialised_);
 
   if (!DH_generate_key(diffieHellman->dh_.get())) {
     return ThrowCryptoError(env, ERR_get_error(), "Key generation failed");
@@ -4106,7 +4127,7 @@ void DiffieHellman::GetField(const FunctionCallbackInfo<Value>& args,
 
   DiffieHellman* dh;
   ASSIGN_OR_RETURN_UNWRAP(&dh, args.Holder());
-  if (!dh->initialised_) return env->ThrowError("Not initialized");
+  CHECK(dh->initialised_);
 
   const BIGNUM* num = get_field(dh->dh_.get());
   if (num == nullptr) return env->ThrowError(err_if_null);
@@ -4158,10 +4179,7 @@ void DiffieHellman::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
 
   DiffieHellman* diffieHellman;
   ASSIGN_OR_RETURN_UNWRAP(&diffieHellman, args.Holder());
-
-  if (!diffieHellman->initialised_) {
-    return ThrowCryptoError(env, ERR_get_error(), "Not initialized");
-  }
+  CHECK(diffieHellman->initialised_);
 
   ClearErrorOnReturn clear_error_on_return;
 
@@ -4229,7 +4247,7 @@ void DiffieHellman::SetKey(const v8::FunctionCallbackInfo<Value>& args,
 
   DiffieHellman* dh;
   ASSIGN_OR_RETURN_UNWRAP(&dh, args.Holder());
-  if (!dh->initialised_) return env->ThrowError("Not initialized");
+  CHECK(dh->initialised_);
 
   char errmsg[64];
 
@@ -4275,10 +4293,7 @@ void DiffieHellman::VerifyErrorGetter(const FunctionCallbackInfo<Value>& args) {
 
   DiffieHellman* diffieHellman;
   ASSIGN_OR_RETURN_UNWRAP(&diffieHellman, args.Holder());
-
-  if (!diffieHellman->initialised_)
-    return ThrowCryptoError(diffieHellman->env(), ERR_get_error(),
-                            "Not initialized");
+  CHECK(diffieHellman->initialised_);
 
   args.GetReturnValue().Set(diffieHellman->verifyError_);
 }
@@ -4318,7 +4333,7 @@ void ECDH::New(const FunctionCallbackInfo<Value>& args) {
   MarkPopErrorOnReturn mark_pop_error_on_return;
 
   // TODO(indutny): Support raw curves?
-  THROW_AND_RETURN_IF_NOT_STRING(env, args[0], "ECDH curve name");
+  CHECK(args[0]->IsString());
   node::Utf8Value curve(env->isolate(), args[0]);
 
   int nid = OBJ_sn2nid(*curve);
@@ -5711,6 +5726,21 @@ void Initialize(Local<Object> target,
 #ifndef OPENSSL_NO_SCRYPT
   env->SetMethod(target, "scrypt", Scrypt);
 #endif  // OPENSSL_NO_SCRYPT
+}
+
+constexpr int search(const char* s, int n, int c) {
+  return *s == c ? n : search(s + 1, n + 1, c);
+}
+
+std::string GetOpenSSLVersion() {
+  // sample openssl version string format
+  // for reference: "OpenSSL 1.1.0i 14 Aug 2018"
+  char buf[128];
+  const int start = search(OPENSSL_VERSION_TEXT, 0, ' ') + 1;
+  const int end = search(OPENSSL_VERSION_TEXT + start, start, ' ') + 1;
+  const int len = end - start;
+  snprintf(buf, sizeof(buf), "%.*s\n", len, &OPENSSL_VERSION_TEXT[start]);
+  return std::string(buf);
 }
 
 }  // namespace crypto

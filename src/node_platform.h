@@ -11,6 +11,7 @@
 #include "libplatform/libplatform.h"
 #include "node.h"
 #include "node_mutex.h"
+#include "tracing/agent.h"
 #include "uv.h"
 
 namespace node {
@@ -116,15 +117,12 @@ class WorkerThreadsTaskRunner {
   std::unique_ptr<DelayedTaskScheduler> delayed_task_scheduler_;
 
   std::vector<std::unique_ptr<uv_thread_t>> threads_;
-
-  Mutex platform_workers_mutex_;
-  ConditionVariable platform_workers_ready_;
-  int pending_platform_workers_;
 };
 
 class NodePlatform : public MultiIsolatePlatform {
  public:
-  NodePlatform(int thread_pool_size, v8::TracingController* tracing_controller);
+  NodePlatform(int thread_pool_size,
+               v8::TracingController* tracing_controller);
   virtual ~NodePlatform() {}
 
   void DrainTasks(v8::Isolate* isolate) override;

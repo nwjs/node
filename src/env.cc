@@ -41,10 +41,10 @@ class TraceEventScope {
   TraceEventScope(const char* category,
                   const char* name,
                   void* id) : category_(category), name_(name), id_(id) {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(category_, name_, id_);
+    //TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(category_, name_, id_);
   }
   ~TraceEventScope() {
-    TRACE_EVENT_NESTABLE_ASYNC_END0(category_, name_, id_);
+    //TRACE_EVENT_NESTABLE_ASYNC_END0(category_, name_, id_);
   }
 
  private:
@@ -256,6 +256,7 @@ void Environment::Start(const std::vector<std::string>& args,
   HandleScope handle_scope(isolate());
   Context::Scope context_scope(context());
 
+#if 0
   if (*TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
       TRACING_CATEGORY_NODE1(environment)) != 0) {
     auto traced_value = tracing::TracedValue::Create();
@@ -272,7 +273,7 @@ void Environment::Start(const std::vector<std::string>& args,
       "Environment", this,
       "args", std::move(traced_value));
   }
-
+#endif
   CHECK_EQ(0, uv_timer_init(event_loop(), timer_handle()));
   uv_unref(reinterpret_cast<uv_handle_t*>(timer_handle()));
 

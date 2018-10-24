@@ -25,6 +25,7 @@
     'node_use_openssl': 'true',
     'node_shared_openssl': 'false',
     'openssl_fips': '',
+    'node_use_large_pages': 'false',
     'node_v8_options%': '',
     'node_enable_v8_vtunejit%': 'false',
     'node_core_target_name%': 'nodebin',

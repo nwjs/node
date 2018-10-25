@@ -133,6 +133,7 @@ struct sockaddr;
     V(symbols)                                                                \
     V(tcp_wrap)                                                               \
     V(timers)                                                                 \
+    V(trace_events)                                                           \
     V(tty_wrap)                                                               \
     V(types)                                                                  \
     V(udp_wrap)                                                               \

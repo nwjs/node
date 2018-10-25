@@ -62,6 +62,7 @@ void NodeCategorySet::New(const FunctionCallbackInfo<Value>& args) {
 }
 
 void NodeCategorySet::Enable(const FunctionCallbackInfo<Value>& args) {
+#if 0
   Environment* env = Environment::GetCurrent(args);
   NodeCategorySet* category_set;
   ASSIGN_OR_RETURN_UNWRAP(&category_set, args.Holder());
@@ -71,9 +72,14 @@ void NodeCategorySet::Enable(const FunctionCallbackInfo<Value>& args) {
     env->tracing_agent_writer()->Enable(categories);
     category_set->enabled_ = true;
   }
+#endif
+}
+
+void Dummy(const FunctionCallbackInfo<Value>& args) {
 }
 
 void NodeCategorySet::Disable(const FunctionCallbackInfo<Value>& args) {
+#if 0
   Environment* env = Environment::GetCurrent(args);
   NodeCategorySet* category_set;
   ASSIGN_OR_RETURN_UNWRAP(&category_set, args.Holder());
@@ -83,9 +89,11 @@ void NodeCategorySet::Disable(const FunctionCallbackInfo<Value>& args) {
     env->tracing_agent_writer()->Disable(categories);
     category_set->enabled_ = false;
   }
+#endif
 }
 
 void GetEnabledCategories(const FunctionCallbackInfo<Value>& args) {
+#if 0
   Environment* env = Environment::GetCurrent(args);
   std::string categories =
       env->tracing_agent_writer()->agent()->GetEnabledCategories();
@@ -96,6 +104,7 @@ void GetEnabledCategories(const FunctionCallbackInfo<Value>& args) {
                           v8::NewStringType::kNormal,
                           categories.size()).ToLocalChecked());
   }
+#endif
 }
 
 void Initialize(Local<Object> target,
@@ -125,8 +134,8 @@ void Initialize(Local<Object> target,
   target->Set(context, isTraceCategoryEnabled,
               binding->Get(context, isTraceCategoryEnabled).ToLocalChecked())
                   .FromJust();
-  target->Set(context, trace,
-              binding->Get(context, trace).ToLocalChecked()).FromJust();
+  env->SetMethod(target, "trace", Dummy);
+  //binding->Get(context, trace).ToLocalChecked()).FromJust();
 
   target->Set(context,
               FIXED_ONE_BYTE_STRING(env->isolate(), "traceCategoryState"),

@@ -402,7 +402,7 @@
         'src/node_postmortem_metadata.cc',
         'src/node_process.cc',
         'src/node_serdes.cc',
-        #'src/node_trace_events.cc',
+        'src/node_trace_events.cc',
         'src/node_types.cc',
         'src/node_url.cc',
         'src/node_util.cc',

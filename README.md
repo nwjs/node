@@ -31,7 +31,7 @@ The Node.js project uses an [open governance model](./GOVERNANCE.md). The
 * [Current Project Team Members](#current-project-team-members)
   * [TSC (Technical Steering Committee)](#tsc-technical-steering-committee)
   * [Collaborators](#collaborators)
-  * [Release Team](#release-team)
+  * [Release Keys](#release-keys)
 * [Contributing to Node.js](#contributing-to-nodejs)
 
 ## Support
@@ -81,7 +81,7 @@ your expectations.
   changes. Use with caution.
 
 Current and LTS releases follow [Semantic Versioning](https://semver.org). A
-member of the [Release Team](#release-team) signs each Current and LTS release.
+member of the Release Team [signs](#release-keys) each Current and LTS release.
 For more information, see the
 [Release README](https://github.com/nodejs/Release).
 
@@ -133,9 +133,9 @@ $ grep node-vx.y.z.tar.gz SHASUMS256.txt | sha256sum -c -
 
 For Current and LTS, the GPG detached signature of `SHASUMS256.txt` is in
 `SHASUMS256.txt.sig`. You can use it with `gpg` to verify the integrity of
-`SHASUM256.txt`. You will first need to import all the GPG keys of individuals
-authorized to create releases. They are at the bottom of this README under
-[Release Team](#release-team). To import the keys:
+`SHASUM256.txt`. You will first need to import
+[the GPG keys of individuals authorized to create releases](#release-keys). To
+import the keys:
 
 ```console
 $ gpg --keyserver pool.sks-keyservers.net --recv-keys DD8F2338BAE7501E3DD5AC78C273792F7D83545D
@@ -179,18 +179,11 @@ nonetheless.
   arbitrary JavaScript code. That is already the highest level of privilege
   possible.
 
-- [#12141](https://github.com/nodejs/node/pull/12141): _buffer: zero fill
-  Buffer(num) by default_. The documented `Buffer()` behavior was prone to
-  [misuse](https://snyk.io/blog/exploiting-buffer/). It has since changed. It
-  was not deemed serious enough to fix in older releases and breaking API
-  stability.
-
 ### Private disclosure preferred
 
 - [CVE-2016-7099](https://nodejs.org/en/blog/vulnerability/september-2016-security-releases/):
-  _Fix invalid wildcard certificate validation check_. This is a high severity
-  defect that would allow a malicious TLS server to serve an invalid wildcard
-  certificate for its hostname and be improperly validated by a Node.js client.
+  _Fix invalid wildcard certificate validation check_. This was a high-severity
+  defect. It caused Node.js TLS clients to accept invalid wildcard certificates.
 
 - [#5507](https://github.com/nodejs/node/pull/5507): _Fix a defect that makes
   the CacheBleed Attack possible_. Many, though not all, OpenSSL vulnerabilities
@@ -198,8 +191,8 @@ nonetheless.
 
 - [CVE-2016-2216](https://nodejs.org/en/blog/vulnerability/february-2016-security-releases/):
   _Fix defects in HTTP header parsing for requests and responses that can allow
-  response splitting_. While the impact of this vulnerability is application and
-  network dependent, it is remotely exploitable in the HTTP protocol.
+  response splitting_. This was a remotely-exploitable defect in the Node.js
+  HTTP implementation.
 
 When in doubt, please do send us a report.
 
@@ -443,8 +436,6 @@ For information about the governance of the Node.js project, see
 **Alexis Campailla** &lt;orangemocha@nodejs.org&gt;
 * [othiym23](https://github.com/othiym23) -
 **Forrest L Norvell** &lt;ogd@aoaioxxysz.net&gt; (he/him)
-* [phillipj](https://github.com/phillipj) -
-**Phillip Johnsen** &lt;johphi@gmail.com&gt;
 * [pmq20](https://github.com/pmq20) -
 **Minqi Pan** &lt;pmq2001@gmail.com&gt;
 * [princejwesley](https://github.com/princejwesley) -
@@ -544,6 +535,8 @@ For information about the governance of the Node.js project, see
 **Oleg Elifantiev** &lt;oleg@elifantiev.ru&gt;
 * [petkaantonov](https://github.com/petkaantonov) -
 **Petka Antonov** &lt;petka_antonov@hotmail.com&gt;
+* [phillipj](https://github.com/phillipj) -
+**Phillip Johnsen** &lt;johphi@gmail.com&gt;
 * [piscisaureus](https://github.com/piscisaureus) -
 **Bert Belder** &lt;bertbelder@gmail.com&gt;
 * [rlidwka](https://github.com/rlidwka) -
@@ -562,9 +555,9 @@ For information about the governance of the Node.js project, see
 Collaborators follow the [COLLABORATOR_GUIDE.md](./COLLABORATOR_GUIDE.md) in
 maintaining the Node.js project.
 
-### Release Team
+### Release Keys
 
-Node.js releases are signed with one of the following GPG keys:
+GPG keys used to sign Node.js releases:
 
 * **Colin Ihrig** &lt;cjihrig@gmail.com&gt;
 `94AE36675C464D64BAFA68DD7434390BDBE9B9C5`

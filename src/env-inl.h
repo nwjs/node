@@ -186,20 +186,20 @@ inline void Environment::AsyncHooks::clear_async_id_stack() {
 inline Environment::AsyncHooks::DefaultTriggerAsyncIdScope
   ::DefaultTriggerAsyncIdScope(Environment* env,
                                double default_trigger_async_id)
-    : async_id_fields_ref_(env->async_hooks()->async_id_fields()) {
+    : async_hooks_(env->async_hooks()) {
   if (env->async_hooks()->fields()[AsyncHooks::kCheck] > 0) {
     CHECK_GE(default_trigger_async_id, 0);
   }
 
   old_default_trigger_async_id_ =
-    async_id_fields_ref_[AsyncHooks::kDefaultTriggerAsyncId];
-  async_id_fields_ref_[AsyncHooks::kDefaultTriggerAsyncId] =
+    async_hooks_->async_id_fields()[AsyncHooks::kDefaultTriggerAsyncId];
+  async_hooks_->async_id_fields()[AsyncHooks::kDefaultTriggerAsyncId] =
     default_trigger_async_id;
 }
 
 inline Environment::AsyncHooks::DefaultTriggerAsyncIdScope
   ::~DefaultTriggerAsyncIdScope() {
-  async_id_fields_ref_[AsyncHooks::kDefaultTriggerAsyncId] =
+  async_hooks_->async_id_fields()[AsyncHooks::kDefaultTriggerAsyncId] =
     old_default_trigger_async_id_;
 }
 
@@ -444,6 +444,11 @@ Environment::should_abort_on_uncaught_toggle() {
 inline AliasedBuffer<uint8_t, v8::Uint8Array>&
 Environment::trace_category_state() {
   return trace_category_state_;
+}
+
+inline AliasedBuffer<int32_t, v8::Int32Array>&
+Environment::stream_base_state() {
+  return stream_base_state_;
 }
 
 inline uint32_t Environment::get_next_module_id() {

@@ -158,6 +158,7 @@ Environment::Environment(IsolateData* isolate_data,
       makecallback_cntr_(0),
       should_abort_on_uncaught_toggle_(isolate_, 1),
       trace_category_state_(isolate_, kTraceCategoryCount),
+      stream_base_state_(isolate_, StreamBase::kNumStreamBaseStateFields),
       http_parser_buffer_(nullptr),
       fs_stats_field_array_(isolate_, kFsStatsFieldsLength * 2),
       fs_stats_field_bigint_array_(isolate_, kFsStatsFieldsLength * 2),
@@ -889,8 +890,8 @@ bool Environment::KickNextTick() {
   }
 
   if (!can_call_into_js()) return true;
-  Local<v8::Value> ret =
-    tick_callback_function()->Call(process_object(), 0, nullptr);
+  MaybeLocal<v8::Value> ret =
+    tick_callback_function()->Call(context(), process_object(), 0, nullptr);
 
   return !ret.IsEmpty();
 }

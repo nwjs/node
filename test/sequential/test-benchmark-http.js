@@ -13,7 +13,7 @@ const runBenchmark = require('../common/benchmark');
 
 runBenchmark('http',
              [
-               'benchmarker=test-double',
+               'benchmarker=test-double-http',
                'c=1',
                'chunkedEnc=true',
                'chunks=0',

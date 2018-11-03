@@ -355,16 +355,16 @@ void SecureContext::Initialize(Environment* env, Local<Object> target) {
   env->SetProtoMethodNoSideEffect(t, "getCertificate", GetCertificate<true>);
   env->SetProtoMethodNoSideEffect(t, "getIssuer", GetCertificate<false>);
 
-  t->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "kTicketKeyReturnIndex"),
-         Integer::NewFromUnsigned(env->isolate(), kTicketKeyReturnIndex));
-  t->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "kTicketKeyHMACIndex"),
-         Integer::NewFromUnsigned(env->isolate(), kTicketKeyHMACIndex));
-  t->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "kTicketKeyAESIndex"),
-         Integer::NewFromUnsigned(env->isolate(), kTicketKeyAESIndex));
-  t->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "kTicketKeyNameIndex"),
-         Integer::NewFromUnsigned(env->isolate(), kTicketKeyNameIndex));
-  t->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "kTicketKeyIVIndex"),
-         Integer::NewFromUnsigned(env->isolate(), kTicketKeyIVIndex));
+#define SET_INTEGER_CONSTANTS(name, value)                                     \
+    t->Set(FIXED_ONE_BYTE_STRING(env->isolate(), name),                        \
+           Integer::NewFromUnsigned(env->isolate(), value));
+  SET_INTEGER_CONSTANTS("kTicketKeyReturnIndex", kTicketKeyReturnIndex);
+  SET_INTEGER_CONSTANTS("kTicketKeyHMACIndex", kTicketKeyHMACIndex);
+  SET_INTEGER_CONSTANTS("kTicketKeyAESIndex", kTicketKeyAESIndex);
+  SET_INTEGER_CONSTANTS("kTicketKeyNameIndex", kTicketKeyNameIndex);
+  SET_INTEGER_CONSTANTS("kTicketKeyIVIndex", kTicketKeyIVIndex);
+
+#undef SET_INTEGER_CONSTANTS
 
   Local<FunctionTemplate> ctx_getter_templ =
       FunctionTemplate::New(env->isolate(),
@@ -5702,9 +5702,9 @@ std::string GetOpenSSLVersion() {
   // for reference: "OpenSSL 1.1.0i 14 Aug 2018"
   char buf[128];
   const int start = search(OPENSSL_VERSION_TEXT, 0, ' ') + 1;
-  const int end = search(OPENSSL_VERSION_TEXT + start, start, ' ') + 1;
+  const int end = search(OPENSSL_VERSION_TEXT + start, start, ' ');
   const int len = end - start;
-  snprintf(buf, sizeof(buf), "%.*s\n", len, &OPENSSL_VERSION_TEXT[start]);
+  snprintf(buf, sizeof(buf), "%.*s", len, &OPENSSL_VERSION_TEXT[start]);
   return std::string(buf);
 }
 

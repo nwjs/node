@@ -221,7 +221,8 @@ category_group_enabled =                                                \
 // Implementation detail: internal macro to create static category and add
 // event if the category is enabled.
 #define INTERNAL_TRACE_EVENT_ADD_WITH_ID(phase, category_group, name, id,      \
-                                         flags, ...)                           \
+                                         flags, ...)                           
+#if 0
   do {                                                                         \
     INTERNAL_TRACE_EVENT_GET_CATEGORY_INFO(category_group);                    \
     if (INTERNAL_TRACE_EVENT_CATEGORY_GROUP_ENABLED_FOR_RECORDING_MODE()) {    \
@@ -234,6 +235,7 @@ category_group_enabled =                                                \
           node::tracing::kNoId, trace_event_flags, ##__VA_ARGS__);             \
     }                                                                          \
   } while (0)
+#endif
 
 // Adds a trace event with a given timestamp.
 #define INTERNAL_TRACE_EVENT_ADD_WITH_TIMESTAMP(phase, category_group, name, \

@@ -83,7 +83,7 @@ int StreamBase::Writev(const FunctionCallbackInfo<Value>& args) {
   if (!all_buffers) {
     // Determine storage size first
     for (size_t i = 0; i < count; i++) {
-      Local<Value> chunk = chunks->Get(i * 2);
+      Local<Value> chunk = chunks->Get(env->context(), i * 2).ToLocalChecked();
 
       if (Buffer::HasInstance(chunk))
         continue;
@@ -92,7 +92,7 @@ int StreamBase::Writev(const FunctionCallbackInfo<Value>& args) {
       // String chunk
       Local<String> string = chunk->ToString(env->context()).ToLocalChecked();
       enum encoding encoding = ParseEncoding(env->isolate(),
-                                             chunks->Get(i * 2 + 1));
+          chunks->Get(env->context(), i * 2 + 1).ToLocalChecked());
       size_t chunk_size;
       if (encoding == UTF8 && string->Length() > 65535 &&
           !StringBytes::Size(env->isolate(), string, encoding).To(&chunk_size))
@@ -107,7 +107,7 @@ int StreamBase::Writev(const FunctionCallbackInfo<Value>& args) {
       return UV_ENOBUFS;
   } else {
     for (size_t i = 0; i < count; i++) {
-      Local<Value> chunk = chunks->Get(i);
+      Local<Value> chunk = chunks->Get(env->context(), i).ToLocalChecked();
       bufs[i].base = Buffer::Data(chunk);
       bufs[i].len = Buffer::Length(chunk);
     }
@@ -120,7 +120,7 @@ int StreamBase::Writev(const FunctionCallbackInfo<Value>& args) {
   offset = 0;
   if (!all_buffers) {
     for (size_t i = 0; i < count; i++) {
-      Local<Value> chunk = chunks->Get(i * 2);
+      Local<Value> chunk = chunks->Get(env->context(), i * 2).ToLocalChecked();
 
       // Write buffer
       if (Buffer::HasInstance(chunk)) {
@@ -136,7 +136,7 @@ int StreamBase::Writev(const FunctionCallbackInfo<Value>& args) {
 
       Local<String> string = chunk->ToString(env->context()).ToLocalChecked();
       enum encoding encoding = ParseEncoding(env->isolate(),
-                                             chunks->Get(i * 2 + 1));
+          chunks->Get(env->context(), i * 2 + 1).ToLocalChecked());
       str_size = StringBytes::Write(env->isolate(),
                                     str_storage,
                                     str_size,
@@ -270,7 +270,9 @@ int StreamBase::WriteString(const FunctionCallbackInfo<Value>& args) {
     send_handle = reinterpret_cast<uv_stream_t*>(wrap->GetHandle());
     // Reference LibuvStreamWrap instance to prevent it from being garbage
     // collected before `AfterWrite` is called.
-    req_wrap_obj->Set(env->handle_string(), send_handle_obj);
+    req_wrap_obj->Set(env->context(),
+                      env->handle_string(),
+                      send_handle_obj).FromJust();
   }
 
   StreamWriteResult res = Write(&buf, 1, send_handle, req_wrap_obj);
@@ -292,7 +294,7 @@ void StreamBase::CallJSOnreadMethod(ssize_t nread,
 
 #ifdef DEBUG
   CHECK_EQ(static_cast<int32_t>(nread), nread);
-  CHECK_EQ(static_cast<int32_t>(offset), offset);
+  CHECK_LE(offset, INT32_MAX);
 
   if (ab.IsEmpty()) {
     CHECK_EQ(offset, 0);

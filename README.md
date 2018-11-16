@@ -159,43 +159,8 @@ source and a list of supported platforms.
 
 ## Security
 
-If you find a security vulnerability in Node.js, please report it to
-security@nodejs.org. Please withhold public disclosure until after the security
-team has addressed the vulnerability.
-
-The security team will acknowledge your email within 24 hours. You will receive
-a more detailed response within 48 hours.
-
-There are no hard and fast rules to determine if a bug is worth reporting as a
-security issue. Here are some examples of past issues and what the Security
-Response Team thinks of them. When in doubt, please do send us a report
-nonetheless.
-
-
-### Public disclosure preferred
-
-- [#14519](https://github.com/nodejs/node/issues/14519): _Internal domain
-  function can be used to cause segfaults_. Requires the ability to execute
-  arbitrary JavaScript code. That is already the highest level of privilege
-  possible.
-
-### Private disclosure preferred
-
-- [CVE-2016-7099](https://nodejs.org/en/blog/vulnerability/september-2016-security-releases/):
-  _Fix invalid wildcard certificate validation check_. This was a high-severity
-  defect. It caused Node.js TLS clients to accept invalid wildcard certificates.
-
-- [#5507](https://github.com/nodejs/node/pull/5507): _Fix a defect that makes
-  the CacheBleed Attack possible_. Many, though not all, OpenSSL vulnerabilities
-  in the TLS/SSL protocols also affect Node.js.
-
-- [CVE-2016-2216](https://nodejs.org/en/blog/vulnerability/february-2016-security-releases/):
-  _Fix defects in HTTP header parsing for requests and responses that can allow
-  response splitting_. This was a remotely-exploitable defect in the Node.js
-  HTTP implementation.
-
-When in doubt, please do send us a report.
-
+For information on reporting security vulnerabilities in Node.js, see
+[SECURITY.md](./SECURITY.md).
 
 ## Current Project Team Members
 
@@ -436,10 +401,14 @@ For information about the governance of the Node.js project, see
 **Alexis Campailla** &lt;orangemocha@nodejs.org&gt;
 * [othiym23](https://github.com/othiym23) -
 **Forrest L Norvell** &lt;ogd@aoaioxxysz.net&gt; (he/him)
+* [oyyd](https://github.com/oyyd) -
+**Ouyang Yadong** &lt;oyydoibh@gmail.com&gt; (he/him)
 * [pmq20](https://github.com/pmq20) -
 **Minqi Pan** &lt;pmq2001@gmail.com&gt;
 * [princejwesley](https://github.com/princejwesley) -
 **Prince John Wesley** &lt;princejohnwesley@gmail.com&gt;
+* [psmarshall](https://github.com/psmarshall) -
+**Peter Marshall** &lt;petermarshall@chromium.org&gt; (he/him)
 * [Qard](https://github.com/Qard) -
 **Stephen Belanger** &lt;admin@stephenbelanger.com&gt; (he/him)
 * [refack](https://github.com/refack) -
@@ -468,6 +437,8 @@ For information about the governance of the Node.js project, see
 **Nikolai Vavilov** &lt;vvnicholas@gmail.com&gt;
 * [shigeki](https://github.com/shigeki) -
 **Shigeki Ohtsu** &lt;ohtsu@ohtsu.org&gt; (he/him)
+* [shisama](https://github.com/shisama) -
+**Masashi Hirano** &lt;shisama07@gmail.com&gt; (he/him)
 * [silverwind](https://github.com/silverwind) -
 **Roman Reiss** &lt;me@silverwind.io&gt;
 * [srl295](https://github.com/srl295) -

@@ -38,7 +38,6 @@
         'include_dirs': [ 'include' ]
       },
       'sources': [
-        'common.gypi',
         'include/ares.h',
         'include/ares_rules.h',
         'include/ares_version.h',
@@ -96,6 +95,7 @@
         'src/ares_strdup.c',
         'src/ares_strdup.h',
         'src/ares_strerror.c',
+        'src/ares_strsplit.c',
         'src/ares_timeout.c',
         'src/ares__timeval.c',
         'src/ares_version.c',

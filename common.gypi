@@ -35,12 +35,9 @@
     'openssl_fips': '',
     'llvm_version': '6.0',
 
-    # Default to -O0 for debug builds.
-    'v8_optimized_debug%': 0,
-
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.7',
+    'v8_embedder_string': '-node.11',
 
     # Enable disassembler for `--print-code` v8 options
     'v8_enable_disassembler': 1,
@@ -67,6 +64,12 @@
     'building_nw%' : '<(building_nw)',
 
     'conditions': [
+      ['target_arch=="arm64"', {
+        # Disabled pending https://github.com/nodejs/node/issues/23913.
+        'openssl_no_asm%': 1,
+      }, {
+        'openssl_no_asm%': 0,
+      }],
       ['OS == "win"', {
         'os_posix': 0,
         'v8_postmortem_support%': 'false',

@@ -1,5 +1,5 @@
 {
-  'variables': {
+   'variables': {
     'openssl_no_asm%': 0,
     'is_clang': 1,
     'openssl_fips%': '',
@@ -7,7 +7,7 @@
     'conditions': [
       ['OS=="mac"', { 'openssl_no_asm%': 1 } ],
     ],
-  },
+   },
   'targets': [
     {
       'target_name': 'openssl',

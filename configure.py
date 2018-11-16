@@ -182,6 +182,11 @@ parser.add_option('--openssl-system-ca-path',
     help='Use the specified path to system CA (PEM format) in addition to '
          'the OpenSSL supplied CA store or compiled-in Mozilla CA copy.')
 
+parser.add_option('--experimental-http-parser',
+    action='store_true',
+    dest='experimental_http_parser',
+    help='use llhttp instead of http_parser')
+
 shared_optgroup.add_option('--shared-http-parser',
     action='store_true',
     dest='shared_http_parser',
@@ -565,6 +570,12 @@ parser.add_option('--verbose',
     dest='verbose',
     default=False,
     help='get more output from this script')
+
+parser.add_option('--v8-non-optimized-debug',
+    action='store_true',
+    dest='v8_non_optimized_debug',
+    default=False,
+    help='compile V8 with minimal optimizations and with runtime checks')
 
 # Create compile_commands.json in out/Debug and out/Release.
 parser.add_option('-C',
@@ -1100,6 +1111,9 @@ def configure_node(o):
   else:
     o['variables']['node_target_type'] = 'executable'
 
+  o['variables']['node_experimental_http_parser'] = \
+      b(options.experimental_http_parser)
+
 def configure_library(lib, output):
   shared_lib = 'shared_' + lib
   output['variables']['node_' + shared_lib] = b(getattr(options, shared_lib))
@@ -1138,7 +1152,7 @@ def configure_library(lib, output):
 def configure_v8(o):
   o['variables']['v8_enable_gdbjit'] = 1 if options.gdb else 0
   o['variables']['v8_no_strict_aliasing'] = 1  # Work around compiler bugs.
-  o['variables']['v8_optimized_debug'] = 0  # Compile with -O0 in debug builds.
+  o['variables']['v8_optimized_debug'] = 0 if options.v8_non_optimized_debug else 1
   o['variables']['v8_random_seed'] = 0  # Use a random seed for hash tables.
   o['variables']['v8_promise_internal_field_count'] = 1 # Add internal field to promises for async hooks.
   o['variables']['v8_use_snapshot'] = 'false' if options.without_snapshot else 'true'
@@ -1169,8 +1183,10 @@ def configure_openssl(o):
   variables = o['variables']
   variables['node_use_openssl'] = b(not options.without_ssl)
   variables['node_shared_openssl'] = b(options.shared_openssl)
-  variables['openssl_no_asm'] = 1 if options.openssl_no_asm else 0
   variables['openssl_fips'] = ''
+
+  if options.openssl_no_asm:
+    variables['openssl_no_asm'] = 1
 
   if options.without_ssl:
     def without_ssl_error(option):

@@ -3,7 +3,6 @@
 ## Contents
 
 * [Issues and Pull Requests](#issues-and-pull-requests)
-  - [Managing Issues and Pull Requests](#managing-issues-and-pull-requests)
   - [Welcoming First-Time Contributors](#welcoming-first-time-contributors)
   - [Closing Issues and Pull Requests](#closing-issues-and-pull-requests)
   - [Author ready pull requests](#author-ready-pull-requests)
@@ -28,7 +27,7 @@
   - [Using `git-node`](#using-git-node)
   - [Technical HOWTO](#technical-howto)
   - [Troubleshooting](#troubleshooting)
-  - [I Just Made a Mistake](#i-just-made-a-mistake)
+  - [I Made a Mistake](#i-made-a-mistake)
   - [Long Term Support](#long-term-support)
     - [What is LTS?](#what-is-lts)
     - [How does LTS work?](#how-does-lts-work)
@@ -38,24 +37,16 @@
     - [How is an LTS release cut?](#how-is-an-lts-release-cut)
 * [Who to CC in the issue tracker](#who-to-cc-in-the-issue-tracker)
 
-This document contains information for Collaborators of the Node.js
-project regarding managing the project's code, documentation, and issue tracker.
-
-Collaborators should be familiar with the guidelines for new
-contributors in [CONTRIBUTING.md](./CONTRIBUTING.md) and also
-understand the project governance model as outlined in
-[GOVERNANCE.md](./GOVERNANCE.md).
+This document explains how Collaborators manage the Node.js project.
+Collaborators should understand the
+[guidelines for new contributors](CONTRIBUTING.md) and the
+[project governance model](GOVERNANCE.md).
 
 ## Issues and Pull Requests
 
-### Managing Issues and Pull Requests
-
-Collaborators should take full responsibility for managing issues and pull
-requests they feel qualified to handle. Make sure this is done while being
-mindful of these guidelines, the opinions of other Collaborators, and guidance
-of the [TSC][]. They may also notify other qualified parties for more input on
-an issue or a pull request.
-See [Who to CC in the issue tracker](#who-to-cc-in-the-issue-tracker).
+Mind these guidelines, the opinions of other Collaborators, and guidance of the
+[TSC][]. Notify other qualified parties for more input on an issue or a pull
+request. See [Who to CC in the issue tracker](#who-to-cc-in-the-issue-tracker).
 
 ### Welcoming First-Time Contributors
 
@@ -497,7 +488,7 @@ This should be done where a pull request:
 
 Assign the `tsc-review` label or @-mention the
 `@nodejs/tsc` GitHub team if you want to elevate an issue to the [TSC][].
-Do not use the GitHub UI on the right hand side to assign to
+Do not use the GitHub UI on the right-hand side to assign to
 `@nodejs/tsc` or request a review from `@nodejs/tsc`.
 
 The TSC should serve as the final arbiter where required.
@@ -528,7 +519,7 @@ The TSC should serve as the final arbiter where required.
    you are unsure exactly how to format the commit messages, use the commit log
    as a reference. See [this commit][commit-example] as an example.
 
-For PRs from first time contributors, be [welcoming](#welcoming-first-time-contributors).
+For PRs from first-time contributors, be [welcoming](#welcoming-first-time-contributors).
 Also, verify that their git settings are to their liking.
 
 All commits should be self-contained, meaning every commit should pass all
@@ -747,7 +738,7 @@ make -j4 test
 git push upstream master
 ```
 
-### I Just Made a Mistake
+### I Made a Mistake
 
 * Ping a TSC member.
 * `#node-dev` on freenode

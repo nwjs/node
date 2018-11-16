@@ -378,6 +378,7 @@ added: v0.3.2
 
 * `callback` {Function} A listener callback that will be registered to listen
 for the server instance's `'close'` event.
+* Returns: {tls.Server}
 
 The `server.close()` method stops the server from accepting new connections.
 
@@ -565,6 +566,22 @@ added: v0.11.4
 Always returns `true`. This may be used to distinguish TLS sockets from regular
 `net.Socket` instances.
 
+### tlsSocket.getCertificate()
+<!-- YAML
+added: v11.2.0
+-->
+
+* Returns: {Object}
+
+Returns an object representing the local certificate. The returned object has
+some properties corresponding to the fields of the certificate.
+
+See [`tls.TLSSocket.getPeerCertificate()`][] for an example of the certificate
+structure.
+
+If there is no local certificate, an empty object will be returned. If the
+socket has been destroyed, `null` will be returned.
+
 ### tlsSocket.getCipher()
 <!-- YAML
 added: v0.11.4
@@ -657,6 +674,7 @@ certificate.
 ```
 
 If the peer does not provide a certificate, an empty object will be returned.
+If the socket has been destroyed, `null` will be returned.
 
 ### tlsSocket.getPeerFinished()
 <!-- YAML
@@ -810,14 +828,15 @@ decrease overall server throughput.
 added: v0.8.4
 -->
 
-* `hostname` {string} The hostname to verify the certificate against
+* `hostname` {string} The host name or IP address to verify the certificate
+  against.
 * `cert` {Object} An object representing the peer's certificate. The returned
   object has some properties corresponding to the fields of the certificate.
 * Returns: {Error|undefined}
 
 Verifies the certificate `cert` is issued to `hostname`.
 
-Returns {Error} object, populating it with the reason, host, and cert on
+Returns {Error} object, populating it with `reason`, `host`, and `cert` on
 failure. On success, returns {undefined}.
 
 This function can be overwritten by providing alternative function as part of
@@ -901,11 +920,15 @@ changes:
     An array of strings, `Buffer`s or `TypedArray`s or `DataView`s, or a
     single `Buffer` or `TypedArray` or `DataView` containing the supported ALPN
     protocols. `Buffer`s should have the format `[len][name][len][name]...`
-    e.g. `0x05hello0x05world`, where the first byte is the length of the next
-    protocol name. Passing an array is usually much simpler, e.g.
-    `['hello', 'world']`.
+    e.g. `'\x08http/1.1\x08http/1.0'`, where the `len` byte is the length of the
+    next protocol name. Passing an array is usually much simpler, e.g.
+    `['http/1.1', 'http/1.0']`. Protocols earlier in the list have higher
+    preference than those later.
   * `servername`: {string} Server name for the SNI (Server Name Indication) TLS
-    extension. It must be a host name, and not an IP address.
+    extension. It is the name of the host being connected to, and must be a host
+    name, and not an IP address. It can be used by a multi-homed server to
+    choose the correct certificate to present to the client, see the
+    `SNICallback` option to [`tls.createServer()`][].
   * `checkServerIdentity(servername, cert)` {Function} A callback function
     to be used (instead of the builtin `tls.checkServerIdentity()` function)
     when checking the server's hostname (or the provided `servername` when
@@ -926,28 +949,31 @@ changes:
   * ...: [`tls.createSecureContext()`][] options that are used if the
     `secureContext` option is missing, otherwise they are ignored.
 * `callback` {Function}
+* Returns: {tls.TLSSocket}
 
 The `callback` function, if specified, will be added as a listener for the
 [`'secureConnect'`][] event.
 
 `tls.connect()` returns a [`tls.TLSSocket`][] object.
 
-Here is an example of a client of echo server as described in
+The following illustrates a client for the echo server example from
 [`tls.createServer()`][]:
 
 ```js
-// This example assumes that you have created an echo server that is
-// listening on port 8000.
+// Assumes an echo server that is listening on port 8000.
 const tls = require('tls');
 const fs = require('fs');
 
 const options = {
-  // Necessary only if using the client certificate authentication
+  // Necessary only if the server requires client certificate authentication.
   key: fs.readFileSync('client-key.pem'),
   cert: fs.readFileSync('client-cert.pem'),
 
-  // Necessary only if the server uses the self-signed certificate
-  ca: [ fs.readFileSync('server-cert.pem') ]
+  // Necessary only if the server uses a self-signed certificate.
+  ca: [ fs.readFileSync('server-cert.pem') ],
+
+  // Necessary only if the server's cert isn't for "localhost".
+  checkServerIdentity: () => { return null; },
 };
 
 const socket = tls.connect(8000, options, () => {
@@ -961,34 +987,7 @@ socket.on('data', (data) => {
   console.log(data);
 });
 socket.on('end', () => {
-  console.log('client ends');
-});
-```
-
-Or
-
-```js
-// This example assumes that you have created an echo server that is
-// listening on port 8000.
-const tls = require('tls');
-const fs = require('fs');
-
-const options = {
-  pfx: fs.readFileSync('client.pfx')
-};
-
-const socket = tls.connect(8000, options, () => {
-  console.log('client connected',
-              socket.authorized ? 'authorized' : 'unauthorized');
-  process.stdin.pipe(socket);
-  process.stdin.resume();
-});
-socket.setEncoding('utf8');
-socket.on('data', (data) => {
-  console.log(data);
-});
-socket.on('end', () => {
-  console.log('client ends');
+  console.log('server ends connection');
 });
 ```
 
@@ -1000,6 +999,7 @@ added: v0.11.3
 * `path` {string} Default value for `options.path`.
 * `options` {Object} See [`tls.connect()`][].
 * `callback` {Function} See [`tls.connect()`][].
+* Returns: {tls.TLSSocket}
 
 Same as [`tls.connect()`][] except that `path` can be provided
 as an argument instead of an option.
@@ -1015,6 +1015,7 @@ added: v0.11.3
 * `host` {string} Default value for `options.host`.
 * `options` {Object} See [`tls.connect()`][].
 * `callback` {Function} See [`tls.connect()`][].
+* Returns: {tls.TLSSocket}
 
 Same as [`tls.connect()`][] except that `port` and `host` can be provided
 as arguments instead of options.
@@ -1191,6 +1192,7 @@ changes:
   * ...: Any [`tls.createSecureContext()`][] option can be provided. For
     servers, the identity options (`pfx` or `key`/`cert`) are usually required.
 * `secureConnectionListener` {Function}
+* Returns: {tls.Server}
 
 Creates a new [`tls.Server`][]. The `secureConnectionListener`, if provided, is
 automatically set as a listener for the [`'secureConnection'`][] event.
@@ -1208,10 +1210,10 @@ const options = {
   key: fs.readFileSync('server-key.pem'),
   cert: fs.readFileSync('server-cert.pem'),
 
-  // This is necessary only if using the client certificate authentication.
+  // This is necessary only if using client certificate authentication.
   requestCert: true,
 
-  // This is necessary only if the client uses the self-signed certificate.
+  // This is necessary only if the client uses a self-signed certificate.
   ca: [ fs.readFileSync('client-cert.pem') ]
 };
 
@@ -1227,36 +1229,8 @@ server.listen(8000, () => {
 });
 ```
 
-Or
-
-```js
-const tls = require('tls');
-const fs = require('fs');
-
-const options = {
-  pfx: fs.readFileSync('server.pfx'),
-
-  // This is necessary only if using the client certificate authentication.
-  requestCert: true,
-};
-
-const server = tls.createServer(options, (socket) => {
-  console.log('server connected',
-              socket.authorized ? 'authorized' : 'unauthorized');
-  socket.write('welcome!\n');
-  socket.setEncoding('utf8');
-  socket.pipe(socket);
-});
-server.listen(8000, () => {
-  console.log('server bound');
-});
-```
-
-This server can be tested by connecting to it using `openssl s_client`:
-
-```sh
-openssl s_client -connect 127.0.0.1:8000
-```
+The server can be tested by connecting to it using the example client from
+[`tls.connect()`][].
 
 ## tls.getCiphers()
 <!-- YAML

@@ -1012,6 +1012,15 @@ added: v8.4.0
 Set to `true` if the `Http2Stream` instance was aborted abnormally. When set,
 the `'aborted'` event will have been emitted.
 
+#### http2stream.bufferSize
+<!-- YAML
+added: v11.2.0
+-->
+* {number}
+
+This property shows the number of characters currently buffered to be written.
+See [`net.Socket.bufferSize`][] for details.
+
 #### http2stream.close(code[, callback])
 <!-- YAML
 added: v8.4.0
@@ -3393,6 +3402,7 @@ following additional properties:
 [HTTPS]: https.html
 [Performance Observer]: perf_hooks.html
 [Readable Stream]: stream.html#stream_class_stream_readable
+[Stream]: stream.html#stream_stream
 [RFC 7838]: https://tools.ietf.org/html/rfc7838
 [RFC 8336]: https://tools.ietf.org/html/rfc8336
 [RFC 8441]: https://tools.ietf.org/html/rfc8441
@@ -3415,6 +3425,7 @@ following additional properties:
 [`http2stream.pushStream()`]: #http2_http2stream_pushstream_headers_options_callback
 [`net.Server.close()`]: net.html#net_server_close_callback
 [`net.Socket`]: net.html#net_class_net_socket
+[`net.Socket.bufferSize`]: net.html#net_socket_buffersize
 [`net.Socket.prototype.ref()`]: net.html#net_socket_ref
 [`net.Socket.prototype.unref()`]: net.html#net_socket_unref
 [`net.connect()`]: net.html#net_net_connect

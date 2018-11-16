@@ -21,9 +21,10 @@
 
 #include "async_wrap-inl.h"
 #include "env-inl.h"
+#include "node_errors.h"
 #include "node_internals.h"
-#include "util-inl.h"
 #include "tracing/traced_value.h"
+#include "util-inl.h"
 
 #include "v8.h"
 #include "v8-profiler.h"
@@ -363,9 +364,15 @@ void AsyncWrap::WeakCallback(const v8::WeakCallbackInfo<DestroyParam>& info) {
   HandleScope scope(info.GetIsolate());
 
   std::unique_ptr<DestroyParam> p{info.GetParameter()};
-  Local<Object> prop_bag = PersistentToLocal(info.GetIsolate(), p->propBag);
+  Local<Object> prop_bag = PersistentToLocal::Default(info.GetIsolate(),
+                                                      p->propBag);
+  Local<Value> val;
 
-  Local<Value> val = prop_bag->Get(p->env->destroyed_string());
+  if (!prop_bag->Get(p->env->context(), p->env->destroyed_string())
+        .ToLocal(&val)) {
+    return;
+  }
+
   if (val->IsFalse()) {
     AsyncWrap::EmitDestroy(p->env, p->asyncId);
   }
@@ -708,6 +715,8 @@ MaybeLocal<Value> AsyncWrap::MakeCallback(const Local<Function> cb,
 
 
 async_id AsyncHooksGetExecutionAsyncId(Isolate* isolate) {
+  // Environment::GetCurrent() allocates a Local<> handle.
+  v8::HandleScope handle_scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
   if (env == nullptr) return -1;
   return env->execution_async_id();
@@ -715,6 +724,8 @@ async_id AsyncHooksGetExecutionAsyncId(Isolate* isolate) {
 
 
 async_id AsyncHooksGetTriggerAsyncId(Isolate* isolate) {
+  // Environment::GetCurrent() allocates a Local<> handle.
+  v8::HandleScope handle_scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
   if (env == nullptr) return -1;
   return env->trigger_async_id();
@@ -725,6 +736,7 @@ async_context EmitAsyncInit(Isolate* isolate,
                             Local<Object> resource,
                             const char* name,
                             async_id trigger_async_id) {
+  v8::HandleScope handle_scope(isolate);
   Local<String> type =
       String::NewFromUtf8(isolate, name, v8::NewStringType::kInternalized)
           .ToLocalChecked();
@@ -735,6 +747,7 @@ async_context EmitAsyncInit(Isolate* isolate,
                             Local<Object> resource,
                             v8::Local<v8::String> name,
                             async_id trigger_async_id) {
+  v8::HandleScope handle_scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
   CHECK_NOT_NULL(env);
 
@@ -755,6 +768,8 @@ async_context EmitAsyncInit(Isolate* isolate,
 }
 
 void EmitAsyncDestroy(Isolate* isolate, async_context asyncContext) {
+  // Environment::GetCurrent() allocates a Local<> handle.
+  v8::HandleScope handle_scope(isolate);
   AsyncWrap::EmitDestroy(
       Environment::GetCurrent(isolate), asyncContext.async_id);
 }

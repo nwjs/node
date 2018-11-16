@@ -41,10 +41,10 @@ class TraceEventScope {
   TraceEventScope(const char* category,
                   const char* name,
                   void* id) : category_(category), name_(name), id_(id) {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(category_, name_, id_);
+    //TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(category_, name_, id_);
   }
   ~TraceEventScope() {
-    TRACE_EVENT_NESTABLE_ASYNC_END0(category_, name_, id_);
+    //TRACE_EVENT_NESTABLE_ASYNC_END0(category_, name_, id_);
   }
 
  private:
@@ -193,6 +193,7 @@ Environment::Environment(IsolateData* isolate_data,
 
   destroy_async_id_list_.reserve(512);
   performance_state_.reset(new performance::performance_state(isolate()));
+#if 0
   performance_state_->Mark(
       performance::NODE_PERFORMANCE_MILESTONE_ENVIRONMENT);
   performance_state_->Mark(
@@ -201,7 +202,7 @@ Environment::Environment(IsolateData* isolate_data,
   performance_state_->Mark(
       performance::NODE_PERFORMANCE_MILESTONE_V8_START,
       performance::performance_v8_start);
-
+#endif
   // By default, always abort when --abort-on-uncaught-exception was passed.
   should_abort_on_uncaught_toggle_[0] = 1;
 
@@ -256,6 +257,7 @@ void Environment::Start(const std::vector<std::string>& args,
   HandleScope handle_scope(isolate());
   Context::Scope context_scope(context());
 
+#if 0
   if (*TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
       TRACING_CATEGORY_NODE1(environment)) != 0) {
     auto traced_value = tracing::TracedValue::Create();
@@ -272,7 +274,7 @@ void Environment::Start(const std::vector<std::string>& args,
       "Environment", this,
       "args", std::move(traced_value));
   }
-
+#endif
   CHECK_EQ(0, uv_timer_init(event_loop(), timer_handle()));
   uv_unref(reinterpret_cast<uv_handle_t*>(timer_handle()));
 
@@ -874,6 +876,26 @@ Local<Object> BaseObject::WrappedObject() const {
 
 bool BaseObject::IsRootNode() const {
   return !persistent_handle_.IsWeak();
+}
+
+bool Environment::KickNextTick() {
+  TickInfo* info = tick_info();
+
+  if (!can_call_into_js()) return true;
+  if (info->has_scheduled() == 0) {
+    //isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
+  }
+
+  if (!info->has_scheduled() && !info->has_promise_rejections()) {
+    return true;
+  }
+
+  if (!can_call_into_js()) return true;
+  MaybeLocal<v8::Value> ret =
+    tick_callback_function()->Call(context(), process_object(), 0, nullptr);
+
+  return !ret.IsEmpty();
 }
 
 }  // namespace node

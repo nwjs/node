@@ -514,7 +514,7 @@ static void read_udp_packets(ares_channel channel, fd_set *read_fds,
           else
             fromlen = sizeof(from.sa6);
           count = socket_recvfrom(channel, server->udp_socket, (void *)buf,
-                                  sizeof(buf), 0, &from.sa, &fromlen);
+                                  sizeof(buf), 0, &from.sa, (socklen_t *)&fromlen);
         }
 
         if (count == -1 && try_again(SOCKERRNO))

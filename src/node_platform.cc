@@ -284,7 +284,7 @@ int PerIsolatePlatformData::unref() {
 }
 
 NodePlatform::NodePlatform(int thread_pool_size,
-                           TracingController* tracing_controller) {
+                           v8::TracingController* tracing_controller) {
   if (tracing_controller) {
     tracing_controller_ = tracing_controller;
   } else {
@@ -457,7 +457,7 @@ double NodePlatform::CurrentClockTimeMillis() {
   return SystemClockTimeMillis();
 }
 
-TracingController* NodePlatform::GetTracingController() {
+v8::TracingController* NodePlatform::GetTracingController() {
   return tracing_controller_;
 }
 

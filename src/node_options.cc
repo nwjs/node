@@ -189,8 +189,8 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
 
   AddOption("--napi-modules", "", NoOp{}, kAllowedInEnvironment);
 
-  Insert(&DebugOptionsParser::instance,
-         &EnvironmentOptions::get_debug_options);
+  //  Insert(&DebugOptionsParser::instance,
+  //       &EnvironmentOptions::get_debug_options);
 }
 
 EnvironmentOptionsParser EnvironmentOptionsParser::instance;

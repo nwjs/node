@@ -92,30 +92,7 @@ void InternalCallbackScope::Close() {
     return;
   }
 
-  Environment::TickInfo* tick_info = env_->tick_info();
-
-  if (!env_->can_call_into_js()) return;
-  if (!tick_info->has_scheduled()) {
-    env_->isolate()->RunMicrotasks();
-  }
-
-  // Make sure the stack unwound properly. If there are nested MakeCallback's
-  // then it should return early and not reach this code.
-  if (env_->async_hooks()->fields()[AsyncHooks::kTotals]) {
-    CHECK_EQ(env_->execution_async_id(), 0);
-    CHECK_EQ(env_->trigger_async_id(), 0);
-  }
-
-  if (!tick_info->has_scheduled() && !tick_info->has_promise_rejections()) {
-    return;
-  }
-
-  Local<Object> process = env_->process_object();
-
-  if (!env_->can_call_into_js()) return;
-
-  if (env_->tick_callback_function()
-      ->Call(env_->context(), process, 0, nullptr).IsEmpty()) {
+  if (!env_->KickNextTick()) {
     failed_ = true;
   }
 }

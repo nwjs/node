@@ -184,6 +184,8 @@ extern std::shared_ptr<PerProcessOptions> per_process_opts;
 // Forward declaration
 class Environment;
 
+NODE_EXTERN v8::Handle<v8::Value> CallTickCallback(Environment* env, const v8::Handle<v8::Value> ret);
+
 // Convert a struct sockaddr to a { address: '1.2.3.4', port: 1234 } JS object.
 // Sets address and port properties on the info object and returns it.
 // If |info| is omitted, a new object is returned.
@@ -366,6 +368,7 @@ class ArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
   virtual void* AllocateUninitialized(size_t size)
     { return node::UncheckedMalloc(size); }
   virtual void Free(void* data, size_t) { free(data); }
+  virtual void Free(void* data, size_t, v8::ArrayBuffer::Allocator::AllocationMode) { free(data); }
 
  private:
   uint32_t zero_fill_field_ = 1;  // Boolean but exposed as uint32 to JS land.

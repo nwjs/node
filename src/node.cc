@@ -134,6 +134,10 @@ typedef int mode_t;
   NODE_BUILTIN_MODULES(V)
 #undef V
 
+extern "C" {
+NODE_EXTERN void* g_get_node_env();
+}
+
 static uv_key_t thread_ctx_key;
 static int thread_ctx_created = 0;
 static int g_worker_support = 0;
@@ -750,6 +754,8 @@ MaybeLocal<Value> MakeCallback(Isolate* isolate,
   // Because of the AssignToContext() call in src/node_contextify.cc,
   // the two contexts need not be the same.
   Environment* env = Environment::GetCurrent(callback->CreationContext());
+  if (!env)
+    env = (Environment*)g_get_node_env();
   CHECK_NOT_NULL(env);
   Context::Scope context_scope(env->context());
   MaybeLocal<Value> ret = InternalMakeCallback(env, recv, callback,

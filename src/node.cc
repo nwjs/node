@@ -2761,9 +2761,9 @@ void UvNoOp(uv_async_t* handle) {
 }
 
 NODE_EXTERN bool g_nw_enter_dom() {
-  if (!thread_ctx_created)
+  if (!node::thread_ctx_created)
     return false;
-  thread_ctx_st* tls_ctx = (node::thread_ctx_st*)uv_key_get(&node::thread_ctx_key);
+  node::thread_ctx_st* tls_ctx = (node::thread_ctx_st*)uv_key_get(&node::thread_ctx_key);
   if (tls_ctx && tls_ctx->env) {
     v8::Isolate* isolate = tls_ctx->env->isolate();
     v8::HandleScope handleScope(isolate);
@@ -2777,7 +2777,7 @@ NODE_EXTERN bool g_nw_enter_dom() {
 }
 
 NODE_EXTERN void g_nw_leave_dom(bool reenter) {
-  if (!thread_ctx_created)
+  if (!node::thread_ctx_created)
     return;
   node::thread_ctx_st* tls_ctx = (node::thread_ctx_st*)uv_key_get(&node::thread_ctx_key);
   if (reenter && tls_ctx && tls_ctx->env) {
@@ -2789,7 +2789,7 @@ NODE_EXTERN void g_nw_leave_dom(bool reenter) {
 
 NODE_EXTERN void g_msg_pump_ctor_osx(msg_pump_context_t* ctx, void* EmbedThreadRunner, void* kevent_hook, void* data, int worker_support) {
   uv_init_nw(worker_support);
-  g_worker_support = worker_support;
+  node::g_worker_support = worker_support;
   // Add dummy handle for libuv, otherwise libuv would quit when there is
   // nothing to do.
   ctx->dummy_uv_handle = new uv_async_t;

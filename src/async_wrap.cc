@@ -30,6 +30,8 @@
 #include "v8-profiler.h"
 
 using v8::Context;
+using v8::DontDelete;
+using v8::EscapableHandleScope;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
@@ -38,18 +40,25 @@ using v8::Integer;
 using v8::Isolate;
 using v8::Local;
 using v8::MaybeLocal;
+using v8::NewStringType;
 using v8::Number;
 using v8::Object;
 using v8::ObjectTemplate;
 using v8::Promise;
 using v8::PromiseHookType;
+using v8::PropertyAttribute;
 using v8::PropertyCallbackInfo;
+using v8::ReadOnly;
 using v8::String;
+using v8::TryCatch;
 using v8::Uint32;
 using v8::Undefined;
 using v8::Value;
+using v8::WeakCallbackInfo;
+using v8::WeakCallbackType;
 
 using AsyncHooks = node::Environment::AsyncHooks;
+using TryCatchScope = node::errors::TryCatchScope;
 
 namespace node {
 
@@ -83,7 +92,7 @@ struct AsyncWrapObject : public AsyncWrap {
 static void DestroyAsyncIdsCallback(Environment* env, void* data) {
   Local<Function> fn = env->async_hooks_destroy_function();
 
-  FatalTryCatch try_catch(env);
+  TryCatchScope try_catch(env, TryCatchScope::CatchMode::kFatal);
 
   do {
     std::vector<double> destroy_async_id_list;
@@ -117,9 +126,9 @@ void Emit(Environment* env, double async_id, AsyncHooks::Fields type,
   if (async_hooks->fields()[type] == 0 || !env->can_call_into_js())
     return;
 
-  v8::HandleScope handle_scope(env->isolate());
+  HandleScope handle_scope(env->isolate());
   Local<Value> async_id_value = Number::New(env->isolate(), async_id);
-  FatalTryCatch try_catch(env);
+  TryCatchScope try_catch(env, TryCatchScope::CatchMode::kFatal);
   USE(fn->Call(env->context(), Undefined(env->isolate()), 1, &async_id_value));
 }
 
@@ -359,8 +368,7 @@ class DestroyParam {
   Persistent<Object> propBag;
 };
 
-
-void AsyncWrap::WeakCallback(const v8::WeakCallbackInfo<DestroyParam>& info) {
+void AsyncWrap::WeakCallback(const WeakCallbackInfo<DestroyParam>& info) {
   HandleScope scope(info.GetIsolate());
 
   std::unique_ptr<DestroyParam> p{info.GetParameter()};
@@ -391,8 +399,7 @@ static void RegisterDestroyHook(const FunctionCallbackInfo<Value>& args) {
   p->env = Environment::GetCurrent(args);
   p->target.Reset(isolate, args[0].As<Object>());
   p->propBag.Reset(isolate, args[2].As<Object>());
-  p->target.SetWeak(
-    p, AsyncWrap::WeakCallback, v8::WeakCallbackType::kParameter);
+  p->target.SetWeak(p, AsyncWrap::WeakCallback, WeakCallbackType::kParameter);
 }
 
 
@@ -451,7 +458,8 @@ Local<FunctionTemplate> AsyncWrap::GetConstructorTemplate(Environment* env) {
 
 void AsyncWrap::Initialize(Local<Object> target,
                            Local<Value> unused,
-                           Local<Context> context) {
+                           Local<Context> context,
+                           void* priv) {
   Environment* env = Environment::GetCurrent(context);
   Isolate* isolate = env->isolate();
   HandleScope scope(isolate);
@@ -466,8 +474,8 @@ void AsyncWrap::Initialize(Local<Object> target,
   env->SetMethod(target, "disablePromiseHook", DisablePromiseHook);
   env->SetMethod(target, "registerDestroyHook", RegisterDestroyHook);
 
-  v8::PropertyAttribute ReadOnlyDontDelete =
-      static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete);
+  PropertyAttribute ReadOnlyDontDelete =
+      static_cast<PropertyAttribute>(ReadOnly | DontDelete);
 
 #define FORCE_SET_TARGET_FIELD(obj, str, field)                               \
   (obj)->DefineOwnProperty(context,                                           \
@@ -688,7 +696,7 @@ void AsyncWrap::EmitAsyncInit(Environment* env,
     object,
   };
 
-  FatalTryCatch try_catch(env);
+  TryCatchScope try_catch(env, TryCatchScope::CatchMode::kFatal);
   USE(init_fn->Call(env->context(), object, arraysize(argv), argv));
 }
 
@@ -716,7 +724,7 @@ MaybeLocal<Value> AsyncWrap::MakeCallback(const Local<Function> cb,
 
 async_id AsyncHooksGetExecutionAsyncId(Isolate* isolate) {
   // Environment::GetCurrent() allocates a Local<> handle.
-  v8::HandleScope handle_scope(isolate);
+  HandleScope handle_scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
   if (env == nullptr) return -1;
   return env->execution_async_id();
@@ -725,7 +733,7 @@ async_id AsyncHooksGetExecutionAsyncId(Isolate* isolate) {
 
 async_id AsyncHooksGetTriggerAsyncId(Isolate* isolate) {
   // Environment::GetCurrent() allocates a Local<> handle.
-  v8::HandleScope handle_scope(isolate);
+  HandleScope handle_scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
   if (env == nullptr) return -1;
   return env->trigger_async_id();
@@ -736,18 +744,18 @@ async_context EmitAsyncInit(Isolate* isolate,
                             Local<Object> resource,
                             const char* name,
                             async_id trigger_async_id) {
-  v8::HandleScope handle_scope(isolate);
+  HandleScope handle_scope(isolate);
   Local<String> type =
-      String::NewFromUtf8(isolate, name, v8::NewStringType::kInternalized)
+      String::NewFromUtf8(isolate, name, NewStringType::kInternalized)
           .ToLocalChecked();
   return EmitAsyncInit(isolate, resource, type, trigger_async_id);
 }
 
 async_context EmitAsyncInit(Isolate* isolate,
                             Local<Object> resource,
-                            v8::Local<v8::String> name,
+                            Local<String> name,
                             async_id trigger_async_id) {
-  v8::HandleScope handle_scope(isolate);
+  HandleScope handle_scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
   CHECK_NOT_NULL(env);
 
@@ -769,7 +777,7 @@ async_context EmitAsyncInit(Isolate* isolate,
 
 void EmitAsyncDestroy(Isolate* isolate, async_context asyncContext) {
   // Environment::GetCurrent() allocates a Local<> handle.
-  v8::HandleScope handle_scope(isolate);
+  HandleScope handle_scope(isolate);
   AsyncWrap::EmitDestroy(
       Environment::GetCurrent(isolate), asyncContext.async_id);
 }
@@ -788,10 +796,10 @@ Local<Object> AsyncWrap::GetOwner() {
 }
 
 Local<Object> AsyncWrap::GetOwner(Environment* env, Local<Object> obj) {
-  v8::EscapableHandleScope handle_scope(env->isolate());
+  EscapableHandleScope handle_scope(env->isolate());
   CHECK(!obj.IsEmpty());
 
-  v8::TryCatch ignore_exceptions(env->isolate());
+  TryCatchScope ignore_exceptions(env);
   while (true) {
     Local<Value> owner;
     if (!obj->Get(env->context(),

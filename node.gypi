@@ -175,12 +175,14 @@
     }],
 
     [ 'node_experimental_http_parser=="true"', {
-      'defines': [ 'NODE_EXPERIMENTAL_HTTP' ],
-      'dependencies': [ 'deps/llhttp/llhttp.gyp:llhttp' ],
-    }, {
-      'conditions': [ [ 'node_shared_http_parser=="false"', {
-        'dependencies': [ 'deps/http_parser/http_parser.gyp:http_parser' ],
-      } ] ],
+      'defines': [ 'NODE_EXPERIMENTAL_HTTP_DEFAULT' ],
+    } ],
+
+    [ 'node_shared_http_parser=="false"', {
+      'dependencies': [
+        'deps/http_parser/http_parser.gyp:http_parser',
+        'deps/llhttp/llhttp.gyp:llhttp'
+      ],
     } ],
 
     [ 'node_shared_cares=="false"', {
@@ -351,25 +353,28 @@
        ],
      },
     }],
-    [ 'OS in "mac freebsd linux" and node_shared=="false"'
-        ' and coverage=="true"', {
+    [ 'coverage=="true" and node_shared=="false" and OS in "mac freebsd linux"', {
+      'cflags!': [ '-O3' ],
       'ldflags': [ '--coverage',
                    '-g',
                    '-O0' ],
       'cflags': [ '--coverage',
                    '-g',
                    '-O0' ],
-      'cflags!': [ '-O3' ],
       'xcode_settings': {
-        'OTHER_LDFLAGS': [
-          '--coverage',
-        ],
-        'OTHER_CFLAGS+': [
+        'OTHER_CFLAGS': [
           '--coverage',
           '-g',
           '-O0'
         ],
-      }
+      },
+      'conditions': [
+        [ '_type=="executable"', {
+          'xcode_settings': {
+            'OTHER_LDFLAGS': [ '--coverage', ],
+          },
+        }],
+      ],
     }],
     [ 'OS=="sunos"', {
       'ldflags': [ '-Wl,-M,/usr/lib/ld/map.noexstk' ],

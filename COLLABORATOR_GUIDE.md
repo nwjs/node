@@ -50,84 +50,71 @@ request. See [Who to CC in the issue tracker](#who-to-cc-in-the-issue-tracker).
 
 ### Welcoming First-Time Contributors
 
-Courtesy should always be shown to individuals submitting issues and pull
-requests to the Node.js project. Be welcoming to first-time contributors,
-identified by the GitHub ![First-time contributor](./doc/first_timer_badge.png)
-badge.
+Always show courtesy to individuals submitting issues and pull requests. Be
+welcoming to first-time contributors, identified by the GitHub
+![First-time contributor](./doc/first_timer_badge.png) badge.
 
-For first-time contributors, check if the commit author is the same as the
-pull request author, and ask if they have configured their git
+For first-time contributors, check if the commit author is the same as the pull
+request author. This way, once their pull request lands, GitHub will show them
+as a _Contributor_. Ask if they have configured their git
 [username][git-username] and [email][git-email] to their liking.
-This is to make sure they would be promoted to "contributor" once their
-pull request lands.
 
 ### Closing Issues and Pull Requests
 
-Collaborators may close any issue or pull request they believe is
-not relevant for the future of the Node.js project. Where this is
-unclear, the issue should be left open for several days to allow for
-additional discussion. Where this does not yield input from Node.js
-Collaborators or additional evidence that the issue has relevance, the
-issue may be closed. Remember that issues can always be re-opened if
-necessary.
+Collaborators may close any issue or pull request that is not relevant to the
+future of the Node.js project. Where this is unclear, leave the issue or pull
+request open for several days to allow for discussion. Where this does not yield
+evidence that the issue or pull request has relevance, close it. Remember that
+issues and pull requests can always be re-opened if necessary.
 
 ### Author ready pull requests
 
-A pull request that is still awaiting the minimum review time is considered
-_author ready_ as soon as the CI has been started, it has at least two approvals
-(one Collaborator approval is enough if the pull request has been open for more
-than 7 days), and it has no outstanding review comments. Please always make sure
-to add the `author ready` label to the PR in that case and remove it again as
-soon as that condition is not met anymore.
+A pull request is _author ready_ when:
+
+* There is a CI run in progress or completed.
+* There are at least two Collaborator approvals, or at least one approval if the
+  pull request is older than 7 days.
+* There are no outstanding review comments.
+
+Please always add the `author ready` label to the pull request in that case.
+Please always remove it again as soon as the conditions are not met anymore.
 
 ### Handling own pull requests
 
-When you open a pull request, it is recommended to start a CI right away (see
-[testing and CI](#testing-and-ci) for instructions) and to post the link to it
-in a comment in the pull request. Starting a new CI after each update is also
-recommended (for example, after an additional code change or after rebasing).
+When you open a pull request, [start a CI](#testing-and-ci) right away and post
+the link to it in a comment in the pull request. Later, after new code changes
+or rebasing, start a new CI.
 
-As soon as the PR is ready to land, please do so. Landing your own pull requests
-allows other Collaborators to focus on other pull requests. If your pull request
-is still awaiting the [minimum time to land](#waiting-for-approvals), add the
-`author ready` label so other Collaborators know it can land as soon as the time
-ends. If instead you wish to land the PR yourself, indicate this intent by using
-the "assign yourself" button, to self-assign the PR.
+As soon as the pull request is ready to land, please do so. This allows other
+Collaborators to focus on other pull requests. If your pull request is not ready
+to land but is [author ready](#author-ready-pull-requests), add the
+`author ready` label. If you wish to land the pull request yourself, use the
+"assign yourself" link to self-assign it.
 
 ## Accepting Modifications
 
-All modifications to the Node.js code and documentation should be performed via
-GitHub pull requests, including modifications by Collaborators and TSC members.
-A pull request must be reviewed, and must also be tested with CI, before being
-landed into the codebase. There may be exceptions to the latter (the changed
-code cannot be tested with a CI or similar). If that is the case, please leave a
-comment that explains why the PR does not require a CI run.
+Contributors propose modifications to Node.js using GitHub pull requests. This
+includes modifications proposed by TSC members and other Collaborators. A pull
+request must pass code review and CI before landing into the codebase.
 
 ### Code Reviews
 
 At least two Collaborators must approve a pull request before the pull request
-lands. (One Collaborator approval is enough if the pull request has been open
-for more than 7 days.) Approving a pull request indicates that the Collaborator
-accepts responsibility for the change. Approval must be from Collaborators who
-are not authors of the change.
+lands. One Collaborator approval is enough if the pull request has been open
+for more than seven days.
+
+Approving a pull request indicates that the Collaborator accepts responsibility
+for the change.
+
+Approval must be from Collaborators who are not authors of the change.
 
 In some cases, it may be necessary to summon a GitHub team to a pull request for
 review by @-mention.
 See [Who to CC in the issue tracker](#who-to-cc-in-the-issue-tracker).
 
-If you are unsure about the modification and are not prepared to take
-full responsibility for the change, defer to another Collaborator.
-
 If you are the first Collaborator to approve a pull request that has no CI yet,
-please start one (see [testing and CI](#testing-and-ci) for further information
-on how to do that) and post the link to the CI in the PR. Please also start a
-new CI in case the PR creator pushed new code since the last CI run (due to
-e.g., an addressed review comment or a rebase).
-
-In case there are already enough approvals (`LGTM`), a CI run, and the PR is
-open longer than the minimum waiting time without any open comments, please do
-not (only) add another approval. Instead go ahead and land the PR after checking
-the CI outcome.
+please [start one](#testing-and-ci). Post the link to the CI in the PR. Please
+also start a new CI if the PR creator pushed new code since the last CI run.
 
 ### Consensus Seeking
 
@@ -154,8 +141,9 @@ the TSC meeting agenda.
 
 #### Helpful resources
 
-* How to respectfully and usefully review code, part [one](https://mtlynch.io/human-code-reviews-1/) and [two](https://mtlynch.io/human-code-reviews-2/)
-* [How to write a positive code review](https://css-tricks.com/code-review-etiquette/)
+* [How to Do Code Reviews Like a Human (Part One)](https://mtlynch.io/human-code-reviews-1/)
+* [How to Do Code Reviews Like a Human (Part Two)](https://mtlynch.io/human-code-reviews-2/)
+* [Code Review Etiquette](https://css-tricks.com/code-review-etiquette/)
 
 ### Waiting for Approvals
 
@@ -794,8 +782,8 @@ TSC for further discussion.
 
 #### How are LTS Branches Managed?
 
-There are multiple LTS branches, e.g. `v8.x` and `v6.x`. Each of these is paired
-with a staging branch: `v8.x-staging` and `v6.x-staging`.
+There are multiple LTS branches, e.g. `v10.x` and `v8.x`. Each of these is
+paired with a staging branch: `v10.x-staging` and `v8.x-staging`.
 
 As commits land on the master branch, they are cherry-picked back to each
 staging branch as appropriate. If the commit applies only to the LTS branch, the
@@ -804,9 +792,8 @@ pulled from the staging branch into the LTS branch only when a release is
 being prepared and may be pulled into the LTS branch in a different order
 than they were landed in staging.
 
-Any Collaborator may land commits into a staging branch, but only the release
-team should land commits into the LTS branch while preparing a new
-LTS release.
+Only the members of the @nodejs/backporters team should land commits onto
+LTS staging branches.
 
 #### How can I help?
 
@@ -817,14 +804,18 @@ on backporting, please see the [backporting guide][].
 
 Several LTS related issue and PR labels have been provided:
 
-* `lts-watch-v6.x` - tells the LTS WG that the issue/PR needs to be considered
-  for landing in the `v6.x-staging` branch.
-* `lts-watch-v4.x` - tells the LTS WG that the issue/PR needs to be considered
-  for landing in the `v4.x-staging` branch.
+* `lts-watch-v10.x` - tells the LTS WG that the issue/PR needs to be
+  considered for landing in the `v10.x-staging` branch.
+* `lts-watch-v8.x` - tells the LTS WG that the issue/PR needs to be
+  considered for landing in the `v8.x-staging` branch.
+* `lts-watch-v6.x` - tells the LTS WG that the issue/PR needs to be
+  considered for landing in the `v6.x-staging` branch.
+* `land-on-v10.x` - tells the release team that the commit should be landed
+  in a future v10.x release.
+* `land-on-v8.x` - tells the release team that the commit should be landed
+  in a future v8.x release.
 * `land-on-v6.x` - tells the release team that the commit should be landed
-  in a future v6.x release
-* `land-on-v4.x` - tells the release team that the commit should be landed
-  in a future v4.x release
+  in a future v6.x release.
 
 Any Collaborator can attach these labels to any PR/issue. As commits are
 landed into the staging branches, the `lts-watch-` label will be removed.

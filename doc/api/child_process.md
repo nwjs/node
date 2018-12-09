@@ -325,6 +325,9 @@ changes:
 * `args` {string[]} List of string arguments.
 * `options` {Object}
   * `cwd` {string} Current working directory of the child process.
+  * `detached` {boolean} Prepare child to run independently of its parent
+    process. Specific behavior depends on the platform, see
+    [`options.detached`][]).
   * `env` {Object} Environment key-value pairs.
   * `execPath` {string} Executable used to create the child process.
   * `execArgv` {string[]} List of string arguments passed to the executable.
@@ -617,8 +620,8 @@ pipes between the parent and child. The value is one of the following:
    `'ignore'` will cause Node.js to open `/dev/null` and attach it to the
    child's fd.
 4. `'inherit'` - Pass through the corresponding stdio stream to/from the
-   parent process.  In the first three positions, this is equivalent to
-   `process.stdin`, `process.stdout`, and `process.stderr`, respectively.  In
+   parent process. In the first three positions, this is equivalent to
+   `process.stdin`, `process.stdout`, and `process.stderr`, respectively. In
    any other position, equivalent to `'ignore'`.
 5. {Stream} object - Share a readable or writable stream that refers to a tty,
    file, socket, or a pipe with the child process. The stream's underlying
@@ -1433,13 +1436,6 @@ unavailable.
 [`ChildProcess`]: #child_process_child_process
 [`Error`]: errors.html#errors_class_error
 [`EventEmitter`]: events.html#events_class_eventemitter
-[`subprocess.connected`]: #child_process_subprocess_connected
-[`subprocess.disconnect()`]: #child_process_subprocess_disconnect
-[`subprocess.kill()`]: #child_process_subprocess_kill_signal
-[`subprocess.send()`]: #child_process_subprocess_send_message_sendhandle_options_callback
-[`subprocess.stderr`]: #child_process_subprocess_stderr
-[`subprocess.stdin`]: #child_process_subprocess_stdin
-[`subprocess.stdout`]: #child_process_subprocess_stdout
 [`child_process.exec()`]: #child_process_child_process_exec_command_options_callback
 [`child_process.execFile()`]: #child_process_child_process_execfile_file_args_options_callback
 [`child_process.execFileSync()`]: #child_process_child_process_execfilesync_file_args_options
@@ -1456,6 +1452,13 @@ unavailable.
 [`process.execPath`]: process.html#process_process_execpath
 [`process.send()`]: process.html#process_process_send_message_sendhandle_options_callback
 [`stdio`]: #child_process_options_stdio
+[`subprocess.connected`]: #child_process_subprocess_connected
+[`subprocess.disconnect()`]: #child_process_subprocess_disconnect
+[`subprocess.kill()`]: #child_process_subprocess_kill_signal
+[`subprocess.send()`]: #child_process_subprocess_send_message_sendhandle_options_callback
+[`subprocess.stderr`]: #child_process_subprocess_stderr
+[`subprocess.stdin`]: #child_process_subprocess_stdin
+[`subprocess.stdout`]: #child_process_subprocess_stdout
 [`util.promisify()`]: util.html#util_util_promisify_original
 [Default Windows Shell]: #child_process_default_windows_shell
 [Shell Requirements]: #child_process_shell_requirements

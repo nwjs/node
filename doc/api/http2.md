@@ -125,7 +125,7 @@ Every `Http2Session` instance is associated with exactly one [`net.Socket`][] or
 [`tls.TLSSocket`][] when it is created. When either the `Socket` or the
 `Http2Session` are destroyed, both will be destroyed.
 
-Because the of the specific serialization and processing requirements imposed
+Because of the specific serialization and processing requirements imposed
 by the HTTP/2 protocol, it is not recommended for user code to read data from
 or write data to a `Socket` instance bound to a `Http2Session`. Doing so can
 put the HTTP/2 session into an indeterminate state causing the session and
@@ -769,7 +769,7 @@ added: v10.12.0
 
 * `origins` {string[]}
 
-The `'origin'`  event is emitted whenever an `ORIGIN` frame is received by
+The `'origin'` event is emitted whenever an `ORIGIN` frame is received by
 the client. The event is emitted with an array of `origin` strings. The
 `http2session.originSet` will be updated to include the received
 origins.
@@ -1132,7 +1132,7 @@ added: v9.5.0
 
 * {HTTP/2 Headers Object}
 
-An object containing the outbound trailers sent for this this `HttpStream`.
+An object containing the outbound trailers sent for this `HttpStream`.
 
 #### http2stream.session
 <!-- YAML
@@ -1193,7 +1193,7 @@ added: v10.0.0
 
 Sends a trailing `HEADERS` frame to the connected HTTP/2 peer. This method
 will cause the `Http2Stream` to be immediately closed and must only be
-called after the `'wantTrailers'`  event has been emitted. When sending a
+called after the `'wantTrailers'` event has been emitted. When sending a
 request or sending a response, the `options.waitForTrailers` option must be set
 in order to keep the `Http2Stream` open after the final `DATA` frame so that
 trailers can be sent.
@@ -1729,7 +1729,7 @@ added: v8.4.0
 -->
 * `callback` {Function}
 
-Stops the server from accepting new connections.  See [`net.Server.close()`][].
+Stops the server from accepting new connections. See [`net.Server.close()`][].
 
 Note that this is not analogous to restricting new requests since HTTP/2
 connections are persistent. To achieve a similar graceful shutdown behavior,
@@ -1871,7 +1871,7 @@ added: v8.4.0
 -->
 * `callback` {Function}
 
-Stops the server from accepting new connections.  See [`tls.Server.close()`][].
+Stops the server from accepting new connections. See [`tls.Server.close()`][].
 
 Note that this is not analogous to restricting new requests since HTTP/2
 connections are persistent. To achieve a similar graceful shutdown behavior,
@@ -2297,7 +2297,7 @@ For incoming headers:
 `upgrade-insecure-requests`, `user-agent` or `x-content-type-options` are
 discarded.
 * `set-cookie` is always an array. Duplicates are added to the array.
-* `cookie`: the values are joined together with '; '.
+* For duplicate `cookie` headers, the values are joined together with '; '.
 * For all other headers, the values are joined together with ', '.
 
 ```js
@@ -2531,7 +2531,7 @@ const server = http2.createServer({ settings });
 
 Once the client receives the `SETTINGS` frame from the server indicating that
 the extended CONNECT may be used, it may send `CONNECT` requests that use the
-`':protocol'`  HTTP/2 pseudo-header:
+`':protocol'` HTTP/2 pseudo-header:
 
 ```js
 const http2 = require('http2');
@@ -2654,6 +2654,16 @@ added: v10.1.0
 The `request.aborted` property will be `true` if the request has
 been aborted.
 
+#### request.authority
+<!-- YAML
+added: v8.4.0
+-->
+
+* {string}
+
+The request authority pseudo header field. It can also be accessed via
+`req.headers[':authority']`.
+
 #### request.destroy([error])
 <!-- YAML
 added: v8.4.0
@@ -2761,6 +2771,16 @@ added: v8.4.0
 
 The raw request/response trailer keys and values exactly as they were
 received. Only populated at the `'end'` event.
+
+#### request.scheme
+<!-- YAML
+added: v8.4.0
+-->
+
+* {string}
+
+The request scheme pseudo header field indicating the scheme
+portion of the target URL.
 
 #### request.setTimeout(msecs, callback)
 <!-- YAML
@@ -3391,21 +3411,21 @@ following additional properties:
 * `type` {string} Either `'server'` or `'client'` to identify the type of
   `Http2Session`.
 
-[ALPN negotiation]: #http2_alpn_negotiation
 [ALPN Protocol ID]: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids
+[ALPN negotiation]: #http2_alpn_negotiation
 [Compatibility API]: #http2_compatibility_api
 [HTTP/1]: http.html
-[HTTP/2]: https://tools.ietf.org/html/rfc7540
-[HTTP/2 Unencrypted]: https://http2.github.io/faq/#does-http2-require-encryption
 [HTTP/2 Headers Object]: #http2_headers_object
 [HTTP/2 Settings Object]: #http2_settings_object
+[HTTP/2 Unencrypted]: https://http2.github.io/faq/#does-http2-require-encryption
+[HTTP/2]: https://tools.ietf.org/html/rfc7540
 [HTTPS]: https.html
 [Performance Observer]: perf_hooks.html
-[Readable Stream]: stream.html#stream_class_stream_readable
-[Stream]: stream.html#stream_stream
 [RFC 7838]: https://tools.ietf.org/html/rfc7838
 [RFC 8336]: https://tools.ietf.org/html/rfc8336
 [RFC 8441]: https://tools.ietf.org/html/rfc8441
+[Readable Stream]: stream.html#stream_class_stream_readable
+[Stream]: stream.html#stream_stream
 [Using `options.selectPadding()`]: #http2_using_options_selectpadding
 [`'checkContinue'`]: #http2_event_checkcontinue
 [`'request'`]: #http2_event_request
@@ -3418,16 +3438,16 @@ following additional properties:
 [`ServerHttp2Stream`]: #http2_class_serverhttp2stream
 [`TypeError`]: errors.html#errors_class_typeerror
 [`http2.SecureServer`]: #http2_class_http2secureserver
-[`http2.createSecureServer()`]: #http2_http2_createsecureserver_options_onrequesthandler
 [`http2.Server`]: #http2_class_http2server
+[`http2.createSecureServer()`]: #http2_http2_createsecureserver_options_onrequesthandler
 [`http2.createServer()`]: #http2_http2_createserver_options_onrequesthandler
 [`http2session.close()`]: #http2_http2session_close_callback
 [`http2stream.pushStream()`]: #http2_http2stream_pushstream_headers_options_callback
 [`net.Server.close()`]: net.html#net_server_close_callback
-[`net.Socket`]: net.html#net_class_net_socket
 [`net.Socket.bufferSize`]: net.html#net_socket_buffersize
 [`net.Socket.prototype.ref()`]: net.html#net_socket_ref
 [`net.Socket.prototype.unref()`]: net.html#net_socket_unref
+[`net.Socket`]: net.html#net_class_net_socket
 [`net.connect()`]: net.html#net_net_connect
 [`request.socket.getPeerCertificate()`]: tls.html#tls_tlssocket_getpeercertificate_detailed
 [`response.end()`]: #http2_response_end_data_encoding_callback

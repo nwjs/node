@@ -31,6 +31,8 @@
 namespace node {
 namespace contextify {
 
+using errors::TryCatchScope;
+
 using v8::Array;
 using v8::ArrayBuffer;
 using v8::ArrayBufferView;
@@ -63,7 +65,6 @@ using v8::ScriptCompiler;
 using v8::ScriptOrigin;
 using v8::String;
 using v8::Symbol;
-using v8::TryCatch;
 using v8::Uint32;
 using v8::UnboundScript;
 using v8::Value;
@@ -248,7 +249,7 @@ void ContextifyContext::MakeContext(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[4]->IsBoolean());
   options.allow_code_gen_wasm = args[4].As<Boolean>();
 
-  TryCatch try_catch(env->isolate());
+  TryCatchScope try_catch(env);
   ContextifyContext* context = new ContextifyContext(env, sandbox, options);
 
   if (try_catch.HasCaught()) {
@@ -710,7 +711,7 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
   if (source.GetCachedData() != nullptr)
     compile_options = ScriptCompiler::kConsumeCodeCache;
 
-  TryCatch try_catch(isolate);
+  TryCatchScope try_catch(env);
   Environment::ShouldNotAbortOnUncaughtScope no_abort_scope(env);
   Context::Scope scope(parsing_context);
 
@@ -870,7 +871,7 @@ bool ContextifyScript::EvalMachine(Environment* env,
         "Script methods can only be called on script instances.");
     return false;
   }
-  TryCatch try_catch(env->isolate());
+  TryCatchScope try_catch(env);
   ContextifyScript* wrapped_script;
   ASSIGN_OR_RETURN_UNWRAP(&wrapped_script, args.Holder(), false);
   Local<UnboundScript> unbound_script =
@@ -1019,7 +1020,7 @@ void ContextifyContext::CompileFunction(
     options = ScriptCompiler::kConsumeCodeCache;
   }
 
-  TryCatch try_catch(isolate);
+  TryCatchScope try_catch(env);
   Context::Scope scope(parsing_context);
 
   // Read context extensions from buffer
@@ -1081,7 +1082,8 @@ void ContextifyContext::CompileFunction(
 
 void Initialize(Local<Object> target,
                 Local<Value> unused,
-                Local<Context> context) {
+                Local<Context> context,
+                void* priv) {
   Environment* env = Environment::GetCurrent(context);
   ContextifyContext::Init(env, target);
   ContextifyScript::Init(env, target);

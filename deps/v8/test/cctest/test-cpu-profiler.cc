@@ -2545,6 +2545,21 @@ TEST(MultipleProfilers) {
   profiler2->StopProfiling("2");
 }
 
+int GetSourcePositionEntryCount(i::Isolate* isolate, const char* source) {
+  i::Handle<i::JSFunction> function = i::Handle<i::JSFunction>::cast(
+      v8::Utils::OpenHandle(*CompileRun(source)));
+  if (function->IsInterpreted()) return -1;
+  i::Handle<i::Code> code(function->code(), isolate);
+  i::SourcePositionTableIterator iterator(
+      ByteArray::cast(code->source_position_table()));
+  int count = 0;
+  while (!iterator.done()) {
+    count++;
+    iterator.Advance();
+  }
+  return count;
+}
+
 UNINITIALIZED_TEST(DetailedSourcePositionAPI) {
   i::FLAG_detailed_line_info = false;
   i::FLAG_allow_natives_syntax = true;

@@ -252,6 +252,10 @@ Listening on a file descriptor is not supported on Windows.
 #### server.listen(options[, callback])
 <!-- YAML
 added: v0.11.14
+changes:
+  - version: v11.4.0
+    pr-url: https://github.com/nodejs/node/pull/23798
+    description: The `ipv6Only` option is supported.
 -->
 
 * `options` {Object} Required. Supports the following properties:
@@ -266,6 +270,9 @@ added: v0.11.14
     for all users. **Default:** `false`
   * `writableAll` {boolean} For IPC servers makes the pipe writable
     for all users. **Default:** `false`
+  * `ipv6Only` {boolean} For TCP servers, setting `ipv6Only` to `true` will
+    disable dual-stack support, i.e., binding to host `::` won't make
+    `0.0.0.0` be bound. **Default:** `false`.
 * `callback` {Function} Common parameter of [`server.listen()`][]
   functions.
 * Returns: {net.Server}
@@ -1167,6 +1174,7 @@ Returns `true` if input is a version 6 IP address, otherwise returns `false`.
 [`net.createConnection(port, host)`]: #net_net_createconnection_port_host_connectlistener
 [`net.createServer()`]: #net_net_createserver_options_connectionlistener
 [`new net.Socket(options)`]: #net_new_net_socket_options
+[`readable.setEncoding()`]: stream.html#stream_readable_setencoding_encoding
 [`server.close()`]: #net_server_close_callback
 [`server.getConnections()`]: #net_server_getconnections_callback
 [`server.listen()`]: #net_server_listen
@@ -1186,7 +1194,6 @@ Returns `true` if input is a version 6 IP address, otherwise returns `false`.
 [`socket.setEncoding()`]: #net_socket_setencoding_encoding
 [`socket.setTimeout()`]: #net_socket_settimeout_timeout_callback
 [`socket.setTimeout(timeout)`]: #net_socket_settimeout_timeout_callback
-[`readable.setEncoding()`]: stream.html#stream_readable_setencoding_encoding
 [IPC]: #net_ipc_support
 [Identifying paths for IPC connections]: #net_identifying_paths_for_ipc_connections
 [Readable Stream]: stream.html#stream_class_stream_readable

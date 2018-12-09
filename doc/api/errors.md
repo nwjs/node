@@ -1655,6 +1655,17 @@ recommended to use 2048 bits or larger for stronger security.
 A TLS/SSL handshake timed out. In this case, the server must also abort the
 connection.
 
+<a id="ERR_TLS_INVALID_PROTOCOL_VERSION"></a>
+### ERR_TLS_INVALID_PROTOCOL_VERSION
+
+Valid TLS protocol versions are `'TLSv1'`, `'TLSv1.1'`, or `'TLSv1.2'`.
+
+<a id="ERR_TLS_PROTOCOL_VERSION_CONFLICT"></a>
+### ERR_TLS_PROTOCOL_VERSION_CONFLICT
+
+Attempting to set a TLS protocol `minVersion` or `maxVersion` conflicts with an
+attempt to set the `secureProtocol` explicitly. Use one mechanism or the other.
+
 <a id="ERR_TLS_RENEGOTIATE"></a>
 ### ERR_TLS_RENEGOTIATE
 
@@ -1869,9 +1880,15 @@ Creation of a [`zlib`][] object failed due to incorrect configuration.
 
 <a id="HPE_HEADER_OVERFLOW"></a>
 ### HPE_HEADER_OVERFLOW
+<!-- YAML
+changes:
+  - version: v11.4.0
+    pr-url: https://github.com/nodejs/node/commit/186035243fad247e3955f
+    description: Max header size in `http_parser` was set to 8KB.
+-->
 
 Too much HTTP header data was received. In order to protect against malicious or
-malconfigured clients, if more than 80KB of HTTP header data is received then
+malconfigured clients, if more than 8KB of HTTP header data is received then
 HTTP parsing will abort without a request or response object being created, and
 an `Error` with this code will be emitted.
 

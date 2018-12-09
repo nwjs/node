@@ -44,24 +44,26 @@ set configure_flags=
 set build_addons=
 set dll=
 set enable_static=
-set build_addons_napi=
+set build_js_native_api_tests=
+set build_node_api_tests=
 set test_node_inspect=
 set test_check_deopts=
 set js_test_suites=default
 set v8_test_options=
 set v8_build_options=
-set "common_test_suites=%js_test_suites% doctool addons addons-napi&set build_addons=1&set build_addons_napi=1"
+set "common_test_suites=%js_test_suites% doctool addons js-native-api node-api&set build_addons=1&set build_js_native_api_tests=1&set build_node_api_tests=1"
 set http2_debug=
 set nghttp2_debug=
 set link_module=
 set no_cctest=
+set cctest=
 set openssl_no_asm=
 set doc=
 
 :next-arg
 if "%1"=="" goto args-done
 if /i "%1"=="debug"         set config=Debug&goto arg-ok
-if /i "%1"=="release"       set config=Release&set ltcg=1&set "pch="&goto arg-ok
+if /i "%1"=="release"       set config=Release&set ltcg=1&set "pch="&set cctest=1&goto arg-ok
 if /i "%1"=="clean"         set target=Clean&goto arg-ok
 if /i "%1"=="ia32"          set target_arch=x86&goto arg-ok
 if /i "%1"=="x86"           set target_arch=x86&goto arg-ok
@@ -80,9 +82,11 @@ if /i "%1"=="licensertf"    set licensertf=1&goto arg-ok
 if /i "%1"=="test"          set test_args=%test_args% -J %common_test_suites%&set lint_cpp=1&set lint_js=1&set lint_md=1&goto arg-ok
 if /i "%1"=="test-ci"       set test_args=%test_args% %test_ci_args% -p tap --logfile test.tap %common_test_suites%&set cctest_args=%cctest_args% --gtest_output=tap:cctest.tap&goto arg-ok
 if /i "%1"=="build-addons"   set build_addons=1&goto arg-ok
-if /i "%1"=="build-addons-napi"   set build_addons_napi=1&goto arg-ok
+if /i "%1"=="build-js-native-api-tests"   set build_js_native_api_tests=1&goto arg-ok
+if /i "%1"=="build-node-api-tests"   set build_node_api_tests=1&goto arg-ok
 if /i "%1"=="test-addons"   set test_args=%test_args% addons&set build_addons=1&goto arg-ok
-if /i "%1"=="test-addons-napi"   set test_args=%test_args% addons-napi&set build_addons_napi=1&goto arg-ok
+if /i "%1"=="test-js-native-api"   set test_args=%test_args% js-native-api&set build_js_native_api_tests=1&goto arg-ok
+if /i "%1"=="test-node-api"   set test_args=%test_args% node-api&set build_node_api_tests=1&goto arg-ok
 if /i "%1"=="test-benchmark" set test_args=%test_args% benchmark&goto arg-ok
 if /i "%1"=="test-simple"   set test_args=%test_args% sequential parallel -J&goto arg-ok
 if /i "%1"=="test-message"  set test_args=%test_args% message&goto arg-ok
@@ -125,6 +129,7 @@ if /i "%1"=="no-NODE-OPTIONS"	set no_NODE_OPTIONS=1&goto arg-ok
 if /i "%1"=="debug-nghttp2" set debug_nghttp2=1&goto arg-ok
 if /i "%1"=="link-module"   set "link_module= --link-module=%2%link_module%"&goto arg-ok-2
 if /i "%1"=="no-cctest"     set no_cctest=1&goto arg-ok
+if /i "%1"=="cctest"        set cctest=1&goto arg-ok
 if /i "%1"=="openssl-no-asm"   set openssl_no_asm=1&goto arg-ok
 if /i "%1"=="doc"           set doc=1&goto arg-ok
 
@@ -151,6 +156,7 @@ if defined build_release (
   set download_arg="--download=all"
   set i18n_arg=small-icu
   set projgen=1
+  set cctest=1
   set ltcg=1
   set "pch="
 )
@@ -198,7 +204,7 @@ call :getnodeversion || exit /b 1
 if defined TAG set configure_flags=%configure_flags% --tag=%TAG%
 
 if not "%target%"=="Clean" goto skip-clean
-rmdir /Q /S "%~dp0%config%\node-v%FULLVERSION%-win-%target_arch%" > nul 2> nul
+rmdir /Q /S "%~dp0%config%\%TARGET_NAME%" > nul 2> nul
 :skip-clean
 
 if defined noprojgen if defined nobuild if not defined sign if not defined msi goto licensertf
@@ -301,7 +307,12 @@ set "msbcpu=/m:2"
 if "%NUMBER_OF_PROCESSORS%"=="1" set "msbcpu=/m:1"
 set "msbplatform=Win32"
 if "%target_arch%"=="x64" set "msbplatform=x64"
-if "%target%"=="Build" if defined no_cctest set target=node
+if "%target%"=="Build" (
+  if defined no_cctest set target=rename_node_bin_win
+  if "%test_args%"=="" set target=rename_node_bin_win
+  if defined cctest set target="Build"
+)
+if "%target%"=="rename_node_bin_win" if exist "%config%\cctest.exe" del "%config%\cctest.exe"
 msbuild node.sln %msbcpu% /t:%target% /p:Configuration=%config% /p:Platform=%msbplatform% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 if errorlevel 1 (
   if not defined project_generated echo Building Node with reused solution failed. To regenerate project files use "vcbuild projgen"
@@ -328,32 +339,34 @@ if not defined stage_package goto install-doctools
 
 echo Creating package...
 cd Release
-rmdir /S /Q node-v%FULLVERSION%-win-%target_arch% > nul 2> nul
-mkdir node-v%FULLVERSION%-win-%target_arch% > nul 2> nul
-mkdir node-v%FULLVERSION%-win-%target_arch%\node_modules > nul 2>nul
+rmdir /S /Q %TARGET_NAME% > nul 2> nul
+mkdir %TARGET_NAME% > nul 2> nul
+mkdir %TARGET_NAME%\node_modules > nul 2>nul
 
-copy /Y node.exe node-v%FULLVERSION%-win-%target_arch%\ > nul
+copy /Y node.exe %TARGET_NAME%\ > nul
 if errorlevel 1 echo Cannot copy node.exe && goto package_error
-copy /Y ..\LICENSE node-v%FULLVERSION%-win-%target_arch%\ > nul
+copy /Y ..\LICENSE %TARGET_NAME%\ > nul
 if errorlevel 1 echo Cannot copy LICENSE && goto package_error
-copy /Y ..\README.md node-v%FULLVERSION%-win-%target_arch%\ > nul
+copy /Y ..\README.md %TARGET_NAME%\ > nul
 if errorlevel 1 echo Cannot copy README.md && goto package_error
-copy /Y ..\CHANGELOG.md node-v%FULLVERSION%-win-%target_arch%\ > nul
+copy /Y ..\CHANGELOG.md %TARGET_NAME%\ > nul
 if errorlevel 1 echo Cannot copy CHANGELOG.md && goto package_error
-robocopy ..\deps\npm node-v%FULLVERSION%-win-%target_arch%\node_modules\npm /e /xd test > nul
+robocopy ..\deps\npm %TARGET_NAME%\node_modules\npm /e /xd test > nul
 if errorlevel 8 echo Cannot copy npm package && goto package_error
-copy /Y ..\deps\npm\bin\npm node-v%FULLVERSION%-win-%target_arch%\ > nul
+copy /Y ..\deps\npm\bin\npm %TARGET_NAME%\ > nul
 if errorlevel 1 echo Cannot copy npm && goto package_error
-copy /Y ..\deps\npm\bin\npm.cmd node-v%FULLVERSION%-win-%target_arch%\ > nul
+copy /Y ..\deps\npm\bin\npm.cmd %TARGET_NAME%\ > nul
 if errorlevel 1 echo Cannot copy npm.cmd && goto package_error
-copy /Y ..\deps\npm\bin\npx node-v%FULLVERSION%-win-%target_arch%\ > nul
+copy /Y ..\deps\npm\bin\npx %TARGET_NAME%\ > nul
 if errorlevel 1 echo Cannot copy npx && goto package_error
-copy /Y ..\deps\npm\bin\npx.cmd node-v%FULLVERSION%-win-%target_arch%\ > nul
+copy /Y ..\deps\npm\bin\npx.cmd %TARGET_NAME%\ > nul
 if errorlevel 1 echo Cannot copy npx.cmd && goto package_error
-copy /Y ..\tools\msvs\nodevars.bat node-v%FULLVERSION%-win-%target_arch%\ > nul
+copy /Y ..\tools\msvs\nodevars.bat %TARGET_NAME%\ > nul
 if errorlevel 1 echo Cannot copy nodevars.bat && goto package_error
+copy /Y ..\tools\msvs\install_tools\*.* %TARGET_NAME%\ > nul
+if errorlevel 1 echo Cannot copy install_tools scripts && goto package_error
 if not defined noetw (
-    copy /Y ..\src\res\node_etw_provider.man node-v%FULLVERSION%-win-%target_arch%\ > nul
+    copy /Y ..\src\res\node_etw_provider.man %TARGET_NAME%\ > nul
     if errorlevel 1 echo Cannot copy node_etw_provider.man && goto package_error
 )
 cd ..
@@ -361,15 +374,15 @@ cd ..
 :package
 if not defined package goto msi
 cd Release
-echo Creating node-v%FULLVERSION%-win-%target_arch%.7z
-del node-v%FULLVERSION%-win-%target_arch%.7z > nul 2> nul
-7z a -r -mx9 -t7z node-v%FULLVERSION%-win-%target_arch%.7z node-v%FULLVERSION%-win-%target_arch% > nul
-if errorlevel 1 echo Cannot create node-v%FULLVERSION%-win-%target_arch%.7z && goto package_error
+echo Creating %TARGET_NAME%.7z
+del %TARGET_NAME%.7z > nul 2> nul
+7z a -r -mx9 -t7z %TARGET_NAME%.7z %TARGET_NAME% > nul
+if errorlevel 1 echo Cannot create %TARGET_NAME%.7z && goto package_error
 
-echo Creating node-v%FULLVERSION%-win-%target_arch%.zip
-del node-v%FULLVERSION%-win-%target_arch%.zip > nul 2> nul
-7z a -r -mx9 -tzip node-v%FULLVERSION%-win-%target_arch%.zip node-v%FULLVERSION%-win-%target_arch% > nul
-if errorlevel 1 echo Cannot create node-v%FULLVERSION%-win-%target_arch%.zip && goto package_error
+echo Creating %TARGET_NAME%.zip
+del %TARGET_NAME%.zip > nul 2> nul
+7z a -r -mx9 -tzip %TARGET_NAME%.zip %TARGET_NAME% > nul
+if errorlevel 1 echo Cannot create %TARGET_NAME%.zip && goto package_error
 
 echo Creating node_pdb.7z
 del node_pdb.7z > nul 2> nul
@@ -422,13 +435,13 @@ scp -F %SSHCONFIG% Release\node_pdb.zip %STAGINGSERVER%:nodejs/%DISTTYPEDIR%/v%F
 if errorlevel 1 goto exit
 scp -F %SSHCONFIG% Release\node_pdb.7z %STAGINGSERVER%:nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node_pdb.7z
 if errorlevel 1 goto exit
-scp -F %SSHCONFIG% Release\node-v%FULLVERSION%-win-%target_arch%.7z %STAGINGSERVER%:nodejs/%DISTTYPEDIR%/v%FULLVERSION%/node-v%FULLVERSION%-win-%target_arch%.7z
+scp -F %SSHCONFIG% Release\%TARGET_NAME%.7z %STAGINGSERVER%:nodejs/%DISTTYPEDIR%/v%FULLVERSION%/%TARGET_NAME%.7z
 if errorlevel 1 goto exit
-scp -F %SSHCONFIG% Release\node-v%FULLVERSION%-win-%target_arch%.zip %STAGINGSERVER%:nodejs/%DISTTYPEDIR%/v%FULLVERSION%/node-v%FULLVERSION%-win-%target_arch%.zip
+scp -F %SSHCONFIG% Release\%TARGET_NAME%.zip %STAGINGSERVER%:nodejs/%DISTTYPEDIR%/v%FULLVERSION%/%TARGET_NAME%.zip
 if errorlevel 1 goto exit
 scp -F %SSHCONFIG% node-v%FULLVERSION%-%target_arch%.msi %STAGINGSERVER%:nodejs/%DISTTYPEDIR%/v%FULLVERSION%/
 if errorlevel 1 goto exit
-ssh -F %SSHCONFIG% %STAGINGSERVER% "touch nodejs/%DISTTYPEDIR%/v%FULLVERSION%/node-v%FULLVERSION%-%target_arch%.msi.done nodejs/%DISTTYPEDIR%/v%FULLVERSION%/node-v%FULLVERSION%-win-%target_arch%.zip.done nodejs/%DISTTYPEDIR%/v%FULLVERSION%/node-v%FULLVERSION%-win-%target_arch%.7z.done nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%.done && chmod -R ug=rw-x+X,o=r+X nodejs/%DISTTYPEDIR%/v%FULLVERSION%/node-v%FULLVERSION%-%target_arch%.* nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%*"
+ssh -F %SSHCONFIG% %STAGINGSERVER% "touch nodejs/%DISTTYPEDIR%/v%FULLVERSION%/node-v%FULLVERSION%-%target_arch%.msi.done nodejs/%DISTTYPEDIR%/v%FULLVERSION%/%TARGET_NAME%.zip.done nodejs/%DISTTYPEDIR%/v%FULLVERSION%/%TARGET_NAME%.7z.done nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%.done && chmod -R ug=rw-x+X,o=r+X nodejs/%DISTTYPEDIR%/v%FULLVERSION%/node-v%FULLVERSION%-%target_arch%.* nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%*"
 if errorlevel 1 goto exit
 
 
@@ -467,10 +480,10 @@ for %%F in (%config%\doc\api\*.md) do (
 :run
 @rem Run tests if requested.
 
-if not defined build_addons goto build-addons-napi
+if not defined build_addons goto build-js-native-api-tests
 if not exist "%node_exe%" (
   echo Failed to find node.exe
-  goto build-addons-napi
+  goto build-js-native-api-tests
 )
 echo Building addons
 :: clear
@@ -487,21 +500,40 @@ set npm_config_nodedir=%~dp0
 if errorlevel 1 exit /b 1
 endlocal
 
-:build-addons-napi
-if not defined build_addons_napi goto run-tests
+:build-js-native-api-tests
+if not defined build_js_native_api_tests goto build-node-api-tests
+if not exist "%node_exe%" (
+  echo Failed to find node.exe
+  goto build-node-api-tests
+)
+echo Building js-native-api
+:: clear
+for /d %%F in (test\js-native-api\??_*) do (
+  rd /s /q %%F
+)
+:: building js-native-api
+setlocal
+set npm_config_nodedir=%~dp0
+"%node_exe%" "%~dp0tools\build-addons.js" "%~dp0deps\npm\node_modules\node-gyp\bin\node-gyp.js" "%~dp0test\js-native-api"
+if errorlevel 1 exit /b 1
+endlocal
+goto build-node-api-tests
+
+:build-node-api-tests
+if not defined build_node_api_tests goto run-tests
 if not exist "%node_exe%" (
   echo Failed to find node.exe
   goto run-tests
 )
-echo Building addons-napi
+echo Building node-api
 :: clear
-for /d %%F in (test\addons-napi\??_*) do (
+for /d %%F in (test\node-api\??_*) do (
   rd /s /q %%F
 )
-:: building addons-napi
+:: building node-api
 setlocal
 set npm_config_nodedir=%~dp0
-"%node_exe%" "%~dp0tools\build-addons.js" "%~dp0deps\npm\node_modules\node-gyp\bin\node-gyp.js" "%~dp0test\addons-napi"
+"%node_exe%" "%~dp0tools\build-addons.js" "%~dp0deps\npm\node_modules\node-gyp\bin\node-gyp.js" "%~dp0test\node-api"
 if errorlevel 1 exit /b 1
 endlocal
 goto run-tests
@@ -533,7 +565,7 @@ if "%test_args%"=="" goto test-v8
 if "%config%"=="Debug" set test_args=--mode=debug %test_args%
 if "%config%"=="Release" set test_args=--mode=release %test_args%
 if defined no_cctest echo Skipping cctest because no-cctest was specified && goto run-test-py
-if not exist %config%\cctest.exe goto run-test-py
+if not exist "%config%\cctest.exe" echo cctest.exe not found. Run "vcbuild test" or "vcbuild cctest" to build it. && goto run-test-py
 echo running 'cctest %cctest_args%'
 "%config%\cctest" %cctest_args%
 :run-test-py
@@ -549,7 +581,7 @@ goto lint-cpp
 
 :lint-cpp
 if not defined lint_cpp goto lint-js
-call :run-lint-cpp src\*.c src\*.cc src\*.h test\addons\*.cc test\addons\*.h test\addons-napi\*.cc test\addons-napi\*.h test\cctest\*.cc test\cctest\*.h tools\icu\*.cc tools\icu\*.h
+call :run-lint-cpp src\*.c src\*.cc src\*.h test\addons\*.cc test\addons\*.h test\js-native-api\*.cc test\js-native-api\*.cc test\js-native-api\*.h test\node-api\*.cc test\node-api\*.cc test\node-api\*.h test\cctest\*.cc test\cctest\*.h tools\icu\*.cc tools\icu\*.h
 python tools/check-imports.py
 goto lint-js
 
@@ -586,7 +618,10 @@ if %errorlevel% equ 0 goto exit
 echo %1 | findstr /r /c:"test\\addons\\[0-9].*_.*\.cc" > nul 2>&1
 if %errorlevel% equ 0 goto exit
 
-echo %1 | findstr /c:"test\addons-napi\common.h" > nul 2>&1
+echo %1 | findstr /c:"test\js-native-api\common.h" > nul 2>&1
+if %errorlevel% equ 0 goto exit
+
+echo %1 | findstr /c:"test\node-api\common.h" > nul 2>&1
 if %errorlevel% equ 0 goto exit
 
 set "localcppfilelist=%localcppfilelist% %1"
@@ -635,7 +670,7 @@ del .used_configure_flags
 goto exit
 
 :help
-echo vcbuild.bat [debug/release] [msi] [doc] [test/test-ci/test-all/test-addons/test-addons-napi/test-benchmark/test-internet/test-pummel/test-simple/test-message/test-tick-processor/test-known-issues/test-node-inspect/test-check-deopts/test-npm/test-async-hooks/test-v8/test-v8-intl/test-v8-benchmarks/test-v8-all] [ignore-flaky] [static/dll] [noprojgen] [projgen] [small-icu/full-icu/without-intl] [nobuild] [nosnapshot] [noetw] [ltcg] [nopch] [licensetf] [sign] [ia32/x86/x64] [vs2017] [download-all] [enable-vtune] [lint/lint-ci/lint-js/lint-js-ci/lint-md] [lint-md-build] [package] [build-release] [upload] [no-NODE-OPTIONS] [link-module path-to-module] [debug-http2] [debug-nghttp2] [clean] [no-cctest] [openssl-no-asm]
+echo vcbuild.bat [debug/release] [msi] [doc] [test/test-ci/test-all/test-addons/test-js-native-api/test-node-api/test-benchmark/test-internet/test-pummel/test-simple/test-message/test-tick-processor/test-known-issues/test-node-inspect/test-check-deopts/test-npm/test-async-hooks/test-v8/test-v8-intl/test-v8-benchmarks/test-v8-all] [ignore-flaky] [static/dll] [noprojgen] [projgen] [small-icu/full-icu/without-intl] [nobuild] [nosnapshot] [noetw] [ltcg] [nopch] [licensetf] [sign] [ia32/x86/x64] [vs2017] [download-all] [enable-vtune] [lint/lint-ci/lint-js/lint-js-ci/lint-md] [lint-md-build] [package] [build-release] [upload] [no-NODE-OPTIONS] [link-module path-to-module] [debug-http2] [debug-nghttp2] [clean] [cctest] [no-cctest] [openssl-no-asm]
 echo Examples:
 echo   vcbuild.bat                          : builds release build
 echo   vcbuild.bat debug                    : builds debug build
@@ -700,4 +735,5 @@ set FULLVERSION=%NODE_VERSION%-%TAG%
 
 :distexit
 if not defined DISTTYPEDIR set DISTTYPEDIR=%DISTTYPE%
+set TARGET_NAME=node-v%FULLVERSION%-win-%target_arch%
 goto :EOF

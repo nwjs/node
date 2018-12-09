@@ -52,6 +52,15 @@ static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
                                  | XN_FLAG_FN_SN;
 
 namespace node {
+namespace Buffer {
+// OpenSSL uses `unsigned char*` for raw data, make this easier for us.
+v8::MaybeLocal<v8::Object> New(Environment* env, unsigned char* udata,
+                               size_t length) {
+  char* data = reinterpret_cast<char*>(udata);
+  return Buffer::New(env, data, length);
+}
+}  // namespace Buffer
+
 namespace crypto {
 
 using v8::Array;
@@ -396,11 +405,15 @@ void SecureContext::Init(const FunctionCallbackInfo<Value>& args) {
   ASSIGN_OR_RETURN_UNWRAP(&sc, args.Holder());
   Environment* env = sc->env();
 
-  int min_version = 0;
-  int max_version = 0;
+  CHECK_EQ(args.Length(), 3);
+  CHECK(args[1]->IsInt32());
+  CHECK(args[2]->IsInt32());
+
+  int min_version = args[1].As<Int32>()->Value();
+  int max_version = args[2].As<Int32>()->Value();
   const SSL_METHOD* method = TLS_method();
 
-  if (args.Length() == 1 && args[0]->IsString()) {
+  if (args[0]->IsString()) {
     const node::Utf8Value sslmethod(env->isolate(), args[0]);
 
     // Note that SSLv2 and SSLv3 are disallowed but SSLv23_method and friends
@@ -425,6 +438,9 @@ void SecureContext::Init(const FunctionCallbackInfo<Value>& args) {
       method = TLS_server_method();
     } else if (strcmp(*sslmethod, "SSLv23_client_method") == 0) {
       method = TLS_client_method();
+    } else if (strcmp(*sslmethod, "TLS_method") == 0) {
+      min_version = 0;
+      max_version = 0;
     } else if (strcmp(*sslmethod, "TLSv1_method") == 0) {
       min_version = TLS1_VERSION;
       max_version = TLS1_VERSION;
@@ -1629,8 +1645,17 @@ static Local<Object> X509ToObject(Environment* env, X509* cert) {
 
   EVPKeyPointer pkey(X509_get_pubkey(cert));
   RSAPointer rsa;
-  if (pkey)
-    rsa.reset(EVP_PKEY_get1_RSA(pkey.get()));
+  ECPointer ec;
+  if (pkey) {
+    switch (EVP_PKEY_id(pkey.get())) {
+      case EVP_PKEY_RSA:
+        rsa.reset(EVP_PKEY_get1_RSA(pkey.get()));
+        break;
+      case EVP_PKEY_EC:
+        ec.reset(EVP_PKEY_get1_EC_KEY(pkey.get()));
+        break;
+    }
+  }
 
   if (rsa) {
     const BIGNUM* n;
@@ -1643,6 +1668,10 @@ static Local<Object> X509ToObject(Environment* env, X509* cert) {
                                   NewStringType::kNormal,
                                   mem->length).ToLocalChecked()).FromJust();
     USE(BIO_reset(bio.get()));
+
+    int bits = BN_num_bits(n);
+    info->Set(context, env->bits_string(),
+              Integer::New(env->isolate(), bits)).FromJust();
 
     uint64_t exponent_word = static_cast<uint64_t>(BN_get_word(e));
     uint32_t lo = static_cast<uint32_t>(exponent_word);
@@ -1666,10 +1695,53 @@ static Local<Object> X509ToObject(Environment* env, X509* cert) {
         reinterpret_cast<unsigned char*>(Buffer::Data(pubbuff));
     i2d_RSA_PUBKEY(rsa.get(), &pubserialized);
     info->Set(env->context(), env->pubkey_string(), pubbuff).FromJust();
+  } else if (ec) {
+    const EC_GROUP* group = EC_KEY_get0_group(ec.get());
+    if (group != nullptr) {
+      int bits = EC_GROUP_order_bits(group);
+      if (bits > 0) {
+        info->Set(context, env->bits_string(),
+                  Integer::New(env->isolate(), bits)).FromJust();
+      }
+    }
+
+    unsigned char* pub = nullptr;
+    size_t publen = EC_KEY_key2buf(ec.get(), EC_KEY_get_conv_form(ec.get()),
+                                   &pub, nullptr);
+    if (publen > 0) {
+      Local<Object> buf = Buffer::New(env, pub, publen).ToLocalChecked();
+      // Ownership of pub pointer accepted by Buffer.
+      pub = nullptr;
+      info->Set(context, env->pubkey_string(), buf).FromJust();
+    } else {
+      CHECK_NULL(pub);
+    }
+
+    if (EC_GROUP_get_asn1_flag(group) != 0) {
+      // Curve is well-known, get its OID and NIST nick-name (if it has one).
+
+      int nid = EC_GROUP_get_curve_name(group);
+      if (nid != 0) {
+        if (const char* sn = OBJ_nid2sn(nid)) {
+          info->Set(context, env->asn1curve_string(),
+                    OneByteString(env->isolate(), sn)).FromJust();
+        }
+      }
+      if (nid != 0) {
+        if (const char* nist = EC_curve_nid2nist(nid)) {
+          info->Set(context, env->nistcurve_string(),
+                    OneByteString(env->isolate(), nist)).FromJust();
+        }
+      }
+    } else {
+      // Unnamed curves can be described by their mathematical properties,
+      // but aren't used much (at all?) with X.509/TLS. Support later if needed.
+    }
   }
 
   pkey.reset();
   rsa.reset();
+  ec.reset();
 
   ASN1_TIME_print(bio.get(), X509_get_notBefore(cert));
   BIO_get_mem_ptr(bio.get(), &mem);
@@ -3201,7 +3273,7 @@ void CipherBase::Final(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-void Hmac::Initialize(Environment* env, v8::Local<Object> target) {
+void Hmac::Initialize(Environment* env, Local<Object> target) {
   Local<FunctionTemplate> t = env->NewFunctionTemplate(New);
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -3323,7 +3395,7 @@ void Hmac::HmacDigest(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-void Hash::Initialize(Environment* env, v8::Local<Object> target) {
+void Hash::Initialize(Environment* env, Local<Object> target) {
   Local<FunctionTemplate> t = env->NewFunctionTemplate(New);
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -3518,7 +3590,7 @@ static bool ApplyRSAOptions(const EVPKeyPointer& pkey,
 
 
 
-void Sign::Initialize(Environment* env, v8::Local<Object> target) {
+void Sign::Initialize(Environment* env, Local<Object> target) {
   Local<FunctionTemplate> t = env->NewFunctionTemplate(New);
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -3750,7 +3822,7 @@ static ParsePublicKeyResult ParsePublicKey(EVPKeyPointer* pkey,
       });
 }
 
-void Verify::Initialize(Environment* env, v8::Local<Object> target) {
+void Verify::Initialize(Environment* env, Local<Object> target) {
   Local<FunctionTemplate> t = env->NewFunctionTemplate(New);
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -3969,7 +4041,7 @@ void DiffieHellman::Initialize(Environment* env, Local<Object> target) {
     Local<FunctionTemplate> t = env->NewFunctionTemplate(callback);
 
     const PropertyAttribute attributes =
-        static_cast<PropertyAttribute>(v8::ReadOnly | v8::DontDelete);
+        static_cast<PropertyAttribute>(ReadOnly | DontDelete);
 
     t->InstanceTemplate()->SetInternalFieldCount(1);
 
@@ -4121,9 +4193,11 @@ void DiffieHellman::GenerateKeys(const FunctionCallbackInfo<Value>& args) {
 
   const BIGNUM* pub_key;
   DH_get0_key(diffieHellman->dh_.get(), &pub_key, nullptr);
-  size_t size = BN_num_bytes(pub_key);
+  const int size = BN_num_bytes(pub_key);
+  CHECK_GE(size, 0);
   char* data = Malloc(size);
-  BN_bn2bin(pub_key, reinterpret_cast<unsigned char*>(data));
+  CHECK_EQ(size,
+           BN_bn2binpad(pub_key, reinterpret_cast<unsigned char*>(data), size));
   args.GetReturnValue().Set(Buffer::New(env, data, size).ToLocalChecked());
 }
 
@@ -4139,9 +4213,11 @@ void DiffieHellman::GetField(const FunctionCallbackInfo<Value>& args,
   const BIGNUM* num = get_field(dh->dh_.get());
   if (num == nullptr) return env->ThrowError(err_if_null);
 
-  size_t size = BN_num_bytes(num);
+  const int size = BN_num_bytes(num);
+  CHECK_GE(size, 0);
   char* data = Malloc(size);
-  BN_bn2bin(num, reinterpret_cast<unsigned char*>(data));
+  CHECK_EQ(size,
+           BN_bn2binpad(num, reinterpret_cast<unsigned char*>(data), size));
   args.GetReturnValue().Set(Buffer::New(env, data, size).ToLocalChecked());
 }
 
@@ -4247,7 +4323,7 @@ void DiffieHellman::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
       Buffer::New(env->isolate(), data.release(), data.size).ToLocalChecked());
 }
 
-void DiffieHellman::SetKey(const v8::FunctionCallbackInfo<Value>& args,
+void DiffieHellman::SetKey(const FunctionCallbackInfo<Value>& args,
                            int (*set_field)(DH*, BIGNUM*), const char* what) {
   Environment* env = Environment::GetCurrent(args);
 
@@ -4477,13 +4553,9 @@ void ECDH::GetPrivateKey(const FunctionCallbackInfo<Value>& args) {
   if (b == nullptr)
     return env->ThrowError("Failed to get ECDH private key");
 
-  int size = BN_num_bytes(b);
+  const int size = BN_num_bytes(b);
   unsigned char* out = node::Malloc<unsigned char>(size);
-
-  if (size != BN_bn2bin(b, out)) {
-    free(out);
-    return env->ThrowError("Failed to convert ECDH private key to Buffer");
-  }
+  CHECK_EQ(size, BN_bn2binpad(b, out, size));
 
   Local<Object> buf =
       Buffer::New(env, reinterpret_cast<char*>(out), size).ToLocalChecked();

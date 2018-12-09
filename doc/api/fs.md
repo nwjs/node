@@ -1486,7 +1486,7 @@ closing naturally.
 
 ```js
 const fs = require('fs');
-// Create a stream from some character  device.
+// Create a stream from some character device.
 const stream = fs.createReadStream('/dev/input/event0');
 setTimeout(() => {
   stream.close(); // This may not close the stream.
@@ -3528,6 +3528,13 @@ On Linux, positional writes don't work when the file is opened in append mode.
 The kernel ignores the position argument and always appends the data to
 the end of the file.
 
+On Windows, if the file descriptor is connected to the console (e.g. `fd == 1`
+or `stdout`) a string containing non-ASCII characters will not be rendered
+properly by default, regardless of the encoding used.
+It is possible to configure the console to render UTF-8 properly by changing the
+active codepage with the `chcp 65001` command. See the [chcp][] docs for more
+details.
+
 ## fs.writeFile(file, data[, options], callback)
 <!-- YAML
 added: v0.1.29
@@ -3959,6 +3966,37 @@ an integer specifying the number of bytes to write.
 `position` refers to the offset from the beginning of the file where this data
 should be written. If `typeof position !== 'number'`, the data will be written
 at the current position. See pwrite(2).
+
+It is unsafe to use `filehandle.write()` multiple times on the same file
+without waiting for the `Promise` to be resolved (or rejected). For this
+scenario, [`fs.createWriteStream()`][] is strongly recommended.
+
+On Linux, positional writes do not work when the file is opened in append mode.
+The kernel ignores the position argument and always appends the data to
+the end of the file.
+
+#### filehandle.write(string[, position[, encoding]])
+<!-- YAML
+added: v10.0.0
+-->
+
+* `string` {string}
+* `position` {integer}
+* `encoding` {string} **Default:** `'utf8'`
+* Returns: {Promise}
+
+Write `string` to the file. If `string` is not a string, then
+the value will be coerced to one.
+
+The `Promise` is resolved with an object containing a `bytesWritten` property
+identifying the number of bytes written, and a `buffer` property containing
+a reference to the `string` written.
+
+`position` refers to the offset from the beginning of the file where this data
+should be written. If the type of `position` is not a `number` the data
+will be written at the current position. See pwrite(2).
+
+`encoding` is the expected string encoding.
 
 It is unsafe to use `filehandle.write()` multiple times on the same file
 without waiting for the `Promise` to be resolved (or rejected). For this
@@ -4610,7 +4648,7 @@ The following constants are meant for use with `fs.open()`.
   <td><code>O_NOATIME</code></td>
     <td>Flag indicating reading accesses to the file system will no longer
     result in an update to the <code>atime</code> information associated with
-    the file.  This flag is available on Linux operating systems only.</td>
+    the file. This flag is available on Linux operating systems only.</td>
   </tr>
   <tr>
     <td><code>O_NOFOLLOW</code></td>
@@ -4839,13 +4877,13 @@ the file contents.
 [`AHAFS`]: https://www.ibm.com/developerworks/aix/library/au-aix_event_infrastructure/
 [`Buffer.byteLength`]: buffer.html#buffer_class_method_buffer_bytelength_string_encoding
 [`Buffer`]: buffer.html#buffer_buffer
+[`EventEmitter`]: events.html
 [`FSEvents`]: https://developer.apple.com/documentation/coreservices/file_system_events
 [`ReadDirectoryChangesW`]: https://docs.microsoft.com/en-us/windows/desktop/api/winbase/nf-winbase-readdirectorychangesw
 [`ReadStream`]: #fs_class_fs_readstream
 [`URL`]: url.html#url_the_whatwg_url_api
 [`UV_THREADPOOL_SIZE`]: cli.html#cli_uv_threadpool_size_size
 [`WriteStream`]: #fs_class_fs_writestream
-[`EventEmitter`]: events.html
 [`event ports`]: http://illumos.org/man/port_create
 [`fs.Dirent`]: #fs_class_fs_dirent
 [`fs.FSWatcher`]: #fs_class_fs_fswatcher
@@ -4864,10 +4902,10 @@ the file contents.
 [`fs.mkdtemp()`]: #fs_fs_mkdtemp_prefix_options_callback
 [`fs.open()`]: #fs_fs_open_path_flags_mode_callback
 [`fs.read()`]: #fs_fs_read_fd_buffer_offset_length_position_callback
-[`fs.readdir()`]: #fs_fs_readdir_path_options_callback
-[`fs.readdirSync()`]: #fs_fs_readdirsync_path_options
 [`fs.readFile()`]: #fs_fs_readfile_path_options_callback
 [`fs.readFileSync()`]: #fs_fs_readfilesync_path_options
+[`fs.readdir()`]: #fs_fs_readdir_path_options_callback
+[`fs.readdirSync()`]: #fs_fs_readdirsync_path_options
 [`fs.realpath()`]: #fs_fs_realpath_path_options_callback
 [`fs.rmdir()`]: #fs_fs_rmdir_path_callback
 [`fs.stat()`]: #fs_fs_stat_path_options_callback
@@ -4885,13 +4923,14 @@ the file contents.
 [Caveats]: #fs_caveats
 [Common System Errors]: errors.html#errors_common_system_errors
 [FS Constants]: #fs_fs_constants_1
+[File Access Constants]: #fs_file_access_constants
 [MDN-Date]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date
 [MDN-Number]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Number_type
 [MSDN-Rel-Path]: https://docs.microsoft.com/en-us/windows/desktop/FileIO/naming-a-file#fully-qualified-vs-relative-paths
+[MSDN-Using-Streams]: https://docs.microsoft.com/en-us/windows/desktop/FileIO/using-streams
+[Naming Files, Paths, and Namespaces]: https://docs.microsoft.com/en-us/windows/desktop/FileIO/naming-a-file
 [Readable Streams]: stream.html#stream_class_stream_readable
 [Writable Stream]: stream.html#stream_class_stream_writable
+[chcp]: https://ss64.com/nt/chcp.html
 [inode]: https://en.wikipedia.org/wiki/Inode
-[Naming Files, Paths, and Namespaces]: https://docs.microsoft.com/en-us/windows/desktop/FileIO/naming-a-file
-[MSDN-Using-Streams]: https://docs.microsoft.com/en-us/windows/desktop/FileIO/using-streams
 [support of file system `flags`]: #fs_file_system_flags
-[File Access Constants]: #fs_file_access_constants

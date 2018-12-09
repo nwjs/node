@@ -22,6 +22,7 @@
 #include "node_internals.h"
 #include "string_bytes.h"
 
+#include <array>
 #include <errno.h>
 #include <string.h>
 
@@ -163,7 +164,7 @@ static void GetCPUInfo(const FunctionCallbackInfo<Value>& args) {
   // The array is in the format
   // [model, speed, (5 entries of cpu_times), model2, speed2, ...]
   std::vector<Local<Value>> result(count * 7);
-  for (size_t i = 0; i < count; i++) {
+  for (int i = 0; i < count; i++) {
     uv_cpu_info_t* ci = cpu_infos + i;
     result[i * 7] = OneByteString(isolate, ci->model);
     result[i * 7 + 1] = Number::New(isolate, ci->speed);
@@ -219,7 +220,7 @@ static void GetInterfaceAddresses(const FunctionCallbackInfo<Value>& args) {
   int count, i;
   char ip[INET6_ADDRSTRLEN];
   char netmask[INET6_ADDRSTRLEN];
-  char mac[18];
+  std::array<char, 18> mac;
   Local<Object> ret, o;
   Local<String> name, family;
   Local<Array> ifarr;
@@ -256,8 +257,8 @@ static void GetInterfaceAddresses(const FunctionCallbackInfo<Value>& args) {
       ret->Set(env->context(), name, ifarr).FromJust();
     }
 
-    snprintf(mac,
-             18,
+    snprintf(mac.data(),
+             mac.size(),
              "%02x:%02x:%02x:%02x:%02x:%02x",
              static_cast<unsigned char>(interfaces[i].phys_addr[0]),
              static_cast<unsigned char>(interfaces[i].phys_addr[1]),
@@ -445,7 +446,8 @@ static void GetPriority(const FunctionCallbackInfo<Value>& args) {
 
 void Initialize(Local<Object> target,
                 Local<Value> unused,
-                Local<Context> context) {
+                Local<Context> context,
+                void* priv) {
   Environment* env = Environment::GetCurrent(context);
   env->SetMethod(target, "getHostname", GetHostname);
   env->SetMethod(target, "getLoadAvg", GetLoadAvg);

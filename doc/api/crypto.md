@@ -185,7 +185,18 @@ Example: Using `Cipher` objects as streams:
 
 ```js
 const crypto = require('crypto');
-const cipher = crypto.createCipher('aes192', 'a password');
+
+const algorithm = 'aes-192-cbc';
+const password = 'Password used to generate key';
+// Key length is dependent on the algorithm. In this case for aes192, it is
+// 24 bytes (192 bits).
+// Use async `crypto.scrypt()` instead.
+const key = crypto.scryptSync(password, 'salt', 24);
+// Use `crypto.randomBytes()` to generate a random iv instead of the static iv
+// shown here.
+const iv = Buffer.alloc(16, 0); // Initialization vector.
+
+const cipher = crypto.createCipheriv(algorithm, key, iv);
 
 let encrypted = '';
 cipher.on('readable', () => {
@@ -195,7 +206,7 @@ cipher.on('readable', () => {
 });
 cipher.on('end', () => {
   console.log(encrypted);
-  // Prints: ca981be48e90867604588e75d04feabb63cc007a8f8ad89b10616ed84d815504
+  // Prints: e5f79c5915c02171eec6b212d5520d44480993d7d622a7c4c2da32f6efda0ffa
 });
 
 cipher.write('some clear text data');
@@ -207,7 +218,16 @@ Example: Using `Cipher` and piped streams:
 ```js
 const crypto = require('crypto');
 const fs = require('fs');
-const cipher = crypto.createCipher('aes192', 'a password');
+
+const algorithm = 'aes-192-cbc';
+const password = 'Password used to generate key';
+// Use the async `crypto.scrypt()` instead.
+const key = crypto.scryptSync(password, 'salt', 24);
+// Use `crypto.randomBytes()` to generate a random iv instead of the static iv
+// shown here.
+const iv = Buffer.alloc(16, 0); // Initialization vector.
+
+const cipher = crypto.createCipheriv(algorithm, key, iv);
 
 const input = fs.createReadStream('test.js');
 const output = fs.createWriteStream('test.enc');
@@ -219,12 +239,21 @@ Example: Using the [`cipher.update()`][] and [`cipher.final()`][] methods:
 
 ```js
 const crypto = require('crypto');
-const cipher = crypto.createCipher('aes192', 'a password');
+
+const algorithm = 'aes-192-cbc';
+const password = 'Password used to generate key';
+// Use the async `crypto.scrypt()` instead.
+const key = crypto.scryptSync(password, 'salt', 24);
+// Use `crypto.randomBytes` to generate a random iv instead of the static iv
+// shown here.
+const iv = Buffer.alloc(16, 0); // Initialization vector.
+
+const cipher = crypto.createCipheriv(algorithm, key, iv);
 
 let encrypted = cipher.update('some clear text data', 'utf8', 'hex');
 encrypted += cipher.final('hex');
 console.log(encrypted);
-// Prints: ca981be48e90867604588e75d04feabb63cc007a8f8ad89b10616ed84d815504
+// Prints: e5f79c5915c02171eec6b212d5520d44480993d7d622a7c4c2da32f6efda0ffa
 ```
 
 ### cipher.final([outputEncoding])
@@ -340,7 +369,17 @@ Example: Using `Decipher` objects as streams:
 
 ```js
 const crypto = require('crypto');
-const decipher = crypto.createDecipher('aes192', 'a password');
+
+const algorithm = 'aes-192-cbc';
+const password = 'Password used to generate key';
+// Key length is dependent on the algorithm. In this case for aes192, it is
+// 24 bytes (192 bits).
+// Use the async `crypto.scrypt()` instead.
+const key = crypto.scryptSync(password, 'salt', 24);
+// The IV is usually passed along with the ciphertext.
+const iv = Buffer.alloc(16, 0); // Initialization vector.
+
+const decipher = crypto.createDecipheriv(algorithm, key, iv);
 
 let decrypted = '';
 decipher.on('readable', () => {
@@ -353,8 +392,9 @@ decipher.on('end', () => {
   // Prints: some clear text data
 });
 
+// Encrypted with same algorithm, key and iv.
 const encrypted =
-    'ca981be48e90867604588e75d04feabb63cc007a8f8ad89b10616ed84d815504';
+  'e5f79c5915c02171eec6b212d5520d44480993d7d622a7c4c2da32f6efda0ffa';
 decipher.write(encrypted, 'hex');
 decipher.end();
 ```
@@ -364,7 +404,15 @@ Example: Using `Decipher` and piped streams:
 ```js
 const crypto = require('crypto');
 const fs = require('fs');
-const decipher = crypto.createDecipher('aes192', 'a password');
+
+const algorithm = 'aes-192-cbc';
+const password = 'Password used to generate key';
+// Use the async `crypto.scrypt()` instead.
+const key = crypto.scryptSync(password, 'salt', 24);
+// The IV is usually passed along with the ciphertext.
+const iv = Buffer.alloc(16, 0); // Initialization vector.
+
+const decipher = crypto.createDecipheriv(algorithm, key, iv);
 
 const input = fs.createReadStream('test.enc');
 const output = fs.createWriteStream('test.js');
@@ -376,10 +424,19 @@ Example: Using the [`decipher.update()`][] and [`decipher.final()`][] methods:
 
 ```js
 const crypto = require('crypto');
-const decipher = crypto.createDecipher('aes192', 'a password');
 
+const algorithm = 'aes-192-cbc';
+const password = 'Password used to generate key';
+// Use the async `crypto.scrypt()` instead.
+const key = crypto.scryptSync(password, 'salt', 24);
+// The IV is usually passed along with the ciphertext.
+const iv = Buffer.alloc(16, 0); // Initialization vector.
+
+const decipher = crypto.createDecipheriv(algorithm, key, iv);
+
+// Encrypted using same algorithm, key and iv.
 const encrypted =
-    'ca981be48e90867604588e75d04feabb63cc007a8f8ad89b10616ed84d815504';
+  'e5f79c5915c02171eec6b212d5520d44480993d7d622a7c4c2da32f6efda0ffa';
 let decrypted = decipher.update(encrypted, 'hex', 'utf8');
 decrypted += decipher.final('utf8');
 console.log(decrypted);
@@ -2147,7 +2204,9 @@ request.
 
 ### crypto.randomFillSync(buffer[, offset][, size])
 <!-- YAML
-added: v7.10.0
+added:
+  - v7.10.0
+  - v6.13.0
 changes:
   - version: v9.0.0
     pr-url: https://github.com/nodejs/node/pull/15231
@@ -2191,7 +2250,9 @@ console.log(Buffer.from(crypto.randomFillSync(c).buffer,
 
 ### crypto.randomFill(buffer[, offset][, size], callback)
 <!-- YAML
-added: v7.10.0
+added:
+  - v7.10.0
+  - v6.13.0
 changes:
   - version: v9.0.0
     pr-url: https://github.com/nodejs/node/pull/15231
@@ -2890,14 +2951,14 @@ the `crypto`, `tls`, and `https` modules and are generally specific to OpenSSL.
 [`hmac.update()`]: #crypto_hmac_update_data_inputencoding
 [`sign.sign()`]: #crypto_sign_sign_privatekey_outputencoding
 [`sign.update()`]: #crypto_sign_update_data_inputencoding
-[`stream.transform` options]: stream.html#stream_new_stream_transform_options
 [`stream.Writable` options]: stream.html#stream_constructor_new_stream_writable_options
+[`stream.transform` options]: stream.html#stream_new_stream_transform_options
 [`util.promisify()`]: util.html#util_util_promisify_original
 [`verify.update()`]: #crypto_verify_update_data_inputencoding
 [`verify.verify()`]: #crypto_verify_verify_object_signature_signatureencoding
 [AEAD algorithms]: https://en.wikipedia.org/wiki/Authenticated_encryption
-[Caveats]: #crypto_support_for_weak_or_compromised_algorithms
 [CCM mode]: #crypto_ccm_mode
+[Caveats]: #crypto_support_for_weak_or_compromised_algorithms
 [Crypto Constants]: #crypto_crypto_constants_1
 [HTML 5.2]: https://www.w3.org/TR/html52/changes.html#features-removed
 [HTML5's `keygen` element]: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/keygen

@@ -62,7 +62,7 @@ The open source license grants you the freedom to use Node.js. It does not
 guarantee commitments of other people's time. Please be respectful and manage
 your expectations.
 
-## Release Types 
+## Release Types
 
 * **Current**: Under active development. Code for the Current release is in the
   branch for its major version number (for example,
@@ -83,7 +83,7 @@ your expectations.
 Current and LTS releases follow [Semantic Versioning](https://semver.org). A
 member of the Release Team [signs](#release-keys) each Current and LTS release.
 For more information, see the
-[Release README](https://github.com/nodejs/Release).
+[Release README](https://github.com/nodejs/Release#readme).
 
 ### Download
 
@@ -203,10 +203,6 @@ For information about the governance of the Node.js project, see
 **Michaël Zasso** &lt;targos@protonmail.com&gt; (he/him)
 * [thefourtheye](https://github.com/thefourtheye) -
 **Sakthipriyan Vairamani** &lt;thechargingvolcano@gmail.com&gt; (he/him)
-* [TimothyGu](https://github.com/TimothyGu) -
-**Tiancheng "Timothy" Gu** &lt;timothygu99@gmail.com&gt; (he/him)
-* [Trott](https://github.com/Trott) -
-**Rich Trott** &lt;rtrott@gmail.com&gt; (he/him)
 
 ### TSC Emeriti
 
@@ -234,8 +230,12 @@ For information about the governance of the Node.js project, see
 **Bert Belder** &lt;bertbelder@gmail.com&gt;
 * [shigeki](https://github.com/shigeki) -
 **Shigeki Ohtsu** &lt;ohtsu@ohtsu.org&gt; (he/him)
+* [TimothyGu](https://github.com/TimothyGu) -
+**Tiancheng "Timothy" Gu** &lt;timothygu99@gmail.com&gt; (he/him)
 * [trevnorris](https://github.com/trevnorris) -
 **Trevor Norris** &lt;trev.norris@gmail.com&gt;
+* [Trott](https://github.com/Trott) -
+**Rich Trott** &lt;rtrott@gmail.com&gt; (he/him)
 
 ### Collaborators
 
@@ -249,6 +249,8 @@ For information about the governance of the Node.js project, see
 **Andreas Madsen** &lt;amwebdk@gmail.com&gt; (he/him)
 * [AnnaMag](https://github.com/AnnaMag) -
 **Anna M. Kedzierska** &lt;anna.m.kedzierska@gmail.com&gt;
+* [antsmartian](https://github.com/antsmartian) -
+**Anto Aravinth** &lt;anto.aravinth.cse@gmail.com&gt; (he/him)
 * [apapirovski](https://github.com/apapirovski) -
 **Anatoli Papirovski** &lt;apapirovski@mac.com&gt; (he/him)
 * [aqrln](https://github.com/aqrln) -
@@ -530,6 +532,8 @@ maintaining the Node.js project.
 
 GPG keys used to sign Node.js releases:
 
+* **Beth Griggs** &lt;bethany.griggs@uk.ibm.com&gt;
+`4ED778F539E3634C779C87C6D7062848A1AB005C`
 * **Colin Ihrig** &lt;cjihrig@gmail.com&gt;
 `94AE36675C464D64BAFA68DD7434390BDBE9B9C5`
 * **Evan Lucas** &lt;evanlucas@me.com&gt;
@@ -546,10 +550,13 @@ GPG keys used to sign Node.js releases:
 `C4F0DFFF4E8C1A8236409D08E73BC641CC11F4C8`
 * **Rod Vagg** &lt;rod@vagg.org&gt;
 `DD8F2338BAE7501E3DD5AC78C273792F7D83545D`
+* **Ruben Bridgewater** &lt;ruben@bridgewater.de&gt;
+`A48C2BEE680E841632CD4E44F07496B3EB3C1762`
 
 To import the full set of trusted release keys:
 
 ```shell
+gpg --keyserver pool.sks-keyservers.net --recv-keys 4ED778F539E3634C779C87C6D7062848A1AB005C
 gpg --keyserver pool.sks-keyservers.net --recv-keys 94AE36675C464D64BAFA68DD7434390BDBE9B9C5
 gpg --keyserver pool.sks-keyservers.net --recv-keys B9AE9905FFD7803F25714661B63B535A4C206CA9
 gpg --keyserver pool.sks-keyservers.net --recv-keys 77984A986EBC2AA786BC0F66B01FBB92821C587A
@@ -558,6 +565,7 @@ gpg --keyserver pool.sks-keyservers.net --recv-keys FD3A5288F042B6850C66B31F09FE
 gpg --keyserver pool.sks-keyservers.net --recv-keys 8FCCA13FEF1D0C2E91008E09770F7A9A5AE15600
 gpg --keyserver pool.sks-keyservers.net --recv-keys C4F0DFFF4E8C1A8236409D08E73BC641CC11F4C8
 gpg --keyserver pool.sks-keyservers.net --recv-keys DD8F2338BAE7501E3DD5AC78C273792F7D83545D
+gpg --keyserver pool.sks-keyservers.net --recv-keys A48C2BEE680E841632CD4E44F07496B3EB3C1762
 ```
 
 See the section above on [Verifying Binaries](#verifying-binaries) for how to

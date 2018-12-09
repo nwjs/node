@@ -634,8 +634,8 @@ asyncTest(
       const e = new Error('error');
       const domainError = new Error('domain error');
       onUnhandledSucceed(done, function(reason, promise) {
-        assert.strictEqual(e, reason);
-        assert.strictEqual(domainError, domainReceivedError);
+        assert.strictEqual(reason, e);
+        assert.strictEqual(domainReceivedError, domainError);
       });
       Promise.reject(e);
       process.nextTick(function() {
@@ -699,3 +699,22 @@ asyncTest('Rejected promise inside unhandledRejection allows nextTick loop' +
     process.nextTick(() => promise.catch(() => done()));
   });
 });
+
+asyncTest(
+  'Unhandled promise rejection emits a warning immediately',
+  function(done) {
+    clean();
+    Promise.reject(0);
+    const { emitWarning } = process;
+    process.emitWarning = common.mustCall((...args) => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+        done();
+      }
+      emitWarning(...args);
+    }, 2);
+
+    let timer = setTimeout(common.mustNotCall(), 10000);
+  },
+);

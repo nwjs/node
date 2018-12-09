@@ -37,6 +37,7 @@
 #include <functional>  // std::function
 #include <set>
 #include <string>
+#include <array>
 #include <unordered_map>
 
 namespace node {
@@ -198,8 +199,8 @@ class ContainerOfHelper {
 // Calculate the address of the outer (i.e. embedding) struct from
 // the interior pointer to a data member.
 template <typename Inner, typename Outer>
-inline ContainerOfHelper<Inner, Outer> ContainerOf(Inner Outer::*field,
-                                                   Inner* pointer);
+constexpr ContainerOfHelper<Inner, Outer> ContainerOf(Inner Outer::*field,
+                                                      Inner* pointer);
 
 // Convenience wrapper around v8::String::NewFromOneByte().
 inline v8::Local<v8::String> OneByteString(v8::Isolate* isolate,
@@ -222,6 +223,14 @@ inline v8::Local<v8::String> FIXED_ONE_BYTE_STRING(
     const char(&data)[N]) {
   return OneByteString(isolate, data, N - 1);
 }
+
+template <std::size_t N>
+inline v8::Local<v8::String> FIXED_ONE_BYTE_STRING(
+    v8::Isolate* isolate,
+    const std::array<char, N>& arr) {
+  return OneByteString(isolate, arr.data(), N - 1);
+}
+
 
 
 // Swaps bytes in place. nbytes is the number of bytes to swap and must be a
@@ -469,6 +478,31 @@ inline v8::MaybeLocal<v8::Value> ToV8Value(v8::Local<v8::Context> context,
 template <typename T, typename U>
 inline v8::MaybeLocal<v8::Value> ToV8Value(v8::Local<v8::Context> context,
                                            const std::unordered_map<T, U>& map);
+
+// These macros expects a `Isolate* isolate` and a `Local<Context> context`
+// to be in the scope.
+#define READONLY_PROPERTY(obj, name, value)                                    \
+  do {                                                                         \
+    obj->DefineOwnProperty(                                                    \
+           context, FIXED_ONE_BYTE_STRING(isolate, name), value, v8::ReadOnly) \
+        .FromJust();                                                           \
+  } while (0)
+
+#define READONLY_DONT_ENUM_PROPERTY(obj, name, var)                            \
+  do {                                                                         \
+    obj->DefineOwnProperty(                                                    \
+           context,                                                            \
+           OneByteString(isolate, name),                                       \
+           var,                                                                \
+           static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontEnum))    \
+        .FromJust();                                                           \
+  } while (0)
+
+#define READONLY_TRUE_PROPERTY(obj, name)                                      \
+  READONLY_PROPERTY(obj, name, True(isolate))
+
+#define READONLY_STRING_PROPERTY(obj, name, str)                               \
+  READONLY_PROPERTY(obj, name, ToV8Value(context, str).ToLocalChecked())
 
 }  // namespace node
 

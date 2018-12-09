@@ -119,6 +119,22 @@ added: v6.0.0
 Force FIPS-compliant crypto on startup. (Cannot be disabled from script code.)
 (Same requirements as `--enable-fips`.)
 
+### `--http-parser=library`
+<!-- YAML
+added: v11.4.0
+-->
+
+Chooses an HTTP parser library. Available values are:
+
+- `llhttp` for https://llhttp.org/
+- `legacy` for https://github.com/nodejs/http-parser
+
+The default is `legacy`, unless otherwise specified when building Node.js.
+
+This flag exists to aid in experimentation with the internal implementation of
+the Node.js http parser.
+This flag is likely to become a no-op and removed at some point in the future.
+
 ### `--icu-data-dir=file`
 <!-- YAML
 added: v0.11.15
@@ -274,7 +290,7 @@ see those as two separate modules and would attempt to load the module multiple
 times, causing an exception to be thrown).
 
 The `--preserve-symlinks` flag does not apply to the main module, which allows
-`node --preserve-symlinks node_module/.bin/<foo>` to work.  To apply the same
+`node --preserve-symlinks node_module/.bin/<foo>` to work. To apply the same
 behavior for the main module, also use `--preserve-symlinks-main`.
 
 ### `--preserve-symlinks-main`
@@ -522,6 +538,10 @@ added: v0.1.32
 -->
 
 `','`-separated list of core modules that should print debug information.
+
+### `NODE_DEBUG_NATIVE=module[,…]`
+
+`','`-separated list of core C++ modules that should print debug information.
 
 ### `NODE_DISABLE_COLORS=1`
 <!-- YAML

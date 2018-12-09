@@ -397,12 +397,12 @@ void DeserializerContext::ReadUint64(const FunctionCallbackInfo<Value>& args) {
   uint32_t lo = static_cast<uint32_t>(value);
 
   Isolate* isolate = ctx->env()->isolate();
-  Local<Context> context = ctx->env()->context();
 
-  Local<Array> ret = Array::New(isolate, 2);
-  ret->Set(context, 0, Integer::NewFromUnsigned(isolate, hi)).FromJust();
-  ret->Set(context, 1, Integer::NewFromUnsigned(isolate, lo)).FromJust();
-  return args.GetReturnValue().Set(ret);
+  Local<Value> ret[] = {
+    Integer::NewFromUnsigned(isolate, hi),
+    Integer::NewFromUnsigned(isolate, lo)
+  };
+  return args.GetReturnValue().Set(Array::New(isolate, ret, arraysize(ret)));
 }
 
 void DeserializerContext::ReadDouble(const FunctionCallbackInfo<Value>& args) {
@@ -440,7 +440,8 @@ void DeserializerContext::ReadRawBytes(
 
 void Initialize(Local<Object> target,
                 Local<Value> unused,
-                Local<Context> context) {
+                Local<Context> context,
+                void* priv) {
   Environment* env = Environment::GetCurrent(context);
   Local<FunctionTemplate> ser =
       env->NewFunctionTemplate(SerializerContext::New);

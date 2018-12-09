@@ -1,10 +1,12 @@
+// Flags: --expose-internals
 'use strict';
-
-const assert = require('assert');
 const common = require('../common');
+const assert = require('assert');
 const http = require('http');
 const net = require('net');
 const MAX = 8 * 1024; // 8KB
+
+const { getOptionValue } = require('internal/options');
 
 // Verify that we cannot receive more than 8KB of headers.
 
@@ -27,7 +29,7 @@ function finished(client, callback) {
 function fillHeaders(headers, currentSize, valid = false) {
   // llhttp counts actual header name/value sizes, excluding the whitespace and
   // stripped chars.
-  if (process.versions.hasOwnProperty('llhttp')) {
+  if (getOptionValue('--http-parser') === 'llhttp') {
     // OK, Content-Length, 0, X-CRASH, aaa...
     headers += 'a'.repeat(MAX - currentSize);
   } else {
@@ -94,7 +96,7 @@ function test1() {
 
   server.listen(0, common.mustCall(() => {
     const port = server.address().port;
-    const client = http.get({ port: port }, common.mustNotCall(() => {}));
+    const client = http.get({ port: port }, common.mustNotCall());
 
     client.on('error', common.mustCall((err) => {
       assert.strictEqual(err.code, 'HPE_HEADER_OVERFLOW');

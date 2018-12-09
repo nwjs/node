@@ -88,7 +88,8 @@ UDPWrap::UDPWrap(Environment* env, Local<Object> object)
 
 void UDPWrap::Initialize(Local<Object> target,
                          Local<Value> unused,
-                         Local<Context> context) {
+                         Local<Context> context,
+                         void* priv) {
   Environment* env = Environment::GetCurrent(context);
 
   Local<FunctionTemplate> t = env->NewFunctionTemplate(New);
@@ -149,6 +150,12 @@ void UDPWrap::Initialize(Local<Object> target,
   target->Set(env->context(),
               sendWrapString,
               swt->GetFunction(env->context()).ToLocalChecked()).FromJust();
+
+  Local<Object> constants = Object::New(env->isolate());
+  NODE_DEFINE_CONSTANT(constants, UV_UDP_IPV6ONLY);
+  target->Set(context,
+              env->constants_string(),
+              constants).FromJust();
 }
 
 

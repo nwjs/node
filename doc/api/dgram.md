@@ -601,6 +601,9 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/13623
     description: The `recvBufferSize` and `sendBufferSize` options are
                  supported now.
+  - version: v11.4.0
+    pr-url: https://github.com/nodejs/node/pull/23798
+    description: The `ipv6Only` option is supported.
 -->
 
 * `options` {Object} Available options are:
@@ -609,6 +612,9 @@ changes:
   * `reuseAddr` {boolean} When `true` [`socket.bind()`][] will reuse the
     address, even if another process has already bound a socket on it.
     **Default:** `false`.
+  * `ipv6Only` {boolean} Setting `ipv6Only` to `true` will
+    disable dual-stack support, i.e., binding to address `::` won't make
+    `0.0.0.0` be bound. **Default:** `false`.
   * `recvBufferSize` {number} - Sets the `SO_RCVBUF` socket value.
   * `sendBufferSize` {number} - Sets the `SO_SNDBUF` socket value.
   * `lookup` {Function} Custom lookup function. **Default:** [`dns.lookup()`][].
@@ -646,6 +652,7 @@ and `udp6` sockets). The bound address and port can be retrieved using
 [`'close'`]: #dgram_event_close
 [`Error`]: errors.html#errors_class_error
 [`EventEmitter`]: events.html
+[`System Error`]: errors.html#errors_class_systemerror
 [`close()`]: #dgram_socket_close_callback
 [`cluster`]: cluster.html
 [`dgram.Socket#bind()`]: #dgram_socket_bind_options_callback
@@ -654,7 +661,6 @@ and `udp6` sockets). The bound address and port can be retrieved using
 [`socket.address().address`]: #dgram_socket_address
 [`socket.address().port`]: #dgram_socket_address
 [`socket.bind()`]: #dgram_socket_bind_port_address_callback
-[`System Error`]: errors.html#errors_class_systemerror
-[byte length]: buffer.html#buffer_class_method_buffer_bytelength_string_encoding
 [IPv6 Zone Indices]: https://en.wikipedia.org/wiki/IPv6_address#Scoped_literal_IPv6_addresses
 [RFC 4007]: https://tools.ietf.org/html/rfc4007
+[byte length]: buffer.html#buffer_class_method_buffer_bytelength_string_encoding

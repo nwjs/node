@@ -3,6 +3,7 @@
 #include "node_internals.h"
 
 namespace node {
+
 using v8::Context;
 using v8::Exception;
 using v8::Function;
@@ -20,7 +21,6 @@ using v8::Number;
 using v8::Object;
 using v8::ScriptOrigin;
 using v8::String;
-using v8::TryCatch;
 using v8::Undefined;
 using v8::Value;
 
@@ -260,43 +260,8 @@ void ReportException(Environment* env,
 #endif
 }
 
-void ReportException(Environment* env, const TryCatch& try_catch) {
+void ReportException(Environment* env, const v8::TryCatch& try_catch) {
   ReportException(env, try_catch.Exception(), try_catch.Message());
-}
-
-void DecorateErrorStack(Environment* env, const TryCatch& try_catch) {
-  Local<Value> exception = try_catch.Exception();
-
-  if (!exception->IsObject()) return;
-
-  Local<Object> err_obj = exception.As<Object>();
-
-  if (IsExceptionDecorated(env, err_obj)) return;
-
-  AppendExceptionLine(env, exception, try_catch.Message(), CONTEXTIFY_ERROR);
-  Local<Value> stack = err_obj->Get(env->context(),
-                                    env->stack_string()).ToLocalChecked();
-  MaybeLocal<Value> maybe_value =
-      err_obj->GetPrivate(env->context(), env->arrow_message_private_symbol());
-
-  Local<Value> arrow;
-  if (!(maybe_value.ToLocal(&arrow) && arrow->IsString())) {
-    return;
-  }
-
-  if (stack.IsEmpty() || !stack->IsString()) {
-    return;
-  }
-
-  Local<String> decorated_stack = String::Concat(
-      env->isolate(),
-      String::Concat(env->isolate(),
-                     arrow.As<String>(),
-                     FIXED_ONE_BYTE_STRING(env->isolate(), "\n")),
-      stack.As<String>());
-  err_obj->Set(env->context(), env->stack_string(), decorated_stack).FromJust();
-  err_obj->SetPrivate(
-      env->context(), env->decorated_private_symbol(), True(env->isolate()));
 }
 
 void PrintErrorString(const char* format, ...) {
@@ -349,12 +314,52 @@ void OnFatalError(const char* location, const char* message) {
   ABORT();
 }
 
-FatalTryCatch::~FatalTryCatch() {
-  if (HasCaught()) {
+namespace errors {
+
+TryCatchScope::~TryCatchScope() {
+  if (HasCaught() && mode_ == CatchMode::kFatal) {
     HandleScope scope(env_->isolate());
-    ReportException(env_, *this);
+    ReportException(env_, Exception(), Message());
     exit(7);
   }
+}
+
+}  // namespace errors
+
+void DecorateErrorStack(Environment* env,
+                        const errors::TryCatchScope& try_catch) {
+  Local<Value> exception = try_catch.Exception();
+
+  if (!exception->IsObject()) return;
+
+  Local<Object> err_obj = exception.As<Object>();
+
+  if (IsExceptionDecorated(env, err_obj)) return;
+
+  AppendExceptionLine(env, exception, try_catch.Message(), CONTEXTIFY_ERROR);
+  Local<Value> stack =
+      err_obj->Get(env->context(), env->stack_string()).ToLocalChecked();
+  MaybeLocal<Value> maybe_value =
+      err_obj->GetPrivate(env->context(), env->arrow_message_private_symbol());
+
+  Local<Value> arrow;
+  if (!(maybe_value.ToLocal(&arrow) && arrow->IsString())) {
+    return;
+  }
+
+  if (stack.IsEmpty() || !stack->IsString()) {
+    return;
+  }
+
+  Local<String> decorated_stack = String::Concat(
+      env->isolate(),
+      String::Concat(env->isolate(),
+                     arrow.As<String>(),
+                     FIXED_ONE_BYTE_STRING(env->isolate(), "\n")),
+      stack.As<String>());
+  err_obj->Set(env->context(), env->stack_string(), decorated_stack).FromJust();
+  err_obj->SetPrivate(
+      env->context(), env->decorated_private_symbol(), True(env->isolate()));
 }
 
 void FatalException(Isolate* isolate,
@@ -380,7 +385,7 @@ void FatalException(Isolate* isolate,
     exit_code = 6;
   } else {
     Local<Function> fatal_exception_function = Local<Function>::Cast(fatal_exception_function_value);
-    TryCatch fatal_try_catch(isolate);
+    errors::TryCatchScope fatal_try_catch(env);
 
     // Do not call FatalException when _fatalException handler throws
     fatal_try_catch.SetVerbose(false);
@@ -415,7 +420,7 @@ void FatalException(Isolate* isolate,
   }
 }
 
-void FatalException(Isolate* isolate, const TryCatch& try_catch) {
+void FatalException(Isolate* isolate, const v8::TryCatch& try_catch) {
   // If we try to print out a termination exception, we'd just get 'null',
   // so just crashing here with that information seems like a better idea,
   // and in particular it seems like we should handle terminations at the call

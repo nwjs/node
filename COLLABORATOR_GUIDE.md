@@ -72,8 +72,7 @@ issues and pull requests can always be re-opened if necessary.
 A pull request is _author ready_ when:
 
 * There is a CI run in progress or completed.
-* There are at least two Collaborator approvals, or at least one approval if the
-  pull request is older than 7 days.
+* There is at least one Collaborator approval.
 * There are no outstanding review comments.
 
 Please always add the `author ready` label to the pull request in that case.
@@ -147,56 +146,54 @@ the TSC meeting agenda.
 
 ### Waiting for Approvals
 
-Before landing pull requests, sufficient time should be left for input
-from other Collaborators. In general, leave at least 48 hours to account for
-international time differences and work schedules. However, certain types of
-pull requests can be fast-tracked and may be landed after a shorter delay. For
-example:
+Before landing pull requests, allow 48 hours for input from other Collaborators.
+Certain types of pull requests can be fast-tracked and may land after a shorter
+delay. For example:
 
 * Focused changes that affect only documentation and/or the test suite:
-  * `code-and-learn` tasks typically fall into this category.
+  * `code-and-learn` tasks often fall into this category.
   * `good-first-issue` pull requests may also be suitable.
 * Changes that fix regressions:
   * Regressions that break the workflow (red CI or broken compilation).
   * Regressions that happen right before a release, or reported soon after.
 
-When a pull request is deemed suitable to be fast-tracked, label it with
-`fast-track` and add a comment that collaborators may upvote. Please mention any
-Collaborators that previously approved the pull request. If someone disagrees
-with the fast-tracking request, remove the label and leave a comment indicating
-why the pull request should not be fast-tracked. The pull request can be landed
-once two or more Collaborators approve both the pull request and the
-fast-tracking request, and the necessary CI testing is done. A request to
-fast-track a PR made by a different Collaborator than the pull-request author
-counts as a fast-track approval.
+To propose fast-tracking a pull request, apply the `fast-track` label. Then add
+a comment that Collaborators may upvote.
+
+If someone disagrees with the fast-tracking request, remove the label. Do not
+fast-track the pull request in that case.
+
+The pull request may be fast-tracked if two Collaborators approve the
+fast-tracking request. To land, the pull request itself still needs two
+Collaborator approvals and a passing CI.
+
+Collaborators may request fast-tracking of pull requests they did not author.
+In that case only, the request itself is also one fast-track approval. Upvote
+the comment anyway to avoid any doubt.
 
 ### Testing and CI
 
-All bugfixes require a test case which demonstrates the defect. The
-test should *fail* before the change, and *pass* after the change.
+All fixes must have a test case which demonstrates the defect. The test should
+fail before the change, and pass after the change.
 
-All pull requests that modify executable code should also include a test case
-and must be subjected to continuous integration tests on the
-[project CI server](https://ci.nodejs.org/). The pull request should have a CI
-status indicator.
+All pull requests must pass continuous integration tests on the
+[project CI server](https://ci.nodejs.org/).
 
-Do not land any Pull Requests without passing (green or yellow) CI runs. If you
-believe any failed (red or grey) CI sub-tasks are unrelated to the change in the
-Pull Request, use "Resume Build" in the left navigation of the relevant
-`node-test-pull-request` job. It will create a new `node-test-pull-request` run
-that preserves all the green results from the current job but re-runs everything
-else.
+Do not land any pull requests without passing (green or yellow) CI runs. If
+there are CI failures unrelated to the change in the pull request, try "Resume
+Build". It is in the left navigation of the relevant `node-test-pull-request`
+job. It will preserve all the green results from the current job but re-run
+everything else.
 
 #### Useful CI Jobs
 
 * [`node-test-pull-request`](https://ci.nodejs.org/job/node-test-pull-request/)
-is the standard CI run we do to check Pull Requests. It triggers
-`node-test-commit`, which runs the `build-ci` and `test-ci` targets on all
-supported platforms.
+is the CI job to test pull requests. It runs the `build-ci` and `test-ci`
+targets on all supported platforms.
 
 * [`node-test-pull-request-lite-pipeline`](https://ci.nodejs.org/job/node-test-pull-request-lite-pipeline/)
-only runs the linter job, as well as the tests on LinuxONE, which is very fast.
-This is useful for changes that only affect comments or documentation.
+runs the linter job. It also runs the tests on a very fast host. This is useful
+for changes that only affect comments or documentation.
 
 * [`citgm-smoker`](https://ci.nodejs.org/job/citgm-smoker/)
 uses [`CitGM`](https://github.com/nodejs/citgm) to allow you to run
@@ -205,69 +202,43 @@ useful to check whether a change will cause breakage in the ecosystem. To test
 Node.js ABI changes you can run [`citgm-abi-smoker`](https://ci.nodejs.org/job/citgm-abi-smoker/).
 
 * [`node-stress-single-test`](https://ci.nodejs.org/job/node-stress-single-test/)
-is designed to allow one to run a group of tests over and over on a specific
-platform to confirm that the test is reliable.
+can run a group of tests over and over on a specific platform. Use it to check
+that the tests are reliable.
 
 * [`node-test-commit-v8-linux`](https://ci.nodejs.org/job/node-test-commit-v8-linux/)
-is designed to allow validation of changes to the copy of V8 in the Node.js
-tree by running the standard V8 tests. It should be run whenever the
-level of V8 within Node.js is updated or new patches are floated on V8.
+runs the standard V8 tests. Run it when updating V8 in Node.js or floating new
+patches on V8.
 
 * [`node-test-commit-custom-suites`](https://ci.nodejs.org/job/node-test-commit-custom-suites/)
-can be used to customize what tests are run and with what parameters. For
-example, it can be used to execute tests which are not executed in a typical
-`node-test-commit` run (such as tests in the `internet` or `pummel`
-directories). It can also be used to make sure tests pass when provided with a
-flag not typically used in other CI test runs (such as `--worker`).
+enables customization of test suites and parameters. It can execute test suites
+not used in other CI test runs (such as tests in the `internet` or `pummel`
+directories). It can also make sure tests pass when provided with a flag not
+used in other CI test runs (such as `--worker`).
 
 ### Internal vs. Public API
 
-Due to the nature of the JavaScript language, it can often be difficult to
-establish a clear distinction between which parts of the Node.js implementation
-represent the public API Node.js users should assume to be stable and which
-are part of the internal implementation details of Node.js itself. A rule of
-thumb is to base the determination off what functionality is actually
-documented in the official Node.js API documentation. However, it has been
-repeatedly demonstrated that either the documentation does not completely cover
-implemented behavior or that Node.js users have come to rely heavily on
-undocumented aspects of the Node.js implementation.
+All functionality in the official Node.js documentation is part of the public
+API. Any undocumented object, property, method, argument, behavior, or event is
+internal. There are exceptions to this rule. Node.js users have come to rely on
+some undocumented behaviors. Collaborators treat many of those undocumented
+behaviors as public.
 
-The following general rules should be followed to determine which aspects of the
-Node.js API are internal:
+All undocumented functionality exposed via  `process.binding(...)` is internal.
 
-- All functionality exposed via `process.binding(...)` is internal.
-- All functionality implemented in `lib/internal/**/*.js` is internal unless it
-  is re-exported by code in `lib/*.js` or documented as part of the Node.js
-  Public API.
-- Any object property or method whose key is a non-exported `Symbol` is an
-  internal property.
-- Any object property or method whose key begins with the underscore `_` prefix
-  is internal unless it is documented as part of the Node.js Public API.
-- Any object, property, method, argument, behavior, or event not documented in
-  the Node.js documentation is internal.
-- Any native C/C++ APIs/ABIs exported by the Node.js `*.h` header files that
-  are hidden behind the `NODE_WANT_INTERNALS` flag are internal.
+All undocumented functionality in `lib/internal/**/*.js` is internal. It is
+public, though, if it is re-exported by code in `lib/*.js`.
 
-Exceptions can be made if use or behavior of a given internal API can be
-demonstrated to be sufficiently relied upon by the Node.js ecosystem such that
-any changes would cause too much breakage. The threshold for what qualifies as
-too much breakage is to be decided on a case-by-case basis by the TSC.
+Non-exported `Symbol` properties and methods are internal.
 
-If it is determined that a currently undocumented object, property, method,
-argument, or event *should* be documented, then a pull request adding the
-documentation is required in order for it to be considered part of the public
-API.
+Any undocumented object property or method that begins with `_` is internal.
 
-Making a determination about whether something *should* be documented can be
-difficult and will need to be handled on a case-by-case basis. For instance, if
-one documented API cannot be used successfully without the use of a second
-*currently undocumented* API, then the second API *should* be documented. If
-using an API in a manner currently undocumented achieves a particular useful
-result, a decision will need to be made whether or not that falls within the
-supported scope of that API; and if it does, it should be documented.
+Any native C/C++ APIs/ABIs requiring the `NODE_WANT_INTERNALS` flag are
+internal.
 
-See [Breaking Changes to Internal Elements](#breaking-changes-to-internal-elements)
-on how to handle those types of changes.
+Sometimes, there is disagreement about whether functionality is internal or
+public. In those cases, the TSC makes a determination.
+
+For undocumented APIs that are public, open a pull request documenting the API.
 
 ### Breaking Changes
 

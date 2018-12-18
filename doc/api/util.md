@@ -159,7 +159,7 @@ const util = require('util');
 const fn1 = util.deprecate(someFunction, someMessage, 'DEP0001');
 const fn2 = util.deprecate(someOtherFunction, someOtherMessage, 'DEP0001');
 fn1(); // emits a deprecation warning with code DEP0001
-fn2(); // does not emit a deprecation warning because it has the same code
+fn2(); // Does not emit a deprecation warning because it has the same code
 ```
 
 If either the `--no-deprecation` or `--no-warnings` command line flags are
@@ -375,6 +375,9 @@ stream.write('With ES6');
 <!-- YAML
 added: v0.3.0
 changes:
+  - version: v11.5.0
+    pr-url: https://github.com/nodejs/node/pull/24852
+    description: The `getters` option is supported now.
   - version: v11.4.0
     pr-url: https://github.com/nodejs/node/pull/24326
     description: The `depth` default changed back to `2`.
@@ -432,10 +435,6 @@ changes:
   * `showProxy` {boolean} If `true`, then objects and functions that are
     `Proxy` objects will be introspected to show their `target` and `handler`
     objects. **Default:** `false`.
-    <!--
-    TODO(BridgeAR): Deprecate `maxArrayLength` and replace it with
-                    `maxEntries`.
-    -->
   * `maxArrayLength` {integer} Specifies the maximum number of `Array`,
     [`TypedArray`][], [`WeakMap`][] and [`WeakSet`][] elements to include when
     formatting. Set to `null` or `Infinity` to show all elements. Set to `0` or
@@ -454,6 +453,11 @@ changes:
     of an object and Set and Map entries will be sorted in the returned string.
     If set to `true` the [default sort][] is going to be used. If set to a
     function, it is used as a [compare function][].
+  * `getters` {boolean|string} If set to `true`, getters are going to be
+    inspected as well. If set to `'get'` only getters without setter are going
+    to be inspected. If set to `'set'` only getters having a corresponding
+    setter are going to be inspected. This might cause side effects depending on
+    the getter function. **Default:** `false`.
 * Returns: {string} The representation of passed object
 
 The `util.inspect()` method returns a string representation of `object` that is

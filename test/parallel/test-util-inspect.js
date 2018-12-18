@@ -1738,19 +1738,34 @@ assert.strictEqual(
   );
 }
 
-// Manipulate the prototype to one that we can not handle.
+// Manipulate the prototype in weird ways.
 {
   let obj = { a: true };
   let value = (function() { return function() {}; })();
   Object.setPrototypeOf(value, null);
   Object.setPrototypeOf(obj, value);
-  assert.strictEqual(util.inspect(obj), '{ a: true }');
+  assert.strictEqual(util.inspect(obj), '<[Function]> { a: true }');
+  assert.strictEqual(
+    util.inspect(obj, { colors: true }),
+    '<\u001b[36m[Function]\u001b[39m> { a: \u001b[33mtrue\u001b[39m }'
+  );
 
   obj = { a: true };
   value = [];
   Object.setPrototypeOf(value, null);
   Object.setPrototypeOf(obj, value);
-  assert.strictEqual(util.inspect(obj), '{ a: true }');
+  assert.strictEqual(
+    util.inspect(obj),
+    '<[Array: null prototype] []> { a: true }'
+  );
+
+  function StorageObject() {}
+  StorageObject.prototype = Object.create(null);
+  assert.strictEqual(
+    util.inspect(new StorageObject()),
+    '<[Object: null prototype] {}> {}'
+  );
+
 }
 
 // Check that the fallback always works.
@@ -1763,4 +1778,37 @@ assert.strictEqual(
     configurable: true
   });
   assert.strictEqual(util.inspect(obj), '[Set: null prototype] { 1, 2 }');
+}
+
+// Check the getter option.
+{
+  let foo = 1;
+  const get = { get foo() { return foo; } };
+  const getset = {
+    get foo() { return foo; },
+    set foo(val) { foo = val; },
+    get inc() { return ++foo; }
+  };
+  const thrower = { get foo() { throw new Error('Oops'); } };
+  assert.strictEqual(
+    inspect(get, { getters: true, colors: true }),
+    '{ foo: \u001b[36m[Getter:\u001b[39m ' +
+      '\u001b[33m1\u001b[39m\u001b[36m]\u001b[39m }');
+  assert.strictEqual(
+    inspect(thrower, { getters: true }),
+    '{ foo: [Getter: <Inspection threw (Oops)>] }');
+  assert.strictEqual(
+    inspect(getset, { getters: true }),
+    '{ foo: [Getter/Setter: 1], inc: [Getter: 2] }');
+  assert.strictEqual(
+    inspect(getset, { getters: 'get' }),
+    '{ foo: [Getter/Setter], inc: [Getter: 3] }');
+  assert.strictEqual(
+    inspect(getset, { getters: 'set' }),
+    '{ foo: [Getter/Setter: 3], inc: [Getter] }');
+  getset.foo = new Set([[{ a: true }, 2, {}], 'foobar', { x: 1 }]);
+  assert.strictEqual(
+    inspect(getset, { getters: true }),
+    '{ foo: [Getter/Setter] Set { [ [Object], 2, {} ], ' +
+      "'foobar', { x: 1 } },\n  inc: [Getter: NaN] }");
 }

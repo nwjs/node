@@ -801,7 +801,7 @@ void SecureContext::AddCACert(const FunctionCallbackInfo<Value>& args) {
     return;
 
   X509_STORE* cert_store = SSL_CTX_get_cert_store(sc->ctx_.get());
-  while (X509* x509 = PEM_read_bio_X509(
+  while (X509* x509 = PEM_read_bio_X509_AUX(
       bio.get(), nullptr, NoPasswordCallback, nullptr)) {
     if (cert_store == root_cert_store) {
       cert_store = NewRootCertStore();
@@ -3431,7 +3431,6 @@ bool Hash::HashInit(const char* hash_type) {
     mdctx_.reset();
     return false;
   }
-  finalized_ = false;
   return true;
 }
 
@@ -3485,7 +3484,6 @@ void Hash::HashDigest(const FunctionCallbackInfo<Value>& args) {
   unsigned int md_len;
 
   EVP_DigestFinal_ex(hash->mdctx_.get(), md_value, &md_len);
-  hash->finalized_ = true;
 
   Local<Value> error;
   MaybeLocal<Value> rc =

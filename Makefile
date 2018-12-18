@@ -1263,10 +1263,14 @@ tools/.cpplintstamp: $(LINT_CPP_FILES)
 	@$(PYTHON) tools/check-imports.py
 	@touch $@
 
-lint-addon-docs: test/addons/.docbuildstamp
+.PHONY: lint-addon-docs
+lint-addon-docs: tools/.doclintstamp
+
+tools/.doclintstamp: test/addons/.docbuildstamp
 	@echo "Running C++ linter on addon docs..."
 	@$(PYTHON) tools/cpplint.py $(CPPLINT_QUIET) --filter=$(ADDON_DOC_LINT_FLAGS) \
 		$(LINT_CPP_ADDON_DOC_FILES_GLOB)
+	@touch $@
 
 cpplint: lint-cpp
 	@echo "Please use lint-cpp instead of cpplint"
@@ -1286,7 +1290,7 @@ ifneq ("","$(wildcard tools/pip/site-packages)")
 lint-py:
 	PYTHONPATH=tools/pip $(PYTHON) -m flake8 . \
 		--count --show-source --statistics --select=E901,E999,F821,F822,F823 \
-		--exclude=.git,deps,lib,src,tools/*_macros.py,tools/gyp,tools/jinja2,tools/pip
+		--exclude=.git,deps,lib,src,tools/*_macros.py,tools/gyp,tools/inspector_protocol,tools/jinja2,tools/markupsafe,tools/pip
 else
 lint-py:
 	@echo "Python linting with flake8 is not avalible"

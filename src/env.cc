@@ -5,6 +5,7 @@
 #include "node_file.h"
 #include "node_internals.h"
 #include "node_native_module.h"
+#include "node_options-inl.h"
 #include "node_platform.h"
 #include "node_worker.h"
 #include "tracing/agent.h"
@@ -192,7 +193,7 @@ Environment::Environment(IsolateData* isolate_data,
   // part of the per-Isolate option set, for which in turn the defaults are
   // part of the per-process option set.
   options_.reset(new EnvironmentOptions(*isolate_data->options()->per_env));
-  options_->debug_options.reset(new DebugOptions(*options_->debug_options));
+  inspector_host_port_.reset(new HostPort(options_->debug_options().host_port));
 
 #if HAVE_INSPECTOR
   // We can only create the inspector agent after having cloned the options.
@@ -342,6 +343,13 @@ void Environment::Start(const std::vector<std::string>& args,
   static uv_once_t init_once = UV_ONCE_INIT;
   uv_once(&init_once, InitThreadLocalOnce);
   uv_key_set(&thread_local_env, this);
+
+#if HAVE_INSPECTOR
+  // This needs to be set before we start the inspector
+  Local<Object> obj = Object::New(isolate());
+  CHECK(obj->SetPrototype(context(), Null(isolate())).FromJust());
+  set_inspector_console_api_object(obj);
+#endif  // HAVE_INSPECTOR
 }
 
 void Environment::RegisterHandleCleanups() {

@@ -40,6 +40,8 @@ using v8::Local;
 using v8::Message;
 using v8::Object;
 using v8::String;
+using v8::Task;
+using v8::TaskRunner;
 using v8::Value;
 
 using v8_inspector::StringBuffer;
@@ -50,7 +52,7 @@ using v8_inspector::V8InspectorClient;
 static uv_sem_t start_io_thread_semaphore;
 static uv_async_t start_io_thread_async;
 
-class StartIoTask : public v8::Task {
+class StartIoTask : public Task {
  public:
   explicit StartIoTask(Agent* agent) : agent(agent) {}
 
@@ -110,7 +112,9 @@ static int StartDebugSignalHandler() {
   sigset_t sigmask;
   // Mask all signals.
   sigfillset(&sigmask);
-  CHECK_EQ(0, pthread_sigmask(SIG_SETMASK, &sigmask, &sigmask));
+  sigset_t savemask;
+  CHECK_EQ(0, pthread_sigmask(SIG_SETMASK, &sigmask, &savemask));
+  sigmask = savemask;
   pthread_t thread;
   const int err = pthread_create(&thread, &attr,
                                  StartIoThreadMain, nullptr);
@@ -502,6 +506,7 @@ class NodeInspectorClient : public V8InspectorClient {
   void installAdditionalCommandLineAPI(Local<Context> context,
                                        Local<Object> target) override {
     Local<Object> console_api = env_->inspector_console_api_object();
+    CHECK(!console_api.IsEmpty());
 
     Local<Array> properties =
         console_api->GetOwnPropertyNames(context).ToLocalChecked();
@@ -667,8 +672,9 @@ class NodeInspectorClient : public V8InspectorClient {
 };
 
 Agent::Agent(Environment* env)
-  : parent_env_(env),
-    debug_options_(env->options()->debug_options) {}
+    : parent_env_(env),
+      debug_options_(env->options()->debug_options()),
+      host_port_(env->inspector_host_port()) {}
 
 Agent::~Agent() {
   if (start_io_thread_async.data == this) {
@@ -679,13 +685,14 @@ Agent::~Agent() {
 }
 
 bool Agent::Start(const std::string& path,
-                  std::shared_ptr<DebugOptions> options,
+                  const DebugOptions& options,
+                  std::shared_ptr<HostPort> host_port,
                   bool is_main) {
-  if (options == nullptr) {
-    options = std::make_shared<DebugOptions>();
-  }
   path_ = path;
   debug_options_ = options;
+  CHECK_NE(host_port, nullptr);
+  host_port_ = host_port;
+
   client_ = std::make_shared<NodeInspectorClient>(parent_env_, is_main);
   if (parent_env_->is_main_thread()) {
     CHECK_EQ(0, uv_async_init(parent_env_->event_loop(),
@@ -697,13 +704,18 @@ bool Agent::Start(const std::string& path,
     StartDebugSignalHandler();
   }
 
-  bool wait_for_connect = options->wait_for_connect();
+  bool wait_for_connect = options.wait_for_connect();
   if (parent_handle_) {
     wait_for_connect = parent_handle_->WaitForConnect();
     parent_handle_->WorkerStarted(client_->getThreadHandle(), wait_for_connect);
-  } else if (!options->inspector_enabled || !StartIoThread()) {
+  } else if (!options.inspector_enabled || !StartIoThread()) {
     return false;
   }
+
+  // TODO(joyeecheung): we should not be using process as a global object
+  // to transport --inspect-brk. Instead, the JS land can get this through
+  // require('internal/options') since it should be set once CLI parsing
+  // is done.
   if (wait_for_connect) {
     HandleScope scope(parent_env_->isolate());
     parent_env_->process_object()->DefineOwnProperty(
@@ -723,8 +735,7 @@ bool Agent::StartIoThread() {
 
   CHECK_NOT_NULL(client_);
 
-  io_ = InspectorIo::Start(
-      client_->getThreadHandle(), path_, debug_options_);
+  io_ = InspectorIo::Start(client_->getThreadHandle(), path_, host_port_);
   if (io_ == nullptr) {
     return false;
   }
@@ -853,7 +864,9 @@ void Agent::RequestIoThreadStart() {
   uv_async_send(&start_io_thread_async);
   Isolate* isolate = parent_env_->isolate();
   v8::Platform* platform = parent_env_->isolate_data()->platform();
-  platform->CallOnForegroundThread(isolate, new StartIoTask(this));
+  std::shared_ptr<TaskRunner> taskrunner =
+    platform->GetForegroundTaskRunner(isolate);
+  taskrunner->PostTask(std::make_unique<StartIoTask>(this));
   isolate->RequestInterrupt(StartIoInterrupt, this);
   uv_async_send(&start_io_thread_async);
 }
@@ -865,8 +878,7 @@ void Agent::ContextCreated(Local<Context> context, const ContextInfo& info) {
 }
 
 bool Agent::WillWaitForConnect() {
-  if (debug_options_->wait_for_connect())
-    return true;
+  if (debug_options_.wait_for_connect()) return true;
   if (parent_handle_)
     return parent_handle_->WaitForConnect();
   return false;

@@ -3,8 +3,7 @@
 const common = require('../../common');
 const assert = require('assert');
 
-// addon is referenced through the eval expression in testFile
-// eslint-disable-next-line no-unused-vars
+// `addon` is referenced through the eval expression in testFile
 const addon = require(`./build/${common.buildType}/test_general`);
 
 const testCase = '(41.92 + 0.08);';

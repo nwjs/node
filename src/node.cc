@@ -143,7 +143,6 @@ using v8::Maybe;
 using v8::MaybeLocal;
 using v8::Message;
 using v8::MicrotasksPolicy;
-using v8::NamedPropertyHandlerConfiguration;
 using v8::NewStringType;
 using v8::None;
 using v8::Nothing;
@@ -1057,21 +1056,11 @@ void SetupProcessObject(Environment* env,
                exec_arguments).FromJust();
 
   // create process.env
-  Local<ObjectTemplate> process_env_template =
-      ObjectTemplate::New(env->isolate());
-  process_env_template->SetHandler(NamedPropertyHandlerConfiguration(
-          EnvGetter,
-          EnvSetter,
-          EnvQuery,
-          EnvDeleter,
-          EnvEnumerator,
-          env->as_external()));
-
-  Local<Object> process_env =
-      process_env_template->NewInstance(env->context()).ToLocalChecked();
-  process->Set(env->context(),
-               FIXED_ONE_BYTE_STRING(env->isolate(), "env"),
-               process_env).FromJust();
+  process
+      ->Set(env->context(),
+            FIXED_ONE_BYTE_STRING(env->isolate(), "env"),
+            CreateEnvVarProxy(context, isolate, env->as_external()))
+      .FromJust();
 
   READONLY_PROPERTY(process, "pid",
                     Integer::New(env->isolate(), uv_os_getpid()));
@@ -1194,22 +1183,23 @@ void SetupProcessObject(Environment* env,
   SECURITY_REVERSIONS(V)
 #undef V
 
-  size_t exec_path_len = 2 * PATH_MAX;
-  char* exec_path = new char[exec_path_len];
-  Local<String> exec_path_value;
-  if (uv_exepath(exec_path, &exec_path_len) == 0) {
-    exec_path_value = String::NewFromUtf8(env->isolate(),
-                                          exec_path,
-                                          NewStringType::kInternalized,
-                                          exec_path_len).ToLocalChecked();
-  } else {
-    exec_path_value = String::NewFromUtf8(env->isolate(), args[0].c_str(),
-        NewStringType::kInternalized).ToLocalChecked();
+  {
+    size_t exec_path_len = 2 * PATH_MAX;
+    std::vector<char> exec_path(exec_path_len);
+    Local<String> exec_path_value;
+    if (uv_exepath(exec_path.data(), &exec_path_len) == 0) {
+      exec_path_value = String::NewFromUtf8(env->isolate(),
+                                            exec_path.data(),
+                                            NewStringType::kInternalized,
+                                            exec_path_len).ToLocalChecked();
+    } else {
+      exec_path_value = String::NewFromUtf8(env->isolate(), args[0].c_str(),
+          NewStringType::kInternalized).ToLocalChecked();
+    }
+    process->Set(env->context(),
+                 FIXED_ONE_BYTE_STRING(env->isolate(), "execPath"),
+                 exec_path_value).FromJust();
   }
-  process->Set(env->context(),
-               FIXED_ONE_BYTE_STRING(env->isolate(), "execPath"),
-               exec_path_value).FromJust();
-  delete[] exec_path;
 
   auto debug_port_string = FIXED_ONE_BYTE_STRING(env->isolate(), "debugPort");
   CHECK(process->SetAccessor(env->context(),

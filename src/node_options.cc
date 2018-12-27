@@ -88,7 +88,7 @@ DebugOptionsParser::DebugOptionsParser() {
 }
 
 #if HAVE_INSPECTOR
-DebugOptionsParser DebugOptionsParser::instance;
+const DebugOptionsParser DebugOptionsParser::instance;
 #endif  // HAVE_INSPECTOR
 
 EnvironmentOptionsParser::EnvironmentOptionsParser() {
@@ -211,7 +211,7 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
 #endif  // HAVE_INSPECTOR
 }
 
-EnvironmentOptionsParser EnvironmentOptionsParser::instance;
+const EnvironmentOptionsParser EnvironmentOptionsParser::instance;
 
 PerIsolateOptionsParser::PerIsolateOptionsParser() {
   AddOption("--track-heap-objects",
@@ -234,7 +234,7 @@ PerIsolateOptionsParser::PerIsolateOptionsParser() {
          &PerIsolateOptions::get_per_env_options);
 }
 
-PerIsolateOptionsParser PerIsolateOptionsParser::instance;
+const PerIsolateOptionsParser PerIsolateOptionsParser::instance;
 
 PerProcessOptionsParser::PerProcessOptionsParser() {
   AddOption("--title",
@@ -252,6 +252,10 @@ PerProcessOptionsParser::PerProcessOptionsParser() {
             kAllowedInEnvironment);
   AddAlias("--trace-events-enabled", {
     "--trace-event-categories", "v8,node,node.async_hooks" });
+  AddOption("--max-http-header-size",
+            "set the maximum size of HTTP headers (default: 8KB)",
+            &PerProcessOptions::max_http_header_size,
+            kAllowedInEnvironment);
   AddOption("--v8-pool-size",
             "set V8's thread pool size",
             &PerProcessOptions::v8_thread_pool_size,
@@ -338,7 +342,7 @@ PerProcessOptionsParser::PerProcessOptionsParser() {
          &PerProcessOptions::get_per_isolate_options);
 }
 
-PerProcessOptionsParser PerProcessOptionsParser::instance;
+const PerProcessOptionsParser PerProcessOptionsParser::instance;
 
 inline std::string RemoveBrackets(const std::string& host) {
   if (!host.empty() && host.front() == '[' && host.back() == ']')
@@ -421,6 +425,9 @@ void GetOptions(const FunctionCallbackInfo<Value>& args) {
         break;
       case kInteger:
         value = Number::New(isolate, *parser.Lookup<int64_t>(field, opts));
+        break;
+      case kUInteger:
+        value = Number::New(isolate, *parser.Lookup<uint64_t>(field, opts));
         break;
       case kString:
         if (!ToV8Value(context, *parser.Lookup<std::string>(field, opts))
@@ -509,6 +516,7 @@ void Initialize(Local<Object> target,
   NODE_DEFINE_CONSTANT(types, kV8Option);
   NODE_DEFINE_CONSTANT(types, kBoolean);
   NODE_DEFINE_CONSTANT(types, kInteger);
+  NODE_DEFINE_CONSTANT(types, kUInteger);
   NODE_DEFINE_CONSTANT(types, kString);
   NODE_DEFINE_CONSTANT(types, kHostPort);
   NODE_DEFINE_CONSTANT(types, kStringList);

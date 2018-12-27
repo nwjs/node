@@ -242,8 +242,8 @@ For undocumented APIs that are public, open a pull request documenting the API.
 
 ### Breaking Changes
 
-Backwards-incompatible changes may land on the master branch at any time after
-sufficient review by Collaborators and approval of at least two TSC members.
+At least two TSC members must approve backward-incompatible changes to the
+master branch.
 
 Examples of breaking changes include:
 
@@ -254,38 +254,16 @@ Examples of breaking changes include:
 * altering expected timing of an event
 * changing the side effects of using a particular API
 
-Purely additive changes (e.g. adding new events to `EventEmitter`
-implementations, adding new arguments to a method in a way that allows
-existing code to continue working without modification, or adding new
-properties to an options argument) are semver-minor changes.
-
 #### Breaking Changes and Deprecations
 
-With a few exceptions outlined below, when backward-incompatible changes to a
-*Public* API are necessary, the existing API *must* be deprecated *first* and
-the new API either introduced in parallel or added after the next major Node.js
-version following the deprecation as a replacement for the deprecated API. In
-other words, as a general rule, existing *Public* APIs *must not* change (in a
-backward-incompatible way) without a deprecation.
+Existing stable public APIs that change in a backward-incompatible way must
+undergo deprecation. The exceptions to this rule are:
 
-Exceptions to this rule may be made in the following cases:
-
-* Adding or removing errors thrown or reported by a Public API;
+* Adding or removing errors thrown or reported by a public API;
 * Changing error messages for errors without error code;
-* Altering the timing and non-internal side effects of the Public API.
-
-Such changes *must* be handled as semver-major changes but MAY be landed
-without a [Deprecation cycle](#deprecation-cycle).
-
-Note that errors thrown, along with behaviors and APIs implemented by
-dependencies of Node.js (e.g. those originating from V8) are generally not
-under the control of Node.js and therefore *are not directly subject to this
-policy*. However, care should still be taken when landing updates to
-dependencies when it is known or expected that breaking changes to error
-handling may have been made. Additional CI testing may be required.
-
-From time-to-time, in particularly exceptional cases, the TSC may be asked to
-consider and approve additional exceptions to this rule.
+* Altering the timing and non-internal side effects of the public API;
+* Changes to errors thrown by dependencies of Node.js, such as V8;
+* One-time exceptions granted by the TSC.
 
 For more information, see [Deprecations](#deprecations).
 

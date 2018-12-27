@@ -118,8 +118,8 @@ that implements an HTTP server:
 const http = require('http');
 
 const server = http.createServer((req, res) => {
-  // req is an http.IncomingMessage, which is a Readable Stream
-  // res is an http.ServerResponse, which is a Writable Stream
+  // `req` is an http.IncomingMessage, which is a Readable Stream
+  // `res` is an http.ServerResponse, which is a Writable Stream
 
   let body = '';
   // Get the data as utf8 strings.
@@ -1195,7 +1195,7 @@ function parseHeader(stream, callback) {
         stream.removeListener('readable', onReadable);
         if (buf.length)
           stream.unshift(buf);
-        // now the body of the message can be read from the stream.
+        // Now the body of the message can be read from the stream.
         callback(null, header, stream);
       } else {
         // still reading the header.
@@ -1450,6 +1450,7 @@ of the four basic stream classes (`stream.Writable`, `stream.Readable`,
 `stream.Duplex`, or `stream.Transform`), making sure they call the appropriate
 parent class constructor:
 
+<!-- eslint-disable no-useless-constructor -->
 ```js
 const { Writable } = require('stream');
 
@@ -1547,6 +1548,7 @@ changes:
   * `autoDestroy` {boolean} Whether this stream should automatically call
     `.destroy()` on itself after ending. **Default:** `false`.
 
+<!-- eslint-disable no-useless-constructor -->
 ```js
 const { Writable } = require('stream');
 
@@ -1718,11 +1720,6 @@ required elements of a custom [`Writable`][] stream instance:
 const { Writable } = require('stream');
 
 class MyWritable extends Writable {
-  constructor(options) {
-    super(options);
-    // ...
-  }
-
   _write(chunk, encoding, callback) {
     if (chunk.toString().indexOf('a') >= 0) {
       callback(new Error('chunk is invalid'));
@@ -1806,6 +1803,7 @@ changes:
   * `autoDestroy` {boolean} Whether this stream should automatically call
     `.destroy()` on itself after ending. **Default:** `false`.
 
+<!-- eslint-disable no-useless-constructor -->
 ```js
 const { Readable } = require('stream');
 
@@ -1932,7 +1930,7 @@ pause/resume mechanism, and a data callback, the low-level source can be wrapped
 by the custom `Readable` instance:
 
 ```js
-// source is an object with readStop() and readStart() methods,
+// `_source` is an object with readStop() and readStart() methods,
 // and an `ondata` member that gets called when it has data, and
 // an `onend` member that gets called when the data is over.
 
@@ -1940,11 +1938,11 @@ class SourceWrapper extends Readable {
   constructor(options) {
     super(options);
 
-    this._source = getLowlevelSourceObject();
+    this._source = getLowLevelSourceObject();
 
     // Every time there's data, push it into the internal buffer.
     this._source.ondata = (chunk) => {
-      // if push() returns false, then stop reading from source
+      // If push() returns false, then stop reading from source
       if (!this.push(chunk))
         this._source.readStop();
     };
@@ -2064,6 +2062,7 @@ changes:
   * `writableHighWaterMark` {number} Sets `highWaterMark` for the writable side
     of the stream. Has no effect if `highWaterMark` is provided.
 
+<!-- eslint-disable no-useless-constructor -->
 ```js
 const { Duplex } = require('stream');
 
@@ -2218,6 +2217,7 @@ output on the `Readable` side is not consumed.
   * `flush` {Function} Implementation for the [`stream._flush()`][stream-_flush]
     method.
 
+<!-- eslint-disable no-useless-constructor -->
 ```js
 const { Transform } = require('stream');
 
@@ -2391,7 +2391,7 @@ For example, consider the following code:
 // WARNING!  BROKEN!
 net.createServer((socket) => {
 
-  // we add an 'end' listener, but never consume the data
+  // We add an 'end' listener, but never consume the data
   socket.on('end', () => {
     // It will never get here.
     socket.end('The message was received but was not processed.\n');

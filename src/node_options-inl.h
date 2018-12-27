@@ -42,6 +42,19 @@ void OptionsParser<Options>::AddOption(const std::string& name,
 template <typename Options>
 void OptionsParser<Options>::AddOption(const std::string& name,
                                        const std::string& help_text,
+                                       uint64_t Options::* field,
+                                       OptionEnvvarSettings env_setting) {
+  options_.emplace(
+      name,
+      OptionInfo{kUInteger,
+                 std::make_shared<SimpleOptionField<uint64_t>>(field),
+                 env_setting,
+                 help_text});
+}
+
+template <typename Options>
+void OptionsParser<Options>::AddOption(const std::string& name,
+                                       const std::string& help_text,
                                        int64_t Options::* field,
                                        OptionEnvvarSettings env_setting) {
   options_.emplace(
@@ -201,7 +214,7 @@ auto OptionsParser<Options>::Convert(
 template <typename Options>
 template <typename ChildOptions>
 void OptionsParser<Options>::Insert(
-    OptionsParser<ChildOptions>* child_options_parser,
+    const OptionsParser<ChildOptions>* child_options_parser,
     ChildOptions* (Options::* get_child)()) {
   aliases_.insert(child_options_parser->aliases_.begin(),
                   child_options_parser->aliases_.end());
@@ -274,7 +287,7 @@ void OptionsParser<Options>::Parse(
     std::vector<std::string>* const v8_args,
     Options* const options,
     OptionEnvvarSettings required_env_settings,
-    std::vector<std::string>* const errors) {
+    std::vector<std::string>* const errors) const {
   ArgsInfo args(orig_args, exec_args);
 
   // The first entry is the process name. Make sure it ends up in the V8 argv,
@@ -400,6 +413,9 @@ void OptionsParser<Options>::Parse(
         break;
       case kInteger:
         *Lookup<int64_t>(info.field, options) = std::atoll(value.c_str());
+        break;
+      case kUInteger:
+        *Lookup<uint64_t>(info.field, options) = std::stoull(value.c_str());
         break;
       case kString:
         *Lookup<std::string>(info.field, options) = value;

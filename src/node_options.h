@@ -151,6 +151,7 @@ class PerProcessOptions : public Options {
   std::string title;
   std::string trace_event_categories;
   std::string trace_event_file_pattern = "node_trace.${rotation}.log";
+  uint64_t max_http_header_size = 8 * 1024;
   int64_t v8_thread_pool_size = 4;
   bool zero_fill_all_buffers = false;
 
@@ -203,6 +204,7 @@ enum OptionType {
   kV8Option,
   kBoolean,
   kInteger,
+  kUInteger,
   kString,
   kHostPort,
   kStringList,
@@ -228,6 +230,10 @@ class OptionsParser {
   void AddOption(const std::string& name,
                  const std::string& help_text,
                  bool Options::* field,
+                 OptionEnvvarSettings env_setting = kDisallowedInEnvironment);
+  void AddOption(const std::string& name,
+                 const std::string& help_text,
+                 uint64_t Options::* field,
                  OptionEnvvarSettings env_setting = kDisallowedInEnvironment);
   void AddOption(const std::string& name,
                  const std::string& help_text,
@@ -275,7 +281,7 @@ class OptionsParser {
   // a method that yields the target options type from this parser's options
   // type.
   template <typename ChildOptions>
-  void Insert(OptionsParser<ChildOptions>* child_options_parser,
+  void Insert(const OptionsParser<ChildOptions>* child_options_parser,
               ChildOptions* (Options::* get_child)());
 
   // Parse a sequence of options into an options struct, a list of
@@ -300,7 +306,7 @@ class OptionsParser {
                      std::vector<std::string>* const v8_args,
                      Options* const options,
                      OptionEnvvarSettings required_env_settings,
-                     std::vector<std::string>* const errors);
+                     std::vector<std::string>* const errors) const;
 
  private:
   // We support the wide variety of different option types by remembering
@@ -391,28 +397,28 @@ class DebugOptionsParser : public OptionsParser<DebugOptions> {
  public:
   DebugOptionsParser();
 
-  static DebugOptionsParser instance;
+  static const DebugOptionsParser instance;
 };
 
 class EnvironmentOptionsParser : public OptionsParser<EnvironmentOptions> {
  public:
   EnvironmentOptionsParser();
 
-  static EnvironmentOptionsParser instance;
+  static const EnvironmentOptionsParser instance;
 };
 
 class PerIsolateOptionsParser : public OptionsParser<PerIsolateOptions> {
  public:
   PerIsolateOptionsParser();
 
-  static PerIsolateOptionsParser instance;
+  static const PerIsolateOptionsParser instance;
 };
 
 class PerProcessOptionsParser : public OptionsParser<PerProcessOptions> {
  public:
   PerProcessOptionsParser();
 
-  static PerProcessOptionsParser instance;
+  static const PerProcessOptionsParser instance;
 };
 
 }  // namespace options_parser

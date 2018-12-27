@@ -65,7 +65,7 @@ class TraceEventScope {
 };
 
 int const Environment::kNodeContextTag = 0x6e6f64;
-void* Environment::kNodeContextTagPtr = const_cast<void*>(
+void* const Environment::kNodeContextTagPtr = const_cast<void*>(
     static_cast<const void*>(&Environment::kNodeContextTag));
 
 IsolateData::IsolateData(Isolate* isolate,
@@ -211,6 +211,14 @@ Environment::Environment(IsolateData* isolate_data,
   }
 
   destroy_async_id_list_.reserve(512);
+  BeforeExit(
+      [](void* arg) {
+        Environment* env = static_cast<Environment*>(arg);
+        if (!env->destroy_async_id_list()->empty())
+          AsyncWrap::DestroyAsyncIdsCallback(env, nullptr);
+      },
+      this);
+
   performance_state_.reset(new performance::performance_state(isolate()));
 #if 0
   performance_state_->Mark(
@@ -611,9 +619,7 @@ void Environment::RunAndClearNativeImmediates() {
     };
     while (drain_list()) {}
 
-#ifdef DEBUG
-    CHECK_GE(immediate_info()->count(), count);
-#endif
+    DCHECK_GE(immediate_info()->count(), count);
     immediate_info()->count_dec(count);
     immediate_info()->ref_count_dec(ref_count);
   }

@@ -130,6 +130,9 @@ void RegisterSignalHandler(int signal,
 #endif
 
 bool SafeGetenv(const char* key, std::string* text);
+v8::Local<v8::Object> CreateEnvVarProxy(v8::Local<v8::Context> context,
+                                        v8::Isolate* isolate,
+                                        v8::Local<v8::Value> data);
 
 std::string GetHumanReadableProcessName();
 void GetHumanReadableProcessName(char (*name)[1024]);
@@ -700,8 +703,8 @@ static inline const char* errno_string(int errorno) {
 
 extern double prog_start_time;
 
-extern const char* llhttp_version;
-extern const char* http_parser_version;
+extern const char* const llhttp_version;
+extern const char* const http_parser_version;
 
 void Abort(const v8::FunctionCallbackInfo<v8::Value>& args);
 void Chdir(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -719,16 +722,6 @@ void StopProfilerIdleNotifier(const v8::FunctionCallbackInfo<v8::Value>& args);
 void Umask(const v8::FunctionCallbackInfo<v8::Value>& args);
 void Uptime(const v8::FunctionCallbackInfo<v8::Value>& args);
 
-void EnvDeleter(v8::Local<v8::Name> property,
-                const v8::PropertyCallbackInfo<v8::Boolean>& info);
-void EnvGetter(v8::Local<v8::Name> property,
-               const v8::PropertyCallbackInfo<v8::Value>& info);
-void EnvSetter(v8::Local<v8::Name> property,
-               v8::Local<v8::Value> value,
-               const v8::PropertyCallbackInfo<v8::Value>& info);
-void EnvQuery(v8::Local<v8::Name> property,
-              const v8::PropertyCallbackInfo<v8::Integer>& info);
-void EnvEnumerator(const v8::PropertyCallbackInfo<v8::Array>& info);
 void DebugPortGetter(v8::Local<v8::Name> property,
                      const v8::PropertyCallbackInfo<v8::Value>& info);
 void DebugPortSetter(v8::Local<v8::Name> property,

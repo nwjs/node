@@ -344,7 +344,7 @@ test/addons/.docbuildstamp: $(DOCBUILDSTAMP_PREREQS) tools/doc/node_modules
 		$(RM) -r test/addons/??_*/; \
 		[ -x $(NODE) ] && $(NODE) $< || node $< ; \
 		touch $@; \
-  fi
+	fi
 
 ADDONS_BINDING_GYPS := \
 	$(filter-out test/addons/??_*/binding.gyp, \
@@ -661,7 +661,7 @@ tools/doc/node_modules: tools/doc/package.json
 		echo "Skipping tools/doc/node_modules (no crypto)"; \
 	else \
 		cd tools/doc && $(call available-node,$(run-npm-ci)) \
-  fi
+	fi
 
 .PHONY: doc-only
 doc-only: tools/doc/node_modules \
@@ -692,16 +692,16 @@ out/doc/api/assets/%: doc/api_assets/% out/doc/api/assets
 
 run-npm-ci = $(PWD)/$(NPM) ci
 
+LINK_DATA = out/doc/apilinks.json
 gen-api = tools/doc/generate.js --node-version=$(FULLVERSION) \
-		--apilinks=out/apilinks.json $< --output-directory=out/doc/api
-gen-apilink = tools/doc/apilinks.js $(wildcard lib/*.js) > $@
+		--apilinks=$(LINK_DATA) $< --output-directory=out/doc/api
+gen-apilink = tools/doc/apilinks.js $(LINK_DATA) $(wildcard lib/*.js)
 
-out/apilinks.json: $(wildcard lib/*.js) tools/doc/apilinks.js
+$(LINK_DATA): $(wildcard lib/*.js) tools/doc/apilinks.js
 	$(call available-node, $(gen-apilink))
 
 out/doc/api/%.json out/doc/api/%.html: doc/api/%.md tools/doc/generate.js \
-	tools/doc/html.js tools/doc/json.js tools/doc/apilinks.js | \
-	out/apilinks.json
+	tools/doc/html.js tools/doc/json.js tools/doc/apilinks.js | $(LINK_DATA)
 	$(call available-node, $(gen-api))
 
 out/doc/api/all.html: $(apidocs_html) tools/doc/allhtml.js \
@@ -1159,7 +1159,7 @@ lint-md: | tools/.mdlintstamp
 LINT_JS_TARGETS = .eslintrc.js benchmark doc lib test tools
 
 run-lint-js = tools/node_modules/eslint/bin/eslint.js --cache \
-	--ext=.js,.mjs,.md $(LINT_JS_TARGETS)
+	--report-unused-disable-directives --ext=.js,.mjs,.md $(LINT_JS_TARGETS)
 run-lint-js-fix = $(run-lint-js) --fix
 
 .PHONY: lint-js-fix

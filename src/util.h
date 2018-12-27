@@ -129,6 +129,29 @@ void DumpBacktrace(FILE* fp);
 #define CHECK_NOT_NULL(val) CHECK((val) != nullptr)
 #define CHECK_IMPLIES(a, b) CHECK(!(a) || (b))
 
+#ifdef DEBUG
+  #define DCHECK_EQ(a, b) CHECK((a) == (b))
+  #define DCHECK_GE(a, b) CHECK((a) >= (b))
+  #define DCHECK_GT(a, b) CHECK((a) > (b))
+  #define DCHECK_LE(a, b) CHECK((a) <= (b))
+  #define DCHECK_LT(a, b) CHECK((a) < (b))
+  #define DCHECK_NE(a, b) CHECK((a) != (b))
+  #define DCHECK_NULL(val) CHECK((val) == nullptr)
+  #define DCHECK_NOT_NULL(val) CHECK((val) != nullptr)
+  #define DCHECK_IMPLIES(a, b) CHECK(!(a) || (b))
+#else
+  #define DCHECK_EQ(a, b)
+  #define DCHECK_GE(a, b)
+  #define DCHECK_GT(a, b)
+  #define DCHECK_LE(a, b)
+  #define DCHECK_LT(a, b)
+  #define DCHECK_NE(a, b)
+  #define DCHECK_NULL(val)
+  #define DCHECK_NOT_NULL(val)
+  #define DCHECK_IMPLIES(a, b)
+#endif
+
+
 #define UNREACHABLE() ABORT()
 
 // TAILQ-style intrusive list node.
@@ -448,6 +471,29 @@ struct MallocedBuffer {
   }
   MallocedBuffer(const MallocedBuffer&) = delete;
   MallocedBuffer& operator=(const MallocedBuffer&) = delete;
+};
+
+template <typename T>
+class NonCopyableMaybe {
+ public:
+  NonCopyableMaybe() : empty_(true) {}
+  explicit NonCopyableMaybe(T&& value)
+      : empty_(false),
+        value_(std::move(value)) {}
+
+  bool IsEmpty() const {
+    return empty_;
+  }
+
+  T&& Release() {
+    CHECK_EQ(empty_, false);
+    empty_ = true;
+    return std::move(value_);
+  }
+
+ private:
+  bool empty_;
+  T value_;
 };
 
 // Test whether some value can be called with ().

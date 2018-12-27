@@ -24,7 +24,8 @@ function re(literals, ...values) {
       customInspect: false,
       maxArrayLength: Infinity,
       breakLength: Infinity,
-      sorted: true
+      sorted: true,
+      getters: true
     });
     // Need to escape special characters.
     result += str;
@@ -41,7 +42,7 @@ function re(literals, ...values) {
 // That is why we discourage using deepEqual in our own tests.
 
 // Turn off no-restricted-properties because we are testing deepEqual!
-/* eslint-disable no-restricted-properties, prefer-common-expectserror */
+/* eslint-disable no-restricted-properties */
 
 const arr = new Uint8Array([120, 121, 122, 10]);
 const buf = Buffer.from(arr);
@@ -1048,4 +1049,25 @@ assert.throws(
     value: () => { throw new Error('failed'); }
   });
   assertDeepAndStrictEqual(a, b);
+}
+
+// Check getters.
+{
+  const a = {
+    get a() { return 5; }
+  };
+  const b = {
+    get a() { return 6; }
+  };
+  assert.throws(
+    () => assert.deepStrictEqual(a, b),
+    {
+      code: 'ERR_ASSERTION',
+      name: 'AssertionError [ERR_ASSERTION]',
+      message: /a: \[Getter: 5]\n-   a: \[Getter: 6]\n  /
+    }
+  );
+
+  // The descriptor is not compared.
+  assertDeepAndStrictEqual(a, { a: 5 });
 }

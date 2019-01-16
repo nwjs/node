@@ -75,6 +75,7 @@
         'v8_postmortem_support%': 'false',
         'obj_dir': '<(PRODUCT_DIR)/obj',
         'v8_base': '<(PRODUCT_DIR)/lib/v8_libbase.lib',
+        'clang_dir': 'third_party/llvm-build/Release+Asserts/',
       }, {
         'os_posix': 1,
         'v8_postmortem_support%': 'true',
@@ -121,10 +122,18 @@
   },
 
   'conditions': [
-      [ 'clang==1 and OS != "mac" and building_nw==1', {
+      [ 'clang==1 and OS == "linux" and building_nw==1', {
         'make_global_settings': [
           ['CC', '<(clang_dir)/bin/clang'],
           ['CXX', '<(clang_dir)/bin/clang++'],
+          ['CC.host', '$(CC)'],
+          ['CXX.host', '$(CXX)'],
+        ],
+      }],
+      [ 'clang==1 and OS == "win" and building_nw==1', {
+        'make_global_settings': [
+          ['CC', 'third_party/llvm-build/Release+Asserts/bin/clang-cl'],
+          ['CXX', 'third_party/llvm-build/Release+Asserts/bin/clang-cl'],
           ['CC.host', '$(CC)'],
           ['CXX.host', '$(CXX)'],
         ],
@@ -209,6 +218,15 @@
               },
             },
           }],
+          ['OS=="win" and component=="shared_library"', {
+            'msvs_settings': {
+              'VCCLCompilerTool': {
+                'AdditionalOptions': [
+                  '/Zc:dllexportInlines-',
+                ],
+              },
+            },
+          }],
           ['OS=="win" and MSVS_VERSION == "2015"', {
             'msvs_settings': {
               'VCCLCompilerTool': {
@@ -230,7 +248,7 @@
         'variables': {
           'v8_enable_handle_zapping': 1,
         },
-        'defines': [ 'DEBUG', '_DEBUG', 'V8_ENABLE_CHECKS' ],
+        'defines': [ 'DEBUG', '_DEBUG', 'V8_ENABLE_CHECKS', '_HAS_ITERATOR_DEBUGGING=0' ],
         'cflags': [ '-g', '-O0' ],
         'conditions': [
           ['target_arch=="x64"', {

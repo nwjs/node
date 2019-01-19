@@ -233,11 +233,11 @@ MaybeLocal<Function> NativeModuleLoader::LookupAndCompile(
     }
   }
 
-  const bool use_cache = cached_data != nullptr;
+  const bool use_cache = false; //cached_data != nullptr;
   ScriptCompiler::CompileOptions options =
       use_cache ? ScriptCompiler::kConsumeCodeCache
                 : ScriptCompiler::kEagerCompile;
-  ScriptCompiler::Source script_source(source, origin, cached_data);
+  ScriptCompiler::Source script_source(source, origin, nullptr);
 
   MaybeLocal<Function> maybe_fun =
       ScriptCompiler::CompileFunctionInContext(context,

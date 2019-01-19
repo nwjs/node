@@ -70,6 +70,7 @@ skip_regex = re.compile(r'# SKIP\S*\s+(.*)', re.IGNORECASE)
 
 VERBOSE = False
 
+os.umask(0o022)
 os.environ['NODE_OPTIONS'] = ''
 
 # ---------------------------------------------
@@ -1587,7 +1588,6 @@ def Main():
 
   if options.worker:
     run_worker = join(workspace, "tools", "run-worker.js")
-    options.node_args.append('--experimental-worker')
     options.node_args.append(run_worker)
 
   shell = abspath(options.shell)

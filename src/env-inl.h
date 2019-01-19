@@ -265,16 +265,12 @@ inline AliasedBuffer<uint8_t, v8::Uint8Array>& Environment::TickInfo::fields() {
   return fields_;
 }
 
-inline bool Environment::TickInfo::has_scheduled() const {
-  return fields_[kHasScheduled] == 1;
+inline bool Environment::TickInfo::has_tick_scheduled() const {
+  return fields_[kHasTickScheduled] == 1;
 }
 
-inline bool Environment::TickInfo::has_promise_rejections() const {
-  return fields_[kHasPromiseRejections] == 1;
-}
-
-inline void Environment::TickInfo::promise_rejections_toggle_on() {
-  fields_[kHasPromiseRejections] = 1;
+inline bool Environment::TickInfo::has_rejection_to_warn() const {
+  return fields_[kHasRejectionToWarn] == 1;
 }
 
 inline void Environment::AssignToContext(v8::Local<v8::Context> context,
@@ -394,6 +390,16 @@ void Environment::DecreaseWaitingRequestCounter() {
 
 inline uv_loop_t* Environment::event_loop() const {
   return isolate_data()->event_loop();
+}
+
+inline void Environment::TryLoadAddon(
+    const char* filename,
+    int flags,
+    std::function<bool(binding::DLib*)> was_loaded) {
+  loaded_addons_.emplace_back(filename, flags);
+  if (!was_loaded(&loaded_addons_.back())) {
+    loaded_addons_.pop_back();
+  }
 }
 
 inline Environment::AsyncHooks* Environment::async_hooks() {
@@ -625,6 +631,14 @@ inline bool Environment::can_call_into_js() const {
 
 inline void Environment::set_can_call_into_js(bool can_call_into_js) {
   can_call_into_js_ = can_call_into_js;
+}
+
+inline bool Environment::has_run_bootstrapping_code() const {
+  return has_run_bootstrapping_code_;
+}
+
+inline void Environment::set_has_run_bootstrapping_code(bool value) {
+  has_run_bootstrapping_code_ = value;
 }
 
 inline bool Environment::is_main_thread() const {

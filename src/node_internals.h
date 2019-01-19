@@ -83,15 +83,10 @@ namespace native_module {
 class NativeModuleLoader;
 }
 
-extern Mutex process_mutex;
-extern Mutex environ_mutex;
-
-// Tells whether it is safe to call v8::Isolate::GetCurrent().
-extern bool v8_initialized;
-
-extern Mutex per_process_opts_mutex;
-extern std::shared_ptr<PerProcessOptions> per_process_opts;
-extern native_module::NativeModuleLoader per_process_loader;
+namespace per_process {
+extern Mutex env_var_mutex;
+extern double prog_start_time;
+}  // namespace per_process
 
 // Forward declaration
 class Environment;
@@ -122,17 +117,13 @@ void GetSockOrPeerName(const v8::FunctionCallbackInfo<v8::Value>& args) {
   args.GetReturnValue().Set(err);
 }
 
+void Exit(const v8::FunctionCallbackInfo<v8::Value>& args);
 void SignalExit(int signo);
 #ifdef __POSIX__
 void RegisterSignalHandler(int signal,
                            void (*handler)(int signal),
                            bool reset_handler = false);
 #endif
-
-bool SafeGetenv(const char* key, std::string* text);
-v8::Local<v8::Object> CreateEnvVarProxy(v8::Local<v8::Context> context,
-                                        v8::Isolate* isolate,
-                                        v8::Local<v8::Value> data);
 
 std::string GetHumanReadableProcessName();
 void GetHumanReadableProcessName(char (*name)[1024]);
@@ -183,16 +174,9 @@ SlicedArguments::SlicedArguments(
   size_ = size;
 }
 
-v8::Maybe<bool> ProcessEmitWarning(Environment* env, const char* fmt, ...);
-v8::Maybe<bool> ProcessEmitDeprecationWarning(Environment* env,
-                                              const char* warning,
-                                              const char* deprecation_code);
-
-void SetupBootstrapObject(Environment* env,
-                          v8::Local<v8::Object> bootstrapper);
-void SetupProcessObject(Environment* env,
-                        const std::vector<std::string>& args,
-                        const std::vector<std::string>& exec_args);
+namespace task_queue {
+void PromiseRejectCallback(v8::PromiseRejectMessage message);
+}  // namespace task_queue
 
 enum Endianness {
   kLittleEndian,  // _Not_ LITTLE_ENDIAN, clashes with endian.h.
@@ -252,6 +236,7 @@ v8::MaybeLocal<v8::Uint8Array> New(Environment* env,
                                    size_t byte_offset,
                                    size_t length) {
   v8::Local<v8::Uint8Array> ui = v8::Uint8Array::New(ab, byte_offset, length);
+  CHECK(!env->buffer_prototype_object().IsEmpty());
   v8::Maybe<bool> mb =
       ui->SetPrototype(env->context(), env->buffer_prototype_object());
   if (mb.IsNothing())
@@ -363,332 +348,7 @@ int ThreadPoolWork::CancelWork() {
 }
 
 tracing::AgentWriterHandle* GetTracingAgentWriter();
-
-static inline const char* errno_string(int errorno) {
-#define ERRNO_CASE(e)  case e: return #e;
-  switch (errorno) {
-#ifdef EACCES
-  ERRNO_CASE(EACCES);
-#endif
-
-#ifdef EADDRINUSE
-  ERRNO_CASE(EADDRINUSE);
-#endif
-
-#ifdef EADDRNOTAVAIL
-  ERRNO_CASE(EADDRNOTAVAIL);
-#endif
-
-#ifdef EAFNOSUPPORT
-  ERRNO_CASE(EAFNOSUPPORT);
-#endif
-
-#ifdef EAGAIN
-  ERRNO_CASE(EAGAIN);
-#endif
-
-#ifdef EWOULDBLOCK
-# if EAGAIN != EWOULDBLOCK
-  ERRNO_CASE(EWOULDBLOCK);
-# endif
-#endif
-
-#ifdef EALREADY
-  ERRNO_CASE(EALREADY);
-#endif
-
-#ifdef EBADF
-  ERRNO_CASE(EBADF);
-#endif
-
-#ifdef EBADMSG
-  ERRNO_CASE(EBADMSG);
-#endif
-
-#ifdef EBUSY
-  ERRNO_CASE(EBUSY);
-#endif
-
-#ifdef ECANCELED
-  ERRNO_CASE(ECANCELED);
-#endif
-
-#ifdef ECHILD
-  ERRNO_CASE(ECHILD);
-#endif
-
-#ifdef ECONNABORTED
-  ERRNO_CASE(ECONNABORTED);
-#endif
-
-#ifdef ECONNREFUSED
-  ERRNO_CASE(ECONNREFUSED);
-#endif
-
-#ifdef ECONNRESET
-  ERRNO_CASE(ECONNRESET);
-#endif
-
-#ifdef EDEADLK
-  ERRNO_CASE(EDEADLK);
-#endif
-
-#ifdef EDESTADDRREQ
-  ERRNO_CASE(EDESTADDRREQ);
-#endif
-
-#ifdef EDOM
-  ERRNO_CASE(EDOM);
-#endif
-
-#ifdef EDQUOT
-  ERRNO_CASE(EDQUOT);
-#endif
-
-#ifdef EEXIST
-  ERRNO_CASE(EEXIST);
-#endif
-
-#ifdef EFAULT
-  ERRNO_CASE(EFAULT);
-#endif
-
-#ifdef EFBIG
-  ERRNO_CASE(EFBIG);
-#endif
-
-#ifdef EHOSTUNREACH
-  ERRNO_CASE(EHOSTUNREACH);
-#endif
-
-#ifdef EIDRM
-  ERRNO_CASE(EIDRM);
-#endif
-
-#ifdef EILSEQ
-  ERRNO_CASE(EILSEQ);
-#endif
-
-#ifdef EINPROGRESS
-  ERRNO_CASE(EINPROGRESS);
-#endif
-
-#ifdef EINTR
-  ERRNO_CASE(EINTR);
-#endif
-
-#ifdef EINVAL
-  ERRNO_CASE(EINVAL);
-#endif
-
-#ifdef EIO
-  ERRNO_CASE(EIO);
-#endif
-
-#ifdef EISCONN
-  ERRNO_CASE(EISCONN);
-#endif
-
-#ifdef EISDIR
-  ERRNO_CASE(EISDIR);
-#endif
-
-#ifdef ELOOP
-  ERRNO_CASE(ELOOP);
-#endif
-
-#ifdef EMFILE
-  ERRNO_CASE(EMFILE);
-#endif
-
-#ifdef EMLINK
-  ERRNO_CASE(EMLINK);
-#endif
-
-#ifdef EMSGSIZE
-  ERRNO_CASE(EMSGSIZE);
-#endif
-
-#ifdef EMULTIHOP
-  ERRNO_CASE(EMULTIHOP);
-#endif
-
-#ifdef ENAMETOOLONG
-  ERRNO_CASE(ENAMETOOLONG);
-#endif
-
-#ifdef ENETDOWN
-  ERRNO_CASE(ENETDOWN);
-#endif
-
-#ifdef ENETRESET
-  ERRNO_CASE(ENETRESET);
-#endif
-
-#ifdef ENETUNREACH
-  ERRNO_CASE(ENETUNREACH);
-#endif
-
-#ifdef ENFILE
-  ERRNO_CASE(ENFILE);
-#endif
-
-#ifdef ENOBUFS
-  ERRNO_CASE(ENOBUFS);
-#endif
-
-#ifdef ENODATA
-  ERRNO_CASE(ENODATA);
-#endif
-
-#ifdef ENODEV
-  ERRNO_CASE(ENODEV);
-#endif
-
-#ifdef ENOENT
-  ERRNO_CASE(ENOENT);
-#endif
-
-#ifdef ENOEXEC
-  ERRNO_CASE(ENOEXEC);
-#endif
-
-#ifdef ENOLINK
-  ERRNO_CASE(ENOLINK);
-#endif
-
-#ifdef ENOLCK
-# if ENOLINK != ENOLCK
-  ERRNO_CASE(ENOLCK);
-# endif
-#endif
-
-#ifdef ENOMEM
-  ERRNO_CASE(ENOMEM);
-#endif
-
-#ifdef ENOMSG
-  ERRNO_CASE(ENOMSG);
-#endif
-
-#ifdef ENOPROTOOPT
-  ERRNO_CASE(ENOPROTOOPT);
-#endif
-
-#ifdef ENOSPC
-  ERRNO_CASE(ENOSPC);
-#endif
-
-#ifdef ENOSR
-  ERRNO_CASE(ENOSR);
-#endif
-
-#ifdef ENOSTR
-  ERRNO_CASE(ENOSTR);
-#endif
-
-#ifdef ENOSYS
-  ERRNO_CASE(ENOSYS);
-#endif
-
-#ifdef ENOTCONN
-  ERRNO_CASE(ENOTCONN);
-#endif
-
-#ifdef ENOTDIR
-  ERRNO_CASE(ENOTDIR);
-#endif
-
-#ifdef ENOTEMPTY
-# if ENOTEMPTY != EEXIST
-  ERRNO_CASE(ENOTEMPTY);
-# endif
-#endif
-
-#ifdef ENOTSOCK
-  ERRNO_CASE(ENOTSOCK);
-#endif
-
-#ifdef ENOTSUP
-  ERRNO_CASE(ENOTSUP);
-#else
-# ifdef EOPNOTSUPP
-  ERRNO_CASE(EOPNOTSUPP);
-# endif
-#endif
-
-#ifdef ENOTTY
-  ERRNO_CASE(ENOTTY);
-#endif
-
-#ifdef ENXIO
-  ERRNO_CASE(ENXIO);
-#endif
-
-
-#ifdef EOVERFLOW
-  ERRNO_CASE(EOVERFLOW);
-#endif
-
-#ifdef EPERM
-  ERRNO_CASE(EPERM);
-#endif
-
-#ifdef EPIPE
-  ERRNO_CASE(EPIPE);
-#endif
-
-#ifdef EPROTO
-  ERRNO_CASE(EPROTO);
-#endif
-
-#ifdef EPROTONOSUPPORT
-  ERRNO_CASE(EPROTONOSUPPORT);
-#endif
-
-#ifdef EPROTOTYPE
-  ERRNO_CASE(EPROTOTYPE);
-#endif
-
-#ifdef ERANGE
-  ERRNO_CASE(ERANGE);
-#endif
-
-#ifdef EROFS
-  ERRNO_CASE(EROFS);
-#endif
-
-#ifdef ESPIPE
-  ERRNO_CASE(ESPIPE);
-#endif
-
-#ifdef ESRCH
-  ERRNO_CASE(ESRCH);
-#endif
-
-#ifdef ESTALE
-  ERRNO_CASE(ESTALE);
-#endif
-
-#ifdef ETIME
-  ERRNO_CASE(ETIME);
-#endif
-
-#ifdef ETIMEDOUT
-  ERRNO_CASE(ETIMEDOUT);
-#endif
-
-#ifdef ETXTBSY
-  ERRNO_CASE(ETXTBSY);
-#endif
-
-#ifdef EXDEV
-  ERRNO_CASE(EXDEV);
-#endif
-
-  default: return "";
-  }
-}
+void DisposePlatform();
 
 #define TRACING_CATEGORY_NODE "node"
 #define TRACING_CATEGORY_NODE1(one)                                           \
@@ -701,57 +361,18 @@ static inline const char* errno_string(int errorno) {
 
 // Functions defined in node.cc that are exposed via the bootstrapper object
 
-extern double prog_start_time;
-
-extern const char* const llhttp_version;
-extern const char* const http_parser_version;
-
-void Abort(const v8::FunctionCallbackInfo<v8::Value>& args);
-void Chdir(const v8::FunctionCallbackInfo<v8::Value>& args);
-void CPUUsage(const v8::FunctionCallbackInfo<v8::Value>& args);
-void Cwd(const v8::FunctionCallbackInfo<v8::Value>& args);
-void GetActiveHandles(const v8::FunctionCallbackInfo<v8::Value>& args);
-void GetActiveRequests(const v8::FunctionCallbackInfo<v8::Value>& args);
-void Hrtime(const v8::FunctionCallbackInfo<v8::Value>& args);
-void HrtimeBigInt(const v8::FunctionCallbackInfo<v8::Value>& args);
-void Kill(const v8::FunctionCallbackInfo<v8::Value>& args);
-void MemoryUsage(const v8::FunctionCallbackInfo<v8::Value>& args);
-void RawDebug(const v8::FunctionCallbackInfo<v8::Value>& args);
-void StartProfilerIdleNotifier(const v8::FunctionCallbackInfo<v8::Value>& args);
-void StopProfilerIdleNotifier(const v8::FunctionCallbackInfo<v8::Value>& args);
-void Umask(const v8::FunctionCallbackInfo<v8::Value>& args);
-void Uptime(const v8::FunctionCallbackInfo<v8::Value>& args);
-
-void DebugPortGetter(v8::Local<v8::Name> property,
-                     const v8::PropertyCallbackInfo<v8::Value>& info);
-void DebugPortSetter(v8::Local<v8::Name> property,
-                     v8::Local<v8::Value> value,
-                     const v8::PropertyCallbackInfo<void>& info);
-
-void GetParentProcessId(v8::Local<v8::Name> property,
-                        const v8::PropertyCallbackInfo<v8::Value>& info);
-
-void ProcessTitleGetter(v8::Local<v8::Name> property,
-                        const v8::PropertyCallbackInfo<v8::Value>& info);
-void ProcessTitleSetter(v8::Local<v8::Name> property,
-                        v8::Local<v8::Value> value,
-                        const v8::PropertyCallbackInfo<void>& info);
-
 #if defined(__POSIX__) && !defined(__ANDROID__) && !defined(__CloudABI__)
-void SetGid(const v8::FunctionCallbackInfo<v8::Value>& args);
-void SetEGid(const v8::FunctionCallbackInfo<v8::Value>& args);
-void SetUid(const v8::FunctionCallbackInfo<v8::Value>& args);
-void SetEUid(const v8::FunctionCallbackInfo<v8::Value>& args);
-void SetGroups(const v8::FunctionCallbackInfo<v8::Value>& args);
-void InitGroups(const v8::FunctionCallbackInfo<v8::Value>& args);
-void GetUid(const v8::FunctionCallbackInfo<v8::Value>& args);
-void GetGid(const v8::FunctionCallbackInfo<v8::Value>& args);
-void GetEUid(const v8::FunctionCallbackInfo<v8::Value>& args);
-void GetEGid(const v8::FunctionCallbackInfo<v8::Value>& args);
-void GetGroups(const v8::FunctionCallbackInfo<v8::Value>& args);
+#define NODE_IMPLEMENTS_POSIX_CREDENTIALS 1
 #endif  // __POSIX__ && !defined(__ANDROID__) && !defined(__CloudABI__)
 
+namespace credentials {
+bool SafeGetenv(const char* key, std::string* text);
+}  // namespace credentials
+
 void DefineZlibConstants(v8::Local<v8::Object> target);
+
+void RunBootstrapping(Environment* env);
+void StartExecution(Environment* env, const char* main_script_id);
 
 }  // namespace node
 

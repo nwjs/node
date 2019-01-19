@@ -30,6 +30,7 @@
 #endif
 #include "handle_wrap.h"
 #include "node.h"
+#include "node_binding.h"
 #include "node_http2_state.h"
 #include "node_options.h"
 #include "req_wrap.h"
@@ -37,11 +38,12 @@
 #include "uv.h"
 #include "v8.h"
 
-#include <list>
 #include <stdint.h>
-#include <vector>
+#include <functional>
+#include <list>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 struct nghttp2_rcbuf;
 
@@ -138,6 +140,7 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(channel_string, "channel")                                                 \
   V(chunks_sent_since_last_write_string, "chunksSentSinceLastWrite")           \
   V(code_string, "code")                                                       \
+  V(config_string, "config")                                                   \
   V(constants_string, "constants")                                             \
   V(crypto_dsa_string, "dsa")                                                  \
   V(crypto_ec_string, "ec")                                                    \
@@ -310,7 +313,7 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(write_host_object_string, "_writeHostObject")                              \
   V(write_queue_size_string, "writeQueueSize")                                 \
   V(x_forwarded_string, "x-forwarded-for")                                     \
-  V(zero_return_string, "ZERO_RETURN")                                         \
+  V(zero_return_string, "ZERO_RETURN")
 
 #define ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)                            \
   V(as_external, v8::External)                                                 \
@@ -359,13 +362,14 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(performance_entry_template, v8::Function)                                  \
   V(pipe_constructor_template, v8::FunctionTemplate)                           \
   V(process_object, v8::Object)                                                \
-  V(promise_handler_function, v8::Function)                                    \
+  V(promise_reject_callback, v8::Function)                                     \
   V(promise_wrap_template, v8::ObjectTemplate)                                 \
   V(sab_lifetimepartner_constructor_template, v8::FunctionTemplate)            \
   V(script_context_constructor_template, v8::FunctionTemplate)                 \
   V(script_data_constructor_function, v8::Function)                            \
   V(secure_context_constructor_template, v8::FunctionTemplate)                 \
   V(shutdown_wrap_template, v8::ObjectTemplate)                                \
+  V(start_execution_function, v8::Function)                                    \
   V(tcp_constructor_template, v8::FunctionTemplate)                            \
   V(tick_callback_function, v8::Function)                                      \
   V(timers_callback_function, v8::Function)                                    \
@@ -374,7 +378,7 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(tty_constructor_template, v8::FunctionTemplate)                            \
   V(udp_constructor_function, v8::Function)                                    \
   V(url_constructor_function, v8::Function)                                    \
-  V(write_wrap_template, v8::ObjectTemplate)                                   \
+  V(write_wrap_template, v8::ObjectTemplate)
 
 class Environment;
 
@@ -569,18 +573,16 @@ class Environment {
   class TickInfo {
    public:
     inline AliasedBuffer<uint8_t, v8::Uint8Array>& fields();
-    inline bool has_scheduled() const;
-    inline bool has_promise_rejections() const;
-
-    inline void promise_rejections_toggle_on();
+    inline bool has_tick_scheduled() const;
+    inline bool has_rejection_to_warn() const;
 
    private:
     friend class Environment;  // So we can call the constructor.
     inline explicit TickInfo(v8::Isolate* isolate);
 
     enum Fields {
-      kHasScheduled,
-      kHasPromiseRejections,
+      kHasTickScheduled = 0,
+      kHasRejectionToWarn,
       kFieldsCount
     };
 
@@ -640,6 +642,9 @@ class Environment {
   inline v8::Isolate* isolate() const;
   inline uv_loop_t* event_loop() const;
   inline uint32_t watched_providers() const;
+  inline void TryLoadAddon(const char* filename,
+                           int flags,
+                           std::function<bool(binding::DLib*)> was_loaded);
 
   static inline Environment* from_timer_handle(uv_timer_t* handle);
   inline uv_timer_t* timer_handle();
@@ -748,6 +753,9 @@ class Environment {
   // calling into JS is allowed from a VM perspective at this point.
   inline bool can_call_into_js() const;
   inline void set_can_call_into_js(bool can_call_into_js);
+
+  inline bool has_run_bootstrapping_code() const;
+  inline void set_has_run_bootstrapping_code(bool has_run_bootstrapping_code);
 
   inline bool is_main_thread() const;
   inline uint64_t thread_id() const;
@@ -928,6 +936,7 @@ class Environment {
   inline void ThrowError(v8::Local<v8::Value> (*fun)(v8::Local<v8::String>),
                          const char* errmsg);
 
+  std::list<binding::DLib> loaded_addons_;
   v8::Isolate* const isolate_;
   IsolateData* const isolate_data_;
   uv_timer_t timer_handle_;
@@ -941,11 +950,11 @@ class Environment {
   ImmediateInfo immediate_info_;
   TickInfo tick_info_;
   const uint64_t timer_base_;
-  bool printed_error_;
-  bool abort_on_uncaught_exception_;
-  bool emit_env_nonstring_warning_;
-  bool emit_err_name_warning_;
-  size_t makecallback_cntr_;
+  bool printed_error_ = false;
+  bool abort_on_uncaught_exception_ = false;
+  bool emit_env_nonstring_warning_ = true;
+  bool emit_err_name_warning_ = true;
+  size_t makecallback_cntr_ = 0;
   std::vector<double> destroy_async_id_list_;
 
   std::shared_ptr<EnvironmentOptions> options_;
@@ -973,6 +982,7 @@ class Environment {
   std::unique_ptr<performance::performance_state> performance_state_;
   std::unordered_map<std::string, uint64_t> performance_marks_;
 
+  bool has_run_bootstrapping_code_ = false;
   bool can_call_into_js_ = true;
   uint64_t thread_id_ = 0;
   std::unordered_set<worker::Worker*> sub_worker_contexts_;
@@ -1000,7 +1010,7 @@ class Environment {
   double* heap_statistics_buffer_ = nullptr;
   double* heap_space_statistics_buffer_ = nullptr;
 
-  char* http_parser_buffer_;
+  char* http_parser_buffer_ = nullptr;
   bool http_parser_buffer_in_use_ = false;
   std::unique_ptr<http2::Http2State> http2_state_;
 

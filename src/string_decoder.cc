@@ -44,9 +44,7 @@ MaybeLocal<String> MakeString(Isolate* isolate,
     isolate->ThrowException(error);
   }
 
-#ifdef DEBUG
-  CHECK(ret.IsEmpty() || ret.ToLocalChecked()->IsString());
-#endif
+  DCHECK(ret.IsEmpty() || ret.ToLocalChecked()->IsString());
   return ret.FromMaybe(Local<Value>()).As<String>();
 }
 
@@ -123,11 +121,9 @@ MaybeLocal<String> StringDecoder::DecodeData(Isolate* isolate,
       body = !prepend.IsEmpty() ? prepend : String::Empty(isolate);
       prepend = Local<String>();
     } else {
-#ifdef DEBUG
       // If not, that means is no character left to finish at this point.
-      CHECK_EQ(MissingBytes(), 0);
-      CHECK_EQ(BufferedBytes(), 0);
-#endif
+      DCHECK_EQ(MissingBytes(), 0);
+      DCHECK_EQ(BufferedBytes(), 0);
 
       // See whether there is a character that we may have to cut off and
       // finish when receiving the next chunk.
@@ -136,9 +132,7 @@ MaybeLocal<String> StringDecoder::DecodeData(Isolate* isolate,
         // This means we'll need to figure out where the character to which
         // the byte belongs begins.
         for (size_t i = nread - 1; ; --i) {
-#ifdef DEBUG
-          CHECK_LT(i, nread);
-#endif
+          DCHECK_LT(i, nread);
           state_[kBufferedBytes]++;
           if ((data[i] & 0xC0) == 0x80) {
             // This byte does not start a character (a "trailing" byte).

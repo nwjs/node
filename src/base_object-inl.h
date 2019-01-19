@@ -113,10 +113,8 @@ void BaseObject::ClearWeak() {
 v8::Local<v8::FunctionTemplate>
 BaseObject::MakeLazilyInitializedJSTemplate(Environment* env) {
   auto constructor = [](const v8::FunctionCallbackInfo<v8::Value>& args) {
-#ifdef DEBUG
-    CHECK(args.IsConstructCall());
-    CHECK_GT(args.This()->InternalFieldCount(), 0);
-#endif
+    DCHECK(args.IsConstructCall());
+    DCHECK_GT(args.This()->InternalFieldCount(), 0);
     args.This()->SetAlignedPointerInInternalField(0, nullptr);
   };
 

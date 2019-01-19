@@ -189,8 +189,8 @@ void NativeModuleLoader::LoadJavaScriptSource() {{
   {initializers}
 }}
 
-void NativeModuleLoader::LoadJavaScriptHash() {{
-  {hash_initializers}
+UnionBytes NativeModuleLoader::GetConfig() {{
+  return UnionBytes(config_raw, arraysize(config_raw));  // config.gypi
 }}
 
 }}  // namespace native_module
@@ -211,13 +211,6 @@ INITIALIZER = """
 source_.emplace(
     "{module}",
     UnionBytes({var}, arraysize({var}))
-);
-"""
-
-HASH_INITIALIZER = """\
-source_hash_.emplace(
-    "{module}",
-    "{hash_value}"
 );
 """
 
@@ -247,29 +240,25 @@ def JS2C(source, target):
   # Build source code lines
   definitions = []
   initializers = []
-  hash_initializers = []
 
-  def AddModule(module, source):
-    var = '%s_raw' % (module.replace('-', '_').replace('/', '_'))
-    source_hash = hashlib.sha256(source).hexdigest()
-
+  def GetDefinition(var, source):
     # Treat non-ASCII as UTF-8 and convert it to UTF-16.
     if any(ord(c) > 127 for c in source):
       source = map(ord, source.decode('utf-8').encode('utf-16be'))
       source = [source[i] * 256 + source[i+1] for i in xrange(0, len(source), 2)]
       source = ToCArray(source)
-      definition = TWO_BYTE_STRING.format(var=var, data=source)
+      return TWO_BYTE_STRING.format(var=var, data=source)
     else:
       source = ToCArray(map(ord, source), step=20)
-      definition = ONE_BYTE_STRING.format(var=var, data=source)
+      return ONE_BYTE_STRING.format(var=var, data=source)
 
+  def AddModule(module, source):
+    var = '%s_raw' % (module.replace('-', '_').replace('/', '_'))
+    definition = GetDefinition(var, source)
     initializer = INITIALIZER.format(module=module,
                                      var=var)
-    hash_initializer = HASH_INITIALIZER.format(module=module,
-                                               hash_value=source_hash)
     definitions.append(definition)
     initializers.append(initializer)
-    hash_initializers.append(hash_initializer)
 
   for name in modules:
     lines = ReadFile(str(name))
@@ -292,11 +281,17 @@ def JS2C(source, target):
 
     # if its a gypi file we're going to want it as json
     # later on anyway, so get it out of the way now
-    if name.endswith(".gypi"):
+    if name.endswith('.gypi'):
+      # Currently only config.gypi is allowed
+      assert name == 'config.gypi'
+      lines = re.sub(r'\'true\'', 'true', lines)
+      lines = re.sub(r'\'false\'', 'false', lines)
       lines = re.sub(r'#.*?\n', '', lines)
       lines = re.sub(r'\'', '"', lines)
-
-    AddModule(name.split('.', 1)[0], lines)
+      definition = GetDefinition('config_raw', lines)
+      definitions.append(definition)
+    else:
+      AddModule(name.split('.', 1)[0], lines)
 
     # Add deprecated aliases for deps without 'deps/'
     if deprecated_deps is not None:
@@ -306,9 +301,9 @@ def JS2C(source, target):
 
   # Emit result
   output = open(str(target[0]), "w")
-  output.write(TEMPLATE.format(definitions=''.join(definitions),
-                               initializers=''.join(initializers),
-                               hash_initializers=''.join(hash_initializers)))
+  output.write(
+    TEMPLATE.format(definitions=''.join(definitions),
+                    initializers=''.join(initializers)))
   output.close()
 
 def main():

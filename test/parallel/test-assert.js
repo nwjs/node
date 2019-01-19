@@ -1,3 +1,4 @@
+// Flags: --expose-internals
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -24,6 +25,7 @@
 const common = require('../common');
 const assert = require('assert');
 const { inspect } = require('util');
+const { internalBinding } = require('internal/test/binding');
 const a = assert;
 
 // Disable colored output to prevent color codes from breaking assertion
@@ -255,16 +257,14 @@ const circular = { y: 1 };
 circular.x = circular;
 
 function testAssertionMessage(actual, expected, msg) {
-  try {
-    assert.strictEqual(actual, '');
-  } catch (e) {
-    assert.strictEqual(
-      e.message,
-      msg || strictEqualMessageStart +
-             `+ actual - expected\n\n+ ${expected}\n- ''`
-    );
-    assert.ok(e.generatedMessage, 'Message not marked as generated');
-  }
+  assert.throws(
+    () => assert.strictEqual(actual, ''),
+    {
+      generatedMessage: true,
+      message: msg || strictEqualMessageStart +
+               `+ actual - expected\n\n+ ${expected}\n- ''`
+    }
+  );
 }
 
 function testShortAssertionMessage(actual, expected) {
@@ -278,7 +278,7 @@ testShortAssertionMessage(false, 'false');
 testShortAssertionMessage(100, '100');
 testShortAssertionMessage(NaN, 'NaN');
 testShortAssertionMessage(Infinity, 'Infinity');
-testShortAssertionMessage('', '""');
+testShortAssertionMessage('a', '"a"');
 testShortAssertionMessage('foo', '\'foo\'');
 testShortAssertionMessage(0, '0');
 testShortAssertionMessage(Symbol(), 'Symbol()');
@@ -656,7 +656,7 @@ common.expectsError(
 
 {
   // Test caching.
-  const fs = process.binding('fs');
+  const fs = internalBinding('fs');
   const tmp = fs.close;
   fs.close = common.mustCall(tmp, 1);
   function throwErr() {
@@ -1137,3 +1137,14 @@ assert.throws(
              '{\n  a: true\n}\n'
   }
 );
+
+{
+  let threw = false;
+  try {
+    assert.deepStrictEqual(Array(100).fill(1), 'foobar');
+  } catch (err) {
+    threw = true;
+    assert(/actual: \[Array],\n  expected: 'foobar',/.test(inspect(err)));
+  }
+  assert(threw);
+}

@@ -1,4 +1,5 @@
 #include "node_internals.h"
+#include "node_errors.h"
 #include "node_watchdog.h"
 
 namespace node {
@@ -15,7 +16,6 @@ using v8::Integer;
 using v8::Isolate;
 using v8::KeyCollectionMode;
 using v8::Local;
-using v8::NewStringType;
 using v8::Object;
 using v8::ONLY_CONFIGURABLE;
 using v8::ONLY_ENUMERABLE;
@@ -172,17 +172,6 @@ void WatchdogHasPendingSigint(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(ret);
 }
 
-void SafeGetenv(const FunctionCallbackInfo<Value>& args) {
-  CHECK(args[0]->IsString());
-  Utf8Value strenvtag(args.GetIsolate(), args[0]);
-  std::string text;
-  if (!node::SafeGetenv(*strenvtag, &text)) return;
-  args.GetReturnValue()
-      .Set(String::NewFromUtf8(
-            args.GetIsolate(), text.c_str(),
-            NewStringType::kNormal).ToLocalChecked());
-}
-
 void EnqueueMicrotask(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
   Isolate* isolate = env->isolate();
@@ -232,10 +221,8 @@ void Initialize(Local<Object> target,
   env->SetMethodNoSideEffect(target, "watchdogHasPendingSigint",
                              WatchdogHasPendingSigint);
 
-  env->SetMethod(target, "safeGetenv", SafeGetenv);
-
   env->SetMethod(target, "enqueueMicrotask", EnqueueMicrotask);
-
+  env->SetMethod(target, "triggerFatalException", FatalException);
   Local<Object> constants = Object::New(env->isolate());
   NODE_DEFINE_CONSTANT(constants, ALL_PROPERTIES);
   NODE_DEFINE_CONSTANT(constants, ONLY_WRITABLE);
@@ -246,6 +233,14 @@ void Initialize(Local<Object> target,
   target->Set(context,
               FIXED_ONE_BYTE_STRING(env->isolate(), "propertyFilter"),
               constants).FromJust();
+
+  Local<String> should_abort_on_uncaught_toggle =
+      FIXED_ONE_BYTE_STRING(env->isolate(), "shouldAbortOnUncaughtToggle");
+  CHECK(target
+            ->Set(env->context(),
+                  should_abort_on_uncaught_toggle,
+                  env->should_abort_on_uncaught_toggle().GetJSArray())
+            .FromJust());
 }
 
 }  // namespace util

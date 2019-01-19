@@ -26,10 +26,22 @@ static void Initialize(Local<Object> target,
   Environment* env = Environment::GetCurrent(context);
   Isolate* isolate = env->isolate();
 
+#if defined(DEBUG) && DEBUG
+  READONLY_TRUE_PROPERTY(target, "isDebugBuild");
+#else
+  READONLY_FALSE_PROPERTY(target, "isDebugBuild");
+#endif  // defined(DEBUG) && DEBUG
+
+#if HAVE_OPENSSL
+  READONLY_TRUE_PROPERTY(target, "hasOpenSSL");
+#else
+  READONLY_FALSE_PROPERTY(target, "hasOpenSSL");
+#endif  // HAVE_OPENSSL
+
 #ifdef NODE_FIPS_MODE
   READONLY_TRUE_PROPERTY(target, "fipsMode");
   // TODO(addaleax): Use options parser variable instead.
-  if (per_process_opts->force_fips_crypto)
+  if (per_process::cli_options->force_fips_crypto)
     READONLY_TRUE_PROPERTY(target, "fipsForced");
 #endif
 
@@ -45,13 +57,19 @@ static void Initialize(Local<Object> target,
   READONLY_TRUE_PROPERTY(target, "hasTracing");
 #endif
 
+#if HAVE_INSPECTOR
+  READONLY_TRUE_PROPERTY(target, "hasInspector");
+#else
+  READONLY_FALSE_PROPERTY(target, "hasInspector");
+#endif
+
 #if !defined(NODE_WITHOUT_NODE_OPTIONS)
   READONLY_TRUE_PROPERTY(target, "hasNodeOptions");
 #endif
 
   // TODO(addaleax): This seems to be an unused, private API. Remove it?
   READONLY_STRING_PROPERTY(target, "icuDataDir",
-      per_process_opts->icu_data_dir);
+      per_process::cli_options->icu_data_dir);
 
 #endif  // NODE_HAVE_I18N_SUPPORT
 
@@ -71,14 +89,8 @@ static void Initialize(Local<Object> target,
   if (env->options()->experimental_vm_modules)
     READONLY_TRUE_PROPERTY(target, "experimentalVMModules");
 
-  if (env->options()->experimental_worker)
-    READONLY_TRUE_PROPERTY(target, "experimentalWorker");
-
   if (env->options()->experimental_repl_await)
     READONLY_TRUE_PROPERTY(target, "experimentalREPLAwait");
-
-  if (env->options()->pending_deprecation)
-    READONLY_TRUE_PROPERTY(target, "pendingDeprecation");
 
   if (env->options()->expose_internals)
     READONLY_TRUE_PROPERTY(target, "exposeInternals");

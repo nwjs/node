@@ -11,6 +11,7 @@ namespace node {
 
 using v8::Array;
 using v8::Context;
+using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
 using v8::Local;
@@ -111,6 +112,13 @@ void GetEnabledCategories(const FunctionCallbackInfo<Value>& args) {
 #endif
 }
 
+static void SetTraceCategoryStateUpdateHandler(
+    const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+  CHECK(args[0]->IsFunction());
+  env->set_trace_category_state_function(args[0].As<Function>());
+}
+
 void NodeCategorySet::Initialize(Local<Object> target,
                 Local<Value> unused,
                 Local<Context> context,
@@ -118,6 +126,9 @@ void NodeCategorySet::Initialize(Local<Object> target,
   Environment* env = Environment::GetCurrent(context);
 
   env->SetMethod(target, "getEnabledCategories", GetEnabledCategories);
+  env->SetMethod(
+      target, "setTraceCategoryStateUpdateHandler",
+      SetTraceCategoryStateUpdateHandler);
 
   Local<FunctionTemplate> category_set =
       env->NewFunctionTemplate(NodeCategorySet::New);

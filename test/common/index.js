@@ -34,18 +34,19 @@ const {
   hasIntl
 } = process.binding('config');
 
+// Some tests assume a umask of 0o022 so set that up front. Tests that need a
+// different umask will set it themselves.
+//
+// process.umask() is not available in workers so we need to check for its
+// existence.
+if (process.umask)
+  process.umask(0o022);
+
 const noop = () => {};
 
 const hasCrypto = Boolean(process.versions.openssl);
 
-const isMainThread = (() => {
-  try {
-    return require('worker_threads').isMainThread;
-  } catch {
-    // Worker module not enabled → only a single main thread exists.
-    return true;
-  }
-})();
+const { isMainThread } = require('worker_threads');
 
 // Check for flags. Skip this for workers (both, the `cluster` module and
 // `worker_threads`) and child processes.
@@ -509,54 +510,43 @@ function isAlive(pid) {
   }
 }
 
-function _expectWarning(name, expected) {
-  const map = new Map(expected);
+function _expectWarning(name, expected, code) {
+  if (typeof expected === 'string') {
+    expected = [[expected, code]];
+  } else if (!Array.isArray(expected)) {
+    expected = Object.entries(expected).map(([a, b]) => [b, a]);
+  } else if (!(Array.isArray(expected[0]))) {
+    expected = [[expected[0], expected[1]]];
+  }
+  // Deprecation codes are mandatory, everything else is not.
+  if (name === 'DeprecationWarning') {
+    expected.forEach(([_, code]) => assert(code, expected));
+  }
   return mustCall((warning) => {
+    const [ message, code ] = expected.shift();
     assert.strictEqual(warning.name, name);
-    assert.ok(map.has(warning.message),
-              `unexpected error message: "${warning.message}"`);
-    const code = map.get(warning.message);
+    assert.strictEqual(warning.message, message);
     assert.strictEqual(warning.code, code);
-    // Remove a warning message after it is seen so that we guarantee that we
-    // get each message only once.
-    map.delete(expected);
   }, expected.length);
 }
 
-function expectWarningByName(name, expected, code) {
-  if (typeof expected === 'string') {
-    expected = [[expected, code]];
-  }
-  process.on('warning', _expectWarning(name, expected));
-}
+let catchWarning;
 
-function expectWarningByMap(warningMap) {
-  const catchWarning = {};
-  Object.keys(warningMap).forEach((name) => {
-    let expected = warningMap[name];
-    if (!Array.isArray(expected)) {
-      throw new Error('warningMap entries must be arrays consisting of two ' +
-      'entries: [message, warningCode]');
-    }
-    if (!(Array.isArray(expected[0]))) {
-      if (expected.length === 0) {
-        return;
-      }
-      expected = [[expected[0], expected[1]]];
-    }
-    catchWarning[name] = _expectWarning(name, expected);
-  });
-  process.on('warning', (warning) => catchWarning[warning.name](warning));
-}
-
-// Accepts a warning name and description or array of descriptions or a map
-// of warning names to description(s)
-// ensures a warning is generated for each name/description pair
+// Accepts a warning name and description or array of descriptions or a map of
+// warning names to description(s) ensures a warning is generated for each
+// name/description pair.
+// The expected messages have to be unique per `expectWarning()` call.
 function expectWarning(nameOrMap, expected, code) {
+  if (catchWarning === undefined) {
+    catchWarning = {};
+    process.on('warning', (warning) => catchWarning[warning.name](warning));
+  }
   if (typeof nameOrMap === 'string') {
-    expectWarningByName(nameOrMap, expected, code);
+    catchWarning[nameOrMap] = _expectWarning(nameOrMap, expected, code);
   } else {
-    expectWarningByMap(nameOrMap);
+    Object.keys(nameOrMap).forEach((name) => {
+      catchWarning[name] = _expectWarning(name, nameOrMap[name]);
+    });
   }
 }
 
@@ -770,7 +760,6 @@ module.exports = {
   mustCallAtLeast,
   mustNotCall,
   nodeProcessAborted,
-  noWarnCode: undefined,
   PIPE,
   platformTimeout,
   printSkipMessage,

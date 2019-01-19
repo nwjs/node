@@ -37,7 +37,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.13',
+    'v8_embedder_string': '-node.16',
 
     # Enable disassembler for `--print-code` v8 options
     'v8_enable_disassembler': 1,
@@ -259,6 +259,17 @@
             'cflags': [ '-gxcoff' ],
             'ldflags': [ '-Wl,-bbigtoc' ],
             'conditions': [
+              ['target_arch=="ppc64"', {
+                'ldflags': [
+                  '-Wl,-blibpath:/usr/lib:/lib:'
+                    '/opt/freeware/lib/pthread/ppc64'
+                ],
+              }],
+              ['target_arch=="ppc"', {
+                'ldflags': [
+                  '-Wl,-blibpath:/usr/lib:/lib:/opt/freeware/lib/pthread'
+                ],
+              }],
               ['"<(real_os_name)"=="OS400"', {
                 'ldflags': [
                   '-Wl,-blibpath:/QOpenSys/pkgs/lib:/QOpenSys/usr/lib',
@@ -568,11 +579,18 @@
             'variables': {'real_os_name': '<!(uname -s)',},
             'conditions': [
               [ 'target_arch=="ppc"', {
-                'ldflags': [ '-Wl,-bmaxdata:0x60000000/dsa' ],
+                'ldflags': [
+                  '-Wl,-bmaxdata:0x60000000/dsa',
+                  '-Wl,-blibpath:/usr/lib:/lib:/opt/freeware/lib/pthread',
+                 ],
               }],
               [ 'target_arch=="ppc64"', {
                 'cflags': [ '-maix64' ],
-                'ldflags': [ '-maix64' ],
+                'ldflags': [
+                  '-maix64',
+                  '-Wl,-blibpath:/usr/lib:/lib:'
+                    '/opt/freeware/lib/pthread/ppc64',
+                ],
               }],
               ['"<(real_os_name)"=="OS400"', {
                 'ldflags': [

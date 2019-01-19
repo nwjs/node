@@ -219,13 +219,19 @@ added: v0.9.4
 ##### Event: 'close'
 <!-- YAML
 added: v0.9.4
+changes:
+  - version: v10.0.0
+    pr-url: https://github.com/nodejs/node/pull/18438
+    description: Add `emitClose` option to specify if `'close'` is emitted on
+                 destroy.
 -->
 
 The `'close'` event is emitted when the stream and any of its underlying
 resources (a file descriptor, for example) have been closed. The event indicates
 that no more events will be emitted, and no further computation will occur.
 
-Not all `Writable` streams will emit the `'close'` event.
+A [`Writable`][] stream will always emit the `'close'` event if it is
+created with the `emitClose` option.
 
 ##### Event: 'drain'
 <!-- YAML
@@ -704,13 +710,19 @@ added: v0.9.4
 ##### Event: 'close'
 <!-- YAML
 added: v0.9.4
+changes:
+  - version: v10.0.0
+    pr-url: https://github.com/nodejs/node/pull/18438
+    description: Add `emitClose` option to specify if `'close'` is emitted on
+                 destroy.
 -->
 
 The `'close'` event is emitted when the stream and any of its underlying
 resources (a file descriptor, for example) have been closed. The event indicates
 that no more events will be emitted, and no further computation will occur.
 
-Not all [`Readable`][] streams will emit the `'close'` event.
+A [`Readable`][] stream will always emit the `'close'` event if it is
+created with the `emitClose` option.
 
 ##### Event: 'data'
 <!-- YAML
@@ -788,9 +800,8 @@ added: v0.9.4
 changes:
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/17979
-    description: >
-      The `'readable'` is always emitted in the next tick after `.push()`
-      is called
+    description: The `'readable'` is always emitted in the next tick after
+                 `.push()` is called.
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/18994
     description: Using `'readable'` requires calling `.read()`.
@@ -1011,6 +1022,10 @@ readable.on('readable', () => {
   }
 });
 ```
+
+Note that the `while` loop is necessary when processing data with
+`readable.read()`. Only after `readable.read()` returns `null`,
+[`'readable'`]() will be emitted.
 
 A `Readable` stream in object mode will always return a single item from
 a call to [`readable.read(size)`][stream-read], regardless of the value of the
@@ -1510,13 +1525,12 @@ constructor and implement the `writable._write()` method. The
 changes:
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/18438
-    description: >
-      Add `emitClose` option to specify if `'close'` is emitted on destroy
+    description: Add `emitClose` option to specify if `'close'` is emitted on
+                 destroy.
   - version: v11.2.0
     pr-url: https://github.com/nodejs/node/pull/22795
-    description: >
-      Add `autoDestroy` option to automatically `destroy()` the stream
-      when it emits `'finish'` or errors
+    description: Add `autoDestroy` option to automatically `destroy()` the
+                 stream when it emits `'finish'` or errors.
 -->
 
 * `options` {Object}
@@ -1782,9 +1796,8 @@ constructor and implement the `readable._read()` method.
 changes:
   - version: v11.2.0
     pr-url: https://github.com/nodejs/node/pull/22795
-    description: >
-      Add `autoDestroy` option to automatically `destroy()` the stream
-      when it emits `'end'` or errors
+    description: Add `autoDestroy` option to automatically `destroy()` the
+                 stream when it emits `'end'` or errors.
 -->
 
 * `options` {Object}
@@ -1845,10 +1858,6 @@ const myReadable = new Readable({
 #### readable.\_read(size)
 <!-- YAML
 added: v0.9.4
-changes:
-  - version: v10.0.0
-    pr-url: https://github.com/nodejs/node/pull/17979
-    description: call `_read()` only once per microtick
 -->
 
 * `size` {number} Number of bytes to read asynchronously
@@ -1868,9 +1877,7 @@ when `_read()` is called again after it has stopped should it resume pushing
 additional data onto the queue.
 
 Once the `readable._read()` method has been called, it will not be called again
-until the [`readable.push()`][stream-push] method is called. `readable._read()`
-is guaranteed to be called only once within a synchronous execution, i.e. a
-microtick.
+until the [`readable.push()`][stream-push] method is called.
 
 The `size` argument is advisory. For implementations where a "read" is a
 single operation that returns data can use the `size` argument to determine how

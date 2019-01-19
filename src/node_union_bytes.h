@@ -75,14 +75,10 @@ class UnionBytes {
   v8::Local<v8::String> ToStringChecked(v8::Isolate* isolate) const {
     if (is_one_byte_) {
       CHECK_NE(one_bytes_, nullptr);
-      NonOwningExternalOneByteResource* source =
-          new NonOwningExternalOneByteResource(one_bytes_, length_);
-      return v8::String::NewExternalOneByte(isolate, source).ToLocalChecked();
+      return v8::String::NewFromOneByte(isolate, one_bytes_, v8::NewStringType::kNormal, length_).ToLocalChecked();
     } else {
       CHECK_NE(two_bytes_, nullptr);
-      NonOwningExternalTwoByteResource* source =
-          new NonOwningExternalTwoByteResource(two_bytes_, length_);
-      return v8::String::NewExternalTwoByte(isolate, source).ToLocalChecked();
+      return v8::String::NewFromTwoByte(isolate, two_bytes_, v8::NewStringType::kNormal, length_).ToLocalChecked();
     }
   }
   size_t length() { return length_; }

@@ -45,10 +45,12 @@ uint64_t performance_v8_start;
 void performance_state::Mark(enum PerformanceMilestone milestone,
                              uint64_t ts) {
   this->milestones[milestone] = ts;
+#if 0
   TRACE_EVENT_INSTANT_WITH_TIMESTAMP0(
       TRACING_CATEGORY_NODE1(bootstrap),
       GetPerformanceMilestoneName(milestone),
       TRACE_EVENT_SCOPE_THREAD, ts / 1000);
+#endif
 }
 
 double GetCurrentTimeInMicroseconds() {
@@ -292,10 +294,12 @@ void MarkGarbageCollectionEnd(Isolate* isolate,
 
 
 inline void SetupGarbageCollectionTracking(Environment* env) {
+#if 0
   env->isolate()->AddGCPrologueCallback(MarkGarbageCollectionStart,
                                         static_cast<void*>(env));
   env->isolate()->AddGCEpilogueCallback(MarkGarbageCollectionEnd,
                                         static_cast<void*>(env));
+#endif
 }
 
 // Gets the name of a function
@@ -441,7 +445,7 @@ void Initialize(Local<Object> target,
                             constants,
                             attr).ToChecked();
 
-  SetupGarbageCollectionTracking(env);
+  //SetupGarbageCollectionTracking(env);
 }
 
 }  // namespace performance

@@ -49,6 +49,22 @@ namespace node {
 // Globals per process
 // This is set by node::Init() which is used by embedders
 extern bool node_is_initialized;
+extern int g_worker_support;
+extern int thread_ctx_created;
+extern uv_key_t thread_ctx_key;
+
+struct thread_ctx_st {
+  node::Environment* env;
+  node::node_module* modpending;
+  node::node_module* modlist_builtin;
+  node::node_module* modlist_linked;
+  node::node_module* modlist_addon;
+  node::node_module* modlist_internal;
+  int handle_counter;
+  int quit_flag;
+  int close_quit_timer_done;
+  int close_async_handle_done;
+};
 
 namespace binding {
 

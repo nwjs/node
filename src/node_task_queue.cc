@@ -27,7 +27,8 @@ using v8::Value;
 namespace task_queue {
 
 static void RunMicrotasks(const FunctionCallbackInfo<Value>& args) {
-  args.GetIsolate()->RunMicrotasks();
+  //args.GetIsolate()->RunMicrotasks();
+  v8::MicrotasksScope::PerformCheckpoint(args.GetIsolate());
 }
 
 static void SetTickCallback(const FunctionCallbackInfo<Value>& args) {

@@ -86,14 +86,13 @@
       ],
       'action': [
         'python',
-        'tools/inspector_protocol/ConvertProtocolToJSON.py',
+        '../../v8/third_party/inspector_protocol/convert_protocol_to_json.py',
         '<@(_inputs)',
         '<@(_outputs)',
       ],
     },
     {
       'action_name': 'node_protocol_generated_sources',
-      'process_outputs_as_sources': 0,
       'inputs': [
         '<(SHARED_INTERMEDIATE_DIR)/node_protocol_config.json',
         '<(SHARED_INTERMEDIATE_DIR)/node_protocol.json',
@@ -115,7 +114,7 @@
     {
       'action_name': 'concatenate_protocols',
       'inputs': [
-        '../../deps/v8/src/inspector/js_protocol.json',
+        '../../../../v8/src/inspector/js_protocol.json',
         '<(SHARED_INTERMEDIATE_DIR)/node_protocol.json',
       ],
       'outputs': [
@@ -123,14 +122,13 @@
       ],
       'action': [
         'python',
-        'tools/inspector_protocol/ConcatenateProtocols.py',
+        '../../v8/third_party/inspector_protocol/concatenate_protocols.py',
         '<@(_inputs)',
         '<@(_outputs)',
       ],
     },
     {
       'action_name': 'v8_inspector_compress_protocol_json',
-      'process_outputs_as_sources': 0,
       'inputs': [
         '<(SHARED_INTERMEDIATE_DIR)/concatenated_protocol.json',
       ],

@@ -100,24 +100,43 @@ static node_module* modlist_addon;
 static uv_once_t init_modpending_once = UV_ONCE_INIT;
 static uv_key_t thread_local_modpending;
 
+uv_key_t thread_ctx_key;
+int thread_ctx_created = 0;
+int g_worker_support = 0;
+
 // This is set by node::Init() which is used by embedders
 bool node_is_initialized = false;
 
 extern "C" void node_module_register(void* m) {
-  struct node_module* mp = reinterpret_cast<struct node_module*>(m);
+  struct node_module* mp;
+  if (g_worker_support) {
+    mp = (struct node_module*)malloc(sizeof(struct node_module));
+    memcpy(mp, m, sizeof(struct node_module));
+  } else
+    mp = reinterpret_cast<struct node_module*>(m);
+  if (!thread_ctx_created) {
+    thread_ctx_created = 1;
+    uv_key_create(&thread_ctx_key);
+  }
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  if (!tls_ctx) {
+    tls_ctx = (struct thread_ctx_st*)malloc(sizeof(struct thread_ctx_st));
+    memset(tls_ctx, 0, sizeof(struct thread_ctx_st));
+    uv_key_set(&thread_ctx_key, tls_ctx);
+  }
 
   if (mp->nm_flags & NM_F_BUILTIN) {
-    mp->nm_link = modlist_builtin;
-    modlist_builtin = mp;
+    mp->nm_link = tls_ctx->modlist_builtin;
+    tls_ctx->modlist_builtin = mp;
   } else if (mp->nm_flags & NM_F_INTERNAL) {
-    mp->nm_link = modlist_internal;
-    modlist_internal = mp;
+    mp->nm_link = tls_ctx->modlist_internal;
+    tls_ctx->modlist_internal = mp;
   } else if (!node_is_initialized) {
     // "Linked" modules are included as part of the node project.
     // Like builtins they are registered *before* node::Init runs.
     mp->nm_flags = NM_F_LINKED;
-    mp->nm_link = modlist_linked;
-    modlist_linked = mp;
+    mp->nm_link = tls_ctx->modlist_linked;
+    tls_ctx->modlist_linked = mp;
   } else {
     uv_key_set(&thread_local_modpending, mp);
   }
@@ -202,6 +221,7 @@ void DLOpen(const FunctionCallbackInfo<Value>& args) {
 
   uv_once(&init_modpending_once, InitModpendingOnce);
   CHECK_NULL(uv_key_get(&thread_local_modpending));
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
 
   if (args.Length() < 2) {
     env->ThrowError("process.dlopen needs at least 2 arguments.");
@@ -294,8 +314,8 @@ void DLOpen(const FunctionCallbackInfo<Value>& args) {
     }
 
     mp->nm_dso_handle = dlib->handle_;
-    mp->nm_link = modlist_addon;
-    modlist_addon = mp;
+    mp->nm_link = tls_ctx->modlist_addon;
+    tls_ctx->modlist_addon = mp;
 
     if (mp->nm_context_register_func != nullptr) {
       mp->nm_context_register_func(exports, module, context, mp->nm_priv);
@@ -328,13 +348,16 @@ inline struct node_module* FindModule(struct node_module* list,
 }
 
 node_module* get_builtin_module(const char* name) {
-  return FindModule(modlist_builtin, name, NM_F_BUILTIN);
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  return FindModule(tls_ctx->modlist_builtin, name, NM_F_BUILTIN);
 }
 node_module* get_internal_module(const char* name) {
-  return FindModule(modlist_internal, name, NM_F_INTERNAL);
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  return FindModule(tls_ctx->modlist_internal, name, NM_F_INTERNAL);
 }
 node_module* get_linked_module(const char* name) {
-  return FindModule(modlist_linked, name, NM_F_LINKED);
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&thread_ctx_key);
+  return FindModule(tls_ctx->modlist_linked, name, NM_F_LINKED);
 }
 
 static Local<Object> InitModule(Environment* env,

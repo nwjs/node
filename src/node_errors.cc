@@ -26,6 +26,8 @@ using v8::String;
 using v8::Undefined;
 using v8::Value;
 
+extern bool node_is_nwjs;
+
 bool IsExceptionDecorated(Environment* env, Local<Value> er) {
   if (!er.IsEmpty() && er->IsObject()) {
     Local<Object> err_obj = er.As<Object>();
@@ -700,19 +702,23 @@ void FatalException(Isolate* isolate,
   HandleScope scope(isolate);
 
   Environment* env = Environment::GetCurrent(isolate);
+  if (!env) //FIXME: check why env is null #4912
+    return;
   CHECK_NOT_NULL(env);  // TODO(addaleax): Handle nullptr here.
   Local<Object> process_object = env->process_object();
   Local<String> fatal_exception_string = env->fatal_exception_string();
-  Local<Value> fatal_exception_function =
+  Local<Value> fatal_exception_function_value =
       process_object->Get(env->context(),
                           fatal_exception_string).ToLocalChecked();
 
-  if (!fatal_exception_function->IsFunction()) {
+  int exit_code = 0;
+  if (!fatal_exception_function_value->IsFunction()) {
     // Failed before the process._fatalException function was added!
     // this is probably pretty bad.  Nothing to do but report and exit.
     ReportException(env, error, message);
-    exit(6);
+    exit_code = 6;
   } else {
+    Local<Function> fatal_exception_function = Local<Function>::Cast(fatal_exception_function_value);
     errors::TryCatchScope fatal_try_catch(env);
 
     // Do not call FatalException when _fatalException handler throws
@@ -727,21 +733,24 @@ void FatalException(Isolate* isolate,
     if (fatal_try_catch.HasCaught()) {
       // The fatal exception function threw, so we must exit
       ReportException(env, fatal_try_catch);
-      exit(7);
-
+      exit_code = 7;
     } else if (caught.ToLocalChecked()->IsFalse()) {
       ReportException(env, error, message);
 
       // fatal_exception_function call before may have set a new exit code ->
       // read it again, otherwise use default for uncaughtException 1
-      Local<String> exit_code = env->exit_code_string();
+      Local<String> exit_code_val = env->exit_code_string();
       Local<Value> code;
-      if (!process_object->Get(env->context(), exit_code).ToLocal(&code) ||
+      if (!process_object->Get(env->context(), exit_code_val).ToLocal(&code) ||
           !code->IsInt32()) {
-        exit(1);
+        exit_code = 1;
+        return;
       }
-      exit(code.As<Int32>()->Value());
+      exit_code = (code.As<Int32>()->Value());
     }
+  }
+  if (!node_is_nwjs && exit_code) {
+    exit(exit_code);
   }
 }
 

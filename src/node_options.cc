@@ -208,8 +208,8 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
   AddOption("--napi-modules", "", NoOp{}, kAllowedInEnvironment);
 
 #if HAVE_INSPECTOR
-  Insert(&DebugOptionsParser::instance,
-         &EnvironmentOptions::get_debug_options);
+  //Insert(&DebugOptionsParser::instance,
+  //       &EnvironmentOptions::get_debug_options);
 #endif  // HAVE_INSPECTOR
 }
 

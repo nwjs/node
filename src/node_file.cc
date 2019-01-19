@@ -759,9 +759,9 @@ void Access(const FunctionCallbackInfo<Value>& args) {
   } else {  // access(path, mode, undefined, ctx)
     CHECK_EQ(argc, 4);
     FSReqWrapSync req_wrap_sync;
-    FS_SYNC_TRACE_BEGIN(access);
+    //FS_SYNC_TRACE_BEGIN(access);
     SyncCall(env, args[3], &req_wrap_sync, "access", uv_fs_access, *path, mode);
-    FS_SYNC_TRACE_END(access);
+    //FS_SYNC_TRACE_END(access);
   }
 }
 

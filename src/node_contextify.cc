@@ -181,6 +181,9 @@ Local<Context> ContextifyContext::CreateV8Context(
   // directly in an Object, we instead hold onto the new context's global
   // object instead (which then has a reference to the context).
   ctx->SetEmbedderData(ContextEmbedderIndex::kSandboxObject, sandbox_obj);
+  void* data = env->context()->GetAlignedPointerFromEmbedderData(2); //v8ContextPerContextDataIndex
+  ctx->SetAlignedPointerInEmbedderData(2, data);
+  ctx->SetAlignedPointerInEmbedderData(50, (void*)0x08110800);
   sandbox_obj->SetPrivate(env->context(),
                           env->contextify_global_private_symbol(),
                           ctx->Global());
@@ -664,6 +667,7 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
   ContextifyScript* contextify_script =
       new ContextifyScript(env, args.This());
 
+#if 0
   if (*TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
           TRACING_CATEGORY_NODE2(vm, script)) != 0) {
     Utf8Value fn(isolate, filename);
@@ -673,6 +677,7 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
         contextify_script,
         "filename", TRACE_STR_COPY(*fn));
   }
+#endif
 
   ScriptCompiler::CachedData* cached_data = nullptr;
   if (!cached_data_buf.IsEmpty()) {
@@ -789,8 +794,10 @@ void ContextifyScript::RunInThisContext(
   ContextifyScript* wrapped_script;
   ASSIGN_OR_RETURN_UNWRAP(&wrapped_script, args.Holder());
 
+#if 0
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
       TRACING_CATEGORY_NODE2(vm, script), "RunInThisContext", wrapped_script);
+#endif
 
   CHECK_EQ(args.Length(), 3);
 

@@ -3,6 +3,10 @@
 #include "env-inl.h"
 #include "v8.h"
 
+extern "C" {
+extern void* g_get_node_env();
+}
+
 namespace node {
 
 using v8::Context;
@@ -99,35 +103,7 @@ void InternalCallbackScope::Close() {
     return;
   }
 
-  Environment::TickInfo* tick_info = env_->tick_info();
-
-  if (!env_->can_call_into_js()) return;
-  if (!tick_info->has_tick_scheduled()) {
-    env_->isolate()->RunMicrotasks();
-  }
-
-  // Make sure the stack unwound properly. If there are nested MakeCallback's
-  // then it should return early and not reach this code.
-  if (env_->async_hooks()->fields()[AsyncHooks::kTotals]) {
-    CHECK_EQ(env_->execution_async_id(), 0);
-    CHECK_EQ(env_->trigger_async_id(), 0);
-  }
-
-  if (!tick_info->has_tick_scheduled() && !tick_info->has_rejection_to_warn()) {
-    return;
-  }
-
-  Local<Object> process = env_->process_object();
-
-  if (!env_->can_call_into_js()) return;
-
-  Local<Function> tick_callback = env_->tick_callback_function();
-
-  // The tick is triggered before JS land calls SetTickCallback
-  // to initializes the tick callback during bootstrap.
-  CHECK(!tick_callback.IsEmpty());
-
-  if (tick_callback->Call(env_->context(), process, 0, nullptr).IsEmpty()) {
+  if (!env_->KickNextTick()) {
     failed_ = true;
   }
 }
@@ -210,6 +186,8 @@ MaybeLocal<Value> MakeCallback(Isolate* isolate,
   // Because of the AssignToContext() call in src/node_contextify.cc,
   // the two contexts need not be the same.
   Environment* env = Environment::GetCurrent(callback->CreationContext());
+  if (!env)
+    env = (Environment*)g_get_node_env();
   CHECK_NOT_NULL(env);
   Context::Scope context_scope(env->context());
   MaybeLocal<Value> ret =

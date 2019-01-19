@@ -7,6 +7,7 @@
 #include "node_native_module.h"
 #include "node_options-inl.h"
 #include "node_platform.h"
+#include "node_process.h"
 #include "node_worker.h"
 #include "tracing/agent.h"
 #include "tracing/traced_value.h"
@@ -22,7 +23,6 @@ using v8::Context;
 using v8::EmbedderGraph;
 using v8::External;
 using v8::Function;
-using v8::FunctionTemplate;
 using v8::HandleScope;
 using v8::Integer;
 using v8::Isolate;
@@ -44,6 +44,8 @@ using v8::Value;
 using worker::Worker;
 
 #define kTraceCategoryCount 1
+
+extern bool node_is_nwjs;
 
 // TODO(@jasnell): Likely useful to move this to util or node_internal to
 // allow reuse. But since we're not reusing it yet...
@@ -79,7 +81,8 @@ IsolateData::IsolateData(Isolate* isolate,
   if (platform_ != nullptr)
     platform_->RegisterIsolate(isolate_, event_loop);
 
-  options_.reset(new PerIsolateOptions(*per_process_opts->per_isolate));
+  options_.reset(
+      new PerIsolateOptions(*(per_process::cli_options->per_isolate)));
 
   // Create string and private symbol properties as internalized one byte
   // strings after the platform is properly initialized.
@@ -171,15 +174,9 @@ Environment::Environment(IsolateData* isolate_data,
       immediate_info_(context->GetIsolate()),
       tick_info_(context->GetIsolate()),
       timer_base_(uv_now(isolate_data->event_loop())),
-      printed_error_(false),
-      abort_on_uncaught_exception_(false),
-      emit_env_nonstring_warning_(true),
-      emit_err_name_warning_(true),
-      makecallback_cntr_(0),
       should_abort_on_uncaught_toggle_(isolate_, 1),
       trace_category_state_(isolate_, kTraceCategoryCount),
       stream_base_state_(isolate_, StreamBase::kNumStreamBaseStateFields),
-      http_parser_buffer_(nullptr),
       fs_stats_field_array_(isolate_, kFsStatsBufferLength),
       fs_stats_field_bigint_array_(isolate_, kFsStatsBufferLength),
       context_(context->GetIsolate(), context) {
@@ -234,7 +231,7 @@ Environment::Environment(IsolateData* isolate_data,
   should_abort_on_uncaught_toggle_[0] = 1;
 
   std::string debug_cats;
-  SafeGetenv("NODE_DEBUG_NATIVE", &debug_cats);
+  credentials::SafeGetenv("NODE_DEBUG_NATIVE", &debug_cats);
   set_debug_categories(debug_cats, true);
 
   isolate()->GetHeapProfiler()->AddBuildEmbedderGraphCallback(
@@ -242,6 +239,10 @@ Environment::Environment(IsolateData* isolate_data,
   if (options_->no_force_async_hooks_checks) {
     async_hooks_.no_force_checks();
   }
+
+  // TODO(addaleax): the per-isolate state should not be controlled by
+  // a single Environment.
+  //isolate()->SetPromiseRejectCallback(task_queue::PromiseRejectCallback);
 }
 
 Environment::~Environment() {
@@ -277,6 +278,11 @@ Environment::~Environment() {
 
   TRACE_EVENT_NESTABLE_ASYNC_END0(
     TRACING_CATEGORY_NODE1(environment), "Environment", this);
+
+  // Dereference all addons that were loaded into this environment.
+  for (binding::DLib& addon : loaded_addons_) {
+    addon.Close();
+  }
 }
 
 void Environment::Start(const std::vector<std::string>& args,
@@ -337,16 +343,8 @@ void Environment::Start(const std::vector<std::string>& args,
     StartProfilerIdleNotifier();
   }
 
-  auto process_template = FunctionTemplate::New(isolate());
-  process_template->SetClassName(FIXED_ONE_BYTE_STRING(isolate(), "process"));
-
-  auto process_object = process_template->GetFunction(context())
-                            .ToLocalChecked()
-                            ->NewInstance(context())
-                            .ToLocalChecked();
+  Local<Object> process_object = CreateProcessObject(this, args, exec_args, node_is_nwjs);
   set_process_object(process_object);
-
-  SetupProcessObject(this, args, exec_args);
 
   static uv_once_t init_once = UV_ONCE_INIT;
   uv_once(&init_once, InitThreadLocalOnce);
@@ -822,7 +820,7 @@ void Environment::CollectExceptionInfo(Local<Value> object,
     return;
 
   Local<Object> obj = object.As<Object>();
-  const char* err_string = node::errno_string(errorno);
+  const char* err_string = errors::errno_string(errorno);
 
   if (message == nullptr || message[0] == '\0') {
     message = strerror(errorno);
@@ -865,10 +863,13 @@ void Environment::AsyncHooks::grow_async_ids_stack() {
 uv_key_t Environment::thread_local_env = {};
 
 void Environment::Exit(int exit_code) {
-  if (is_main_thread())
+  if (is_main_thread()) {
+    stop_sub_worker_contexts();
+    DisposePlatform();
     exit(exit_code);
-  else
+  } else {
     worker_context_->Exit(exit_code);
+  }
 }
 
 void Environment::stop_sub_worker_contexts() {
@@ -908,12 +909,12 @@ bool Environment::KickNextTick() {
   TickInfo* info = tick_info();
 
   if (!can_call_into_js()) return true;
-  if (info->has_scheduled() == 0) {
+  if (info->has_tick_scheduled() == 0) {
     //isolate()->RunMicrotasks();
     v8::MicrotasksScope::PerformCheckpoint(isolate());
   }
 
-  if (!info->has_scheduled() && !info->has_promise_rejections()) {
+  if (!info->has_tick_scheduled() && !info->has_rejection_to_warn()) {
     return true;
   }
 

@@ -35,6 +35,7 @@
 #include <string.h>
 
 #include <functional>  // std::function
+#include <limits>
 #include <set>
 #include <string>
 #include <array>
@@ -72,6 +73,12 @@ inline char* UncheckedCalloc(size_t n);
 
 template <typename T>
 inline T MultiplyWithOverflowCheck(T a, T b);
+
+namespace per_process {
+// Tells whether the per-process V8::Initialize() is called and
+// if it is safe to call v8::Isolate::GetCurrent().
+extern bool v8_initialized;
+}  // namespace per_process
 
 // Used by the allocation functions when allocation fails.
 // Thin wrapper around v8::Isolate::LowMemoryNotification() that checks
@@ -130,6 +137,7 @@ void DumpBacktrace(FILE* fp);
 #define CHECK_IMPLIES(a, b) CHECK(!(a) || (b))
 
 #ifdef DEBUG
+  #define DCHECK(expr) CHECK(expr)
   #define DCHECK_EQ(a, b) CHECK((a) == (b))
   #define DCHECK_GE(a, b) CHECK((a) >= (b))
   #define DCHECK_GT(a, b) CHECK((a) > (b))
@@ -140,6 +148,7 @@ void DumpBacktrace(FILE* fp);
   #define DCHECK_NOT_NULL(val) CHECK((val) != nullptr)
   #define DCHECK_IMPLIES(a, b) CHECK(!(a) || (b))
 #else
+  #define DCHECK(expr)
   #define DCHECK_EQ(a, b)
   #define DCHECK_GE(a, b)
   #define DCHECK_GT(a, b)
@@ -514,16 +523,24 @@ struct FunctionDeleter {
 template <typename T, void (*function)(T*)>
 using DeleteFnPtr = typename FunctionDeleter<T, function>::Pointer;
 
-std::set<std::string> ParseCommaSeparatedSet(const std::string& in);
+std::vector<std::string> SplitString(const std::string& in, char delim);
 
 inline v8::MaybeLocal<v8::Value> ToV8Value(v8::Local<v8::Context> context,
-                                           const std::string& str);
+                                           const std::string& str,
+                                           v8::Isolate* isolate = nullptr);
+template <typename T, typename test_for_number =
+    typename std::enable_if<std::numeric_limits<T>::is_specialized, bool>::type>
+inline v8::MaybeLocal<v8::Value> ToV8Value(v8::Local<v8::Context> context,
+                                           const T& number,
+                                           v8::Isolate* isolate = nullptr);
 template <typename T>
 inline v8::MaybeLocal<v8::Value> ToV8Value(v8::Local<v8::Context> context,
-                                           const std::vector<T>& vec);
+                                           const std::vector<T>& vec,
+                                           v8::Isolate* isolate = nullptr);
 template <typename T, typename U>
 inline v8::MaybeLocal<v8::Value> ToV8Value(v8::Local<v8::Context> context,
-                                           const std::unordered_map<T, U>& map);
+                                           const std::unordered_map<T, U>& map,
+                                           v8::Isolate* isolate = nullptr);
 
 // These macros expects a `Isolate* isolate` and a `Local<Context> context`
 // to be in the scope.
@@ -544,8 +561,11 @@ inline v8::MaybeLocal<v8::Value> ToV8Value(v8::Local<v8::Context> context,
         .FromJust();                                                           \
   } while (0)
 
+#define READONLY_FALSE_PROPERTY(obj, name)                                     \
+  READONLY_PROPERTY(obj, name, v8::False(isolate))
+
 #define READONLY_TRUE_PROPERTY(obj, name)                                      \
-  READONLY_PROPERTY(obj, name, True(isolate))
+  READONLY_PROPERTY(obj, name, v8::True(isolate))
 
 #define READONLY_STRING_PROPERTY(obj, name, str)                               \
   READONLY_PROPERTY(obj, name, ToV8Value(context, str).ToLocalChecked())

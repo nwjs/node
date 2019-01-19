@@ -1190,15 +1190,6 @@ inline std::vector<std::string> FromJSStringArray(Environment* env,
   return vec;
 }
 
-inline Local<Array> ToJSStringArray(Environment* env,
-                                    const std::vector<std::string>& vec) {
-  Isolate* isolate = env->isolate();
-  Local<Array> array = Array::New(isolate, vec.size());
-  for (size_t n = 0; n < vec.size(); n++)
-    array->Set(env->context(), n, Utf8String(isolate, vec[n])).FromJust();
-  return array;
-}
-
 inline url_data HarvestBase(Environment* env, Local<Object> base_obj) {
   url_data base;
   Local<Context> context = env->context();
@@ -2119,7 +2110,7 @@ static inline void SetArgs(Environment* env,
   if (url.port > -1)
     argv[ARG_PORT] = Integer::New(isolate, url.port);
   if (url.flags & URL_FLAGS_HAS_PATH)
-    argv[ARG_PATH] = ToJSStringArray(env, url.path);
+    argv[ARG_PATH] = ToV8Value(env->context(), url.path).ToLocalChecked();
 }
 
 static void Parse(Environment* env,
@@ -2381,7 +2372,7 @@ URL URL::FromFilePath(const std::string& file_path) {
 // This function works by calling out to a JS function that creates and
 // returns the JS URL object. Be mindful of the JS<->Native boundary
 // crossing that is required.
-const Local<Value> URL::ToObject(Environment* env) const {
+MaybeLocal<Value> URL::ToObject(Environment* env) const {
   Isolate* isolate = env->isolate();
   Local<Context> context = env->context();
   Context::Scope context_scope(context);
@@ -2417,7 +2408,7 @@ const Local<Value> URL::ToObject(Environment* env) const {
         ->Call(env->context(), undef, arraysize(argv), argv);
   }
 
-  return ret.ToLocalChecked();
+  return ret;
 }
 
 static void SetURLConstructor(const FunctionCallbackInfo<Value>& args) {

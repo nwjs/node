@@ -19,11 +19,13 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#include "node_file.h"
 #include "aliased_buffer.h"
 #include "node_buffer.h"
 #include "node_internals.h"
+#include "node_process.h"
 #include "node_stat_watcher.h"
-#include "node_file.h"
+
 #include "tracing/trace_event.h"
 
 #include "req_wrap-inl.h"
@@ -2236,4 +2238,4 @@ void Initialize(Local<Object> target,
 
 }  // end namespace node
 
-NODE_BUILTIN_MODULE_CONTEXT_AWARE(fs, node::fs::Initialize)
+NODE_MODULE_CONTEXT_AWARE_INTERNAL(fs, node::fs::Initialize)

@@ -19,8 +19,6 @@
 // DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-// Flags: --expose-internals
 'use strict';
 const common = require('../common');
 const assert = require('assert');
@@ -117,70 +115,86 @@ assert(!/Object/.test(
   util.inspect({ a: { a: { a: { a: {} } } } }, undefined, null, true)
 ));
 
-for (const showHidden of [true, false]) {
-  const ab = new ArrayBuffer(4);
+{
+  const showHidden = true;
+  const ab = new Uint8Array([1, 2, 3, 4]).buffer;
   const dv = new DataView(ab, 1, 2);
   assert.strictEqual(
     util.inspect(ab, showHidden),
-    'ArrayBuffer { byteLength: 4 }'
+    'ArrayBuffer { [Uint8Contents]: <01 02 03 04>, byteLength: 4 }'
   );
   assert.strictEqual(util.inspect(new DataView(ab, 1, 2), showHidden),
                      'DataView {\n' +
                      '  byteLength: 2,\n' +
                      '  byteOffset: 1,\n' +
-                     '  buffer: ArrayBuffer { byteLength: 4 } }');
+                     '  buffer:\n' +
+                     '   ArrayBuffer { [Uint8Contents]: ' +
+                       '<01 02 03 04>, byteLength: 4 } }');
   assert.strictEqual(
     util.inspect(ab, showHidden),
-    'ArrayBuffer { byteLength: 4 }'
+    'ArrayBuffer { [Uint8Contents]: <01 02 03 04>, byteLength: 4 }'
   );
   assert.strictEqual(util.inspect(dv, showHidden),
                      'DataView {\n' +
                      '  byteLength: 2,\n' +
                      '  byteOffset: 1,\n' +
-                     '  buffer: ArrayBuffer { byteLength: 4 } }');
+                     '  buffer:\n' +
+                     '   ArrayBuffer { [Uint8Contents]: ' +
+                       '<01 02 03 04>, byteLength: 4 } }');
   ab.x = 42;
   dv.y = 1337;
   assert.strictEqual(util.inspect(ab, showHidden),
-                     'ArrayBuffer { byteLength: 4, x: 42 }');
+                     'ArrayBuffer { [Uint8Contents]: <01 02 03 04>, ' +
+                       'byteLength: 4, x: 42 }');
   assert.strictEqual(util.inspect(dv, showHidden),
                      'DataView {\n' +
                      '  byteLength: 2,\n' +
                      '  byteOffset: 1,\n' +
-                     '  buffer: ArrayBuffer { byteLength: 4, x: 42 },\n' +
+                     '  buffer:\n' +
+                     '   ArrayBuffer { [Uint8Contents]: <01 02 03 04>, ' +
+                       'byteLength: 4, x: 42 },\n' +
                      '  y: 1337 }');
 }
 
 // Now do the same checks but from a different context.
-for (const showHidden of [true, false]) {
+{
+  const showHidden = false;
   const ab = vm.runInNewContext('new ArrayBuffer(4)');
   const dv = vm.runInNewContext('new DataView(ab, 1, 2)', { ab });
   assert.strictEqual(
     util.inspect(ab, showHidden),
-    'ArrayBuffer { byteLength: 4 }'
+    'ArrayBuffer { [Uint8Contents]: <00 00 00 00>, byteLength: 4 }'
   );
   assert.strictEqual(util.inspect(new DataView(ab, 1, 2), showHidden),
                      'DataView {\n' +
                      '  byteLength: 2,\n' +
                      '  byteOffset: 1,\n' +
-                     '  buffer: ArrayBuffer { byteLength: 4 } }');
+                     '  buffer:\n' +
+                     '   ArrayBuffer { [Uint8Contents]: <00 00 00 00>, ' +
+                       'byteLength: 4 } }');
   assert.strictEqual(
     util.inspect(ab, showHidden),
-    'ArrayBuffer { byteLength: 4 }'
+    'ArrayBuffer { [Uint8Contents]: <00 00 00 00>, byteLength: 4 }'
   );
   assert.strictEqual(util.inspect(dv, showHidden),
                      'DataView {\n' +
                      '  byteLength: 2,\n' +
                      '  byteOffset: 1,\n' +
-                     '  buffer: ArrayBuffer { byteLength: 4 } }');
+                     '  buffer:\n' +
+                     '   ArrayBuffer { [Uint8Contents]: <00 00 00 00>, ' +
+                       'byteLength: 4 } }');
   ab.x = 42;
   dv.y = 1337;
   assert.strictEqual(util.inspect(ab, showHidden),
-                     'ArrayBuffer { byteLength: 4, x: 42 }');
+                     'ArrayBuffer { [Uint8Contents]: <00 00 00 00>, ' +
+                       'byteLength: 4, x: 42 }');
   assert.strictEqual(util.inspect(dv, showHidden),
                      'DataView {\n' +
                      '  byteLength: 2,\n' +
                      '  byteOffset: 1,\n' +
-                     '  buffer: ArrayBuffer { byteLength: 4, x: 42 },\n' +
+                     '  buffer:\n' +
+                     '   ArrayBuffer { [Uint8Contents]: <00 00 00 00>,' +
+                       ' byteLength: 4, x: 42 },\n' +
                      '  y: 1337 }');
 }
 
@@ -599,7 +613,8 @@ assert.strictEqual(util.inspect(-5e-324), '-5e-324');
     Object.defineProperty(this, 'name',
                           { value: 'BadCustomError', enumerable: false });
   }
-  util.inherits(BadCustomError, Error);
+  Object.setPrototypeOf(BadCustomError.prototype, Error.prototype);
+  Object.setPrototypeOf(BadCustomError, Error);
   assert.strictEqual(
     util.inspect(new BadCustomError('foo')),
     '[BadCustomError: foo]'
@@ -1580,15 +1595,7 @@ assert.strictEqual(util.inspect('"\''), '`"\'`');
 // eslint-disable-next-line no-template-curly-in-string
 assert.strictEqual(util.inspect('"\'${a}'), "'\"\\'${a}'");
 
-{
-  assert.strictEqual(
-    util.inspect(Object.setPrototypeOf(/a/, null)),
-    '/undefined/undefined'
-  );
-}
-
-// Verify that throwing in valueOf and having no prototype still produces nice
-// results.
+// Verify that throwing in valueOf and toString still produces nice results.
 [
   [new String(55), "[String: '55']"],
   [new Boolean(true), '[Boolean: true]'],
@@ -1609,6 +1616,7 @@ assert.strictEqual(util.inspect('"\'${a}'), "'\"\\'${a}'");
   [new Promise((resolve) => setTimeout(resolve, 10)), 'Promise { <pending> }'],
   [new WeakSet(), 'WeakSet { <items unknown> }'],
   [new WeakMap(), 'WeakMap { <items unknown> }'],
+  [/foobar/g, '/foobar/g']
 ].forEach(([value, expected]) => {
   Object.defineProperty(value, 'valueOf', {
     get() {
@@ -1628,6 +1636,7 @@ assert.strictEqual(util.inspect('"\'${a}'), "'\"\\'${a}'");
   assert.notStrictEqual(util.inspect(value), expected);
 });
 
+// Verify that having no prototype still produces nice results.
 [
   [[1, 3, 4], '[Array: null prototype] [ 1, 3, 4 ]'],
   [new Set([1, 2]), '[Set: null prototype] { 1, 2 }'],
@@ -1646,13 +1655,17 @@ assert.strictEqual(util.inspect('"\'${a}'), "'\"\\'${a}'");
   [new Float64Array(2), '[Float64Array: null prototype] [ 0, 0 ]'],
   [new BigInt64Array(2), '[BigInt64Array: null prototype] [ 0n, 0n ]'],
   [new BigUint64Array(2), '[BigUint64Array: null prototype] [ 0n, 0n ]'],
-  [new ArrayBuffer(16), '[ArrayBuffer: null prototype] ' +
-   '{ byteLength: undefined }'],
+  [new ArrayBuffer(16), '[ArrayBuffer: null prototype] {\n' +
+     '  [Uint8Contents]: <00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00>,\n' +
+     '  byteLength: undefined }'],
   [new DataView(new ArrayBuffer(16)),
    '[DataView: null prototype] {\n  byteLength: undefined,\n  ' +
-    'byteOffset: undefined,\n  buffer: undefined }'],
+     'byteOffset: undefined,\n  buffer: undefined }'],
   [new SharedArrayBuffer(2), '[SharedArrayBuffer: null prototype] ' +
-  '{ byteLength: undefined }']
+     '{ [Uint8Contents]: <00 00>, byteLength: undefined }'],
+  [/foobar/, '[RegExp: null prototype] /foobar/'],
+  [new Date('Sun, 14 Feb 2010 11:48:40 GMT'),
+   '[Date: null prototype] 2010-02-14T11:48:40.000Z']
 ].forEach(([value, expected]) => {
   assert.strictEqual(
     util.inspect(Object.setPrototypeOf(value, null)),
@@ -1664,6 +1677,81 @@ assert.strictEqual(util.inspect('"\'${a}'), "'\"\\'${a}'");
   value[Symbol('foo')] = 'yeah';
   assert.notStrictEqual(util.inspect(value), expected);
 });
+
+// Verify that subclasses with and without prototype produce nice results.
+[
+  [RegExp, ['foobar', 'g'], '/foobar/g'],
+  [WeakSet, [[{}]], '{ <items unknown> }'],
+  [WeakMap, [[[{}, {}]]], '{ <items unknown> }'],
+  [BigInt64Array, [10], '[ 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n ]']
+].forEach(([base, input, rawExpected]) => {
+  class Foo extends base {}
+  const value = new Foo(...input);
+  const symbol = value[Symbol.toStringTag];
+  const expected = `Foo ${symbol ? `[${symbol}] ` : ''}${rawExpected}`;
+  const expectedWithoutProto = `[${base.name}: null prototype] ${rawExpected}`;
+  assert.strictEqual(util.inspect(value), expected);
+  value.foo = 'bar';
+  assert.notStrictEqual(util.inspect(value), expected);
+  delete value.foo;
+  assert.strictEqual(
+    util.inspect(Object.setPrototypeOf(value, null)),
+    expectedWithoutProto
+  );
+  value.foo = 'bar';
+  let res = util.inspect(value);
+  assert.notStrictEqual(res, expectedWithoutProto);
+  assert(/foo: 'bar'/.test(res), res);
+  delete value.foo;
+  value[Symbol('foo')] = 'yeah';
+  res = util.inspect(value);
+  assert.notStrictEqual(res, expectedWithoutProto);
+  assert(/\[Symbol\(foo\)]: 'yeah'/.test(res), res);
+});
+
+// Date null prototype checks
+{
+  class CustomDate extends Date {
+  }
+
+  const date = new CustomDate('Sun, 14 Feb 2010 11:48:40 GMT');
+  assert.strictEqual(util.inspect(date), 'CustomDate 2010-02-14T11:48:40.000Z');
+
+  // add properties
+  date.foo = 'bar';
+  assert.strictEqual(util.inspect(date),
+                     '{ CustomDate 2010-02-14T11:48:40.000Z foo: \'bar\' }');
+
+  // check for null prototype
+  Object.setPrototypeOf(date, null);
+  assert.strictEqual(util.inspect(date),
+                     '{ [Date: null prototype] 2010-02-14T11:48:40.000Z' +
+                     ' foo: \'bar\' }');
+
+  const anotherDate = new CustomDate('Sun, 14 Feb 2010 11:48:40 GMT');
+  Object.setPrototypeOf(anotherDate, null);
+  assert.strictEqual(util.inspect(anotherDate),
+                     '[Date: null prototype] 2010-02-14T11:48:40.000Z');
+}
+
+// Check for invalid dates and null prototype
+{
+  class CustomDate extends Date {
+  }
+
+  const date = new CustomDate('invalid_date');
+  assert.strictEqual(util.inspect(date), 'CustomDate Invalid Date');
+
+  // add properties
+  date.foo = 'bar';
+  assert.strictEqual(util.inspect(date),
+                     '{ CustomDate Invalid Date foo: \'bar\' }');
+
+  // check for null prototype
+  Object.setPrototypeOf(date, null);
+  assert.strictEqual(util.inspect(date),
+                     '{ [Date: null prototype] Invalid Date foo: \'bar\' }');
+}
 
 assert.strictEqual(inspect(1n), '1n');
 assert.strictEqual(inspect(Object(-1n)), '[BigInt: -1n]');
@@ -1765,7 +1853,6 @@ assert.strictEqual(
     util.inspect(new StorageObject()),
     '<[Object: null prototype] {}> {}'
   );
-
 }
 
 // Check that the fallback always works.

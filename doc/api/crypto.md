@@ -200,9 +200,10 @@ const cipher = crypto.createCipheriv(algorithm, key, iv);
 
 let encrypted = '';
 cipher.on('readable', () => {
-  const data = cipher.read();
-  if (data)
-    encrypted += data.toString('hex');
+  let chunk;
+  while (null !== (chunk = cipher.read())) {
+    encrypted += chunk.toString('hex');
+  }
 });
 cipher.on('end', () => {
   console.log(encrypted);
@@ -383,9 +384,9 @@ const decipher = crypto.createDecipheriv(algorithm, key, iv);
 
 let decrypted = '';
 decipher.on('readable', () => {
-  const data = decipher.read();
-  if (data)
-    decrypted += data.toString('utf8');
+  while (null !== (chunk = decipher.read())) {
+    decrypted += chunk.toString('utf8');
+  }
 });
 decipher.on('end', () => {
   console.log(decrypted);
@@ -941,6 +942,8 @@ const crypto = require('crypto');
 const hash = crypto.createHash('sha256');
 
 hash.on('readable', () => {
+  // Only one element is going to be produced by the
+  // hash stream.
   const data = hash.read();
   if (data) {
     console.log(data.toString('hex'));
@@ -1015,7 +1018,7 @@ This can be called many times with new data as it is streamed.
 added: v0.1.94
 -->
 
-The `Hmac` Class is a utility for creating cryptographic HMAC digests. It can
+The `Hmac` class is a utility for creating cryptographic HMAC digests. It can
 be used in one of two ways:
 
 - As a [stream][] that is both readable and writable, where data is written
@@ -1033,6 +1036,8 @@ const crypto = require('crypto');
 const hmac = crypto.createHmac('sha256', 'a secret');
 
 hmac.on('readable', () => {
+  // Only one element is going to be produced by the
+  // hash stream.
   const data = hmac.read();
   if (data) {
     console.log(data.toString('hex'));
@@ -1157,6 +1162,16 @@ For private keys, the following encoding options can be used:
 When PEM encoding was selected, the result will be a string, otherwise it will
 be a buffer containing the data encoded as DER.
 
+PKCS#1, SEC1, and PKCS#8 type keys can be encrypted by using a combination of
+the `cipher` and `format` options. The PKCS#8 `type` can be used with any
+`format` to encrypt any key algorithm (RSA, EC, or DH) by specifying a
+`cipher`. PKCS#1 and SEC1 can only be encrypted by specifying a `cipher`
+when the PEM `format` is used. For maximum compatibility, use PKCS#8 for
+encrypted private keys. Since PKCS#8 defines its own
+encryption mechanism, PEM-level encryption is not supported when encrypting
+a PKCS#8 key. See [RFC 5208][] for PKCS#8 encryption and [RFC 1421][] for
+PKCS#1 and SEC1 encryption.
+
 ### keyObject.symmetricSize
 <!-- YAML
 added: v11.6.0
@@ -1181,7 +1196,7 @@ or `'private'` for private (asymmetric) keys.
 added: v0.1.92
 -->
 
-The `Sign` Class is a utility for generating signatures. It can be used in one
+The `Sign` class is a utility for generating signatures. It can be used in one
 of two ways:
 
 - As a writable [stream][], where data to be signed is written and the
@@ -1193,51 +1208,46 @@ The [`crypto.createSign()`][] method is used to create `Sign` instances. The
 argument is the string name of the hash function to use. `Sign` objects are not
 to be created directly using the `new` keyword.
 
-Example: Using `Sign` objects as streams:
+Example: Using `Sign` and [`Verify`][] objects as streams:
 
 ```js
 const crypto = require('crypto');
-const sign = crypto.createSign('SHA256');
 
+const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', {
+  namedCurve: 'sect239k1'
+});
+
+const sign = crypto.createSign('SHA256');
 sign.write('some data to sign');
 sign.end();
+const signature = sign.sign(privateKey, 'hex');
 
-const privateKey = getPrivateKeySomehow();
-console.log(sign.sign(privateKey, 'hex'));
-// Prints: the calculated signature using the specified private key and
-// SHA-256. For RSA keys, the algorithm is RSASSA-PKCS1-v1_5 (see padding
-// parameter below for RSASSA-PSS). For EC keys, the algorithm is ECDSA.
+const verify = crypto.createVerify('SHA256');
+verify.write('some data to sign');
+verify.end();
+console.log(verify.verify(publicKey, signature));
+// Prints: true or false
 ```
 
-Example: Using the [`sign.update()`][] and [`sign.sign()`][] methods:
+Example: Using the [`sign.update()`][] and [`verify.update()`][] methods:
 
 ```js
 const crypto = require('crypto');
+
+const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
+  modulusLength: 2048,
+});
+
 const sign = crypto.createSign('SHA256');
-
 sign.update('some data to sign');
+sign.end();
+const signature = sign.sign(privateKey);
 
-const privateKey = getPrivateKeySomehow();
-console.log(sign.sign(privateKey, 'hex'));
-// Prints: the calculated signature
-```
-
-In some cases, a `Sign` instance can also be created by passing in a signature
-algorithm name, such as 'RSA-SHA256'. This will use the corresponding digest
-algorithm. This does not work for all signature algorithms, such as
-'ecdsa-with-SHA256'. Use digest names instead.
-
-Example: signing using legacy signature algorithm name
-
-```js
-const crypto = require('crypto');
-const sign = crypto.createSign('RSA-SHA256');
-
-sign.update('some data to sign');
-
-const privateKey = getPrivateKeySomehow();
-console.log(sign.sign(privateKey, 'hex'));
-// Prints: the calculated signature
+const verify = crypto.createVerify('SHA256');
+verify.update('some data to sign');
+verify.end();
+console.log(verify.verify(publicKey, signature));
+// Prints: true
 ```
 
 ### sign.sign(privateKey[, outputEncoding])
@@ -1317,34 +1327,7 @@ of two ways:
 The [`crypto.createVerify()`][] method is used to create `Verify` instances.
 `Verify` objects are not to be created directly using the `new` keyword.
 
-Example: Using `Verify` objects as streams:
-
-```js
-const crypto = require('crypto');
-const verify = crypto.createVerify('SHA256');
-
-verify.write('some data to sign');
-verify.end();
-
-const publicKey = getPublicKeySomehow();
-const signature = getSignatureToVerify();
-console.log(verify.verify(publicKey, signature));
-// Prints: true or false
-```
-
-Example: Using the [`verify.update()`][] and [`verify.verify()`][] methods:
-
-```js
-const crypto = require('crypto');
-const verify = crypto.createVerify('SHA256');
-
-verify.update('some data to sign');
-
-const publicKey = getPublicKeySomehow();
-const signature = getSignatureToVerify();
-console.log(verify.verify(publicKey, signature));
-// Prints: true or false
-```
+See [`Sign`][] for examples.
 
 ### verify.update(data[, inputEncoding])
 <!-- YAML
@@ -1369,6 +1352,9 @@ This can be called many times with new data as it is streamed.
 <!-- YAML
 added: v0.1.92
 changes:
+  - version: v11.7.0
+    pr-url: https://github.com/nodejs/node/pull/25217
+    description: The key can now be a private key.
   - version: v8.0.0
     pr-url: https://github.com/nodejs/node/pull/11705
     description: Support for RSASSA-PSS and additional options was added.
@@ -1408,6 +1394,9 @@ string; otherwise `signature` is expected to be a [`Buffer`][],
 The `verify` object can not be used again after `verify.verify()` has been
 called. Multiple calls to `verify.verify()` will result in an error being
 thrown.
+
+Because public keys can be derived from private keys, a private key may
+be passed instead of a public key.
 
 ## `crypto` module methods and properties
 
@@ -1746,6 +1735,8 @@ const hash = crypto.createHash('sha256');
 
 const input = fs.createReadStream(filename);
 input.on('readable', () => {
+  // Only one element is going to be produced by the
+  // hash stream.
   const data = input.read();
   if (data)
     hash.update(data);
@@ -1791,6 +1782,8 @@ const hmac = crypto.createHmac('sha256', 'a secret');
 
 const input = fs.createReadStream(filename);
 input.on('readable', () => {
+  // Only one element is going to be produced by the
+  // hash stream.
   const data = input.read();
   if (data)
     hmac.update(data);
@@ -1819,6 +1812,10 @@ must be an object with the properties described above.
 ### crypto.createPublicKey(key)
 <!-- YAML
 added: v11.6.0
+changes:
+  - version: v11.7.0
+    pr-url: https://github.com/nodejs/node/pull/25217
+    description: The `key` argument can now be a private key.
 -->
 * `key` {Object | string | Buffer}
   - `key`: {string | Buffer}
@@ -1832,6 +1829,12 @@ string or `Buffer`, `format` is assumed to be `'pem'`; otherwise, `key`
 must be an object with the properties described above.
 
 If the format is `'pem'`, the `'key'` may also be an X.509 certificate.
+
+Because public keys can be derived from private keys, a private key may be
+passed instead of a public key. In that case, this function behaves as if
+[`crypto.createPrivateKey()`][] had been called, except that the type of the
+returned `KeyObject` will be `public` and that the private key cannot be
+extracted from the returned `KeyObject`.
 
 ### crypto.createSecretKey(key)
 <!-- YAML
@@ -1851,10 +1854,15 @@ added: v0.1.92
 * `options` {Object} [`stream.Writable` options][]
 * Returns: {Sign}
 
-Creates and returns a `Sign` object that uses the given `algorithm`.
-Use [`crypto.getHashes()`][] to obtain an array of names of the available
-signing algorithms. Optional `options` argument controls the
-`stream.Writable` behavior.
+Creates and returns a `Sign` object that uses the given `algorithm`.  Use
+[`crypto.getHashes()`][] to obtain the names of the available digest algorithms.
+Optional `options` argument controls the `stream.Writable` behavior.
+
+In some cases, a `Sign` instance can be created using the name of a signature
+algorithm, such as `'RSA-SHA256'`, instead of a digest algorithm. This will use
+the corresponding digest algorithm. This does not work for all signature
+algorithms, such as `'ecdsa-with-SHA256'`, so it is best to always use digest
+algorithm names.
 
 ### crypto.createVerify(algorithm[, options])
 <!-- YAML
@@ -1868,6 +1876,12 @@ Creates and returns a `Verify` object that uses the given algorithm.
 Use [`crypto.getHashes()`][] to obtain an array of names of the available
 signing algorithms. Optional `options` argument controls the
 `stream.Writable` behavior.
+
+In some cases, a `Verify` instance can be created using the name of a signature
+algorithm, such as `'RSA-SHA256'`, instead of a digest algorithm. This will use
+the corresponding digest algorithm. This does not work for all signature
+algorithms, such as `'ecdsa-with-SHA256'`, so it is best to always use digest
+algorithm names.
 
 ### crypto.generateKeyPair(type, options, callback)
 <!-- YAML
@@ -1941,18 +1955,8 @@ changes:
   - `publicExponent`: {number} Public exponent (RSA). **Default:** `0x10001`.
   - `divisorLength`: {number} Size of `q` in bits (DSA).
   - `namedCurve`: {string} Name of the curve to use (EC).
-  - `publicKeyEncoding`: {Object}
-    - `type`: {string} Must be one of `'pkcs1'` (RSA only) or `'spki'`.
-    - `format`: {string} Must be `'pem'` or `'der'`.
-  - `privateKeyEncoding`: {Object}
-    - `type`: {string} Must be one of `'pkcs1'` (RSA only), `'pkcs8'` or
-      `'sec1'` (EC only).
-    - `format`: {string} Must be `'pem'` or `'der'`.
-    - `cipher`: {string} If specified, the private key will be encrypted with
-      the given `cipher` and `passphrase` using PKCS#5 v2.0 password based
-      encryption.
-    - `passphrase`: {string | Buffer} The passphrase to use for encryption, see
-      `cipher`.
+  - `publicKeyEncoding`: {Object} See [`keyObject.export()`][].
+  - `privateKeyEncoding`: {Object} See [`keyObject.export()`][].
 * Returns: {Object}
   - `publicKey`: {string | Buffer | KeyObject}
   - `privateKey`: {string | Buffer | KeyObject}
@@ -1960,8 +1964,13 @@ changes:
 Generates a new asymmetric key pair of the given `type`. Only RSA, DSA and EC
 are currently supported.
 
-It is recommended to encode public keys as `'spki'` and private keys as
-`'pkcs8'` with encryption:
+If a `publicKeyEncoding` or `privateKeyEncoding` was specified, this function
+behaves as if [`keyObject.export()`][] had been called on its result. Otherwise,
+the respective part of the key is returned as a [`KeyObject`].
+
+When encoding public keys, it is recommended to use `'spki'`. When encoding
+private keys, it is recommended to use `'pks8'` with a strong passphrase, and to
+keep the passphrase confidential.
 
 ```js
 const { generateKeyPairSync } = require('crypto');
@@ -2054,7 +2063,7 @@ added: v10.0.0
 added: v0.9.3
 -->
 * Returns: {string[]} An array of the names of the supported hash algorithms,
-  such as `'RSA-SHA256'`.
+  such as `'RSA-SHA256'`. Hash algorithms are also called "digest" algorithms.
 
 ```js
 const hashes = crypto.getHashes();
@@ -3073,7 +3082,9 @@ the `crypto`, `tls`, and `https` modules and are generally specific to OpenSSL.
 [`Buffer`]: buffer.html
 [`EVP_BytesToKey`]: https://www.openssl.org/docs/man1.1.0/crypto/EVP_BytesToKey.html
 [`KeyObject`]: #crypto_class_keyobject
+[`Sign`]: #crypto_class_sign
 [`UV_THREADPOOL_SIZE`]: cli.html#cli_uv_threadpool_size_size
+[`Verify`]: #crypto_class_verify
 [`cipher.final()`]: #crypto_cipher_final_outputencoding
 [`cipher.update()`]: #crypto_cipher_update_data_inputencoding_outputencoding
 [`crypto.createCipher()`]: #crypto_crypto_createcipher_algorithm_password_options
@@ -3127,10 +3138,12 @@ the `crypto`, `tls`, and `https` modules and are generally specific to OpenSSL.
 [NIST SP 800-38D]: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf
 [Nonce-Disrespecting Adversaries]: https://github.com/nonce-disrespect/nonce-disrespect
 [OpenSSL's SPKAC implementation]: https://www.openssl.org/docs/man1.1.0/apps/openssl-spkac.html
+[RFC 1421]: https://www.rfc-editor.org/rfc/rfc1421.txt
 [RFC 2412]: https://www.rfc-editor.org/rfc/rfc2412.txt
 [RFC 3526]: https://www.rfc-editor.org/rfc/rfc3526.txt
 [RFC 3610]: https://www.rfc-editor.org/rfc/rfc3610.txt
 [RFC 4055]: https://www.rfc-editor.org/rfc/rfc4055.txt
+[RFC 5208]: https://www.rfc-editor.org/rfc/rfc5208.txt
 [encoding]: buffer.html#buffer_buffers_and_character_encodings
 [initialization vector]: https://en.wikipedia.org/wiki/Initialization_vector
 [scrypt]: https://en.wikipedia.org/wiki/Scrypt

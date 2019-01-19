@@ -624,6 +624,16 @@ An attempt was made to register something that is not a function as an
 The type of an asynchronous resource was invalid. Note that users are also able
 to define their own types if using the public embedder API.
 
+<a id="ERR_BROTLI_COMPRESSION_FAILED"></a>
+### ERR_BROTLI_COMPRESSION_FAILED
+
+Data passed to a Brotli stream was not successfully compressed.
+
+<a id="ERR_BROTLI_INVALID_PARAM"></a>
+### ERR_BROTLI_INVALID_PARAM
+
+An invalid parameter key was passed during construction of a Brotli stream.
+
 <a id="ERR_BUFFER_CONTEXT_NOT_AVAILABLE"></a>
 ### ERR_BUFFER_CONTEXT_NOT_AVAILABLE
 
@@ -1130,6 +1140,12 @@ is set for the `Http2Stream`.
 
 `http2.connect()` was passed a URL that uses any protocol other than `http:` or
 `https:`.
+
+<a id="ERR_INCOMPATIBLE_OPTION_PAIR"></a>
+### ERR_INCOMPATIBLE_OPTION_PAIR
+
+An option pair is incompatible with each other and can not be used at the same
+time.
 
 <a id="ERR_INSPECTOR_ALREADY_CONNECTED"></a>
 ### ERR_INSPECTOR_ALREADY_CONNECTED
@@ -1794,20 +1810,6 @@ An attempt was made to load a module with an unknown or unsupported format.
 An invalid or unknown process signal was passed to an API expecting a valid
 signal (such as [`subprocess.kill()`][]).
 
-<a id="ERR_UNKNOWN_STDIN_TYPE"></a>
-### ERR_UNKNOWN_STDIN_TYPE
-
-An attempt was made to launch a Node.js process with an unknown `stdin` file
-type. This error is usually an indication of a bug within Node.js itself,
-although it is possible for user code to trigger it.
-
-<a id="ERR_UNKNOWN_STREAM_TYPE"></a>
-### ERR_UNKNOWN_STREAM_TYPE
-
-An attempt was made to launch a Node.js process with an unknown `stdout` or
-`stderr` file type. This error is usually an indication of a bug within Node.js
-itself, although it is possible for user code to trigger it.
-
 <a id="ERR_V8BREAKITERATOR"></a>
 ### ERR_V8BREAKITERATOR
 
@@ -2064,6 +2066,28 @@ kind of internal Node.js error that should not typically be triggered by user
 code. Instances of this error point to an internal bug within the Node.js
 binary itself.
 
+<a id="ERR_UNKNOWN_STDIN_TYPE"></a>
+### ERR_UNKNOWN_STDIN_TYPE
+<!-- YAML
+added: v8.0.0
+removed: v11.7.0
+-->
+
+An attempt was made to launch a Node.js process with an unknown `stdin` file
+type. This error is usually an indication of a bug within Node.js itself,
+although it is possible for user code to trigger it.
+
+<a id="ERR_UNKNOWN_STREAM_TYPE"></a>
+### ERR_UNKNOWN_STREAM_TYPE
+<!-- YAML
+added: v8.0.0
+removed: v11.7.0
+-->
+
+An attempt was made to launch a Node.js process with an unknown `stdout` or
+`stderr` file type. This error is usually an indication of a bug within Node.js
+itself, although it is possible for user code to trigger it.
+
 <a id="ERR_VALUE_OUT_OF_RANGE"></a>
 ### ERR_VALUE_OUT_OF_RANGE
 <!-- YAML
@@ -2178,7 +2202,7 @@ such as `process.stdout.on('data')`.
 [`process.setUncaughtExceptionCaptureCallback()`]: process.html#process_process_setuncaughtexceptioncapturecallback_fn
 [`readable._read()`]: stream.html#stream_readable_read_size_1
 [`require('crypto').setEngine()`]: crypto.html#crypto_crypto_setengine_engine_flags
-[`require()`]: modules.html#modules_require
+[`require()`]: modules.html#modules_require_id
 [`server.close()`]: net.html#net_server_close_callback
 [`server.listen()`]: net.html#net_server_listen
 [`sign.sign()`]: crypto.html#crypto_sign_sign_privatekey_outputencoding

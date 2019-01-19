@@ -117,8 +117,8 @@ assert.throws(
   {
     code: 'ERR_ASSERTION',
     message: `${defaultMsgStartFull}\n\n` +
-             '+ 2016-01-01T00:00:00.000Z\n- 2016-01-01T00:00:00.000Z {\n' +
-             "-   '0': '1'\n- }"
+             '+ 2016-01-01T00:00:00.000Z\n- MyDate 2016-01-01T00:00:00.000Z' +
+             " {\n-   '0': '1'\n- }"
   }
 );
 assert.throws(
@@ -126,7 +126,7 @@ assert.throws(
   {
     code: 'ERR_ASSERTION',
     message: `${defaultMsgStartFull}\n\n` +
-             '+ 2016-01-01T00:00:00.000Z {\n' +
+             '+ MyDate 2016-01-01T00:00:00.000Z {\n' +
              "+   '0': '1'\n+ }\n- 2016-01-01T00:00:00.000Z"
   }
 );
@@ -149,7 +149,7 @@ assert.throws(
   {
     code: 'ERR_ASSERTION',
     message: `${defaultMsgStartFull}\n\n` +
-             "+ /test/\n- /test/ {\n-   '0': '1'\n- }"
+             "+ /test/\n- MyRegExp /test/ {\n-   '0': '1'\n- }"
   }
 );
 

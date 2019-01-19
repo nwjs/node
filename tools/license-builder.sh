@@ -89,4 +89,10 @@ addlicense "nghttp2" "deps/nghttp2" "$(cat ${rootdir}/deps/nghttp2/COPYING)"
 # node-inspect
 addlicense "node-inspect" "deps/node-inspect" "$(cat ${rootdir}/deps/node-inspect/LICENSE)"
 
+# large_pages
+addlicense "large_pages" "src/large_pages" "$(sed -e '/SPDX-License-Identifier/,$d' -e 's/^\/\///' ${rootdir}/src/large_pages/node_large_page.h)"
+
+# brotli
+addlicense "brotli" "deps/brotli" "$(cat ${rootdir}/deps/brotli/LICENSE)"
+
 mv $tmplicense $licensefile

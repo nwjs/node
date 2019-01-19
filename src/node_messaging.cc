@@ -1,12 +1,13 @@
-#include "debug_utils.h"
 #include "node_messaging.h"
-#include "node_internals.h"
+#include "async_wrap-inl.h"
+#include "async_wrap.h"
+#include "debug_utils.h"
 #include "node_buffer.h"
 #include "node_errors.h"
-#include "util.h"
+#include "node_internals.h"
+#include "node_process.h"
 #include "util-inl.h"
-#include "async_wrap.h"
-#include "async_wrap-inl.h"
+#include "util.h"
 
 using v8::Array;
 using v8::ArrayBuffer;
@@ -30,6 +31,7 @@ using v8::String;
 using v8::Value;
 using v8::ValueDeserializer;
 using v8::ValueSerializer;
+using v8::WasmCompiledModule;
 
 namespace node {
 namespace worker {
@@ -43,13 +45,15 @@ namespace {
 // `MessagePort`s and `SharedArrayBuffer`s, and make new JS objects out of them.
 class DeserializerDelegate : public ValueDeserializer::Delegate {
  public:
-  DeserializerDelegate(Message* m,
-                       Environment* env,
-                       const std::vector<MessagePort*>& message_ports,
-                       const std::vector<Local<SharedArrayBuffer>>&
-                           shared_array_buffers)
-    : message_ports_(message_ports),
-      shared_array_buffers_(shared_array_buffers) {}
+  DeserializerDelegate(
+      Message* m,
+      Environment* env,
+      const std::vector<MessagePort*>& message_ports,
+      const std::vector<Local<SharedArrayBuffer>>& shared_array_buffers,
+      const std::vector<WasmCompiledModule::TransferrableModule>& wasm_modules)
+      : message_ports_(message_ports),
+        shared_array_buffers_(shared_array_buffers),
+        wasm_modules_(wasm_modules) {}
 
   MaybeLocal<Object> ReadHostObject(Isolate* isolate) override {
     // Currently, only MessagePort hosts objects are supported, so identifying
@@ -67,11 +71,19 @@ class DeserializerDelegate : public ValueDeserializer::Delegate {
     return shared_array_buffers_[clone_id];
   }
 
+  MaybeLocal<WasmCompiledModule> GetWasmModuleFromId(
+      Isolate* isolate, uint32_t transfer_id) override {
+    CHECK_LE(transfer_id, wasm_modules_.size());
+    return WasmCompiledModule::FromTransferrableModule(
+        isolate, wasm_modules_[transfer_id]);
+  }
+
   ValueDeserializer* deserializer = nullptr;
 
  private:
   const std::vector<MessagePort*>& message_ports_;
   const std::vector<Local<SharedArrayBuffer>>& shared_array_buffers_;
+  const std::vector<WasmCompiledModule::TransferrableModule>& wasm_modules_;
 };
 
 }  // anonymous namespace
@@ -109,7 +121,8 @@ MaybeLocal<Value> Message::Deserialize(Environment* env,
   }
   shared_array_buffers_.clear();
 
-  DeserializerDelegate delegate(this, env, ports, shared_array_buffers);
+  DeserializerDelegate delegate(
+      this, env, ports, shared_array_buffers, wasm_modules_);
   ValueDeserializer deserializer(
       env->isolate(),
       reinterpret_cast<const uint8_t*>(main_message_buf_.data),
@@ -141,6 +154,11 @@ void Message::AddSharedArrayBuffer(
 
 void Message::AddMessagePort(std::unique_ptr<MessagePortData>&& data) {
   message_ports_.emplace_back(std::move(data));
+}
+
+uint32_t Message::AddWASMModule(WasmCompiledModule::TransferrableModule&& mod) {
+  wasm_modules_.emplace_back(std::move(mod));
+  return wasm_modules_.size() - 1;
 }
 
 namespace {
@@ -200,6 +218,11 @@ class SerializerDelegate : public ValueSerializer::Delegate {
     seen_shared_array_buffers_.push_back(shared_array_buffer);
     msg_->AddSharedArrayBuffer(reference);
     return Just(i);
+  }
+
+  Maybe<uint32_t> GetWasmModuleTransferId(
+      Isolate* isolate, Local<WasmCompiledModule> module) override {
+    return Just(msg_->AddWASMModule(module->GetTransferrableModule()));
   }
 
   void Finish() {

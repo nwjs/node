@@ -8,8 +8,8 @@
 // of `configure`.
 
 const {
-  getSource,
   getCodeCache,
+  compileFunction,
   cachableBuiltins
 } = require('internal/bootstrap/cache');
 
@@ -18,13 +18,6 @@ const {
     isUint8Array
   }
 } = require('util');
-
-function hash(str) {
-  if (process.versions.openssl) {
-    return require('crypto').createHash('sha256').update(str).digest('hex');
-  }
-  return '';
-}
 
 const fs = require('fs');
 
@@ -65,26 +58,21 @@ function getInitalizer(key, cache) {
   const defName = `${key.replace(/\//g, '_').replace(/-/g, '_')}_raw`;
   const definition = `static const uint8_t ${defName}[] = {\n` +
                      `${cache.join(',')}\n};`;
-  const source = getSource(key);
-  const sourceHash = hash(source);
+  const dataDef = 'std::make_unique<v8::ScriptCompiler::CachedData>(' +
+                  `${defName}, static_cast<int>(arraysize(${defName})), ` +
+                  'policy)';
   const initializer =
     'code_cache_.emplace(\n' +
     `  "${key}",\n` +
-    `  UnionBytes(${defName}, arraysize(${defName}))\n` +
-    ');';
-  const hashIntializer =
-    'code_cache_hash_.emplace(\n' +
-    `  "${key}",\n` +
-    `  "${sourceHash}"\n` +
+    `  ${dataDef}\n` +
     ');';
   return {
-    definition, initializer, hashIntializer, sourceHash
+    definition, initializer
   };
 }
 
 const cacheDefinitions = [];
 const cacheInitializers = [];
-const cacheHashInitializers = [];
 let totalCacheSize = 0;
 
 function lexical(a, b) {
@@ -98,6 +86,7 @@ function lexical(a, b) {
 }
 
 for (const key of cachableBuiltins.sort(lexical)) {
+  compileFunction(key);  // compile it
   const cachedData = getCodeCache(key);
   if (!isUint8Array(cachedData)) {
     console.error(`Failed to generate code cache for '${key}'`);
@@ -107,13 +96,12 @@ for (const key of cachableBuiltins.sort(lexical)) {
   const size = cachedData.byteLength;
   totalCacheSize += size;
   const {
-    definition, initializer, hashIntializer, sourceHash
+    definition, initializer,
   } = getInitalizer(key, cachedData);
   cacheDefinitions.push(definition);
   cacheInitializers.push(initializer);
-  cacheHashInitializers.push(hashIntializer);
   console.log(`Generated cache for '${key}', size = ${formatSize(size)}` +
-              `, hash = ${sourceHash}, total = ${formatSize(totalCacheSize)}`);
+              `, total = ${formatSize(totalCacheSize)}`);
 }
 
 const result = `#include "node_native_module.h"
@@ -127,12 +115,8 @@ namespace native_module {
 ${cacheDefinitions.join('\n\n')}
 
 void NativeModuleLoader::LoadCodeCache() {
-  has_code_cache_ = true;
+  auto policy = v8::ScriptCompiler::CachedData::BufferPolicy::BufferNotOwned;
   ${cacheInitializers.join('\n  ')}
-}
-
-void NativeModuleLoader::LoadCodeCacheHash() {
-  ${cacheHashInitializers.join('\n  ')}
 }
 
 }  // namespace native_module

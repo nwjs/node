@@ -19,16 +19,17 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#include "node_crypto.h"
 #include "node.h"
 #include "node_buffer.h"
-#include "node_errors.h"
 #include "node_constants.h"
-#include "node_crypto.h"
 #include "node_crypto_bio.h"
-#include "node_crypto_groups.h"
 #include "node_crypto_clienthello-inl.h"
-#include "node_mutex.h"
+#include "node_crypto_groups.h"
+#include "node_errors.h"
 #include "node_internals.h"
+#include "node_mutex.h"
+#include "node_process.h"
 #include "tls_wrap.h"  // TLSWrap
 
 #include "async_wrap-inl.h"
@@ -248,22 +249,12 @@ struct CryptoErrorVector : public std::vector<std::string> {
     CHECK(!exception_v.IsEmpty());
 
     if (!empty()) {
-      Local<Array> array = Array::New(env->isolate(), size());
-      CHECK(!array.IsEmpty());
-
-      for (const std::string& string : *this) {
-        const size_t index = &string - &front();
-        Local<String> value =
-            String::NewFromUtf8(env->isolate(), string.data(),
-                                NewStringType::kNormal, string.size())
-            .ToLocalChecked();
-        array->Set(env->context(), index, value).FromJust();
-      }
-
       CHECK(exception_v->IsObject());
       Local<Object> exception = exception_v.As<Object>();
       exception->Set(env->context(),
-                     env->openssl_error_stack(), array).FromJust();
+                     env->openssl_error_stack(),
+                     ToV8Value(env->context(), *this).ToLocalChecked())
+          .FromJust();
     }
 
     return exception_v;
@@ -779,7 +770,7 @@ static X509_STORE* NewRootCertStore() {
   if (*system_cert_path != '\0') {
     X509_STORE_load_locations(store, system_cert_path, nullptr);
   }
-  if (per_process_opts->ssl_openssl_cert_store) {
+  if (per_process::cli_options->ssl_openssl_cert_store) {
     X509_STORE_set_default_paths(store);
   } else {
     for (X509* cert : root_certs_vector) {
@@ -1483,20 +1474,20 @@ int SSLWrap<Base>::NewSessionCallback(SSL* s, SSL_SESSION* sess) {
     return 0;
 
   // Serialize session
-  Local<Object> buff = Buffer::New(env, size).ToLocalChecked();
-  unsigned char* serialized = reinterpret_cast<unsigned char*>(
-      Buffer::Data(buff));
-  memset(serialized, 0, size);
-  i2d_SSL_SESSION(sess, &serialized);
+  Local<Object> session = Buffer::New(env, size).ToLocalChecked();
+  unsigned char* session_data = reinterpret_cast<unsigned char*>(
+      Buffer::Data(session));
+  memset(session_data, 0, size);
+  i2d_SSL_SESSION(sess, &session_data);
 
   unsigned int session_id_length;
-  const unsigned char* session_id = SSL_SESSION_get_id(sess,
-                                                       &session_id_length);
-  Local<Object> session = Buffer::Copy(
+  const unsigned char* session_id_data = SSL_SESSION_get_id(sess,
+                                                            &session_id_length);
+  Local<Object> session_id = Buffer::Copy(
       env,
-      reinterpret_cast<const char*>(session_id),
+      reinterpret_cast<const char*>(session_id_data),
       session_id_length).ToLocalChecked();
-  Local<Value> argv[] = { session, buff };
+  Local<Value> argv[] = { session_id, session };
   w->new_session_wait_ = true;
   w->MakeCallback(env->onnewsession_string(), arraysize(argv), argv);
 
@@ -1532,9 +1523,6 @@ void SSLWrap<Base>::OnClientHello(void* arg,
   hello_obj->Set(context,
                  env->tls_ticket_string(),
                  Boolean::New(env->isolate(), hello.has_ticket())).FromJust();
-  hello_obj->Set(context,
-                 env->ocsp_request_string(),
-                 Boolean::New(env->isolate(), hello.ocsp_request())).FromJust();
 
   Local<Value> argv[] = { hello_obj };
   w->MakeCallback(env->onclienthello_string(), arraysize(argv), argv);
@@ -1724,21 +1712,18 @@ static Local<Object> X509ToObject(Environment* env, X509* cert) {
       CHECK_NULL(pub);
     }
 
-    if (EC_GROUP_get_asn1_flag(group) != 0) {
+    const int nid = EC_GROUP_get_curve_name(group);
+    if (nid != 0) {
       // Curve is well-known, get its OID and NIST nick-name (if it has one).
 
-      int nid = EC_GROUP_get_curve_name(group);
-      if (nid != 0) {
-        if (const char* sn = OBJ_nid2sn(nid)) {
-          info->Set(context, env->asn1curve_string(),
-                    OneByteString(env->isolate(), sn)).FromJust();
-        }
+      if (const char* sn = OBJ_nid2sn(nid)) {
+        info->Set(context, env->asn1curve_string(),
+                  OneByteString(env->isolate(), sn)).FromJust();
       }
-      if (nid != 0) {
-        if (const char* nist = EC_curve_nid2nist(nid)) {
-          info->Set(context, env->nistcurve_string(),
-                    OneByteString(env->isolate(), nist)).FromJust();
-        }
+
+      if (const char* nist = EC_curve_nid2nist(nid)) {
+        info->Set(context, env->nistcurve_string(),
+                  OneByteString(env->isolate(), nist)).FromJust();
       }
     } else {
       // Unnamed curves can be described by their mathematical properties,
@@ -2672,7 +2657,7 @@ static bool IsSupportedAuthenticatedMode(const EVP_CIPHER_CTX* ctx) {
 template <typename T>
 static T* MallocOpenSSL(size_t count) {
   void* mem = OPENSSL_malloc(MultiplyWithOverflowCheck(count, sizeof(T)));
-  CHECK_NOT_NULL(mem);
+  CHECK_IMPLIES(mem == nullptr, count == 0);
   return static_cast<T*>(mem);
 }
 
@@ -2830,7 +2815,8 @@ static EVPKeyPointer ParsePrivateKey(const PrivateKeyEncodingConfig& config,
 
   if (config.format_ == kKeyFormatPEM) {
     BIOPointer bio(BIO_new_mem_buf(key, key_len));
-    CHECK(bio);
+    if (!bio)
+      return pkey;
 
     char* pass = const_cast<char*>(config.passphrase_.get());
     pkey.reset(PEM_read_bio_PrivateKey(bio.get(),
@@ -2845,7 +2831,8 @@ static EVPKeyPointer ParsePrivateKey(const PrivateKeyEncodingConfig& config,
       pkey.reset(d2i_PrivateKey(EVP_PKEY_RSA, nullptr, &p, key_len));
     } else if (config.type_.ToChecked() == kKeyEncodingPKCS8) {
       BIOPointer bio(BIO_new_mem_buf(key, key_len));
-      CHECK(bio);
+      if (!bio)
+        return pkey;
       char* pass = const_cast<char*>(config.passphrase_.get());
       pkey.reset(d2i_PKCS8PrivateKey_bio(bio.get(),
                                          nullptr,
@@ -2994,30 +2981,6 @@ static PublicKeyEncodingConfig GetPublicKeyEncodingFromJs(
   PublicKeyEncodingConfig result;
   GetKeyFormatAndTypeFromJs(&result, args, offset, context);
   return result;
-}
-
-static ManagedEVPPKey GetPublicKeyFromJs(
-    const FunctionCallbackInfo<Value>& args,
-    unsigned int* offset,
-    bool allow_key_object) {
-  if (args[*offset]->IsString() || Buffer::HasInstance(args[*offset])) {
-    Environment* env = Environment::GetCurrent(args);
-    ByteSource key = ByteSource::FromStringOrBuffer(env, args[(*offset)++]);
-    PublicKeyEncodingConfig config =
-        GetPublicKeyEncodingFromJs(args, offset, kKeyContextInput);
-    EVPKeyPointer pkey;
-    ParsePublicKey(&pkey, config, key.get(), key.size());
-    if (!pkey)
-      ThrowCryptoError(env, ERR_get_error(), "Failed to read public key");
-    return ManagedEVPPKey(pkey.release());
-  } else {
-    CHECK(args[*offset]->IsObject() && allow_key_object);
-    KeyObject* key;
-    ASSIGN_OR_RETURN_UNWRAP(&key, args[*offset].As<Object>(), ManagedEVPPKey());
-    CHECK_EQ(key->GetKeyType(), kKeyTypePublic);
-    (*offset) += 3;
-    return key->GetAsymmetricKey();
-  }
 }
 
 static NonCopyableMaybe<PrivateKeyEncodingConfig> GetPrivateKeyEncodingFromJs(
@@ -3312,10 +3275,12 @@ Local<Function> KeyObject::Initialize(Environment* env, Local<Object> target) {
                                   GetAsymmetricKeyType);
   env->SetProtoMethod(t, "export", Export);
 
-  target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "KeyObject"),
-              t->GetFunction(env->context()).ToLocalChecked());
+  auto function = t->GetFunction(env->context()).ToLocalChecked();
+  target->Set(env->context(),
+              FIXED_ONE_BYTE_STRING(env->isolate(), "KeyObject"),
+              function).FromJust();
 
-  return t->GetFunction();
+  return function;
 }
 
 Local<Object> KeyObject::Create(Environment* env,
@@ -3379,7 +3344,7 @@ void KeyObject::Init(const FunctionCallbackInfo<Value>& args) {
     CHECK_EQ(args.Length(), 3);
 
     offset = 0;
-    pkey = GetPublicKeyFromJs(args, &offset, false);
+    pkey = GetPublicOrPrivateKeyFromJs(args, &offset, false);
     if (!pkey)
       return;
     key->InitPublic(pkey);
@@ -4661,7 +4626,7 @@ void Verify::VerifyFinal(const FunctionCallbackInfo<Value>& args) {
   ASSIGN_OR_RETURN_UNWRAP(&verify, args.Holder());
 
   unsigned int offset = 0;
-  ManagedEVPPKey pkey = GetPublicKeyFromJs(args, &offset, true);
+  ManagedEVPPKey pkey = GetPublicOrPrivateKeyFromJs(args, &offset, true);
 
   char* hbuf = Buffer::Data(args[offset]);
   ssize_t hlen = Buffer::Length(args[offset]);
@@ -6189,16 +6154,15 @@ void InitCryptoOnce() {
   OPENSSL_no_config();
 
   // --openssl-config=...
-  if (!per_process_opts->openssl_config.empty()) {
+  if (!per_process::cli_options->openssl_config.empty()) {
     OPENSSL_load_builtin_modules();
 #ifndef OPENSSL_NO_ENGINE
     ENGINE_load_builtin_engines();
 #endif
     ERR_clear_error();
-    CONF_modules_load_file(
-        per_process_opts->openssl_config.c_str(),
-        nullptr,
-        CONF_MFLAGS_DEFAULT_SECTION);
+    CONF_modules_load_file(per_process::cli_options->openssl_config.c_str(),
+                           nullptr,
+                           CONF_MFLAGS_DEFAULT_SECTION);
     int err = ERR_get_error();
     if (0 != err) {
       fprintf(stderr,
@@ -6214,8 +6178,8 @@ void InitCryptoOnce() {
 #ifdef NODE_FIPS_MODE
   /* Override FIPS settings in cnf file, if needed. */
   unsigned long err = 0;  // NOLINT(runtime/int)
-  if (per_process_opts->enable_fips_crypto ||
-      per_process_opts->force_fips_crypto) {
+  if (per_process::cli_options->enable_fips_crypto ||
+      per_process::cli_options->force_fips_crypto) {
     if (0 == FIPS_mode() && !FIPS_mode_set(1)) {
       err = ERR_get_error();
     }
@@ -6278,7 +6242,7 @@ void GetFipsCrypto(const FunctionCallbackInfo<Value>& args) {
 }
 
 void SetFipsCrypto(const FunctionCallbackInfo<Value>& args) {
-  CHECK(!per_process_opts->force_fips_crypto);
+  CHECK(!per_process::cli_options->force_fips_crypto);
   Environment* env = Environment::GetCurrent(args);
   const bool enabled = FIPS_mode();
   bool enable;
@@ -6364,21 +6328,6 @@ void Initialize(Local<Object> target,
 #ifndef OPENSSL_NO_SCRYPT
   env->SetMethod(target, "scrypt", Scrypt);
 #endif  // OPENSSL_NO_SCRYPT
-}
-
-constexpr int search(const char* s, int n, int c) {
-  return *s == c ? n : search(s + 1, n + 1, c);
-}
-
-std::string GetOpenSSLVersion() {
-  // sample openssl version string format
-  // for reference: "OpenSSL 1.1.0i 14 Aug 2018"
-  char buf[128];
-  const int start = search(OPENSSL_VERSION_TEXT, 0, ' ') + 1;
-  const int end = search(OPENSSL_VERSION_TEXT + start, start, ' ');
-  const int len = end - start;
-  snprintf(buf, sizeof(buf), "%.*s", len, &OPENSSL_VERSION_TEXT[start]);
-  return std::string(buf);
 }
 
 }  // namespace crypto

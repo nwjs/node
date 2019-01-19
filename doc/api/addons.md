@@ -234,6 +234,23 @@ NODE_MODULE_INIT(/* exports, module, context */) {
 }
 ```
 
+#### Worker support
+
+In order to support [`Worker`][] threads, addons need to clean up any resources
+they may have allocated when such a thread exists. This can be achieved through
+the usage of the `AddEnvironmentCleanupHook()` function:
+
+```c++
+void AddEnvironmentCleanupHook(v8::Isolate* isolate,
+                               void (*fun)(void* arg),
+                               void* arg);
+```
+
+This function adds a hook that will run before a given Node.js instance shuts
+down. If necessary, such hooks can be removed using
+`RemoveEnvironmentCleanupHook()` before they are run, which has the same
+signature.
+
 ### Building
 
 Once the source code has been written, it must be compiled into the binary
@@ -1349,6 +1366,7 @@ Test in JavaScript by running:
 require('./build/Release/addon');
 ```
 
+[`Worker`]: worker_threads.html#worker_threads_class_worker
 [Electron]: https://electronjs.org/
 [Embedder's Guide]: https://github.com/v8/v8/wiki/Embedder's%20Guide
 [Linking to Node.js' own dependencies]: #addons_linking_to_node_js_own_dependencies
@@ -1359,5 +1377,5 @@ require('./build/Release/addon');
 [installation instructions]: https://github.com/nodejs/node-gyp#installation
 [libuv]: https://github.com/libuv/libuv
 [node-gyp]: https://github.com/nodejs/node-gyp
-[require]: modules.html#modules_require
+[require]: modules.html#modules_require_id
 [v8-docs]: https://v8docs.nodesource.com/

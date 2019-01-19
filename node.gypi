@@ -226,6 +226,10 @@
       'libraries': [ '<(PRODUCT_DIR)/../nw/v8.dll.lib' ]
     }],
 
+    [ 'node_shared_brotli=="false"', {
+      'dependencies': [ 'deps/brotli/brotli.gyp:brotli' ],
+    }],
+
     [ 'OS=="mac"', {
       # linking Corefoundation is needed since certain OSX debugging tools
       # like Instruments require it for some features

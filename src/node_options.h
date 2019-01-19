@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <vector>
 #include "node_constants.h"
+#include "node_mutex.h"
 #include "util.h"
 
 namespace node {
@@ -95,7 +96,6 @@ class EnvironmentOptions : public Options {
   bool experimental_modules = false;
   bool experimental_repl_await = false;
   bool experimental_vm_modules = false;
-  bool experimental_worker = false;
   bool expose_internals = false;
   std::string http_parser =
 #ifdef NODE_EXPERIMENTAL_HTTP_DEFAULT
@@ -422,6 +422,13 @@ class PerProcessOptionsParser : public OptionsParser<PerProcessOptions> {
 };
 
 }  // namespace options_parser
+
+namespace per_process {
+
+extern Mutex cli_options_mutex;
+extern std::shared_ptr<PerProcessOptions> cli_options;
+
+}  // namespace per_process
 }  // namespace node
 
 #endif  // defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS

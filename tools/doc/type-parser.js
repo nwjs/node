@@ -35,8 +35,13 @@ const customTypesMap = {
   'Iterator':
     `${jsDocPrefix}Reference/Iteration_protocols#The_iterator_protocol`,
 
+  'Module Namespace Object':
+    'https://tc39.github.io/ecma262/#sec-module-namespace-exotic-objects',
+
   'AsyncHook': 'async_hooks.html#async_hooks_async_hooks_createhook_callbacks',
   'AsyncResource': 'async_hooks.html#async_hooks_class_asyncresource',
+
+  'brotli options': 'zlib.html#zlib_class_brotlioptions',
 
   'Buffer': 'buffer.html#buffer_class_buffer',
 
@@ -58,6 +63,8 @@ const customTypesMap = {
   'dgram.Socket': 'dgram.html#dgram_class_dgram_socket',
 
   'Domain': 'domain.html#domain_class_domain',
+
+  'import.meta': 'esm.html#esm_import_meta',
 
   'EventEmitter': 'events.html#events_class_eventemitter',
 
@@ -90,6 +97,7 @@ const customTypesMap = {
   'https.Server': 'https.html#https_class_https_server',
 
   'module': 'modules.html#modules_the_module_object',
+  'require': 'modules.html#modules_require_id',
 
   'Handle': 'net.html#net_server_listen_handle_backlog_callback',
   'net.Server': 'net.html#net_class_net_server',
@@ -126,6 +134,8 @@ const customTypesMap = {
 
   'URL': 'url.html#url_the_whatwg_url_api',
   'URLSearchParams': 'url.html#url_class_urlsearchparams',
+
+  'vm.SourceTextModule': 'vm.html#vm_class_vm_sourcetextmodule',
 
   'MessagePort': 'worker_threads.html#worker_threads_class_messageport',
 

@@ -433,8 +433,8 @@ PerProcessOptionsParser::PerProcessOptionsParser() {
 #endif
 #endif
 
-  Insert(&PerIsolateOptionsParser::instance,
-         &PerProcessOptions::get_per_isolate_options);
+  //Insert(&PerIsolateOptionsParser::instance,
+  //       &PerProcessOptions::get_per_isolate_options);
 }
 
 const PerProcessOptionsParser PerProcessOptionsParser::instance;

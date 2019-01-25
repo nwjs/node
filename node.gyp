@@ -3,6 +3,7 @@
     'icu_gyp_path%': '../icu/icu.gyp',
     'v8_use_snapshot%': 'false',
     'coverage': 'false',
+    'node_report': 'false',
     'v8_trace_maps%': 0,
     'node_use_dtrace%': 'false',
     'node_use_etw%': 'false',
@@ -28,6 +29,7 @@
     'node_use_openssl': 'true',
     'node_shared_openssl': 'false',
     'openssl_fips': '',
+    'openssl_is_fips': 'false',
     'node_use_large_pages': 'false',
     'node_v8_options%': '',
     'node_enable_v8_vtunejit%': 'false',
@@ -119,9 +121,7 @@
       'lib/internal/cluster/worker.js',
       'lib/internal/console/constructor.js',
       'lib/internal/console/global.js',
-      'lib/internal/console/inspector.js',
       'lib/internal/coverage-gen/with_profiler.js',
-      'lib/internal/coverage-gen/with_instrumentation.js',
       'lib/internal/crypto/certificate.js',
       'lib/internal/crypto/cipher.js',
       'lib/internal/crypto/diffiehellman.js',
@@ -164,6 +164,8 @@
       'lib/internal/safe_globals.js',
       'lib/internal/net.js',
       'lib/internal/options.js',
+      'lib/internal/policy/sri.js',
+      'lib/internal/policy/manifest.js',
       'lib/internal/print_help.js',
       'lib/internal/priority_queue.js',
       'lib/internal/process/esm_loader.js',
@@ -171,10 +173,12 @@
       'lib/internal/process/main_thread_only.js',
       'lib/internal/process/next_tick.js',
       'lib/internal/process/per_thread.js',
+      'lib/internal/process/policy.js',
       'lib/internal/process/promises.js',
       'lib/internal/process/stdio.js',
       'lib/internal/process/warning.js',
       'lib/internal/process/worker_thread_only.js',
+      'lib/internal/process/report.js',
       'lib/internal/querystring.js',
       'lib/internal/queue_microtask.js',
       'lib/internal/readline.js',
@@ -336,6 +340,29 @@
           # lib causes filename collision. Need a different PRODUCT_NAME for
           # the executable and rename it back to node.exe later
           'product_name': '<(node_core_target_name)-win',
+        }],
+        [ 'node_report=="true"', {
+          'defines': [
+            'NODE_REPORT',
+            'NODE_ARCH="<(target_arch)"',
+            'NODE_PLATFORM="<(OS)"',
+          ],
+          'conditions': [
+            ['OS=="win"', {
+              'libraries': [
+                'dbghelp.lib',
+                'Netapi32.lib',
+                'PsApi.lib',
+                'Ws2_32.lib',
+              ],
+              'dll_files': [
+                'dbghelp.dll',
+                'Netapi32.dll',
+                'PsApi.dll',
+                'Ws2_32.dll',
+              ],
+            }],
+          ],
         }],
       ],
     }, # node_core_target_name
@@ -670,6 +697,34 @@
             'src/node_crypto_groups.h',
             'src/tls_wrap.cc',
             'src/tls_wrap.h'
+          ],
+        }],
+        [ 'node_report=="true"', {
+          'sources': [
+            'src/node_report.cc',
+            'src/node_report_module.cc',
+            'src/node_report_utils.cc',
+          ],
+          'defines': [
+            'NODE_REPORT',
+            'NODE_ARCH="<(target_arch)"',
+            'NODE_PLATFORM="<(OS)"',
+          ],
+          'conditions': [
+            ['OS=="win"', {
+              'libraries': [
+                'dbghelp.lib',
+                'Netapi32.lib',
+                'PsApi.lib',
+                'Ws2_32.lib',
+              ],
+              'dll_files': [
+                'dbghelp.dll',
+                'Netapi32.dll',
+                'PsApi.dll',
+                'Ws2_32.dll',
+              ],
+            }],
           ],
         }],
         [ 'node_use_large_pages=="true" and OS=="linux"', {
@@ -1013,13 +1068,35 @@
             'OTHER_LDFLAGS': [ '-Wl,-rpath,@loader_path', ],
           },
         }],
+        [ 'node_report=="true"', {
+          'defines': [
+            'NODE_REPORT',
+            'NODE_ARCH="<(target_arch)"',
+            'NODE_PLATFORM="<(OS)"',
+          ],
+          'conditions': [
+            ['OS=="win"', {
+              'libraries': [
+                'dbghelp.lib',
+                'Netapi32.lib',
+                'PsApi.lib',
+                'Ws2_32.lib',
+              ],
+              'dll_files': [
+                'dbghelp.dll',
+                'Netapi32.dll',
+                'PsApi.dll',
+                'Ws2_32.dll',
+              ],
+            }],
+          ],
+        }],
       ],
     }, # cctest
   ], # end targets
 
   'conditions': [
     [ 'OS=="aix" and node_shared=="true"', {
-      'variables': {'real_os_name': '<!(uname -s)',},
       'targets': [
         {
           'target_name': 'node_aix_shared',
@@ -1027,26 +1104,6 @@
           'product_name': '<(node_core_target_name)',
           'ldflags': [ '--shared' ],
           'product_extension': '<(shlib_suffix)',
-          'conditions': [
-            ['target_arch=="ppc64"', {
-              'ldflags': [
-                '-Wl,-blibpath:/usr/lib:/lib:'
-                  '/opt/freeware/lib/pthread/ppc64'
-              ],
-            }],
-            ['target_arch=="ppc"', {
-              'ldflags': [
-                '-Wl,-blibpath:/usr/lib:/lib:/opt/freeware/lib/pthread'
-              ],
-            }],
-            ['"<(real_os_name)"=="OS400"', {
-              'ldflags': [
-                '-Wl,-blibpath:/QOpenSys/pkgs/lib:/QOpenSys/usr/lib',
-                '-Wl,-bbigtoc',
-                '-Wl,-brtl',
-              ],
-            }],
-          ],
           'includes': [
             'node.gypi'
           ],

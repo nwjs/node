@@ -23,7 +23,7 @@
 #define SRC_NODE_VERSION_H_
 
 #define NODE_MAJOR_VERSION 11
-#define NODE_MINOR_VERSION 7
+#define NODE_MINOR_VERSION 8
 #define NODE_PATCH_VERSION 0
 
 #define NODE_VERSION_IS_LTS 0
@@ -117,6 +117,6 @@
 #define NODE_MODULE_VERSION 67
 
 // the NAPI_VERSION provided by this version of the runtime
-#define NAPI_VERSION  3
+#define NAPI_VERSION  4
 
 #endif  // SRC_NODE_VERSION_H_

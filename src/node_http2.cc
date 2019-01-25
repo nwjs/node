@@ -4,8 +4,8 @@
 #include "node_buffer.h"
 #include "node_http2.h"
 #include "node_http2_state.h"
-#include "node_internals.h"
 #include "node_perf.h"
+#include "util.h"
 
 #include <algorithm>
 
@@ -1952,8 +1952,7 @@ int Http2Stream::DoShutdown(ShutdownWrap* req_wrap) {
              NGHTTP2_ERR_NOMEM);
     Debug(this, "writable side shutdown");
   }
-  req_wrap->Done(0);
-  return 0;
+  return 1;
 }
 
 // Destroy the Http2Stream and render it unusable. Actual resources for the

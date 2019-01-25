@@ -1380,6 +1380,39 @@ An attempt was made to open an IPC communication channel with a synchronously
 forked Node.js process. See the documentation for the [`child_process`][] module
 for more information.
 
+<a id="ERR_MANIFEST_ASSERT_INTEGRITY"></a>
+### ERR_MANIFEST_ASSERT_INTEGRITY
+
+An attempt was made to load a resource, but the resource did not match the
+integrity defined by the policy manifest. See the documentation for [policy]
+manifests for more information.
+
+<a id="ERR_MANIFEST_INTEGRITY_MISMATCH"></a>
+### ERR_MANIFEST_INTEGRITY_MISMATCH
+
+An attempt was made to load a policy manifest, but the manifest had multiple
+entries for a resource which did not match each other. Update the manifest
+entries to match in order to resolve this error. See the documentation for
+[policy] manifests for more information.
+
+<a id="ERR_MANIFEST_PARSE_POLICY"></a>
+### ERR_MANIFEST_PARSE_POLICY
+
+An attempt was made to load a policy manifest, but the manifest was unable to
+be parsed. See the documentation for [policy] manifests for more information.
+
+<a id="ERR_MANIFEST_TDZ"></a>
+### ERR_MANIFEST_TDZ
+
+An attempt was made to read from a policy manifest, but the manifest
+initialization has not yet taken place. This is likely a bug in Node.js.
+
+<a id="ERR_MANIFEST_UNKNOWN_ONERROR"></a>
+### ERR_MANIFEST_UNKNOWN_ONERROR
+
+A policy manifest was loaded, but had an unknown value for its "onerror"
+behavior. See the documentation for [policy] manifests for more information.
+
 <a id="ERR_MEMORY_ALLOCATION_FAILED"></a>
 ### ERR_MEMORY_ALLOCATION_FAILED
 
@@ -1590,6 +1623,13 @@ An attempt was made to operate on an already closed socket.
 
 A call was made and the UDP subsystem was not running.
 
+<a id="ERR_SRI_PARSE"></a>
+### ERR_SRI_PARSE
+
+A string was provided for a Subresource Integrity check, but was unable to be
+parsed. Check the format of integrity attributes by looking at the
+[Subresource Integrity specification][].
+
 <a id="ERR_STREAM_CANNOT_PIPE"></a>
 ### ERR_STREAM_CANNOT_PIPE
 
@@ -1648,6 +1688,12 @@ called.
 
 An attempt has been made to create a string longer than the maximum allowed
 length.
+
+<a id="ERR_SYNTHETIC"></a>
+#### ERR_SYNTHETIC
+
+An artificial error object used to capture call stack when diagnostic report
+is produced.
 
 <a id="ERR_SYSTEM_ERROR"></a>
 ### ERR_SYSTEM_ERROR
@@ -1863,6 +1909,12 @@ The fulfilled value of a linking promise is not a `vm.SourceTextModule` object.
 The current module's status does not allow for this operation. The specific
 meaning of the error depends on the specific function.
 
+<a id="ERR_WORKER_INVALID_EXEC_ARGV"></a>
+### ERR_WORKER_INVALID_EXEC_ARGV
+
+The `execArgv` option passed to the `Worker` constructor contains
+invalid flags.
+
 <a id="ERR_WORKER_PATH"></a>
 ### ERR_WORKER_PATH
 
@@ -1879,6 +1931,11 @@ All attempts at serializing an uncaught exception from a worker thread failed.
 
 The pathname used for the main script of a worker has an
 unknown file extension.
+
+<a id="ERR_WORKER_UNSUPPORTED_OPERATION"></a>
+### ERR_WORKER_UNSUPPORTED_OPERATION
+
+The requested functionality is not supported in worker threads.
 
 <a id="ERR_ZLIB_INITIALIZATION_FAILED"></a>
 ### ERR_ZLIB_INITIALIZATION_FAILED
@@ -2170,6 +2227,12 @@ size.
 This `Error` is thrown when a read is attempted on a TTY `WriteStream`,
 such as `process.stdout.on('data')`.
 
+<a id="ERR_SYNTHETIC"></a>
+#### ERR_SYNTHETIC
+
+An artifical error object used to capture call stack when diagnostic report
+is produced.
+
 
 [`'uncaughtException'`]: process.html#process_event_uncaughtexception
 [`--force-fips`]: cli.html#cli_force_fips
@@ -2223,7 +2286,9 @@ such as `process.stdout.on('data')`.
 [domains]: domain.html
 [event emitter-based]: events.html#events_class_eventemitter
 [file descriptors]: https://en.wikipedia.org/wiki/File_descriptor
+[policy]: policy.html
 [stream-based]: stream.html
 [syscall]: http://man7.org/linux/man-pages/man2/syscalls.2.html
+[Subresource Integrity specification]: https://www.w3.org/TR/SRI/#the-integrity-attribute
 [try-catch]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/try...catch
 [vm]: vm.html

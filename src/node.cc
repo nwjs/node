@@ -95,6 +95,10 @@
 #include <unicode/uvernum.h>
 #endif
 
+#ifdef NODE_REPORT
+#include "node_report.h"
+#endif
+
 #if defined(LEAK_SANITIZER)
 #include <sanitizer/lsan_interface.h>
 #endif
@@ -257,6 +261,7 @@ static struct {
   }
 
   void Dispose() {
+    StopTracingAgent();
     platform_->Shutdown();
     delete platform_;
     platform_ = nullptr;
@@ -602,7 +607,6 @@ static void WaitForInspectorDisconnect(Environment* env) {
 void Exit(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
   WaitForInspectorDisconnect(env);
-  v8_platform.StopTracingAgent();
   int code = args[0]->Int32Value(env->context()).FromMaybe(0);
   env->Exit(code);
 }
@@ -919,8 +923,14 @@ int ProcessGlobalArgs(std::vector<std::string>* args,
 
   if (!errors->empty()) return 9;
 
-  for (const std::string& cve : per_process::cli_options->security_reverts)
-    Revert(cve.c_str());
+  std::string revert_error;
+  for (const std::string& cve : per_process::cli_options->security_reverts) {
+    Revert(cve.c_str(), &revert_error);
+    if (!revert_error.empty()) {
+      errors->emplace_back(std::move(revert_error));
+      return 12;
+    }
+  }
 
   auto env_opts = per_process::cli_options->per_isolate->per_env;
   if (std::find(v8_args.begin(), v8_args.end(),
@@ -978,6 +988,12 @@ int Init(std::vector<std::string>* argv,
   // Make inherited handles noninheritable.
   uv_disable_stdio_inheritance();
   } //node_is_nwjs
+
+#ifdef NODE_REPORT
+  // Cache the original command line to be
+  // used in diagnostic reports.
+  per_process::cli_options->cmdline = *argv;
+#endif  //  NODE_REPORT
 
 #if defined(NODE_V8_OPTIONS)
   // Should come before the call to V8::SetFlagsFromCommandLine()
@@ -1623,7 +1639,6 @@ int Start(int argc, char** argv) {
   per_process::v8_initialized = true;
   const int exit_code =
       Start(uv_default_loop(), args, exec_args);
-  v8_platform.StopTracingAgent();
   per_process::v8_initialized = false;
   V8::Dispose();
 

@@ -279,9 +279,16 @@ Environment::~Environment() {
   TRACE_EVENT_NESTABLE_ASYNC_END0(
     TRACING_CATEGORY_NODE1(environment), "Environment", this);
 
-  // Dereference all addons that were loaded into this environment.
-  for (binding::DLib& addon : loaded_addons_) {
-    addon.Close();
+  // Do not unload addons on the main thread. Some addons need to retain memory
+  // beyond the Environment's lifetime, and unloading them early would break
+  // them; with Worker threads, we have the opportunity to be stricter.
+  // Also, since the main thread usually stops just before the process exits,
+  // this is far less relevant here.
+  if (!is_main_thread()) {
+    // Dereference all addons that were loaded into this environment.
+    for (binding::DLib& addon : loaded_addons_) {
+      addon.Close();
+    }
   }
 }
 
@@ -349,13 +356,6 @@ void Environment::Start(const std::vector<std::string>& args,
   static uv_once_t init_once = UV_ONCE_INIT;
   uv_once(&init_once, InitThreadLocalOnce);
   uv_key_set(&thread_local_env, this);
-
-#if HAVE_INSPECTOR
-  // This needs to be set before we start the inspector
-  Local<Object> obj = Object::New(isolate());
-  CHECK(obj->SetPrototype(context(), Null(isolate())).FromJust());
-  set_inspector_console_api_object(obj);
-#endif  // HAVE_INSPECTOR
 }
 
 void Environment::RegisterHandleCleanups() {

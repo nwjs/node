@@ -1023,6 +1023,9 @@ being issued by trusted CA (`options.ca`).
 <!-- YAML
 added: v0.11.3
 changes:
+  - version: v11.7.0
+    pr-url: https://github.com/nodejs/node/pull/25517
+    description: The `timeout` option is supported now.
   - version: v8.0.0
     pr-url: https://github.com/nodejs/node/pull/12839
     description: The `lookup` option is supported now.
@@ -1088,6 +1091,9 @@ changes:
     `tls.createSecureContext()`.
   * `lookup`: {Function} Custom lookup function. **Default:**
     [`dns.lookup()`][].
+  * `timeout`: {number} If set and if a socket is created internally, will call
+    [`socket.setTimeout(timeout)`][] after the socket is created, but before it
+    starts the connection.
   * ...: [`tls.createSecureContext()`][] options that are used if the
     `secureContext` option is missing, otherwise they are ignored.
 * `callback` {Function}
@@ -1183,6 +1189,10 @@ changes:
   - version: v9.3.0
     pr-url: https://github.com/nodejs/node/pull/14903
     description: The `options` parameter can now include `clientCertEngine`.
+  - version: v9.0.0
+    pr-url: https://github.com/nodejs/node/pull/15206
+    description: The `ecdhCurve` option can now be multiple `':'` separated
+                 curve names or `'auto'`.
   - version: v7.3.0
     pr-url: https://github.com/nodejs/node/pull/10294
     description: If the `key` option is an array, individual entries do not
@@ -1409,6 +1419,10 @@ console.log(tls.getCiphers()); // ['AES128-SHA', 'AES256-SHA', ...]
 ## tls.DEFAULT_ECDH_CURVE
 <!-- YAML
 added: v0.11.13
+changes:
+  - version: v10.0.0
+    pr-url: https://github.com/nodejs/node/pull/16853
+    description: Default value changed to `'auto'`.
 -->
 
 The default curve name to use for ECDH key agreement in a tls server. The
@@ -1539,6 +1553,7 @@ where `secureSocket` has the same API as `pair.cleartext`.
 [`server.getTicketKeys()`]: #tls_server_getticketkeys
 [`server.listen()`]: net.html#net_server_listen
 [`server.setTicketKeys()`]: #tls_server_setticketkeys_keys
+[`socket.setTimeout(timeout)`]: #net_socket_settimeout_timeout_callback
 [`tls.DEFAULT_ECDH_CURVE`]: #tls_tls_default_ecdh_curve
 [`tls.Server`]: #tls_class_tls_server
 [`tls.TLSSocket.getPeerCertificate()`]: #tls_tlssocket_getpeercertificate_detailed

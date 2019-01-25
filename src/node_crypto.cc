@@ -27,7 +27,6 @@
 #include "node_crypto_clienthello-inl.h"
 #include "node_crypto_groups.h"
 #include "node_errors.h"
-#include "node_internals.h"
 #include "node_mutex.h"
 #include "node_process.h"
 #include "tls_wrap.h"  // TLSWrap
@@ -1936,10 +1935,10 @@ void SSLWrap<Base>::GetCertificate(
 
   Local<Object> result;
 
-  X509Pointer cert(SSL_get_certificate(w->ssl_.get()));
+  X509* cert = SSL_get_certificate(w->ssl_.get());
 
-  if (cert)
-    result = X509ToObject(env, cert.get());
+  if (cert != nullptr)
+    result = X509ToObject(env, cert);
 
   args.GetReturnValue().Set(result);
 }
@@ -4478,9 +4477,14 @@ Sign::SignResult Sign::SignFinal(
 
 #ifdef NODE_FIPS_MODE
   /* Validate DSA2 parameters from FIPS 186-4 */
-  if (FIPS_mode() && EVP_PKEY_DSA == pkey->type) {
-    size_t L = BN_num_bits(pkey->pkey.dsa->p);
-    size_t N = BN_num_bits(pkey->pkey.dsa->q);
+  if (FIPS_mode() && EVP_PKEY_DSA == EVP_PKEY_base_id(pkey.get())) {
+    DSA* dsa = EVP_PKEY_get0_DSA(pkey.get());
+    const BIGNUM* p;
+    DSA_get0_pqg(dsa, &p, nullptr, nullptr);
+    size_t L = BN_num_bits(p);
+    const BIGNUM* q;
+    DSA_get0_pqg(dsa, nullptr, &q, nullptr);
+    size_t N = BN_num_bits(q);
     bool result = false;
 
     if (L == 1024 && N == 160)
@@ -4493,7 +4497,7 @@ Sign::SignResult Sign::SignFinal(
       result = true;
 
     if (!result) {
-      return kSignPrivateKey;
+      return SignResult(kSignPrivateKey);
     }
   }
 #endif  // NODE_FIPS_MODE

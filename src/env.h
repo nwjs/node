@@ -354,7 +354,7 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(http2settings_constructor_template, v8::ObjectTemplate)                    \
   V(http2stream_constructor_template, v8::ObjectTemplate)                      \
   V(immediate_callback_function, v8::Function)                                 \
-  V(inspector_console_api_object, v8::Object)                                  \
+  V(inspector_console_extension_installer, v8::Function)                       \
   V(libuv_stream_wrap_ctor_template, v8::FunctionTemplate)                     \
   V(message_port, v8::Object)                                                  \
   V(message_port_constructor_template, v8::FunctionTemplate)                   \
@@ -392,6 +392,7 @@ class IsolateData {
   inline uint32_t* zero_fill_field() const;
   inline MultiIsolatePlatform* platform() const;
   inline std::shared_ptr<PerIsolateOptions> options();
+  inline void set_options(std::shared_ptr<PerIsolateOptions> options);
 
 #define VP(PropertyName, StringValue) V(v8::Private, PropertyName)
 #define VY(PropertyName, StringValue) V(v8::Symbol, PropertyName)

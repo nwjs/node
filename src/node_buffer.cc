@@ -19,9 +19,10 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "node.h"
 #include "node_buffer.h"
+#include "node.h"
 #include "node_errors.h"
+#include "node_internals.h"
 
 #include "env-inl.h"
 #include "string_bytes.h"
@@ -403,11 +404,6 @@ MaybeLocal<Object> New(Environment* env,
 
   Local<ArrayBuffer> ab = ArrayBuffer::NewNode(env->isolate(), data, length);
   ab->set_nodejs(true);
-  // `Neuter()`ing is required here to prevent materialization of the backing
-  // store in v8. `nullptr` buffers are not writable, so this is semantically
-  // correct.
-  if (data == nullptr)
-    ab->Neuter();
   MaybeLocal<Uint8Array> ui = Buffer::New(env, ab, 0, length);
 
   if (ui.IsEmpty()) {

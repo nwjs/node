@@ -33,20 +33,19 @@ const {
   bits,
   hasIntl
 } = process.binding('config');
+const { isMainThread } = require('worker_threads');
 
 // Some tests assume a umask of 0o022 so set that up front. Tests that need a
 // different umask will set it themselves.
 //
-// process.umask() is not available in workers so we need to check for its
-// existence.
-if (process.umask)
+// Workers can read, but not set the umask, so check that this is the main
+// thread.
+if (isMainThread)
   process.umask(0o022);
 
 const noop = () => {};
 
 const hasCrypto = Boolean(process.versions.openssl);
-
-const { isMainThread } = require('worker_threads');
 
 // Check for flags. Skip this for workers (both, the `cluster` module and
 // `worker_threads`) and child processes.
@@ -58,9 +57,9 @@ if (process.argv.length === 2 &&
   const bytesToRead = 1500;
   const buffer = Buffer.allocUnsafe(bytesToRead);
   const fd = fs.openSync(module.parent.filename, 'r');
-  fs.readSync(fd, buffer, 0, bytesToRead);
+  const bytesRead = fs.readSync(fd, buffer, 0, bytesToRead);
   fs.closeSync(fd);
-  const source = buffer.toString();
+  const source = buffer.toString('utf8', 0, bytesRead);
 
   const flagStart = source.indexOf('// Flags: --') + 10;
   if (flagStart !== 9) {
@@ -239,9 +238,6 @@ function platformTimeout(ms) {
   if (process.features.debug)
     ms = multipliers.two * ms;
 
-  if (global.__coverage__)
-    ms = multipliers.four * ms;
-
   if (isAIX)
     return multipliers.two * ms; // default localhost speed is slower on AIX
 
@@ -311,11 +307,7 @@ function leakedGlobals() {
     }
   }
 
-  if (global.__coverage__) {
-    return leaked.filter((varname) => !/^(?:cov_|__cov)/.test(varname));
-  } else {
-    return leaked;
-  }
+  return leaked;
 }
 
 process.on('exit', function() {
@@ -644,6 +636,12 @@ function skipIfInspectorDisabled() {
   }
 }
 
+function skipIfReportDisabled() {
+  if (!process.config.variables.node_report) {
+    skip('Node Report is disabled');
+  }
+}
+
 function skipIf32Bits() {
   if (bits < 64) {
     skip('The tested feature is not available in 32bit builds');
@@ -770,6 +768,7 @@ module.exports = {
   skipIf32Bits,
   skipIfEslintMissing,
   skipIfInspectorDisabled,
+  skipIfReportDisabled,
   skipIfWorker,
 
   get localhostIPv6() { return '::1'; },

@@ -1,6 +1,7 @@
 #include "node_binding.h"
-#include "node_internals.h"
+#include "env-inl.h"
 #include "node_native_module.h"
+#include "util.h"
 
 #if HAVE_OPENSSL
 #define NODE_BUILTIN_OPENSSL_MODULES(V) V(crypto) V(tls_wrap)
@@ -12,6 +13,12 @@
 #define NODE_BUILTIN_ICU_MODULES(V) V(icu)
 #else
 #define NODE_BUILTIN_ICU_MODULES(V)
+#endif
+
+#if NODE_REPORT
+#define NODE_BUILTIN_REPORT_MODULES(V) V(report)
+#else
+#define NODE_BUILTIN_REPORT_MODULES(V)
 #endif
 
 // A list of built-in modules. In order to do module registration
@@ -69,7 +76,8 @@
 #define NODE_BUILTIN_MODULES(V)                                                \
   NODE_BUILTIN_STANDARD_MODULES(V)                                             \
   NODE_BUILTIN_OPENSSL_MODULES(V)                                              \
-  NODE_BUILTIN_ICU_MODULES(V)
+  NODE_BUILTIN_ICU_MODULES(V)                                                  \
+  NODE_BUILTIN_REPORT_MODULES(V)
 
 // This is used to load built-in modules. Instead of using
 // __attribute__((constructor)), we call the _register_<modname>

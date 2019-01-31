@@ -23,6 +23,15 @@ Mutex cli_options_mutex;
 std::shared_ptr<PerProcessOptions> cli_options{new PerProcessOptions()};
 }  // namespace per_process
 
+void DebugOptions::CheckOptions(std::vector<std::string>* errors) {
+#if !NODE_USE_V8_PLATFORM
+  if (inspector_enabled) {
+    errors->push_back("Inspector is not available when Node is compiled "
+                      "--without-v8-platform");
+  }
+#endif
+}
+
 void PerProcessOptions::CheckOptions(std::vector<std::string>* errors) {
 #if HAVE_OPENSSL
   if (use_openssl_ca && use_bundled_ca) {
@@ -143,15 +152,11 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             "experimental ES Module support and caching modules",
             &EnvironmentOptions::experimental_modules,
             kAllowedInEnvironment);
-  AddOption("[has_experimental_policy]",
-            "",
-            &EnvironmentOptions::has_experimental_policy);
   AddOption("--experimental-policy",
             "use the specified file as a "
             "security policy",
             &EnvironmentOptions::experimental_policy,
             kAllowedInEnvironment);
-  Implies("--experimental-policy", "[has_experimental_policy]");
   AddOption("--experimental-repl-await",
             "experimental await keyword support in REPL",
             &EnvironmentOptions::experimental_repl_await,

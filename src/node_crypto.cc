@@ -324,6 +324,14 @@ bool EntropySource(unsigned char* buffer, size_t length) {
 }
 
 
+template <typename T>
+static T* MallocOpenSSL(size_t count) {
+  void* mem = OPENSSL_malloc(MultiplyWithOverflowCheck(count, sizeof(T)));
+  CHECK_IMPLIES(mem == nullptr, count == 0);
+  return static_cast<T*>(mem);
+}
+
+
 void SecureContext::Initialize(Environment* env, Local<Object> target) {
   Local<FunctionTemplate> t = env->NewFunctionTemplate(New);
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -919,8 +927,26 @@ void SecureContext::SetCiphers(const FunctionCallbackInfo<Value>& args) {
 
   THROW_AND_RETURN_IF_NOT_STRING(env, args[0], "Ciphers");
 
+  // Note: set_ciphersuites() is for TLSv1.3 and was introduced in openssl
+  // 1.1.1, set_cipher_list() is for TLSv1.2 and earlier.
+  //
+  // In openssl 1.1.0, set_cipher_list() would error if it resulted in no
+  // TLSv1.2 (and earlier) cipher suites, and there is no TLSv1.3 support.
+  //
+  // In openssl 1.1.1, set_cipher_list() will not error if it results in no
+  // TLSv1.2 cipher suites if there are any TLSv1.3 cipher suites, which there
+  // are by default. There will be an error later, during the handshake, but
+  // that results in an async error event, rather than a sync error thrown,
+  // which is a semver-major change for the tls API.
+  //
+  // Since we don't currently support TLSv1.3, work around this by removing the
+  // TLSv1.3 cipher suites, so we get backwards compatible synchronous errors.
   const node::Utf8Value ciphers(args.GetIsolate(), args[0]);
-  if (!SSL_CTX_set_cipher_list(sc->ctx_.get(), *ciphers)) {
+  if (
+#ifdef TLS1_3_VERSION
+      !SSL_CTX_set_ciphersuites(sc->ctx_.get(), "") ||
+#endif
+      !SSL_CTX_set_cipher_list(sc->ctx_.get(), *ciphers)) {
     unsigned long err = ERR_get_error();  // NOLINT(runtime/int)
     if (!err) {
       return env->ThrowError("Failed to set ciphers");
@@ -1487,7 +1513,7 @@ int SSLWrap<Base>::NewSessionCallback(SSL* s, SSL_SESSION* sess) {
       reinterpret_cast<const char*>(session_id_data),
       session_id_length).ToLocalChecked();
   Local<Value> argv[] = { session_id, session };
-  w->new_session_wait_ = true;
+  w->awaiting_new_session_ = true;
   w->MakeCallback(env->onnewsession_string(), arraysize(argv), argv);
 
   return 0;
@@ -2083,6 +2109,7 @@ void SSLWrap<Base>::Renegotiate(const FunctionCallbackInfo<Value>& args) {
 
   ClearErrorOnReturn clear_error_on_return;
 
+  // XXX(sam) Return/throw an error, don't discard the SSL error reason.
   bool yes = SSL_renegotiate(w->ssl_.get()) == 1;
   args.GetReturnValue().Set(yes);
 }
@@ -2116,7 +2143,7 @@ template <class Base>
 void SSLWrap<Base>::NewSessionDone(const FunctionCallbackInfo<Value>& args) {
   Base* w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
-  w->new_session_wait_ = false;
+  w->awaiting_new_session_ = false;
   w->NewSessionDoneCb();
 }
 
@@ -2427,11 +2454,11 @@ int SSLWrap<Base>::TLSExtStatusCallback(SSL* s, void* arg) {
     size_t len = Buffer::Length(obj);
 
     // OpenSSL takes control of the pointer after accepting it
-    char* data = node::Malloc(len);
+    unsigned char* data = MallocOpenSSL<unsigned char>(len);
     memcpy(data, resp, len);
 
     if (!SSL_set_tlsext_status_ocsp_resp(s, data, len))
-      free(data);
+      OPENSSL_free(data);
     w->ocsp_response_.Reset();
 
     return SSL_TLSEXT_ERR_OK;
@@ -2651,13 +2678,6 @@ static bool IsSupportedAuthenticatedMode(const EVP_CIPHER* cipher) {
 static bool IsSupportedAuthenticatedMode(const EVP_CIPHER_CTX* ctx) {
   const EVP_CIPHER* cipher = EVP_CIPHER_CTX_cipher(ctx);
   return IsSupportedAuthenticatedMode(cipher);
-}
-
-template <typename T>
-static T* MallocOpenSSL(size_t count) {
-  void* mem = OPENSSL_malloc(MultiplyWithOverflowCheck(count, sizeof(T)));
-  CHECK_IMPLIES(mem == nullptr, count == 0);
-  return static_cast<T*>(mem);
 }
 
 enum class ParsePublicKeyResult {
@@ -3282,15 +3302,18 @@ Local<Function> KeyObject::Initialize(Environment* env, Local<Object> target) {
   return function;
 }
 
-Local<Object> KeyObject::Create(Environment* env,
-                                KeyType key_type,
-                                const ManagedEVPPKey& pkey) {
+MaybeLocal<Object> KeyObject::Create(Environment* env,
+                                     KeyType key_type,
+                                     const ManagedEVPPKey& pkey) {
   CHECK_NE(key_type, kKeyTypeSecret);
   Local<Value> type = Integer::New(env->isolate(), key_type);
-  Local<Object> obj =
-      env->crypto_key_object_constructor()->NewInstance(env->context(),
-                                                        1, &type)
-      .ToLocalChecked();
+  Local<Object> obj;
+  if (!env->crypto_key_object_constructor()
+           ->NewInstance(env->context(), 1, &type)
+           .ToLocal(&obj)) {
+    return MaybeLocal<Object>();
+  }
+
   KeyObject* key = Unwrap<KeyObject>(obj);
   CHECK(key);
   if (key_type == kKeyTypePublic)
@@ -5778,24 +5801,22 @@ class GenerateKeyPairJob : public CryptoJob {
     if (public_key_encoding_.output_key_object_) {
       // Note that this has the downside of containing sensitive data of the
       // private key.
-      *pubkey = KeyObject::Create(env, kKeyTypePublic, pkey_);
-    } else {
-      MaybeLocal<Value> maybe_pubkey =
-          WritePublicKey(env, pkey_.get(), public_key_encoding_);
-      if (maybe_pubkey.IsEmpty())
+      if (!KeyObject::Create(env, kKeyTypePublic, pkey_).ToLocal(pubkey))
         return false;
-      *pubkey = maybe_pubkey.ToLocalChecked();
+    } else {
+      if (!WritePublicKey(env, pkey_.get(), public_key_encoding_)
+               .ToLocal(pubkey))
+        return false;
     }
 
     // Now do the same for the private key.
     if (private_key_encoding_.output_key_object_) {
-      *privkey = KeyObject::Create(env, kKeyTypePrivate, pkey_);
-    } else {
-      MaybeLocal<Value> maybe_privkey =
-          WritePrivateKey(env, pkey_.get(), private_key_encoding_);
-      if (maybe_privkey.IsEmpty())
+      if (!KeyObject::Create(env, kKeyTypePrivate, pkey_).ToLocal(privkey))
         return false;
-      *privkey = maybe_privkey.ToLocalChecked();
+    } else {
+      if (!WritePrivateKey(env, pkey_.get(), private_key_encoding_)
+               .ToLocal(privkey))
+        return false;
     }
 
     return true;

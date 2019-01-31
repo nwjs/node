@@ -88,6 +88,8 @@ class DebugOptions : public Options {
   bool wait_for_connect() const {
     return break_first_line || break_node_first_line;
   }
+
+  void CheckOptions(std::vector<std::string>* errors);
 };
 
 class EnvironmentOptions : public Options {
@@ -95,7 +97,6 @@ class EnvironmentOptions : public Options {
   bool abort_on_uncaught_exception = false;
   bool experimental_modules = false;
   std::string experimental_policy;
-  bool has_experimental_policy;
   bool experimental_repl_await = false;
   bool experimental_vm_modules = false;
   bool expose_internals = false;

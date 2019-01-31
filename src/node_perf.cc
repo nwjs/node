@@ -20,6 +20,7 @@ using v8::HandleScope;
 using v8::Integer;
 using v8::Isolate;
 using v8::Local;
+using v8::MaybeLocal;
 using v8::Name;
 using v8::NewStringType;
 using v8::Number;
@@ -104,10 +105,13 @@ inline void InitObject(const PerformanceEntry& entry, Local<Object> obj) {
 }
 
 // Create a new PerformanceEntry object
-const Local<Object> PerformanceEntry::ToObject() const {
-  Local<Object> obj =
-      env_->performance_entry_template()
-          ->NewInstance(env_->context()).ToLocalChecked();
+MaybeLocal<Object> PerformanceEntry::ToObject() const {
+  Local<Object> obj;
+  if (!env_->performance_entry_template()
+           ->NewInstance(env_->context())
+           .ToLocal(&obj)) {
+    return MaybeLocal<Object>();
+  }
   InitObject(*this, obj);
   return obj;
 }
@@ -156,7 +160,8 @@ void Mark(const FunctionCallbackInfo<Value>& args) {
       *name, now / 1000);
 
   PerformanceEntry entry(env, *name, "mark", now, now);
-  Local<Object> obj = entry.ToObject();
+  Local<Object> obj;
+  if (!entry.ToObject().ToLocal(&obj)) return;
   PerformanceEntry::Notify(env, entry.kind(), obj);
   args.GetReturnValue().Set(obj);
 }
@@ -219,7 +224,8 @@ void Measure(const FunctionCallbackInfo<Value>& args) {
       *name, *name, endTimestamp / 1000);
 
   PerformanceEntry entry(env, *name, "measure", startTimestamp, endTimestamp);
-  Local<Object> obj = entry.ToObject();
+  Local<Object> obj;
+  if (!entry.ToObject().ToLocal(&obj)) return;
   PerformanceEntry::Notify(env, entry.kind(), obj);
   args.GetReturnValue().Set(obj);
 }
@@ -244,14 +250,16 @@ void SetupPerformanceObservers(const FunctionCallbackInfo<Value>& args) {
 
 // Creates a GC Performance Entry and passes it to observers
 void PerformanceGCCallback(Environment* env, void* ptr) {
-  GCPerformanceEntry* entry = static_cast<GCPerformanceEntry*>(ptr);
+  std::unique_ptr<GCPerformanceEntry> entry{
+      static_cast<GCPerformanceEntry*>(ptr)};
   HandleScope scope(env->isolate());
   Local<Context> context = env->context();
 
   AliasedBuffer<uint32_t, Uint32Array>& observers =
       env->performance_state()->observers;
   if (observers[NODE_PERFORMANCE_ENTRY_TYPE_GC]) {
-    Local<Object> obj = entry->ToObject();
+    Local<Object> obj;
+    if (!entry->ToObject().ToLocal(&obj)) return;
     PropertyAttribute attr =
         static_cast<PropertyAttribute>(ReadOnly | DontDelete);
     obj->DefineOwnProperty(context,
@@ -260,8 +268,6 @@ void PerformanceGCCallback(Environment* env, void* ptr) {
                            attr).FromJust();
     PerformanceEntry::Notify(env, entry->kind(), obj);
   }
-
-  delete entry;
 }
 
 // Marks the start of a GC cycle
@@ -299,6 +305,11 @@ inline void SetupGarbageCollectionTracking(Environment* env) {
                                         static_cast<void*>(env));
   env->isolate()->AddGCEpilogueCallback(MarkGarbageCollectionEnd,
                                         static_cast<void*>(env));
+  env->AddCleanupHook([](void* data) {
+    Environment* env = static_cast<Environment*>(data);
+    env->isolate()->RemoveGCPrologueCallback(MarkGarbageCollectionStart, data);
+    env->isolate()->RemoveGCEpilogueCallback(MarkGarbageCollectionEnd, data);
+  }, env);
 #endif
 }
 
@@ -358,7 +369,8 @@ void TimerFunctionCall(const FunctionCallbackInfo<Value>& args) {
     return;
 
   PerformanceEntry entry(env, *name, "function", start, end);
-  Local<Object> obj = entry.ToObject();
+  Local<Object> obj;
+  if (!entry.ToObject().ToLocal(&obj)) return;
   for (idx = 0; idx < count; idx++)
     obj->Set(context, idx, args[idx]).FromJust();
   PerformanceEntry::Notify(env, entry.kind(), obj);

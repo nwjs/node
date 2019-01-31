@@ -10,7 +10,7 @@ globals, there is no need to call `require('timers')` to use the API.
 
 The timer functions within Node.js implement a similar API as the timers API
 provided by Web Browsers but use a different internal implementation that is
-built around [the Node.js Event Loop][].
+built around the Node.js [Event Loop][].
 
 ## Class: Immediate
 
@@ -186,7 +186,7 @@ added: v0.0.1
 Schedules repeated execution of `callback` every `delay` milliseconds.
 
 When `delay` is larger than `2147483647` or less than `1`, the `delay` will be
-set to `1`.
+set to `1`. Non-integer delays are truncated to an integer.
 
 If `callback` is not a function, a [`TypeError`][] will be thrown.
 
@@ -209,7 +209,7 @@ nor of their ordering. The callback will be called as close as possible to the
 time specified.
 
 When `delay` is larger than `2147483647` or less than `1`, the `delay`
-will be set to `1`.
+will be set to `1`. Non-integer delays are truncated to an integer.
 
 If `callback` is not a function, a [`TypeError`][] will be thrown.
 
@@ -263,6 +263,7 @@ added: v0.0.1
 
 Cancels a `Timeout` object created by [`setTimeout()`][].
 
+[Event Loop]: https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick/#setimmediate-vs-settimeout
 [`TypeError`]: errors.html#errors_class_typeerror
 [`clearImmediate()`]: timers.html#timers_clearimmediate_immediate
 [`clearInterval()`]: timers.html#timers_clearinterval_timeout
@@ -271,4 +272,3 @@ Cancels a `Timeout` object created by [`setTimeout()`][].
 [`setInterval()`]: timers.html#timers_setinterval_callback_delay_args
 [`setTimeout()`]: timers.html#timers_settimeout_callback_delay_args
 [`util.promisify()`]: util.html#util_util_promisify_original
-[the Node.js Event Loop]: https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick/

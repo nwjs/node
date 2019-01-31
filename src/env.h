@@ -403,6 +403,7 @@ class IsolateData {
   PER_ISOLATE_SYMBOL_PROPERTIES(VY)
   PER_ISOLATE_STRING_PROPERTIES(VS)
 #undef V
+#undef VY
 #undef VS
 #undef VP
 
@@ -419,6 +420,7 @@ class IsolateData {
   PER_ISOLATE_SYMBOL_PROPERTIES(VY)
   PER_ISOLATE_STRING_PROPERTIES(VS)
 #undef V
+#undef VY
 #undef VS
 #undef VP
 
@@ -513,8 +515,6 @@ class Environment {
     inline AsyncHooks();
     // Keep a list of all Persistent strings used for Provider types.
     v8::Eternal<v8::String> providers_[AsyncWrap::PROVIDERS_LENGTH];
-    // Keep track of the environment copy itself.
-    Environment* env_;
     // Stores the ids of the current execution context stack.
     AliasedBuffer<double, v8::Float64Array> async_ids_stack_;
     // Attached to a Uint32Array that tracks the number of active hooks for
@@ -608,9 +608,10 @@ class Environment {
               v8::Local<v8::Context> context);
   ~Environment();
 
-  void Start(const std::vector<std::string>& args,
-             const std::vector<std::string>& exec_args,
-             bool start_profiler_idle_notifier);
+  void Start(bool start_profiler_idle_notifier);
+  v8::MaybeLocal<v8::Object> CreateProcessObject(
+      const std::vector<std::string>& args,
+      const std::vector<std::string>& exec_args);
 
   typedef void (*HandleCleanupCb)(Environment* env,
                                   uv_handle_t* handle,
@@ -642,7 +643,6 @@ class Environment {
 
   inline v8::Isolate* isolate() const;
   inline uv_loop_t* event_loop() const;
-  inline uint32_t watched_providers() const;
   inline void TryLoadAddon(const char* filename,
                            int flags,
                            std::function<bool(binding::DLib*)> was_loaded);

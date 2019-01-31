@@ -136,10 +136,6 @@ threshold is exceeded. The limits are configurable:
 The default renegotiation limits should not be modified without a full
 understanding of the implications and risks.
 
-To test the renegotiation limits on a server, connect to it using the OpenSSL
-command-line client (`openssl s_client -connect address:port`) then input
-`R<CR>` (i.e., the letter `R` followed by a carriage return) multiple times.
-
 ### Session Resumption
 
 Establishing a TLS session can be relatively slow. The process can be sped
@@ -1023,7 +1019,7 @@ being issued by trusted CA (`options.ca`).
 <!-- YAML
 added: v0.11.3
 changes:
-  - version: v11.7.0
+  - version: v11.8.0
     pr-url: https://github.com/nodejs/node/pull/25517
     description: The `timeout` option is supported now.
   - version: v8.0.0

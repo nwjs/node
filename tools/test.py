@@ -47,7 +47,10 @@ import copy
 
 from os.path import join, dirname, abspath, basename, isdir, exists
 from datetime import datetime
-from Queue import Queue, Empty
+try:
+    from queue import Queue, Empty  # Python 3
+except ImportError:
+    from Queue import Queue, Empty  # Python 2
 
 try:
     cmp             # Python 2
@@ -1388,7 +1391,7 @@ def BuildOptions():
       help='Send SIGABRT instead of SIGTERM to kill processes that time out',
       default=False, action="store_true", dest="abort_on_timeout")
   result.add_option("--type",
-      help="Type of build (simple, fips)",
+      help="Type of build (simple, fips, coverage)",
       default=None)
   return result
 

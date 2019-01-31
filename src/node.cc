@@ -279,23 +279,6 @@ static struct {
     platform_->CancelPendingDelayedTasks(isolate);
   }
 
-#if HAVE_INSPECTOR
-  bool StartInspector(Environment* env, const char* script_path) {
-    // Inspector agent can't fail to start, but if it was configured to listen
-    // right away on the websocket port and fails to bind/etc, this will return
-    // false.
-    return env->inspector_agent()->Start(
-        script_path == nullptr ? "" : script_path,
-        env->options()->debug_options(),
-        env->inspector_host_port(),
-        true);
-  }
-
-  bool InspectorStarted(Environment* env) {
-    return env->inspector_agent()->IsListening();
-  }
-#endif  // HAVE_INSPECTOR
-
   void StartTracingAgent() {
 #if 0
     if (per_process::cli_options->trace_event_categories.empty()) {
@@ -338,10 +321,6 @@ static struct {
   void Dispose() {}
   void DrainVMTasks(Isolate* isolate) {}
   void CancelVMTasks(Isolate* isolate) {}
-  bool StartInspector(Environment* env, const char* script_path) {
-    env->ThrowError("Node compiled with NODE_USE_V8_PLATFORM=0");
-    return true;
-  }
 
   void StartTracingAgent() {
     if (!trace_enabled_categories.empty()) {
@@ -359,12 +338,6 @@ static struct {
     return nullptr;
   }
 #endif  // !NODE_USE_V8_PLATFORM
-
-#if !NODE_USE_V8_PLATFORM || !HAVE_INSPECTOR
-  bool InspectorStarted(Environment* env) {
-    return false;
-  }
-#endif  //  !NODE_USE_V8_PLATFORM || !HAVE_INSPECTOR
 } v8_platform;
 
 tracing::AgentWriterHandle* GetTracingAgentWriter() {
@@ -797,13 +770,6 @@ void StartExecution(Environment* env, const char* main_script_id) {
       env->context(), Undefined(env->isolate()), arraysize(argv), argv));
 }
 
-static void StartInspector(Environment* env, const char* path) {
-#if HAVE_INSPECTOR
-  CHECK(!env->inspector_agent()->IsListening());
-  v8_platform.StartInspector(env, path);
-#endif  // HAVE_INSPECTOR
-}
-
 
 #ifdef __POSIX__
 void RegisterSignalHandler(int signal,
@@ -1232,7 +1198,8 @@ Environment* CreateEnvironment(IsolateData* isolate_data,
   std::vector<std::string> args(argv, argv + argc);
   std::vector<std::string> exec_args(exec_argv, exec_argv + exec_argc);
   Environment* env = new Environment(isolate_data, context);
-  env->Start(args, exec_args, per_process::v8_is_profiling);
+  env->Start(per_process::v8_is_profiling);
+  env->CreateProcessObject(args, exec_args);
   return env;
 }
 
@@ -1306,15 +1273,27 @@ inline int Start(Isolate* isolate, IsolateData* isolate_data,
   Local<Context> context = NewContext(isolate);
   Context::Scope context_scope(context);
   Environment env(isolate_data, context);
-  env.Start(args, exec_args, per_process::v8_is_profiling);
+  env.Start(per_process::v8_is_profiling);
+  env.CreateProcessObject(args, exec_args);
 
-  const char* path = args.size() > 1 ? args[1].c_str() : nullptr;
-  StartInspector(&env, path);
-
+#if HAVE_INSPECTOR && NODE_USE_V8_PLATFORM
+  CHECK(!env.inspector_agent()->IsListening());
+  // Inspector agent can't fail to start, but if it was configured to listen
+  // right away on the websocket port and fails to bind/etc, this will return
+  // false.
+  env.inspector_agent()->Start(args.size() > 1 ? args[1].c_str() : "",
+                               env.options()->debug_options(),
+                               env.inspector_host_port(),
+                               true);
   if (env.options()->debug_options().inspector_enabled &&
-      !v8_platform.InspectorStarted(&env)) {
+      !env.inspector_agent()->IsListening()) {
     return 12;  // Signal internal error.
   }
+#else
+  // inspector_enabled can't be true if !HAVE_INSPECTOR or !NODE_USE_V8_PLATFORM
+  // - the option parser should not allow that.
+  CHECK(!env.options()->debug_options().inspector_enabled);
+#endif  // HAVE_INSPECTOR && NODE_USE_V8_PLATFORM
 
   {
     Environment::AsyncCallbackScope callback_scope(&env);

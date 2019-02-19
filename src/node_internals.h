@@ -56,6 +56,7 @@ class NativeModuleLoader;
 namespace per_process {
 extern Mutex env_var_mutex;
 extern double prog_start_time;
+extern bool v8_is_profiling;
 }  // namespace per_process
 
 // Forward declaration
@@ -87,7 +88,7 @@ void GetSockOrPeerName(const v8::FunctionCallbackInfo<v8::Value>& args) {
   args.GetReturnValue().Set(err);
 }
 
-void Exit(const v8::FunctionCallbackInfo<v8::Value>& args);
+void WaitForInspectorDisconnect(Environment* env);
 void SignalExit(int signo);
 #ifdef __POSIX__
 void RegisterSignalHandler(int signal,
@@ -247,9 +248,6 @@ int ThreadPoolWork::CancelWork() {
   return uv_cancel(reinterpret_cast<uv_req_t*>(&work_req_));
 }
 
-tracing::AgentWriterHandle* GetTracingAgentWriter();
-void DisposePlatform();
-
 #define TRACING_CATEGORY_NODE "node"
 #define TRACING_CATEGORY_NODE1(one)                                           \
     TRACING_CATEGORY_NODE ","                                                 \
@@ -271,8 +269,9 @@ bool SafeGetenv(const char* key, std::string* text);
 
 void DefineZlibConstants(v8::Local<v8::Object> target);
 
-void RunBootstrapping(Environment* env);
-void StartExecution(Environment* env, const char* main_script_id);
+v8::MaybeLocal<v8::Value> RunBootstrapping(Environment* env);
+v8::MaybeLocal<v8::Value> StartExecution(Environment* env,
+                                         const char* main_script_id);
 
 }  // namespace node
 

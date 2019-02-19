@@ -57,16 +57,19 @@ class TLSWrap : public AsyncWrap,
                          v8::Local<v8::Context> context,
                          void* priv);
 
-  int GetFD() override;
+  // Implement StreamBase:
   bool IsAlive() override;
   bool IsClosing() override;
-
-  // JavaScript functions
-  int ReadStart() override;
-  int ReadStop() override;
-
+  bool IsIPCPipe() override;
+  int GetFD() override;
   ShutdownWrap* CreateShutdownWrap(
       v8::Local<v8::Object> req_wrap_object) override;
+  AsyncWrap* GetAsyncWrap() override;
+
+
+  // Implement StreamResource:
+  int ReadStart() override;  // Exposed to JS
+  int ReadStop() override;   // Exposed to JS
   int DoShutdown(ShutdownWrap* req_wrap) override;
   int DoWrite(WriteWrap* w,
               uv_buf_t* bufs,
@@ -77,14 +80,18 @@ class TLSWrap : public AsyncWrap,
   // Reset error_ string to empty. Not related to "clear text".
   void ClearError() override;
 
+
+  // Called by the done() callback of the 'newSession' event.
   void NewSessionDoneCb();
 
+  // Implement MemoryRetainer:
   void MemoryInfo(MemoryTracker* tracker) const override;
-
   SET_MEMORY_INFO_NAME(TLSWrap)
   SET_SELF_SIZE(TLSWrap)
 
  protected:
+  // Alternative to StreamListener::stream(), that returns a StreamBase instead
+  // of a StreamResource.
   inline StreamBase* underlying_stream() {
     return static_cast<StreamBase*>(stream_);
   }
@@ -101,6 +108,7 @@ class TLSWrap : public AsyncWrap,
   static const int kSimultaneousBufferCount = 10;
 
   TLSWrap(Environment* env,
+          v8::Local<v8::Object> obj,
           Kind kind,
           StreamBase* stream,
           crypto::SecureContext* sc);
@@ -136,13 +144,11 @@ class TLSWrap : public AsyncWrap,
     }
   }
 
-  AsyncWrap* GetAsyncWrap() override;
-  bool IsIPCPipe() override;
-
-  // Resource implementation
-  void OnStreamAfterWrite(WriteWrap* w, int status) override;
+  // Implement StreamListener:
+  // Returns buf that points into enc_in_.
   uv_buf_t OnStreamAlloc(size_t size) override;
   void OnStreamRead(ssize_t nread, const uv_buf_t& buf) override;
+  void OnStreamAfterWrite(WriteWrap* w, int status) override;
 
   v8::Local<v8::Value> GetSSLError(int status, int* err, std::string* msg);
 
@@ -153,7 +159,6 @@ class TLSWrap : public AsyncWrap,
   static void SetVerifyMode(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void EnableSessionCallbacks(
       const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void EnableTrace(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void EnableCertCb(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void DestroySSL(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetServername(const v8::FunctionCallbackInfo<v8::Value>& args);

@@ -8,6 +8,7 @@
 #include "node_options-inl.h"
 #include "node_platform.h"
 #include "node_process.h"
+#include "node_v8_platform-inl.h"
 #include "node_worker.h"
 #include "tracing/agent.h"
 #include "tracing/traced_value.h"
@@ -15,6 +16,7 @@
 
 #include <stdio.h>
 #include <algorithm>
+#include <atomic>
 
 namespace node {
 
@@ -142,7 +144,7 @@ void InitThreadLocalOnce() {
 }
 
 void Environment::TrackingTraceStateObserver::UpdateTraceCategoryState() {
-  if (!env_->is_main_thread()) {
+  if (!env_->owns_process_state()) {
     // Ideally, we’d have a consistent story that treats all threads/Environment
     // instances equally here. However, tracing is essentially global, and this
     // callback is called from whichever thread calls `StartTracing()` or
@@ -167,8 +169,16 @@ void Environment::TrackingTraceStateObserver::UpdateTraceCategoryState() {
            0, nullptr).ToLocalChecked();
 }
 
+static std::atomic<uint64_t> next_thread_id{0};
+
+uint64_t Environment::AllocateThreadId() {
+  return next_thread_id++;
+}
+
 Environment::Environment(IsolateData* isolate_data,
-                         Local<Context> context)
+                         Local<Context> context,
+                         Flags flags,
+                         uint64_t thread_id)
     : isolate_(context->GetIsolate()),
       isolate_data_(isolate_data),
       immediate_info_(context->GetIsolate()),
@@ -177,6 +187,8 @@ Environment::Environment(IsolateData* isolate_data,
       should_abort_on_uncaught_toggle_(isolate_, 1),
       trace_category_state_(isolate_, kTraceCategoryCount),
       stream_base_state_(isolate_, StreamBase::kNumStreamBaseStateFields),
+      flags_(flags),
+      thread_id_(thread_id == kNoThreadId ? AllocateThreadId() : thread_id),
       fs_stats_field_array_(isolate_, kFsStatsBufferLength),
       fs_stats_field_bigint_array_(isolate_, kFsStatsBufferLength),
       context_(context->GetIsolate(), context) {
@@ -200,12 +212,13 @@ Environment::Environment(IsolateData* isolate_data,
 
   AssignToContext(context, ContextInfo(""));
 
+#if 0
   if (tracing::AgentWriterHandle* writer = GetTracingAgentWriter()) {
     trace_state_observer_ = std::make_unique<TrackingTraceStateObserver>(this);
     TracingController* tracing_controller = writer->GetTracingController();
-    if (tracing_controller != nullptr)
-      tracing_controller->AddTraceStateObserver(trace_state_observer_.get());
+    tracing_controller->AddTraceStateObserver(trace_state_observer_.get());
   }
+#endif
 
   destroy_async_id_list_.reserve(512);
   BeforeExit(
@@ -268,8 +281,7 @@ Environment::~Environment() {
     tracing::AgentWriterHandle* writer = GetTracingAgentWriter();
     CHECK_NOT_NULL(writer);
     TracingController* tracing_controller = writer->GetTracingController();
-    if (tracing_controller != nullptr)
-      tracing_controller->RemoveTraceStateObserver(trace_state_observer_.get());
+    tracing_controller->RemoveTraceStateObserver(trace_state_observer_.get());
   }
 
   delete[] heap_statistics_buffer_;
@@ -335,9 +347,23 @@ void Environment::Start(bool start_profiler_idle_notifier) {
   uv_key_set(&thread_local_env, this);
 }
 
-MaybeLocal<Object> Environment::CreateProcessObject(
+MaybeLocal<Object> Environment::ProcessCliArgs(
     const std::vector<std::string>& args,
     const std::vector<std::string>& exec_args) {
+  if (node_is_nwjs) {
+    execution_mode_ = ExecutionMode::kRunMainModule;
+  }
+  if (args.size() > 1) {
+    std::string first_arg = args[1];
+    if (first_arg == "inspect") {
+      execution_mode_ = ExecutionMode::kInspect;
+    } else if (first_arg == "debug") {
+      execution_mode_ = ExecutionMode::kDebug;
+    } else if (first_arg != "-") {
+      execution_mode_ = ExecutionMode::kRunMainModule;
+    }
+  }
+
 #if 0
   if (*TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
           TRACING_CATEGORY_NODE1(environment)) != 0) {

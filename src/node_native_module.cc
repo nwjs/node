@@ -83,11 +83,20 @@ void NativeModuleLoader::GetCacheUsage(
   args.GetReturnValue().Set(result);
 }
 
-void NativeModuleLoader::SourceObjectGetter(
+void NativeModuleLoader::ModuleIdsGetter(
     Local<Name> property, const PropertyCallbackInfo<Value>& info) {
-  Local<Context> context = info.GetIsolate()->GetCurrentContext();
-  info.GetReturnValue().Set(
-      per_process::native_module_loader.GetSourceObject(context));
+  Isolate* isolate = info.GetIsolate();
+
+  const NativeModuleRecordMap& source_ =
+      per_process::native_module_loader.source_;
+  std::vector<Local<Value>> ids;
+  ids.reserve(source_.size());
+
+  for (auto const& x : source_) {
+    ids.push_back(OneByteString(isolate, x.first.c_str(), x.first.size()));
+  }
+
+  info.GetReturnValue().Set(Array::New(isolate, ids.data(), ids.size()));
 }
 
 void NativeModuleLoader::ConfigStringGetter(
@@ -166,33 +175,14 @@ void NativeModuleLoader::CompileFunction(
   }
 }
 
-// TODO(joyeecheung): it should be possible to generate the argument names
-// from some special comments for the bootstrapper case.
-MaybeLocal<Value> NativeModuleLoader::CompileAndCall(
-    Local<Context> context,
-    const char* id,
-    std::vector<Local<String>>* parameters,
-    std::vector<Local<Value>>* arguments,
-    Environment* optional_env) {
-  Isolate* isolate = context->GetIsolate();
-  MaybeLocal<Function> compiled =
-      per_process::native_module_loader.LookupAndCompile(
-          context, id, parameters, nullptr);
-  if (compiled.IsEmpty()) {
-    return MaybeLocal<Value>();
-  }
-  Local<Function> fn = compiled.ToLocalChecked().As<Function>();
-  return fn->Call(
-      context, v8::Null(isolate), arguments->size(), arguments->data());
-}
-
 MaybeLocal<Function> NativeModuleLoader::CompileAsModule(Environment* env,
                                                          const char* id) {
   std::vector<Local<String>> parameters = {env->exports_string(),
                                            env->require_string(),
                                            env->module_string(),
                                            env->process_string(),
-                                           env->internal_binding_string()};
+                                           env->internal_binding_string(),
+                                           env->primordials_string()};
   return per_process::native_module_loader.LookupAndCompile(
       env->context(), id, &parameters, env);
 }
@@ -281,7 +271,7 @@ MaybeLocal<Function> NativeModuleLoader::LookupAndCompile(
   // Generate new cache for next compilation
   std::unique_ptr<ScriptCompiler::CachedData> new_cached_data(
       ScriptCompiler::CreateCodeCacheForFunction(fun));
-  CHECK_NE(new_cached_data, nullptr);
+  CHECK_NOT_NULL(new_cached_data);
 
   // The old entry should've been erased by now so we can just emplace
   code_cache_.emplace(id, std::move(new_cached_data));
@@ -308,8 +298,8 @@ void NativeModuleLoader::Initialize(Local<Object> target,
             .FromJust());
   CHECK(target
             ->SetAccessor(env->context(),
-                          env->source_string(),
-                          SourceObjectGetter,
+                          FIXED_ONE_BYTE_STRING(env->isolate(), "moduleIds"),
+                          ModuleIdsGetter,
                           nullptr,
                           MaybeLocal<Value>(),
                           DEFAULT,

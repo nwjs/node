@@ -289,6 +289,15 @@ Maybe<bool> Message::Serialize(Environment* env,
         // take ownership of its memory, copying the buffer will have to do.
         if (!ab->IsNeuterable() || ab->IsExternal())
           continue;
+        if (std::find(array_buffers.begin(), array_buffers.end(), ab) !=
+            array_buffers.end()) {
+          ThrowDataCloneException(
+              env,
+              FIXED_ONE_BYTE_STRING(
+                  env->isolate(),
+                  "Transfer list contains duplicate ArrayBuffer"));
+          return Nothing<bool>();
+        }
         // We simply use the array index in the `array_buffers` list as the
         // ID that we write into the serialized buffer.
         uint32_t id = array_buffers.size();
@@ -312,6 +321,15 @@ Maybe<bool> Message::Serialize(Environment* env,
               FIXED_ONE_BYTE_STRING(
                   env->isolate(),
                   "MessagePort in transfer list is already detached"));
+          return Nothing<bool>();
+        }
+        if (std::find(delegate.ports_.begin(), delegate.ports_.end(), port) !=
+            delegate.ports_.end()) {
+          ThrowDataCloneException(
+              env,
+              FIXED_ONE_BYTE_STRING(
+                  env->isolate(),
+                  "Transfer list contains duplicate MessagePort"));
           return Nothing<bool>();
         }
         delegate.ports_.push_back(port);
@@ -358,7 +376,7 @@ void Message::MemoryInfo(MemoryTracker* tracker) const {
 MessagePortData::MessagePortData(MessagePort* owner) : owner_(owner) { }
 
 MessagePortData::~MessagePortData() {
-  CHECK_EQ(owner_, nullptr);
+  CHECK_NULL(owner_);
   Disentangle();
 }
 
@@ -384,8 +402,8 @@ bool MessagePortData::IsSiblingClosed() const {
 }
 
 void MessagePortData::Entangle(MessagePortData* a, MessagePortData* b) {
-  CHECK_EQ(a->sibling_, nullptr);
-  CHECK_EQ(b->sibling_, nullptr);
+  CHECK_NULL(a->sibling_);
+  CHECK_NULL(b->sibling_);
   a->sibling_ = b;
   b->sibling_ = a;
   a->sibling_mutex_ = b->sibling_mutex_;
@@ -515,6 +533,11 @@ MessagePort* MessagePort::New(
   if (data) {
     port->Detach();
     port->data_ = std::move(data);
+
+    // This lock is here to avoid race conditions with the `owner_` read
+    // in AddToIncomingQueue(). (This would likely be unproblematic without it,
+    // but it's better to be safe than sorry.)
+    Mutex::ScopedLock lock(port->data_->mutex_);
     port->data_->owner_ = port;
     // If the existing MessagePortData object had pending messages, this is
     // the easiest way to run that queue.
@@ -601,6 +624,7 @@ void MessagePort::OnClose() {
 }
 
 std::unique_ptr<MessagePortData> MessagePort::Detach() {
+  CHECK(data_);
   Mutex::ScopedLock lock(data_->mutex_);
   data_->owner_ = nullptr;
   return std::move(data_);

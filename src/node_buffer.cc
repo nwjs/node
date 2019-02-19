@@ -34,8 +34,6 @@
 #include <string.h>
 #include <limits.h>
 
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-
 #define THROW_AND_RETURN_UNLESS_BUFFER(env, obj)                            \
   THROW_AND_RETURN_IF_NOT_BUFFER(env, obj, "argument")                      \
 
@@ -47,8 +45,8 @@
   } while (0)                                                               \
 
 #define SLICE_START_END(env, start_arg, end_arg, end_max)                   \
-  size_t start;                                                             \
-  size_t end;                                                               \
+  size_t start = 0;                                                         \
+  size_t end = 0;                                                           \
   THROW_AND_RETURN_IF_OOB(ParseArrayIndex(env, start_arg, 0, &start));      \
   THROW_AND_RETURN_IF_OOB(ParseArrayIndex(env, end_arg, end_max, &end));    \
   if (end < start) end = start;                                             \
@@ -99,7 +97,7 @@ class CallbackInfo {
                                   Local<ArrayBuffer> object,
                                   FreeCallback callback,
                                   char* data,
-                                  void* hint = 0);
+                                  void* hint = nullptr);
  private:
   static void WeakCallback(const WeakCallbackInfo<CallbackInfo>&);
   inline void WeakCallback(Isolate* isolate);
@@ -500,9 +498,9 @@ void Copy(const FunctionCallbackInfo<Value> &args) {
   SPREAD_BUFFER_ARG(buffer_obj, ts_obj);
   SPREAD_BUFFER_ARG(target_obj, target);
 
-  size_t target_start;
-  size_t source_start;
-  size_t source_end;
+  size_t target_start = 0;
+  size_t source_start = 0;
+  size_t source_end = 0;
 
   THROW_AND_RETURN_IF_OOB(ParseArrayIndex(env, args[2], 0, &target_start));
   THROW_AND_RETURN_IF_OOB(ParseArrayIndex(env, args[3], 0, &source_start));
@@ -520,9 +518,9 @@ void Copy(const FunctionCallbackInfo<Value> &args) {
   if (source_end - source_start > target_length - target_start)
     source_end = source_start + target_length - target_start;
 
-  uint32_t to_copy = MIN(MIN(source_end - source_start,
-                             target_length - target_start),
-                             ts_obj_length - source_start);
+  uint32_t to_copy = std::min(
+      std::min(source_end - source_start, target_length - target_start),
+      ts_obj_length - source_start);
 
   memmove(target_data + target_start, ts_obj_data + source_start, to_copy);
   args.GetReturnValue().Set(to_copy);
@@ -553,7 +551,8 @@ void Fill(const FunctionCallbackInfo<Value>& args) {
   if (Buffer::HasInstance(args[1])) {
     SPREAD_BUFFER_ARG(args[1], fill_obj);
     str_length = fill_obj_length;
-    memcpy(ts_obj_data + start, fill_obj_data, MIN(str_length, fill_length));
+    memcpy(
+        ts_obj_data + start, fill_obj_data, std::min(str_length, fill_length));
     goto start_fill;
   }
 
@@ -574,7 +573,7 @@ void Fill(const FunctionCallbackInfo<Value>& args) {
   if (enc == UTF8) {
     str_length = str_obj->Utf8Length(env->isolate());
     node::Utf8Value str(env->isolate(), args[1]);
-    memcpy(ts_obj_data + start, *str, MIN(str_length, fill_length));
+    memcpy(ts_obj_data + start, *str, std::min(str_length, fill_length));
 
   } else if (enc == UCS2) {
     str_length = str_obj->Length() * sizeof(uint16_t);
@@ -582,7 +581,7 @@ void Fill(const FunctionCallbackInfo<Value>& args) {
     if (IsBigEndian())
       SwapBytes16(reinterpret_cast<char*>(&str[0]), str_length);
 
-    memcpy(ts_obj_data + start, *str, MIN(str_length, fill_length));
+    memcpy(ts_obj_data + start, *str, std::min(str_length, fill_length));
 
   } else {
     // Write initial String to Buffer, then use that memory to copy remainder
@@ -647,7 +646,7 @@ void StringWrite(const FunctionCallbackInfo<Value>& args) {
   THROW_AND_RETURN_IF_OOB(ParseArrayIndex(env, args[2], ts_obj_length - offset,
                                           &max_length));
 
-  max_length = MIN(ts_obj_length - offset, max_length);
+  max_length = std::min(ts_obj_length - offset, max_length);
 
   if (max_length == 0)
     return args.GetReturnValue().Set(0);
@@ -694,10 +693,10 @@ void CompareOffset(const FunctionCallbackInfo<Value> &args) {
   SPREAD_BUFFER_ARG(args[0], ts_obj);
   SPREAD_BUFFER_ARG(args[1], target);
 
-  size_t target_start;
-  size_t source_start;
-  size_t source_end;
-  size_t target_end;
+  size_t target_start = 0;
+  size_t source_start = 0;
+  size_t source_end = 0;
+  size_t target_end = 0;
 
   THROW_AND_RETURN_IF_OOB(ParseArrayIndex(env, args[2], 0, &target_start));
   THROW_AND_RETURN_IF_OOB(ParseArrayIndex(env, args[3], 0, &source_start));
@@ -716,9 +715,9 @@ void CompareOffset(const FunctionCallbackInfo<Value> &args) {
   CHECK_LE(source_start, source_end);
   CHECK_LE(target_start, target_end);
 
-  size_t to_cmp = MIN(MIN(source_end - source_start,
-                      target_end - target_start),
-                      ts_obj_length - source_start);
+  size_t to_cmp =
+      std::min(std::min(source_end - source_start, target_end - target_start),
+               ts_obj_length - source_start);
 
   int val = normalizeCompareVal(to_cmp > 0 ?
                                   memcmp(ts_obj_data + source_start,
@@ -738,7 +737,7 @@ void Compare(const FunctionCallbackInfo<Value> &args) {
   SPREAD_BUFFER_ARG(args[0], obj_a);
   SPREAD_BUFFER_ARG(args[1], obj_b);
 
-  size_t cmp_length = MIN(obj_a_length, obj_b_length);
+  size_t cmp_length = std::min(obj_a_length, obj_b_length);
 
   int val = normalizeCompareVal(cmp_length > 0 ?
                                 memcmp(obj_a_data, obj_b_data, cmp_length) : 0,

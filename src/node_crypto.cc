@@ -495,6 +495,7 @@ void SecureContext::Init(const FunctionCallbackInfo<Value>& args) {
 
   // SSL session cache configuration
   SSL_CTX_set_session_cache_mode(sc->ctx_.get(),
+                                 SSL_SESS_CACHE_CLIENT |
                                  SSL_SESS_CACHE_SERVER |
                                  SSL_SESS_CACHE_NO_INTERNAL |
                                  SSL_SESS_CACHE_NO_AUTO_CLEAR);
@@ -1513,7 +1514,10 @@ int SSLWrap<Base>::NewSessionCallback(SSL* s, SSL_SESSION* sess) {
       reinterpret_cast<const char*>(session_id_data),
       session_id_length).ToLocalChecked();
   Local<Value> argv[] = { session_id, session };
-  w->awaiting_new_session_ = true;
+  // On servers, we pause the handshake until callback of 'newSession', which
+  // calls NewSessionDoneCb(). On clients, there is no callback to wait for.
+  if (w->is_server())
+    w->awaiting_new_session_ = true;
   w->MakeCallback(env->onnewsession_string(), arraysize(argv), argv);
 
   return 0;
@@ -1608,6 +1612,27 @@ static void AddFingerprintDigest(const unsigned char* md,
     (*fingerprint)[0] = '\0';
   }
 }
+
+
+static MaybeLocal<Object> ECPointToBuffer(Environment* env,
+                                          const EC_GROUP* group,
+                                          const EC_POINT* point,
+                                          point_conversion_form_t form,
+                                          const char** error) {
+  size_t len = EC_POINT_point2oct(group, point, form, nullptr, 0, nullptr);
+  if (len == 0) {
+    if (error != nullptr) *error = "Failed to get public key length";
+    return MaybeLocal<Object>();
+  }
+  MallocedBuffer<unsigned char> buf(len);
+  len = EC_POINT_point2oct(group, point, form, buf.data, buf.size, nullptr);
+  if (len == 0) {
+    if (error != nullptr) *error = "Failed to get public key";
+    return MaybeLocal<Object>();
+  }
+  return Buffer::New(env, buf.release(), len);
+}
+
 
 static Local<Object> X509ToObject(Environment* env, X509* cert) {
   EscapableHandleScope scope(env->isolate());
@@ -1725,16 +1750,13 @@ static Local<Object> X509ToObject(Environment* env, X509* cert) {
       }
     }
 
-    unsigned char* pub = nullptr;
-    size_t publen = EC_KEY_key2buf(ec.get(), EC_KEY_get_conv_form(ec.get()),
-                                   &pub, nullptr);
-    if (publen > 0) {
-      Local<Object> buf = Buffer::New(env, pub, publen).ToLocalChecked();
-      // Ownership of pub pointer accepted by Buffer.
-      pub = nullptr;
+    const EC_POINT* pubkey = EC_KEY_get0_public_key(ec.get());
+    Local<Object> buf;
+    if (pubkey != nullptr &&
+        ECPointToBuffer(
+            env, group, pubkey, EC_KEY_get_conv_form(ec.get()), nullptr)
+            .ToLocal(&buf)) {
       info->Set(context, env->pubkey_string(), buf).FromJust();
-    } else {
-      CHECK_NULL(pub);
     }
 
     const int nid = EC_GROUP_get_curve_name(group);
@@ -2621,47 +2643,19 @@ int SSLWrap<Base>::SetCACerts(SecureContext* sc) {
 }
 
 int VerifyCallback(int preverify_ok, X509_STORE_CTX* ctx) {
-  // Quoting SSL_set_verify(3ssl):
+  // From https://www.openssl.org/docs/man1.1.1/man3/SSL_verify_cb:
   //
-  //   The VerifyCallback function is used to control the behaviour when
-  //   the SSL_VERIFY_PEER flag is set. It must be supplied by the
-  //   application and receives two arguments: preverify_ok indicates,
-  //   whether the verification of the certificate in question was passed
-  //   (preverify_ok=1) or not (preverify_ok=0). x509_ctx is a pointer to
-  //   the complete context used for the certificate chain verification.
-  //
-  //   The certificate chain is checked starting with the deepest nesting
-  //   level (the root CA certificate) and worked upward to the peer's
-  //   certificate.  At each level signatures and issuer attributes are
-  //   checked.  Whenever a verification error is found, the error number is
-  //   stored in x509_ctx and VerifyCallback is called with preverify_ok=0.
-  //   By applying X509_CTX_store_* functions VerifyCallback can locate the
-  //   certificate in question and perform additional steps (see EXAMPLES).
-  //   If no error is found for a certificate, VerifyCallback is called
-  //   with preverify_ok=1 before advancing to the next level.
-  //
-  //   The return value of VerifyCallback controls the strategy of the
-  //   further verification process. If VerifyCallback returns 0, the
-  //   verification process is immediately stopped with "verification
-  //   failed" state. If SSL_VERIFY_PEER is set, a verification failure
-  //   alert is sent to the peer and the TLS/SSL handshake is terminated. If
-  //   VerifyCallback returns 1, the verification process is continued. If
+  //   If VerifyCallback returns 1, the verification process is continued. If
   //   VerifyCallback always returns 1, the TLS/SSL handshake will not be
-  //   terminated with respect to verification failures and the connection
-  //   will be established. The calling process can however retrieve the
-  //   error code of the last verification error using
-  //   SSL_get_verify_result(3) or by maintaining its own error storage
-  //   managed by VerifyCallback.
+  //   terminated with respect to verification failures and the connection will
+  //   be established. The calling process can however retrieve the error code
+  //   of the last verification error using SSL_get_verify_result(3) or by
+  //   maintaining its own error storage managed by VerifyCallback.
   //
-  //   If no VerifyCallback is specified, the default callback will be
-  //   used.  Its return value is identical to preverify_ok, so that any
-  //   verification failure will lead to a termination of the TLS/SSL
-  //   handshake with an alert message, if SSL_VERIFY_PEER is set.
-  //
-  // Since we cannot perform I/O quickly enough in this callback, we ignore
-  // all preverify_ok errors and let the handshake continue. It is
-  // imperative that the user use Connection::VerifyError after the
-  // 'secure' callback has been made.
+  // Since we cannot perform I/O quickly enough with X509_STORE_CTX_ APIs in
+  // this callback, we ignore all preverify_ok errors and let the handshake
+  // continue. It is imperative that the user use Connection::VerifyError after
+  // the 'secure' callback has been made.
   return 1;
 }
 
@@ -2721,7 +2715,7 @@ static ParsePublicKeyResult ParsePublicKeyPEM(EVPKeyPointer* pkey,
 
   ParsePublicKeyResult ret;
 
-  // Try PKCS#8 first.
+  // Try parsing as a SubjectPublicKeyInfo first.
   ret = TryParsePublicKey(pkey, bp, "PUBLIC KEY",
       [](const unsigned char** p, long l) {  // NOLINT(runtime/int)
         return d2i_PUBKEY(nullptr, p, l);
@@ -4796,7 +4790,7 @@ void DiffieHellman::Initialize(Environment* env, Local<Object> target) {
 
 bool DiffieHellman::Init(int primeLength, int g) {
   dh_.reset(DH_new());
-  if (!DH_generate_parameters_ex(dh_.get(), primeLength, g, 0))
+  if (!DH_generate_parameters_ex(dh_.get(), primeLength, g, nullptr))
     return false;
   return VerifyContext();
 }
@@ -4819,8 +4813,10 @@ bool DiffieHellman::Init(const char* p, int p_len, int g) {
 
 bool DiffieHellman::Init(const char* p, int p_len, const char* g, int g_len) {
   dh_.reset(DH_new());
-  BIGNUM* bn_p = BN_bin2bn(reinterpret_cast<const unsigned char*>(p), p_len, 0);
-  BIGNUM* bn_g = BN_bin2bn(reinterpret_cast<const unsigned char*>(g), g_len, 0);
+  BIGNUM* bn_p =
+      BN_bin2bn(reinterpret_cast<const unsigned char*>(p), p_len, nullptr);
+  BIGNUM* bn_g =
+      BN_bin2bn(reinterpret_cast<const unsigned char*>(g), g_len, nullptr);
   if (!DH_set0_pqg(dh_.get(), bn_p, nullptr, bn_g)) {
     BN_free(bn_p);
     BN_free(bn_g);
@@ -4988,7 +4984,7 @@ void DiffieHellman::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
   BignumPointer key(BN_bin2bn(
       reinterpret_cast<unsigned char*>(Buffer::Data(args[0])),
       Buffer::Length(args[0]),
-      0));
+      nullptr));
 
   MallocedBuffer<char> data(DH_size(diffieHellman->dh_.get()));
 
@@ -5230,29 +5226,19 @@ void ECDH::GetPublicKey(const FunctionCallbackInfo<Value>& args) {
   ECDH* ecdh;
   ASSIGN_OR_RETURN_UNWRAP(&ecdh, args.Holder());
 
+  const EC_GROUP* group = EC_KEY_get0_group(ecdh->key_.get());
   const EC_POINT* pub = EC_KEY_get0_public_key(ecdh->key_.get());
   if (pub == nullptr)
     return env->ThrowError("Failed to get ECDH public key");
 
-  int size;
   CHECK(args[0]->IsUint32());
   uint32_t val = args[0].As<Uint32>()->Value();
   point_conversion_form_t form = static_cast<point_conversion_form_t>(val);
 
-  size = EC_POINT_point2oct(ecdh->group_, pub, form, nullptr, 0, nullptr);
-  if (size == 0)
-    return env->ThrowError("Failed to get public key length");
-
-  unsigned char* out = node::Malloc<unsigned char>(size);
-
-  int r = EC_POINT_point2oct(ecdh->group_, pub, form, out, size, nullptr);
-  if (r != size) {
-    free(out);
-    return env->ThrowError("Failed to get public key");
-  }
-
-  Local<Object> buf =
-      Buffer::New(env, reinterpret_cast<char*>(out), size).ToLocalChecked();
+  const char* error;
+  Local<Object> buf;
+  if (!ECPointToBuffer(env, group, pub, form, &error).ToLocal(&buf))
+    return env->ThrowError(error);
   args.GetReturnValue().Set(buf);
 }
 
@@ -5397,7 +5383,7 @@ void CryptoJob::AfterThreadPoolWork(int status) {
 
 void CryptoJob::Run(std::unique_ptr<CryptoJob> job, Local<Value> wrap) {
   CHECK(wrap->IsObject());
-  CHECK_EQ(nullptr, job->async_wrap);
+  CHECK_NULL(job->async_wrap);
   job->async_wrap.reset(Unwrap<AsyncWrap>(wrap.As<Object>()));
   CHECK_EQ(false, job->async_wrap->persistent().IsWeak());
   job->ScheduleWork();
@@ -6141,22 +6127,10 @@ void ConvertKey(const FunctionCallbackInfo<Value>& args) {
   uint32_t val = args[2].As<Uint32>()->Value();
   point_conversion_form_t form = static_cast<point_conversion_form_t>(val);
 
-  int size = EC_POINT_point2oct(
-      group.get(), pub.get(), form, nullptr, 0, nullptr);
-
-  if (size == 0)
-    return env->ThrowError("Failed to get public key length");
-
-  unsigned char* out = node::Malloc<unsigned char>(size);
-
-  int r = EC_POINT_point2oct(group.get(), pub.get(), form, out, size, nullptr);
-  if (r != size) {
-    free(out);
-    return env->ThrowError("Failed to get public key");
-  }
-
-  Local<Object> buf =
-      Buffer::New(env, reinterpret_cast<char*>(out), size).ToLocalChecked();
+  const char* error;
+  Local<Object> buf;
+  if (!ECPointToBuffer(env, group.get(), pub.get(), form, &error).ToLocal(&buf))
+    return env->ThrowError(error);
   args.GetReturnValue().Set(buf);
 }
 
@@ -6246,7 +6220,7 @@ void SetEngine(const FunctionCallbackInfo<Value>& args) {
   ENGINE* engine = LoadEngineById(*engine_id, &errmsg);
 
   if (engine == nullptr) {
-    int err = ERR_get_error();
+    unsigned long err = ERR_get_error();  // NOLINT(runtime/int)
     if (err == 0)
       return args.GetReturnValue().Set(false);
     return ThrowCryptoError(env, err);

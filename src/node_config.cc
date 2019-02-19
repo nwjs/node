@@ -57,12 +57,6 @@ static void Initialize(Local<Object> target,
   READONLY_TRUE_PROPERTY(target, "hasTracing");
 #endif
 
-#if HAVE_INSPECTOR
-  READONLY_TRUE_PROPERTY(target, "hasInspector");
-#else
-  READONLY_FALSE_PROPERTY(target, "hasInspector");
-#endif
-
 #if !defined(NODE_WITHOUT_NODE_OPTIONS)
   READONLY_TRUE_PROPERTY(target, "hasNodeOptions");
 #endif
@@ -73,30 +67,11 @@ static void Initialize(Local<Object> target,
 
 #endif  // NODE_HAVE_I18N_SUPPORT
 
-  if (env->options()->preserve_symlinks)
-    READONLY_TRUE_PROPERTY(target, "preserveSymlinks");
-  if (env->options()->preserve_symlinks_main)
-    READONLY_TRUE_PROPERTY(target, "preserveSymlinksMain");
-
-  if (env->options()->experimental_modules) {
-    READONLY_TRUE_PROPERTY(target, "experimentalModules");
-    const std::string& userland_loader = env->options()->userland_loader;
-    if (!userland_loader.empty()) {
-      READONLY_STRING_PROPERTY(target, "userLoader",  userland_loader);
-    }
-  }
-
-  if (env->options()->experimental_vm_modules)
-    READONLY_TRUE_PROPERTY(target, "experimentalVMModules");
-
-  if (env->options()->experimental_repl_await)
-    READONLY_TRUE_PROPERTY(target, "experimentalREPLAwait");
-
-  if (env->options()->expose_internals)
-    READONLY_TRUE_PROPERTY(target, "exposeInternals");
-
-  if (env->abort_on_uncaught_exception())
-    READONLY_TRUE_PROPERTY(target, "shouldAbortOnUncaughtException");
+#if HAVE_INSPECTOR
+  READONLY_TRUE_PROPERTY(target, "hasInspector");
+#else
+  READONLY_FALSE_PROPERTY(target, "hasInspector");
+#endif
 
   READONLY_PROPERTY(target,
                     "bits",

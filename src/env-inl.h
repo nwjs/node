@@ -647,15 +647,19 @@ inline void Environment::set_has_run_bootstrapping_code(bool value) {
 }
 
 inline bool Environment::is_main_thread() const {
-  return thread_id_ == 0;
+  return flags_ & kIsMainThread;
+}
+
+inline bool Environment::owns_process_state() const {
+  return flags_ & kOwnsProcessState;
+}
+
+inline bool Environment::owns_inspector() const {
+  return flags_ & kOwnsInspector;
 }
 
 inline uint64_t Environment::thread_id() const {
   return thread_id_;
-}
-
-inline void Environment::set_thread_id(uint64_t id) {
-  thread_id_ = id;
 }
 
 inline worker::Worker* Environment::worker_context() const {
@@ -663,7 +667,7 @@ inline worker::Worker* Environment::worker_context() const {
 }
 
 inline void Environment::set_worker_context(worker::Worker* context) {
-  CHECK_EQ(worker_context_, nullptr);  // Should be set only once.
+  CHECK_NULL(worker_context_);  // Should be set only once.
   worker_context_ = context;
 }
 

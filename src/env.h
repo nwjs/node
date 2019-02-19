@@ -254,6 +254,7 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(port2_string, "port2")                                                     \
   V(port_string, "port")                                                       \
   V(preference_string, "preference")                                           \
+  V(primordials_string, "primordials")                                         \
   V(priority_string, "priority")                                               \
   V(process_string, "process")                                                 \
   V(promise_string, "promise")                                                 \
@@ -353,15 +354,18 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(http2session_on_stream_trailers_function, v8::Function)                    \
   V(http2settings_constructor_template, v8::ObjectTemplate)                    \
   V(http2stream_constructor_template, v8::ObjectTemplate)                      \
+  V(internal_binding_loader, v8::Function)                                     \
   V(immediate_callback_function, v8::Function)                                 \
   V(inspector_console_extension_installer, v8::Function)                       \
   V(libuv_stream_wrap_ctor_template, v8::FunctionTemplate)                     \
   V(message_port, v8::Object)                                                  \
   V(message_port_constructor_template, v8::FunctionTemplate)                   \
+  V(native_module_require, v8::Function)                                       \
   V(performance_entry_callback, v8::Function)                                  \
   V(performance_entry_template, v8::Function)                                  \
   V(pipe_constructor_template, v8::FunctionTemplate)                           \
   V(process_object, v8::Object)                                                \
+  V(primordials, v8::Object)                                                   \
   V(promise_reject_callback, v8::Function)                                     \
   V(promise_wrap_template, v8::ObjectTemplate)                                 \
   V(sab_lifetimepartner_constructor_template, v8::FunctionTemplate)            \
@@ -369,7 +373,6 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(script_data_constructor_function, v8::Function)                            \
   V(secure_context_constructor_template, v8::FunctionTemplate)                 \
   V(shutdown_wrap_template, v8::ObjectTemplate)                                \
-  V(start_execution_function, v8::Function)                                    \
   V(tcp_constructor_template, v8::FunctionTemplate)                            \
   V(tick_callback_function, v8::Function)                                      \
   V(timers_callback_function, v8::Function)                                    \
@@ -592,6 +595,13 @@ class Environment {
     DISALLOW_COPY_AND_ASSIGN(TickInfo);
   };
 
+  enum Flags {
+    kNoFlags = 0,
+    kIsMainThread = 1 << 0,
+    kOwnsProcessState = 1 << 1,
+    kOwnsInspector = 1 << 2,
+  };
+
   static inline Environment* GetCurrent(v8::Isolate* isolate);
   static inline Environment* GetCurrent(v8::Local<v8::Context> context);
   static inline Environment* GetCurrent(
@@ -605,11 +615,13 @@ class Environment {
   static inline Environment* GetThreadLocalEnv();
 
   Environment(IsolateData* isolate_data,
-              v8::Local<v8::Context> context);
+              v8::Local<v8::Context> context,
+              Flags flags = Flags(),
+              uint64_t thread_id = kNoThreadId);
   ~Environment();
 
   void Start(bool start_profiler_idle_notifier);
-  v8::MaybeLocal<v8::Object> CreateProcessObject(
+  v8::MaybeLocal<v8::Object> ProcessCliArgs(
       const std::vector<std::string>& args,
       const std::vector<std::string>& exec_args);
 
@@ -758,9 +770,13 @@ class Environment {
   inline bool has_run_bootstrapping_code() const;
   inline void set_has_run_bootstrapping_code(bool has_run_bootstrapping_code);
 
+  static uint64_t AllocateThreadId();
+  static constexpr uint64_t kNoThreadId = -1;
+
   inline bool is_main_thread() const;
+  inline bool owns_process_state() const;
+  inline bool owns_inspector() const;
   inline uint64_t thread_id() const;
-  inline void set_thread_id(uint64_t id);
   inline worker::Worker* worker_context() const;
   inline void set_worker_context(worker::Worker* context);
   inline void add_sub_worker_context(worker::Worker* context);
@@ -928,6 +944,24 @@ class Environment {
   inline std::shared_ptr<EnvironmentOptions> options();
   inline std::shared_ptr<HostPort> inspector_host_port();
 
+  enum class ExecutionMode {
+    kDefault,
+    kInspect,              // node inspect
+    kDebug,                // node debug
+    kPrintHelp,            // node --help
+    kPrintBashCompletion,  // node --completion-bash
+    kProfProcess,          // node --prof-process
+    kEvalString,           // node --eval without --interactive
+    kCheckSyntax,          // node --check (incompatible with --eval)
+    kRepl,
+    kEvalStdin,
+    kRunMainModule
+  };
+
+  inline ExecutionMode execution_mode() { return execution_mode_; }
+
+  inline void set_execution_mode(ExecutionMode mode) { execution_mode_ = mode; }
+
  private:
   inline void CreateImmediate(native_immediate_callback cb,
                               void* data,
@@ -937,6 +971,7 @@ class Environment {
   inline void ThrowError(v8::Local<v8::Value> (*fun)(v8::Local<v8::String>),
                          const char* errmsg);
 
+  ExecutionMode execution_mode_ = ExecutionMode::kDefault;
   std::list<binding::DLib> loaded_addons_;
   v8::Isolate* const isolate_;
   IsolateData* const isolate_data_;
@@ -985,7 +1020,8 @@ class Environment {
 
   bool has_run_bootstrapping_code_ = false;
   bool can_call_into_js_ = true;
-  uint64_t thread_id_ = 0;
+  Flags flags_;
+  uint64_t thread_id_;
   std::unordered_set<worker::Worker*> sub_worker_contexts_;
 
   static void* const kNodeContextTagPtr;

@@ -72,7 +72,7 @@ static void Abort(const FunctionCallbackInfo<Value>& args) {
 
 static void Chdir(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
-  CHECK(env->is_main_thread());
+  CHECK(env->owns_process_state());
 
   CHECK_EQ(args.Length(), 1);
   CHECK(args[0]->IsString());
@@ -385,6 +385,13 @@ static void DebugEnd(const FunctionCallbackInfo<Value>& args) {
 #endif
 }
 
+static void ReallyExit(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+  WaitForInspectorDisconnect(env);
+  int code = args[0]->Int32Value(env->context()).FromMaybe(0);
+  env->Exit(code);
+}
+
 static void InitializeProcessMethods(Local<Object> target,
                                      Local<Value> unused,
                                      Local<Context> context,
@@ -392,16 +399,16 @@ static void InitializeProcessMethods(Local<Object> target,
   Environment* env = Environment::GetCurrent(context);
 
   // define various internal methods
-  if (env->is_main_thread()) {
+  if (env->owns_process_state()) {
     env->SetMethod(target, "_debugProcess", DebugProcess);
     env->SetMethod(target, "_debugEnd", DebugEnd);
-    env->SetMethod(
-        target, "_startProfilerIdleNotifier", StartProfilerIdleNotifier);
-    env->SetMethod(
-        target, "_stopProfilerIdleNotifier", StopProfilerIdleNotifier);
     env->SetMethod(target, "abort", Abort);
     env->SetMethod(target, "chdir", Chdir);
   }
+
+  env->SetMethod(
+      target, "_startProfilerIdleNotifier", StartProfilerIdleNotifier);
+  env->SetMethod(target, "_stopProfilerIdleNotifier", StopProfilerIdleNotifier);
 
   env->SetMethod(target, "umask", Umask);
   env->SetMethod(target, "_rawDebug", RawDebug);
@@ -416,7 +423,7 @@ static void InitializeProcessMethods(Local<Object> target,
 
   env->SetMethodNoSideEffect(target, "cwd", Cwd);
   env->SetMethod(target, "dlopen", binding::DLOpen);
-  env->SetMethod(target, "reallyExit", Exit);
+  env->SetMethod(target, "reallyExit", ReallyExit);
   env->SetMethodNoSideEffect(target, "uptime", Uptime);
 }
 

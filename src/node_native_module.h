@@ -42,27 +42,23 @@ class NativeModuleLoader {
   // Returns config.gypi as a JSON string
   v8::Local<v8::String> GetConfigString(v8::Isolate* isolate) const;
 
-  // Run a script with JS source bundled inside the binary as if it's wrapped
-  // in a function called with a null receiver and arguments specified in C++.
-  // The returned value is empty if an exception is encountered.
-  // JS code run with this method can assume that their top-level
-  // declarations won't affect the global scope.
-  v8::MaybeLocal<v8::Value> CompileAndCall(
+  bool Exists(const char* id);
+
+  // For bootstrappers optional_env may be a nullptr.
+  // If an exception is encountered (e.g. source code contains
+  // syntax error), the returned value is empty.
+  v8::MaybeLocal<v8::Function> LookupAndCompile(
       v8::Local<v8::Context> context,
       const char* id,
       std::vector<v8::Local<v8::String>>* parameters,
-      std::vector<v8::Local<v8::Value>>* arguments,
       Environment* optional_env);
-
-  bool Exists(const char* id);
 
  private:
   static void GetCacheUsage(const v8::FunctionCallbackInfo<v8::Value>& args);
-  // Passing map of builtin module source code into JS land as
-  // internalBinding('native_module').source
-  static void SourceObjectGetter(
-      v8::Local<v8::Name> property,
-      const v8::PropertyCallbackInfo<v8::Value>& info);
+  // Passing ids of builtin module source code into JS land as
+  // internalBinding('native_module').moduleIds
+  static void ModuleIdsGetter(v8::Local<v8::Name> property,
+                              const v8::PropertyCallbackInfo<v8::Value>& info);
   // Passing config.gypi into JS land as internalBinding('native_module').config
   static void ConfigStringGetter(
       v8::Local<v8::Name> property,
@@ -87,15 +83,6 @@ class NativeModuleLoader {
   // NativeModule.p.require in JS land.
   static v8::MaybeLocal<v8::Function> CompileAsModule(Environment* env,
                                                       const char* id);
-
-  // For bootstrappers optional_env may be a nullptr.
-  // If an exception is encountered (e.g. source code contains
-  // syntax error), the returned value is empty.
-  v8::MaybeLocal<v8::Function> LookupAndCompile(
-      v8::Local<v8::Context> context,
-      const char* id,
-      std::vector<v8::Local<v8::String>>* parameters,
-      Environment* optional_env);
 
   NativeModuleRecordMap source_;
   NativeModuleCacheMap code_cache_;

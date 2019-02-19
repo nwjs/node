@@ -119,6 +119,9 @@ declare_args() {
   # tools/gen-postmortem-metadata.py for details.
   v8_postmortem_support = false
 
+  # Use Siphash as added protection against hash flooding attacks.
+  v8_use_siphash = false
+
   # Switches off inlining in V8.
   v8_no_inline = false
 
@@ -384,6 +387,9 @@ config("features") {
   }
   if (v8_use_multi_snapshots) {
     defines += [ "V8_MULTI_SNAPSHOTS" ]
+  }
+  if (v8_use_siphash) {
+    defines += [ "V8_USE_SIPHASH" ]
   }
 }
 
@@ -1564,6 +1570,8 @@ v8_source_set("v8_base") {
     "src/ast/prettyprinter.h",
     "src/ast/scopes.cc",
     "src/ast/scopes.h",
+    "src/ast/source-range-ast-visitor.cc",
+    "src/ast/source-range-ast-visitor.h",
     "src/ast/variables.cc",
     "src/ast/variables.h",
     "src/bailout-reason.cc",
@@ -2446,6 +2454,8 @@ v8_source_set("v8_base") {
     "src/string-stream.h",
     "src/strtod.cc",
     "src/strtod.h",
+    "src/third_party/siphash/halfsiphash.cc",
+    "src/third_party/siphash/halfsiphash.h",
     "src/third_party/utf8-decoder/utf8-decoder.h",
     "src/tracing/trace-event.cc",
     "src/tracing/trace-event.h",

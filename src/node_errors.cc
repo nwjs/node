@@ -9,6 +9,7 @@
 
 namespace node {
 
+using errors::TryCatchScope;
 using v8::Context;
 using v8::Exception;
 using v8::Function;
@@ -168,23 +169,17 @@ void AppendExceptionLine(Environment* env,
   ABORT_NO_BACKTRACE();
 }
 
-[[noreturn]] void Assert(const char* const (*args)[4]) {
-  auto filename = (*args)[0];
-  auto linenum = (*args)[1];
-  auto message = (*args)[2];
-  auto function = (*args)[3];
-
+[[noreturn]] void Assert(const AssertionInfo& info) {
   char name[1024];
   GetHumanReadableProcessName(&name);
 
   fprintf(stderr,
-          "%s: %s:%s:%s%s Assertion `%s' failed.\n",
+          "%s: %s:%s%s Assertion `%s' failed.\n",
           name,
-          filename,
-          linenum,
-          function,
-          *function ? ":" : "",
-          message);
+          info.file_line,
+          info.function,
+          *info.function ? ":" : "",
+          info.message);
   fflush(stderr);
 
   Abort();
@@ -209,8 +204,10 @@ void ReportException(Environment* env,
   } else {
     Local<Object> err_obj = er->ToObject(env->context()).ToLocalChecked();
 
-    trace_value = err_obj->Get(env->context(),
-                               env->stack_string()).ToLocalChecked();
+    if (!err_obj->Get(env->context(), env->stack_string())
+             .ToLocal(&trace_value)) {
+      trace_value = Undefined(env->isolate());
+    }
     arrow =
         err_obj->GetPrivate(env->context(), env->arrow_message_private_symbol())
             .ToLocalChecked();
@@ -230,27 +227,25 @@ void ReportException(Environment* env,
     // this really only happens for RangeErrors, since they're the only
     // kind that won't have all this info in the trace, or when non-Error
     // objects are thrown manually.
-    Local<Value> message;
-    Local<Value> name;
+    MaybeLocal<Value> message;
+    MaybeLocal<Value> name;
 
     if (er->IsObject()) {
       Local<Object> err_obj = er.As<Object>();
-      message = err_obj->Get(env->context(),
-                             env->message_string()).ToLocalChecked();
-      name = err_obj->Get(env->context(),
-          FIXED_ONE_BYTE_STRING(env->isolate(), "name")).ToLocalChecked();
+      message = err_obj->Get(env->context(), env->message_string());
+      name = err_obj->Get(env->context(), env->name_string());
     }
 
-    if (message.IsEmpty() || message->IsUndefined() || name.IsEmpty() ||
-        name->IsUndefined()) {
+    if (message.IsEmpty() || message.ToLocalChecked()->IsUndefined() ||
+        name.IsEmpty() || name.ToLocalChecked()->IsUndefined()) {
       // Not an error object. Just print as-is.
       String::Utf8Value message(env->isolate(), er);
 
       PrintErrorString("%s\n",
                        *message ? *message : "<toString() threw exception>");
     } else {
-      node::Utf8Value name_string(env->isolate(), name);
-      node::Utf8Value message_string(env->isolate(), message);
+      node::Utf8Value name_string(env->isolate(), name.ToLocalChecked());
+      node::Utf8Value message_string(env->isolate(), message.ToLocalChecked());
 
       if (arrow.IsEmpty() || !arrow->IsString() || decorated) {
         PrintErrorString("%s: %s\n", *name_string, *message_string);
@@ -321,6 +316,7 @@ void OnFatalError(const char* location, const char* message) {
   }
 #ifdef NODE_REPORT
   Isolate* isolate = Isolate::GetCurrent();
+  HandleScope handle_scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
   if (env != nullptr) {
     std::shared_ptr<PerIsolateOptions> options = env->isolate_data()->options();
@@ -688,8 +684,8 @@ void DecorateErrorStack(Environment* env,
   if (IsExceptionDecorated(env, err_obj)) return;
 
   AppendExceptionLine(env, exception, try_catch.Message(), CONTEXTIFY_ERROR);
-  Local<Value> stack =
-      err_obj->Get(env->context(), env->stack_string()).ToLocalChecked();
+  TryCatchScope try_catch_scope(env);  // Ignore exceptions below.
+  MaybeLocal<Value> stack = err_obj->Get(env->context(), env->stack_string());
   MaybeLocal<Value> maybe_value =
       err_obj->GetPrivate(env->context(), env->arrow_message_private_symbol());
 
@@ -698,7 +694,7 @@ void DecorateErrorStack(Environment* env,
     return;
   }
 
-  if (stack.IsEmpty() || !stack->IsString()) {
+  if (stack.IsEmpty() || !stack.ToLocalChecked()->IsString()) {
     return;
   }
 
@@ -707,8 +703,8 @@ void DecorateErrorStack(Environment* env,
       String::Concat(env->isolate(),
                      arrow.As<String>(),
                      FIXED_ONE_BYTE_STRING(env->isolate(), "\n")),
-      stack.As<String>());
-  err_obj->Set(env->context(), env->stack_string(), decorated_stack).FromJust();
+      stack.ToLocalChecked().As<String>());
+  USE(err_obj->Set(env->context(), env->stack_string(), decorated_stack));
   err_obj->SetPrivate(
       env->context(), env->decorated_private_symbol(), True(env->isolate()));
 }
@@ -768,19 +764,6 @@ void FatalException(Isolate* isolate,
   }
   if (!node_is_nwjs && exit_code) {
     exit(exit_code);
-  }
-}
-
-void FatalException(Isolate* isolate, const v8::TryCatch& try_catch) {
-  // If we try to print out a termination exception, we'd just get 'null',
-  // so just crashing here with that information seems like a better idea,
-  // and in particular it seems like we should handle terminations at the call
-  // site for this function rather than by printing them out somewhere.
-  CHECK(!try_catch.HasTerminated());
-
-  HandleScope scope(isolate);
-  if (!try_catch.IsVerbose()) {
-    FatalException(isolate, try_catch.Exception(), try_catch.Message());
   }
 }
 

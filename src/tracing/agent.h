@@ -63,11 +63,11 @@ class AgentWriterHandle {
 
   inline v8::TracingController* GetTracingController();
 
- private:
-  inline AgentWriterHandle(Agent* agent, int id) : agent_(agent), id_(id) {}
-
   AgentWriterHandle(const AgentWriterHandle& other) = delete;
   AgentWriterHandle& operator=(const AgentWriterHandle& other) = delete;
+
+ private:
+  inline AgentWriterHandle(Agent* agent, int id) : agent_(agent), id_(id) {}
 
   Agent* agent_ = nullptr;
   int id_;
@@ -81,7 +81,9 @@ class Agent {
   ~Agent() {};
 
   TracingController* GetTracingController() {
-    return tracing_controller_.get();
+    TracingController* controller = tracing_controller_.get();
+    CHECK_NOT_NULL(controller);
+    return controller;
   }
 
   enum UseDefaultCategoryMode {
@@ -113,7 +115,6 @@ class Agent {
  private:
   friend class AgentWriterHandle;
 
-  static void ThreadCb(void* arg);
   void InitializeWritersOnThread();
 
   void Start();

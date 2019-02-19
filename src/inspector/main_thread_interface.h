@@ -45,6 +45,7 @@ class MainThreadHandle : public std::enable_shared_from_this<MainThreadHandle> {
                             : main_thread_(main_thread) {
   }
   ~MainThreadHandle() {
+    Mutex::ScopedLock scoped_lock(block_lock_);
     CHECK_NULL(main_thread_);  // main_thread_ should have called Reset
   }
   std::unique_ptr<InspectorSession> Connect(
@@ -84,6 +85,7 @@ class MainThreadInterface {
   }
   void AddObject(int handle, std::unique_ptr<Deletable> object);
   Deletable* GetObject(int id);
+  Deletable* GetObjectIfExists(int id);
   void RemoveObject(int handle);
 
  private:

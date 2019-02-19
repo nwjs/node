@@ -48,13 +48,11 @@ using v8::String;
 using v8::Value;
 
 TLSWrap::TLSWrap(Environment* env,
+                 Local<Object> obj,
                  Kind kind,
                  StreamBase* stream,
                  SecureContext* sc)
-    : AsyncWrap(env,
-                env->tls_wrap_constructor_function()
-                    ->NewInstance(env->context()).ToLocalChecked(),
-                AsyncWrap::PROVIDER_TLSWRAP),
+    : AsyncWrap(env, obj, AsyncWrap::PROVIDER_TLSWRAP),
       SSLWrap<TLSWrap>(env, sc, kind),
       StreamBase(env),
       sc_(sc) {
@@ -159,7 +157,14 @@ void TLSWrap::Wrap(const FunctionCallbackInfo<Value>& args) {
   StreamBase* stream = static_cast<StreamBase*>(stream_obj->Value());
   CHECK_NOT_NULL(stream);
 
-  TLSWrap* res = new TLSWrap(env, kind, stream, Unwrap<SecureContext>(sc));
+  Local<Object> obj;
+  if (!env->tls_wrap_constructor_function()
+           ->NewInstance(env->context())
+           .ToLocal(&obj)) {
+    return;
+  }
+
+  TLSWrap* res = new TLSWrap(env, obj, kind, stream, Unwrap<SecureContext>(sc));
 
   args.GetReturnValue().Set(res->object());
 }
@@ -209,10 +214,9 @@ void TLSWrap::SSLInfoCallback(const SSL* ssl_, int where, int ret) {
   if (!(where & (SSL_CB_HANDSHAKE_START | SSL_CB_HANDSHAKE_DONE)))
     return;
 
-  // Be compatible with older versions of OpenSSL. SSL_get_app_data() wants
-  // a non-const SSL* in OpenSSL <= 0.9.7e.
+  // SSL_renegotiate_pending() should take `const SSL*`, but it does not.
   SSL* ssl = const_cast<SSL*>(ssl_);
-  TLSWrap* c = static_cast<TLSWrap*>(SSL_get_app_data(ssl));
+  TLSWrap* c = static_cast<TLSWrap*>(SSL_get_app_data(ssl_));
   Environment* env = c->env();
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
@@ -348,14 +352,15 @@ Local<Value> TLSWrap::GetSSLError(int status, int* err, std::string* msg) {
     case SSL_ERROR_WANT_READ:
     case SSL_ERROR_WANT_WRITE:
     case SSL_ERROR_WANT_X509_LOOKUP:
-      break;
+      return Local<Value>();
+
     case SSL_ERROR_ZERO_RETURN:
       return scope.Escape(env()->zero_return_string());
-      break;
-    default:
-      {
-        CHECK(*err == SSL_ERROR_SSL || *err == SSL_ERROR_SYSCALL);
 
+    case SSL_ERROR_SSL:
+    case SSL_ERROR_SYSCALL:
+      {
+        unsigned long ssl_err = ERR_peek_error();  // NOLINT(runtime/int)
         BIO* bio = BIO_new(BIO_s_mem());
         ERR_print_errors(bio);
 
@@ -373,8 +378,11 @@ Local<Value> TLSWrap::GetSSLError(int status, int* err, std::string* msg) {
 
         return scope.Escape(exception);
       }
+
+    default:
+      UNREACHABLE();
   }
-  return Local<Value>();
+  UNREACHABLE();
 }
 
 
@@ -732,7 +740,7 @@ void TLSWrap::SetVerifyMode(const FunctionCallbackInfo<Value>& args) {
   if (wrap->is_server()) {
     bool request_cert = args[0]->IsTrue();
     if (!request_cert) {
-      // Note reject_unauthorized ignored.
+      // If no cert is requested, there will be none to reject as unauthorized.
       verify_mode = SSL_VERIFY_NONE;
     } else {
       bool reject_unauthorized = args[1]->IsTrue();
@@ -741,7 +749,9 @@ void TLSWrap::SetVerifyMode(const FunctionCallbackInfo<Value>& args) {
         verify_mode |= SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
     }
   } else {
-    // Note request_cert and reject_unauthorized are ignored for clients.
+    // Servers always send a cert if the cipher is not anonymous (anon is
+    // disabled by default), so use VERIFY_NONE and check the cert after the
+    // handshake has completed.
     verify_mode = SSL_VERIFY_NONE;
   }
 
@@ -756,6 +766,11 @@ void TLSWrap::EnableSessionCallbacks(
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
   CHECK_NOT_NULL(wrap->ssl_);
   wrap->enable_session_callbacks();
+
+  // Clients don't use the HelloParser.
+  if (wrap->is_client())
+    return;
+
   crypto::NodeBIO::FromBIO(wrap->enc_in_)->set_initial(kMaxHelloLength);
   wrap->hello_parser_.Start(SSLWrap<TLSWrap>::OnClientHello,
                             OnClientHelloParseEnd,

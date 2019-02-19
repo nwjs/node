@@ -17,7 +17,7 @@
   - [Breaking Changes](#breaking-changes)
     - [Breaking Changes and Deprecations](#breaking-changes-and-deprecations)
     - [Breaking Changes to Internal Elements](#breaking-changes-to-internal-elements)
-    - [When Breaking Changes Actually Break Things](#when-breaking-changes-actually-break-things)
+    - [Unintended Breaking Changes](#unintended-breaking-changes)
       - [Reverting commits](#reverting-commits)
   - [Introducing New Modules](#introducing-new-modules)
   - [Additions to N-API](#additions-to-n-api)
@@ -276,58 +276,45 @@ an effort to determine the potential impact of the change in the ecosystem. Use
 If a change will cause ecosystem breakage, then it is semver-major. Consider
 providing a Public API in such cases.
 
-#### When Breaking Changes Actually Break Things
+#### Unintended Breaking Changes
 
-* Breaking changes should *never* land in Current or LTS except when:
-  * Resolving critical security issues.
-  * Fixing a critical bug (e.g. fixing a memory leak) requires a breaking
-    change.
-  * There is TSC consensus that the change is required.
-* If a breaking commit does accidentally land in a Current or LTS branch, an
-  attempt to fix the issue will be made before the next release; If no fix is
-  provided then the commit will be reverted.
-
-When any changes are landed on the master branch and it is determined that the
-changes *do* break existing code, a decision may be made to revert those
-changes either temporarily or permanently. However, the decision to revert or
-not can often be based on many complex factors that are not easily codified. It
-is also possible that the breaking commit can be labeled retroactively as a
-semver-major change that will not be backported to Current or LTS branches.
+Sometimes, a change intended to be non-breaking turns out to be a breaking
+change. If such a change lands on the master branch, a Collaborator may revert
+it. As an alternative to reverting, the TSC may apply the semver-major label
+after-the-fact.
 
 ##### Reverting commits
 
-Commits are reverted with `git revert <HASH>`, or `git revert <FROM>..<TO>` for
-multiple commits. Commit metadata and the reason for the revert should be
-appended. Commit message rules about line length and subsystem can be ignored.
-A Pull Request should be raised and approved like any other change.
+Revert commits with `git revert <HASH>` or `git revert <FROM>..<TO>`. The
+generated commit message will not have a subsystem and may violate line length
+rules. That is OK. Append the reason for the revert and any `Refs` or `Fixes`
+metadata. Raise a Pull Request like any other change.
 
 ### Introducing New Modules
 
-Semver-minor commits that introduce new core modules should be treated with
-extra care.
+Treat commits that introduce new core modules with extra care.
 
-The name of the new core module should not conflict with any existing
-module in the ecosystem unless a written agreement with the owner of those
-modules is reached to transfer ownership.
+Check if the module's name conflicts with an existing ecosystem module. If it
+does, choose a different name unless the module owner has agreed in writing to
+transfer it.
 
-If the new module name is free, a Collaborator should register a placeholder
-in the module registry as soon as possible, linking to the pull request that
-introduces the new core module.
+If the new module name is free, register a placeholder in the module registry as
+soon as possible. Link to the pull request that introduces the new core module
+in the placeholder's `README`.
 
-Pull requests introducing new core modules:
+For pull requests introducing new core modules:
 
-* Must be left open for at least one week for review.
-* Must be labeled using the `tsc-review` label.
-* Must have signoff from at least two TSC members.
-
-New core modules must be landed with a [Stability Index][] of Experimental,
-and must remain Experimental until a semver-major release.
+* Allow at least one week for review.
+* Label with the `tsc-review` label.
+* Land only after sign-off from at least two TSC members.
+* Land with a [Stability Index][] of Experimental. The module must remain
+  Experimental until a semver-major release.
 
 ### Additions to N-API
 
-N-API provides an ABI stable API that we will have to support in future
-versions without the usual option to modify or remove existing APIs on
-SemVer boundaries. Therefore, additions need to be managed carefully.
+N-API provides an ABI-stable API guaranteed for future Node.js versions.
+Existing N-API APIs cannot change or disappear, even in semver-major releases.
+Thus, N-API additions call for unusual care and scrutiny.
 
 This
 [guide](https://github.com/nodejs/node/blob/master/doc/guides/adding-new-napi-api.md)

@@ -633,6 +633,13 @@ const cookie = request.getHeader('Cookie');
 
 Limits maximum response headers count. If set to 0, no limit will be applied.
 
+### request.path
+<!-- YAML
+added: v0.4.0
+-->
+
+* {string} The request path. Read-only.
+
 ### request.removeHeader(name)
 <!-- YAML
 added: v1.6.0
@@ -900,6 +907,10 @@ also be accessed at `request.connection`.
 
 This event can also be explicitly emitted by users to inject connections
 into the HTTP server. In that case, any [`Duplex`][] stream can be passed.
+
+If `socket.setTimeout()` is called here, the timeout will be replaced with
+`server.keepAliveTimeout` when the socket has served a request (if
+`server.keepAliveTimeout` is non-zero).
 
 ### Event: 'request'
 <!-- YAML
@@ -1433,6 +1444,10 @@ the request body should be sent. See the [`'checkContinue'`][] event on
 <!-- YAML
 added: v0.1.30
 changes:
+  - version: v11.10.0
+    pr-url: https://github.com/nodejs/node/pull/25974
+    description: Return `this` from `writeHead()` to allow chaining with
+                 `end()`.
   - version: v5.11.0, v4.4.5
     pr-url: https://github.com/nodejs/node/pull/6291
     description: A `RangeError` is thrown if `statusCode` is not a number in
@@ -1442,17 +1457,23 @@ changes:
 * `statusCode` {number}
 * `statusMessage` {string}
 * `headers` {Object}
+* Returns: {http.ServerResponse}
 
 Sends a response header to the request. The status code is a 3-digit HTTP
 status code, like `404`. The last argument, `headers`, are the response headers.
 Optionally one can give a human-readable `statusMessage` as the second
 argument.
 
+Returns a reference to the `ServerResponse`, so that calls can be chained.
+
 ```js
 const body = 'hello world';
-response.writeHead(200, {
-  'Content-Length': Buffer.byteLength(body),
-  'Content-Type': 'text/plain' });
+response
+  .writeHead(200, {
+    'Content-Length': Buffer.byteLength(body),
+    'Content-Type': 'text/plain'
+  })
+  .end(body);
 ```
 
 This method must only be called once on a message and it must

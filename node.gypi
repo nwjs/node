@@ -263,6 +263,7 @@
     [ 'OS=="aix"', {
       'defines': [
         '_LINUX_SOURCE_COMPAT',
+        '__STDC_FORMAT_MACROS'
       ],
       'conditions': [
         [ 'force_load=="true"', {

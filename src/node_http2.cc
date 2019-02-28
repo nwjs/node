@@ -654,6 +654,7 @@ inline bool HasHttp2Observer(Environment* env) {
 }
 
 void Http2Stream::EmitStatistics() {
+#if 0
   if (!HasHttp2Observer(env()))
     return;
   Http2StreamPerformanceEntry* entry =
@@ -691,9 +692,11 @@ void Http2Stream::EmitStatistics() {
     Local<Object> obj;
     if (entry->ToObject().ToLocal(&obj)) entry->Notify(obj);
   }, static_cast<void*>(entry));
+#endif
 }
 
 void Http2Session::EmitStatistics() {
+#if 0
   if (!HasHttp2Observer(env()))
     return;
   Http2SessionPerformanceEntry* entry =
@@ -721,6 +724,7 @@ void Http2Session::EmitStatistics() {
     Local<Object> obj;
     if (entry->ToObject().ToLocal(&obj)) entry->Notify(obj);
   }, static_cast<void*>(entry));
+#endif
 }
 
 // Closes the session and frees the associated resources
@@ -1813,11 +1817,11 @@ void Http2Session::OnStreamRead(ssize_t nread, const uv_buf_t& buf) {
   // Create an array buffer for the read data. DATA frames will be emitted
   // as slices of this array buffer to avoid having to copy memory.
   stream_buf_ab_ =
-      ArrayBuffer::New(isolate,
+      ArrayBuffer::NewNode(isolate,
                         buf.base,
                         nread,
                         ArrayBufferCreationMode::kInternalized);
-
+  stream_buf_ab_->set_nodejs(true);
   statistics_.data_received += nread;
   ssize_t ret = Write(&stream_buf_, 1);
 

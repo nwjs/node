@@ -46,6 +46,14 @@ static void init_process_title_mutex_once(void) {
 
 
 char** uv_setup_args(int argc, char** argv) {
+  if (argc > 0) {
+    process_title.len = strlen(argv[0]);
+    process_title.str = uv__malloc(process_title.len + 1);
+    memcpy(process_title.str, argv[0], process_title.len + 1);
+  }
+  return argv;
+#if 0
+    
   char** new_argv;
   size_t size;
   char* s;
@@ -88,6 +96,7 @@ char** uv_setup_args(int argc, char** argv) {
   new_argv[i] = NULL;
 
   return new_argv;
+#endif
 }
 
 

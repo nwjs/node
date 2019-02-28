@@ -618,19 +618,43 @@ int uv_loop_configure(uv_loop_t* loop, uv_loop_option option, ...) {
 }
 
 
+static uv_key_t thread_ctx_key;
+static int thread_ctx_initiated = 0;
+static int g_worker_support = 0;
+
 static uv_loop_t default_loop_struct;
 static uv_loop_t* default_loop_ptr;
 
+void uv_init_nw(int worker_support) {
+  g_worker_support = worker_support;
+}
 
 uv_loop_t* uv_default_loop(void) {
-  if (default_loop_ptr != NULL)
+  if (!g_worker_support) {
+    if (default_loop_ptr != NULL)
+      return default_loop_ptr;
+    if (uv_loop_init(&default_loop_struct))
+      return NULL;
+    default_loop_ptr = &default_loop_struct;
     return default_loop_ptr;
+  } else {
+    uv_loop_t* loop;
+    if (!thread_ctx_initiated) {
+      thread_ctx_initiated = 1;
+      uv_key_create(&thread_ctx_key);
+    }
+    loop = (uv_loop_t*)uv_key_get(&thread_ctx_key);
+    if (loop != NULL)
+      return loop;
 
-  if (uv_loop_init(&default_loop_struct))
-    return NULL;
+    loop = malloc(sizeof(uv_loop_t));
+    memset(loop, 0, sizeof(uv_loop_t));
+    if (uv_loop_init(loop))
+      return NULL;
 
-  default_loop_ptr = &default_loop_struct;
-  return default_loop_ptr;
+    uv_key_set(&thread_ctx_key, loop);
+    return loop;
+  }
 }
 
 
@@ -673,8 +697,15 @@ int uv_loop_close(uv_loop_t* loop) {
   memset(loop, -1, sizeof(*loop));
   loop->data = saved_data;
 #endif
-  if (loop == default_loop_ptr)
-    default_loop_ptr = NULL;
+  if (g_worker_support) {
+    uv_loop_t* default_loop_ptr;
+    default_loop_ptr = (uv_loop_t*)uv_key_get(&thread_ctx_key);
+    if (loop == default_loop_ptr)
+      uv_key_set(&thread_ctx_key, NULL);
+  } else {
+    if (loop == default_loop_ptr)
+      default_loop_ptr = NULL;
+  }
 
   return 0;
 }
@@ -684,7 +715,10 @@ void uv_loop_delete(uv_loop_t* loop) {
   uv_loop_t* default_loop;
   int err;
 
-  default_loop = default_loop_ptr;
+  if (g_worker_support)
+    default_loop = (uv_loop_t*)uv_key_get(&thread_ctx_key);
+  else
+    default_loop = default_loop_ptr;
 
   err = uv_loop_close(loop);
   (void) err;    /* Squelch compiler warnings. */

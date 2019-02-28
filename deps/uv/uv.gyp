@@ -1,5 +1,6 @@
 {
   'variables': {
+    'uv_library%': 'static_library',
     'conditions': [
       ['OS=="win"', {
         'shared_unix_defines': [ ],
@@ -43,11 +44,7 @@
         'include',
         'src/',
       ],
-      'defines': [
-        '<@(shared_mac_defines)',
-        '<@(shared_unix_defines)',
-        '<@(shared_zos_defines)',
-      ],
+      'defines': [ 'BUILDING_UV_SHARED=1' ],
       'direct_dependent_settings': {
         'defines': [
           '<@(shared_mac_defines)',
@@ -89,10 +86,11 @@
           '-Wall',
           '-Wextra',
           '-Wno-unused-parameter',
-          '-Wstrict-prototypes',
+          '-Wstrict-prototypes', '-Wno-error=gnu-folding-constant', '-Wno-varargs'
         ],
         'OTHER_CFLAGS': [ '-g', '--std=gnu89', '-pedantic' ],
       },
+      'msvs_disabled_warnings': [4267, 4477],
       'conditions': [
         [ 'OS=="win"', {
           'defines': [
@@ -219,6 +217,7 @@
             '-Wextra',
             '-Wno-unused-parameter',
             '-Wstrict-prototypes',
+            '-Wno-varargs',
           ],
         }],
         [ 'OS in "mac ios"', {
@@ -341,7 +340,7 @@
             'src/unix/kqueue.c',
           ],
         }],
-        ['uv_library=="shared_library"', {
+        ['component=="shared_library"', {
           'defines': [ 'BUILDING_UV_SHARED=1' ]
         }],
         ['OS=="zos"', {

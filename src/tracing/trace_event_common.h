@@ -377,10 +377,7 @@
   INTERNAL_TRACE_EVENT_ADD(TRACE_EVENT_PHASE_MARK, category_group, name, \
                            TRACE_EVENT_FLAG_COPY)
 
-#define TRACE_EVENT_COPY_MARK_WITH_TIMESTAMP(category_group, name, timestamp) \
-  INTERNAL_TRACE_EVENT_ADD_WITH_TIMESTAMP(                                    \
-      TRACE_EVENT_PHASE_MARK, category_group, name, timestamp,                \
-      TRACE_EVENT_FLAG_COPY)
+#define TRACE_EVENT_COPY_MARK_WITH_TIMESTAMP(category_group, name, timestamp)
 
 // Similar to TRACE_EVENT_ENDx but with a custom |at| timestamp provided.
 // - |id| is used to match the _BEGIN event with the _END event.
@@ -721,6 +718,8 @@
   INTERNAL_TRACE_EVENT_ADD_WITH_ID(TRACE_EVENT_PHASE_NESTABLE_ASYNC_BEGIN, \
                                    category_group, name, id,               \
                                    TRACE_EVENT_FLAG_NONE)
+#undef TRACE_EVENT_NESTABLE_ASYNC_BEGIN0
+#define TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(category_group, name, id)
 #define TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(category_group, name, id, arg1_name, \
                                           arg1_val)                            \
   INTERNAL_TRACE_EVENT_ADD_WITH_ID(TRACE_EVENT_PHASE_NESTABLE_ASYNC_BEGIN,     \
@@ -738,6 +737,8 @@
   INTERNAL_TRACE_EVENT_ADD_WITH_ID(TRACE_EVENT_PHASE_NESTABLE_ASYNC_END, \
                                    category_group, name, id,             \
                                    TRACE_EVENT_FLAG_NONE)
+#undef TRACE_EVENT_NESTABLE_ASYNC_END0
+#define TRACE_EVENT_NESTABLE_ASYNC_END0(category_group, name, id)
 // Records a single NESTABLE_ASYNC_END event called "name" immediately, with 1
 // associated argument. If the category is not enabled, then this does nothing.
 #define TRACE_EVENT_NESTABLE_ASYNC_END1(category_group, name, id, arg1_name, \
@@ -808,15 +809,9 @@
       TRACE_EVENT_PHASE_NESTABLE_ASYNC_INSTANT, category_group, name, id, \
       TRACE_EVENT_API_CURRENT_THREAD_ID, timestamp, TRACE_EVENT_FLAG_NONE)
 #define TRACE_EVENT_COPY_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP0(          \
-    category_group, name, id, timestamp)                                \
-  INTERNAL_TRACE_EVENT_ADD_WITH_ID_TID_AND_TIMESTAMP(                   \
-      TRACE_EVENT_PHASE_NESTABLE_ASYNC_BEGIN, category_group, name, id, \
-      TRACE_EVENT_API_CURRENT_THREAD_ID, timestamp, TRACE_EVENT_FLAG_COPY)
+    category_group, name, id, timestamp)
 #define TRACE_EVENT_COPY_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(          \
-    category_group, name, id, timestamp)                              \
-  INTERNAL_TRACE_EVENT_ADD_WITH_ID_TID_AND_TIMESTAMP(                 \
-      TRACE_EVENT_PHASE_NESTABLE_ASYNC_END, category_group, name, id, \
-      TRACE_EVENT_API_CURRENT_THREAD_ID, timestamp, TRACE_EVENT_FLAG_COPY)
+    category_group, name, id, timestamp)                              
 
 // Records a single FLOW_BEGIN event called "name" immediately, with 0, 1 or 2
 // associated arguments. If the category is not enabled, then this
@@ -928,8 +923,8 @@
 
 // TRACE_EVENT_METADATA* events are information related to other
 // injected events, not events in their own right.
-#define TRACE_EVENT_METADATA1(category_group, name, arg1_name, arg1_val) \
-  INTERNAL_TRACE_EVENT_METADATA_ADD(category_group, name, arg1_name, arg1_val)
+#define TRACE_EVENT_METADATA1(category_group, name, arg1_name, arg1_val) 
+//  INTERNAL_TRACE_EVENT_METADATA_ADD(category_group, name, arg1_name, arg1_val)
 
 // Records a clock sync event.
 #define TRACE_EVENT_CLOCK_SYNC_RECEIVER(sync_id)                               \

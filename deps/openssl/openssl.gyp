@@ -1,13 +1,20 @@
 {
-  'variables': {
+   'variables': {
     'gas_version%': 0,
     'llvm_version%': 0,
     'nasm_version%': 0,
-  },
+    'openssl_no_asm%': 0,
+    'is_clang': 1,
+    'openssl_fips%': '',
+    'node_byteorder%': 'little',
+    'conditions': [
+      ['OS=="mac"', { 'openssl_no_asm%': 1 } ],
+    ],
+   },
   'targets': [
     {
       'target_name': 'openssl',
-      'type': '<(library)',
+      'type': 'static_library',
       'includes': ['./openssl_common.gypi'],
       'defines': [
         # Compile out hardware engines.  Most are stubs that dynamically load

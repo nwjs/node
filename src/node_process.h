@@ -34,7 +34,8 @@ v8::Maybe<bool> ProcessEmitDeprecationWarning(Environment* env,
 v8::MaybeLocal<v8::Object> CreateProcessObject(
     Environment* env,
     const std::vector<std::string>& args,
-    const std::vector<std::string>& exec_args);
+    const std::vector<std::string>& exec_args,
+    bool node_is_nwjs);
 
 }  // namespace node
 #endif  // defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS

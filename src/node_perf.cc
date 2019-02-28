@@ -52,10 +52,12 @@ uint64_t performance_v8_start;
 void performance_state::Mark(enum PerformanceMilestone milestone,
                              uint64_t ts) {
   this->milestones[milestone] = ts;
+#if 0
   TRACE_EVENT_INSTANT_WITH_TIMESTAMP0(
       TRACING_CATEGORY_NODE1(bootstrap),
       GetPerformanceMilestoneName(milestone),
       TRACE_EVENT_SCOPE_THREAD, ts / 1000);
+#endif
 }
 
 double GetCurrentTimeInMicroseconds() {
@@ -304,6 +306,7 @@ void MarkGarbageCollectionEnd(Isolate* isolate,
 
 static void SetupGarbageCollectionTracking(
     const FunctionCallbackInfo<Value>& args) {
+#if 0
   Environment* env = Environment::GetCurrent(args);
 
   env->isolate()->AddGCPrologueCallback(MarkGarbageCollectionStart,
@@ -315,6 +318,7 @@ static void SetupGarbageCollectionTracking(
     env->isolate()->RemoveGCPrologueCallback(MarkGarbageCollectionStart, data);
     env->isolate()->RemoveGCEpilogueCallback(MarkGarbageCollectionEnd, data);
   }, env);
+#endif
 }
 
 // Gets the name of a function

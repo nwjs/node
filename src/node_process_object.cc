@@ -70,7 +70,7 @@ static void GetParentProcessId(Local<Name> property,
 MaybeLocal<Object> CreateProcessObject(
     Environment* env,
     const std::vector<std::string>& args,
-    const std::vector<std::string>& exec_args) {
+    const std::vector<std::string>& exec_args, bool node_is_nwjs) {
   Isolate* isolate = env->isolate();
   EscapableHandleScope scope(isolate);
   Local<Context> context = env->context();
@@ -97,6 +97,9 @@ MaybeLocal<Object> CreateProcessObject(
                 None,
                 SideEffectType::kHasNoSideEffect)
             .FromJust());
+
+  if (node_is_nwjs)
+    READONLY_PROPERTY(process, "__nwjs", Integer::New(env->isolate(), 1));
 
   // process.version
   READONLY_PROPERTY(process,

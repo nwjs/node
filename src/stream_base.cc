@@ -366,11 +366,12 @@ void EmitToJSStreamListener::OnStreamRead(ssize_t nread, const uv_buf_t& buf) {
   CHECK_LE(static_cast<size_t>(nread), buf.len);
   char* base = Realloc(buf.base, nread);
 
-  Local<ArrayBuffer> obj = ArrayBuffer::New(
+  Local<ArrayBuffer> obj = ArrayBuffer::NewNode(
       env->isolate(),
       base,
       nread,
       v8::ArrayBufferCreationMode::kInternalized);  // Transfer ownership to V8.
+  obj->set_nodejs(true);
   stream->CallJSOnreadMethod(nread, obj);
 }
 

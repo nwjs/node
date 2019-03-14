@@ -36,9 +36,9 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <string.h>
-#include <errno.h>
-#include <limits.h>
+#include <cstring>
+#include <cerrno>
+#include <climits>
 
 #if defined(__MINGW32__) || defined(_MSC_VER)
 # include <io.h>
@@ -73,10 +73,6 @@ using v8::Symbol;
 using v8::Uint32;
 using v8::Undefined;
 using v8::Value;
-
-#ifndef MIN
-# define MIN(a, b) ((a) < (b) ? (a) : (b))
-#endif
 
 #ifndef S_ISDIR
 # define S_ISDIR(mode)  (((mode) & S_IFMT) == S_IFDIR)
@@ -559,7 +555,7 @@ void AfterStringPath(uv_fs_t* req) {
 
   if (after.Proceed()) {
     link = StringBytes::Encode(req_wrap->env()->isolate(),
-                               static_cast<const char*>(req->path),
+                               req->path,
                                req_wrap->encoding(),
                                &error);
     if (link.IsEmpty())

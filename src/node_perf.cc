@@ -46,7 +46,6 @@ using v8::Value;
 const uint64_t timeOrigin = PERFORMANCE_NOW();
 // https://w3c.github.io/hr-time/#dfn-time-origin-timestamp
 const double timeOriginTimestamp = GetCurrentTimeInMicroseconds();
-uint64_t performance_node_start;
 uint64_t performance_v8_start;
 
 void performance_state::Mark(enum PerformanceMilestone milestone,
@@ -184,7 +183,7 @@ void ClearMark(const FunctionCallbackInfo<Value>& args) {
   }
 }
 
-inline uint64_t GetPerformanceMark(Environment* env, std::string name) {
+inline uint64_t GetPerformanceMark(Environment* env, const std::string& name) {
   auto marks = env->performance_marks();
   auto res = marks->find(name);
   return res != marks->end() ? res->second : 0;

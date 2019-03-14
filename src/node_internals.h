@@ -34,8 +34,8 @@
 #include "uv.h"
 #include "v8.h"
 
-#include <stdint.h>
-#include <stdlib.h>
+#include <cstdint>
+#include <cstdlib>
 
 #include <string>
 #include <vector>
@@ -55,7 +55,7 @@ class NativeModuleLoader;
 
 namespace per_process {
 extern Mutex env_var_mutex;
-extern double prog_start_time;
+extern uint64_t node_start_time;
 extern bool v8_is_profiling;
 }  // namespace per_process
 
@@ -107,14 +107,36 @@ class ArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
  public:
   inline uint32_t* zero_fill_field() { return &zero_fill_field_; }
 
-  virtual void* Allocate(size_t size);  // Defined in src/node.cc
-  virtual void* AllocateUninitialized(size_t size)
+  void* Allocate(size_t size) override;  // Defined in src/node.cc
+  void* AllocateUninitialized(size_t size) override
     { return node::UncheckedMalloc(size); }
-  virtual void Free(void* data, size_t) { free(data); }
-  virtual void Free(void* data, size_t, v8::ArrayBuffer::Allocator::AllocationMode) { free(data); }
+  void Free(void* data, size_t) override { free(data); }
+  virtual void* Reallocate(void* data, size_t old_size, size_t size) {
+    return static_cast<void*>(
+        UncheckedRealloc<char>(static_cast<char*>(data), size));
+  }
+  virtual void RegisterPointer(void* data, size_t size) {}
+  virtual void UnregisterPointer(void* data, size_t size) {}
 
  private:
   uint32_t zero_fill_field_ = 1;  // Boolean but exposed as uint32 to JS land.
+};
+
+class DebuggingArrayBufferAllocator final : public ArrayBufferAllocator {
+ public:
+  ~DebuggingArrayBufferAllocator() override;
+  void* Allocate(size_t size) override;
+  void* AllocateUninitialized(size_t size) override;
+  void Free(void* data, size_t size) override;
+  void* Reallocate(void* data, size_t old_size, size_t size) override;
+  void RegisterPointer(void* data, size_t size) override;
+  void UnregisterPointer(void* data, size_t size) override;
+
+ private:
+  void RegisterPointerInternal(void* data, size_t size);
+  void UnregisterPointerInternal(void* data, size_t size);
+  Mutex mutex_;
+  std::unordered_map<void*, size_t> allocations_;
 };
 
 namespace Buffer {
@@ -126,24 +148,12 @@ v8::MaybeLocal<v8::Object> New(Environment* env,
                                size_t length,
                                void (*callback)(char* data, void* hint),
                                void* hint);
-// Takes ownership of |data|.  Must allocate |data| with malloc() or realloc()
-// because ArrayBufferAllocator::Free() deallocates it again with free().
-// Mixing operator new and free() is undefined behavior so don't do that.
-v8::MaybeLocal<v8::Object> New(Environment* env, char* data, size_t length);
-
-inline
-v8::MaybeLocal<v8::Uint8Array> New(Environment* env,
-                                   v8::Local<v8::ArrayBuffer> ab,
-                                   size_t byte_offset,
-                                   size_t length) {
-  v8::Local<v8::Uint8Array> ui = v8::Uint8Array::New(ab, byte_offset, length);
-  CHECK(!env->buffer_prototype_object().IsEmpty());
-  v8::Maybe<bool> mb =
-      ui->SetPrototype(env->context(), env->buffer_prototype_object());
-  if (mb.IsNothing())
-    return v8::MaybeLocal<v8::Uint8Array>();
-  return ui;
-}
+// Takes ownership of |data|.  Must allocate |data| with the current Isolate's
+// ArrayBuffer::Allocator().
+v8::MaybeLocal<v8::Object> New(Environment* env,
+                               char* data,
+                               size_t length,
+                               bool uses_malloc);
 
 // Construct a Buffer from a MaybeStackBuffer (and also its subclasses like
 // Utf8Value and TwoByteValue).
@@ -161,7 +171,7 @@ static v8::MaybeLocal<v8::Object> New(Environment* env,
   const size_t len_in_bytes = buf->length() * sizeof(buf->out()[0]);
 
   if (buf->IsAllocated())
-    ret = New(env, src, len_in_bytes);
+    ret = New(env, src, len_in_bytes, true);
   else if (!buf->IsInvalidated())
     ret = Copy(env, src, len_in_bytes);
 
@@ -272,7 +282,9 @@ void DefineZlibConstants(v8::Local<v8::Object> target);
 v8::MaybeLocal<v8::Value> RunBootstrapping(Environment* env);
 v8::MaybeLocal<v8::Value> StartExecution(Environment* env,
                                          const char* main_script_id);
-
+namespace coverage {
+bool StartCoverageCollection(Environment* env);
+}
 }  // namespace node
 
 #endif  // defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS

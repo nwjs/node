@@ -89,7 +89,7 @@ class DebugOptions : public Options {
     return break_first_line || break_node_first_line;
   }
 
-  void CheckOptions(std::vector<std::string>* errors);
+  void CheckOptions(std::vector<std::string>* errors) override;
 };
 
 class EnvironmentOptions : public Options {
@@ -135,7 +135,7 @@ class EnvironmentOptions : public Options {
 
   inline DebugOptions* get_debug_options();
   inline const DebugOptions& debug_options() const;
-  void CheckOptions(std::vector<std::string>* errors);
+  void CheckOptions(std::vector<std::string>* errors) override;
 
  private:
   DebugOptions debug_options_;
@@ -153,10 +153,9 @@ class PerIsolateOptions : public Options {
   std::string report_signal;
   std::string report_filename;
   std::string report_directory;
-  bool report_verbose;
 #endif  //  NODE_REPORT
   inline EnvironmentOptions* get_per_env_options();
-  void CheckOptions(std::vector<std::string>* errors);
+  void CheckOptions(std::vector<std::string>* errors) override;
 };
 
 class PerProcessOptions : public Options {
@@ -169,6 +168,7 @@ class PerProcessOptions : public Options {
   uint64_t max_http_header_size = 8 * 1024;
   int64_t v8_thread_pool_size = 4;
   bool zero_fill_all_buffers = false;
+  bool debug_arraybuffer_allocations = false;
 
   std::vector<std::string> security_reverts;
   bool print_bash_completion = false;
@@ -202,7 +202,7 @@ class PerProcessOptions : public Options {
 #endif  //  NODE_REPORT
 
   inline PerIsolateOptions* get_per_isolate_options();
-  void CheckOptions(std::vector<std::string>* errors);
+  void CheckOptions(std::vector<std::string>* errors) override;
 };
 
 // The actual options parser, as opposed to the structs containing them:
@@ -239,43 +239,39 @@ class OptionsParser {
   struct NoOp {};
   struct V8Option {};
 
-  // TODO(addaleax): A lot of the `std::string` usage here could be reduced
-  // to simple `const char*`s if it's reasonable to expect the values to be
-  // known at compile-time.
-
   // These methods add a single option to the parser. Optionally, it can be
   // specified whether the option should be allowed from environment variable
   // sources (i.e. NODE_OPTIONS).
-  void AddOption(const std::string& name,
-                 const std::string& help_text,
+  void AddOption(const char* name,
+                 const char* help_text,
                  bool Options::* field,
                  OptionEnvvarSettings env_setting = kDisallowedInEnvironment);
-  void AddOption(const std::string& name,
-                 const std::string& help_text,
+  void AddOption(const char* name,
+                 const char* help_text,
                  uint64_t Options::* field,
                  OptionEnvvarSettings env_setting = kDisallowedInEnvironment);
-  void AddOption(const std::string& name,
-                 const std::string& help_text,
+  void AddOption(const char* name,
+                 const char* help_text,
                  int64_t Options::* field,
                  OptionEnvvarSettings env_setting = kDisallowedInEnvironment);
-  void AddOption(const std::string& name,
-                 const std::string& help_text,
+  void AddOption(const char* name,
+                 const char* help_text,
                  std::string Options::* field,
                  OptionEnvvarSettings env_setting = kDisallowedInEnvironment);
-  void AddOption(const std::string& name,
-                 const std::string& help_text,
+  void AddOption(const char* name,
+                 const char* help_text,
                  std::vector<std::string> Options::* field,
                  OptionEnvvarSettings env_setting = kDisallowedInEnvironment);
-  void AddOption(const std::string& name,
-                 const std::string& help_text,
+  void AddOption(const char* name,
+                 const char* help_text,
                  HostPort Options::* field,
                  OptionEnvvarSettings env_setting = kDisallowedInEnvironment);
-  void AddOption(const std::string& name,
-                 const std::string& help_text,
+  void AddOption(const char* name,
+                 const char* help_text,
                  NoOp no_op_tag,
                  OptionEnvvarSettings env_setting = kDisallowedInEnvironment);
-  void AddOption(const std::string& name,
-                 const std::string& help_text,
+  void AddOption(const char* name,
+                 const char* help_text,
                  V8Option v8_option_tag,
                  OptionEnvvarSettings env_setting = kDisallowedInEnvironment);
 
@@ -286,15 +282,15 @@ class OptionsParser {
   // the option is presented in that form (i.e. with a '=').
   // If `from` has the form "--option-a <arg>", the alias will only be expanded
   // if the option has a non-option argument (not starting with -) following it.
-  void AddAlias(const std::string& from, const std::string& to);
-  void AddAlias(const std::string& from, const std::vector<std::string>& to);
-  void AddAlias(const std::string& from,
+  void AddAlias(const char* from, const char* to);
+  void AddAlias(const char* from, const std::vector<std::string>& to);
+  void AddAlias(const char* from,
                 const std::initializer_list<std::string>& to);
 
   // Add implications from some arbitrary option to a boolean one, either
   // in a way that makes `from` set `to` to true or to false.
-  void Implies(const std::string& from, const std::string& to);
-  void ImpliesNot(const std::string& from, const std::string& to);
+  void Implies(const char* from, const char* to);
+  void ImpliesNot(const char* from, const char* to);
 
   // Insert options from another options parser into this one, along with
   // a method that yields the target options type from this parser's options
@@ -336,23 +332,17 @@ class OptionsParser {
    public:
     virtual ~BaseOptionField() {}
     virtual void* LookupImpl(Options* options) const = 0;
-  };
 
-  // Represents a field of type T within `Options`.
-  template <typename T>
-  class OptionField : public BaseOptionField {
-   public:
-    typedef T Type;
-
-    T* Lookup(Options* options) const {
-      return static_cast<T*>(this->LookupImpl(options));
+    template <typename T>
+    inline T* Lookup(Options* options) const {
+      return static_cast<T*>(LookupImpl(options));
     }
   };
 
   // Represents a field of type T within `Options` that can be looked up
   // as a C++ member field.
   template <typename T>
-  class SimpleOptionField : public OptionField<T> {
+  class SimpleOptionField : public BaseOptionField {
    public:
     explicit SimpleOptionField(T Options::* field) : field_(field) {}
     void* LookupImpl(Options* options) const override {
@@ -366,7 +356,7 @@ class OptionsParser {
   template <typename T>
   inline T* Lookup(std::shared_ptr<BaseOptionField> field,
                    Options* options) const {
-    return std::static_pointer_cast<OptionField<T>>(field)->Lookup(options);
+    return field->template Lookup<T>(options);
   }
 
   // An option consists of:
@@ -383,7 +373,7 @@ class OptionsParser {
   // An implied option is composed of the information on where to store a
   // specific boolean value (if another specific option is encountered).
   struct Implication {
-    std::shared_ptr<OptionField<bool>> target_field;
+    std::shared_ptr<BaseOptionField> target_field;
     bool target_value;
   };
 

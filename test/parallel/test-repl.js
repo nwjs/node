@@ -48,7 +48,7 @@ async function runReplTests(socket, prompt, tests) {
   let lineBuffer = '';
 
   for (const { send, expect } of tests) {
-    // expect can be a single line or multiple lines
+    // Expect can be a single line or multiple lines
     const expectedLines = Array.isArray(expect) ? expect : [ expect ];
 
     console.error('out:', JSON.stringify(send));
@@ -439,15 +439,16 @@ const errorTests = [
     expect: [
       /\.break/,
       /\.clear/,
-      /\.editor/,
       /\.exit/,
       /\.help/,
       /\.load/,
       /\.save/,
+      '',
+      'Press ^C to abort current expression, ^D to exit the repl',
       /'thefourtheye'/
     ]
   },
-  // empty lines in the REPL should be allowed
+  // Empty lines in the REPL should be allowed
   {
     send: '\n\r\n\r\n',
     expect: ''

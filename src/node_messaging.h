@@ -43,7 +43,7 @@ class Message : public MemoryRetainer {
 
   // Internal method of Message that is called when a new SharedArrayBuffer
   // object is encountered in the incoming value's structure.
-  void AddSharedArrayBuffer(SharedArrayBufferMetadataReference ref);
+  void AddSharedArrayBuffer(const SharedArrayBufferMetadataReference& ref);
   // Internal method of Message that is called once serialization finishes
   // and that transfers ownership of `data` to this message.
   void AddMessagePort(std::unique_ptr<MessagePortData>&& data);
@@ -78,7 +78,7 @@ class Message : public MemoryRetainer {
 class MessagePortData : public MemoryRetainer {
  public:
   explicit MessagePortData(MessagePort* owner);
-  ~MessagePortData();
+  ~MessagePortData() override;
 
   MessagePortData(MessagePortData&& other) = delete;
   MessagePortData& operator=(MessagePortData&& other) = delete;
@@ -138,7 +138,7 @@ class MessagePort : public HandleWrap {
   MessagePort(Environment* env,
               v8::Local<v8::Context> context,
               v8::Local<v8::Object> wrap);
-  ~MessagePort();
+  ~MessagePort() override;
 
   // Create a new message port instance, optionally over an existing
   // `MessagePortData` object.
@@ -152,16 +152,11 @@ class MessagePort : public HandleWrap {
   v8::Maybe<bool> PostMessage(Environment* env,
                               v8::Local<v8::Value> message,
                               v8::Local<v8::Value> transfer);
-  // Deliver a single message into this port's incoming queue.
-  void AddToIncomingQueue(Message&& message);
 
   // Start processing messages on this port as a receiving end.
   void Start();
   // Stop processing messages on this port as a receiving end.
   void Stop();
-  // Stop processing messages on this port as a receiving end,
-  // and stop the event loop that this port is associated with.
-  void StopEventLoop();
 
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void PostMessage(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -203,10 +198,9 @@ class MessagePort : public HandleWrap {
   void OnClose() override;
   void OnMessage();
   void TriggerAsync();
-  inline uv_async_t* async();
 
   std::unique_ptr<MessagePortData> data_ = nullptr;
-  bool stop_event_loop_ = false;
+  uv_async_t async_;
 
   friend class MessagePortData;
 };

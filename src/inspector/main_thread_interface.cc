@@ -42,7 +42,7 @@ class CreateObjectRequest : public Request {
   CreateObjectRequest(int object_id, Factory factory)
                       : object_id_(object_id), factory_(std::move(factory)) {}
 
-  void Call(MainThreadInterface* thread) {
+  void Call(MainThreadInterface* thread) override {
     thread->AddObject(object_id_, WrapInDeletable(factory_(thread)));
   }
 
@@ -95,13 +95,6 @@ class DispatchMessagesTask : public v8::Task {
  private:
   MainThreadInterface* thread_;
 };
-
-void DisposePairCallback(uv_handle_t* ref) {
-  using AsyncAndInterface = std::pair<uv_async_t, MainThreadInterface*>;
-  AsyncAndInterface* pair = node::ContainerOf(
-      &AsyncAndInterface::first, reinterpret_cast<uv_async_t*>(ref));
-  delete pair;
-}
 
 template <typename T>
 class AnotherThreadObjectReference {
@@ -224,11 +217,6 @@ MainThreadInterface::MainThreadInterface(Agent* agent, uv_loop_t* loop,
                                          v8::Platform* platform)
                                          : agent_(agent), isolate_(isolate),
                                            platform_(platform) {
-  main_thread_request_.reset(new AsyncAndInterface(uv_async_t(), this));
-  CHECK_EQ(0, uv_async_init(loop, &main_thread_request_->first,
-                            DispatchMessagesAsyncCallback));
-  // Inspector uv_async_t should not prevent main loop shutdown.
-  uv_unref(reinterpret_cast<uv_handle_t*>(&main_thread_request_->first));
 }
 
 MainThreadInterface::~MainThreadInterface() {
@@ -236,24 +224,11 @@ MainThreadInterface::~MainThreadInterface() {
     handle_->Reset();
 }
 
-// static
-void MainThreadInterface::DispatchMessagesAsyncCallback(uv_async_t* async) {
-  AsyncAndInterface* asyncAndInterface =
-      node::ContainerOf(&AsyncAndInterface::first, async);
-  asyncAndInterface->second->DispatchMessages();
-}
-
-// static
-void MainThreadInterface::CloseAsync(AsyncAndInterface* pair) {
-  uv_close(reinterpret_cast<uv_handle_t*>(&pair->first), DisposePairCallback);
-}
-
 void MainThreadInterface::Post(std::unique_ptr<Request> request) {
   Mutex::ScopedLock scoped_lock(requests_lock_);
   bool needs_notify = requests_.empty();
   requests_.push_back(std::move(request));
   if (needs_notify) {
-    CHECK_EQ(0, uv_async_send(&main_thread_request_->first));
     if (isolate_ != nullptr && platform_ != nullptr) {
       std::shared_ptr<v8::TaskRunner> taskrunner =
         platform_->GetForegroundTaskRunner(isolate_);

@@ -1,4 +1,4 @@
-#include <errno.h>
+#include <cerrno>
 #include "env-inl.h"
 #include "node_binding.h"
 #include "node_options-inl.h"
@@ -78,11 +78,6 @@ void PerIsolateOptions::CheckOptions(std::vector<std::string>* errors) {
     errors->push_back(
         "--diagnostic-report-uncaught-exception option is valid only when "
         "--experimental-report is set");
-  }
-
-  if (report_verbose) {
-    errors->push_back("--diagnostic-report-verbose option is valid only when "
-                      "--experimental-report is set");
   }
 #endif  // NODE_REPORT
 }
@@ -339,11 +334,6 @@ PerIsolateOptionsParser::PerIsolateOptionsParser() {
             " (default: current working directory of Node.js process)",
             &PerIsolateOptions::report_directory,
             kAllowedInEnvironment);
-  AddOption("--diagnostic-report-verbose",
-            "verbose option for report generation(true|false)."
-            " (default: false)",
-            &PerIsolateOptions::report_verbose,
-            kAllowedInEnvironment);
 #endif  // NODE_REPORT
 
   Insert(&EnvironmentOptionsParser::instance,
@@ -378,6 +368,10 @@ PerProcessOptionsParser::PerProcessOptionsParser() {
             "automatically zero-fill all newly allocated Buffer and "
             "SlowBuffer instances",
             &PerProcessOptions::zero_fill_all_buffers,
+            kAllowedInEnvironment);
+  AddOption("--debug-arraybuffer-allocations",
+            "", /* undocumented, only for debugging */
+            &PerProcessOptions::debug_arraybuffer_allocations,
             kAllowedInEnvironment);
 
   AddOption("--security-reverts", "", &PerProcessOptions::security_reverts);

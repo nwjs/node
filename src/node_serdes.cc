@@ -33,7 +33,7 @@ class SerializerContext : public BaseObject,
   SerializerContext(Environment* env,
                     Local<Object> wrap);
 
-  ~SerializerContext() {}
+  ~SerializerContext() override {}
 
   void ThrowDataCloneError(Local<String> message) override;
   Maybe<bool> WriteHostObject(Isolate* isolate, Local<Object> object) override;
@@ -68,7 +68,7 @@ class DeserializerContext : public BaseObject,
                       Local<Object> wrap,
                       Local<Value> buffer);
 
-  ~DeserializerContext() {}
+  ~DeserializerContext() override {}
 
   MaybeLocal<Object> ReadHostObject(Isolate* isolate) override;
 
@@ -201,10 +201,13 @@ void SerializerContext::ReleaseBuffer(const FunctionCallbackInfo<Value>& args) {
   SerializerContext* ctx;
   ASSIGN_OR_RETURN_UNWRAP(&ctx, args.Holder());
 
+  // Note: Both ValueSerializer and this Buffer::New() variant use malloc()
+  // as the underlying allocator.
   std::pair<uint8_t*, size_t> ret = ctx->serializer_.Release();
   auto buf = Buffer::New(ctx->env(),
                          reinterpret_cast<char*>(ret.first),
-                         ret.second);
+                         ret.second,
+                         true /* uses_malloc */);
 
   if (!buf.IsEmpty()) {
     args.GetReturnValue().Set(buf.ToLocalChecked());

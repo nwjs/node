@@ -15,8 +15,8 @@
 #include "inspector_io.h"
 #endif
 
-#include <limits.h>  // PATH_MAX
-#include <stdio.h>
+#include <climits>  // PATH_MAX
+#include <cstdio>
 
 #if defined(_MSC_VER)
 #include <direct.h>
@@ -44,6 +44,7 @@ using v8::Isolate;
 using v8::Local;
 using v8::Name;
 using v8::NewStringType;
+using v8::Number;
 using v8::Object;
 using v8::String;
 using v8::Uint32;
@@ -56,7 +57,7 @@ Mutex umask_mutex;
 
 // Microseconds in a second, as a float, used in CPUUsage() below
 #define MICROS_PER_SEC 1e6
-// used in Hrtime() below
+// used in Hrtime() and Uptime() below
 #define NANOS_PER_SEC 1000000000
 
 #ifdef _WIN32
@@ -239,19 +240,20 @@ static void Umask(const FunctionCallbackInfo<Value>& args) {
 
 static void Uptime(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
-  double uptime;
 
   uv_update_time(env->event_loop());
-  uptime = uv_now(env->event_loop()) - per_process::prog_start_time;
-
-  args.GetReturnValue().Set(uptime / 1000);
+  double uptime =
+      static_cast<double>(uv_hrtime() - per_process::node_start_time);
+  Local<Number> result = Number::New(env->isolate(), uptime / NANOS_PER_SEC);
+  args.GetReturnValue().Set(result);
 }
 
 static void GetActiveRequests(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
 
   std::vector<Local<Value>> request_v;
-  for (auto w : *env->req_wrap_queue()) {
+  for (ReqWrapBase* req_wrap : *env->req_wrap_queue()) {
+    AsyncWrap* w = req_wrap->GetAsyncWrap();
     if (w->persistent().IsEmpty())
       continue;
     request_v.push_back(w->GetOwner());

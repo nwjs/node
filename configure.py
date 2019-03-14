@@ -617,6 +617,10 @@ def warn(msg):
 # track if warnings occurred
 warn.warned = False
 
+def info(msg):
+  prefix = '\033[1m\033[32mINFO\033[0m' if os.isatty(1) else 'INFO'
+  print('%s: %s' % (prefix, msg))
+
 def print_verbose(x):
   if not options.verbose:
     return
@@ -1179,10 +1183,6 @@ def configure_v8(o):
   o['variables']['node_use_bundled_v8'] = b(not options.without_bundled_v8)
   o['variables']['force_dynamic_crt'] = 1 if options.shared else 0
   o['variables']['node_enable_d8'] = b(options.enable_d8)
-  # Unconditionally force typed arrays to allocate outside the v8 heap. This
-  # is to prevent memory pointers from being moved around that are returned by
-  # Buffer::Data().
-  o['variables']['v8_typed_array_max_size_in_heap'] = 0
   if options.enable_d8:
     o['variables']['test_isolation_mode'] = 'noop'  # Needed by d8.gyp.
   if options.without_bundled_v8 and options.enable_d8:
@@ -1292,7 +1292,7 @@ def glob_to_var(dir_base, dir_sub, patch_dir):
           patchfile = '%s/%s/%s' % (dir_base, patch_dir, file)
           if os.path.isfile(patchfile):
             srcfile = '%s/%s' % (patch_dir, file)
-            warn('Using floating patch "%s" from "%s"' % (patchfile, dir_base))
+            info('Using floating patch "%s" from "%s"' % (patchfile, dir_base))
         list.append(srcfile)
     break
   return list

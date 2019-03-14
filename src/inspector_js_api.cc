@@ -149,25 +149,22 @@ void InspectorConsoleCall(const FunctionCallbackInfo<Value>& info) {
   Environment* env = Environment::GetCurrent(info);
   Isolate* isolate = env->isolate();
   Local<Context> context = isolate->GetCurrentContext();
-  CHECK_LT(2, info.Length());
-  SlicedArguments call_args(info, /* start */ 3);
+  CHECK_GE(info.Length(), 2);
+  SlicedArguments call_args(info, /* start */ 2);
   if (InspectorEnabled(env)) {
     Local<Value> inspector_method = info[0];
     CHECK(inspector_method->IsFunction());
-    Local<Value> config_value = info[2];
-    CHECK(config_value->IsObject());
-    Local<Object> config_object = config_value.As<Object>();
-    Local<String> in_call_key = FIXED_ONE_BYTE_STRING(isolate, "in_call");
-    if (!config_object->Has(context, in_call_key).FromMaybe(false)) {
-      CHECK(config_object->Set(context,
-                               in_call_key,
-                               v8::True(isolate)).FromJust());
-      CHECK(!inspector_method.As<Function>()->Call(context,
-                                                   info.Holder(),
-                                                   call_args.length(),
-                                                   call_args.out()).IsEmpty());
+    if (!env->is_in_inspector_console_call()) {
+      env->set_is_in_inspector_console_call(true);
+      MaybeLocal<Value> ret =
+          inspector_method.As<Function>()->Call(context,
+                                                info.Holder(),
+                                                call_args.length(),
+                                                call_args.out());
+      env->set_is_in_inspector_console_call(false);
+      if (ret.IsEmpty())
+        return;
     }
-    CHECK(config_object->Delete(context, in_call_key).FromJust());
   }
 
   Local<Value> node_method = info[1];
@@ -275,7 +272,17 @@ void Initialize(Local<Object> target, Local<Value> unused,
   Environment* env = Environment::GetCurrent(context);
 
   Agent* agent = env->inspector_agent();
-  env->SetMethod(target, "consoleCall", InspectorConsoleCall);
+
+  v8::Local<v8::Function> consoleCallFunc =
+      env->NewFunctionTemplate(InspectorConsoleCall, v8::Local<v8::Signature>(),
+                               v8::ConstructorBehavior::kThrow,
+                               v8::SideEffectType::kHasSideEffect)
+          ->GetFunction(context)
+          .ToLocalChecked();
+  auto name_string = FIXED_ONE_BYTE_STRING(env->isolate(), "consoleCall");
+  target->Set(context, name_string, consoleCallFunc).FromJust();
+  consoleCallFunc->SetName(name_string);
+
   env->SetMethod(
       target, "setConsoleExtensionInstaller", SetConsoleExtensionInstaller);
   if (agent->WillWaitForConnect())

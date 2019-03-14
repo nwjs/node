@@ -77,6 +77,7 @@ using BIOPointer = DeleteFnPtr<BIO, BIO_free_all>;
 using SSLCtxPointer = DeleteFnPtr<SSL_CTX, SSL_CTX_free>;
 using SSLSessionPointer = DeleteFnPtr<SSL_SESSION, SSL_SESSION_free>;
 using SSLPointer = DeleteFnPtr<SSL, SSL_free>;
+using PKCS8Pointer = DeleteFnPtr<PKCS8_PRIV_KEY_INFO, PKCS8_PRIV_KEY_INFO_free>;
 using EVPKeyPointer = DeleteFnPtr<EVP_PKEY, EVP_PKEY_free>;
 using EVPKeyCtxPointer = DeleteFnPtr<EVP_PKEY_CTX, EVP_PKEY_CTX_free>;
 using EVPMDPointer = DeleteFnPtr<EVP_MD_CTX, EVP_MD_CTX_free>;
@@ -279,13 +280,11 @@ class SSLWrap {
   static void SetSession(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void LoadSession(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void IsSessionReused(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void IsInitFinished(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void VerifyError(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetCurrentCipher(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void EndParser(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void CertCbDone(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Renegotiate(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void Shutdown(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetTLSTicket(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void NewSessionDone(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetOCSPResponse(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -334,7 +333,7 @@ class SSLWrap {
 
   ClientHelloParser hello_parser_;
 
-  Persistent<v8::Object> ocsp_response_;
+  Persistent<v8::ArrayBufferView> ocsp_response_;
   Persistent<v8::Value> sni_context_;
 
   friend class SecureContext;
@@ -463,7 +462,7 @@ class KeyObject : public BaseObject {
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
 
   static void Init(const v8::FunctionCallbackInfo<v8::Value>& args);
-  void InitSecret(const char* key, size_t key_len);
+  void InitSecret(v8::Local<v8::ArrayBufferView> abv);
   void InitPublic(const ManagedEVPPKey& pkey);
   void InitPrivate(const ManagedEVPPKey& pkey);
 
@@ -543,9 +542,8 @@ class CipherBase : public BaseObject {
   bool InitAuthenticated(const char* cipher_type, int iv_len,
                          unsigned int auth_tag_len);
   bool CheckCCMMessageLength(int message_len);
-  UpdateResult Update(const char* data, int len, unsigned char** out,
-                      int* out_len);
-  bool Final(unsigned char** out, int* out_len);
+  UpdateResult Update(const char* data, int len, AllocatedBuffer* out);
+  bool Final(AllocatedBuffer* out);
   bool SetAutoPadding(bool auto_padding);
 
   bool IsAuthenticatedMode() const;
@@ -676,11 +674,11 @@ class Sign : public SignBase {
 
   struct SignResult {
     Error error;
-    MallocedBuffer<unsigned char> signature;
+    AllocatedBuffer signature;
 
     explicit SignResult(
         Error err,
-        MallocedBuffer<unsigned char>&& sig = MallocedBuffer<unsigned char>())
+        AllocatedBuffer&& sig = AllocatedBuffer())
       : error(err), signature(std::move(sig)) {}
   };
 
@@ -737,12 +735,12 @@ class PublicKeyCipher {
   template <Operation operation,
             EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init,
             EVP_PKEY_cipher_t EVP_PKEY_cipher>
-  static bool Cipher(const ManagedEVPPKey& pkey,
+  static bool Cipher(Environment* env,
+                     const ManagedEVPPKey& pkey,
                      int padding,
                      const unsigned char* data,
                      int len,
-                     unsigned char** out,
-                     size_t* out_len);
+                     AllocatedBuffer* out);
 
   template <Operation operation,
             EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init,
@@ -805,8 +803,7 @@ class ECDH : public BaseObject {
   static void Initialize(Environment* env, v8::Local<v8::Object> target);
   static ECPointPointer BufferToPoint(Environment* env,
                                       const EC_GROUP* group,
-                                      char* data,
-                                      size_t len);
+                                      v8::Local<v8::Value> buf);
 
   // TODO(joyeecheung): track the memory used by OpenSSL types
   SET_NO_MEMORY_INFO()

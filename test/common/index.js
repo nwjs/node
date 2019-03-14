@@ -236,7 +236,7 @@ function platformTimeout(ms) {
     ms = multipliers.two * ms;
 
   if (isAIX)
-    return multipliers.two * ms; // default localhost speed is slower on AIX
+    return multipliers.two * ms; // Default localhost speed is slower on AIX
 
   if (process.arch !== 'arm')
     return ms;
@@ -635,7 +635,7 @@ function skipIfInspectorDisabled() {
 
 function skipIfReportDisabled() {
   if (!process.config.variables.node_report) {
-    skip('Node Report is disabled');
+    skip('Diagnostic reporting is disabled');
   }
 }
 

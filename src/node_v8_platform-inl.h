@@ -107,9 +107,9 @@ struct V8Platform {
 
   inline void StartTracingAgent() {
 #if 0
-    if (per_process::cli_options->trace_event_categories.empty()) {
-      tracing_file_writer_ = tracing_agent_->DefaultHandle();
-    } else {
+    // Attach a new NodeTraceWriter only if this function hasn't been called
+    // before.
+    if (tracing_file_writer_.IsDefaultHandle()) {
       std::vector<std::string> categories =
           SplitString(per_process::cli_options->trace_event_categories, ',');
 
@@ -158,6 +158,10 @@ struct V8Platform {
 
 namespace per_process {
 extern struct V8Platform v8_platform;
+}
+
+inline void StartTracingAgent() {
+  return per_process::v8_platform.StartTracingAgent();
 }
 
 inline tracing::AgentWriterHandle* GetTracingAgentWriter() {

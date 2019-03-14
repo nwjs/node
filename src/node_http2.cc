@@ -12,7 +12,7 @@
 namespace node {
 
 using v8::ArrayBuffer;
-using v8::ArrayBufferCreationMode;
+using v8::ArrayBufferView;
 using v8::Boolean;
 using v8::Context;
 using v8::Float64Array;
@@ -1771,32 +1771,39 @@ Http2Stream* Http2Session::SubmitRequest(
   return stream;
 }
 
+uv_buf_t Http2Session::OnStreamAlloc(size_t suggested_size) {
+  return env()->AllocateManaged(suggested_size).release();
+}
+
 // Callback used to receive inbound data from the i/o stream
-void Http2Session::OnStreamRead(ssize_t nread, const uv_buf_t& buf) {
+void Http2Session::OnStreamRead(ssize_t nread, const uv_buf_t& buf_) {
   HandleScope handle_scope(env()->isolate());
   Context::Scope context_scope(env()->context());
   Http2Scope h2scope(this);
   CHECK_NOT_NULL(stream_);
   Debug(this, "receiving %d bytes", nread);
-  IncrementCurrentSessionMemory(buf.len);
   CHECK(stream_buf_ab_.IsEmpty());
-
-  OnScopeLeave on_scope_leave([&]() {
-    // Once finished handling this write, reset the stream buffer.
-    // The memory has either been free()d or was handed over to V8.
-    DecrementCurrentSessionMemory(buf.len);
-    stream_buf_ab_ = Local<ArrayBuffer>();
-    stream_buf_ = uv_buf_init(nullptr, 0);
-  });
+  AllocatedBuffer buf(env(), buf_);
 
   // Only pass data on if nread > 0
   if (nread <= 0) {
-    free(buf.base);
     if (nread < 0) {
       PassReadErrorToPreviousListener(nread);
     }
     return;
   }
+
+  // Shrink to the actual amount of used data.
+  buf.Resize(nread);
+
+  IncrementCurrentSessionMemory(buf.size());
+  OnScopeLeave on_scope_leave([&]() {
+    // Once finished handling this write, reset the stream buffer.
+    // The memory has either been free()d or was handed over to V8.
+    DecrementCurrentSessionMemory(buf.size());
+    stream_buf_ab_ = Local<ArrayBuffer>();
+    stream_buf_ = uv_buf_init(nullptr, 0);
+  });
 
   // Make sure that there was no read previously active.
   CHECK_NULL(stream_buf_.base);
@@ -1804,24 +1811,14 @@ void Http2Session::OnStreamRead(ssize_t nread, const uv_buf_t& buf) {
 
   // Remember the current buffer, so that OnDataChunkReceived knows the
   // offset of a DATA frame's data into the socket read buffer.
-  stream_buf_ = uv_buf_init(buf.base, nread);
-
-  // Verify that currently: There is memory allocated into which
-  // the data has been read, and that memory buffer is at least as large
-  // as the amount of data we have read, but we have not yet made an
-  // ArrayBuffer out of it.
-  CHECK_LE(static_cast<size_t>(nread), stream_buf_.len);
+  stream_buf_ = uv_buf_init(buf.data(), nread);
 
   Isolate* isolate = env()->isolate();
 
   // Create an array buffer for the read data. DATA frames will be emitted
   // as slices of this array buffer to avoid having to copy memory.
-  stream_buf_ab_ =
-      ArrayBuffer::NewNode(isolate,
-                        buf.base,
-                        nread,
-                        ArrayBufferCreationMode::kInternalized);
-  stream_buf_ab_->set_nodejs(true);
+  stream_buf_ab_ = buf.ToArrayBuffer();
+
   statistics_.data_received += nread;
   ssize_t ret = Write(&stream_buf_, 1);
 
@@ -2491,7 +2488,7 @@ void Http2Session::Request(const FunctionCallbackInfo<Value>& args) {
 // state of the Http2Session, it's simply a notification.
 void Http2Session::Goaway(uint32_t code,
                           int32_t lastStreamID,
-                          uint8_t* data,
+                          const uint8_t* data,
                           size_t len) {
   if (IsDestroyed())
     return;
@@ -2516,16 +2513,13 @@ void Http2Session::Goaway(const FunctionCallbackInfo<Value>& args) {
 
   uint32_t code = args[0]->Uint32Value(context).ToChecked();
   int32_t lastStreamID = args[1]->Int32Value(context).ToChecked();
-  Local<Value> opaqueData = args[2];
-  uint8_t* data = nullptr;
-  size_t length = 0;
+  ArrayBufferViewContents<uint8_t> opaque_data;
 
-  if (Buffer::HasInstance(opaqueData)) {
-    data = reinterpret_cast<uint8_t*>(Buffer::Data(opaqueData));
-    length = Buffer::Length(opaqueData);
+  if (args[2]->IsArrayBufferView()) {
+    opaque_data.Read(args[2].As<ArrayBufferView>());
   }
 
-  session->Goaway(code, lastStreamID, data, length);
+  session->Goaway(code, lastStreamID, opaque_data.data(), opaque_data.length());
 }
 
 // Update accounting of data chunks. This is used primarily to manage timeout
@@ -2780,10 +2774,10 @@ void Http2Session::Ping(const FunctionCallbackInfo<Value>& args) {
 
   // A PING frame may have exactly 8 bytes of payload data. If not provided,
   // then the current hrtime will be used as the payload.
-  uint8_t* payload = nullptr;
-  if (Buffer::HasInstance(args[0])) {
-    payload = reinterpret_cast<uint8_t*>(Buffer::Data(args[0]));
-    CHECK_EQ(Buffer::Length(args[0]), 8);
+  ArrayBufferViewContents<uint8_t, 8> payload;
+  if (args[0]->IsArrayBufferView()) {
+    payload.Read(args[0].As<ArrayBufferView>());
+    CHECK_EQ(payload.length(), 8);
   }
 
   Local<Object> obj;
@@ -2808,7 +2802,7 @@ void Http2Session::Ping(const FunctionCallbackInfo<Value>& args) {
   // the callback will be invoked and a notification sent out to JS land. The
   // notification will include the duration of the ping, allowing the round
   // trip to be measured.
-  ping->Send(payload);
+  ping->Send(payload.data());
   args.GetReturnValue().Set(true);
 }
 
@@ -2880,7 +2874,7 @@ Http2Session::Http2Ping::Http2Ping(Http2Session* session, Local<Object> obj)
       session_(session),
       startTime_(uv_hrtime()) {}
 
-void Http2Session::Http2Ping::Send(uint8_t* payload) {
+void Http2Session::Http2Ping::Send(const uint8_t* payload) {
   uint8_t data[8];
   if (payload == nullptr) {
     memcpy(&data, &startTime_, arraysize(data));

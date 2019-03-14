@@ -14,8 +14,8 @@
 #include <vector>
 #include "v8.h"
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -43,13 +43,13 @@ typedef struct tm TIME_TYPE;
 std::string TriggerNodeReport(v8::Isolate* isolate,
                               node::Environment* env,
                               const char* message,
-                              const char* location,
+                              const char* trigger,
                               std::string name,
                               v8::Local<v8::String> stackstr);
 void GetNodeReport(v8::Isolate* isolate,
                    node::Environment* env,
                    const char* message,
-                   const char* location,
+                   const char* trigger,
                    v8::Local<v8::String> stackstr,
                    std::ostream& out);
 

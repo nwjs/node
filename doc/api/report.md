@@ -23,7 +23,7 @@ is provided below for reference.
 {
   "header": {
     "event": "exception",
-    "location": "OnUncaughtException",
+    "trigger": "Exception",
     "filename": "report.20181221.005011.8974.001.json",
     "dumpEventTime": "2018-12-21T00:50:11Z",
     "dumpEventTimeStamp": "1545371411331",
@@ -32,7 +32,7 @@ is provided below for reference.
       "/home/nodeuser/project/node/out/Release/node",
       "--experimental-report",
       "--diagnostic-report-uncaught-exception",
-      "/home/nodeuser/project/node/test/node-report/test-exception.js",
+      "/home/nodeuser/project/node/test/report/test-exception.js",
       "child"
     ],
     "nodejsVersion": "v12.0.0-pre",
@@ -66,8 +66,8 @@ is provided below for reference.
   "javascriptStack": {
     "message": "Error: *** test-exception.js: throwing uncaught Error",
     "stack": [
-      "at myException (/home/nodeuser/project/node/test/node-report/test-exception.js:9:11)",
-      "at Object.<anonymous> (/home/nodeuser/project/node/test/node-report/test-exception.js:12:3)",
+      "at myException (/home/nodeuser/project/node/test/report/test-exception.js:9:11)",
+      "at Object.<anonymous> (/home/nodeuser/project/node/test/report/test-exception.js:12:3)",
       "at Module._compile (internal/modules/cjs/loader.js:718:30)",
       "at Object.Module._extensions..js (internal/modules/cjs/loader.js:729:10)",
       "at Module.load (internal/modules/cjs/loader.js:617:32)",
@@ -401,9 +401,6 @@ written.
 * `--diagnostic-report-signal` Sets or resets the signal for report generation
 (not supported on Windows). Default signal is `SIGUSR2`.
 
-* `--diagnostic-report-verbose` Flag that enables additional information to be
-printed during report generation.
-
 A report can also be triggered via an API call from a JavaScript application:
 
 ```js
@@ -495,8 +492,7 @@ process.report.setOptions({
   events: ['exception', 'fatalerror', 'signal'],
   signal: 'SIGUSR2',
   filename: 'myreport.json',
-  path: '/home/nodeuser',
-  verbose: true
+  path: '/home/nodeuser'
 });
 ```
 
@@ -519,9 +515,6 @@ timestamp, PID and sequence number.
 URLs are not supported. Defaults to the current working directory of the
 Node.js process.
 
-`verbose` specifies whether to print additional verbose messages
-pertinent to the report generation. Defaults to `false`.
-
 ```js
 // Trigger report only on uncaught exceptions.
 process.report.setOptions({ events: ['exception'] });
@@ -541,7 +534,7 @@ environment variables:
 NODE_OPTIONS="--experimental-report --diagnostic-report-uncaught-exception \
   --diagnostic-report-on-fatalerror --diagnostic-report-on-signal \
   --diagnostic-report-signal=SIGUSR2  --diagnostic-report-filename=./report.json \
-  --diagnostic-report-directory=/home/nodeuser --diagnostic-report-verbose"
+  --diagnostic-report-directory=/home/nodeuser"
 ```
 
 Specific API documentation can be found under

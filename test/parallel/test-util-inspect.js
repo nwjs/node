@@ -976,10 +976,15 @@ if (typeof Symbol !== 'undefined') {
 {
   const map = new Map([['foo', 'bar']]);
   assert.strictEqual(util.inspect(map.keys()), '[Map Iterator] { \'foo\' }');
-  assert.strictEqual(util.inspect(map.values()), '[Map Iterator] { \'bar\' }');
+  const mapValues = map.values();
+  Object.defineProperty(mapValues, Symbol.toStringTag, { value: 'Foo' });
+  assert.strictEqual(
+    util.inspect(mapValues),
+    '[Foo] [Map Iterator] { \'bar\' }'
+  );
   map.set('A', 'B!');
   assert.strictEqual(util.inspect(map.entries(), { maxArrayLength: 1 }),
-                     "[Map Iterator] { [ 'foo', 'bar' ], ... 1 more item }");
+                     "[Map Entries] { [ 'foo', 'bar' ], ... 1 more item }");
   // Make sure the iterator doesn't get consumed.
   const keys = map.keys();
   assert.strictEqual(util.inspect(keys), "[Map Iterator] { 'foo', 'A' }");
@@ -995,9 +1000,13 @@ if (typeof Symbol !== 'undefined') {
   const aSet = new Set([1, 3]);
   assert.strictEqual(util.inspect(aSet.keys()), '[Set Iterator] { 1, 3 }');
   assert.strictEqual(util.inspect(aSet.values()), '[Set Iterator] { 1, 3 }');
-  assert.strictEqual(util.inspect(aSet.entries()), '[Set Iterator] { 1, 3 }');
+  const setEntries = aSet.entries();
+  Object.defineProperty(setEntries, Symbol.toStringTag, { value: 'Foo' });
+  assert.strictEqual(util.inspect(setEntries),
+                     '[Foo] [Set Entries] { [ 1, 1 ], [ 3, 3 ] }');
   // Make sure the iterator doesn't get consumed.
   const keys = aSet.keys();
+  Object.defineProperty(keys, Symbol.toStringTag, { value: null });
   assert.strictEqual(util.inspect(keys), '[Set Iterator] { 1, 3 }');
   assert.strictEqual(util.inspect(keys), '[Set Iterator] { 1, 3 }');
   keys.extra = true;
@@ -1477,6 +1486,42 @@ util.inspect(process);
 
   assert.strict.equal(out, expected);
 
+  out = util.inspect(map, { compact: 2, showHidden: true, depth: 9 });
+
+  expected = [
+    'Map {',
+    '  Promise {',
+    '    [',
+    '      [',
+    '        1,',
+    '        Set { [ 1, 2, [length]: 2 ], [size]: 1 },',
+    '        [length]: 2',
+    '      ],',
+    '      [length]: 1',
+    '    ]',
+    '  } => Uint8Array [',
+    '    [BYTES_PER_ELEMENT]: 1,',
+    '    [length]: 0,',
+    '    [byteLength]: 0,',
+    '    [byteOffset]: 0,',
+    '    [buffer]: ArrayBuffer { byteLength: 0, foo: true }',
+    '  ],',
+    '  [Set Iterator] { [ 1, 2, [length]: 2 ] } => [Map Iterator] {',
+    '    Uint8Array [',
+    '      [BYTES_PER_ELEMENT]: 1,',
+    '      [length]: 0,',
+    '      [byteLength]: 0,',
+    '      [byteOffset]: 0,',
+    '      [buffer]: ArrayBuffer { byteLength: 0, foo: true }',
+    '    ],',
+    '    [Circular]',
+    '  },',
+    '  [size]: 2',
+    '}'
+  ].join('\n');
+
+  assert.strict.equal(out, expected);
+
   out = util.inspect(map, { showHidden: true, depth: 9, breakLength: 4 });
   expected = [
     'Map {',
@@ -1609,7 +1654,7 @@ assert.strictEqual(util.inspect('"\'${a}'), "'\"\\'${a}'");
   [{ a: 5 }, '{ a: 5 }'],
   [new Set([1, 2]), 'Set { 1, 2 }'],
   [new Map([[1, 2]]), 'Map { 1 => 2 }'],
-  [new Set([1, 2]).entries(), '[Set Iterator] { 1, 2 }'],
+  [new Set([1, 2]).entries(), '[Set Entries] { [ 1, 1 ], [ 2, 2 ] }'],
   [new Map([[1, 2]]).keys(), '[Map Iterator] { 1 }'],
   [new Date(2000), '1970-01-01T00:00:02.000Z'],
   [new Uint8Array(2), 'Uint8Array [ 0, 0 ]'],
@@ -1908,4 +1953,197 @@ assert.strictEqual(
     inspect(getset, { getters: true }),
     '{ foo: [Getter/Setter] Set { [ [Object], 2, {} ], ' +
       "'foobar', { x: 1 } },\n  inc: [Getter: NaN] }");
+}
+
+// Check compact number mode.
+{
+  let obj = {
+    a: {
+      b: {
+        x: 5,
+        c: {
+          x: '10000000000000000 00000000000000000 '.repeat(1e1),
+          d: 2,
+          e: 3
+        }
+      }
+    },
+    b: [
+      1,
+      2,
+      [ 1, 2, { a: 1, b: 2, c: 3 } ]
+    ],
+    c: ['foo', 4, 444444],
+    d: Array.from({ length: 100 }).map((e, i) => {
+      return i % 2 === 0 ? i * i : i;
+    }),
+    e: Array(6).fill('foobar'),
+    f: Array(9).fill('foobar'),
+    g: Array(21).fill('foobar baz'),
+    h: [100].concat(Array.from({ length: 9 }).map((e, n) => (n))),
+    long: Array(9).fill('This text is too long for grouping!')
+  };
+
+  let out = util.inspect(obj, { compact: 3, depth: 10 });
+
+  let expected = [
+    '{',
+    '  a: {',
+    '    b: {',
+    '      x: 5,',
+    '      c: {',
+    "        x: '10000000000000000 00000000000000000 ' +",
+    "          '10000000000000000 00000000000000000 ' +",
+    "          '10000000000000000 00000000000000000 ' +",
+    "          '10000000000000000 00000000000000000 ' +",
+    "          '10000000000000000 00000000000000000 ' +",
+    "          '10000000000000000 00000000000000000 ' +",
+    "          '10000000000000000 00000000000000000 ' +",
+    "          '10000000000000000 00000000000000000 ' +",
+    "          '10000000000000000 00000000000000000 ' +",
+    "          '10000000000000000 00000000000000000 ',",
+    '        d: 2,',
+    '        e: 3',
+    '      }',
+    '    }',
+    '  },',
+    '  b: [ 1, 2, [ 1, 2, { a: 1, b: 2, c: 3 } ] ],',
+    "  c: [ 'foo', 4, 444444 ],",
+    '  d: [',
+    '       0,    1,    4,    3,   16,    5,   36,',
+    '       7,   64,    9,  100,   11,  144,   13,',
+    '     196,   15,  256,   17,  324,   19,  400,',
+    '      21,  484,   23,  576,   25,  676,   27,',
+    '     784,   29,  900,   31, 1024,   33, 1156,',
+    '      35, 1296,   37, 1444,   39, 1600,   41,',
+    '    1764,   43, 1936,   45, 2116,   47, 2304,',
+    '      49, 2500,   51, 2704,   53, 2916,   55,',
+    '    3136,   57, 3364,   59, 3600,   61, 3844,',
+    '      63, 4096,   65, 4356,   67, 4624,   69,',
+    '    4900,   71, 5184,   73, 5476,   75, 5776,',
+    '      77, 6084,   79, 6400,   81, 6724,   83,',
+    '    7056,   85, 7396,   87, 7744,   89, 8100,',
+    '      91, 8464,   93, 8836,   95, 9216,   97,',
+    '    9604,   99',
+    '  ],',
+    '  e: [',
+    "    'foobar',",
+    "    'foobar',",
+    "    'foobar',",
+    "    'foobar',",
+    "    'foobar',",
+    "    'foobar'",
+    '  ],',
+    '  f: [',
+    "    'foobar', 'foobar',",
+    "    'foobar', 'foobar',",
+    "    'foobar', 'foobar',",
+    "    'foobar', 'foobar',",
+    "    'foobar'",
+    '  ],',
+    '  g: [',
+    "    'foobar baz', 'foobar baz',",
+    "    'foobar baz', 'foobar baz',",
+    "    'foobar baz', 'foobar baz',",
+    "    'foobar baz', 'foobar baz',",
+    "    'foobar baz', 'foobar baz',",
+    "    'foobar baz', 'foobar baz',",
+    "    'foobar baz', 'foobar baz',",
+    "    'foobar baz', 'foobar baz',",
+    "    'foobar baz', 'foobar baz',",
+    "    'foobar baz', 'foobar baz',",
+    "    'foobar baz'",
+    '  ],',
+    '  h: [',
+    '    100,   0,   1,',
+    '      2,   3,   4,',
+    '      5,   6,   7,',
+    '      8',
+    '  ],',
+    '  long: [',
+    "    'This text is too long for grouping!',",
+    "    'This text is too long for grouping!',",
+    "    'This text is too long for grouping!',",
+    "    'This text is too long for grouping!',",
+    "    'This text is too long for grouping!',",
+    "    'This text is too long for grouping!',",
+    "    'This text is too long for grouping!',",
+    "    'This text is too long for grouping!',",
+    "    'This text is too long for grouping!'",
+    '  ]',
+    '}'
+  ].join('\n');
+
+  assert.strictEqual(out, expected);
+
+  // Verify that array grouping and line consolidation does not happen together.
+  obj = {
+    a: {
+      b: {
+        x: 5,
+        c: {
+          d: 2,
+          e: 3
+        }
+      }
+    },
+    b: Array.from({ length: 9 }).map((e, n) => {
+      return n % 2 === 0 ? 'foobar' : 'baz';
+    })
+  };
+
+  out = util.inspect(obj, { compact: 1, breakLength: Infinity, colors: true });
+
+  expected = [
+    '{',
+    '  a: {',
+    '    b: { x: \u001b[33m5\u001b[39m, c: \u001b[36m[Object]\u001b[39m }',
+    '  },',
+    '  b: [',
+    "    \u001b[32m'foobar'\u001b[39m,    \u001b[32m'baz'\u001b[39m,",
+    "    \u001b[32m'foobar'\u001b[39m,    \u001b[32m'baz'\u001b[39m,",
+    "    \u001b[32m'foobar'\u001b[39m,    \u001b[32m'baz'\u001b[39m,",
+    "    \u001b[32m'foobar'\u001b[39m,    \u001b[32m'baz'\u001b[39m,",
+    "    \u001b[32m'foobar'\u001b[39m",
+    '  ]',
+    '}',
+  ].join('\n');
+
+  assert.strictEqual(out, expected);
+
+  obj = Array.from({ length: 60 }).map((e, i) => i);
+  out = util.inspect(obj, { compact: 1, breakLength: Infinity, colors: true });
+
+  expected = [
+    '[',
+    '   \u001b[33m0\u001b[39m,  \u001b[33m1\u001b[39m,  \u001b[33m2\u001b[39m,',
+    '   \u001b[33m3\u001b[39m,  \u001b[33m4\u001b[39m,  \u001b[33m5\u001b[39m,',
+    '   \u001b[33m6\u001b[39m,  \u001b[33m7\u001b[39m,  \u001b[33m8\u001b[39m,',
+    '   \u001b[33m9\u001b[39m, \u001b[33m10\u001b[39m, \u001b[33m11\u001b[39m,',
+    '  \u001b[33m12\u001b[39m, \u001b[33m13\u001b[39m, \u001b[33m14\u001b[39m,',
+    '  \u001b[33m15\u001b[39m, \u001b[33m16\u001b[39m, \u001b[33m17\u001b[39m,',
+    '  \u001b[33m18\u001b[39m, \u001b[33m19\u001b[39m, \u001b[33m20\u001b[39m,',
+    '  \u001b[33m21\u001b[39m, \u001b[33m22\u001b[39m, \u001b[33m23\u001b[39m,',
+    '  \u001b[33m24\u001b[39m, \u001b[33m25\u001b[39m, \u001b[33m26\u001b[39m,',
+    '  \u001b[33m27\u001b[39m, \u001b[33m28\u001b[39m, \u001b[33m29\u001b[39m,',
+    '  \u001b[33m30\u001b[39m, \u001b[33m31\u001b[39m, \u001b[33m32\u001b[39m,',
+    '  \u001b[33m33\u001b[39m, \u001b[33m34\u001b[39m, \u001b[33m35\u001b[39m,',
+    '  \u001b[33m36\u001b[39m, \u001b[33m37\u001b[39m, \u001b[33m38\u001b[39m,',
+    '  \u001b[33m39\u001b[39m, \u001b[33m40\u001b[39m, \u001b[33m41\u001b[39m,',
+    '  \u001b[33m42\u001b[39m, \u001b[33m43\u001b[39m, \u001b[33m44\u001b[39m,',
+    '  \u001b[33m45\u001b[39m, \u001b[33m46\u001b[39m, \u001b[33m47\u001b[39m,',
+    '  \u001b[33m48\u001b[39m, \u001b[33m49\u001b[39m, \u001b[33m50\u001b[39m,',
+    '  \u001b[33m51\u001b[39m, \u001b[33m52\u001b[39m, \u001b[33m53\u001b[39m,',
+    '  \u001b[33m54\u001b[39m, \u001b[33m55\u001b[39m, \u001b[33m56\u001b[39m,',
+    '  \u001b[33m57\u001b[39m, \u001b[33m58\u001b[39m, \u001b[33m59\u001b[39m',
+    ']'
+  ].join('\n');
+
+  assert.strictEqual(out, expected);
+
+  out = util.inspect([1, 2, 3, 4], { compact: 1, colors: true });
+  expected = '[ \u001b[33m1\u001b[39m, \u001b[33m2\u001b[39m, ' +
+    '\u001b[33m3\u001b[39m, \u001b[33m4\u001b[39m ]';
+
+  assert.strictEqual(out, expected);
 }

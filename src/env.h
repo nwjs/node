@@ -38,7 +38,7 @@
 #include "uv.h"
 #include "v8.h"
 
-#include <stdint.h>
+#include <cstdint>
 #include <functional>
 #include <list>
 #include <unordered_map>
@@ -146,6 +146,7 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(crypto_ec_string, "ec")                                                    \
   V(crypto_rsa_string, "rsa")                                                  \
   V(cwd_string, "cwd")                                                         \
+  V(data_string, "data")                                                       \
   V(dest_string, "dest")                                                       \
   V(destroyed_string, "destroyed")                                             \
   V(detached_string, "detached")                                               \
@@ -291,6 +292,7 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(subject_string, "subject")                                                 \
   V(subjectaltname_string, "subjectaltname")                                   \
   V(syscall_string, "syscall")                                                 \
+  V(target_string, "target")                                                   \
   V(thread_id_string, "threadId")                                              \
   V(ticketkeycallback_string, "onticketkeycallback")                           \
   V(timeout_string, "timeout")                                                 \
@@ -327,6 +329,7 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(async_wrap_ctor_template, v8::FunctionTemplate)                            \
   V(async_wrap_object_ctor_template, v8::FunctionTemplate)                     \
   V(buffer_prototype_object, v8::Object)                                       \
+  V(coverage_connection, v8::Object)                                           \
   V(context, v8::Context)                                                      \
   V(crypto_key_object_constructor, v8::Function)                               \
   V(domain_callback, v8::Function)                                             \
@@ -359,8 +362,10 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(inspector_console_extension_installer, v8::Function)                       \
   V(libuv_stream_wrap_ctor_template, v8::FunctionTemplate)                     \
   V(message_port, v8::Object)                                                  \
+  V(message_event_object_template, v8::ObjectTemplate)                         \
   V(message_port_constructor_template, v8::FunctionTemplate)                   \
   V(native_module_require, v8::Function)                                       \
+  V(on_coverage_message_function, v8::Function)                                \
   V(performance_entry_callback, v8::Function)                                  \
   V(performance_entry_template, v8::Function)                                  \
   V(pipe_constructor_template, v8::FunctionTemplate)                           \
@@ -387,15 +392,19 @@ class Environment;
 
 class IsolateData {
  public:
-  IsolateData(v8::Isolate* isolate, uv_loop_t* event_loop,
+  IsolateData(v8::Isolate* isolate,
+              uv_loop_t* event_loop,
               MultiIsolatePlatform* platform = nullptr,
-              uint32_t* zero_fill_field = nullptr);
+              ArrayBufferAllocator* node_allocator = nullptr);
   ~IsolateData();
   inline uv_loop_t* event_loop() const;
-  inline uint32_t* zero_fill_field() const;
   inline MultiIsolatePlatform* platform() const;
   inline std::shared_ptr<PerIsolateOptions> options();
   inline void set_options(std::shared_ptr<PerIsolateOptions> options);
+
+  inline bool uses_node_allocator() const;
+  inline v8::ArrayBuffer::Allocator* allocator() const;
+  inline ArrayBufferAllocator* node_allocator() const;
 
 #define VP(PropertyName, StringValue) V(v8::Private, PropertyName)
 #define VY(PropertyName, StringValue) V(v8::Symbol, PropertyName)
@@ -429,7 +438,9 @@ class IsolateData {
 
   v8::Isolate* const isolate_;
   uv_loop_t* const event_loop_;
-  uint32_t* const zero_fill_field_;
+  v8::ArrayBuffer::Allocator* const allocator_;
+  ArrayBufferAllocator* const node_allocator_;
+  const bool uses_node_allocator_;
   MultiIsolatePlatform* platform_;
   std::shared_ptr<PerIsolateOptions> options_;
 
@@ -443,17 +454,56 @@ struct ContextInfo {
   bool is_default = false;
 };
 
+struct CompileFnEntry {
+  Environment* env;
+  uint32_t id;
+  CompileFnEntry(Environment* env, uint32_t id);
+};
+
 // Listing the AsyncWrap provider types first enables us to cast directly
 // from a provider type to a debug category.
-#define DEBUG_CATEGORY_NAMES(V) \
-    NODE_ASYNC_PROVIDER_TYPES(V) \
-    V(INSPECTOR_SERVER)
+#define DEBUG_CATEGORY_NAMES(V)                                                \
+  NODE_ASYNC_PROVIDER_TYPES(V)                                                 \
+  V(INSPECTOR_SERVER)                                                          \
+  V(COVERAGE)
 
 enum class DebugCategory {
 #define V(name) name,
   DEBUG_CATEGORY_NAMES(V)
 #undef V
   CATEGORY_COUNT
+};
+
+// A unique-pointer-ish object that is compatible with the JS engine's
+// ArrayBuffer::Allocator.
+struct AllocatedBuffer {
+ public:
+  explicit inline AllocatedBuffer(Environment* env = nullptr);
+  inline AllocatedBuffer(Environment* env, uv_buf_t buf);
+  inline ~AllocatedBuffer();
+  inline void Resize(size_t len);
+
+  inline uv_buf_t release();
+  inline char* data();
+  inline const char* data() const;
+  inline size_t size() const;
+  inline void clear();
+
+  inline v8::MaybeLocal<v8::Object> ToBuffer();
+  inline v8::Local<v8::ArrayBuffer> ToArrayBuffer();
+
+  inline AllocatedBuffer(AllocatedBuffer&& other);
+  inline AllocatedBuffer& operator=(AllocatedBuffer&& other);
+  AllocatedBuffer(const AllocatedBuffer& other) = delete;
+  AllocatedBuffer& operator=(const AllocatedBuffer& other) = delete;
+
+ private:
+  Environment* env_;
+  // We do not pass this to libuv directly, but uv_buf_t is a convenient way
+  // to represent a chunk of memory, and plays nicely with other parts of core.
+  uv_buf_t buffer_;
+
+  friend class Environment;
 };
 
 class Environment {
@@ -624,6 +674,7 @@ class Environment {
   v8::MaybeLocal<v8::Object> ProcessCliArgs(
       const std::vector<std::string>& args,
       const std::vector<std::string>& exec_args);
+  inline const std::vector<std::string>& exec_argv();
 
   typedef void (*HandleCleanupCb)(Environment* env,
                                   uv_handle_t* handle,
@@ -655,9 +706,10 @@ class Environment {
 
   inline v8::Isolate* isolate() const;
   inline uv_loop_t* event_loop() const;
-  inline void TryLoadAddon(const char* filename,
-                           int flags,
-                           std::function<bool(binding::DLib*)> was_loaded);
+  inline void TryLoadAddon(
+      const char* filename,
+      int flags,
+      const std::function<bool(binding::DLib*)>& was_loaded);
 
   static inline Environment* from_timer_handle(uv_timer_t* handle);
   inline uv_timer_t* timer_handle();
@@ -676,6 +728,15 @@ class Environment {
 
   inline IsolateData* isolate_data() const;
 
+  // Utilites that allocate memory using the Isolate's ArrayBuffer::Allocator.
+  // In particular, using AllocateManaged() will provide a RAII-style object
+  // with easy conversion to `Buffer` and `ArrayBuffer` objects.
+  inline AllocatedBuffer AllocateManaged(size_t size, bool checked = true);
+  inline char* Allocate(size_t size);
+  inline char* AllocateUnchecked(size_t size);
+  char* Reallocate(char* data, size_t old_size, size_t size);
+  inline void Free(char* data, size_t size);
+
   inline bool printed_error() const;
   inline void set_printed_error(bool value);
 
@@ -692,7 +753,6 @@ class Environment {
   inline AliasedBuffer<uint32_t, v8::Uint32Array>&
   should_abort_on_uncaught_toggle();
 
-  inline AliasedBuffer<uint8_t, v8::Uint8Array>& trace_category_state();
   inline AliasedBuffer<int32_t, v8::Int32Array>& stream_base_state();
 
   // The necessary API for async_hooks.
@@ -711,9 +771,12 @@ class Environment {
   std::unordered_map<uint32_t, loader::ModuleWrap*> id_to_module_map;
   std::unordered_map<uint32_t, contextify::ContextifyScript*>
       id_to_script_map;
+  std::unordered_set<CompileFnEntry*> compile_fn_entries;
+  std::unordered_map<uint32_t, Persistent<v8::Function>> id_to_function_map;
 
   inline uint32_t get_next_module_id();
   inline uint32_t get_next_script_id();
+  inline uint32_t get_next_function_id();
 
   std::unordered_map<std::string, const loader::PackageConfig>
       package_json_cache;
@@ -860,11 +923,13 @@ class Environment {
   inline inspector::Agent* inspector_agent() const {
     return inspector_agent_.get();
   }
+
+  inline bool is_in_inspector_console_call() const;
+  inline void set_is_in_inspector_console_call(bool value);
 #endif
 
   typedef ListHead<HandleWrap, &HandleWrap::handle_wrap_queue_> HandleWrapQueue;
-  typedef ListHead<ReqWrap<uv_req_t>, &ReqWrap<uv_req_t>::req_wrap_queue_>
-          ReqWrapQueue;
+  typedef ListHead<ReqWrapBase, &ReqWrapBase::req_wrap_queue_> ReqWrapQueue;
 
   inline HandleWrapQueue* handle_wrap_queue() { return &handle_wrap_queue_; }
   inline ReqWrapQueue* req_wrap_queue() { return &req_wrap_queue_; }
@@ -1002,15 +1067,15 @@ class Environment {
   // the inspector_host_port_->port() will be the actual port being
   // used.
   std::shared_ptr<HostPort> inspector_host_port_;
+  std::vector<std::string> exec_argv_;
 
   uint32_t module_id_counter_ = 0;
   uint32_t script_id_counter_ = 0;
+  uint32_t function_id_counter_ = 0;
 
   AliasedBuffer<uint32_t, v8::Uint32Array> should_abort_on_uncaught_toggle_;
   int should_not_abort_scope_counter_ = 0;
 
-  // Attached to a Uint8Array that tracks the state of trace category
-  AliasedBuffer<uint8_t, v8::Uint8Array> trace_category_state_;
   std::unique_ptr<TrackingTraceStateObserver> trace_state_observer_;
 
   AliasedBuffer<int32_t, v8::Int32Array> stream_base_state_;
@@ -1029,6 +1094,7 @@ class Environment {
 
 #if HAVE_INSPECTOR
   std::unique_ptr<inspector::Agent> inspector_agent_;
+  bool is_in_inspector_console_call_ = false;
 #endif
 
   // handle_wrap_queue_ and req_wrap_queue_ needs to be at a fixed offset from
@@ -1081,7 +1147,7 @@ class Environment {
   struct NativeImmediateCallback {
     native_immediate_callback cb_;
     void* data_;
-    std::unique_ptr<Persistent<v8::Object>> keep_alive_;
+    v8::Global<v8::Object> keep_alive_;
     bool refed_;
   };
   std::vector<NativeImmediateCallback> native_immediate_callbacks_;
@@ -1115,6 +1181,7 @@ class Environment {
                      CleanupHookCallback::Hash,
                      CleanupHookCallback::Equal> cleanup_hooks_;
   uint64_t cleanup_hook_counter_ = 0;
+  bool started_cleanup_ = false;
 
   static void EnvPromiseHook(v8::PromiseHookType type,
                              v8::Local<v8::Promise> promise,

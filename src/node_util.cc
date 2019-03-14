@@ -8,6 +8,7 @@ namespace util {
 
 using v8::ALL_PROPERTIES;
 using v8::Array;
+using v8::ArrayBufferView;
 using v8::Boolean;
 using v8::Context;
 using v8::Function;
@@ -100,7 +101,7 @@ static void PreviewEntries(const FunctionCallbackInfo<Value>& args) {
   Local<Array> entries;
   if (!args[0].As<Object>()->PreviewEntries(&is_key_value).ToLocal(&entries))
     return;
-  // Fast path for WeakMap, WeakSet and Set iterators.
+  // Fast path for WeakMap and WeakSet.
   if (args.Length() == 1)
     return args.GetReturnValue().Set(entries);
 
@@ -172,6 +173,11 @@ void StopSigintWatchdog(const FunctionCallbackInfo<Value>& args) {
 void WatchdogHasPendingSigint(const FunctionCallbackInfo<Value>& args) {
   bool ret = SigintWatchdogHelper::GetInstance()->HasPendingSignal();
   args.GetReturnValue().Set(ret);
+}
+
+void ArrayBufferViewHasBuffer(const FunctionCallbackInfo<Value>& args) {
+  CHECK(args[0]->IsArrayBufferView());
+  args.GetReturnValue().Set(args[0].As<ArrayBufferView>()->HasBuffer());
 }
 
 void EnqueueMicrotask(const FunctionCallbackInfo<Value>& args) {
@@ -254,6 +260,7 @@ void Initialize(Local<Object> target,
   env->SetMethodNoSideEffect(target, "watchdogHasPendingSigint",
                              WatchdogHasPendingSigint);
 
+  env->SetMethod(target, "arrayBufferViewHasBuffer", ArrayBufferViewHasBuffer);
   env->SetMethod(target, "enqueueMicrotask", EnqueueMicrotask);
   env->SetMethod(target, "triggerFatalException", FatalException);
   Local<Object> constants = Object::New(env->isolate());

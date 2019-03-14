@@ -175,6 +175,19 @@ void UDPWrap::GetFD(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(fd);
 }
 
+int sockaddr_for_family(int address_family,
+                        const char* address,
+                        const unsigned short port,
+                        struct sockaddr_storage* addr) {
+  switch (address_family) {
+  case AF_INET:
+    return uv_ip4_addr(address, port, reinterpret_cast<sockaddr_in*>(addr));
+  case AF_INET6:
+    return uv_ip6_addr(address, port, reinterpret_cast<sockaddr_in6*>(addr));
+  default:
+    CHECK(0 && "unexpected address family");
+  }
+}
 
 void UDPWrap::DoBind(const FunctionCallbackInfo<Value>& args, int family) {
   UDPWrap* wrap;
@@ -191,24 +204,11 @@ void UDPWrap::DoBind(const FunctionCallbackInfo<Value>& args, int family) {
   if (!args[1]->Uint32Value(ctx).To(&port) ||
       !args[2]->Uint32Value(ctx).To(&flags))
     return;
-  char addr[sizeof(sockaddr_in6)];
-  int err;
-
-  switch (family) {
-  case AF_INET:
-    err = uv_ip4_addr(*address, port, reinterpret_cast<sockaddr_in*>(&addr));
-    break;
-  case AF_INET6:
-    err = uv_ip6_addr(*address, port, reinterpret_cast<sockaddr_in6*>(&addr));
-    break;
-  default:
-    CHECK(0 && "unexpected address family");
-    ABORT();
-  }
-
+  struct sockaddr_storage addr_storage;
+  int err = sockaddr_for_family(family, address.out(), port, &addr_storage);
   if (err == 0) {
     err = uv_udp_bind(&wrap->handle_,
-                      reinterpret_cast<const sockaddr*>(&addr),
+                      reinterpret_cast<const sockaddr*>(&addr_storage),
                       flags);
   }
 
@@ -392,27 +392,14 @@ void UDPWrap::DoSend(const FunctionCallbackInfo<Value>& args, int family) {
 
   req_wrap->msg_size = msg_size;
 
-  char addr[sizeof(sockaddr_in6)];
-  int err;
-
-  switch (family) {
-  case AF_INET:
-    err = uv_ip4_addr(*address, port, reinterpret_cast<sockaddr_in*>(&addr));
-    break;
-  case AF_INET6:
-    err = uv_ip6_addr(*address, port, reinterpret_cast<sockaddr_in6*>(&addr));
-    break;
-  default:
-    CHECK(0 && "unexpected address family");
-    ABORT();
-  }
-
+  struct sockaddr_storage addr_storage;
+  int err = sockaddr_for_family(family, address.out(), port, &addr_storage);
   if (err == 0) {
     err = req_wrap->Dispatch(uv_udp_send,
                              &wrap->handle_,
                              *bufs,
                              count,
-                             reinterpret_cast<const sockaddr*>(&addr),
+                             reinterpret_cast<const sockaddr*>(&addr_storage),
                              OnSend);
   }
 
@@ -457,7 +444,7 @@ void UDPWrap::RecvStop(const FunctionCallbackInfo<Value>& args) {
 
 
 void UDPWrap::OnSend(uv_udp_send_t* req, int status) {
-  SendWrap* req_wrap = static_cast<SendWrap*>(req->data);
+  std::unique_ptr<SendWrap> req_wrap{static_cast<SendWrap*>(req->data)};
   if (req_wrap->have_callback()) {
     Environment* env = req_wrap->env();
     HandleScope handle_scope(env->isolate());
@@ -468,31 +455,28 @@ void UDPWrap::OnSend(uv_udp_send_t* req, int status) {
     };
     req_wrap->MakeCallback(env->oncomplete_string(), 2, arg);
   }
-  delete req_wrap;
 }
 
 
 void UDPWrap::OnAlloc(uv_handle_t* handle,
                       size_t suggested_size,
                       uv_buf_t* buf) {
-  buf->base = node::Malloc(suggested_size);
-  buf->len = suggested_size;
+  UDPWrap* wrap = static_cast<UDPWrap*>(handle->data);
+  *buf = wrap->env()->AllocateManaged(suggested_size).release();
 }
-
 
 void UDPWrap::OnRecv(uv_udp_t* handle,
                      ssize_t nread,
-                     const uv_buf_t* buf,
+                     const uv_buf_t* buf_,
                      const struct sockaddr* addr,
                      unsigned int flags) {
-  if (nread == 0 && addr == nullptr) {
-    if (buf->base != nullptr)
-      free(buf->base);
-    return;
-  }
-
   UDPWrap* wrap = static_cast<UDPWrap*>(handle->data);
   Environment* env = wrap->env();
+
+  AllocatedBuffer buf(env, *buf_);
+  if (nread == 0 && addr == nullptr) {
+    return;
+  }
 
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
@@ -506,14 +490,12 @@ void UDPWrap::OnRecv(uv_udp_t* handle,
   };
 
   if (nread < 0) {
-    if (buf->base != nullptr)
-      free(buf->base);
     wrap->MakeCallback(env->onmessage_string(), arraysize(argv), argv);
     return;
   }
 
-  char* base = node::UncheckedRealloc(buf->base, nread);
-  argv[2] = Buffer::New(env, base, nread).ToLocalChecked();
+  buf.Resize(nread);
+  argv[2] = buf.ToBuffer().ToLocalChecked();
   argv[3] = AddressToJS(env, addr);
   wrap->MakeCallback(env->onmessage_string(), arraysize(argv), argv);
 }

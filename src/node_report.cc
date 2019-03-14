@@ -27,12 +27,12 @@
 #endif
 #include <cxxabi.h>
 #include <dlfcn.h>
-#include <inttypes.h>
+#include <cinttypes>
 #endif
 
 #include <fcntl.h>
-#include <string.h>
-#include <time.h>
+#include <cstring>
+#include <ctime>
 #include <iomanip>
 
 #ifndef _MSC_VER
@@ -46,6 +46,9 @@
 #ifndef _WIN32
 extern char** environ;
 #endif
+
+constexpr int NANOS_PER_SEC = 1000 * 1000 * 1000;
+constexpr double SEC_PER_MICROS = 1e-6;
 
 namespace report {
 using node::arraysize;
@@ -67,16 +70,16 @@ using v8::Value;
 static void WriteNodeReport(Isolate* isolate,
                             Environment* env,
                             const char* message,
-                            const char* location,
+                            const char* trigger,
                             const std::string& filename,
                             std::ostream& out,
                             Local<String> stackstr,
-                            TIME_TYPE* time);
+                            TIME_TYPE* tm_struct);
 static void PrintVersionInformation(JSONWriter* writer);
 static void PrintJavaScriptStack(JSONWriter* writer,
                                  Isolate* isolate,
                                  Local<String> stackstr,
-                                 const char* location);
+                                 const char* trigger);
 static void PrintNativeStack(JSONWriter* writer);
 #ifndef _WIN32
 static void PrintResourceUsage(JSONWriter* writer);
@@ -97,7 +100,7 @@ static std::atomic_int seq = {0};  // sequence number for report filenames
 std::string TriggerNodeReport(Isolate* isolate,
                               Environment* env,
                               const char* message,
-                              const char* location,
+                              const char* trigger,
                               std::string name,
                               Local<String> stackstr) {
   std::ostringstream oss;
@@ -108,7 +111,6 @@ std::string TriggerNodeReport(Isolate* isolate,
   // Obtain the current time and the pid (platform dependent)
   TIME_TYPE tm_struct;
   LocalTime(&tm_struct);
-  uv_pid_t pid = uv_os_getpid();
   // Determine the required report filename. In order of priority:
   //   1) supplied on API 2) configured on startup 3) default generated
   if (!name.empty()) {
@@ -120,7 +122,6 @@ std::string TriggerNodeReport(Isolate* isolate,
   } else {
     // Construct the report filename, with timestamp, pid and sequence number
     oss << "report";
-    seq++;
 #ifdef _WIN32
     oss << "." << std::setfill('0') << std::setw(4) << tm_struct.wYear;
     oss << std::setfill('0') << std::setw(2) << tm_struct.wMonth;
@@ -128,8 +129,6 @@ std::string TriggerNodeReport(Isolate* isolate,
     oss << "." << std::setfill('0') << std::setw(2) << tm_struct.wHour;
     oss << std::setfill('0') << std::setw(2) << tm_struct.wMinute;
     oss << std::setfill('0') << std::setw(2) << tm_struct.wSecond;
-    oss << "." << pid;
-    oss << "." << std::setfill('0') << std::setw(3) << seq.load();
 #else  // UNIX, OSX
     oss << "." << std::setfill('0') << std::setw(4) << tm_struct.tm_year + 1900;
     oss << std::setfill('0') << std::setw(2) << tm_struct.tm_mon + 1;
@@ -137,9 +136,9 @@ std::string TriggerNodeReport(Isolate* isolate,
     oss << "." << std::setfill('0') << std::setw(2) << tm_struct.tm_hour;
     oss << std::setfill('0') << std::setw(2) << tm_struct.tm_min;
     oss << std::setfill('0') << std::setw(2) << tm_struct.tm_sec;
-    oss << "." << pid;
-    oss << "." << std::setfill('0') << std::setw(3) << seq.load();
 #endif
+    oss << "." << uv_os_getpid();
+    oss << "." << std::setfill('0') << std::setw(3) << ++seq;
     oss << ".json";
   }
 
@@ -147,7 +146,7 @@ std::string TriggerNodeReport(Isolate* isolate,
   // Open the report file stream for writing. Supports stdout/err,
   // user-specified or (default) generated name
   std::ofstream outfile;
-  std::ostream* outstream = &std::cout;
+  std::ostream* outstream;
   if (filename == "stdout") {
     outstream = &std::cout;
   } else if (filename == "stderr") {
@@ -164,28 +163,23 @@ std::string TriggerNodeReport(Isolate* isolate,
     }
     // Check for errors on the file open
     if (!outfile.is_open()) {
-      if (env != nullptr && options->report_directory.length() > 0) {
-        std::cerr << std::endl
-                  << "Failed to open Node.js report file: " << filename
-                  << " directory: " << options->report_directory
-                  << " (errno: " << errno << ")" << std::endl;
-      } else {
-        std::cerr << std::endl
-                  << "Failed to open Node.js report file: " << filename
-                  << " (errno: " << errno << ")" << std::endl;
-      }
-      return "";
-    } else {
       std::cerr << std::endl
-                << "Writing Node.js report to file: " << filename << std::endl;
+                << "Failed to open Node.js report file: " << filename;
+
+      if (env != nullptr && options->report_directory.length() > 0)
+        std::cerr << " directory: " << options->report_directory;
+
+      std::cerr << " (errno: " << errno << ")" << std::endl;
+      return "";
     }
+    outstream = &outfile;
+
+    std::cerr << std::endl
+              << "Writing Node.js report to file: " << filename << std::endl;
   }
 
-  // Pass our stream about by reference, not by copying it.
-  std::ostream& out = outfile.is_open() ? outfile : *outstream;
-
-  WriteNodeReport(
-      isolate, env, message, location, filename, out, stackstr, &tm_struct);
+  WriteNodeReport(isolate, env, message, trigger, filename, *outstream,
+                  stackstr, &tm_struct);
 
   // Do not close stdout/stderr, only close files we opened.
   if (outfile.is_open()) {
@@ -193,22 +187,21 @@ std::string TriggerNodeReport(Isolate* isolate,
   }
 
   std::cerr << "Node.js report completed" << std::endl;
-  if (name.empty()) return filename;
-  return name;
+  return filename;
 }
 
 // External function to trigger a report, writing to a supplied stream.
 void GetNodeReport(Isolate* isolate,
                    Environment* env,
                    const char* message,
-                   const char* location,
+                   const char* trigger,
                    Local<String> stackstr,
                    std::ostream& out) {
   // Obtain the current time and the pid (platform dependent)
   TIME_TYPE tm_struct;
   LocalTime(&tm_struct);
   WriteNodeReport(
-      isolate, env, message, location, "", out, stackstr, &tm_struct);
+      isolate, env, message, trigger, "", out, stackstr, &tm_struct);
 }
 
 // Internal function to coordinate and write the various
@@ -216,7 +209,7 @@ void GetNodeReport(Isolate* isolate,
 static void WriteNodeReport(Isolate* isolate,
                             Environment* env,
                             const char* message,
-                            const char* location,
+                            const char* trigger,
                             const std::string& filename,
                             std::ostream& out,
                             Local<String> stackstr,
@@ -235,7 +228,7 @@ static void WriteNodeReport(Isolate* isolate,
   writer.json_objectstart("header");
 
   writer.json_keyvalue("event", message);
-  writer.json_keyvalue("location", location);
+  writer.json_keyvalue("trigger", trigger);
   if (!filename.empty())
     writer.json_keyvalue("filename", filename);
   else
@@ -287,7 +280,7 @@ static void WriteNodeReport(Isolate* isolate,
   writer.json_objectend();
 
   // Report summary JavaScript stack backtrace
-  PrintJavaScriptStack(&writer, isolate, stackstr, location);
+  PrintJavaScriptStack(&writer, isolate, stackstr, trigger);
 
   // Report native stack backtrace
   PrintNativeStack(&writer);
@@ -379,12 +372,12 @@ static void PrintVersionInformation(JSONWriter* writer) {
 static void PrintJavaScriptStack(JSONWriter* writer,
                                  Isolate* isolate,
                                  Local<String> stackstr,
-                                 const char* location) {
+                                 const char* trigger) {
   writer->json_objectstart("javascriptStack");
 
   std::string ss;
-  if ((!strcmp(location, "OnFatalError")) ||
-      (!strcmp(location, "OnUserSignal"))) {
+  if ((!strcmp(trigger, "FatalError")) ||
+      (!strcmp(trigger, "Signal"))) {
     ss = "No stack.\nUnavailable.\n";
   } else {
     String::Utf8Value sv(isolate, stackstr);
@@ -452,8 +445,7 @@ static void PrintGCStatistics(JSONWriter* writer, Isolate* isolate) {
 
   writer->json_objectstart("heapSpaces");
   // Loop through heap spaces
-  size_t i;
-  for (i = 0; i < isolate->NumberOfHeapSpaces() - 1; i++) {
+  for (size_t i = 0; i < isolate->NumberOfHeapSpaces(); i++) {
     isolate->GetHeapSpaceStatistics(&v8_heap_space_stats, i);
     writer->json_objectstart(v8_heap_space_stats.space_name());
     writer->json_keyvalue("memorySize", v8_heap_space_stats.space_size());
@@ -469,19 +461,7 @@ static void PrintGCStatistics(JSONWriter* writer, Isolate* isolate) {
         "available", v8_heap_space_stats.space_available_size());
     writer->json_objectend();
   }
-  isolate->GetHeapSpaceStatistics(&v8_heap_space_stats, i);
-  writer->json_objectstart(v8_heap_space_stats.space_name());
-  writer->json_keyvalue("memorySize", v8_heap_space_stats.space_size());
-  writer->json_keyvalue(
-      "committedMemory", v8_heap_space_stats.physical_space_size());
-  writer->json_keyvalue(
-      "capacity",
-      v8_heap_space_stats.space_used_size() +
-          v8_heap_space_stats.space_available_size());
-  writer->json_keyvalue("used", v8_heap_space_stats.space_used_size());
-  writer->json_keyvalue(
-      "available", v8_heap_space_stats.space_available_size());
-  writer->json_objectend();
+
   writer->json_objectend();
   writer->json_objectend();
 }
@@ -489,20 +469,19 @@ static void PrintGCStatistics(JSONWriter* writer, Isolate* isolate) {
 #ifndef _WIN32
 // Report resource usage (Linux/OSX only).
 static void PrintResourceUsage(JSONWriter* writer) {
-  time_t current_time;  // current time absolute
-  time(&current_time);
-  size_t boot_time = static_cast<time_t>(node::per_process::prog_start_time /
-                                         (1000 * 1000 * 1000));
-  auto uptime = difftime(current_time, boot_time);
+  // Get process uptime in seconds
+  uint64_t uptime =
+      (uv_hrtime() - node::per_process::node_start_time) / (NANOS_PER_SEC);
   if (uptime == 0) uptime = 1;  // avoid division by zero.
 
   // Process and current thread usage statistics
   struct rusage stats;
   writer->json_objectstart("resourceUsage");
   if (getrusage(RUSAGE_SELF, &stats) == 0) {
-    double user_cpu = stats.ru_utime.tv_sec + 0.000001 * stats.ru_utime.tv_usec;
+    double user_cpu =
+        stats.ru_utime.tv_sec + SEC_PER_MICROS * stats.ru_utime.tv_usec;
     double kernel_cpu =
-        stats.ru_utime.tv_sec + 0.000001 * stats.ru_utime.tv_usec;
+        stats.ru_stime.tv_sec + SEC_PER_MICROS * stats.ru_stime.tv_usec;
     writer->json_keyvalue("userCpuSeconds", user_cpu);
     writer->json_keyvalue("kernelCpuSeconds", kernel_cpu);
     double cpu_abs = user_cpu + kernel_cpu;
@@ -522,9 +501,10 @@ static void PrintResourceUsage(JSONWriter* writer) {
 #ifdef RUSAGE_THREAD
   if (getrusage(RUSAGE_THREAD, &stats) == 0) {
     writer->json_objectstart("uvthreadResourceUsage");
-    double user_cpu = stats.ru_utime.tv_sec + 0.000001 * stats.ru_utime.tv_usec;
+    double user_cpu =
+        stats.ru_utime.tv_sec + SEC_PER_MICROS * stats.ru_utime.tv_usec;
     double kernel_cpu =
-        stats.ru_utime.tv_sec + 0.000001 * stats.ru_utime.tv_usec;
+        stats.ru_stime.tv_sec + SEC_PER_MICROS * stats.ru_stime.tv_usec;
     writer->json_keyvalue("userCpuSeconds", user_cpu);
     writer->json_keyvalue("kernelCpuSeconds", kernel_cpu);
     double cpu_abs = user_cpu + kernel_cpu;

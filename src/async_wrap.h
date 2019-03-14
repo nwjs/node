@@ -27,7 +27,7 @@
 #include "base_object.h"
 #include "v8.h"
 
-#include <stdint.h>
+#include <cstdint>
 
 namespace node {
 
@@ -109,7 +109,7 @@ class AsyncWrap : public BaseObject {
             ProviderType provider,
             double execution_async_id = -1);
 
-  virtual ~AsyncWrap();
+  ~AsyncWrap() override;
 
   static v8::Local<v8::FunctionTemplate> GetConstructorTemplate(
       Environment* env);
@@ -169,7 +169,7 @@ class AsyncWrap : public BaseObject {
       v8::Local<v8::Value>* argv);
 
   virtual std::string diagnostic_name() const;
-  virtual std::string MemoryInfoName() const;
+  std::string MemoryInfoName() const override;
 
   static void WeakCallback(const v8::WeakCallbackInfo<DestroyParam> &info);
 

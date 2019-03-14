@@ -312,58 +312,46 @@ For pull requests introducing new core modules:
 
 ### Additions to N-API
 
-N-API provides an ABI-stable API guaranteed for future Node.js versions.
-Existing N-API APIs cannot change or disappear, even in semver-major releases.
-Thus, N-API additions call for unusual care and scrutiny.
-
-This
-[guide](https://github.com/nodejs/node/blob/master/doc/guides/adding-new-napi-api.md)
-outlines the requirements and principles that we should follow when
-approving and landing new N-API APIs (any additions to `node_api.h` and
-`node_api_types.h`).
+N-API provides an ABI-stable API guaranteed for future Node.js versions. N-API
+additions call for unusual care and scrutiny. If a change adds to `node_api.h`
+or `node_api_types.h`, consult [the relevant
+guide](https://github.com/nodejs/node/blob/master/doc/guides/adding-new-napi-api.md).
 
 ### Deprecations
 
-[_Deprecation_][] is "the discouragement of use of some … feature … or practice,
-typically because it has been superseded or is no longer considered efficient or
-safe, without completely removing it or prohibiting its use. It can also imply
-that a feature, design, or practice will be removed or discontinued entirely in
-the future."
+Node.js uses three [Deprecation][] levels. For all deprecated APIs, the API
+documentation must state the deprecation status.
 
-Node.js uses three Deprecation levels:
+* Documentation-Only Deprecation
+  * A deprecation notice appears in the API documentation.
+  * There are no functional changes.
+  * By default, there will be no warnings emitted for such deprecations at
+    runtime.
+  * May cause a runtime warning with the [`--pending-deprecation`][] flag or
+    `NODE_PENDING_DEPRECATION` environment variable.
 
-* *Documentation-Only Deprecation*: A deprecation notice is added to the API
-  documentation but no functional changes are implemented in the code. By
-  default, there will be no warnings emitted for such deprecations at
-  runtime. Documentation-only deprecations may trigger a runtime warning when
-  Node.js is started with the [`--pending-deprecation`][] flag or the
-  `NODE_PENDING_DEPRECATION=1` environment variable is set.
+* Runtime Deprecation
+  * Emits a warning at runtime on first use of the deprecated API.
+  * If used with the [`--throw-deprecation`][] flag, will throw a runtime error.
 
-* *Runtime Deprecation*: A warning is emitted at runtime the first time that a
-  deprecated API is used. The [`--throw-deprecation`][] flag can be used to
-  escalate such warnings into runtime errors that will cause the Node.js process
-  to exit. As with Documentation-Only Deprecation, the documentation for the API
-  must be updated to clearly indicate the deprecated status.
+* End-of-life
+  * The API is no longer subject to the semantic versioning rules.
+  * Backward-incompatible changes including complete removal of such APIs may
+    occur at any time.
 
-* *End-of-life*: The API is no longer subject to the semantic versioning rules.
-  Backward-incompatible changes including complete removal of such APIs may
-  occur at any time.
+Apply the `notable change` label to all pull requests that introduce
+Documentation-Only Deprecations. Such deprecations have no impact on code
+execution. Thus, they are not breaking changes (`semver-major`).
 
-Documentation-Only Deprecations may be handled as semver-minor or semver-major
-changes. Such deprecations have no impact on the successful operation of running
-code and therefore should not be viewed as breaking changes.
+Runtime Deprecations and End-of-life APIs (internal or public) are breaking
+changes (`semver-major`). The TSC may make exceptions, deciding that one of
+these deprecations is not a breaking change.
 
-Runtime Deprecations and End-of-life APIs (internal or public) must be
-handled as semver-major changes unless there is TSC consensus to land the
-deprecation as a semver-minor.
-
-All Documentation-Only and Runtime deprecations will be assigned a unique
-identifier that can be used to persistently refer to the deprecation in
-documentation, emitted process warnings, or errors thrown. Documentation for
-these identifiers will be included in the Node.js API documentation and will
-be immutable once assigned. Even if End-of-Life code is removed from Node.js,
-the documentation for the assigned deprecation identifier must remain in the
-Node.js API documentation.
+All deprecations receive a unique and immutable identifier. Documentation,
+warnings, and errors use the identifier when referring to the deprecation. The
+documentation for the assigned deprecation identifier must always remain in the
+API documentation. This is true even if the deprecation is no longer in use (for
+example, due to removal of an End-of-Life deprecated API).
 
 <a id="deprecation-cycle"></a>
 A _Deprecation cycle_ is a major release during which an API has been in one of
@@ -800,9 +788,9 @@ When things need extra attention, are controversial, or `semver-major`:
 If you cannot find who to cc for a file, `git shortlog -n -s <file>` may help.
 
 ["Merge Pull Request"]: https://help.github.com/articles/merging-a-pull-request/#merging-a-pull-request-on-github
+[Deprecation]: https://en.wikipedia.org/wiki/Deprecation
 [Stability Index]: doc/api/documentation.md#stability-index
 [TSC]: https://github.com/nodejs/TSC
-[_Deprecation_]: https://en.wikipedia.org/wiki/Deprecation
 [`--pending-deprecation`]: doc/api/cli.md#--pending-deprecation
 [`--throw-deprecation`]: doc/api/cli.md#--throw-deprecation
 [`node-core-utils`]: https://github.com/nodejs/node-core-utils

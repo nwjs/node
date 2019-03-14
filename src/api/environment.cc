@@ -9,6 +9,10 @@
 #include "node_v8_platform-inl.h"
 #include "uv.h"
 
+#ifdef NODE_ENABLE_VTUNE_PROFILING
+#include "../deps/v8/src/third_party/vtune/v8-vtune.h"
+#endif
+
 namespace node {
 using v8::Context;
 using v8::Function;
@@ -34,7 +38,9 @@ static bool AllowWasmCodeGenerationCallback(Local<Context> context,
 static bool ShouldAbortOnUncaughtException(Isolate* isolate) {
   HandleScope scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
-  return env != nullptr && env->should_abort_on_uncaught_toggle()[0] &&
+  return env != nullptr &&
+         (env->is_main_thread() || !env->is_stopping_worker()) &&
+         env->should_abort_on_uncaught_toggle()[0] &&
          !env->inside_should_not_abort_on_uncaught_scope();
 }
 
@@ -71,8 +77,82 @@ void* ArrayBufferAllocator::Allocate(size_t size) {
     return UncheckedMalloc(size);
 }
 
+DebuggingArrayBufferAllocator::~DebuggingArrayBufferAllocator() {
+  CHECK(allocations_.empty());
+}
+
+void* DebuggingArrayBufferAllocator::Allocate(size_t size) {
+  Mutex::ScopedLock lock(mutex_);
+  void* data = ArrayBufferAllocator::Allocate(size);
+  RegisterPointerInternal(data, size);
+  return data;
+}
+
+void* DebuggingArrayBufferAllocator::AllocateUninitialized(size_t size) {
+  Mutex::ScopedLock lock(mutex_);
+  void* data = ArrayBufferAllocator::AllocateUninitialized(size);
+  RegisterPointerInternal(data, size);
+  return data;
+}
+
+void DebuggingArrayBufferAllocator::Free(void* data, size_t size) {
+  Mutex::ScopedLock lock(mutex_);
+  UnregisterPointerInternal(data, size);
+  ArrayBufferAllocator::Free(data, size);
+}
+
+void* DebuggingArrayBufferAllocator::Reallocate(void* data,
+                                                size_t old_size,
+                                                size_t size) {
+  Mutex::ScopedLock lock(mutex_);
+  void* ret = ArrayBufferAllocator::Reallocate(data, old_size, size);
+  if (ret == nullptr) {
+    if (size == 0)  // i.e. equivalent to free().
+      UnregisterPointerInternal(data, old_size);
+    return nullptr;
+  }
+
+  if (data != nullptr) {
+    auto it = allocations_.find(data);
+    CHECK_NE(it, allocations_.end());
+    allocations_.erase(it);
+  }
+
+  RegisterPointerInternal(ret, size);
+  return ret;
+}
+
+void DebuggingArrayBufferAllocator::RegisterPointer(void* data, size_t size) {
+  Mutex::ScopedLock lock(mutex_);
+  RegisterPointerInternal(data, size);
+}
+
+void DebuggingArrayBufferAllocator::UnregisterPointer(void* data, size_t size) {
+  Mutex::ScopedLock lock(mutex_);
+  UnregisterPointerInternal(data, size);
+}
+
+void DebuggingArrayBufferAllocator::UnregisterPointerInternal(void* data,
+                                                              size_t size) {
+  if (data == nullptr) return;
+  auto it = allocations_.find(data);
+  CHECK_NE(it, allocations_.end());
+  CHECK_EQ(it->second, size);
+  allocations_.erase(it);
+}
+
+void DebuggingArrayBufferAllocator::RegisterPointerInternal(void* data,
+                                                            size_t size) {
+  if (data == nullptr) return;
+  CHECK_EQ(allocations_.count(data), 0);
+  allocations_[data] = size;
+}
+
 ArrayBufferAllocator* CreateArrayBufferAllocator() {
-  return new ArrayBufferAllocator();
+  if (per_process::cli_options->debug_arraybuffer_allocations)
+    return new DebuggingArrayBufferAllocator();
+  else
+    return new ArrayBufferAllocator();
 }
 
 void FreeArrayBufferAllocator(ArrayBufferAllocator* allocator) {
@@ -116,11 +196,7 @@ IsolateData* CreateIsolateData(Isolate* isolate,
                                uv_loop_t* loop,
                                MultiIsolatePlatform* platform,
                                ArrayBufferAllocator* allocator) {
-  return new IsolateData(
-      isolate,
-      loop,
-      platform,
-      allocator != nullptr ? allocator->zero_fill_field() : nullptr);
+  return new IsolateData(isolate, loop, platform, allocator);
 }
 
 void FreeIsolateData(IsolateData* isolate_data) {

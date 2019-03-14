@@ -56,13 +56,13 @@ class PerIsolatePlatformData :
     public std::enable_shared_from_this<PerIsolatePlatformData> {
  public:
   PerIsolatePlatformData(v8::Isolate* isolate, uv_loop_t* loop);
-  ~PerIsolatePlatformData();
+  ~PerIsolatePlatformData() override;
 
   void PostTask(std::unique_ptr<v8::Task> task) override;
   void PostIdleTask(std::unique_ptr<v8::IdleTask> task) override;
   void PostDelayedTask(std::unique_ptr<v8::Task> task,
                        double delay_in_seconds) override;
-  bool IdleTasksEnabled() override { return false; };
+  bool IdleTasksEnabled() override { return false; }
 
   void Shutdown();
 
@@ -123,7 +123,7 @@ class NodePlatform : public MultiIsolatePlatform {
  public:
   NodePlatform(int thread_pool_size,
                v8::TracingController* tracing_controller);
-  virtual ~NodePlatform() {}
+  ~NodePlatform() override {}
 
   void DrainTasks(v8::Isolate* isolate) override;
   void CancelPendingDelayedTasks(v8::Isolate* isolate) override;

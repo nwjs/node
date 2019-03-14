@@ -34,12 +34,6 @@ using v8::String;
 using v8::V8;
 using v8::Value;
 
-// Internal/static function declarations
-void OnUncaughtException(const FunctionCallbackInfo<Value>& info);
-static void Initialize(Local<Object> exports,
-                       Local<Value> unused,
-                       Local<Context> context);
-
 // External JavaScript API for triggering a report
 void TriggerReport(const FunctionCallbackInfo<Value>& info) {
   Environment* env = Environment::GetCurrent(info);
@@ -48,15 +42,16 @@ void TriggerReport(const FunctionCallbackInfo<Value>& info) {
   std::string filename;
   Local<String> stackstr;
 
-  if (info.Length() == 1) {
-    stackstr = info[0].As<String>();
-  } else {
-    filename = *String::Utf8Value(isolate, info[0]);
-    stackstr = info[1].As<String>();
-  }
+  CHECK_EQ(info.Length(), 4);
+  String::Utf8Value message(isolate, info[0].As<String>());
+  String::Utf8Value trigger(isolate, info[1].As<String>());
+  stackstr = info[3].As<String>();
+
+  if (info[2]->IsString())
+    filename = *String::Utf8Value(isolate, info[2]);
 
   filename = TriggerNodeReport(
-      isolate, env, "JavaScript API", __func__, filename, stackstr);
+      isolate, env, *message, *trigger, filename, stackstr);
   // Return value is the report filename
   info.GetReturnValue().Set(
       String::NewFromUtf8(isolate, filename.c_str(), v8::NewStringType::kNormal)
@@ -78,34 +73,6 @@ void GetReport(const FunctionCallbackInfo<Value>& info) {
                                                 out.str().c_str(),
                                                 v8::NewStringType::kNormal)
                                 .ToLocalChecked());
-}
-
-// Callbacks for triggering report on uncaught exception.
-// Calls triggered from JS land.
-void OnUncaughtException(const FunctionCallbackInfo<Value>& info) {
-  Environment* env = Environment::GetCurrent(info);
-  Isolate* isolate = env->isolate();
-  HandleScope scope(isolate);
-  std::string filename;
-  std::shared_ptr<PerIsolateOptions> options = env->isolate_data()->options();
-
-  // Trigger report if requested
-  if (options->report_uncaught_exception) {
-    TriggerNodeReport(
-        isolate, env, "exception", __func__, filename, info[0].As<String>());
-  }
-}
-
-// Signal handler for report action, called from JS land (util.js)
-void OnUserSignal(const FunctionCallbackInfo<Value>& info) {
-  Environment* env = Environment::GetCurrent(info);
-  Isolate* isolate = env->isolate();
-  CHECK(info[0]->IsString());
-  Local<String> str = info[0].As<String>();
-  String::Utf8Value value(isolate, str);
-  std::string filename;
-  TriggerNodeReport(
-      isolate, env, *value, __func__, filename, info[0].As<String>());
 }
 
 // A method to sync up data elements in the JS land with its
@@ -167,17 +134,6 @@ void SyncConfig(const FunctionCallbackInfo<Value>& info) {
 
   Utf8Value pathstr(env->isolate(), path);
 
-  // Report verbosity
-  Local<String> verbosekey = FIXED_ONE_BYTE_STRING(env->isolate(), "verbose");
-  Local<Value> verbose_unchecked;
-  if (!obj->Get(context, verbosekey).ToLocal(&verbose_unchecked)) return;
-  Local<Boolean> verbose;
-  if (verbose_unchecked->IsUndefined() || verbose_unchecked->IsNull())
-    verbose_unchecked = Boolean::New(env->isolate(), "verbose");
-  verbose = verbose_unchecked.As<Boolean>();
-
-  bool verb = verbose->BooleanValue(context).FromJust();
-
   if (sync) {
     static const std::string e = "exception";
     static const std::string s = "signal";
@@ -202,7 +158,6 @@ void SyncConfig(const FunctionCallbackInfo<Value>& info) {
     options->report_filename = *filestr;
     CHECK_NOT_NULL(*pathstr);
     options->report_directory = *pathstr;
-    options->report_verbose = verb;
   } else {
     int i = 0;
     if (options->report_uncaught_exception &&
@@ -242,12 +197,6 @@ void SyncConfig(const FunctionCallbackInfo<Value>& info) {
              .ToLocal(&path_value))
       return;
     if (!obj->Set(context, pathkey, path_value).FromJust()) return;
-
-    if (!obj->Set(context,
-                  verbosekey,
-                  Boolean::New(env->isolate(), options->report_verbose))
-             .FromJust())
-      return;
   }
 }
 
@@ -255,28 +204,10 @@ static void Initialize(Local<Object> exports,
                        Local<Value> unused,
                        Local<Context> context) {
   Environment* env = Environment::GetCurrent(context);
-  std::shared_ptr<PerIsolateOptions> options = env->isolate_data()->options();
+
   env->SetMethod(exports, "triggerReport", TriggerReport);
   env->SetMethod(exports, "getReport", GetReport);
-  env->SetMethod(exports, "onUnCaughtException", OnUncaughtException);
-  env->SetMethod(exports, "onUserSignal", OnUserSignal);
   env->SetMethod(exports, "syncConfig", SyncConfig);
-
-  // TODO(gireeshpunathil) if we are retaining this flag,
-  // insert more verbose information at vital control flow
-  // points. Right now, it is only this one.
-  if (options->report_verbose) {
-    std::cerr << "report: initialization complete, event flags:" << std::endl;
-    std::cerr << "report_uncaught_exception: "
-              << options->report_uncaught_exception << std::endl;
-    std::cerr << "report_on_signal: " << options->report_on_signal << std::endl;
-    std::cerr << "report_on_fatalerror: " << options->report_on_fatalerror
-              << std::endl;
-    std::cerr << "report_signal: " << options->report_signal << std::endl;
-    std::cerr << "report_filename: " << options->report_filename << std::endl;
-    std::cerr << "report_directory: " << options->report_directory << std::endl;
-    std::cerr << "report_verbose: " << options->report_verbose << std::endl;
-  }
 }
 
 }  // namespace report

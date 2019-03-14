@@ -14,13 +14,15 @@
 #include "tracing/traced_value.h"
 #include "v8-profiler.h"
 
-#include <stdio.h>
+#include <cstdio>
 #include <algorithm>
 #include <atomic>
 
 namespace node {
 
 using errors::TryCatchScope;
+using v8::ArrayBuffer;
+using v8::Boolean;
 using v8::Context;
 using v8::EmbedderGraph;
 using v8::External;
@@ -44,8 +46,6 @@ using v8::TracingController;
 using v8::Undefined;
 using v8::Value;
 using worker::Worker;
-
-#define kTraceCategoryCount 1
 
 extern bool node_is_nwjs;
 
@@ -75,11 +75,14 @@ void* const Environment::kNodeContextTagPtr = const_cast<void*>(
 IsolateData::IsolateData(Isolate* isolate,
                          uv_loop_t* event_loop,
                          MultiIsolatePlatform* platform,
-                         uint32_t* zero_fill_field) :
-    isolate_(isolate),
-    event_loop_(event_loop),
-    zero_fill_field_(zero_fill_field),
-    platform_(platform) {
+                         ArrayBufferAllocator* node_allocator)
+    : isolate_(isolate),
+      event_loop_(event_loop),
+      allocator_(isolate->GetArrayBufferAllocator()),
+      node_allocator_(node_allocator),
+      uses_node_allocator_(allocator_ == node_allocator_),
+      platform_(platform) {
+  CHECK_NOT_NULL(allocator_);
   if (platform_ != nullptr)
     platform_->RegisterIsolate(isolate_, event_loop);
 
@@ -154,9 +157,8 @@ void Environment::TrackingTraceStateObserver::UpdateTraceCategoryState() {
     return;
   }
 
-  env_->trace_category_state()[0] =
-      *TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
-          TRACING_CATEGORY_NODE1(async_hooks));
+  bool async_hooks_enabled = (*(TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
+                                 TRACING_CATEGORY_NODE1(async_hooks)))) != 0;
 
   Isolate* isolate = env_->isolate();
   HandleScope handle_scope(isolate);
@@ -165,8 +167,9 @@ void Environment::TrackingTraceStateObserver::UpdateTraceCategoryState() {
     return;
   TryCatchScope try_catch(env_);
   try_catch.SetVerbose(true);
-  cb->Call(env_->context(), Undefined(isolate),
-           0, nullptr).ToLocalChecked();
+  Local<Value> args[] = {Boolean::New(isolate, async_hooks_enabled)};
+  cb->Call(env_->context(), Undefined(isolate), arraysize(args), args)
+      .ToLocalChecked();
 }
 
 static std::atomic<uint64_t> next_thread_id{0};
@@ -185,7 +188,6 @@ Environment::Environment(IsolateData* isolate_data,
       tick_info_(context->GetIsolate()),
       timer_base_(uv_now(isolate_data->event_loop())),
       should_abort_on_uncaught_toggle_(isolate_, 1),
-      trace_category_state_(isolate_, kTraceCategoryCount),
       stream_base_state_(isolate_, StreamBase::kNumStreamBaseStateFields),
       flags_(flags),
       thread_id_(thread_id == kNoThreadId ? AllocateThreadId() : thread_id),
@@ -233,9 +235,8 @@ Environment::Environment(IsolateData* isolate_data,
 #if 0
   performance_state_->Mark(
       performance::NODE_PERFORMANCE_MILESTONE_ENVIRONMENT);
-  performance_state_->Mark(
-      performance::NODE_PERFORMANCE_MILESTONE_NODE_START,
-      performance::performance_node_start);
+  performance_state_->Mark(performance::NODE_PERFORMANCE_MILESTONE_NODE_START,
+                           per_process::node_start_time);
   performance_state_->Mark(
       performance::NODE_PERFORMANCE_MILESTONE_V8_START,
       performance::performance_v8_start);
@@ -258,6 +259,11 @@ Environment::Environment(IsolateData* isolate_data,
   //isolate()->SetPromiseRejectCallback(task_queue::PromiseRejectCallback);
 }
 
+CompileFnEntry::CompileFnEntry(Environment* env, uint32_t id)
+    : env(env), id(id) {
+  env->compile_fn_entries.insert(this);
+}
+
 Environment::~Environment() {
   isolate()->GetHeapProfiler()->RemoveBuildEmbedderGraphCallback(
       BuildEmbedderGraph, this);
@@ -265,6 +271,12 @@ Environment::~Environment() {
   // Make sure there are no re-used libuv wrapper objects.
   // CleanupHandles() should have removed all of them.
   CHECK(file_handle_read_wrap_freelist_.empty());
+
+  // dispose the Persistent references to the compileFunction
+  // wrappers used in the dynamic import callback
+  for (auto& entry : compile_fn_entries) {
+    delete entry;
+  }
 
   HandleScope handle_scope(isolate());
 
@@ -381,6 +393,9 @@ MaybeLocal<Object> Environment::ProcessCliArgs(
                                       std::move(traced_value));
   }
 #endif
+
+  exec_argv_ = exec_args;
+
   Local<Object> process_object =
     node::CreateProcessObject(this, args, exec_args, node_is_nwjs)
           .FromMaybe(Local<Object>());
@@ -393,7 +408,11 @@ void Environment::RegisterHandleCleanups() {
                                         void* arg) {
     handle->data = env;
 
-    env->CloseHandle(handle, [](uv_handle_t* handle) {});
+    env->CloseHandle(handle, [](uv_handle_t* handle) {
+#ifdef DEBUG
+      memset(handle, 0xab, uv_handle_size(handle->type));
+#endif
+    });
   };
 
   RegisterHandleCleanup(
@@ -419,7 +438,7 @@ void Environment::RegisterHandleCleanups() {
 }
 
 void Environment::CleanupHandles() {
-  for (ReqWrap<uv_req_t>* request : req_wrap_queue_)
+  for (ReqWrapBase* request : req_wrap_queue_)
     request->Cancel();
 
   for (HandleWrap* handle : handle_wrap_queue_)
@@ -507,6 +526,7 @@ void Environment::PrintSyncTrace() const {
 }
 
 void Environment::RunCleanup() {
+  started_cleanup_ = true;
   TraceEventScope trace_scope(TRACING_CATEGORY_NODE1(environment),
                               "RunCleanup", this);
   CleanupHandles();
@@ -655,10 +675,13 @@ void Environment::RunAndClearNativeImmediates() {
 
 
 void Environment::ScheduleTimer(int64_t duration_ms) {
+  if (started_cleanup_) return;
   uv_timer_start(timer_handle(), RunTimers, duration_ms, 0);
 }
 
 void Environment::ToggleTimerRef(bool ref) {
+  if (started_cleanup_) return;
+
   if (ref) {
     uv_ref(reinterpret_cast<uv_handle_t*>(timer_handle()));
   } else {
@@ -758,6 +781,8 @@ void Environment::CheckImmediate(uv_check_t* handle) {
 }
 
 void Environment::ToggleImmediateRef(bool ref) {
+  if (started_cleanup_) return;
+
   if (ref) {
     // Idle handle is needed only to stop the event loop from blocking in poll.
     uv_idle_start(immediate_idle_handle(), [](uv_idle_t*){ });
@@ -920,6 +945,23 @@ void Environment::BuildEmbedderGraph(Isolate* isolate,
   });
 }
 
+char* Environment::Reallocate(char* data, size_t old_size, size_t size) {
+  // If we know that the allocator is our ArrayBufferAllocator, we can let
+  // if reallocate directly.
+  if (isolate_data()->uses_node_allocator()) {
+    return static_cast<char*>(
+        isolate_data()->node_allocator()->Reallocate(data, old_size, size));
+  }
+  // Generic allocators do not provide a reallocation method; we need to
+  // allocate a new chunk of memory and copy the data over.
+  char* new_data = AllocateUnchecked(size);
+  if (new_data == nullptr) return nullptr;
+  memcpy(new_data, data, std::min(size, old_size));
+  if (size > old_size)
+    memset(new_data + old_size, 0, size - old_size);
+  Free(data, old_size);
+  return new_data;
+}
 
 // Not really any better place than env.cc at this moment.
 void BaseObject::DeleteMe(void* data) {

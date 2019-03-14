@@ -1,7 +1,7 @@
 #ifndef TEST_CCTEST_NODE_TEST_FIXTURE_H_
 #define TEST_CCTEST_NODE_TEST_FIXTURE_H_
 
-#include <stdlib.h>
+#include <cstdlib>
 #include "gtest/gtest.h"
 #include "node.h"
 #include "node_platform.h"
@@ -84,14 +84,14 @@ class NodeTestFixture : public ::testing::Test {
     CHECK_EQ(0, uv_loop_close(&current_loop));
   }
 
-  virtual void SetUp() {
+  void SetUp() override {
     allocator = ArrayBufferUniquePtr(node::CreateArrayBufferAllocator(),
                                      &node::FreeArrayBufferAllocator);
     isolate_ = NewIsolate(allocator.get(), &current_loop);
     CHECK_NE(isolate_, nullptr);
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     isolate_->Dispose();
     platform->UnregisterIsolate(isolate_);
     isolate_ = nullptr;

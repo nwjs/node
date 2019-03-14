@@ -19,6 +19,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#include "debug_utils.h"
 #include "node_binding.h"
 #include "node_buffer.h"
 #include "node_constants.h"
@@ -77,13 +78,13 @@
 #include "large_pages/node_large_page.h"
 #endif
 
-#include <errno.h>
+#include <cerrno>
 #include <fcntl.h>  // _O_RDWR
-#include <limits.h>  // PATH_MAX
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <climits>  // PATH_MAX
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <sys/types.h>
 
 #include <string>
@@ -163,8 +164,8 @@ unsigned int reverted_cve = 0;
 bool v8_initialized = false;
 
 // node_internals.h
-// process-relative uptime base, initialized at start-up
-double prog_start_time;
+// process-relative uptime base in nanoseconds, initialized in node::Start()
+uint64_t node_start_time;
 // Tells whether --prof is passed.
 bool v8_is_profiling = false;
 
@@ -249,6 +250,18 @@ MaybeLocal<Value> RunBootstrapping(Environment* env) {
   Isolate* isolate = env->isolate();
   Local<Context> context = env->context();
 
+  std::string coverage;
+  bool rc = credentials::SafeGetenv("NODE_V8_COVERAGE", &coverage);
+  if (rc && !coverage.empty()) {
+#if HAVE_INSPECTOR
+    if (!coverage::StartCoverageCollection(env)) {
+      return MaybeLocal<Value>();
+    }
+#else
+    fprintf(stderr, "NODE_V8_COVERAGE cannot be used without inspector");
+#endif  // HAVE_INSPECTOR
+  }
+
   // Add a reference to the global object
   Local<Object> global = context->Global();
 
@@ -268,14 +281,18 @@ MaybeLocal<Value> RunBootstrapping(Environment* env) {
   // Store primordials
   env->set_primordials(Object::New(isolate));
   std::vector<Local<String>> primordials_params = {
-    FIXED_ONE_BYTE_STRING(isolate, "breakAtBootstrap"),
     env->primordials_string()
   };
   std::vector<Local<Value>> primordials_args = {
-    Boolean::New(isolate,
-                  env->options()->debug_options().break_node_first_line),
     env->primordials()
   };
+
+#if HAVE_INSPECTOR
+  if (env->options()->debug_options().break_node_first_line) {
+    env->inspector_agent()->PauseOnNextJavascriptStatement(
+        "Break at bootstrap");
+  }
+#endif  // HAVE_INSPECTOR
   MaybeLocal<Value> primordials_ret =
       ExecuteBootstrapper(env,
                           "internal/bootstrap/primordials",
@@ -613,9 +630,6 @@ int ProcessGlobalArgs(std::vector<std::string>* args,
 int Init(std::vector<std::string>* argv,
          std::vector<std::string>* exec_argv,
          std::vector<std::string>* errors) {
-  // Initialize prog_start_time to get relative uptime.
-  per_process::prog_start_time = static_cast<double>(uv_now(uv_default_loop()));
-
   // Register built-in modules
   binding::RegisterBuiltinModules();
 
@@ -1003,7 +1017,7 @@ void StartupDataHandler::Load(const char* blob_file,
 int Start(int argc, char** argv) {
   atexit([] () { uv_tty_reset_mode(); });
   PlatformInit();
-  //performance::performance_node_start = PERFORMANCE_NOW();
+  per_process::node_start_time = uv_hrtime();
 
   CHECK_GT(argc, 0);
 
@@ -1274,7 +1288,7 @@ NODE_EXTERN void g_call_tick_callback(node::Environment* env) {
 
 // copied beginning of Start() until v8::Initialize()
 NODE_EXTERN void g_setup_nwnode(int argc, char** argv, bool worker) {
-  node::per_process::prog_start_time = static_cast<double>(uv_now(uv_default_loop()));
+  node::per_process::node_start_time = static_cast<double>(uv_now(uv_default_loop()));
   node::node_is_initialized = true;
   node::node_is_nwjs = true;
 }

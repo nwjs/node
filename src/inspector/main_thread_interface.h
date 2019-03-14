@@ -89,11 +89,6 @@ class MainThreadInterface {
   void RemoveObject(int handle);
 
  private:
-  using AsyncAndInterface = std::pair<uv_async_t, MainThreadInterface*>;
-
-  static void DispatchMessagesAsyncCallback(uv_async_t* async);
-  static void CloseAsync(AsyncAndInterface*);
-
   MessageQueue requests_;
   Mutex requests_lock_;   // requests_ live across threads
   // This queue is to maintain the order of the messages for the cases
@@ -105,7 +100,6 @@ class MainThreadInterface {
   Agent* const agent_;
   v8::Isolate* const isolate_;
   v8::Platform* const platform_;
-  DeleteFnPtr<AsyncAndInterface, CloseAsync> main_thread_request_;
   std::shared_ptr<MainThreadHandle> handle_;
   std::unordered_map<int, std::unique_ptr<Deletable>> managed_objects_;
 };

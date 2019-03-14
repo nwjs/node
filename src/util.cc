@@ -19,7 +19,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <stdio.h>
+#include <cstdio>
 #include <sstream>
 #include "node_buffer.h"
 #include "node_errors.h"
@@ -29,6 +29,7 @@
 
 namespace node {
 
+using v8::ArrayBufferView;
 using v8::Isolate;
 using v8::Local;
 using v8::String;
@@ -89,11 +90,11 @@ BufferValue::BufferValue(Isolate* isolate, Local<Value> value) {
 
   if (value->IsString()) {
     MakeUtf8String(isolate, value, this);
-  } else if (Buffer::HasInstance(value)) {
-    const size_t len = Buffer::Length(value);
+  } else if (value->IsArrayBufferView()) {
+    const size_t len = value.As<ArrayBufferView>()->ByteLength();
     // Leave place for the terminating '\0' byte.
     AllocateSufficientStorage(len + 1);
-    memcpy(out(), Buffer::Data(value), len);
+    value.As<ArrayBufferView>()->CopyContents(out(), len);
     SetLengthAndZeroTerminate(len);
   } else {
     Invalidate();

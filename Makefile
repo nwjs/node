@@ -1184,8 +1184,12 @@ lint-js-fix:
 # Note that on the CI `lint-js-ci` is run instead.
 # Lints the JavaScript code with eslint.
 lint-js:
-	@echo "Running JS linter..."
-	@$(call available-node,$(run-lint-js))
+	@if [ "$(shell $(node_use_openssl))" != "true" ]; then \
+		echo "Skipping $@ (no crypto)"; \
+	else \
+		echo "Running JS linter..."; \
+		$(call available-node,$(run-lint-js)) \
+	fi
 
 jslint: lint-js
 	@echo "Please use lint-js instead of jslint"
@@ -1262,11 +1266,8 @@ else
 	@echo "To install (requires internet access) run: $ make format-cpp-build"
 endif
 
-ifeq ($(V),1)
-  CPPLINT_QUIET =
-else
-  CPPLINT_QUIET = --quiet
-endif
+CPPLINT_QUIET = --quiet
+
 .PHONY: lint-cpp
 # Lints the C++ code with cpplint.py and check-imports.py.
 lint-cpp: tools/.cpplintstamp

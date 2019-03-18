@@ -8,7 +8,6 @@
 
 namespace node {
 
-using v8::HandleScope;
 using v8::Isolate;
 using v8::Local;
 using v8::Object;
@@ -332,11 +331,15 @@ int NodePlatform::NumberOfWorkerThreads() {
 
 void PerIsolatePlatformData::RunForegroundTask(std::unique_ptr<Task> task) {
   Isolate* isolate = Isolate::GetCurrent();
-  HandleScope scope(isolate);
+  DebugSealHandleScope scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
-  InternalCallbackScope cb_scope(env, Local<Object>(), { 0, 0 },
-                                 InternalCallbackScope::kAllowEmptyResource);
-  task->Run();
+  if (env != nullptr) {
+    InternalCallbackScope cb_scope(env, Local<Object>(), { 0, 0 },
+                                   InternalCallbackScope::kAllowEmptyResource);
+    task->Run();
+  } else {
+    task->Run();
+  }
 }
 
 void PerIsolatePlatformData::DeleteFromScheduledTasks(DelayedTask* task) {

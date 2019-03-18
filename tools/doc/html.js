@@ -161,7 +161,7 @@ function linkJsTypeDocs(text) {
 
 // Preprocess headers, stability blockquotes, and YAML blocks.
 function preprocessElements({ filename }) {
-  return (tree, file) => {
+  return (tree) => {
     const STABILITY_RE = /(.*:)\s*(\d)([\s\S]*)/;
     let headingIndex = -1;
     let heading = null;
@@ -170,26 +170,6 @@ function preprocessElements({ filename }) {
       if (node.type === 'heading') {
         headingIndex = index;
         heading = node;
-
-        // Ensure optional API parameters are not treated as links by
-        // collapsing all of heading into a single text node.
-        if (heading.children.length > 1) {
-          const position = {
-            start: heading.children[0].position.start,
-            end: heading.position.end
-          };
-
-          heading.children = [{
-            type: 'text',
-            value: file.contents.slice(
-              position.start.offset, position.end.offset)
-              .replace('&lt;', '<')
-              .replace('&gt;', '>')
-              .replace(/\\(.{1})/g, '$1'),
-            position
-          }];
-        }
-
       } else if (node.type === 'html' && common.isYAMLBlock(node.value)) {
         node.value = parseYAML(node.value);
 
@@ -221,7 +201,7 @@ function preprocessElements({ filename }) {
           node.children.shift();
           node.children.unshift(...paragraph.children);
 
-          // insert div with prefix and number
+          // Insert div with prefix and number
           node.children.unshift({
             type: 'html',
             value: `<div class="api_stability api_stability_${number}">` +
@@ -231,7 +211,7 @@ function preprocessElements({ filename }) {
                 .replace(/\n/g, ' ')
           });
 
-          // remove prefix and number from text
+          // Remove prefix and number from text
           text.value = explication;
 
           // close div
@@ -413,7 +393,7 @@ function altDocs(filename, docCreated) {
     { num: '5.x' },
     { num: '4.x' },
     { num: '0.12.x' },
-    { num: '0.10.x' }
+    { num: '0.10.x' },
   ];
 
   const getHref = (versionNum) =>

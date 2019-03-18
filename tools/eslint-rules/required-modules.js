@@ -12,7 +12,7 @@ const path = require('path');
 
 module.exports = function(context) {
   // trim required module names
-  var requiredModules = context.options;
+  const requiredModules = context.options;
   const isESM = context.parserOptions.sourceType === 'module';
 
   const foundModules = [];
@@ -46,7 +46,7 @@ module.exports = function(context) {
    * @returns {undefined|String} required module name or undefined
    */
   function getRequiredModuleName(str) {
-    var value = path.basename(str);
+    const value = path.basename(str);
 
     // Check if value is in required modules array
     return requiredModules.indexOf(value) !== -1 ? value : undefined;
@@ -70,12 +70,10 @@ module.exports = function(context) {
   const rules = {
     'Program:exit'(node) {
       if (foundModules.length < requiredModules.length) {
-        var missingModules = requiredModules.filter(
-          function(module) {
-            return foundModules.indexOf(module) === -1;
-          }
+        const missingModules = requiredModules.filter(
+          (module) => foundModules.indexOf(module) === -1
         );
-        missingModules.forEach(function(moduleName) {
+        missingModules.forEach((moduleName) => {
           context.report(
             node,
             'Mandatory module "{{moduleName}}" must be loaded.',
@@ -88,7 +86,7 @@ module.exports = function(context) {
 
   if (isESM) {
     rules.ImportDeclaration = (node) => {
-      var requiredModuleName = getRequiredModuleName(node.source.value);
+      const requiredModuleName = getRequiredModuleName(node.source.value);
       if (requiredModuleName) {
         foundModules.push(requiredModuleName);
       }
@@ -96,7 +94,7 @@ module.exports = function(context) {
   } else {
     rules.CallExpression = (node) => {
       if (isRequireCall(node)) {
-        var requiredModuleName = getRequiredModuleNameFromCall(node);
+        const requiredModuleName = getRequiredModuleNameFromCall(node);
 
         if (requiredModuleName) {
           foundModules.push(requiredModuleName);

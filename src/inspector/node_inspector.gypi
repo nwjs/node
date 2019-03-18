@@ -34,7 +34,7 @@
       '<(protocol_tool_path)/templates/Imported_h.template',
       '<(protocol_tool_path)/templates/TypeBuilder_cpp.template',
       '<(protocol_tool_path)/templates/TypeBuilder_h.template',
-      '<(protocol_tool_path)/CodeGenerator.py',
+      '<(protocol_tool_path)/code_generator.py',
     ]
   },
   'defines': [
@@ -105,7 +105,7 @@
       'process_outputs_as_sources': 1,
       'action': [
         'python',
-        'tools/inspector_protocol/CodeGenerator.py',
+        'tools/inspector_protocol/code_generator.py',
         '--jinja_dir', '<@(protocol_tool_path)/..',
         '--output_base', '<(SHARED_INTERMEDIATE_DIR)/src/',
         '--config', '<(SHARED_INTERMEDIATE_DIR)/node_protocol_config.json',

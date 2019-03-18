@@ -116,13 +116,19 @@ added: v0.3.4
   Can have the following fields:
   * `keepAlive` {boolean} Keep sockets around even when there are no
     outstanding requests, so they can be used for future requests without
-    having to reestablish a TCP connection. **Default:** `false`.
+    having to reestablish a TCP connection. Not to be confused with the
+    `keep-alive` value of the `Connection` header. The `Connection: keep-alive`
+    header is always sent when using an agent except when the `Connection`
+    header is explicitly specified or when the `keepAlive` and `maxSockets`
+    options are respectively set to `false` and `Infinity`, in which case
+    `Connection: close` will be used. **Default:** `false`.
   * `keepAliveMsecs` {number} When using the `keepAlive` option, specifies
     the [initial delay](net.html#net_socket_setkeepalive_enable_initialdelay)
     for TCP Keep-Alive packets. Ignored when the
     `keepAlive` option is `false` or `undefined`. **Default:** `1000`.
   * `maxSockets` {number} Maximum number of sockets to allow per
-    host. **Default:** `Infinity`.
+    host. Each request will use a new socket until the maximum is reached.
+    **Default:** `Infinity`.
   * `maxFreeSockets` {number} Maximum number of sockets to leave open
     in a free state. Only relevant if `keepAlive` is set to `true`.
     **Default:** `256`.
@@ -367,7 +373,7 @@ proxy.on('connect', (req, cltSocket, head) => {
 // now that proxy is running
 proxy.listen(1337, '127.0.0.1', () => {
 
-  // make a request to a tunneling proxy
+  // Make a request to a tunneling proxy
   const options = {
     port: 1337,
     host: '127.0.0.1',
@@ -381,7 +387,7 @@ proxy.listen(1337, '127.0.0.1', () => {
   req.on('connect', (res, socket, head) => {
     console.log('got connected!');
 
-    // make a request over an HTTP tunnel
+    // Make a request over an HTTP tunnel
     socket.write('GET / HTTP/1.1\r\n' +
                  'Host: www.google.com:80\r\n' +
                  'Connection: close\r\n' +
@@ -1134,7 +1140,7 @@ This method signals to the server that all of the response headers and body
 have been sent; that server should consider this message complete.
 The method, `response.end()`, MUST be called on each response.
 
-If `data` is specified, it is equivalent to calling
+If `data` is specified, it is similar in effect to calling
 [`response.write(data, encoding)`][] followed by `response.end(callback)`.
 
 If `callback` is specified, it will be called when the response stream
@@ -1301,7 +1307,7 @@ with any headers passed to [`response.writeHead()`][], with the headers passed
 to [`response.writeHead()`][] given precedence.
 
 ```js
-// returns content-type = text/plain
+// Returns content-type = text/plain
 const server = http.createServer((req, res) => {
   res.setHeader('Content-Type', 'text/html');
   res.setHeader('X-Foo', 'bar');
@@ -1494,7 +1500,7 @@ desired with potential future retrieval and modification, use
 [`response.setHeader()`][] instead.
 
 ```js
-// returns content-type = text/plain
+// Returns content-type = text/plain
 const server = http.createServer((req, res) => {
   res.setHeader('Content-Type', 'text/html');
   res.setHeader('X-Foo', 'bar');
@@ -1839,7 +1845,7 @@ Found'`.
 <!-- YAML
 added: v0.1.13
 changes:
-  - version: v9.6.0
+  - version: v9.6.0, v8.12.0
     pr-url: https://github.com/nodejs/node/pull/15752
     description: The `options` argument is supported now.
 -->
@@ -1906,7 +1912,7 @@ http.get('http://nodejs.org/dist/index.json', (res) => {
   }
   if (error) {
     console.error(error.message);
-    // consume response data to free up memory
+    // Consume response data to free up memory
     res.resume();
     return;
   }

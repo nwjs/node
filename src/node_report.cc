@@ -8,8 +8,11 @@
 #include "node_metadata.h"
 #include "zlib.h"
 
-#include <atomic>
-#include <fstream>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
+
+#include <fcntl.h>
 
 #ifdef _WIN32
 #include <Lm.h>
@@ -18,30 +21,18 @@
 #include <process.h>
 #include <psapi.h>
 #include <tchar.h>
-#include <cwctype>
-#else
+#else  // !_WIN32
 #include <sys/resource.h>
-// Get the standard printf format macros for C99 stdint types.
-#ifndef __STDC_FORMAT_MACROS
-#define __STDC_FORMAT_MACROS
-#endif
 #include <cxxabi.h>
 #include <dlfcn.h>
-#include <cinttypes>
 #endif
 
-#include <fcntl.h>
 #include <cstring>
 #include <ctime>
+#include <cwctype>
+#include <atomic>
+#include <fstream>
 #include <iomanip>
-
-#ifndef _MSC_VER
-#include <strings.h>
-#endif
-
-#ifdef __APPLE__
-#include <mach-o/dyld.h>
-#endif
 
 #ifndef _WIN32
 extern char** environ;
@@ -81,9 +72,7 @@ static void PrintJavaScriptStack(JSONWriter* writer,
                                  Local<String> stackstr,
                                  const char* trigger);
 static void PrintNativeStack(JSONWriter* writer);
-#ifndef _WIN32
 static void PrintResourceUsage(JSONWriter* writer);
-#endif
 static void PrintGCStatistics(JSONWriter* writer, Isolate* isolate);
 static void PrintSystemInformation(JSONWriter* writer);
 static void PrintLoadedLibraries(JSONWriter* writer);
@@ -101,7 +90,7 @@ std::string TriggerNodeReport(Isolate* isolate,
                               Environment* env,
                               const char* message,
                               const char* trigger,
-                              std::string name,
+                              const std::string& name,
                               Local<String> stackstr) {
   std::ostringstream oss;
   std::string filename;
@@ -173,9 +162,7 @@ std::string TriggerNodeReport(Isolate* isolate,
       return "";
     }
     outstream = &outfile;
-
-    std::cerr << std::endl
-              << "Writing Node.js report to file: " << filename << std::endl;
+    std::cerr << std::endl << "Writing Node.js report to file: " << filename;
   }
 
   WriteNodeReport(isolate, env, message, trigger, filename, *outstream,
@@ -186,7 +173,7 @@ std::string TriggerNodeReport(Isolate* isolate,
     outfile.close();
   }
 
-  std::cerr << "Node.js report completed" << std::endl;
+  std::cerr << std::endl << "Node.js report completed" << std::endl;
   return filename;
 }
 
@@ -289,9 +276,7 @@ static void WriteNodeReport(Isolate* isolate,
   PrintGCStatistics(&writer, isolate);
 
   // Report OS and current thread resource usage
-#ifndef _WIN32
   PrintResourceUsage(&writer);
-#endif
 
   writer.json_arraystart("libuv");
   if (env != nullptr) {
@@ -466,8 +451,6 @@ static void PrintGCStatistics(JSONWriter* writer, Isolate* isolate) {
   writer->json_objectend();
 }
 
-#ifndef _WIN32
-// Report resource usage (Linux/OSX only).
 static void PrintResourceUsage(JSONWriter* writer) {
   // Get process uptime in seconds
   uint64_t uptime =
@@ -475,30 +458,31 @@ static void PrintResourceUsage(JSONWriter* writer) {
   if (uptime == 0) uptime = 1;  // avoid division by zero.
 
   // Process and current thread usage statistics
-  struct rusage stats;
+  uv_rusage_t rusage;
   writer->json_objectstart("resourceUsage");
-  if (getrusage(RUSAGE_SELF, &stats) == 0) {
+  if (uv_getrusage(&rusage) == 0) {
     double user_cpu =
-        stats.ru_utime.tv_sec + SEC_PER_MICROS * stats.ru_utime.tv_usec;
+        rusage.ru_utime.tv_sec + SEC_PER_MICROS * rusage.ru_utime.tv_usec;
     double kernel_cpu =
-        stats.ru_stime.tv_sec + SEC_PER_MICROS * stats.ru_stime.tv_usec;
+        rusage.ru_stime.tv_sec + SEC_PER_MICROS * rusage.ru_stime.tv_usec;
     writer->json_keyvalue("userCpuSeconds", user_cpu);
     writer->json_keyvalue("kernelCpuSeconds", kernel_cpu);
     double cpu_abs = user_cpu + kernel_cpu;
     double cpu_percentage = (cpu_abs / uptime) * 100.0;
     writer->json_keyvalue("cpuConsumptionPercent", cpu_percentage);
-    writer->json_keyvalue("maxRss", stats.ru_maxrss * 1024);
+    writer->json_keyvalue("maxRss", rusage.ru_maxrss * 1024);
     writer->json_objectstart("pageFaults");
-    writer->json_keyvalue("IORequired", stats.ru_majflt);
-    writer->json_keyvalue("IONotRequired", stats.ru_minflt);
+    writer->json_keyvalue("IORequired", rusage.ru_majflt);
+    writer->json_keyvalue("IONotRequired", rusage.ru_minflt);
     writer->json_objectend();
     writer->json_objectstart("fsActivity");
-    writer->json_keyvalue("reads", stats.ru_inblock);
-    writer->json_keyvalue("writes", stats.ru_oublock);
+    writer->json_keyvalue("reads", rusage.ru_inblock);
+    writer->json_keyvalue("writes", rusage.ru_oublock);
     writer->json_objectend();
   }
   writer->json_objectend();
 #ifdef RUSAGE_THREAD
+  struct rusage stats;
   if (getrusage(RUSAGE_THREAD, &stats) == 0) {
     writer->json_objectstart("uvthreadResourceUsage");
     double user_cpu =
@@ -518,7 +502,6 @@ static void PrintResourceUsage(JSONWriter* writer) {
   }
 #endif
 }
-#endif
 
 // Report operating system information.
 static void PrintSystemInformation(JSONWriter* writer) {

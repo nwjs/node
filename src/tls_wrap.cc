@@ -57,6 +57,7 @@ TLSWrap::TLSWrap(Environment* env,
       StreamBase(env),
       sc_(sc) {
   MakeWeak();
+  StreamBase::AttachToObject(GetObject());
 
   // sc comes from an Unwrap. Make sure it was assigned.
   CHECK_NOT_NULL(sc);
@@ -149,12 +150,11 @@ void TLSWrap::Wrap(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[1]->IsObject());
   CHECK(args[2]->IsBoolean());
 
-  Local<External> stream_obj = args[0].As<External>();
   Local<Object> sc = args[1].As<Object>();
   Kind kind = args[2]->IsTrue() ? SSLWrap<TLSWrap>::kServer :
                                   SSLWrap<TLSWrap>::kClient;
 
-  StreamBase* stream = static_cast<StreamBase*>(stream_obj->Value());
+  StreamBase* stream = StreamBase::FromObject(args[0].As<Object>());
   CHECK_NOT_NULL(stream);
 
   Local<Object> obj;
@@ -923,11 +923,13 @@ void TLSWrap::Initialize(Local<Object> target,
   Local<String> tlsWrapString =
       FIXED_ONE_BYTE_STRING(env->isolate(), "TLSWrap");
   t->SetClassName(tlsWrapString);
+  t->InstanceTemplate()
+    ->SetInternalFieldCount(StreamBase::kStreamBaseField + 1);
 
   Local<FunctionTemplate> get_write_queue_size =
       FunctionTemplate::New(env->isolate(),
                             GetWriteQueueSize,
-                            env->as_external(),
+                            env->as_callback_data(),
                             Signature::New(env->isolate(), t));
   t->PrototypeTemplate()->SetAccessorProperty(
       env->write_queue_size_string(),
@@ -943,7 +945,7 @@ void TLSWrap::Initialize(Local<Object> target,
   env->SetProtoMethod(t, "destroySSL", DestroySSL);
   env->SetProtoMethod(t, "enableCertCb", EnableCertCb);
 
-  StreamBase::AddMethods<TLSWrap>(env, t);
+  StreamBase::AddMethods(env, t);
   SSLWrap<TLSWrap>::AddMethods(env, t);
 
   env->SetProtoMethod(t, "getServername", GetServername);

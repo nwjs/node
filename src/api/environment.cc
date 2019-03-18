@@ -36,7 +36,7 @@ static bool AllowWasmCodeGenerationCallback(Local<Context> context,
 }
 
 static bool ShouldAbortOnUncaughtException(Isolate* isolate) {
-  HandleScope scope(isolate);
+  DebugSealHandleScope scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
   return env != nullptr &&
          (env->is_main_thread() || !env->is_stopping_worker()) &&
@@ -223,7 +223,7 @@ Environment* CreateEnvironment(IsolateData* isolate_data,
       static_cast<Environment::Flags>(Environment::kIsMainThread |
                                       Environment::kOwnsProcessState |
                                       Environment::kOwnsInspector));
-  env->Start(per_process::v8_is_profiling);
+  env->InitializeLibuv(per_process::v8_is_profiling);
   env->ProcessCliArgs(args, exec_args);
   return env;
 }

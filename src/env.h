@@ -319,7 +319,8 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(zero_return_string, "ZERO_RETURN")
 
 #define ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)                            \
-  V(as_external, v8::External)                                                 \
+  V(as_callback_data, v8::Object)                                              \
+  V(as_callback_data_template, v8::FunctionTemplate)                           \
   V(async_hooks_after_function, v8::Function)                                  \
   V(async_hooks_before_function, v8::Function)                                 \
   V(async_hooks_binding, v8::Object)                                           \
@@ -661,6 +662,8 @@ class Environment {
   static inline Environment* GetCurrent(
       const v8::PropertyCallbackInfo<T>& info);
 
+  static inline Environment* GetFromCallbackData(v8::Local<v8::Value> val);
+
   static uv_key_t thread_local_env;
   static inline Environment* GetThreadLocalEnv();
 
@@ -670,7 +673,7 @@ class Environment {
               uint64_t thread_id = kNoThreadId);
   ~Environment();
 
-  void Start(bool start_profiler_idle_notifier);
+  void InitializeLibuv(bool start_profiler_idle_notifier);
   v8::MaybeLocal<v8::Object> ProcessCliArgs(
       const std::vector<std::string>& args,
       const std::vector<std::string>& exec_args);
@@ -877,9 +880,6 @@ class Environment {
   inline void SetProtoMethod(v8::Local<v8::FunctionTemplate> that,
                              const char* name,
                              v8::FunctionCallback callback);
-  inline void SetTemplateMethod(v8::Local<v8::FunctionTemplate> that,
-                                const char* name,
-                                v8::FunctionCallback callback);
 
   // Safe variants denote the function has no side effects.
   inline void SetMethodNoSideEffect(v8::Local<v8::Object> that,
@@ -888,10 +888,6 @@ class Environment {
   inline void SetProtoMethodNoSideEffect(v8::Local<v8::FunctionTemplate> that,
                                          const char* name,
                                          v8::FunctionCallback callback);
-  inline void SetTemplateMethodNoSideEffect(
-      v8::Local<v8::FunctionTemplate> that,
-      const char* name,
-      v8::FunctionCallback callback);
 
   void BeforeExit(void (*cb)(void* arg), void* arg);
   void RunBeforeExitCallbacks();
@@ -1052,7 +1048,6 @@ class Environment {
   TickInfo tick_info_;
   const uint64_t timer_base_;
   bool printed_error_ = false;
-  bool abort_on_uncaught_exception_ = false;
   bool emit_env_nonstring_warning_ = true;
   bool emit_err_name_warning_ = true;
   size_t makecallback_cntr_ = 0;

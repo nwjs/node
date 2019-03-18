@@ -25,6 +25,7 @@ struct StreamWriteResult {
   size_t bytes;
 };
 
+using JSMethodFunction = void(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 class StreamReq {
  public:
@@ -207,8 +208,14 @@ class StreamResource {
   // `*bufs` and `*count` accordingly. This is a no-op by default.
   // Return 0 for success and a libuv error code for failures.
   virtual int DoTryWrite(uv_buf_t** bufs, size_t* count);
-  // Perform a write of data, and either call req_wrap->Done() when finished
-  // and return 0, or return a libuv error code for synchronous failures.
+  // Initiate a write of data. If the write completes synchronously, return 0 on
+  // success (with bufs modified to indicate how much data was consumed) or a
+  // libuv error code on failure. If the write will complete asynchronously,
+  // return 0. When the write completes asynchronously, call req_wrap->Done()
+  // with 0 on success (with bufs modified to indicate how much data was
+  // consumed) or a libuv error code on failure. Do not call req_wrap->Done() if
+  // the write completes synchronously, that is, it should never be called
+  // before DoWrite() has returned.
   virtual int DoWrite(WriteWrap* w,
                       uv_buf_t* bufs,
                       size_t count,
@@ -253,9 +260,9 @@ class StreamResource {
 
 class StreamBase : public StreamResource {
  public:
-  template <class Base>
-  static inline void AddMethods(Environment* env,
-                                v8::Local<v8::FunctionTemplate> target);
+  static constexpr int kStreamBaseField = 1;
+  static void AddMethods(Environment* env,
+                         v8::Local<v8::FunctionTemplate> target);
 
   virtual bool IsAlive() = 0;
   virtual bool IsClosing() = 0;
@@ -299,6 +306,8 @@ class StreamBase : public StreamResource {
   virtual AsyncWrap* GetAsyncWrap() = 0;
   virtual v8::Local<v8::Object> GetObject();
 
+  static StreamBase* FromObject(v8::Local<v8::Object> obj);
+
  protected:
   explicit StreamBase(Environment* env);
 
@@ -311,20 +320,13 @@ class StreamBase : public StreamResource {
   template <enum encoding enc>
   int WriteString(const v8::FunctionCallbackInfo<v8::Value>& args);
 
-  template <class Base>
   static void GetFD(const v8::FunctionCallbackInfo<v8::Value>& args);
-
-  template <class Base>
   static void GetExternal(const v8::FunctionCallbackInfo<v8::Value>& args);
-
-  template <class Base>
   static void GetBytesRead(const v8::FunctionCallbackInfo<v8::Value>& args);
-
-  template <class Base>
   static void GetBytesWritten(const v8::FunctionCallbackInfo<v8::Value>& args);
+  void AttachToObject(v8::Local<v8::Object> obj);
 
-  template <class Base,
-            int (StreamBase::*Method)(
+  template <int (StreamBase::*Method)(
       const v8::FunctionCallbackInfo<v8::Value>& args)>
   static void JSMethod(const v8::FunctionCallbackInfo<v8::Value>& args);
 
@@ -342,6 +344,12 @@ class StreamBase : public StreamResource {
   EmitToJSStreamListener default_listener_;
 
   void SetWriteResult(const StreamWriteResult& res);
+  static void AddMethod(Environment* env,
+                        v8::Local<v8::Signature> sig,
+                        enum v8::PropertyAttribute attributes,
+                        v8::Local<v8::FunctionTemplate> t,
+                        JSMethodFunction* stream_method,
+                        v8::Local<v8::String> str);
 
   friend class WriteWrap;
   friend class ShutdownWrap;

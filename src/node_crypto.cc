@@ -369,7 +369,7 @@ void SecureContext::Initialize(Environment* env, Local<Object> target) {
   Local<FunctionTemplate> ctx_getter_templ =
       FunctionTemplate::New(env->isolate(),
                             CtxGetter,
-                            env->as_external(),
+                            env->as_callback_data(),
                             Signature::New(env->isolate(), t));
 
 
@@ -937,7 +937,7 @@ void SecureContext::SetCiphers(const FunctionCallbackInfo<Value>& args) {
   // TLSv1.3 cipher suites, so we get backwards compatible synchronous errors.
   const node::Utf8Value ciphers(args.GetIsolate(), args[0]);
   if (
-#ifdef TLS1_3_VERSION
+#if defined(TLS1_3_VERSION) && !defined(OPENSSL_IS_BORINGSSL)
       !SSL_CTX_set_ciphersuites(sc->ctx_.get(), "") ||
 #endif
       !SSL_CTX_set_cipher_list(sc->ctx_.get(), *ciphers)) {
@@ -3123,8 +3123,7 @@ static ManagedEVPPKey GetPrivateKeyFromJs(
 
 static ManagedEVPPKey GetPublicOrPrivateKeyFromJs(
     const FunctionCallbackInfo<Value>& args,
-    unsigned int* offset,
-    bool allow_key_object) {
+    unsigned int* offset) {
   if (args[*offset]->IsString() || Buffer::HasInstance(args[*offset])) {
     Environment* env = Environment::GetCurrent(args);
     ByteSource data = ByteSource::FromStringOrBuffer(env, args[(*offset)++]);
@@ -3172,7 +3171,7 @@ static ManagedEVPPKey GetPublicOrPrivateKeyFromJs(
       ThrowCryptoError(env, ERR_get_error(), "Failed to read asymmetric key");
     return ManagedEVPPKey(pkey.release());
   } else {
-    CHECK(args[*offset]->IsObject() && allow_key_object);
+    CHECK(args[*offset]->IsObject());
     KeyObject* key = Unwrap<KeyObject>(args[*offset].As<Object>());
     CHECK(key);
     CHECK_NE(key->GetKeyType(), kKeyTypeSecret);
@@ -3382,7 +3381,7 @@ void KeyObject::Init(const FunctionCallbackInfo<Value>& args) {
     CHECK_EQ(args.Length(), 3);
 
     offset = 0;
-    pkey = GetPublicOrPrivateKeyFromJs(args, &offset, false);
+    pkey = GetPublicOrPrivateKeyFromJs(args, &offset);
     if (!pkey)
       return;
     key->InitPublic(pkey);
@@ -3659,6 +3658,16 @@ void CipherBase::InitIv(const char* cipher_type,
   // Throw if an IV was passed which does not match the cipher's fixed IV length
   if (!is_authenticated_mode && has_iv && iv_len != expected_iv_len) {
     return env()->ThrowError("Invalid IV length");
+  }
+
+  if (EVP_CIPHER_nid(cipher) == NID_chacha20_poly1305) {
+    CHECK(has_iv);
+    // Check for invalid IV lengths, since OpenSSL does not under some
+    // conditions:
+    //   https://www.openssl.org/news/secadv/20190306.txt.
+    if (iv_len > 12) {
+      return env()->ThrowError("Invalid IV length");
+    }
   }
 
   CommonInit(cipher_type, cipher, key, key_len, iv, iv_len, auth_tag_len);
@@ -4649,7 +4658,7 @@ void Verify::VerifyFinal(const FunctionCallbackInfo<Value>& args) {
   ASSIGN_OR_RETURN_UNWRAP(&verify, args.Holder());
 
   unsigned int offset = 0;
-  ManagedEVPPKey pkey = GetPublicOrPrivateKeyFromJs(args, &offset, true);
+  ManagedEVPPKey pkey = GetPublicOrPrivateKeyFromJs(args, &offset);
   if (!pkey)
     return;
 
@@ -4712,7 +4721,7 @@ void PublicKeyCipher::Cipher(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
 
   unsigned int offset = 0;
-  ManagedEVPPKey pkey = GetPublicOrPrivateKeyFromJs(args, &offset, true);
+  ManagedEVPPKey pkey = GetPublicOrPrivateKeyFromJs(args, &offset);
   if (!pkey)
     return;
 
@@ -4762,7 +4771,7 @@ void DiffieHellman::Initialize(Environment* env, Local<Object> target) {
     Local<FunctionTemplate> verify_error_getter_templ =
         FunctionTemplate::New(env->isolate(),
                               DiffieHellman::VerifyErrorGetter,
-                              env->as_external(),
+                              env->as_callback_data(),
                               Signature::New(env->isolate(), t),
                               /* length */ 0,
                               ConstructorBehavior::kThrow,

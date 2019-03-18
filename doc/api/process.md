@@ -1286,7 +1286,7 @@ setTimeout(() => {
   // [ 1, 552 ]
 
   console.log(`Benchmark took ${diff[0] * NS_PER_SEC + diff[1]} nanoseconds`);
-  // benchmark took 1000000552 nanoseconds
+  // Benchmark took 1000000552 nanoseconds
 }, 1000);
 ```
 
@@ -1669,6 +1669,36 @@ added: v11.8.0
 reports for the current process. Additional documentation is available in the
 [report documentation][].
 
+### process.report.directory
+<!-- YAML
+added: v11.12.0
+-->
+
+* {string}
+
+Directory where the report is written. The default value is the empty string,
+indicating that reports are written to the current working directory of the
+Node.js process.
+
+```js
+console.log(`Report directory is ${process.report.directory}`);
+```
+
+### process.report.filename
+<!-- YAML
+added: v11.12.0
+-->
+
+* {string}
+
+Filename where the report is written. If set to the empty string, the output
+filename will be comprised of a timestamp, PID, and sequence number. The default
+value is the empty string.
+
+```js
+console.log(`Report filename is ${process.report.filename}`);
+```
+
 ### process.report.getReport([err])
 <!-- YAML
 added: v11.8.0
@@ -1687,52 +1717,69 @@ console.log(data);
 
 Additional documentation is available in the [report documentation][].
 
-### process.report.setOptions([options]);
+### process.report.reportOnFatalError
 <!-- YAML
-added: v11.8.0
+added: v11.12.0
 -->
 
-* `options` {Object}
-  * `events` {string[]}
-    * `signal`: Generate a report in response to a signal raised on the process.
-    * `exception`: Generate a report on unhandled exceptions.
-    * `fatalerror`: Generate a report on internal fault
-      (such as out of memory errors or native assertions).
-  * `signal` {string} Sets or resets the signal for report generation
-    (not supported on Windows). **Default:** `'SIGUSR2'`.
-  * `filename` {string} Name of the file where the report is written.
-  * `path` {string} Directory where the report is written.
-    **Default:** the current working directory of the Node.js process.
+* {boolean}
 
-Configures the diagnostic reporting behavior. Upon invocation, the runtime
-is reconfigured to generate reports based on `options`. Several usage examples
-are shown below.
+If `true`, a diagnostic report is generated on fatal errors, such as out of
+memory errors or failed C++ assertions.
 
 ```js
-// Trigger a report on uncaught exceptions or fatal errors.
-process.report.setOptions({ events: ['exception', 'fatalerror'] });
-
-// Change the default path and filename of the report.
-process.report.setOptions({ filename: 'foo.json', path: '/home' });
-
-// Produce the report onto stdout, when generated. Special meaning is attached
-// to `stdout` and `stderr`. Usage of these will result in report being written
-// to the associated standard streams. URLs are not supported.
-process.report.setOptions({ filename: 'stdout' });
+console.log(`Report on fatal error: ${process.report.reportOnFatalError}`);
 ```
 
-Signal based report generation is not supported on Windows.
+### process.report.reportOnSignal
+<!-- YAML
+added: v11.12.0
+-->
 
-Additional documentation is available in the [report documentation][].
+* {boolean}
 
-### process.report.triggerReport([filename][, err])
+If `true`, a diagnostic report is generated when the process receives the
+signal specified by `process.report.signal`.
+
+```js
+console.log(`Report on signal: ${process.report.reportOnSignal}`);
+```
+
+### process.report.reportOnUncaughtException
+<!-- YAML
+added: v11.12.0
+-->
+
+* {boolean}
+
+If `true`, a diagnostic report is generated on uncaught exception.
+
+```js
+console.log(`Report on exception: ${process.report.reportOnUncaughtException}`);
+```
+
+### process.report.signal
+<!-- YAML
+added: v11.12.0
+-->
+
+* {string}
+
+The signal used to trigger the creation of a diagnostic report. Defaults to
+`'SIGUSR2'`.
+
+```js
+console.log(`Report signal: ${process.report.signal}`);
+```
+
+### process.report.writeReport([filename][, err])
 <!-- YAML
 added: v11.8.0
 -->
 
 * `filename` {string} Name of the file where the report is written. This
   should be a relative path, that will be appended to the directory specified in
-  `process.report.setOptions`, or the current working directory of the Node.js
+  `process.report.directory`, or the current working directory of the Node.js
   process, if unspecified.
 * `err` {Error} A custom error used for reporting the JavaScript stack.
 
@@ -1743,7 +1790,7 @@ filename includes the date, time, PID, and a sequence number. The report's
 JavaScript stack trace is taken from `err`, if present.
 
 ```js
-process.report.triggerReport();
+process.report.writeReport();
 ```
 
 Additional documentation is available in the [report documentation][].

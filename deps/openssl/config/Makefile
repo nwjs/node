@@ -44,9 +44,6 @@ all: $(ARCHS) replace
 
 # Configure and generate openssl asm files for each archs
 $(ARCHS):
-# Remove openssl git and travis configuration, nodejs has its own (and they
-# should not have been packaged by upstream).
-	rm -rf $(OPSSL_SRC)/.git* $(OPSSL_SRC)/.travis*
 	cd $(OPSSL_SRC); $(NO_WARN_ENV) CC=$(CC) $(PERL) $(CONFIGURE) $(COPTS) $@;
 	$(PERL) -w -I$(OPSSL_SRC) $(GENERATE) asm $@
 # Confgure asm_avx2 and generate upto avx2 support

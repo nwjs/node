@@ -1,11 +1,10 @@
 #include "node_messaging.h"
+
 #include "async_wrap-inl.h"
-#include "async_wrap.h"
 #include "debug_utils.h"
 #include "node_buffer.h"
 #include "node_errors.h"
 #include "node_process.h"
-#include "util-inl.h"
 #include "util.h"
 
 using v8::Array;
@@ -63,7 +62,7 @@ class DeserializerDelegate : public ValueDeserializer::Delegate {
       return MaybeLocal<Object>();
     CHECK_LE(id, message_ports_.size());
     return message_ports_[id]->object(isolate);
-  };
+  }
 
   MaybeLocal<SharedArrayBuffer> GetSharedArrayBufferFromId(
       Isolate* isolate, uint32_t clone_id) override {
@@ -725,23 +724,19 @@ void MessagePort::Stop() {
 }
 
 void MessagePort::Start(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
   MessagePort* port;
   ASSIGN_OR_RETURN_UNWRAP(&port, args.This());
   if (!port->data_) {
-    THROW_ERR_CLOSED_MESSAGE_PORT(env);
     return;
   }
   port->Start();
 }
 
 void MessagePort::Stop(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
   MessagePort* port;
   CHECK(args[0]->IsObject());
   ASSIGN_OR_RETURN_UNWRAP(&port, args[0].As<Object>());
   if (!port->data_) {
-    THROW_ERR_CLOSED_MESSAGE_PORT(env);
     return;
   }
   port->Stop();

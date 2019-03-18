@@ -1,3 +1,5 @@
+#include "env.h"
+
 #include "async_wrap.h"
 #include "node_buffer.h"
 #include "node_context_data.h"
@@ -14,9 +16,9 @@
 #include "tracing/traced_value.h"
 #include "v8-profiler.h"
 
-#include <cstdio>
 #include <algorithm>
 #include <atomic>
+#include <cstdio>
 
 namespace node {
 
@@ -25,8 +27,8 @@ using v8::ArrayBuffer;
 using v8::Boolean;
 using v8::Context;
 using v8::EmbedderGraph;
-using v8::External;
 using v8::Function;
+using v8::FunctionTemplate;
 using v8::HandleScope;
 using v8::Integer;
 using v8::Isolate;
@@ -197,7 +199,16 @@ Environment::Environment(IsolateData* isolate_data,
   // We'll be creating new objects so make sure we've entered the context.
   HandleScope handle_scope(isolate());
   Context::Scope context_scope(context);
-  set_as_external(External::New(isolate(), this));
+  {
+    Local<FunctionTemplate> templ = FunctionTemplate::New(isolate());
+    templ->InstanceTemplate()->SetInternalFieldCount(1);
+    Local<Object> obj =
+        templ->GetFunction(context).ToLocalChecked()->NewInstance(
+            context).ToLocalChecked();
+    obj->SetAlignedPointerInInternalField(0, this);
+    set_as_callback_data(obj);
+    set_as_callback_data_template(templ);
+  }
 
   // We create new copies of the per-Environment option sets, so that it is
   // easier to modify them after Environment creation. The defaults are
@@ -316,7 +327,7 @@ Environment::~Environment() {
   }
 }
 
-void Environment::Start(bool start_profiler_idle_notifier) {
+void Environment::InitializeLibuv(bool start_profiler_idle_notifier) {
   HandleScope handle_scope(isolate());
   Context::Scope context_scope(context());
 
@@ -646,9 +657,7 @@ void Environment::RunAndClearNativeImmediates() {
     auto drain_list = [&]() {
       TryCatchScope try_catch(this);
       for (auto it = list.begin(); it != list.end(); ++it) {
-#ifdef DEBUG
-        v8::SealHandleScope seal_handle_scope(isolate());
-#endif
+        DebugSealHandleScope seal_handle_scope(isolate());
         it->cb_(this, it->data_);
         if (it->refed_)
           ref_count++;

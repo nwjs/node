@@ -60,9 +60,9 @@ module.exports = {
     'brace-style': ['error', '1tbs', { allowSingleLine: true }],
     'capitalized-comments': ['error', 'always', {
       line: {
-        // Ignore all lines that have less characters than 40 and all lines that
+        // Ignore all lines that have less characters than 30 and all lines that
         // start with something that looks like a variable name or code.
-        ignorePattern: '^.{0,40}$|^ [a-z]+ ?[0-9A-Z_.(/=:[#-]|^ std',
+        ignorePattern: '^.{0,30}$|^ [a-z]+ ?[0-9A-Z_.(/=:[#-]|^ std',
         ignoreInlineComments: true,
         ignoreConsecutiveComments: true,
       },
@@ -170,32 +170,32 @@ module.exports = {
         message: '__defineSetter__ is deprecated.',
       },
     ],
-    // If this list is modified, please copy the change to lib/.eslintrc.yaml
-    // and test/.eslintrc.yaml.
+    // If this list is modified, please copy changes that should apply to ./lib
+    // as well to lib/.eslintrc.yaml.
     'no-restricted-syntax': [
       'error',
       {
-        selector: "CallExpression[callee.object.name='assert'][callee.property.name='deepStrictEqual'][arguments.2.type='Literal']",
+        selector: "CallExpression[callee.property.name='deepStrictEqual'][arguments.2.type='Literal']",
         message: 'Do not use a literal for the third argument of assert.deepStrictEqual()',
       },
       {
-        selector: "CallExpression[callee.object.name='assert'][callee.property.name='doesNotThrow']",
+        selector: "CallExpression[callee.property.name='doesNotThrow']",
         message: 'Please replace `assert.doesNotThrow()` and add a comment next to the code instead.',
       },
       {
-        selector: "CallExpression[callee.object.name='assert'][callee.property.name='rejects'][arguments.length<2]",
+        selector: "CallExpression[callee.property.name='rejects'][arguments.length<2]",
         message: '`assert.rejects()` must be invoked with at least two arguments.',
       },
       {
-        selector: "CallExpression[callee.object.name='assert'][callee.property.name='strictEqual'][arguments.2.type='Literal']",
+        selector: "CallExpression[callee.property.name='strictEqual'][arguments.2.type='Literal']",
         message: 'Do not use a literal for the third argument of assert.strictEqual()',
       },
       {
-        selector: "CallExpression[callee.object.name='assert'][callee.property.name='throws'][arguments.1.type='Literal']:not([arguments.1.regex])",
+        selector: "CallExpression[callee.property.name='throws'][arguments.1.type='Literal']:not([arguments.1.regex])",
         message: 'Use an object as second argument of `assert.throws()`.',
       },
       {
-        selector: "CallExpression[callee.object.name='assert'][callee.property.name='throws'][arguments.length<2]",
+        selector: "CallExpression[callee.property.name='throws'][arguments.length<2]",
         message: '`assert.throws()` must be invoked with at least two arguments.',
       },
       {
@@ -210,6 +210,38 @@ module.exports = {
         selector: 'ThrowStatement > CallExpression[callee.name=/Error$/]',
         message: 'Use `new` keyword when throwing an `Error`.',
       },
+      {
+        selector: "CallExpression[callee.property.name='notDeepStrictEqual'][arguments.length<2]",
+        message: 'assert.notDeepStrictEqual() must be invoked with at least two arguments.',
+      },
+      {
+        selector: "CallExpression[callee.property.name='deepStrictEqual'][arguments.length<2]",
+        message: 'assert.deepStrictEqual() must be invoked with at least two arguments.',
+      },
+      {
+        selector: "CallExpression[callee.property.name='notStrictEqual'][arguments.length<2]",
+        message: 'assert.notStrictEqual() must be invoked with at least two arguments.',
+      },
+      {
+        selector: "CallExpression[callee.property.name='strictEqual'][arguments.length<2]",
+        message: 'assert.strictEqual() must be invoked with at least two arguments.',
+      },
+      {
+        selector: "CallExpression[callee.property.name='notDeepStrictEqual'][arguments.0.type='Literal']:not([arguments.1.type='Literal']):not([arguments.1.type='ObjectExpression']):not([arguments.1.type='ArrayExpression']):not([arguments.1.type='UnaryExpression'])",
+        message: 'The first argument should be the `actual`, not the `expected` value.',
+      },
+      {
+        selector: "CallExpression[callee.property.name='notStrictEqual'][arguments.0.type='Literal']:not([arguments.1.type='Literal']):not([arguments.1.type='ObjectExpression']):not([arguments.1.type='ArrayExpression']):not([arguments.1.type='UnaryExpression'])",
+        message: 'The first argument should be the `actual`, not the `expected` value.',
+      },
+      {
+        selector: "CallExpression[callee.property.name='deepStrictEqual'][arguments.0.type='Literal']:not([arguments.1.type='Literal']):not([arguments.1.type='ObjectExpression']):not([arguments.1.type='ArrayExpression']):not([arguments.1.type='UnaryExpression'])",
+        message: 'The first argument should be the `actual`, not the `expected` value.',
+      },
+      {
+        selector: "CallExpression[callee.property.name='strictEqual'][arguments.0.type='Literal']:not([arguments.1.type='Literal']):not([arguments.1.type='ObjectExpression']):not([arguments.1.type='ArrayExpression']):not([arguments.1.type='UnaryExpression'])",
+        message: 'The first argument should be the `actual`, not the `expected` value.',
+      }
     ],
     /* eslint-enable max-len */
     'no-return-await': 'error',

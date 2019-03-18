@@ -35,7 +35,7 @@ using performance::PerformanceEntry;
 #define DEFAULT_MAX_SETTINGS 10
 
 // Default maximum total memory cap for Http2Session.
-#define DEFAULT_MAX_SESSION_MEMORY 1e7;
+#define DEFAULT_MAX_SESSION_MEMORY 1e7
 
 // These are the standard HTTP/2 defaults as specified by the RFC
 #define DEFAULT_SETTINGS_HEADER_TABLE_SIZE 4096
@@ -696,7 +696,7 @@ class Http2Session : public AsyncWrap, public StreamListener {
 
   void Close(uint32_t code = NGHTTP2_NO_ERROR,
              bool socket_closed = false);
-  void Consume(Local<External> external);
+  void Consume(Local<Object> stream);
   void Goaway(uint32_t code, int32_t lastStreamID,
               const uint8_t* data, size_t len);
   void AltSvc(int32_t id,

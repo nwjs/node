@@ -39,6 +39,9 @@
     # Increment by one for each non-official patch applied to deps/v8.
     'v8_embedder_string': '-node.18',
 
+    # Turn on SipHash for hash seed generation, addresses HashWick
+    'v8_use_siphash': 'true',
+
     # Enable disassembler for `--print-code` v8 options
     'v8_enable_disassembler': 1,
     'v8_host_byteorder': '<!(python -c "import sys; print sys.byteorder")',
@@ -430,6 +433,14 @@
               }],
             ],
           }],
+          ['target_arch=="arm64"', {
+            'TargetMachine' : 0, # /MACHINE:ARM64 is inferred from the input files.
+            'target_conditions': [
+              ['_type=="executable"', {
+                'AdditionalOptions': [ '/SubSystem:Console' ],
+              }],
+            ],
+          }],
         ],
         'GenerateDebugInformation': 'true',
         'GenerateMapFile': 'false', # /MAP
@@ -455,6 +466,9 @@
     #   Ususaly safe. Disable for `dep`, enable for `src`
     'msvs_disabled_warnings': [4351, 4355, 4800, 4251, 4275, 4244, 4267, 4595],
     'conditions': [
+      [ 'target_arch=="arm64"', {
+        'msvs_configuration_platform': 'arm64',
+      }],
       ['asan == 1 and OS != "mac"', {
         'cflags+': [
           '-fno-omit-frame-pointer',

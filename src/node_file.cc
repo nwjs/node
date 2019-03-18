@@ -111,6 +111,7 @@ FileHandle::FileHandle(Environment* env, Local<Object> obj, int fd)
       StreamBase(env),
       fd_(fd) {
   MakeWeak();
+  StreamBase::AttachToObject(GetObject());
 }
 
 FileHandle* FileHandle::New(Environment* env, int fd, Local<Object> obj) {
@@ -1658,7 +1659,7 @@ static void WriteBuffer(const FunctionCallbackInfo<Value>& args) {
   const int64_t pos = GET_OFFSET(args[4]);
 
   char* buf = buffer_data + off;
-  uv_buf_t uvbuf = uv_buf_init(const_cast<char*>(buf), len);
+  uv_buf_t uvbuf = uv_buf_init(buf, len);
 
   FSReqBase* req_wrap_async = GetReqWrap(env, args[5]);
   if (req_wrap_async != nullptr) {  // write(fd, buffer, off, len, pos, req)
@@ -1857,7 +1858,7 @@ static void Read(const FunctionCallbackInfo<Value>& args) {
   const int64_t pos = args[4].As<Integer>()->Value();
 
   char* buf = buffer_data + off;
-  uv_buf_t uvbuf = uv_buf_init(const_cast<char*>(buf), len);
+  uv_buf_t uvbuf = uv_buf_init(buf, len);
 
   FSReqBase* req_wrap_async = GetReqWrap(env, args[5]);
   if (req_wrap_async != nullptr) {  // read(fd, buffer, offset, len, pos, req)
@@ -2112,7 +2113,7 @@ static void Mkdtemp(const FunctionCallbackInfo<Value>& args) {
     SyncCall(env, args[3], &req_wrap_sync, "mkdtemp",
              uv_fs_mkdtemp, *tmpl);
     FS_SYNC_TRACE_END(mkdtemp);
-    const char* path = static_cast<const char*>(req_wrap_sync.req.path);
+    const char* path = req_wrap_sync.req.path;
 
     Local<Value> error;
     MaybeLocal<Value> rc =
@@ -2227,11 +2228,11 @@ void Initialize(Local<Object> target,
   env->SetProtoMethod(fd, "close", FileHandle::Close);
   env->SetProtoMethod(fd, "releaseFD", FileHandle::ReleaseFD);
   Local<ObjectTemplate> fdt = fd->InstanceTemplate();
-  fdt->SetInternalFieldCount(1);
+  fdt->SetInternalFieldCount(StreamBase::kStreamBaseField + 1);
   Local<String> handleString =
        FIXED_ONE_BYTE_STRING(isolate, "FileHandle");
   fd->SetClassName(handleString);
-  StreamBase::AddMethods<FileHandle>(env, fd);
+  StreamBase::AddMethods(env, fd);
   target
       ->Set(context, handleString,
             fd->GetFunction(env->context()).ToLocalChecked())

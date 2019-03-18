@@ -1,7 +1,10 @@
-#include <cerrno>
+#include "node_options.h"  // NOLINT(build/include_inline)
+#include "node_options-inl.h"
+
 #include "env-inl.h"
 #include "node_binding.h"
-#include "node_options-inl.h"
+
+#include <cstdlib>  // strtoul, errno
 
 using v8::Boolean;
 using v8::Context;
@@ -45,8 +48,14 @@ void PerProcessOptions::CheckOptions(std::vector<std::string>* errors) {
 void PerIsolateOptions::CheckOptions(std::vector<std::string>* errors) {
   per_env->CheckOptions(errors);
 #ifdef NODE_REPORT
-  if (per_env->experimental_report)
+  if (per_env->experimental_report) {
+    // Assign the report_signal default value here. Once the
+    // --experimental-report flag is dropped, move this initialization to
+    // node_options.h, where report_signal is declared.
+    if (report_signal.empty())
+      report_signal = "SIGUSR2";
     return;
+  }
 
   if (!report_directory.empty()) {
     errors->push_back("--diagnostic-report-directory option is valid only when "
@@ -178,6 +187,10 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             kAllowedInEnvironment);
 #endif  // NODE_REPORT
   AddOption("--expose-internals", "", &EnvironmentOptions::expose_internals);
+  AddOption("--frozen-intrinsics",
+            "experimental frozen intrinsics support",
+            &EnvironmentOptions::frozen_intrinsics,
+            kAllowedInEnvironment);
   AddOption("--http-parser",
             "Select which HTTP parser to use; either 'legacy' or 'llhttp' "
 #ifdef NODE_EXPERIMENTAL_HTTP_DEFAULT

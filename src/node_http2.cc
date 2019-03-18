@@ -1287,9 +1287,6 @@ void Http2Session::HandleHeadersFrame(const nghttp2_frame* frame) {
 
   std::vector<nghttp2_header> headers(stream->move_headers());
 
-  Local<String> name_str;
-  Local<String> value_str;
-
   // The headers are passed in above as a queue of nghttp2_header structs.
   // The following converts that into a JS array with the structure:
   // [name1, value1, name2, value2, name3, value3, name3, value4] and so on.
@@ -1844,8 +1841,8 @@ bool Http2Session::HasWritesOnSocketForStream(Http2Stream* stream) {
 // (typically a net.Socket or tls.TLSSocket). The lifecycle of the two is
 // tightly coupled with all data transfer between the two happening at the
 // C++ layer via the StreamBase API.
-void Http2Session::Consume(Local<External> external) {
-  StreamBase* stream = static_cast<StreamBase*>(external->Value());
+void Http2Session::Consume(Local<Object> stream_obj) {
+  StreamBase* stream = StreamBase::FromObject(stream_obj);
   stream->PushStreamListener(this);
   Debug(this, "i/o stream consumed");
 }
@@ -1875,12 +1872,14 @@ Http2Stream::Http2Stream(Http2Session* session,
       id_(id),
       current_headers_category_(category) {
   MakeWeak();
+  StreamBase::AttachToObject(GetObject());
   statistics_.start_time = uv_hrtime();
 
   // Limit the number of header pairs
   max_header_pairs_ = session->GetMaxHeaderPairs();
-  if (max_header_pairs_ == 0)
-  max_header_pairs_ = DEFAULT_MAX_HEADER_LIST_PAIRS;
+  if (max_header_pairs_ == 0) {
+    max_header_pairs_ = DEFAULT_MAX_HEADER_LIST_PAIRS;
+  }
   current_headers_.reserve(max_header_pairs_);
 
   // Limit the number of header octets
@@ -2434,8 +2433,8 @@ void Http2Session::New(const FunctionCallbackInfo<Value>& args) {
 void Http2Session::Consume(const FunctionCallbackInfo<Value>& args) {
   Http2Session* session;
   ASSIGN_OR_RETURN_UNWRAP(&session, args.Holder());
-  CHECK(args[0]->IsExternal());
-  session->Consume(args[0].As<External>());
+  CHECK(args[0]->IsObject());
+  session->Consume(args[0].As<Object>());
 }
 
 // Destroys the Http2Session instance and renders it unusable
@@ -3015,9 +3014,9 @@ void Initialize(Local<Object> target,
   env->SetProtoMethod(stream, "rstStream", Http2Stream::RstStream);
   env->SetProtoMethod(stream, "refreshState", Http2Stream::RefreshState);
   stream->Inherit(AsyncWrap::GetConstructorTemplate(env));
-  StreamBase::AddMethods<Http2Stream>(env, stream);
+  StreamBase::AddMethods(env, stream);
   Local<ObjectTemplate> streamt = stream->InstanceTemplate();
-  streamt->SetInternalFieldCount(1);
+  streamt->SetInternalFieldCount(StreamBase::kStreamBaseField + 1);
   env->set_http2stream_constructor_template(streamt);
   target->Set(context,
               FIXED_ONE_BYTE_STRING(env->isolate(), "Http2Stream"),

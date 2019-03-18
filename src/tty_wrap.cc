@@ -51,7 +51,8 @@ void TTYWrap::Initialize(Local<Object> target,
 
   Local<FunctionTemplate> t = env->NewFunctionTemplate(New);
   t->SetClassName(ttyString);
-  t->InstanceTemplate()->SetInternalFieldCount(1);
+  t->InstanceTemplate()
+    ->SetInternalFieldCount(StreamBase::kStreamBaseField + 1);
   t->Inherit(LibuvStreamWrap::GetConstructorTemplate(env));
 
   env->SetProtoMethodNoSideEffect(t, "getWindowSize", TTYWrap::GetWindowSize);
@@ -114,7 +115,7 @@ void TTYWrap::GetWindowSize(const FunctionCallbackInfo<Value>& args) {
   int err = uv_tty_get_winsize(&wrap->handle_, &width, &height);
 
   if (err == 0) {
-    Local<v8::Array> a = args[0].As<Array>();
+    Local<Array> a = args[0].As<Array>();
     a->Set(env->context(), 0, Integer::New(env->isolate(), width)).FromJust();
     a->Set(env->context(), 1, Integer::New(env->isolate(), height)).FromJust();
   }

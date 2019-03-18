@@ -158,7 +158,7 @@ const fs = require('fs');
 
 try {
   fs.readFile('/some/file/that/does-not-exist', (err, data) => {
-    // mistaken assumption: throwing here...
+    // Mistaken assumption: throwing here...
     if (err) {
       throw err;
     }
@@ -217,7 +217,7 @@ a string representing the location in the code at which
 ```js
 const myObject = {};
 Error.captureStackTrace(myObject);
-myObject.stack;  // similar to `new Error().stack`
+myObject.stack;  // Similar to `new Error().stack`
 ```
 
 The first line of the trace will be prefixed with
@@ -316,7 +316,7 @@ will not be present in the stack traces:
 const cheetahify = require('./native-binding.node');
 
 function makeFaster() {
-  // cheetahify *synchronously* calls speedy.
+  // `cheetahify()` *synchronously* calls speedy.
   cheetahify(function speedy() {
     throw new Error('oh no!');
   });
@@ -573,6 +573,9 @@ program. For a comprehensive list, see the [`errno`(3) man page][].
 - `ENOTEMPTY` (Directory not empty): A directory with entries was the target
   of an operation that requires an empty directory — usually [`fs.unlink`][].
 
+- `ENOTFOUND` (DNS lookup failed): Indicates a DNS failure of either
+  `EAI_NODATA` or `EAI_NONAME`. This is not a standard POSIX error.
+
 - `EPERM` (Operation not permitted): An attempt was made to perform an
   operation that requires elevated privileges.
 
@@ -684,12 +687,6 @@ Used when a child process is being forked without specifying an IPC channel.
 
 Used when the main process is trying to read data from the child process's
 STDERR/STDOUT, and the data's length is longer than the `maxBuffer` option.
-
-<a id="ERR_CLOSED_MESSAGE_PORT"></a>
-### ERR_CLOSED_MESSAGE_PORT
-
-There was an attempt to use a `MessagePort` instance in a closed
-state, usually after `.close()` has been called.
 
 <a id="ERR_CONSOLE_WRITABLE_STREAM"></a>
 ### ERR_CONSOLE_WRITABLE_STREAM
@@ -1971,6 +1968,16 @@ A module file could not be resolved while attempting a [`require()`][] or
 
 > Stability: 0 - Deprecated. These error codes are either inconsistent, or have
 > been removed.
+
+<a id="ERR_CLOSED_MESSAGE_PORT"></a>
+### ERR_CLOSED_MESSAGE_PORT
+<!-- YAML
+added: v10.5.0
+removed: v11.12.0
+-->
+
+There was an attempt to use a `MessagePort` instance in a closed
+state, usually after `.close()` has been called.
 
 <a id="ERR_HTTP2_FRAME_ERROR"></a>
 ### ERR_HTTP2_FRAME_ERROR

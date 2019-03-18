@@ -296,6 +296,8 @@ inline void Environment::AssignToContext(v8::Local<v8::Context> context,
 }
 
 inline Environment* Environment::GetCurrent(v8::Isolate* isolate) {
+  if (UNLIKELY(!isolate->InContext())) return nullptr;
+  v8::HandleScope handle_scope(isolate);
   return GetCurrent(isolate->GetCurrentContext());
 }
 
@@ -316,16 +318,23 @@ inline Environment* Environment::GetCurrent(v8::Local<v8::Context> context) {
 
 inline Environment* Environment::GetCurrent(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  CHECK(info.Data()->IsExternal());
-  return static_cast<Environment*>(info.Data().As<v8::External>()->Value());
+  return GetFromCallbackData(info.Data());
 }
 
 template <typename T>
 inline Environment* Environment::GetCurrent(
     const v8::PropertyCallbackInfo<T>& info) {
-  CHECK(info.Data()->IsExternal());
-  return static_cast<Environment*>(
-      info.Data().template As<v8::External>()->Value());
+  return GetFromCallbackData(info.Data());
+}
+
+inline Environment* Environment::GetFromCallbackData(v8::Local<v8::Value> val) {
+  DCHECK(val->IsObject());
+  v8::Local<v8::Object> obj = val.As<v8::Object>();
+  DCHECK_GE(obj->InternalFieldCount(), 1);
+  Environment* env =
+      static_cast<Environment*>(obj->GetAlignedPointerFromInternalField(0));
+  DCHECK(env->as_callback_data_template()->HasInstance(obj));
+  return env;
 }
 
 inline Environment* Environment::GetThreadLocalEnv() {
@@ -857,7 +866,7 @@ inline v8::Local<v8::FunctionTemplate>
                                      v8::Local<v8::Signature> signature,
                                      v8::ConstructorBehavior behavior,
                                      v8::SideEffectType side_effect_type) {
-  v8::Local<v8::External> external = as_external();
+  v8::Local<v8::Object> external = as_callback_data();
   return v8::FunctionTemplate::New(isolate(), callback, external,
                                    signature, 0, behavior, side_effect_type);
 }
@@ -931,37 +940,6 @@ inline void Environment::SetProtoMethodNoSideEffect(
       v8::String::NewFromUtf8(isolate(), name, type).ToLocalChecked();
   that->PrototypeTemplate()->Set(name_string, t);
   t->SetClassName(name_string);  // NODE_SET_PROTOTYPE_METHOD() compatibility.
-}
-
-inline void Environment::SetTemplateMethod(v8::Local<v8::FunctionTemplate> that,
-                                           const char* name,
-                                           v8::FunctionCallback callback) {
-  v8::Local<v8::FunctionTemplate> t =
-      NewFunctionTemplate(callback, v8::Local<v8::Signature>(),
-                          v8::ConstructorBehavior::kAllow,
-                          v8::SideEffectType::kHasSideEffect);
-  // kInternalized strings are created in the old space.
-  const v8::NewStringType type = v8::NewStringType::kInternalized;
-  v8::Local<v8::String> name_string =
-      v8::String::NewFromUtf8(isolate(), name, type).ToLocalChecked();
-  that->Set(name_string, t);
-  t->SetClassName(name_string);  // NODE_SET_METHOD() compatibility.
-}
-
-inline void Environment::SetTemplateMethodNoSideEffect(
-    v8::Local<v8::FunctionTemplate> that,
-    const char* name,
-    v8::FunctionCallback callback) {
-  v8::Local<v8::FunctionTemplate> t =
-      NewFunctionTemplate(callback, v8::Local<v8::Signature>(),
-                          v8::ConstructorBehavior::kAllow,
-                          v8::SideEffectType::kHasNoSideEffect);
-  // kInternalized strings are created in the old space.
-  const v8::NewStringType type = v8::NewStringType::kInternalized;
-  v8::Local<v8::String> name_string =
-      v8::String::NewFromUtf8(isolate(), name, type).ToLocalChecked();
-  that->Set(name_string, t);
-  t->SetClassName(name_string);  // NODE_SET_METHOD() compatibility.
 }
 
 void Environment::AddCleanupHook(void (*fn)(void*), void* arg) {

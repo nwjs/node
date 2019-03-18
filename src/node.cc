@@ -19,6 +19,10 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#include "node.h"
+
+// ========== local headers ==========
+
 #include "debug_utils.h"
 #include "node_binding.h"
 #include "node_buffer.h"
@@ -78,25 +82,19 @@
 #include "large_pages/node_large_page.h"
 #endif
 
-#include <cerrno>
-#include <fcntl.h>  // _O_RDWR
-#include <climits>  // PATH_MAX
-#include <csignal>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <sys/types.h>
+#ifdef NODE_REPORT
+#include "node_report.h"
+#endif
 
-#include <string>
-#include <vector>
+// ========== global C headers ==========
+
+#include <fcntl.h>  // _O_RDWR
+#include <sys/types.h>
 
 #if defined(NODE_HAVE_I18N_SUPPORT)
 #include <unicode/uvernum.h>
 #endif
 
-#ifdef NODE_REPORT
-#include "node_report.h"
-#endif
 
 #if defined(LEAK_SANITIZER)
 #include <sanitizer/lsan_interface.h>
@@ -111,6 +109,18 @@
 #include <sys/resource.h>  // getrlimit, setrlimit
 #include <unistd.h>        // STDIN_FILENO, STDERR_FILENO
 #endif
+
+// ========== global C++ headers ==========
+
+#include <cerrno>
+#include <climits>  // PATH_MAX
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+#include <string>
+#include <vector>
 
 extern "C" {
 NODE_EXTERN void* g_get_node_env();
@@ -417,7 +427,7 @@ MaybeLocal<Value> StartMainThreadExecution(Environment* env) {
   }
 
   if (env->options()->prof_process) {
-    env->set_execution_mode(Environment::ExecutionMode::kPrintBashCompletion);
+    env->set_execution_mode(Environment::ExecutionMode::kProfProcess);
     return StartExecution(env, "internal/main/prof_process");
   }
 
@@ -627,9 +637,14 @@ int ProcessGlobalArgs(std::vector<std::string>* args,
   return 0;
 }
 
-int Init(std::vector<std::string>* argv,
-         std::vector<std::string>* exec_argv,
-         std::vector<std::string>* errors) {
+static std::atomic_bool init_called{false};
+
+int InitializeNodeWithArgs(std::vector<std::string>* argv,
+                           std::vector<std::string>* exec_argv,
+                           std::vector<std::string>* errors) {
+  // Make sure InitializeNodeWithArgs() is called only once.
+  CHECK(!init_called.exchange(true));
+
   // Register built-in modules
   binding::RegisterBuiltinModules();
 
@@ -740,7 +755,7 @@ void Init(int* argc,
 
   // This (approximately) duplicates some logic that has been moved to
   // node::Start(), with the difference that here we explicitly call `exit()`.
-  int exit_code = Init(&argv_, &exec_argv_, &errors);
+  int exit_code = InitializeNodeWithArgs(&argv_, &exec_argv_, &errors);
 
   for (const std::string& error : errors)
     fprintf(stderr, "%s: %s\n", argv_.at(0).c_str(), error.c_str());
@@ -775,19 +790,21 @@ void RunBeforeExit(Environment* env) {
     EmitBeforeExit(env);
 }
 
-inline int Start(Isolate* isolate, IsolateData* isolate_data,
-                 const std::vector<std::string>& args,
-                 const std::vector<std::string>& exec_args) {
+inline int StartNodeWithIsolate(Isolate* isolate,
+                                IsolateData* isolate_data,
+                                const std::vector<std::string>& args,
+                                const std::vector<std::string>& exec_args) {
   HandleScope handle_scope(isolate);
   Local<Context> context = NewContext(isolate);
   Context::Scope context_scope(context);
+  int exit_code = 0;
   Environment env(
       isolate_data,
       context,
       static_cast<Environment::Flags>(Environment::kIsMainThread |
                                       Environment::kOwnsProcessState |
                                       Environment::kOwnsInspector));
-  env.Start(per_process::v8_is_profiling);
+  env.InitializeLibuv(per_process::v8_is_profiling);
   env.ProcessCliArgs(args, exec_args);
 
 #if HAVE_INSPECTOR && NODE_USE_V8_PLATFORM
@@ -801,7 +818,8 @@ inline int Start(Isolate* isolate, IsolateData* isolate_data,
                                true);
   if (env.options()->debug_options().inspector_enabled &&
       !env.inspector_agent()->IsListening()) {
-    return 12;  // Signal internal error.
+    exit_code = 12;  // Signal internal error.
+    goto exit;
   }
 #else
   // inspector_enabled can't be true if !HAVE_INSPECTOR or !NODE_USE_V8_PLATFORM
@@ -842,10 +860,11 @@ inline int Start(Isolate* isolate, IsolateData* isolate_data,
 
   env.set_trace_sync_io(false);
 
-  const int exit_code = EmitExit(&env);
+  exit_code = EmitExit(&env);
 
   WaitForInspectorDisconnect(&env);
 
+exit:
   env.set_can_call_into_js(false);
   env.stop_sub_worker_contexts();
   uv_tty_reset_mode();
@@ -861,24 +880,14 @@ inline int Start(Isolate* isolate, IsolateData* isolate_data,
   return exit_code;
 }
 
-inline int Start(uv_loop_t* event_loop,
-                 const std::vector<std::string>& args,
-                 const std::vector<std::string>& exec_args) {
+inline int StartNodeWithLoopAndArgs(uv_loop_t* event_loop,
+                                    const std::vector<std::string>& args,
+                                    const std::vector<std::string>& exec_args) {
   std::unique_ptr<ArrayBufferAllocator, decltype(&FreeArrayBufferAllocator)>
       allocator(CreateArrayBufferAllocator(), &FreeArrayBufferAllocator);
   Isolate* const isolate = NewIsolate(allocator.get(), event_loop);
   if (isolate == nullptr)
     return 12;  // Signal internal error.
-
-  if (per_process::cli_options->print_version) {
-    printf("%s\n", NODE_VERSION);
-    return 0;
-  }
-
-  if (per_process::cli_options->print_v8_help) {
-    V8::SetFlagsFromString("--help", 6);  // Doesn't return.
-    UNREACHABLE();
-  }
 
   int exit_code;
   {
@@ -896,7 +905,7 @@ inline int Start(uv_loop_t* event_loop,
       isolate->GetHeapProfiler()->StartTrackingHeapObjects(true);
     }
     exit_code =
-        Start(isolate, isolate_data.get(), args, exec_args);
+        StartNodeWithIsolate(isolate, isolate_data.get(), args, exec_args);
   }
 
   isolate->Dispose();
@@ -1037,10 +1046,20 @@ int Start(int argc, char** argv) {
   std::vector<std::string> errors;
   // This needs to run *before* V8::Initialize().
   {
-    const int exit_code = Init(&args, &exec_args, &errors);
+    const int exit_code = InitializeNodeWithArgs(&args, &exec_args, &errors);
     for (const std::string& error : errors)
       fprintf(stderr, "%s: %s\n", args.at(0).c_str(), error.c_str());
     if (exit_code != 0) return exit_code;
+  }
+
+  if (per_process::cli_options->print_version) {
+    printf("%s\n", NODE_VERSION);
+    return 0;
+  }
+
+  if (per_process::cli_options->print_v8_help) {
+    V8::SetFlagsFromString("--help", 6);  // Doesn't return.
+    UNREACHABLE();
   }
 
 #if HAVE_OPENSSL
@@ -1078,7 +1097,7 @@ int Start(int argc, char** argv) {
   //performance::performance_v8_start = PERFORMANCE_NOW();
   per_process::v8_initialized = true;
   const int exit_code =
-      Start(uv_default_loop(), args, exec_args);
+      StartNodeWithLoopAndArgs(uv_default_loop(), args, exec_args);
   per_process::v8_initialized = false;
   V8::Dispose();
 

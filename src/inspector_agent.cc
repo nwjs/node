@@ -766,7 +766,8 @@ void Agent::Stop() {
 std::unique_ptr<InspectorSession> Agent::Connect(
     std::unique_ptr<InspectorSessionDelegate> delegate,
     bool prevent_shutdown) {
-  CHECK_NOT_NULL(client_);
+  if (!client_)
+    return nullptr;
   int session_id = client_->connectFrontend(std::move(delegate),
                                             prevent_shutdown);
   return std::unique_ptr<InspectorSession>(

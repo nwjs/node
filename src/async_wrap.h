@@ -41,6 +41,7 @@ namespace node {
   V(FSREQPROMISE)                                                             \
   V(GETADDRINFOREQWRAP)                                                       \
   V(GETNAMEINFOREQWRAP)                                                       \
+  V(HEAPSNAPSHOT)                                                             \
   V(HTTP2SESSION)                                                             \
   V(HTTP2STREAM)                                                              \
   V(HTTP2PING)                                                                \
@@ -110,6 +111,8 @@ class AsyncWrap : public BaseObject {
             double execution_async_id = -1);
 
   ~AsyncWrap() override;
+
+  AsyncWrap() = delete;
 
   static v8::Local<v8::FunctionTemplate> GetConstructorTemplate(
       Environment* env);
@@ -199,7 +202,6 @@ class AsyncWrap : public BaseObject {
             ProviderType provider,
             double execution_async_id,
             bool silent);
-  inline AsyncWrap();
   const ProviderType provider_type_;
   // Because the values may be Reset(), cannot be made const.
   double async_id_ = -1;

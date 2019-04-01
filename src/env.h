@@ -38,6 +38,7 @@
 #include "uv.h"
 #include "v8.h"
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <list>
@@ -187,11 +188,13 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(get_data_clone_error_string, "_getDataCloneError")                         \
   V(get_shared_array_buffer_id_string, "_getSharedArrayBufferId")              \
   V(gid_string, "gid")                                                         \
+  V(h2_string, "h2")                                                           \
   V(handle_string, "handle")                                                   \
   V(help_text_string, "helpText")                                              \
   V(homedir_string, "homedir")                                                 \
   V(host_string, "host")                                                       \
   V(hostmaster_string, "hostmaster")                                           \
+  V(http_1_1_string, "http/1.1")                                               \
   V(ignore_string, "ignore")                                                   \
   V(infoaccess_string, "infoAccess")                                           \
   V(inherit_string, "inherit")                                                 \
@@ -232,7 +235,6 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(onmessage_string, "onmessage")                                             \
   V(onnewsession_string, "onnewsession")                                       \
   V(onocspresponse_string, "onocspresponse")                                   \
-  V(onread_string, "onread")                                                   \
   V(onreadstart_string, "onreadstart")                                         \
   V(onreadstop_string, "onreadstop")                                           \
   V(onshutdown_string, "onshutdown")                                           \
@@ -379,6 +381,7 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(script_data_constructor_function, v8::Function)                            \
   V(secure_context_constructor_template, v8::FunctionTemplate)                 \
   V(shutdown_wrap_template, v8::ObjectTemplate)                                \
+  V(streambaseoutputstream_constructor_template, v8::ObjectTemplate)           \
   V(tcp_constructor_template, v8::FunctionTemplate)                            \
   V(tick_callback_function, v8::Function)                                      \
   V(timers_callback_function, v8::Function)                                    \
@@ -422,6 +425,8 @@ class IsolateData {
 
   std::unordered_map<nghttp2_rcbuf*, v8::Eternal<v8::String>> http2_static_strs;
   inline v8::Isolate* isolate() const;
+  IsolateData(const IsolateData&) = delete;
+  IsolateData& operator=(const IsolateData&) = delete;
 
  private:
 #define VP(PropertyName, StringValue) V(v8::Private, PropertyName)
@@ -444,8 +449,6 @@ class IsolateData {
   const bool uses_node_allocator_;
   MultiIsolatePlatform* platform_;
   std::shared_ptr<PerIsolateOptions> options_;
-
-  DISALLOW_COPY_AND_ASSIGN(IsolateData);
 };
 
 struct ContextInfo {
@@ -507,144 +510,193 @@ struct AllocatedBuffer {
   friend class Environment;
 };
 
+class AsyncRequest : public MemoryRetainer {
+ public:
+  AsyncRequest() {}
+  ~AsyncRequest();
+  void Install(Environment* env, void* data, uv_async_cb target);
+  void Uninstall();
+  void Stop();
+  inline void set_stopped(bool flag);
+  inline bool is_stopped() const;
+  uv_async_t* GetHandle();
+  void MemoryInfo(MemoryTracker* tracker) const override;
+
+
+  SET_MEMORY_INFO_NAME(AsyncRequest)
+  SET_SELF_SIZE(AsyncRequest)
+
+ private:
+  Environment* env_;
+  uv_async_t* async_ = nullptr;
+  std::atomic_bool stopped_ {true};
+};
+
+class AsyncHooks {
+ public:
+  // Reason for both UidFields and Fields are that one is stored as a double*
+  // and the other as a uint32_t*.
+  enum Fields {
+    kInit,
+    kBefore,
+    kAfter,
+    kDestroy,
+    kPromiseResolve,
+    kTotals,
+    kCheck,
+    kStackLength,
+    kFieldsCount,
+  };
+
+  enum UidFields {
+    kExecutionAsyncId,
+    kTriggerAsyncId,
+    kAsyncIdCounter,
+    kDefaultTriggerAsyncId,
+    kUidFieldsCount,
+  };
+
+  inline AliasedBuffer<uint32_t, v8::Uint32Array>& fields();
+  inline AliasedBuffer<double, v8::Float64Array>& async_id_fields();
+  inline AliasedBuffer<double, v8::Float64Array>& async_ids_stack();
+
+  inline v8::Local<v8::String> provider_string(int idx);
+
+  inline void no_force_checks();
+  inline Environment* env();
+
+  inline void push_async_ids(double async_id, double trigger_async_id);
+  inline bool pop_async_id(double async_id);
+  inline void clear_async_id_stack();  // Used in fatal exceptions.
+
+  AsyncHooks(const AsyncHooks&) = delete;
+  AsyncHooks& operator=(const AsyncHooks&) = delete;
+
+  // Used to set the kDefaultTriggerAsyncId in a scope. This is instead of
+  // passing the trigger_async_id along with other constructor arguments.
+  class DefaultTriggerAsyncIdScope {
+   public:
+    DefaultTriggerAsyncIdScope() = delete;
+    explicit DefaultTriggerAsyncIdScope(Environment* env,
+                                        double init_trigger_async_id);
+    explicit DefaultTriggerAsyncIdScope(AsyncWrap* async_wrap);
+    ~DefaultTriggerAsyncIdScope();
+
+    DefaultTriggerAsyncIdScope(const DefaultTriggerAsyncIdScope&) = delete;
+    DefaultTriggerAsyncIdScope& operator=(const DefaultTriggerAsyncIdScope&) =
+        delete;
+
+   private:
+    AsyncHooks* async_hooks_;
+    double old_default_trigger_async_id_;
+  };
+
+ private:
+  friend class Environment;  // So we can call the constructor.
+  inline AsyncHooks();
+  // Keep a list of all Persistent strings used for Provider types.
+  v8::Eternal<v8::String> providers_[AsyncWrap::PROVIDERS_LENGTH];
+  // Stores the ids of the current execution context stack.
+  AliasedBuffer<double, v8::Float64Array> async_ids_stack_;
+  // Attached to a Uint32Array that tracks the number of active hooks for
+  // each type.
+  AliasedBuffer<uint32_t, v8::Uint32Array> fields_;
+  // Attached to a Float64Array that tracks the state of async resources.
+  AliasedBuffer<double, v8::Float64Array> async_id_fields_;
+
+  void grow_async_ids_stack();
+};
+
+class AsyncCallbackScope {
+ public:
+  AsyncCallbackScope() = delete;
+  explicit AsyncCallbackScope(Environment* env);
+  ~AsyncCallbackScope();
+  AsyncCallbackScope(const AsyncCallbackScope&) = delete;
+  AsyncCallbackScope& operator=(const AsyncCallbackScope&) = delete;
+
+ private:
+  Environment* env_;
+};
+
+class ImmediateInfo {
+ public:
+  inline AliasedBuffer<uint32_t, v8::Uint32Array>& fields();
+  inline uint32_t count() const;
+  inline uint32_t ref_count() const;
+  inline bool has_outstanding() const;
+  inline void count_inc(uint32_t increment);
+  inline void count_dec(uint32_t decrement);
+  inline void ref_count_inc(uint32_t increment);
+  inline void ref_count_dec(uint32_t decrement);
+
+  ImmediateInfo(const ImmediateInfo&) = delete;
+  ImmediateInfo& operator=(const ImmediateInfo&) = delete;
+
+ private:
+  friend class Environment;  // So we can call the constructor.
+  inline explicit ImmediateInfo(v8::Isolate* isolate);
+
+  enum Fields { kCount, kRefCount, kHasOutstanding, kFieldsCount };
+
+  AliasedBuffer<uint32_t, v8::Uint32Array> fields_;
+};
+
+class TickInfo {
+ public:
+  inline AliasedBuffer<uint8_t, v8::Uint8Array>& fields();
+  inline bool has_tick_scheduled() const;
+  inline bool has_rejection_to_warn() const;
+
+  TickInfo(const TickInfo&) = delete;
+  TickInfo& operator=(const TickInfo&) = delete;
+
+ private:
+  friend class Environment;  // So we can call the constructor.
+  inline explicit TickInfo(v8::Isolate* isolate);
+
+  enum Fields { kHasTickScheduled = 0, kHasRejectionToWarn, kFieldsCount };
+
+  AliasedBuffer<uint8_t, v8::Uint8Array> fields_;
+};
+
+class TrackingTraceStateObserver :
+    public v8::TracingController::TraceStateObserver {
+ public:
+  explicit TrackingTraceStateObserver(Environment* env) : env_(env) {}
+
+  void OnTraceEnabled() override {
+    UpdateTraceCategoryState();
+  }
+
+  void OnTraceDisabled() override {
+    UpdateTraceCategoryState();
+  }
+
+ private:
+  void UpdateTraceCategoryState();
+
+  Environment* env_;
+};
+
+class ShouldNotAbortOnUncaughtScope {
+ public:
+  explicit inline ShouldNotAbortOnUncaughtScope(Environment* env);
+  inline void Close();
+  inline ~ShouldNotAbortOnUncaughtScope();
+
+ private:
+  Environment* env_;
+};
+
 class Environment {
  public:
-  class AsyncHooks {
-   public:
-    // Reason for both UidFields and Fields are that one is stored as a double*
-    // and the other as a uint32_t*.
-    enum Fields {
-      kInit,
-      kBefore,
-      kAfter,
-      kDestroy,
-      kPromiseResolve,
-      kTotals,
-      kCheck,
-      kStackLength,
-      kFieldsCount,
-    };
+  Environment(const Environment&) = delete;
+  Environment& operator=(const Environment&) = delete;
 
-    enum UidFields {
-      kExecutionAsyncId,
-      kTriggerAsyncId,
-      kAsyncIdCounter,
-      kDefaultTriggerAsyncId,
-      kUidFieldsCount,
-    };
-
-    inline AliasedBuffer<uint32_t, v8::Uint32Array>& fields();
-    inline AliasedBuffer<double, v8::Float64Array>& async_id_fields();
-    inline AliasedBuffer<double, v8::Float64Array>& async_ids_stack();
-
-    inline v8::Local<v8::String> provider_string(int idx);
-
-    inline void no_force_checks();
-    inline Environment* env();
-
-    inline void push_async_ids(double async_id, double trigger_async_id);
-    inline bool pop_async_id(double async_id);
-    inline void clear_async_id_stack();  // Used in fatal exceptions.
-
-    // Used to set the kDefaultTriggerAsyncId in a scope. This is instead of
-    // passing the trigger_async_id along with other constructor arguments.
-    class DefaultTriggerAsyncIdScope {
-     public:
-      DefaultTriggerAsyncIdScope() = delete;
-      explicit DefaultTriggerAsyncIdScope(Environment* env,
-                                          double init_trigger_async_id);
-      explicit DefaultTriggerAsyncIdScope(AsyncWrap* async_wrap);
-      ~DefaultTriggerAsyncIdScope();
-
-     private:
-      AsyncHooks* async_hooks_;
-      double old_default_trigger_async_id_;
-
-      DISALLOW_COPY_AND_ASSIGN(DefaultTriggerAsyncIdScope);
-    };
-
-
-   private:
-    friend class Environment;  // So we can call the constructor.
-    inline AsyncHooks();
-    // Keep a list of all Persistent strings used for Provider types.
-    v8::Eternal<v8::String> providers_[AsyncWrap::PROVIDERS_LENGTH];
-    // Stores the ids of the current execution context stack.
-    AliasedBuffer<double, v8::Float64Array> async_ids_stack_;
-    // Attached to a Uint32Array that tracks the number of active hooks for
-    // each type.
-    AliasedBuffer<uint32_t, v8::Uint32Array> fields_;
-    // Attached to a Float64Array that tracks the state of async resources.
-    AliasedBuffer<double, v8::Float64Array> async_id_fields_;
-
-    void grow_async_ids_stack();
-
-    DISALLOW_COPY_AND_ASSIGN(AsyncHooks);
-  };
-
-  class AsyncCallbackScope {
-   public:
-    AsyncCallbackScope() = delete;
-    explicit AsyncCallbackScope(Environment* env);
-    ~AsyncCallbackScope();
-
-   private:
-    Environment* env_;
-
-    DISALLOW_COPY_AND_ASSIGN(AsyncCallbackScope);
-  };
-
-  inline size_t makecallback_depth() const;
-
-  class ImmediateInfo {
-   public:
-    inline AliasedBuffer<uint32_t, v8::Uint32Array>& fields();
-    inline uint32_t count() const;
-    inline uint32_t ref_count() const;
-    inline bool has_outstanding() const;
-
-    inline void count_inc(uint32_t increment);
-    inline void count_dec(uint32_t decrement);
-
-    inline void ref_count_inc(uint32_t increment);
-    inline void ref_count_dec(uint32_t decrement);
-
-   private:
-    friend class Environment;  // So we can call the constructor.
-    inline explicit ImmediateInfo(v8::Isolate* isolate);
-
-    enum Fields {
-      kCount,
-      kRefCount,
-      kHasOutstanding,
-      kFieldsCount
-    };
-
-    AliasedBuffer<uint32_t, v8::Uint32Array> fields_;
-
-    DISALLOW_COPY_AND_ASSIGN(ImmediateInfo);
-  };
-
-  class TickInfo {
-   public:
-    inline AliasedBuffer<uint8_t, v8::Uint8Array>& fields();
-    inline bool has_tick_scheduled() const;
-    inline bool has_rejection_to_warn() const;
-
-   private:
-    friend class Environment;  // So we can call the constructor.
-    inline explicit TickInfo(v8::Isolate* isolate);
-
-    enum Fields {
-      kHasTickScheduled = 0,
-      kHasRejectionToWarn,
-      kFieldsCount
-    };
-
-    AliasedBuffer<uint8_t, v8::Uint8Array> fields_;
-
-    DISALLOW_COPY_AND_ASSIGN(TickInfo);
-  };
+  inline size_t async_callback_scope_depth() const;
+  inline void PushAsyncCallbackScope();
+  inline void PopAsyncCallbackScope();
 
   enum Flags {
     kNoFlags = 0,
@@ -691,6 +743,7 @@ class Environment {
   void RegisterHandleCleanups();
   void CleanupHandles();
   void Exit(int code);
+  void ExitEnv();
 
   // Register clean-up cb to be called on environment destruction.
   inline void RegisterHandleCleanup(uv_handle_t* handle,
@@ -848,7 +901,7 @@ class Environment {
   inline void add_sub_worker_context(worker::Worker* context);
   inline void remove_sub_worker_context(worker::Worker* context);
   void stop_sub_worker_contexts();
-  inline bool is_stopping_worker() const;
+  inline bool is_stopping() const;
 
   inline void ThrowError(const char* errmsg);
   inline void ThrowTypeError(const char* errmsg);
@@ -957,35 +1010,8 @@ class Environment {
   // This needs to be available for the JS-land setImmediate().
   void ToggleImmediateRef(bool ref);
 
-  class TrackingTraceStateObserver :
-      public v8::TracingController::TraceStateObserver {
-   public:
-    explicit TrackingTraceStateObserver(Environment* env) : env_(env) {}
-
-    void OnTraceEnabled() override {
-      UpdateTraceCategoryState();
-    }
-
-    void OnTraceDisabled() override {
-      UpdateTraceCategoryState();
-    }
-
-   private:
-    void UpdateTraceCategoryState();
-
-    Environment* env_;
-  };
-
-  class ShouldNotAbortOnUncaughtScope {
-   public:
-    explicit inline ShouldNotAbortOnUncaughtScope(Environment* env);
-    inline void Close();
-    inline ~ShouldNotAbortOnUncaughtScope();
-
-   private:
-    Environment* env_;
-  };
-
+  inline void PushShouldNotAbortOnUncaughtScope();
+  inline void PopShouldNotAbortOnUncaughtScope();
   inline bool inside_should_not_abort_on_uncaught_scope() const;
 
   static inline Environment* ForAsyncHooks(AsyncHooks* hooks);
@@ -1022,6 +1048,7 @@ class Environment {
   inline ExecutionMode execution_mode() { return execution_mode_; }
 
   inline void set_execution_mode(ExecutionMode mode) { execution_mode_ = mode; }
+  inline AsyncRequest* thread_stopper() { return &thread_stopper_; }
 
  private:
   inline void CreateImmediate(native_immediate_callback cb,
@@ -1050,7 +1077,7 @@ class Environment {
   bool printed_error_ = false;
   bool emit_env_nonstring_warning_ = true;
   bool emit_err_name_warning_ = true;
-  size_t makecallback_cntr_ = 0;
+  size_t async_callback_scope_depth_ = 0;
   std::vector<double> destroy_async_id_list_;
 
   std::shared_ptr<EnvironmentOptions> options_;
@@ -1178,6 +1205,10 @@ class Environment {
   uint64_t cleanup_hook_counter_ = 0;
   bool started_cleanup_ = false;
 
+  // A custom async abstraction (a pair of async handle and a state variable)
+  // Used by embedders to shutdown running Node instance.
+  AsyncRequest thread_stopper_;
+
   static void EnvPromiseHook(v8::PromiseHookType type,
                              v8::Local<v8::Promise> promise,
                              v8::Local<v8::Value> parent);
@@ -1188,8 +1219,6 @@ class Environment {
 #define V(PropertyName, TypeName) Persistent<TypeName> PropertyName ## _;
   ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)
 #undef V
-
-  DISALLOW_COPY_AND_ASSIGN(Environment);
 };
 
 }  // namespace node

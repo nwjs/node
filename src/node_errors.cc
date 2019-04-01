@@ -13,7 +13,6 @@ using errors::TryCatchScope;
 using v8::Context;
 using v8::Exception;
 using v8::Function;
-using v8::FunctionCallbackInfo;
 using v8::HandleScope;
 using v8::Int32;
 using v8::Isolate;
@@ -759,17 +758,6 @@ void FatalException(Isolate* isolate,
   if (!node_is_nwjs && exit_code) {
     exit(exit_code);
   }
-}
-
-void FatalException(const FunctionCallbackInfo<Value>& args) {
-  Isolate* isolate = args.GetIsolate();
-  Environment* env = Environment::GetCurrent(isolate);
-  if (env != nullptr && env->abort_on_uncaught_exception()) {
-    Abort();
-  }
-  Local<Value> exception = args[0];
-  Local<Message> message = Exception::CreateMessage(isolate, exception);
-  FatalException(isolate, exception, message);
 }
 
 }  // namespace node

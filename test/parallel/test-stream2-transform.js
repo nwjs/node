@@ -324,7 +324,6 @@ const Transform = require('_stream_transform');
   assert.strictEqual(emits, 1);
   assert.strictEqual(pt.read(5).toString(), 'l');
   assert.strictEqual(pt.read(5), null);
-
   assert.strictEqual(emits, 1);
 }
 

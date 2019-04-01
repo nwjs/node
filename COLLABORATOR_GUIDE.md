@@ -464,18 +464,19 @@ Apply external patches:
 $ curl -L https://github.com/nodejs/node/pull/xxx.patch | git am --whitespace=fix
 ```
 
-If the merge fails even though recent CI runs were successful, then a 3-way
-merge may be required.  In this case try:
+If the merge fails even though recent CI runs were successful, try a 3-way
+merge:
 
 ```text
 $ git am --abort
 $ curl -L https://github.com/nodejs/node/pull/xxx.patch | git am -3 --whitespace=fix
 ```
-If the 3-way merge succeeds you can proceed, but make sure to check the changes
-against the original PR carefully and build/test on at least one platform
-before landing. If the 3-way merge fails, then it is most likely that a
-conflicting PR has landed since the CI run and you will have to ask the author
-to rebase.
+
+If the 3-way merge succeeds, check the results against the original pull
+request. Build and test on at least one platform before landing.
+
+If the 3-way merge fails, then it is most likely that a conflicting pull request
+has landed since the CI run. You will have to ask the author to rebase.
 
 Check and re-review the changes:
 
@@ -541,52 +542,46 @@ reword 51759dc crypto: feature B
 fixup 7d6f433 test for feature B
 ```
 
-Save the file and close the editor. You'll be asked to enter a new
-commit message for that commit. This is a good moment to fix incorrect
-commit logs, ensure that they are properly formatted, and add
-`Reviewed-By` lines.
+Save the file and close the editor. When prompted, enter a new commit message
+for that commit. This is an opportunity to fix commit messages.
 
 * The commit message text must conform to the [commit message guidelines][].
 
 <a name="metadata"></a>
-* Modify the original commit message to include additional metadata regarding
-  the change process. (The [`git node metadata`][git-node-metadata] command
-  can generate the metadata for you.)
+* Change the original commit message to include metadata. (The
+  [`git node metadata`][git-node-metadata] command can generate the metadata
+  for you.)
 
-  * Required: A `PR-URL:` line that references the *full* GitHub URL of the
-    original pull request being merged so it's easy to trace a commit back to
-    the conversation that led up to that change.
-  * Optional: A `Fixes: X` line, where _X_ either includes the *full* GitHub URL
-    for an issue, and/or the hash and commit message if the commit fixes
-    a bug in a previous commit. Multiple `Fixes:` lines may be added if
-    appropriate.
+  * Required: A `PR-URL:` line that references the full GitHub URL of the pull
+    request. This makes it easy to trace a commit back to the conversation that
+    led up to that change.
+  * Optional: A `Fixes: X` line, where _X_ is the full GitHub URL for an
+    issue. A commit message may include more than one `Fixes:` lines.
   * Optional: One or more `Refs:` lines referencing a URL for any relevant
     background.
-  * Required: A `Reviewed-By: Name <email>` line for yourself and any
-    other Collaborators who have reviewed the change.
+  * Required: A `Reviewed-By: Name <email>` line for each Collaborator who
+    reviewed the change.
     * Useful for @mentions / contact list if something goes wrong in the PR.
     * Protects against the assumption that GitHub will be around forever.
 
-Run tests (`make -j4 test` or `vcbuild test`). Even though there was a
-successful continuous integration run, other changes may have landed on master
-since then, so running the tests one last time locally is a good practice.
+Other changes may have landed on master since the successful CI run. As a
+precaution, run tests (`make -j4 test` or `vcbuild test`).
 
-Validate that the commit message is properly formatted using
+Confirm that the commit message format is correct using
 [core-validate-commit](https://github.com/evanlucas/core-validate-commit).
 
 ```text
 $ git rev-list upstream/master...HEAD | xargs core-validate-commit
 ```
 
-Optional: When landing your own commits, force push the amended commit to the
-branch you used to open the pull request. If your branch is called `bugfix`,
-then the command would be `git push --force-with-lease origin master:bugfix`.
-Don't manually close the PR, GitHub will close it automatically later after you
-push it upstream, and will mark it with the purple merged status rather than the
-red closed status. If you close the PR before GitHub adjusts its status, it will
-show up as a 0 commit PR and the changed file history will be empty. Also if you
-push upstream before you push to your branch, GitHub will close the issue with
-red status so the order of operations is important.
+Optional: For your own commits, force push the amended commit to the pull
+request branch. If your branch name is `bugfix`, then: `git push
+--force-with-lease origin master:bugfix`. Don't close the PR. It will close
+after you push it upstream. It will have the purple merged status rather than
+the red closed status. If you close the PR before GitHub adjusts its status, it
+will show up as a 0 commit PR with no changed files. The order of operations is
+important. If you push upstream before you push to your branch, GitHub will
+close the issue with the red closed status.
 
 Time to push it:
 
@@ -597,7 +592,7 @@ $ git push upstream master
 Close the pull request with a "Landed in `<commit hash>`" comment. If
 your pull request shows the purple merged status then you should still
 add the "Landed in <commit hash>..<commit hash>" comment if you added
-multiple commits.
+more than one commit.
 
 ### Troubleshooting
 
@@ -608,17 +603,15 @@ like this:
 To https://github.com/nodejs/node
  ! [rejected]              master -> master (fetch first)
 error: failed to push some refs to 'https://github.com/nodejs/node'
-hint: Updates were rejected because the remote contains work that you do
-hint: not have locally. This is usually caused by another repository pushing
-hint: to the same ref. You may want to first integrate the remote changes
-hint: (e.g. 'git pull ...') before pushing again.
+hint: Updates were rejected because the tip of your current branch is behind
+hint: its remote counterpart. Integrate the remote changes (e.g.
+hint: 'git pull ...') before pushing again.
 hint: See the 'Note about fast-forwards' in 'git push --help' for details.
 ```
 
 That means a commit has landed since your last rebase against `upstream/master`.
-To fix this, pull with rebase from upstream and run the tests again (to make
-sure no interactions between your changes and the new changes cause any
-problems), and push again:
+To fix this, pull with rebase from upstream, run the tests again, and (if the
+tests pass) push again:
 
 ```sh
 git pull upstream master --rebase
@@ -631,99 +624,62 @@ git push upstream master
 * Ping a TSC member.
 * `#node-dev` on freenode
 * With `git`, there's a way to override remote trees by force pushing
-(`git push -f`). This should generally be seen as forbidden (since
-you're rewriting history on a repository other people are working
-against) but is allowed for simpler slip-ups such as typos in commit
-messages. However, you are only allowed to force push to any Node.js
-branch within 10 minutes from your original push. If someone else
-pushes to the branch or the 10 minute period passes, consider the
-commit final.
-  * Use `--force-with-lease` to minimize the chance of overwriting
-  someone else's change.
+  (`git push -f`). This is generally forbidden as it creates conflicts in other
+  people's forks. It is permissible for simpler slip-ups such as typos in commit
+  messages. You are only allowed to force push to any Node.js branch within 10
+  minutes from your original push. If someone else pushes to the branch or the
+  10-minute period passes, consider the commit final.
+  * Use `--force-with-lease` to reduce the chance of overwriting someone else's
+    change.
   * Post to `#node-dev` (IRC) if you force push.
 
 ### Long Term Support
 
 #### What is LTS?
 
-Long Term Support (often referred to as *LTS*) guarantees application developers
-a 30-month support cycle with specific versions of Node.js.
-
-You can find more information
-[in the full release plan](https://github.com/nodejs/Release#release-plan).
-
-#### How does LTS work?
-
-Once a Current branch enters LTS, changes in that branch are limited to bug
-fixes, security updates, possible npm updates, documentation updates, and
-certain performance improvements that can be demonstrated to not break existing
-applications. Semver-minor changes are only permitted if required for bug fixes
-and then only on a case-by-case basis with LTS WG and possibly Technical
-Steering Committee (TSC) review. Semver-major changes are permitted only if
-required for security-related fixes.
-
-Once a Current branch moves into Maintenance mode, only **critical** bugs,
-**critical** security fixes, and documentation updates will be permitted.
-
-#### Landing semver-minor commits in LTS
-
-The default policy is to not land semver-minor or higher commits in any LTS
-branch. However, the LTS WG or TSC can evaluate any individual semver-minor
-commit and decide whether a special exception ought to be made. It is
-expected that such exceptions would be evaluated, in part, on the scope
-and impact of the changes on the code, the risk to ecosystem stability
-incurred by accepting the change, and the expected benefit that landing the
-commit will have for the ecosystem.
-
-Any Collaborator who feels a semver-minor commit should be landed in an LTS
-branch should attach the `lts-agenda` label to the pull request. The LTS WG
-will discuss the issue and, if necessary, will escalate the issue up to the
-TSC for further discussion.
+Long Term Support (LTS) guarantees 30-month support cycles for specific Node.js
+versions. You can find more information
+[in the full release plan](https://github.com/nodejs/Release#release-plan). Once
+a branch enters LTS, the release plan limits the types of changes permitted in
+the branch.
 
 #### How are LTS Branches Managed?
 
-There are multiple LTS branches, e.g. `v10.x` and `v8.x`. Each of these is
-paired with a staging branch: `v10.x-staging` and `v8.x-staging`.
+Each LTS release has a corresponding branch (v10.x, v8.x, etc.). Each also has a
+corresponding staging branch (v10.x-staging, v8.x-staging, etc.).
 
-As commits land on the master branch, they are cherry-picked back to each
-staging branch as appropriate. If the commit applies only to the LTS branch, the
-PR must be opened against the *staging* branch. Commits are selectively
-pulled from the staging branch into the LTS branch only when a release is
-being prepared and may be pulled into the LTS branch in a different order
-than they were landed in staging.
+Commits that land on master are cherry-picked to each staging branch as
+appropriate. If a change applies only to the LTS branch, open the PR against the
+*staging* branch. Commits from the staging branch land on the LTS branch only
+when a release is being prepared. They may land on the LTS branch in a different
+order than they were in staging.
 
-Only the members of the @nodejs/backporters team should land commits onto
-LTS staging branches.
+Only members of @nodejs/backporters should land commits onto LTS staging
+branches.
 
 #### How can I help?
 
-When you send your pull request, please include information about whether your
-change is breaking. If you think your patch can be backported, please include
-that information in the PR thread or your PR description. For more information
-on backporting, please see the [backporting guide][].
+When you send your pull request, please state if your change is breaking. Also
+state if you think your patch is a good candidate for backporting. For more
+information on backporting, please see the [backporting guide][].
 
-Several LTS related issue and PR labels have been provided:
+There are several LTS-related labels:
 
-* `lts-watch-v10.x` - tells the LTS WG that the issue/PR needs to be
-  considered for landing in the `v10.x-staging` branch.
-* `lts-watch-v8.x` - tells the LTS WG that the issue/PR needs to be
-  considered for landing in the `v8.x-staging` branch.
-* `lts-watch-v6.x` - tells the LTS WG that the issue/PR needs to be
-  considered for landing in the `v6.x-staging` branch.
-* `land-on-v10.x` - tells the release team that the commit should be landed
-  in a future v10.x release.
-* `land-on-v8.x` - tells the release team that the commit should be landed
-  in a future v8.x release.
-* `land-on-v6.x` - tells the release team that the commit should be landed
-  in a future v6.x release.
+* `lts-watch-` labels are for pull requests to consider for landing in staging
+  branches. For example, `lts-watch-v10.x` would be for a change
+  to consider for the `v10.x-staging` branch.
 
-Any Collaborator can attach these labels to any PR/issue. As commits are
-landed into the staging branches, the `lts-watch-` label will be removed.
-Likewise, as commits are landed in a LTS release, the `land-on-` label will
-be removed.
+* `land-on-` are for pull requests that should land in a future v*.x
+  release. For example, `land-on-v10.x` would be for a change to land in Node.js
+  10.x.
 
-Collaborators are encouraged to help the LTS WG by attaching the appropriate
-`lts-watch-` label to any PR that may impact an LTS release.
+Any Collaborator can attach these labels to any pull request/issue. As commits
+land on the staging branches, the backporter removes the `lts-watch-` label.
+Likewise, as commits land in an LTS release, the releaser removes the `land-on-`
+label.
+
+Attach the appropriate `lts-watch-` label to any PR that may impact an LTS
+release.
 
 #### How is an LTS release cut?
 

@@ -32,7 +32,6 @@
 #include "v8.h"
 #include "node_perf_common.h"
 #include "node_context_data.h"
-#include "node_worker.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -65,7 +64,7 @@ inline MultiIsolatePlatform* IsolateData::platform() const {
   return platform_;
 }
 
-inline Environment::AsyncHooks::AsyncHooks()
+inline AsyncHooks::AsyncHooks()
     : async_ids_stack_(env()->isolate(), 16 * 2),
       fields_(env()->isolate(), kFieldsCount),
       async_id_fields_(env()->isolate(), kUidFieldsCount) {
@@ -103,36 +102,33 @@ inline Environment::AsyncHooks::AsyncHooks()
 #undef V
 }
 
-inline AliasedBuffer<uint32_t, v8::Uint32Array>&
-Environment::AsyncHooks::fields() {
+inline AliasedBuffer<uint32_t, v8::Uint32Array>& AsyncHooks::fields() {
   return fields_;
 }
 
-inline AliasedBuffer<double, v8::Float64Array>&
-Environment::AsyncHooks::async_id_fields() {
+inline AliasedBuffer<double, v8::Float64Array>& AsyncHooks::async_id_fields() {
   return async_id_fields_;
 }
 
-inline AliasedBuffer<double, v8::Float64Array>&
-Environment::AsyncHooks::async_ids_stack() {
+inline AliasedBuffer<double, v8::Float64Array>& AsyncHooks::async_ids_stack() {
   return async_ids_stack_;
 }
 
-inline v8::Local<v8::String> Environment::AsyncHooks::provider_string(int idx) {
+inline v8::Local<v8::String> AsyncHooks::provider_string(int idx) {
   return providers_[idx].Get(env()->isolate());
 }
 
-inline void Environment::AsyncHooks::no_force_checks() {
+inline void AsyncHooks::no_force_checks() {
   fields_[kCheck] -= 1;
 }
 
-inline Environment* Environment::AsyncHooks::env() {
+inline Environment* AsyncHooks::env() {
   return Environment::ForAsyncHooks(this);
 }
 
 // Remember to keep this code aligned with pushAsyncIds() in JS.
-inline void Environment::AsyncHooks::push_async_ids(double async_id,
-                                                    double trigger_async_id) {
+inline void AsyncHooks::push_async_ids(double async_id,
+                                       double trigger_async_id) {
   // Since async_hooks is experimental, do only perform the check
   // when async_hooks is enabled.
   if (fields_[kCheck] > 0) {
@@ -151,7 +147,7 @@ inline void Environment::AsyncHooks::push_async_ids(double async_id,
 }
 
 // Remember to keep this code aligned with popAsyncIds() in JS.
-inline bool Environment::AsyncHooks::pop_async_id(double async_id) {
+inline bool AsyncHooks::pop_async_id(double async_id) {
   // In case of an exception then this may have already been reset, if the
   // stack was multiple MakeCallback()'s deep.
   if (fields_[kStackLength] == 0) return false;
@@ -184,7 +180,7 @@ inline bool Environment::AsyncHooks::pop_async_id(double async_id) {
 }
 
 // Keep in sync with clearAsyncIdStack in lib/internal/async_hooks.js.
-inline void Environment::AsyncHooks::clear_async_id_stack() {
+inline void AsyncHooks::clear_async_id_stack() {
   async_id_fields_[kExecutionAsyncId] = 0;
   async_id_fields_[kTriggerAsyncId] = 0;
   fields_[kStackLength] = 0;
@@ -193,9 +189,8 @@ inline void Environment::AsyncHooks::clear_async_id_stack() {
 // The DefaultTriggerAsyncIdScope(AsyncWrap*) constructor is defined in
 // async_wrap-inl.h to avoid a circular dependency.
 
-inline Environment::AsyncHooks::DefaultTriggerAsyncIdScope
-  ::DefaultTriggerAsyncIdScope(Environment* env,
-                               double default_trigger_async_id)
+inline AsyncHooks::DefaultTriggerAsyncIdScope ::DefaultTriggerAsyncIdScope(
+    Environment* env, double default_trigger_async_id)
     : async_hooks_(env->async_hooks()) {
   if (env->async_hooks()->fields()[AsyncHooks::kCheck] > 0) {
     CHECK_GE(default_trigger_async_id, 0);
@@ -207,8 +202,7 @@ inline Environment::AsyncHooks::DefaultTriggerAsyncIdScope
     default_trigger_async_id;
 }
 
-inline Environment::AsyncHooks::DefaultTriggerAsyncIdScope
-  ::~DefaultTriggerAsyncIdScope() {
+inline AsyncHooks::DefaultTriggerAsyncIdScope ::~DefaultTriggerAsyncIdScope() {
   async_hooks_->async_id_fields()[AsyncHooks::kDefaultTriggerAsyncId] =
     old_default_trigger_async_id_;
 }
@@ -218,68 +212,74 @@ Environment* Environment::ForAsyncHooks(AsyncHooks* hooks) {
   return ContainerOf(&Environment::async_hooks_, hooks);
 }
 
-
-inline Environment::AsyncCallbackScope::AsyncCallbackScope(Environment* env)
-    : env_(env) {
-  env_->makecallback_cntr_++;
+inline AsyncCallbackScope::AsyncCallbackScope(Environment* env) : env_(env) {
+  env_->PushAsyncCallbackScope();
 }
 
-inline Environment::AsyncCallbackScope::~AsyncCallbackScope() {
-  env_->makecallback_cntr_--;
+inline AsyncCallbackScope::~AsyncCallbackScope() {
+  env_->PopAsyncCallbackScope();
 }
 
-inline size_t Environment::makecallback_depth() const {
-  return makecallback_cntr_;
+inline size_t Environment::async_callback_scope_depth() const {
+  return async_callback_scope_depth_;
 }
 
-inline Environment::ImmediateInfo::ImmediateInfo(v8::Isolate* isolate)
+inline void Environment::PushAsyncCallbackScope() {
+  async_callback_scope_depth_++;
+}
+
+inline void Environment::PopAsyncCallbackScope() {
+  async_callback_scope_depth_--;
+}
+
+inline ImmediateInfo::ImmediateInfo(v8::Isolate* isolate)
     : fields_(isolate, kFieldsCount) {}
 
 inline AliasedBuffer<uint32_t, v8::Uint32Array>&
-    Environment::ImmediateInfo::fields() {
+    ImmediateInfo::fields() {
   return fields_;
 }
 
-inline uint32_t Environment::ImmediateInfo::count() const {
+inline uint32_t ImmediateInfo::count() const {
   return fields_[kCount];
 }
 
-inline uint32_t Environment::ImmediateInfo::ref_count() const {
+inline uint32_t ImmediateInfo::ref_count() const {
   return fields_[kRefCount];
 }
 
-inline bool Environment::ImmediateInfo::has_outstanding() const {
+inline bool ImmediateInfo::has_outstanding() const {
   return fields_[kHasOutstanding] == 1;
 }
 
-inline void Environment::ImmediateInfo::count_inc(uint32_t increment) {
+inline void ImmediateInfo::count_inc(uint32_t increment) {
   fields_[kCount] += increment;
 }
 
-inline void Environment::ImmediateInfo::count_dec(uint32_t decrement) {
+inline void ImmediateInfo::count_dec(uint32_t decrement) {
   fields_[kCount] -= decrement;
 }
 
-inline void Environment::ImmediateInfo::ref_count_inc(uint32_t increment) {
+inline void ImmediateInfo::ref_count_inc(uint32_t increment) {
   fields_[kRefCount] += increment;
 }
 
-inline void Environment::ImmediateInfo::ref_count_dec(uint32_t decrement) {
+inline void ImmediateInfo::ref_count_dec(uint32_t decrement) {
   fields_[kRefCount] -= decrement;
 }
 
-inline Environment::TickInfo::TickInfo(v8::Isolate* isolate)
+inline TickInfo::TickInfo(v8::Isolate* isolate)
     : fields_(isolate, kFieldsCount) {}
 
-inline AliasedBuffer<uint8_t, v8::Uint8Array>& Environment::TickInfo::fields() {
+inline AliasedBuffer<uint8_t, v8::Uint8Array>& TickInfo::fields() {
   return fields_;
 }
 
-inline bool Environment::TickInfo::has_tick_scheduled() const {
+inline bool TickInfo::has_tick_scheduled() const {
   return fields_[kHasTickScheduled] == 1;
 }
 
-inline bool Environment::TickInfo::has_rejection_to_warn() const {
+inline bool TickInfo::has_rejection_to_warn() const {
   return fields_[kHasRejectionToWarn] == 1;
 }
 
@@ -431,15 +431,15 @@ inline void Environment::set_is_in_inspector_console_call(bool value) {
 }
 #endif
 
-inline Environment::AsyncHooks* Environment::async_hooks() {
+inline AsyncHooks* Environment::async_hooks() {
   return &async_hooks_;
 }
 
-inline Environment::ImmediateInfo* Environment::immediate_info() {
+inline ImmediateInfo* Environment::immediate_info() {
   return &immediate_info_;
 }
 
-inline Environment::TickInfo* Environment::tick_info() {
+inline TickInfo* Environment::tick_info() {
   return &tick_info_;
 }
 
@@ -487,24 +487,32 @@ inline uint32_t Environment::get_next_function_id() {
   return function_id_counter_++;
 }
 
-Environment::ShouldNotAbortOnUncaughtScope::ShouldNotAbortOnUncaughtScope(
+ShouldNotAbortOnUncaughtScope::ShouldNotAbortOnUncaughtScope(
     Environment* env)
     : env_(env) {
-  env_->should_not_abort_scope_counter_++;
+  env_->PushShouldNotAbortOnUncaughtScope();
 }
 
-Environment::ShouldNotAbortOnUncaughtScope::~ShouldNotAbortOnUncaughtScope() {
+ShouldNotAbortOnUncaughtScope::~ShouldNotAbortOnUncaughtScope() {
   Close();
 }
 
-void Environment::ShouldNotAbortOnUncaughtScope::Close() {
+void ShouldNotAbortOnUncaughtScope::Close() {
   if (env_ != nullptr) {
-    env_->should_not_abort_scope_counter_--;
+    env_->PopShouldNotAbortOnUncaughtScope();
     env_ = nullptr;
   }
 }
 
-bool Environment::inside_should_not_abort_on_uncaught_scope() const {
+inline void Environment::PushShouldNotAbortOnUncaughtScope() {
+  should_not_abort_scope_counter_++;
+}
+
+inline void Environment::PopShouldNotAbortOnUncaughtScope() {
+  should_not_abort_scope_counter_--;
+}
+
+inline bool Environment::inside_should_not_abort_on_uncaught_scope() const {
   return should_not_abort_scope_counter_ > 0;
 }
 
@@ -661,7 +669,7 @@ void Environment::SetUnrefImmediate(native_immediate_callback cb,
 }
 
 inline bool Environment::can_call_into_js() const {
-  return can_call_into_js_ && (is_main_thread() || !is_stopping_worker());
+  return can_call_into_js_ && !is_stopping();
 }
 
 inline void Environment::set_can_call_into_js(bool can_call_into_js) {
@@ -709,9 +717,8 @@ inline void Environment::remove_sub_worker_context(worker::Worker* context) {
   sub_worker_contexts_.erase(context);
 }
 
-inline bool Environment::is_stopping_worker() const {
-  CHECK(!is_main_thread());
-  return worker_context_->is_stopped();
+inline bool Environment::is_stopping() const {
+  return thread_stopper_.is_stopped();
 }
 
 inline performance::performance_state* Environment::performance_state() {
@@ -753,8 +760,10 @@ inline AllocatedBuffer::AllocatedBuffer(Environment* env, uv_buf_t buf)
     : env_(env), buffer_(buf) {}
 
 inline void AllocatedBuffer::Resize(size_t len) {
-  char* new_data = env_->Reallocate(buffer_.base, buffer_.len, len);
-  CHECK_IMPLIES(len > 0, new_data != nullptr);
+  // The `len` check is to make sure we don't end up with `nullptr` as our base.
+  char* new_data = env_->Reallocate(buffer_.base, buffer_.len,
+                                    len > 0 ? len : 1);
+  CHECK_NOT_NULL(new_data);
   buffer_ = uv_buf_init(new_data, len);
 }
 
@@ -979,6 +988,14 @@ void Environment::ForEachBaseObject(T&& iterator) {
     if (obj != nullptr)
       iterator(obj);
   }
+}
+
+bool AsyncRequest::is_stopped() const {
+  return stopped_.load();
+}
+
+void AsyncRequest::set_stopped(bool flag) {
+  stopped_.store(flag);
 }
 
 #define VP(PropertyName, StringValue) V(v8::Private, PropertyName)

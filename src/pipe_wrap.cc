@@ -47,8 +47,6 @@ using v8::Object;
 using v8::String;
 using v8::Value;
 
-using AsyncHooks = Environment::AsyncHooks;
-
 MaybeLocal<Object> PipeWrap::Instantiate(Environment* env,
                                          AsyncWrap* parent,
                                          PipeWrap::SocketType type) {
@@ -75,7 +73,7 @@ void PipeWrap::Initialize(Local<Object> target,
   Local<String> pipeString = FIXED_ONE_BYTE_STRING(env->isolate(), "Pipe");
   t->SetClassName(pipeString);
   t->InstanceTemplate()
-    ->SetInternalFieldCount(StreamBase::kStreamBaseField + 1);
+    ->SetInternalFieldCount(StreamBase::kStreamBaseFieldCount);
 
   t->Inherit(LibuvStreamWrap::GetConstructorTemplate(env));
 

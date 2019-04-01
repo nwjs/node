@@ -12,7 +12,25 @@ const writeStream = new WriteStream(fd);
   const depth = writeStream.getColorDepth();
   assert.strictEqual(typeof depth, 'number');
   assert(depth >= 1 && depth <= 24);
+
+  const support = writeStream.hasColors();
+  assert.strictEqual(support, depth !== 1);
 }
+
+// Validate invalid input.
+[true, null, () => {}, Symbol(), 5n].forEach((input) => {
+  assert.throws(
+    () => writeStream.hasColors(input),
+    { code: 'ERR_INVALID_ARG_TYPE' }
+  );
+});
+
+[-1, 1].forEach((input) => {
+  assert.throws(
+    () => writeStream.hasColors(input),
+    { code: 'ERR_OUT_OF_RANGE' }
+  );
+});
 
 // Check different environment variables.
 [
@@ -41,11 +59,18 @@ const writeStream = new WriteStream(fd);
   [{ TERM: 'color' }, 4],
   [{ TERM: 'linux' }, 4],
   [{ TERM: 'fail' }, 1],
-  [{ NODE_DISABLE_COLORS: '1' }, 1],
+  [{ TERM: 'color', NODE_DISABLE_COLORS: '1' }, 1],
   [{ TERM: 'dumb' }, 1],
   [{ TERM: 'dumb', COLORTERM: '1' }, 1],
   [{ TERM: 'terminator' }, 24],
-  [{ TERM: 'console' }, 4]
+  [{ TERM: 'console' }, 4],
+  [{ COLORTERM: '24bit', FORCE_COLOR: '' }, 4],
+  [{ NO_COLOR: '1', FORCE_COLOR: '2' }, 8],
+  [{ NODE_DISABLE_COLORS: '1', FORCE_COLOR: '3' }, 24],
+  [{ NO_COLOR: '1', COLORTERM: '24bit' }, 1],
+  [{ NO_COLOR: '', COLORTERM: '24bit' }, 1],
+  [{ TMUX: '1', FORCE_COLOR: 0 }, 1],
+  [{ NO_COLOR: 'true', FORCE_COLOR: 0, COLORTERM: 'truecolor' }, 1],
 ].forEach(([env, depth], i) => {
   const actual = writeStream.getColorDepth(env);
   assert.strictEqual(
@@ -54,6 +79,10 @@ const writeStream = new WriteStream(fd);
     `i: ${i}, expected: ${depth}, ` +
       `actual: ${actual}, env: ${inspect(env)}`
   );
+  const colors = 2 ** actual;
+  assert(writeStream.hasColors(colors, env));
+  assert(!writeStream.hasColors(colors + 1, env));
+  assert(depth >= 4 ? writeStream.hasColors(env) : !writeStream.hasColors(env));
 });
 
 // OS settings

@@ -154,18 +154,6 @@ MaybeLocal<Object> CreateProcessObject(
                ToV8Value(env->context(), exec_args)
                    .ToLocalChecked()).FromJust();
 
-  Local<Object> env_var_proxy;
-  if (!CreateEnvVarProxy(context, isolate, env->as_callback_data())
-           .ToLocal(&env_var_proxy))
-    return MaybeLocal<Object>();
-
-  // process.env
-  process
-      ->Set(env->context(),
-            FIXED_ONE_BYTE_STRING(env->isolate(), "env"),
-            env_var_proxy)
-      .FromJust();
-
   READONLY_PROPERTY(process, "pid",
                     Integer::New(env->isolate(), uv_os_getpid()));
 
@@ -257,18 +245,6 @@ MaybeLocal<Object> CreateProcessObject(
   if (env->options()->debug_options().break_node_first_line) {
     READONLY_DONT_ENUM_PROPERTY(process,
                                 "_breakNodeFirstLine", True(env->isolate()));
-  }
-
-  // --inspect --debug-brk
-  if (env->options()->debug_options().deprecated_invocation()) {
-    READONLY_DONT_ENUM_PROPERTY(process,
-                                "_deprecatedDebugBrk", True(env->isolate()));
-  }
-
-  // --debug or, --debug-brk without --inspect
-  if (env->options()->debug_options().invalid_invocation()) {
-    READONLY_DONT_ENUM_PROPERTY(process,
-                                "_invalidDebug", True(env->isolate()));
   }
 
   // --security-revert flags

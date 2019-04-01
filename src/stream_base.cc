@@ -18,12 +18,16 @@ namespace node {
 using v8::Array;
 using v8::ArrayBuffer;
 using v8::Context;
+using v8::DontDelete;
+using v8::DontEnum;
 using v8::External;
+using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::HandleScope;
 using v8::Integer;
 using v8::Local;
 using v8::Object;
+using v8::ReadOnly;
 using v8::String;
 using v8::Value;
 
@@ -311,7 +315,9 @@ void StreamBase::CallJSOnreadMethod(ssize_t nread,
 
   AsyncWrap* wrap = GetAsyncWrap();
   CHECK_NOT_NULL(wrap);
-  wrap->MakeCallback(env->onread_string(), arraysize(argv), argv);
+  Local<Value> onread = wrap->object()->GetInternalField(kOnReadFunctionField);
+  CHECK(onread->IsFunction());
+  wrap->MakeCallback(onread.As<Function>(), arraysize(argv), argv);
 }
 
 
@@ -347,8 +353,8 @@ void StreamBase::AddMethod(Environment* env,
 void StreamBase::AddMethods(Environment* env, Local<FunctionTemplate> t) {
   HandleScope scope(env->isolate());
 
-  enum PropertyAttribute attributes = static_cast<PropertyAttribute>(
-      v8::ReadOnly | v8::DontDelete | v8::DontEnum);
+  enum PropertyAttribute attributes =
+      static_cast<PropertyAttribute>(ReadOnly | DontDelete | DontEnum);
   Local<Signature> sig = Signature::New(env->isolate(), t);
 
   AddMethod(env, sig, attributes, t, GetFD, env->fd_string());
@@ -373,6 +379,10 @@ void StreamBase::AddMethods(Environment* env, Local<FunctionTemplate> t) {
   t->PrototypeTemplate()->Set(FIXED_ONE_BYTE_STRING(env->isolate(),
                                                     "isStreamBase"),
                               True(env->isolate()));
+  t->PrototypeTemplate()->SetAccessor(
+      FIXED_ONE_BYTE_STRING(env->isolate(), "onread"),
+      BaseObject::InternalFieldGet<kOnReadFunctionField>,
+      BaseObject::InternalFieldSet<kOnReadFunctionField, &Value::IsFunction>);
 }
 
 void StreamBase::GetFD(const FunctionCallbackInfo<Value>& args) {

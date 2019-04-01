@@ -144,8 +144,9 @@ position.
 added: v9.9.0
 -->
 
-* `env` {Object} An object containing the environment variables to check.
-  **Default:** `process.env`.
+* `env` {Object} An object containing the environment variables to check. This
+  enables simulating the usage of a specific terminal. **Default:**
+  `process.env`.
 * Returns: {number}
 
 Returns:
@@ -159,11 +160,18 @@ Use this to determine what colors the terminal supports. Due to the nature of
 colors in terminals it is possible to either have false positives or false
 negatives. It depends on process information and the environment variables that
 may lie about what terminal is used.
-To enforce a specific behavior without relying on `process.env` it is possible
-to pass in an object with different settings.
+It is possible to pass in an `env` object to simulate the usage of a specific
+terminal. This can be useful to check how specific environment settings behave.
 
-Use the `NODE_DISABLE_COLORS` environment variable to enforce this function to
-always return 1.
+To enforce a specific color support, use one of the below environment settings.
+
+* 2 colors: `FORCE_COLOR = 0` (Disables colors)
+* 16 colors: `FORCE_COLOR = 1`
+* 256 colors: `FORCE_COLOR = 2`
+* 16,777,216 colors: `FORCE_COLOR = 3`
+
+Disabling color support is also possible by using the `NO_COLOR` and
+`NODE_DISABLE_COLORS` environment variables.
 
 ### writeStream.getWindowSize()
 <!-- YAML
@@ -175,6 +183,35 @@ added: v0.7.7
 corresponding to this `WriteStream`. The array is of the type
 `[numColumns, numRows]` where `numColumns` and `numRows` represent the number
 of columns and rows in the corresponding [TTY](tty.html).
+
+### writeStream.hasColors([count][, env])
+<!-- YAML
+added: v11.13.0
+-->
+
+* `count` {integer} The number of colors that are requested (minimum 2).
+  **Default:** 16.
+* `env` {Object} An object containing the environment variables to check. This
+  enables simulating the usage of a specific terminal. **Default:**
+  `process.env`.
+* Returns: {boolean}
+
+Returns `true` if the `writeStream` supports at least as many colors as provided
+in `count`. Minimum support is 2 (black and white).
+
+This has the same false positives and negatives as described in
+[`writeStream.getColorDepth()`][].
+
+```js
+process.stdout.hasColors();
+// Returns true or false depending on if `stdout` supports at least 16 colors.
+process.stdout.hasColors(256);
+// Returns true or false depending on if `stdout` supports at least 256 colors.
+process.stdout.hasColors({ TMUX: '1' });
+// Returns true.
+process.stdout.hasColors(2 ** 24, { TMUX: '1' });
+// Returns false (the environment setting pretends to support 2 ** 8 colors).
+```
 
 ### writeStream.isTTY
 <!-- YAML
@@ -217,3 +254,4 @@ integer.
 [`process.stderr`]: process.html#process_process_stderr
 [`process.stdin`]: process.html#process_process_stdin
 [`process.stdout`]: process.html#process_process_stdout
+[`writeStream.getColorDepth()`]: #tty_writestream_getcolordepth_env

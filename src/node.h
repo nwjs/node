@@ -199,9 +199,16 @@ typedef intptr_t ssize_t;
 
 namespace node {
 
+class IsolateData;
+class Environment;
+
 // TODO(addaleax): Officially deprecate this and replace it with something
 // better suited for a public embedder API.
 NODE_EXTERN int Start(int argc, char* argv[]);
+
+// Tear down Node.js while it is running (there are active handles
+// in the loop and / or actively executing JavaScript code).
+NODE_EXTERN int Stop(Environment* env);
 
 // TODO(addaleax): Officially deprecate this and replace it with something
 // better suited for a public embedder API.
@@ -214,9 +221,6 @@ class ArrayBufferAllocator;
 
 NODE_EXTERN ArrayBufferAllocator* CreateArrayBufferAllocator();
 NODE_EXTERN void FreeArrayBufferAllocator(ArrayBufferAllocator* allocator);
-
-class IsolateData;
-class Environment;
 
 class NODE_EXTERN MultiIsolatePlatform : public v8::Platform {
  public:
@@ -445,6 +449,10 @@ typedef void (*addon_context_register_func)(
     v8::Local<v8::Context> context,
     void* priv);
 
+enum ModuleFlags {
+  kLinked = 0x02
+};
+
 struct node_module {
   int nm_version;
   unsigned int nm_flags;
@@ -542,6 +550,14 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
   /* NOLINTNEXTLINE (readability/null_usage) */                       \
   NODE_MODULE_CONTEXT_AWARE_X(modname, regfunc, NULL, 0)
 
+// Embedders can use this type of binding for statically linked native bindings.
+// It is used the same way addon bindings are used, except that linked bindings
+// can be accessed through `process._linkedBinding(modname)`.
+#define NODE_MODULE_LINKED(modname, regfunc)                               \
+  /* NOLINTNEXTLINE (readability/null_usage) */                            \
+  NODE_MODULE_CONTEXT_AWARE_X(modname, regfunc, NULL,                      \
+                              node::ModuleFlags::kLinked)
+
 /*
  * For backward compatibility in add-on modules.
  */
@@ -595,9 +611,10 @@ struct async_context {
 
 /* Registers an additional v8::PromiseHook wrapper. This API exists because V8
  * itself supports only a single PromiseHook. */
-NODE_EXTERN void AddPromiseHook(v8::Isolate* isolate,
-                                promise_hook_func fn,
-                                void* arg);
+NODE_DEPRECATED("Use async_hooks directly instead",
+                NODE_EXTERN void AddPromiseHook(v8::Isolate* isolate,
+                                                promise_hook_func fn,
+                                                void* arg));
 
 /* This is a lot like node::AtExit, except that the hooks added via this
  * function are run before the AtExit ones and will always be registered

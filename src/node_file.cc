@@ -53,6 +53,7 @@ namespace fs {
 using v8::Array;
 using v8::BigUint64Array;
 using v8::Context;
+using v8::DontDelete;
 using v8::EscapableHandleScope;
 using v8::Float64Array;
 using v8::Function;
@@ -68,6 +69,8 @@ using v8::Number;
 using v8::Object;
 using v8::ObjectTemplate;
 using v8::Promise;
+using v8::PropertyAttribute;
+using v8::ReadOnly;
 using v8::String;
 using v8::Symbol;
 using v8::Uint32;
@@ -120,8 +123,8 @@ FileHandle* FileHandle::New(Environment* env, int fd, Local<Object> obj) {
                             .ToLocal(&obj)) {
     return nullptr;
   }
-  v8::PropertyAttribute attr =
-      static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete);
+  PropertyAttribute attr =
+      static_cast<PropertyAttribute>(ReadOnly | DontDelete);
   if (obj->DefineOwnProperty(env->context(),
                              env->fd_string(),
                              Integer::New(env->isolate(), fd),
@@ -682,8 +685,8 @@ class FSReqWrapSync {
   ~FSReqWrapSync() { uv_fs_req_cleanup(&req); }
   uv_fs_t req;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(FSReqWrapSync);
+  FSReqWrapSync(const FSReqWrapSync&) = delete;
+  FSReqWrapSync& operator=(const FSReqWrapSync&) = delete;
 };
 
 // Returns nullptr if the operation fails from the start.
@@ -2228,7 +2231,7 @@ void Initialize(Local<Object> target,
   env->SetProtoMethod(fd, "close", FileHandle::Close);
   env->SetProtoMethod(fd, "releaseFD", FileHandle::ReleaseFD);
   Local<ObjectTemplate> fdt = fd->InstanceTemplate();
-  fdt->SetInternalFieldCount(StreamBase::kStreamBaseField + 1);
+  fdt->SetInternalFieldCount(StreamBase::kStreamBaseFieldCount);
   Local<String> handleString =
        FIXED_ONE_BYTE_STRING(isolate, "FileHandle");
   fd->SetClassName(handleString);

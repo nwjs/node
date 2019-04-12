@@ -29,6 +29,8 @@ using v8::Private;
 using v8::String;
 using v8::Value;
 
+extern bool node_is_nwjs;
+
 static bool AllowWasmCodeGenerationCallback(Local<Context> context,
                                             Local<String>) {
   Local<Value> wasm_code_gen =
@@ -45,7 +47,7 @@ static bool ShouldAbortOnUncaughtException(Isolate* isolate) {
          !env->inside_should_not_abort_on_uncaught_scope();
 }
 
-static void OnMessage(Local<Message> message, Local<Value> error) {
+NODE_EXTERN void OnMessage(Local<Message> message, Local<Value> error) {
   Isolate* isolate = message->GetIsolate();
   switch (message->ErrorLevel()) {
     case Isolate::MessageErrorLevel::kMessageWarning: {
@@ -166,7 +168,7 @@ void FreeArrayBufferAllocator(ArrayBufferAllocator* allocator) {
 
 void SetIsolateCreateParams(Isolate::CreateParams* params,
                             ArrayBufferAllocator* allocator) {
-  if (allocator != nullptr)
+  if (allocator != nullptr && !node_is_nwjs)
     params->array_buffer_allocator = allocator;
 
 #ifdef NODE_ENABLE_VTUNE_PROFILING
@@ -179,12 +181,15 @@ void SetIsolateUpForNode(v8::Isolate* isolate) {
       OnMessage,
       Isolate::MessageErrorLevel::kMessageError |
           Isolate::MessageErrorLevel::kMessageWarning);
+#if 0
   isolate->SetAbortOnUncaughtExceptionCallback(ShouldAbortOnUncaughtException);
   isolate->SetMicrotasksPolicy(MicrotasksPolicy::kExplicit);
+#endif
+  isolate->SetMicrotasksPolicy(v8::MicrotasksPolicy::kScoped);
   isolate->SetFatalErrorHandler(OnFatalError);
   isolate->SetAllowWasmCodeGenerationCallback(AllowWasmCodeGenerationCallback);
-  isolate->SetPromiseRejectCallback(task_queue::PromiseRejectCallback);
-  v8::CpuProfiler::UseDetailedSourcePositionsForProfiling(isolate);
+  //isolate->SetPromiseRejectCallback(task_queue::PromiseRejectCallback);
+  //v8::CpuProfiler::UseDetailedSourcePositionsForProfiling(isolate);
 }
 
 Isolate* NewIsolate(ArrayBufferAllocator* allocator, uv_loop_t* event_loop) {

@@ -88,7 +88,8 @@ INLINE static uv_req_t* uv_overlapped_to_req(OVERLAPPED* overlapped) {
 
 
 INLINE static void uv_insert_pending_req(uv_loop_t* loop, uv_req_t* req) {
-  req->next_req = NULL;
+  if (req->next_req)
+    return;
   if (loop->pending_reqs_tail) {
 #ifdef _DEBUG
     /* Ensure the request is not already in the queue, or the queue
@@ -153,6 +154,7 @@ INLINE static int uv_process_reqs(uv_loop_t* loop) {
   while (next != NULL) {
     req = next;
     next = req->next_req != first ? req->next_req : NULL;
+    req->next_req = NULL;
 
     switch (req->type) {
       case UV_READ:

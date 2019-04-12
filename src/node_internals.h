@@ -62,6 +62,8 @@ extern bool v8_is_profiling;
 // Forward declaration
 class Environment;
 
+NODE_EXTERN v8::Handle<v8::Value> CallTickCallback(Environment* env, const v8::Handle<v8::Value> ret);
+
 // Convert a struct sockaddr to a { address: '1.2.3.4', port: 1234 } JS object.
 // Sets address and port properties on the info object and returns it.
 // If |info| is omitted, a new object is returned.

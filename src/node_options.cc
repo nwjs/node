@@ -496,7 +496,7 @@ PerProcessOptionsParser::PerProcessOptionsParser(
 #endif
 #endif
 
-  Insert(iop, &PerProcessOptions::get_per_isolate_options);
+  //Insert(iop, &PerProcessOptions::get_per_isolate_options);
 }
 
 inline std::string RemoveBrackets(const std::string& host) {

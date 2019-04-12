@@ -20,8 +20,11 @@ void RunAtExit(Environment* env) {
 }
 
 void AtExit(void (*cb)(void* arg), void* arg) {
-  auto env = Environment::GetThreadLocalEnv();
-  AtExit(env, cb, arg);
+  //auto env = Environment::GetThreadLocalEnv();
+  thread_ctx_st* tls_ctx = (struct thread_ctx_st*)uv_key_get(&node::thread_ctx_key);
+  if (tls_ctx && tls_ctx->env) {
+    AtExit(tls_ctx->env, cb, arg);
+  }
 }
 
 void AtExit(Environment* env, void (*cb)(void* arg), void* arg) {

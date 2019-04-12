@@ -1,4 +1,7 @@
 {
+  'variables': {
+    'library%': 'static_library',
+  },
   'target_defaults': {
     'conditions': [
       ['OS!="win"', {
@@ -114,6 +117,7 @@
         [ 'OS=="win"', {
           'defines': [ 'CARES_PULL_WS2TCPIP_H=1' ],
           'include_dirs': [ 'config/win32' ],
+          'msvs_disabled_warnings': [4133],
           'sources': [
             'src/config-win32.h',
             'src/windows_port.c',

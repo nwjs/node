@@ -190,7 +190,7 @@ static void uv_init(void) {
    * FDs even though they return the proper error code in the release build.
    */
 #if defined(_DEBUG) && (defined(_MSC_VER) || defined(__MINGW64_VERSION_MAJOR))
-  _CrtSetReportHook(uv__crt_dbg_report_handler);
+  //_CrtSetReportHook(uv__crt_dbg_report_handler);
 #endif
 
   /* Initialize tracking of all uv loops */

@@ -215,11 +215,11 @@ MaybeLocal<Function> NativeModuleLoader::LookupAndCompile(
     }
   }
 
-  const bool use_cache = cached_data != nullptr;
+  const bool use_cache = false; //cached_data != nullptr;
   ScriptCompiler::CompileOptions options =
       use_cache ? ScriptCompiler::kConsumeCodeCache
                 : ScriptCompiler::kEagerCompile;
-  ScriptCompiler::Source script_source(source, origin, cached_data);
+  ScriptCompiler::Source script_source(source, origin, nullptr);
 
   MaybeLocal<Function> maybe_fun =
       ScriptCompiler::CompileFunctionInContext(context,
@@ -260,6 +260,7 @@ MaybeLocal<Function> NativeModuleLoader::LookupAndCompile(
     }
   }
 
+#if 0
   // Generate new cache for next compilation
   std::unique_ptr<ScriptCompiler::CachedData> new_cached_data(
       ScriptCompiler::CreateCodeCacheForFunction(fun));
@@ -267,6 +268,7 @@ MaybeLocal<Function> NativeModuleLoader::LookupAndCompile(
 
   // The old entry should've been erased by now so we can just emplace
   code_cache_.emplace(id, std::move(new_cached_data));
+#endif
 
   return scope.Escape(fun);
 }

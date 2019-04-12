@@ -38,7 +38,6 @@ namespace {
   V(WebAssemblyCompiledModule)                                                \
   V(ModuleNamespaceObject)                                                    \
 
-
 #define V(type) \
   static void Is##type(const FunctionCallbackInfo<Value>& args) {             \
     args.GetReturnValue().Set(args[0]->Is##type());                           \

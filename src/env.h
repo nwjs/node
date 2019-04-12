@@ -408,7 +408,7 @@ class IsolateData {
 
   inline bool uses_node_allocator() const;
   inline v8::ArrayBuffer::Allocator* allocator() const;
-  inline ArrayBufferAllocator* node_allocator() const;
+  inline NodeArrayBufferAllocator* node_allocator() const;
 
 #define VP(PropertyName, StringValue) V(v8::Private, PropertyName)
 #define VY(PropertyName, StringValue) V(v8::Symbol, PropertyName)
@@ -445,7 +445,7 @@ class IsolateData {
   v8::Isolate* const isolate_;
   uv_loop_t* const event_loop_;
   v8::ArrayBuffer::Allocator* const allocator_;
-  ArrayBufferAllocator* const node_allocator_;
+  NodeArrayBufferAllocator* const node_allocator_;
   const bool uses_node_allocator_;
   MultiIsolatePlatform* platform_;
   std::shared_ptr<PerIsolateOptions> options_;
@@ -469,7 +469,7 @@ struct CompileFnEntry {
 #define DEBUG_CATEGORY_NAMES(V)                                                \
   NODE_ASYNC_PROVIDER_TYPES(V)                                                 \
   V(INSPECTOR_SERVER)                                                          \
-  V(COVERAGE)
+  V(INSPECTOR_PROFILER)
 
 enum class DebugCategory {
 #define V(name) name,
@@ -531,6 +531,29 @@ class AsyncRequest : public MemoryRetainer {
   uv_async_t* async_ = nullptr;
   std::atomic_bool stopped_ {true};
 };
+
+class KVStore {
+ public:
+  virtual v8::Local<v8::String> Get(v8::Isolate* isolate,
+                                    v8::Local<v8::String> key) const = 0;
+  virtual void Set(v8::Isolate* isolate,
+                   v8::Local<v8::String> key,
+                   v8::Local<v8::String> value) = 0;
+  virtual int32_t Query(v8::Isolate* isolate,
+                        v8::Local<v8::String> key) const = 0;
+  virtual void Delete(v8::Isolate* isolate, v8::Local<v8::String> key) = 0;
+  virtual v8::Local<v8::Array> Enumerate(v8::Isolate* isolate) const = 0;
+
+  virtual std::shared_ptr<KVStore> Clone(v8::Isolate* isolate) const;
+  virtual v8::Maybe<bool> AssignFromObject(v8::Local<v8::Context> context,
+                                           v8::Local<v8::Object> entries);
+
+  static std::shared_ptr<KVStore> CreateMapKVStore();
+};
+
+namespace per_process {
+extern std::shared_ptr<KVStore> system_environment;
+}
 
 class AsyncHooks {
  public:
@@ -730,6 +753,7 @@ class Environment {
       const std::vector<std::string>& args,
       const std::vector<std::string>& exec_args);
   inline const std::vector<std::string>& exec_argv();
+  inline const std::vector<std::string>& argv();
 
   typedef void (*HandleCleanupCb)(Environment* env,
                                   uv_handle_t* handle,
@@ -781,6 +805,8 @@ class Environment {
   inline ImmediateInfo* immediate_info();
   inline TickInfo* tick_info();
   inline uint64_t timer_base() const;
+  inline std::shared_ptr<KVStore> env_vars();
+  inline void set_env_vars(std::shared_ptr<KVStore> env_vars);
 
   inline IsolateData* isolate_data() const;
 
@@ -888,6 +914,9 @@ class Environment {
 
   inline bool has_run_bootstrapping_code() const;
   inline void set_has_run_bootstrapping_code(bool has_run_bootstrapping_code);
+
+  inline bool has_serialized_options() const;
+  inline void set_has_serialized_options(bool has_serialized_options);
 
   static uint64_t AllocateThreadId();
   static constexpr uint64_t kNoThreadId = -1;
@@ -1031,23 +1060,6 @@ class Environment {
   inline std::shared_ptr<EnvironmentOptions> options();
   inline std::shared_ptr<HostPort> inspector_host_port();
 
-  enum class ExecutionMode {
-    kDefault,
-    kInspect,              // node inspect
-    kDebug,                // node debug
-    kPrintHelp,            // node --help
-    kPrintBashCompletion,  // node --completion-bash
-    kProfProcess,          // node --prof-process
-    kEvalString,           // node --eval without --interactive
-    kCheckSyntax,          // node --check (incompatible with --eval)
-    kRepl,
-    kEvalStdin,
-    kRunMainModule
-  };
-
-  inline ExecutionMode execution_mode() { return execution_mode_; }
-
-  inline void set_execution_mode(ExecutionMode mode) { execution_mode_ = mode; }
   inline AsyncRequest* thread_stopper() { return &thread_stopper_; }
 
  private:
@@ -1059,7 +1071,6 @@ class Environment {
   inline void ThrowError(v8::Local<v8::Value> (*fun)(v8::Local<v8::String>),
                          const char* errmsg);
 
-  ExecutionMode execution_mode_ = ExecutionMode::kDefault;
   std::list<binding::DLib> loaded_addons_;
   v8::Isolate* const isolate_;
   IsolateData* const isolate_data_;
@@ -1074,6 +1085,7 @@ class Environment {
   ImmediateInfo immediate_info_;
   TickInfo tick_info_;
   const uint64_t timer_base_;
+  std::shared_ptr<KVStore> env_vars_;
   bool printed_error_ = false;
   bool emit_env_nonstring_warning_ = true;
   bool emit_err_name_warning_ = true;
@@ -1090,6 +1102,7 @@ class Environment {
   // used.
   std::shared_ptr<HostPort> inspector_host_port_;
   std::vector<std::string> exec_argv_;
+  std::vector<std::string> argv_;
 
   uint32_t module_id_counter_ = 0;
   uint32_t script_id_counter_ = 0;
@@ -1106,6 +1119,8 @@ class Environment {
   std::unordered_map<std::string, uint64_t> performance_marks_;
 
   bool has_run_bootstrapping_code_ = false;
+  bool has_serialized_options_ = false;
+
   bool can_call_into_js_ = true;
   Flags flags_;
   uint64_t thread_id_;

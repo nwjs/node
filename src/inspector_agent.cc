@@ -728,18 +728,12 @@ bool Agent::Start(const std::string& path,
     return false;
   }
 
-  // TODO(joyeecheung): we should not be using process as a global object
-  // to transport --inspect-brk. Instead, the JS land can get this through
-  // require('internal/options') since it should be set once CLI parsing
-  // is done.
+  // Patch the debug options to implement waitForDebuggerOnStart for
+  // the NodeWorker.enable method.
   if (wait_for_connect) {
-    HandleScope scope(parent_env_->isolate());
-    parent_env_->process_object()->DefineOwnProperty(
-        parent_env_->context(),
-        FIXED_ONE_BYTE_STRING(parent_env_->isolate(), "_breakFirstLine"),
-        True(parent_env_->isolate()),
-        static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontEnum))
-        .FromJust();
+    CHECK(!parent_env_->has_serialized_options());
+    debug_options_.EnableBreakFirstLine();
+    parent_env_->options()->get_debug_options()->EnableBreakFirstLine();
     client_->waitForFrontend();
   }
   return true;
@@ -842,14 +836,16 @@ void Agent::DisableAsyncHook() {
 
 void Agent::ToggleAsyncHook(Isolate* isolate,
                             const node::Persistent<Function>& fn) {
+  CHECK(parent_env_->has_run_bootstrapping_code());
   HandleScope handle_scope(isolate);
   CHECK(!fn.IsEmpty());
   auto context = parent_env_->context();
-  auto result = fn.Get(isolate)->Call(context, Undefined(isolate), 0, nullptr);
-  if (result.IsEmpty()) {
-    FatalError(
-        "node::inspector::Agent::ToggleAsyncHook",
-        "Cannot toggle Inspector's AsyncHook, please report this.");
+  v8::TryCatch try_catch(isolate);
+  USE(fn.Get(isolate)->Call(context, Undefined(isolate), 0, nullptr));
+  if (try_catch.HasCaught()) {
+    PrintCaughtException(isolate, context, try_catch);
+    FatalError("\nnode::inspector::Agent::ToggleAsyncHook",
+               "Cannot toggle Inspector's AsyncHook, please report this.");
   }
 }
 

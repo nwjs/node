@@ -10,6 +10,7 @@
 #include "inspector/worker_inspector.h"  // ParentInspectorHandle
 #endif
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -67,7 +68,8 @@ Worker::Worker(Environment* env,
       exec_argv_(exec_argv),
       platform_(env->isolate_data()->platform()),
       profiler_idle_notifier_started_(env->profiler_idle_notifier_started()),
-      thread_id_(Environment::AllocateThreadId()) {
+      thread_id_(Environment::AllocateThreadId()),
+      env_vars_(env->env_vars()) {
   Debug(this, "Creating new worker instance with thread id %llu", thread_id_);
 
   // Set up everything that needs to be set up in the parent environment.
@@ -77,7 +79,7 @@ Worker::Worker(Environment* env,
     return;
   }
 
-  child_port_data_.reset(new MessagePortData(nullptr));
+  child_port_data_ = std::make_unique<MessagePortData>(nullptr);
   MessagePort::Entangle(parent_port_, child_port_data_.get());
 
   object()->Set(env->context(),
@@ -94,6 +96,7 @@ Worker::Worker(Environment* env,
       env->inspector_agent()->GetParentHandle(thread_id_, url);
 #endif
 
+  argv_ = std::vector<std::string>{env->argv()[0]};
   // Mark this Worker object as weak until we actually start the thread.
   MakeWeak();
 
@@ -249,12 +252,12 @@ void Worker::Run() {
                                    Environment::kNoFlags,
                                    thread_id_));
         CHECK_NOT_NULL(env_);
+        env_->set_env_vars(std::move(env_vars_));
         env_->set_abort_on_uncaught_exception(false);
         env_->set_worker_context(this);
 
         env_->InitializeLibuv(profiler_idle_notifier_started_);
-        env_->ProcessCliArgs(std::vector<std::string>{},
-                             std::move(exec_argv_));
+        env_->ProcessCliArgs(std::move(argv_), std::move(exec_argv_));
       }
       {
         Mutex::ScopedLock lock(mutex_);
@@ -399,68 +402,88 @@ void Worker::New(const FunctionCallbackInfo<Value>& args) {
   std::vector<std::string> exec_argv_out;
   bool has_explicit_exec_argv = false;
 
+  CHECK_EQ(args.Length(), 2);
   // Argument might be a string or URL
-  if (args.Length() > 0 && !args[0]->IsNullOrUndefined()) {
+  if (!args[0]->IsNullOrUndefined()) {
     Utf8Value value(
         args.GetIsolate(),
         args[0]->ToString(env->context()).FromMaybe(v8::Local<v8::String>()));
     url.append(value.out(), value.length());
+  }
 
-    if (args.Length() > 1 && args[1]->IsArray()) {
-      v8::Local<v8::Array> array = args[1].As<v8::Array>();
-      // The first argument is reserved for program name, but we don't need it
-      // in workers.
-      has_explicit_exec_argv = true;
-      std::vector<std::string> exec_argv = {""};
-      uint32_t length = array->Length();
-      for (uint32_t i = 0; i < length; i++) {
-        v8::Local<v8::Value> arg;
-        if (!array->Get(env->context(), i).ToLocal(&arg)) {
-          return;
-        }
-        v8::MaybeLocal<v8::String> arg_v8_string =
-            arg->ToString(env->context());
-        if (arg_v8_string.IsEmpty()) {
-          return;
-        }
-        Utf8Value arg_utf8_value(
-            args.GetIsolate(),
-            arg_v8_string.FromMaybe(v8::Local<v8::String>()));
-        std::string arg_string(arg_utf8_value.out(), arg_utf8_value.length());
-        exec_argv.push_back(arg_string);
-      }
-
-      std::vector<std::string> invalid_args{};
-      std::vector<std::string> errors{};
-      per_isolate_opts.reset(new PerIsolateOptions());
-
-      // Using invalid_args as the v8_args argument as it stores unknown
-      // options for the per isolate parser.
-      options_parser::PerIsolateOptionsParser::instance.Parse(
-          &exec_argv,
-          &exec_argv_out,
-          &invalid_args,
-          per_isolate_opts.get(),
-          kDisallowedInEnvironment,
-          &errors);
-
-      // The first argument is program name.
-      invalid_args.erase(invalid_args.begin());
-      if (errors.size() > 0 || invalid_args.size() > 0) {
-        v8::Local<v8::Value> value =
-            ToV8Value(env->context(),
-                      errors.size() > 0 ? errors : invalid_args)
-                .ToLocalChecked();
-        Local<String> key =
-            FIXED_ONE_BYTE_STRING(env->isolate(), "invalidExecArgv");
-        args.This()->Set(env->context(), key, value).FromJust();
+  if (args[1]->IsArray()) {
+    v8::Local<v8::Array> array = args[1].As<v8::Array>();
+    // The first argument is reserved for program name, but we don't need it
+    // in workers.
+    has_explicit_exec_argv = true;
+    std::vector<std::string> exec_argv = {""};
+    uint32_t length = array->Length();
+    for (uint32_t i = 0; i < length; i++) {
+      v8::Local<v8::Value> arg;
+      if (!array->Get(env->context(), i).ToLocal(&arg)) {
         return;
       }
+      v8::MaybeLocal<v8::String> arg_v8_string =
+          arg->ToString(env->context());
+      if (arg_v8_string.IsEmpty()) {
+        return;
+      }
+      Utf8Value arg_utf8_value(
+          args.GetIsolate(),
+          arg_v8_string.FromMaybe(v8::Local<v8::String>()));
+      std::string arg_string(arg_utf8_value.out(), arg_utf8_value.length());
+      exec_argv.push_back(arg_string);
+    }
+
+    std::vector<std::string> invalid_args{};
+    std::vector<std::string> errors{};
+    per_isolate_opts.reset(new PerIsolateOptions());
+
+    // Using invalid_args as the v8_args argument as it stores unknown
+    // options for the per isolate parser.
+    options_parser::Parse(
+        &exec_argv,
+        &exec_argv_out,
+        &invalid_args,
+        per_isolate_opts.get(),
+        kDisallowedInEnvironment,
+        &errors);
+
+    // The first argument is program name.
+    invalid_args.erase(invalid_args.begin());
+    if (errors.size() > 0 || invalid_args.size() > 0) {
+      v8::Local<v8::Value> error =
+          ToV8Value(env->context(),
+                    errors.size() > 0 ? errors : invalid_args)
+              .ToLocalChecked();
+      Local<String> key =
+          FIXED_ONE_BYTE_STRING(env->isolate(), "invalidExecArgv");
+      USE(args.This()->Set(env->context(), key, error).FromJust());
+      return;
     }
   }
   if (!has_explicit_exec_argv)
     exec_argv_out = env->exec_argv();
   new Worker(env, args.This(), url, per_isolate_opts, std::move(exec_argv_out));
+}
+
+void Worker::CloneParentEnvVars(const FunctionCallbackInfo<Value>& args) {
+  Worker* w;
+  ASSIGN_OR_RETURN_UNWRAP(&w, args.This());
+  CHECK(w->thread_joined_);  // The Worker has not started yet.
+
+  w->env_vars_ = w->env()->env_vars()->Clone(args.GetIsolate());
+}
+
+void Worker::SetEnvVars(const FunctionCallbackInfo<Value>& args) {
+  Worker* w;
+  ASSIGN_OR_RETURN_UNWRAP(&w, args.This());
+  CHECK(w->thread_joined_);  // The Worker has not started yet.
+
+  CHECK(args[0]->IsObject());
+  w->env_vars_ = KVStore::CreateMapKVStore();
+  w->env_vars_->AssignFromObject(args.GetIsolate()->GetCurrentContext(),
+                                args[0].As<Object>());
 }
 
 void Worker::StartThread(const FunctionCallbackInfo<Value>& args) {
@@ -560,6 +583,8 @@ void InitWorker(Local<Object> target,
     w->InstanceTemplate()->SetInternalFieldCount(1);
     w->Inherit(AsyncWrap::GetConstructorTemplate(env));
 
+    env->SetProtoMethod(w, "setEnvVars", Worker::SetEnvVars);
+    env->SetProtoMethod(w, "cloneParentEnvVars", Worker::CloneParentEnvVars);
     env->SetProtoMethod(w, "startThread", Worker::StartThread);
     env->SetProtoMethod(w, "stopThread", Worker::StopThread);
     env->SetProtoMethod(w, "ref", Worker::Ref);

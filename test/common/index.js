@@ -48,8 +48,11 @@ const hasCrypto = Boolean(process.versions.openssl);
 
 // Check for flags. Skip this for workers (both, the `cluster` module and
 // `worker_threads`) and child processes.
+// If the binary was built without-ssl then the crypto flags are
+// invalid (bad option). The test itself should handle this case.
 if (process.argv.length === 2 &&
     isMainThread &&
+    hasCrypto &&
     module.parent &&
     require('cluster').isMaster) {
   // The copyright notice is relatively big and the flags could come afterwards.
@@ -74,13 +77,21 @@ if (process.argv.length === 2 &&
     const args = process.execArgv.map((arg) => arg.replace(/_/g, '-'));
     for (const flag of flags) {
       if (!args.includes(flag) &&
-          // If the binary was built without-ssl then the crypto flags are
-          // invalid (bad option). The test itself should handle this case.
-          hasCrypto &&
           // If the binary is build without `intl` the inspect option is
           // invalid. The test itself should handle this case.
           (process.features.inspector || !flag.startsWith('--inspect'))) {
-        throw new Error(`Test has to be started with the flag: '${flag}'`);
+        console.log(
+          'NOTE: The test started as a child_process using these flags:',
+          util.inspect(flags)
+        );
+        const args = [...flags, ...process.execArgv, ...process.argv.slice(1)];
+        const options = { encoding: 'utf8', stdio: 'inherit' };
+        const result = spawnSync(process.execPath, args, options);
+        if (result.signal) {
+          process.kill(0, result.signal);
+        } else {
+          process.exit(result.status);
+        }
       }
     }
   }

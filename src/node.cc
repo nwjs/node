@@ -219,11 +219,10 @@ void SignalExit(int signo) {
   raise(signo);
 }
 
-static MaybeLocal<Value> ExecuteBootstrapper(
-    Environment* env,
-    const char* id,
-    std::vector<Local<String>>* parameters,
-    std::vector<Local<Value>>* arguments) {
+MaybeLocal<Value> ExecuteBootstrapper(Environment* env,
+                                      const char* id,
+                                      std::vector<Local<String>>* parameters,
+                                      std::vector<Local<Value>>* arguments) {
   EscapableHandleScope scope(env->isolate());
   MaybeLocal<Function> maybe_fn =
       per_process::native_module_loader.LookupAndCompile(
@@ -264,9 +263,7 @@ MaybeLocal<Value> RunBootstrapping(Environment* env) {
   bool rc = credentials::SafeGetenv("NODE_V8_COVERAGE", &coverage);
   if (rc && !coverage.empty()) {
 #if HAVE_INSPECTOR
-    if (!coverage::StartCoverageCollection(env)) {
-      return MaybeLocal<Value>();
-    }
+    profiler::StartCoverageCollection(env);
 #else
     fprintf(stderr, "NODE_V8_COVERAGE cannot be used without inspector");
 #endif  // HAVE_INSPECTOR
@@ -317,8 +314,6 @@ MaybeLocal<Value> RunBootstrapping(Environment* env) {
       env->process_string(),
       FIXED_ONE_BYTE_STRING(isolate, "getLinkedBinding"),
       FIXED_ONE_BYTE_STRING(isolate, "getInternalBinding"),
-      // --expose-internals
-      FIXED_ONE_BYTE_STRING(isolate, "exposeInternals"),
       env->primordials_string()};
   std::vector<Local<Value>> loaders_args = {
       process,
@@ -328,7 +323,6 @@ MaybeLocal<Value> RunBootstrapping(Environment* env) {
       env->NewFunctionTemplate(binding::GetInternalBinding)
           ->GetFunction(context)
           .ToLocalChecked(),
-      Boolean::New(isolate, env->options()->expose_internals),
       env->primordials()};
 
   // Bootstrap internal loaders
@@ -427,47 +421,44 @@ MaybeLocal<Value> StartMainThreadExecution(Environment* env) {
     return StartExecution(env, "internal/main/run_third_party_main");
   }
 
-  if (env->execution_mode() == Environment::ExecutionMode::kInspect ||
-      env->execution_mode() == Environment::ExecutionMode::kDebug) {
+  std::string first_argv;
+  if (env->argv().size() > 1) {
+    first_argv = env->argv()[1];
+  }
+
+  if (first_argv == "inspect" || first_argv == "debug") {
     return StartExecution(env, "internal/main/inspect");
   }
 
   if (per_process::cli_options->print_help) {
-    env->set_execution_mode(Environment::ExecutionMode::kPrintHelp);
     return StartExecution(env, "internal/main/print_help");
   }
 
   if (per_process::cli_options->print_bash_completion) {
-    env->set_execution_mode(Environment::ExecutionMode::kPrintBashCompletion);
     return StartExecution(env, "internal/main/print_bash_completion");
   }
 
   if (env->options()->prof_process) {
-    env->set_execution_mode(Environment::ExecutionMode::kProfProcess);
     return StartExecution(env, "internal/main/prof_process");
   }
 
   // -e/--eval without -i/--interactive
   if (env->options()->has_eval_string && !env->options()->force_repl) {
-    env->set_execution_mode(Environment::ExecutionMode::kEvalString);
     return StartExecution(env, "internal/main/eval_string");
   }
 
   if (env->options()->syntax_check_only) {
-    env->set_execution_mode(Environment::ExecutionMode::kCheckSyntax);
     return StartExecution(env, "internal/main/check_syntax");
   }
 
-  if (env->execution_mode() == Environment::ExecutionMode::kRunMainModule) {
+  if (!first_argv.empty() && first_argv != "-" || node_is_nwjs) {
     return StartExecution(env, "internal/main/run_main_module");
   }
 
   if (env->options()->force_repl || uv_guess_handle(STDIN_FILENO) == UV_TTY) {
-    env->set_execution_mode(Environment::ExecutionMode::kRepl);
     return StartExecution(env, "internal/main/repl");
   }
 
-  env->set_execution_mode(Environment::ExecutionMode::kEvalStdin);
   return StartExecution(env, "internal/main/eval_stdin");
 }
 
@@ -477,9 +468,7 @@ void LoadEnvironment(Environment* env) {
   // StartMainThreadExecution() make sense for embedders. Pick the
   // useful ones out, and allow embedders to customize the entry
   // point more directly without using _third_party_main.js
-  if (!RunBootstrapping(env).IsEmpty()) {
-    USE(StartMainThreadExecution(env));
-  }
+  USE(StartMainThreadExecution(env));
 }
 
 
@@ -591,7 +580,7 @@ int ProcessGlobalArgs(std::vector<std::string>* args,
   std::vector<std::string> v8_args;
 
   Mutex::ScopedLock lock(per_process::cli_options_mutex);
-  options_parser::PerProcessOptionsParser::instance.Parse(
+  options_parser::Parse(
       args,
       exec_args,
       &v8_args,
@@ -806,90 +795,117 @@ void RunBeforeExit(Environment* env) {
     EmitBeforeExit(env);
 }
 
-inline int StartNodeWithIsolate(Isolate* isolate,
-                                IsolateData* isolate_data,
-                                const std::vector<std::string>& args,
-                                const std::vector<std::string>& exec_args) {
+// TODO(joyeecheung): align this with the CreateEnvironment exposed in node.h
+// and the environment creation routine in workers somehow.
+inline std::unique_ptr<Environment> CreateMainEnvironment(
+    IsolateData* isolate_data,
+    const std::vector<std::string>& args,
+    const std::vector<std::string>& exec_args,
+    int* exit_code) {
+  Isolate* isolate = isolate_data->isolate();
   HandleScope handle_scope(isolate);
+
+  // TODO(addaleax): This should load a real per-Isolate option, currently
+  // this is still effectively per-process.
+  if (isolate_data->options()->track_heap_objects) {
+    isolate->GetHeapProfiler()->StartTrackingHeapObjects(true);
+  }
+
   Local<Context> context = NewContext(isolate);
   Context::Scope context_scope(context);
-  int exit_code = 0;
-  Environment env(
+
+  std::unique_ptr<Environment> env = std::make_unique<Environment>(
       isolate_data,
       context,
       static_cast<Environment::Flags>(Environment::kIsMainThread |
                                       Environment::kOwnsProcessState |
                                       Environment::kOwnsInspector));
-  env.InitializeLibuv(per_process::v8_is_profiling);
-  env.ProcessCliArgs(args, exec_args);
+  env->InitializeLibuv(per_process::v8_is_profiling);
+  env->ProcessCliArgs(args, exec_args);
 
 #if HAVE_INSPECTOR && NODE_USE_V8_PLATFORM
-  CHECK(!env.inspector_agent()->IsListening());
+  CHECK(!env->inspector_agent()->IsListening());
   // Inspector agent can't fail to start, but if it was configured to listen
   // right away on the websocket port and fails to bind/etc, this will return
   // false.
-  env.inspector_agent()->Start(args.size() > 1 ? args[1].c_str() : "",
-                               env.options()->debug_options(),
-                               env.inspector_host_port(),
-                               true);
-  if (env.options()->debug_options().inspector_enabled &&
-      !env.inspector_agent()->IsListening()) {
-    exit_code = 12;  // Signal internal error.
-    goto exit;
+  env->inspector_agent()->Start(args.size() > 1 ? args[1].c_str() : "",
+                                env->options()->debug_options(),
+                                env->inspector_host_port(),
+                                true);
+  if (env->options()->debug_options().inspector_enabled &&
+      !env->inspector_agent()->IsListening()) {
+    *exit_code = 12;  // Signal internal error.
+    return env;
   }
 #else
   // inspector_enabled can't be true if !HAVE_INSPECTOR or !NODE_USE_V8_PLATFORM
   // - the option parser should not allow that.
-  CHECK(!env.options()->debug_options().inspector_enabled);
+  CHECK(!env->options()->debug_options().inspector_enabled);
 #endif  // HAVE_INSPECTOR && NODE_USE_V8_PLATFORM
 
-  {
-    AsyncCallbackScope callback_scope(&env);
-    env.async_hooks()->push_async_ids(1, 0);
-    LoadEnvironment(&env);
-    env.async_hooks()->pop_async_id(1);
+  if (RunBootstrapping(env.get()).IsEmpty()) {
+    *exit_code = 1;
   }
 
-  {
-    SealHandleScope seal(isolate);
-    bool more;
-    env.performance_state()->Mark(
-        node::performance::NODE_PERFORMANCE_MILESTONE_LOOP_START);
-    do {
-      uv_run(env.event_loop(), UV_RUN_DEFAULT);
+  return env;
+}
 
-      per_process::v8_platform.DrainVMTasks(isolate);
+inline int StartNodeWithIsolate(Isolate* isolate,
+                                IsolateData* isolate_data,
+                                const std::vector<std::string>& args,
+                                const std::vector<std::string>& exec_args) {
+  int exit_code = 0;
+  std::unique_ptr<Environment> env =
+      CreateMainEnvironment(isolate_data, args, exec_args, &exit_code);
+  CHECK_NOT_NULL(env);
+  HandleScope handle_scope(env->isolate());
+  Context::Scope context_scope(env->context());
 
-      more = uv_loop_alive(env.event_loop());
-      if (more && !env.is_stopping()) continue;
+  if (exit_code == 0) {
+    {
+      AsyncCallbackScope callback_scope(env.get());
+      env->async_hooks()->push_async_ids(1, 0);
+      LoadEnvironment(env.get());
+      env->async_hooks()->pop_async_id(1);
+    }
 
-      RunBeforeExit(&env);
+    {
+      SealHandleScope seal(isolate);
+      bool more;
+      env->performance_state()->Mark(
+          node::performance::NODE_PERFORMANCE_MILESTONE_LOOP_START);
+      do {
+        uv_run(env->event_loop(), UV_RUN_DEFAULT);
 
-      // Emit `beforeExit` if the loop became alive either after emitting
-      // event, or after running some callbacks.
-      more = uv_loop_alive(env.event_loop());
-    } while (more == true && !env.is_stopping());
-    env.performance_state()->Mark(
-        node::performance::NODE_PERFORMANCE_MILESTONE_LOOP_EXIT);
+        per_process::v8_platform.DrainVMTasks(isolate);
+
+        more = uv_loop_alive(env->event_loop());
+        if (more && !env->is_stopping()) continue;
+
+        RunBeforeExit(env.get());
+
+        // Emit `beforeExit` if the loop became alive either after emitting
+        // event, or after running some callbacks.
+        more = uv_loop_alive(env->event_loop());
+      } while (more == true && !env->is_stopping());
+      env->performance_state()->Mark(
+          node::performance::NODE_PERFORMANCE_MILESTONE_LOOP_EXIT);
+    }
+
+    env->set_trace_sync_io(false);
+    exit_code = EmitExit(env.get());
+    WaitForInspectorDisconnect(env.get());
   }
 
-  env.set_trace_sync_io(false);
-
-  exit_code = EmitExit(&env);
-
-  WaitForInspectorDisconnect(&env);
-
-#if HAVE_INSPECTOR && NODE_USE_V8_PLATFORM
-exit:
-#endif
-  env.set_can_call_into_js(false);
-  env.stop_sub_worker_contexts();
+  env->set_can_call_into_js(false);
+  env->stop_sub_worker_contexts();
   uv_tty_reset_mode();
-  env.RunCleanup();
-  RunAtExit(&env);
+  env->RunCleanup();
+  RunAtExit(env.get());
 
   per_process::v8_platform.DrainVMTasks(isolate);
   per_process::v8_platform.CancelVMTasks(isolate);
+
 #if defined(LEAK_SANITIZER)
   __lsan_do_leak_check();
 #endif
@@ -916,11 +932,6 @@ inline int StartNodeWithLoopAndArgs(uv_loop_t* event_loop,
                           event_loop,
                           per_process::v8_platform.Platform()),
         &FreeIsolateData);
-    // TODO(addaleax): This should load a real per-Isolate option, currently
-    // this is still effectively per-process.
-    if (isolate_data->options()->track_heap_objects) {
-      isolate->GetHeapProfiler()->StartTrackingHeapObjects(true);
-    }
     exit_code =
         StartNodeWithIsolate(isolate, isolate_data.get(), args, exec_args);
   }

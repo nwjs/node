@@ -73,7 +73,7 @@ NODE_EXTERN void OnMessage(Local<Message> message, Local<Value> error) {
   }
 }
 
-void* ArrayBufferAllocator::Allocate(size_t size) {
+void* NodeArrayBufferAllocator::Allocate(size_t size) {
   if (zero_fill_field_ || per_process::cli_options->zero_fill_all_buffers)
     return UncheckedCalloc(size);
   else
@@ -86,14 +86,14 @@ DebuggingArrayBufferAllocator::~DebuggingArrayBufferAllocator() {
 
 void* DebuggingArrayBufferAllocator::Allocate(size_t size) {
   Mutex::ScopedLock lock(mutex_);
-  void* data = ArrayBufferAllocator::Allocate(size);
+  void* data = NodeArrayBufferAllocator::Allocate(size);
   RegisterPointerInternal(data, size);
   return data;
 }
 
 void* DebuggingArrayBufferAllocator::AllocateUninitialized(size_t size) {
   Mutex::ScopedLock lock(mutex_);
-  void* data = ArrayBufferAllocator::AllocateUninitialized(size);
+  void* data = NodeArrayBufferAllocator::AllocateUninitialized(size);
   RegisterPointerInternal(data, size);
   return data;
 }
@@ -101,14 +101,14 @@ void* DebuggingArrayBufferAllocator::AllocateUninitialized(size_t size) {
 void DebuggingArrayBufferAllocator::Free(void* data, size_t size) {
   Mutex::ScopedLock lock(mutex_);
   UnregisterPointerInternal(data, size);
-  ArrayBufferAllocator::Free(data, size);
+  NodeArrayBufferAllocator::Free(data, size);
 }
 
 void* DebuggingArrayBufferAllocator::Reallocate(void* data,
                                                 size_t old_size,
                                                 size_t size) {
   Mutex::ScopedLock lock(mutex_);
-  void* ret = ArrayBufferAllocator::Reallocate(data, old_size, size);
+  void* ret = NodeArrayBufferAllocator::Reallocate(data, old_size, size);
   if (ret == nullptr) {
     if (size == 0)  // i.e. equivalent to free().
       UnregisterPointerInternal(data, old_size);
@@ -151,34 +151,32 @@ void DebuggingArrayBufferAllocator::RegisterPointerInternal(void* data,
   allocations_[data] = size;
 }
 
-ArrayBufferAllocator* CreateArrayBufferAllocator() {
-  if (per_process::cli_options->debug_arraybuffer_allocations)
-    return new DebuggingArrayBufferAllocator();
+std::unique_ptr<ArrayBufferAllocator> ArrayBufferAllocator::Create(bool debug) {
+  if (debug || per_process::cli_options->debug_arraybuffer_allocations)
+    return std::make_unique<DebuggingArrayBufferAllocator>();
   else
-    return new ArrayBufferAllocator();
+    return std::make_unique<NodeArrayBufferAllocator>();
+}
+
+ArrayBufferAllocator* CreateArrayBufferAllocator() {
+  return ArrayBufferAllocator::Create().release();
 }
 
 void FreeArrayBufferAllocator(ArrayBufferAllocator* allocator) {
   delete allocator;
 }
 
-Isolate* NewIsolate(ArrayBufferAllocator* allocator, uv_loop_t* event_loop) {
-  Isolate::CreateParams params;
-  if (!node_is_nwjs) {
-  params.array_buffer_allocator = allocator;
-  }
+void SetIsolateCreateParams(Isolate::CreateParams* params,
+                            ArrayBufferAllocator* allocator) {
+  if (allocator != nullptr && !node_is_nwjs)
+    params->array_buffer_allocator = allocator;
+
 #ifdef NODE_ENABLE_VTUNE_PROFILING
-  params.code_event_handler = vTune::GetVtuneCodeEventHandler();
+  params->code_event_handler = vTune::GetVtuneCodeEventHandler();
 #endif
+}
 
-  Isolate* isolate = Isolate::Allocate();
-  if (isolate == nullptr) return nullptr;
-
-  // Register the isolate on the platform before the isolate gets initialized,
-  // so that the isolate can access the platform during initialization.
-  per_process::v8_platform.Platform()->RegisterIsolate(isolate, event_loop);
-  Isolate::Initialize(isolate, params);
-
+void SetIsolateUpForNode(v8::Isolate* isolate) {
   isolate->AddMessageListenerWithErrorLevel(
       OnMessage,
       Isolate::MessageErrorLevel::kMessageError |
@@ -190,7 +188,29 @@ Isolate* NewIsolate(ArrayBufferAllocator* allocator, uv_loop_t* event_loop) {
   isolate->SetMicrotasksPolicy(v8::MicrotasksPolicy::kScoped);
   isolate->SetFatalErrorHandler(OnFatalError);
   isolate->SetAllowWasmCodeGenerationCallback(AllowWasmCodeGenerationCallback);
+  //isolate->SetPromiseRejectCallback(task_queue::PromiseRejectCallback);
   //v8::CpuProfiler::UseDetailedSourcePositionsForProfiling(isolate);
+}
+
+Isolate* NewIsolate(ArrayBufferAllocator* allocator, uv_loop_t* event_loop) {
+  return NewIsolate(allocator, event_loop, GetMainThreadMultiIsolatePlatform());
+}
+
+Isolate* NewIsolate(ArrayBufferAllocator* allocator,
+                    uv_loop_t* event_loop,
+                    MultiIsolatePlatform* platform) {
+  Isolate::CreateParams params;
+  SetIsolateCreateParams(&params, allocator);
+
+  Isolate* isolate = Isolate::Allocate();
+  if (isolate == nullptr) return nullptr;
+
+  // Register the isolate on the platform before the isolate gets initialized,
+  // so that the isolate can access the platform during initialization.
+  platform->RegisterIsolate(isolate, event_loop);
+  Isolate::Initialize(isolate, params);
+
+  SetIsolateUpForNode(isolate);
 
   return isolate;
 }
@@ -228,6 +248,23 @@ Environment* CreateEnvironment(IsolateData* isolate_data,
                                       Environment::kOwnsInspector));
   env->InitializeLibuv(per_process::v8_is_profiling);
   env->ProcessCliArgs(args, exec_args);
+  if (RunBootstrapping(env).IsEmpty()) {
+    return nullptr;
+  }
+
+  std::vector<Local<String>> parameters = {
+      env->require_string(),
+      FIXED_ONE_BYTE_STRING(env->isolate(), "markBootstrapComplete")};
+  std::vector<Local<Value>> arguments = {
+      env->native_module_require(),
+      env->NewFunctionTemplate(MarkBootstrapComplete)
+          ->GetFunction(env->context())
+          .ToLocalChecked()};
+  if (ExecuteBootstrapper(
+          env, "internal/bootstrap/environment", &parameters, &arguments)
+          .IsEmpty()) {
+    return nullptr;
+  }
   return env;
 }
 

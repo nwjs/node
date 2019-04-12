@@ -56,7 +56,7 @@ inline v8::ArrayBuffer::Allocator* IsolateData::allocator() const {
   return allocator_;
 }
 
-inline ArrayBufferAllocator* IsolateData::node_allocator() const {
+inline NodeArrayBufferAllocator* IsolateData::node_allocator() const {
   return node_allocator_;
 }
 
@@ -447,6 +447,14 @@ inline uint64_t Environment::timer_base() const {
   return timer_base_;
 }
 
+inline std::shared_ptr<KVStore> Environment::env_vars() {
+  return env_vars_;
+}
+
+inline void Environment::set_env_vars(std::shared_ptr<KVStore> env_vars) {
+  env_vars_ = env_vars;
+}
+
 inline bool Environment::printed_error() const {
   return printed_error_;
 }
@@ -622,6 +630,10 @@ inline std::shared_ptr<EnvironmentOptions> Environment::options() {
   return options_;
 }
 
+inline const std::vector<std::string>& Environment::argv() {
+  return argv_;
+}
+
 inline const std::vector<std::string>& Environment::exec_argv() {
   return exec_argv_;
 }
@@ -682,6 +694,14 @@ inline bool Environment::has_run_bootstrapping_code() const {
 
 inline void Environment::set_has_run_bootstrapping_code(bool value) {
   has_run_bootstrapping_code_ = value;
+}
+
+inline bool Environment::has_serialized_options() const {
+  return has_serialized_options_;
+}
+
+inline void Environment::set_has_serialized_options(bool value) {
+  has_serialized_options_ = value;
 }
 
 inline bool Environment::is_main_thread() const {

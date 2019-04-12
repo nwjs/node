@@ -64,6 +64,8 @@
 #include "v8-platform.h"  // NOLINT(build/include_order)
 #include "node_version.h"  // NODE_MODULE_VERSION
 
+#include <memory>
+
 #define NODE_MAKE_VERSION(major, minor, patch)                                \
   ((major) * 0x1000 + (minor) * 0x100 + (patch))
 
@@ -217,8 +219,30 @@ NODE_EXTERN void Init(int* argc,
                       int* exec_argc,
                       const char*** exec_argv);
 
-class ArrayBufferAllocator;
+class NodeArrayBufferAllocator;
 
+// An ArrayBuffer::Allocator class with some Node.js-specific tweaks. If you do
+// not have to use another allocator, using this class is recommended:
+// - It supports Buffer.allocUnsafe() and Buffer.allocUnsafeSlow() with
+//   uninitialized memory.
+// - It supports transferring, rather than copying, ArrayBuffers when using
+//   MessagePorts.
+class NODE_EXTERN ArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
+ public:
+  // If `always_debug` is true, create an ArrayBuffer::Allocator instance
+  // that performs additional integrity checks (e.g. make sure that only memory
+  // that was allocated by the it is also freed by it).
+  // This can also be set using the --debug-arraybuffer-allocations flag.
+  static std::unique_ptr<ArrayBufferAllocator> Create(
+      bool always_debug = false);
+
+ private:
+  virtual NodeArrayBufferAllocator* GetImpl() = 0;
+
+  friend class IsolateData;
+};
+
+// Legacy equivalents for ArrayBufferAllocator::Create().
 NODE_EXTERN ArrayBufferAllocator* CreateArrayBufferAllocator();
 NODE_EXTERN void FreeArrayBufferAllocator(ArrayBufferAllocator* allocator);
 
@@ -238,9 +262,24 @@ class NODE_EXTERN MultiIsolatePlatform : public v8::Platform {
   virtual void UnregisterIsolate(v8::Isolate* isolate) = 0;
 };
 
+// Set up some Node.js-specific defaults for `params`, in particular
+// the ArrayBuffer::Allocator if it is provided, memory limits, and
+// possibly a code event handler.
+NODE_EXTERN void SetIsolateCreateParams(v8::Isolate::CreateParams* params,
+                                        ArrayBufferAllocator* allocator
+                                            = nullptr);
+// Set a number of callbacks for the `isolate`, in particular the Node.js
+// uncaught exception listener.
+NODE_EXTERN void SetIsolateUpForNode(v8::Isolate* isolate);
 // Creates a new isolate with Node.js-specific settings.
+// This is a convenience method equivalent to using SetIsolateCreateParams(),
+// Isolate::Allocate(), MultiIsolatePlatform::RegisterIsolate(),
+// Isolate::Initialize(), and SetIsolateUpForNode().
 NODE_EXTERN v8::Isolate* NewIsolate(ArrayBufferAllocator* allocator,
                                     struct uv_loop_s* event_loop);
+NODE_EXTERN v8::Isolate* NewIsolate(ArrayBufferAllocator* allocator,
+                                    struct uv_loop_s* event_loop,
+                                    MultiIsolatePlatform* platform);
 
 // Creates a new context with Node.js-specific tweaks.
 NODE_EXTERN v8::Local<v8::Context> NewContext(
@@ -260,6 +299,8 @@ NODE_EXTERN void FreeIsolateData(IsolateData* isolate_data);
 
 // TODO(addaleax): Add an official variant using STL containers, and move
 // per-Environment options parsing here.
+// Returns nullptr when the Environment cannot be created e.g. there are
+// pending JavaScript exceptions.
 NODE_EXTERN Environment* CreateEnvironment(IsolateData* isolate_data,
                                            v8::Local<v8::Context> context,
                                            int argc,

@@ -88,6 +88,11 @@ void GetSockOrPeerName(const v8::FunctionCallbackInfo<v8::Value>& args) {
   args.GetReturnValue().Set(err);
 }
 
+void PrintStackTrace(v8::Isolate* isolate, v8::Local<v8::StackTrace> stack);
+void PrintCaughtException(v8::Isolate* isolate,
+                          v8::Local<v8::Context> context,
+                          const v8::TryCatch& try_catch);
+
 void WaitForInspectorDisconnect(Environment* env);
 void SignalExit(int signo);
 #ifdef __POSIX__
@@ -103,7 +108,7 @@ namespace task_queue {
 void PromiseRejectCallback(v8::PromiseRejectMessage message);
 }  // namespace task_queue
 
-class ArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
+class NodeArrayBufferAllocator : public ArrayBufferAllocator {
  public:
   inline uint32_t* zero_fill_field() { return &zero_fill_field_; }
 
@@ -118,11 +123,13 @@ class ArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
   virtual void RegisterPointer(void* data, size_t size) {}
   virtual void UnregisterPointer(void* data, size_t size) {}
 
+  NodeArrayBufferAllocator* GetImpl() final { return this; }
+
  private:
   uint32_t zero_fill_field_ = 1;  // Boolean but exposed as uint32 to JS land.
 };
 
-class DebuggingArrayBufferAllocator final : public ArrayBufferAllocator {
+class DebuggingArrayBufferAllocator final : public NodeArrayBufferAllocator {
  public:
   ~DebuggingArrayBufferAllocator() override;
   void* Allocate(size_t size) override;
@@ -288,7 +295,7 @@ int ThreadPoolWork::CancelWork() {
 #endif  // __POSIX__ && !defined(__ANDROID__) && !defined(__CloudABI__)
 
 namespace credentials {
-bool SafeGetenv(const char* key, std::string* text);
+bool SafeGetenv(const char* key, std::string* text, Environment* env = nullptr);
 }  // namespace credentials
 
 void DefineZlibConstants(v8::Local<v8::Object> target);
@@ -297,9 +304,14 @@ v8::MaybeLocal<v8::Value> RunBootstrapping(Environment* env);
 v8::MaybeLocal<v8::Value> StartExecution(Environment* env,
                                          const char* main_script_id);
 v8::MaybeLocal<v8::Object> GetPerContextExports(v8::Local<v8::Context> context);
-
-namespace coverage {
-bool StartCoverageCollection(Environment* env);
+v8::MaybeLocal<v8::Value> ExecuteBootstrapper(
+    Environment* env,
+    const char* id,
+    std::vector<v8::Local<v8::String>>* parameters,
+    std::vector<v8::Local<v8::Value>>* arguments);
+void MarkBootstrapComplete(const v8::FunctionCallbackInfo<v8::Value>& args);
+namespace profiler {
+void StartCoverageCollection(Environment* env);
 }
 
 #ifdef _WIN32

@@ -30,6 +30,7 @@
 
 #include <cerrno>
 #include <cstring>
+#include <memory>
 #include <vector>
 #include <unordered_set>
 
@@ -295,18 +296,13 @@ void node_ares_task::MemoryInfo(MemoryTracker* tracker) const {
 node_ares_task* ares_task_create(ChannelWrap* channel, ares_socket_t sock) {
   auto task = new node_ares_task();
 
-  if (task == nullptr) {
-    /* Out of memory. */
-    return nullptr;
-  }
-
   task->channel = channel;
   task->sock = sock;
 
   if (uv_poll_init_socket(channel->env()->event_loop(),
                           &task->poll_watcher, sock) < 0) {
     /* This should never happen. */
-    free(task);
+    delete task;
     return nullptr;
   }
 
@@ -663,7 +659,7 @@ class QueryWrap : public AsyncWrap {
       memcpy(buf_copy, answer_buf, answer_len);
     }
 
-    wrap->response_data_.reset(new ResponseData());
+    wrap->response_data_ = std::make_unique<ResponseData>();
     ResponseData* data = wrap->response_data_.get();
     data->status = status;
     data->is_host = false;
@@ -683,7 +679,7 @@ class QueryWrap : public AsyncWrap {
       cares_wrap_hostent_cpy(host_copy, host);
     }
 
-    wrap->response_data_.reset(new ResponseData());
+    wrap->response_data_ = std::make_unique<ResponseData>();
     ResponseData* data = wrap->response_data_.get();
     data->status = status;
     data->host.reset(host_copy);
@@ -1973,7 +1969,7 @@ void GetAddrInfo(const FunctionCallbackInfo<Value>& args) {
                                                        args[4]->IsTrue());
 
   struct addrinfo hints;
-  memset(&hints, 0, sizeof(struct addrinfo));
+  memset(&hints, 0, sizeof(hints));
   hints.ai_family = family;
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = flags;

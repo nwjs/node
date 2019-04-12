@@ -51,6 +51,7 @@
     'library_files': [
       'lib/internal/bootstrap/primordials.js',
       'lib/internal/bootstrap/cache.js',
+      'lib/internal/bootstrap/environment.js',
       'lib/internal/bootstrap/loaders.js',
       'lib/internal/bootstrap/node.js',
       'lib/internal/bootstrap/pre_execution.js',
@@ -125,7 +126,6 @@
       'lib/internal/cluster/worker.js',
       'lib/internal/console/constructor.js',
       'lib/internal/console/global.js',
-      'lib/internal/coverage-gen/with_profiler.js',
       'lib/internal/crypto/certificate.js',
       'lib/internal/crypto/cipher.js',
       'lib/internal/crypto/diffiehellman.js',
@@ -193,6 +193,7 @@
       'lib/internal/process/worker_thread_only.js',
       'lib/internal/process/report.js',
       'lib/internal/process/task_queues.js',
+      'lib/internal/profiler.js',
       'lib/internal/querystring.js',
       'lib/internal/readline.js',
       'lib/internal/repl.js',

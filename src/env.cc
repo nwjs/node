@@ -8,7 +8,6 @@
 #include "node_internals.h"
 #include "node_native_module.h"
 #include "node_options-inl.h"
-#include "node_platform.h"
 #include "node_process.h"
 #include "node_v8_platform-inl.h"
 #include "node_worker.h"
@@ -19,6 +18,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdio>
+#include <memory>
 
 namespace node {
 
@@ -33,14 +33,12 @@ using v8::HandleScope;
 using v8::Integer;
 using v8::Isolate;
 using v8::Local;
-using v8::Message;
 using v8::NewStringType;
 using v8::Number;
 using v8::Object;
 using v8::Private;
 using v8::Promise;
 using v8::PromiseHookType;
-using v8::StackFrame;
 using v8::StackTrace;
 using v8::String;
 using v8::Symbol;
@@ -81,7 +79,8 @@ IsolateData::IsolateData(Isolate* isolate,
     : isolate_(isolate),
       event_loop_(event_loop),
       allocator_(isolate->GetArrayBufferAllocator()),
-      node_allocator_(node_allocator),
+      node_allocator_(node_allocator == nullptr ?
+          nullptr : node_allocator->GetImpl()),
       uses_node_allocator_(allocator_ == node_allocator_),
       platform_(platform) {
   CHECK_NOT_NULL(allocator_);
@@ -210,6 +209,8 @@ Environment::Environment(IsolateData* isolate_data,
     set_as_callback_data_template(templ);
   }
 
+  set_env_vars(per_process::system_environment);
+
   // We create new copies of the per-Environment option sets, so that it is
   // easier to modify them after Environment creation. The defaults are
   // part of the per-Isolate option set, for which in turn the defaults are
@@ -219,8 +220,7 @@ Environment::Environment(IsolateData* isolate_data,
 
 #if HAVE_INSPECTOR
   // We can only create the inspector agent after having cloned the options.
-  inspector_agent_ =
-      std::unique_ptr<inspector::Agent>(new inspector::Agent(this));
+  inspector_agent_ = std::make_unique<inspector::Agent>(this);
 #endif
 
   AssignToContext(context, ContextInfo(""));
@@ -242,7 +242,8 @@ Environment::Environment(IsolateData* isolate_data,
       },
       this);
 
-  performance_state_.reset(new performance::performance_state(isolate()));
+  performance_state_ =
+      std::make_unique<performance::performance_state>(isolate());
 #if 0
   performance_state_->Mark(
       performance::NODE_PERFORMANCE_MILESTONE_ENVIRONMENT);
@@ -256,7 +257,7 @@ Environment::Environment(IsolateData* isolate_data,
   should_abort_on_uncaught_toggle_[0] = 1;
 
   std::string debug_cats;
-  credentials::SafeGetenv("NODE_DEBUG_NATIVE", &debug_cats);
+  credentials::SafeGetenv("NODE_DEBUG_NATIVE", &debug_cats, this);
   set_debug_categories(debug_cats, true);
 
   isolate()->GetHeapProfiler()->AddBuildEmbedderGraphCallback(
@@ -264,10 +265,6 @@ Environment::Environment(IsolateData* isolate_data,
   if (options_->no_force_async_hooks_checks) {
     async_hooks_.no_force_checks();
   }
-
-  // TODO(addaleax): the per-isolate state should not be controlled by
-  // a single Environment.
-  //isolate()->SetPromiseRejectCallback(task_queue::PromiseRejectCallback);
 }
 
 CompileFnEntry::CompileFnEntry(Environment* env, uint32_t id)
@@ -387,19 +384,8 @@ void Environment::ExitEnv() {
 MaybeLocal<Object> Environment::ProcessCliArgs(
     const std::vector<std::string>& args,
     const std::vector<std::string>& exec_args) {
-  if (node_is_nwjs) {
-    execution_mode_ = ExecutionMode::kRunMainModule;
-  }
-  if (args.size() > 1) {
-    std::string first_arg = args[1];
-    if (first_arg == "inspect") {
-      execution_mode_ = ExecutionMode::kInspect;
-    } else if (first_arg == "debug") {
-      execution_mode_ = ExecutionMode::kDebug;
-    } else if (first_arg != "-") {
-      execution_mode_ = ExecutionMode::kRunMainModule;
-    }
-  }
+  argv_ = args;
+  exec_argv_ = exec_args;
 
 #if 0
   if (*TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
@@ -418,8 +404,6 @@ MaybeLocal<Object> Environment::ProcessCliArgs(
                                       std::move(traced_value));
   }
 #endif
-
-  exec_argv_ = exec_args;
 
   Local<Object> process_object =
     node::CreateProcessObject(this, args, exec_args, node_is_nwjs)
@@ -506,48 +490,15 @@ void Environment::StopProfilerIdleNotifier() {
 }
 
 void Environment::PrintSyncTrace() const {
-  if (!options_->trace_sync_io)
-    return;
+  if (!options_->trace_sync_io) return;
 
   HandleScope handle_scope(isolate());
-  Local<StackTrace> stack =
-      StackTrace::CurrentStackTrace(isolate(), 10, StackTrace::kDetailed);
 
-  fprintf(stderr, "(node:%d) WARNING: Detected use of sync API\n",
-          uv_os_getpid());
-
-  for (int i = 0; i < stack->GetFrameCount() - 1; i++) {
-    Local<StackFrame> stack_frame = stack->GetFrame(isolate(), i);
-    node::Utf8Value fn_name_s(isolate(), stack_frame->GetFunctionName());
-    node::Utf8Value script_name(isolate(), stack_frame->GetScriptName());
-    const int line_number = stack_frame->GetLineNumber();
-    const int column = stack_frame->GetColumn();
-
-    if (stack_frame->IsEval()) {
-      if (stack_frame->GetScriptId() == Message::kNoScriptIdInfo) {
-        fprintf(stderr, "    at [eval]:%i:%i\n", line_number, column);
-      } else {
-        fprintf(stderr,
-                "    at [eval] (%s:%i:%i)\n",
-                *script_name,
-                line_number,
-                column);
-      }
-      break;
-    }
-
-    if (fn_name_s.length() == 0) {
-      fprintf(stderr, "    at %s:%i:%i\n", *script_name, line_number, column);
-    } else {
-      fprintf(stderr,
-              "    at %s (%s:%i:%i)\n",
-              *fn_name_s,
-              *script_name,
-              line_number,
-              column);
-    }
-  }
-  fflush(stderr);
+  fprintf(
+      stderr, "(node:%d) WARNING: Detected use of sync API\n", uv_os_getpid());
+  PrintStackTrace(
+      isolate(),
+      StackTrace::CurrentStackTrace(isolate(), 10, StackTrace::kDetailed));
 }
 
 void Environment::RunCleanup() {

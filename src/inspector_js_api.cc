@@ -4,6 +4,8 @@
 #include "v8.h"
 #include "v8-inspector.h"
 
+#include <memory>
+
 namespace node {
 namespace inspector {
 namespace {
@@ -66,8 +68,8 @@ class JSBindingsConnection : public AsyncWrap {
                          callback_(env->isolate(), callback) {
     Agent* inspector = env->inspector_agent();
     if (inspector)
-    session_ = inspector->Connect(std::unique_ptr<JSBindingsSessionDelegate>(
-        new JSBindingsSessionDelegate(env, this)), false);
+    session_ = inspector->Connect(std::make_unique<JSBindingsSessionDelegate>(
+        env, this), false);
   }
 
   void OnMessage(Local<Value> value) {

@@ -997,7 +997,10 @@ if (typeof Symbol !== 'undefined') {
 
 // Test Set iterators.
 {
-  const aSet = new Set([1, 3]);
+  const aSet = new Set([1]);
+  assert.strictEqual(util.inspect(aSet.entries(), { compact: false }),
+                     '[Set Entries] {\n  [\n    1,\n    1\n  ]\n}');
+  aSet.add(3);
   assert.strictEqual(util.inspect(aSet.keys()), '[Set Iterator] { 1, 3 }');
   assert.strictEqual(util.inspect(aSet.values()), '[Set Iterator] { 1, 3 }');
   const setEntries = aSet.entries();
@@ -1640,6 +1643,70 @@ assert.strictEqual(util.inspect('"\''), '`"\'`');
 // eslint-disable-next-line no-template-curly-in-string
 assert.strictEqual(util.inspect('"\'${a}'), "'\"\\'${a}'");
 
+// Errors should visualize as much information as possible.
+// If the name is not included in the stack, visualize it as well.
+[
+  [class Foo extends TypeError {}, 'test'],
+  [class Foo extends TypeError {}, undefined],
+  [class BarError extends Error {}, 'test'],
+  [class BazError extends Error {
+    get name() {
+      return 'BazError';
+    }
+  }, undefined]
+].forEach(([Class, message, messages], i) => {
+  console.log('Test %i', i);
+  const foo = new Class(message);
+  const name = foo.name;
+  const extra = Class.name.includes('Error') ? '' : ` [${foo.name}]`;
+  assert(
+    util.inspect(foo).startsWith(
+      `${Class.name}${extra}${message ? `: ${message}` : '\n'}`),
+    util.inspect(foo)
+  );
+  Object.defineProperty(foo, Symbol.toStringTag, {
+    value: 'WOW',
+    writable: true,
+    configurable: true
+  });
+  const stack = foo.stack;
+  foo.stack = 'This is a stack';
+  assert.strictEqual(
+    util.inspect(foo),
+    '[This is a stack]'
+  );
+  foo.stack = stack;
+  assert(
+    util.inspect(foo).startsWith(
+      `${Class.name} [WOW]${extra}${message ? `: ${message}` : '\n'}`),
+    util.inspect(foo)
+  );
+  Object.setPrototypeOf(foo, null);
+  assert(
+    util.inspect(foo).startsWith(
+      `[${name}: null prototype] [WOW]${message ? `: ${message}` : '\n'}`
+    ),
+    util.inspect(foo)
+  );
+  foo.bar = true;
+  delete foo[Symbol.toStringTag];
+  assert(
+    util.inspect(foo).startsWith(
+      `{ [${name}: null prototype]${message ? `: ${message}` : '\n'}`),
+    util.inspect(foo)
+  );
+  foo.stack = 'This is a stack';
+  assert.strictEqual(
+    util.inspect(foo),
+    '{ [[Error: null prototype]: This is a stack] bar: true }'
+  );
+  foo.stack = stack.split('\n')[0];
+  assert.strictEqual(
+    util.inspect(foo),
+    `{ [[${name}: null prototype]${message ? `: ${message}` : ''}] bar: true }`
+  );
+});
+
 // Verify that throwing in valueOf and toString still produces nice results.
 [
   [new String(55), "[String: '55']"],
@@ -2144,6 +2211,96 @@ assert.strictEqual(
   out = util.inspect([1, 2, 3, 4], { compact: 1, colors: true });
   expected = '[ \u001b[33m1\u001b[39m, \u001b[33m2\u001b[39m, ' +
     '\u001b[33m3\u001b[39m, \u001b[33m4\u001b[39m ]';
+
+  assert.strictEqual(out, expected);
+
+  obj = [
+    'Object', 'Function', 'Array',
+    'Number', 'parseFloat', 'parseInt',
+    'Infinity', 'NaN', 'undefined',
+    'Boolean', 'String', 'Symbol',
+    'Date', 'Promise', 'RegExp',
+    'Error', 'EvalError', 'RangeError',
+    'ReferenceError', 'SyntaxError', 'TypeError',
+    'URIError', 'JSON', 'Math',
+    'console', 'Intl', 'ArrayBuffer',
+    'Uint8Array', 'Int8Array', 'Uint16Array',
+    'Int16Array', 'Uint32Array', 'Int32Array',
+    'Float32Array', 'Float64Array', 'Uint8ClampedArray',
+    'BigUint64Array', 'BigInt64Array', 'DataView',
+    'Map', 'BigInt', 'Set',
+    'WeakMap', 'WeakSet', 'Proxy',
+    'Reflect', 'decodeURI', 'decodeURIComponent',
+    'encodeURI', 'encodeURIComponent', 'escape',
+    'unescape', 'eval', 'isFinite',
+    'isNaN', 'SharedArrayBuffer', 'Atomics',
+    'globalThis', 'WebAssembly', 'global',
+    'process', 'GLOBAL', 'root',
+    'Buffer', 'URL', 'URLSearchParams',
+    'TextEncoder', 'TextDecoder', 'clearInterval',
+    'clearTimeout', 'setInterval', 'setTimeout',
+    'queueMicrotask', 'clearImmediate', 'setImmediate',
+    'module', 'require', 'assert',
+    'async_hooks', 'buffer', 'child_process',
+    'cluster', 'crypto', 'dgram',
+    'dns', 'domain', 'events',
+    'fs', 'http', 'http2',
+    'https', 'inspector', 'net',
+    'os', 'path', 'perf_hooks',
+    'punycode', 'querystring', 'readline',
+    'repl', 'stream', 'string_decoder',
+    'tls', 'trace_events', 'tty',
+    'url', 'v8', 'vm',
+    'worker_threads', 'zlib', '_',
+    '_error', 'util'
+  ];
+
+  out = util.inspect(
+    obj,
+    { compact: 3, breakLength: 80, maxArrayLength: 250 }
+  );
+  expected = [
+    '[',
+    "          'Object',           'Function',              'Array',",
+    "          'Number',         'parseFloat',           'parseInt',",
+    "        'Infinity',                'NaN',          'undefined',",
+    "         'Boolean',             'String',             'Symbol',",
+    "            'Date',            'Promise',             'RegExp',",
+    "           'Error',          'EvalError',         'RangeError',",
+    "  'ReferenceError',        'SyntaxError',          'TypeError',",
+    "        'URIError',               'JSON',               'Math',",
+    "         'console',               'Intl',        'ArrayBuffer',",
+    "      'Uint8Array',          'Int8Array',        'Uint16Array',",
+    "      'Int16Array',        'Uint32Array',         'Int32Array',",
+    "    'Float32Array',       'Float64Array',  'Uint8ClampedArray',",
+    "  'BigUint64Array',      'BigInt64Array',           'DataView',",
+    "             'Map',             'BigInt',                'Set',",
+    "         'WeakMap',            'WeakSet',              'Proxy',",
+    "         'Reflect',          'decodeURI', 'decodeURIComponent',",
+    "       'encodeURI', 'encodeURIComponent',             'escape',",
+    "        'unescape',               'eval',           'isFinite',",
+    "           'isNaN',  'SharedArrayBuffer',            'Atomics',",
+    "      'globalThis',        'WebAssembly',             'global',",
+    "         'process',             'GLOBAL',               'root',",
+    "          'Buffer',                'URL',    'URLSearchParams',",
+    "     'TextEncoder',        'TextDecoder',      'clearInterval',",
+    "    'clearTimeout',        'setInterval',         'setTimeout',",
+    "  'queueMicrotask',     'clearImmediate',       'setImmediate',",
+    "          'module',            'require',             'assert',",
+    "     'async_hooks',             'buffer',      'child_process',",
+    "         'cluster',             'crypto',              'dgram',",
+    "             'dns',             'domain',             'events',",
+    "              'fs',               'http',              'http2',",
+    "           'https',          'inspector',                'net',",
+    "              'os',               'path',         'perf_hooks',",
+    "        'punycode',        'querystring',           'readline',",
+    "            'repl',             'stream',     'string_decoder',",
+    "             'tls',       'trace_events',                'tty',",
+    "             'url',                 'v8',                 'vm',",
+    "  'worker_threads',               'zlib',                  '_',",
+    "          '_error',               'util'",
+    ']'
+  ].join('\n');
 
   assert.strictEqual(out, expected);
 }

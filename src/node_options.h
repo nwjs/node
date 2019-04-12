@@ -85,6 +85,12 @@ class DebugOptions : public Options {
     return deprecated_debug && !inspector_enabled;
   }
 
+  // Used to patch the options as if --inspect-brk is passed.
+  void EnableBreakFirstLine() {
+    inspector_enabled = true;
+    break_first_line = true;
+  }
+
   bool wait_for_connect() const {
     return break_first_line || break_node_first_line;
   }
@@ -297,7 +303,7 @@ class OptionsParser {
   // a method that yields the target options type from this parser's options
   // type.
   template <typename ChildOptions>
-  void Insert(const OptionsParser<ChildOptions>* child_options_parser,
+  void Insert(const OptionsParser<ChildOptions>& child_options_parser,
               ChildOptions* (Options::* get_child)());
 
   // Parse a sequence of options into an options struct, a list of
@@ -317,12 +323,12 @@ class OptionsParser {
   //
   // If `*error` is set, the result of the parsing should be discarded and the
   // contents of any of the argument vectors should be considered undefined.
-  virtual void Parse(std::vector<std::string>* const args,
-                     std::vector<std::string>* const exec_args,
-                     std::vector<std::string>* const v8_args,
-                     Options* const options,
-                     OptionEnvvarSettings required_env_settings,
-                     std::vector<std::string>* const errors) const;
+  void Parse(std::vector<std::string>* const args,
+             std::vector<std::string>* const exec_args,
+             std::vector<std::string>* const v8_args,
+             Options* const options,
+             OptionEnvvarSettings required_env_settings,
+             std::vector<std::string>* const errors) const;
 
  private:
   // We support the wide variety of different option types by remembering
@@ -403,33 +409,12 @@ class OptionsParser {
   friend void GetOptions(const v8::FunctionCallbackInfo<v8::Value>& args);
 };
 
-class DebugOptionsParser : public OptionsParser<DebugOptions> {
- public:
-  DebugOptionsParser();
-
-  static const DebugOptionsParser instance;
-};
-
-class EnvironmentOptionsParser : public OptionsParser<EnvironmentOptions> {
- public:
-  EnvironmentOptionsParser();
-
-  static const EnvironmentOptionsParser instance;
-};
-
-class PerIsolateOptionsParser : public OptionsParser<PerIsolateOptions> {
- public:
-  PerIsolateOptionsParser();
-
-  static const PerIsolateOptionsParser instance;
-};
-
-class PerProcessOptionsParser : public OptionsParser<PerProcessOptions> {
- public:
-  PerProcessOptionsParser();
-
-  static const PerProcessOptionsParser instance;
-};
+using StringVector = std::vector<std::string>;
+template <class OptionsType, class = Options>
+void Parse(
+  StringVector* const args, StringVector* const exec_args,
+  StringVector* const v8_args, OptionsType* const options,
+  OptionEnvvarSettings required_env_settings, StringVector* const errors);
 
 }  // namespace options_parser
 

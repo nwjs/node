@@ -58,10 +58,10 @@
       ],
       'msvs_precompiled_header': 'tools/msvs/pch/node_pch.h',
       'msvs_precompiled_source': 'tools/msvs/pch/node_pch.cc',
-      'sources': [
-        '<(_msvs_precompiled_header)',
-        '<(_msvs_precompiled_source)',
-      ],
+      #'sources': [
+      #  '<(_msvs_precompiled_header)',
+      #  '<(_msvs_precompiled_source)',
+      #],
     }, { # POSIX
       'defines': [ '__POSIX__' ],
     }],

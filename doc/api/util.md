@@ -187,6 +187,17 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/23708
     description: The `%d`, `%f` and `%i` specifiers now support Symbols
                  properly.
+  - version: v12.0.0
+    pr-url: https://github.com/nodejs/node/pull/23162
+    description: The `format` argument is now only taken as such if it actually
+                 contains format specifiers.
+  - version: v12.0.0
+    pr-url: https://github.com/nodejs/node/pull/23162
+    description: If the `format` argument is not a format string, the output
+                 string's formatting is no longer dependent on the type of the
+                 first argument. This change removes previously present quotes
+                 from strings that were being output when the first argument
+                 was not a string.
   - version: v11.4.0
     pr-url: https://github.com/nodejs/node/pull/24806
     description: The `%o` specifier's `depth` has default depth of 4 again.
@@ -205,21 +216,21 @@ changes:
 * `format` {string} A `printf`-like format string.
 
 The `util.format()` method returns a formatted string using the first argument
-as a `printf`-like format.
+as a `printf`-like format string which can contain zero or more format
+specifiers. Each specifier is replaced with the converted value from the
+corresponding argument. Supported specifiers are:
 
-The first argument is a string containing zero or more *placeholder* tokens.
-Each placeholder token is replaced with the converted value from the
-corresponding argument. Supported placeholders are:
-
-* `%s` - `String`.
-* `%d` - `Number` (integer or floating point value) or `BigInt`.
-* `%i` - Integer or `BigInt`.
-* `%f` - Floating point value.
-* `%j` - JSON. Replaced with the string `'[Circular]'` if the argument
-contains circular references.
-* `%o` - `Object`. A string representation of an object
-  with generic JavaScript object formatting.
-  Similar to `util.inspect()` with options
+* `%s` - `String` will be used to convert all values except `BigInt` and
+  `Object`. `BigInt` values will be represented with an `n` and Objects are
+  inspected using `util.inspect()` with options
+  `{ depth: 0, colors: false, compact: 3 }`.
+* `%d` - `Number` will be used to convert all values except `BigInt`.
+* `%i` - `parseInt(value, 10)` is used for all values except `BigInt`.
+* `%f` - `parseFloat(value)` is used for all values.
+* `%j` - JSON. Replaced with the string `'[Circular]'` if the argument contains
+  circular references.
+* `%o` - `Object`. A string representation of an object with generic JavaScript
+  object formatting. Similar to `util.inspect()` with options
   `{ showHidden: true, showProxy: true }`. This will show the full object
   including non-enumerable properties and proxies.
 * `%O` - `Object`. A string representation of an object with generic JavaScript
@@ -228,37 +239,39 @@ contains circular references.
 * `%%` - single percent sign (`'%'`). This does not consume an argument.
 * Returns: {string} The formatted string
 
-If the placeholder does not have a corresponding argument, the placeholder is
-not replaced.
+If a specifier does not have a corresponding argument, it is not replaced:
 
 ```js
 util.format('%s:%s', 'foo');
 // Returns: 'foo:%s'
 ```
 
-If there are more arguments passed to the `util.format()` method than the number
-of placeholders, the extra arguments are coerced into strings then concatenated
-to the returned string, each delimited by a space. Excessive arguments whose
-`typeof` is `'object'` or `'symbol'` (except `null`) will be transformed by
-`util.inspect()`.
+Values that are not part of the format string are formatted using
+`util.inspect()` if their type is not `string`.
+
+If there are more arguments passed to the `util.format()` method than the
+number of specifiers, the extra arguments are concatenated to the returned
+string, separated by spaces:
 
 ```js
-util.format('%s:%s', 'foo', 'bar', 'baz'); // 'foo:bar baz'
+util.format('%s:%s', 'foo', 'bar', 'baz');
+// Returns: 'foo:bar baz'
 ```
 
-If the first argument is not a string then `util.format()` returns
-a string that is the concatenation of all arguments separated by spaces.
-Each argument is converted to a string using `util.inspect()`.
+If the first argument does not contain a valid format specifier, `util.format()`
+returns a string that is the concatenation of all arguments separated by spaces:
 
 ```js
-util.format(1, 2, 3); // '1 2 3'
+util.format(1, 2, 3);
+// Returns: '1 2 3'
 ```
 
 If only one argument is passed to `util.format()`, it is returned as it is
-without any formatting.
+without any formatting:
 
 ```js
-util.format('%% %s'); // '%% %s'
+util.format('%% %s');
+// Returns: '%% %s'
 ```
 
 Please note that `util.format()` is a synchronous method that is mainly
@@ -323,6 +336,8 @@ Inherit the prototype methods from one [constructor][] into another. The
 prototype of `constructor` will be set to a new object created from
 `superConstructor`.
 
+This mainly adds some input validation on top of
+`Object.setPrototypeOf(constructor.prototype, superConstructor.prototype)`.
 As an additional convenience, `superConstructor` will be accessible
 through the `constructor.super_` property.
 
@@ -375,9 +390,17 @@ stream.write('With ES6');
 <!-- YAML
 added: v0.3.0
 changes:
+  - version: v12.0.0
+    pr-url: https://github.com/nodejs/node/pull/27109
+    description: The `compact` options default is changed to `3` and the
+                 `breakLength` options default is changed to `80`.
   - version: v11.11.0
     pr-url: https://github.com/nodejs/node/pull/26269
     description: The `compact` option accepts numbers for a new output mode.
+  - version: v12.0.0
+    pr-url: https://github.com/nodejs/node/pull/24971
+    description: Internal properties no longer appear in the context argument
+                 of a custom inspection function.
   - version: v11.7.0
     pr-url: https://github.com/nodejs/node/pull/25006
     description: ArrayBuffers now also show their binary contents.
@@ -444,16 +467,17 @@ changes:
     [`TypedArray`][], [`WeakMap`][] and [`WeakSet`][] elements to include when
     formatting. Set to `null` or `Infinity` to show all elements. Set to `0` or
     negative to show no elements. **Default:** `100`.
-  * `breakLength` {integer} The length at which an object's keys are split
-    across multiple lines. Set to `Infinity` to format an object as a single
-    line. **Default:** `60` for legacy compatibility.
+  * `breakLength` {integer} The length at which input values are split across
+    multiple lines. Set to `Infinity` to format the input as a single line
+    (in combination with `compact` set to `true` or any number >= `1`).
+    **Default:** `80`.
   * `compact` {boolean|integer} Setting this to `false` causes each object key
     to be displayed on a new line. It will also add new lines to text that is
     longer than `breakLength`. If set to a number, the most `n` inner elements
     are united on a single line as long as all properties fit into
     `breakLength`. Short array elements are also grouped together. Note that no
     text will be reduced below 16 characters, no matter the `breakLength` size.
-    For more information, see the example below. **Default:** `true`.
+    For more information, see the example below. **Default:** `3`.
   * `sorted` {boolean|Function} If set to `true` or a function, all properties
     of an object, and `Set` and `Map` entries are sorted in the resulting
     string. If set to `true` the [default sort][] is used. If set to a function,
@@ -614,22 +638,25 @@ via the `util.inspect.styles` and `util.inspect.colors` properties.
 
 The default styles and associated colors are:
 
- * `number` - `yellow`
- * `boolean` - `yellow`
- * `string` - `green`
- * `date` - `magenta`
- * `regexp` - `red`
- * `null` - `bold`
- * `undefined` - `grey`
- * `special` - `cyan` (only applied to functions at this time)
- * `name` - (no styling)
+* `bigint` - `yellow`
+* `boolean` - `yellow`
+* `date` - `magenta`
+* `module` - `underline`
+* `name` - (no styling)
+* `null` - `bold`
+* `number` - `yellow`
+* `regexp` - `red`
+* `special` - `cyan` (e.g., `Proxies`)
+* `string` - `green`
+* `symbol` - `green`
+* `undefined` - `grey`
 
 The predefined color codes are: `white`, `grey`, `black`, `blue`, `cyan`,
 `green`, `magenta`, `red` and `yellow`. There are also `bold`, `italic`,
 `underline` and `inverse` codes.
 
 Color styling uses ANSI control codes that may not be supported on all
-terminals.
+terminals. To verify color support use [`tty.hasColors()`][].
 
 ### Custom inspection functions on Objects
 
@@ -741,7 +768,7 @@ option properties directly is also supported.
 const util = require('util');
 const arr = Array(101).fill(0);
 
-console.log(arr); // logs the truncated array
+console.log(arr); // Logs the truncated array
 util.inspect.defaultOptions.maxArrayLength = null;
 console.log(arr); // logs the full array
 ```
@@ -1706,30 +1733,6 @@ Node.js modules. The community found and used it anyway.
 It is deprecated and should not be used in new code. JavaScript comes with very
 similar built-in functionality through [`Object.assign()`].
 
-### util.debug(string)
-<!-- YAML
-added: v0.3.0
-deprecated: v0.11.3
--->
-
-> Stability: 0 - Deprecated: Use [`console.error()`][] instead.
-
-* `string` {string} The message to print to `stderr`
-
-Deprecated predecessor of `console.error`.
-
-### util.error([...strings])
-<!-- YAML
-added: v0.3.0
-deprecated: v0.11.3
--->
-
-> Stability: 0 - Deprecated: Use [`console.error()`][] instead.
-
-* `...strings` {string} The message to print to `stderr`
-
-Deprecated predecessor of `console.error`.
-
 ### util.isArray(object)
 <!-- YAML
 added: v0.6.0
@@ -2159,26 +2162,6 @@ const util = require('util');
 util.log('Timestamped message.');
 ```
 
-### util.print([...strings])
-<!-- YAML
-added: v0.3.0
-deprecated: v0.11.3
--->
-
-> Stability: 0 - Deprecated: Use [`console.log()`][] instead.
-
-Deprecated predecessor of `console.log`.
-
-### util.puts([...strings])
-<!-- YAML
-added: v0.3.0
-deprecated: v0.11.3
--->
-
-> Stability: 0 - Deprecated: Use [`console.log()`][] instead.
-
-Deprecated predecessor of `console.log`.
-
 [`'uncaughtException'`]: process.html#process_event_uncaughtexception
 [`'warning'`]: process.html#process_event_warning
 [`Array.isArray()`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/isArray
@@ -2209,8 +2192,8 @@ Deprecated predecessor of `console.log`.
 [`WebAssembly.Module`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WebAssembly/Module
 [`assert.deepStrictEqual()`]: assert.html#assert_assert_deepstrictequal_actual_expected_message
 [`console.error()`]: console.html#console_console_error_data_args
-[`console.log()`]: console.html#console_console_log_data_args
 [`target` and `handler`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Proxy#Terminology
+[`tty.hasColors()`]: tty.html#tty_writestream_hascolors_count_env
 [`util.format()`]: #util_util_format_format_args
 [`util.inspect()`]: #util_util_inspect_object_options
 [`util.promisify()`]: #util_util_promisify_original

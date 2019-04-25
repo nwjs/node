@@ -1470,9 +1470,11 @@ returned by this method has a default `highWaterMark` of 64 kb.
 
 `options` can include `start` and `end` values to read a range of bytes from
 the file instead of the entire file. Both `start` and `end` are inclusive and
-start counting at 0. If `fd` is specified and `start` is omitted or `undefined`,
-`fs.createReadStream()` reads sequentially from the current file position.
-The `encoding` can be any one of those accepted by [`Buffer`][].
+start counting at 0, allowed values are in the
+[0, [`Number.MAX_SAFE_INTEGER`][]] range. If `fd` is specified and `start` is
+omitted or `undefined`, `fs.createReadStream()` reads sequentially from the
+current file position. The `encoding` can be any one of those accepted by
+[`Buffer`][].
 
 If `fd` is specified, `ReadStream` will ignore the `path` argument and will use
 the specified file descriptor. This means that no `'open'` event will be
@@ -1548,7 +1550,8 @@ changes:
 * Returns: {fs.WriteStream} See [Writable Stream][].
 
 `options` may also include a `start` option to allow writing data at
-some position past the beginning of the file. Modifying a file rather
+some position past the beginning of the file, allowed values are in the
+[0, [`Number.MAX_SAFE_INTEGER`][]] range. Modifying a file rather
 than replacing it may require a `flags` mode of `r+` rather than the
 default mode `w`. The `encoding` can be any one of those accepted by
 [`Buffer`][].
@@ -3040,20 +3043,26 @@ changes:
     description: The `target` and `path` parameters can be WHATWG `URL` objects
                  using `file:` protocol. Support is currently still
                  *experimental*.
+  - version: v12.0.0
+    pr-url: https://github.com/nodejs/node/pull/23724
+    description: If the `type` argument is left undefined, Node will autodetect
+                 `target` type and automatically select `dir` or `file`
 -->
 
 * `target` {string|Buffer|URL}
 * `path` {string|Buffer|URL}
-* `type` {string} **Default:** `'file'`
+* `type` {string}
 * `callback` {Function}
   * `err` {Error}
 
 Asynchronous symlink(2). No arguments other than a possible exception are given
-to the completion callback. The `type` argument can be set to `'dir'`,
-`'file'`, or `'junction'` and is only available on
-Windows (ignored on other platforms). Windows junction points require the
-destination path to be absolute. When using `'junction'`, the `target` argument
-will automatically be normalized to absolute path.
+to the completion callback. The `type` argument is only available on Windows
+and ignored on other platforms. It can be set to `'dir'`, `'file'`, or
+`'junction'`. If the `type` argument is not set, Node will autodetect `target`
+type and use `'file'` or `'dir'`. If the `target` does not exist, `'file'` will
+be used. Windows junction points require the destination path to be absolute.
+When using `'junction'`, the `target` argument will automatically be normalized
+to absolute path.
 
 Here is an example below:
 
@@ -3072,11 +3081,15 @@ changes:
     description: The `target` and `path` parameters can be WHATWG `URL` objects
                  using `file:` protocol. Support is currently still
                  *experimental*.
+  - version: v12.0.0
+    pr-url: https://github.com/nodejs/node/pull/23724
+    description: If the `type` argument is left undefined, Node will autodetect
+                 `target` type and automatically select `dir` or `file`
 -->
 
 * `target` {string|Buffer|URL}
 * `path` {string|Buffer|URL}
-* `type` {string} **Default:** `'file'`
+* `type` {string}
 
 Returns `undefined`.
 
@@ -3606,10 +3619,10 @@ recommended.
 1. Any specified file descriptor has to support writing.
 2. If a file descriptor is specified as the `file`, it will not be closed
 automatically.
-3. The writing will begin at the beginning of the file. For example, if the
-file already had `'Hello World'` and the newly written content is `'Aloha'`,
-then the contents of the file would be `'Aloha World'`, rather than just
-`'Aloha'`.
+3. The writing will begin at the current position. For example, if the string
+`'Hello'` is written to the file descriptor, and if `', World'` is written with
+`fs.writeFile()` to the same file descriptor, the contents of the file would
+become `'Hello, World'`, instead of just `', World'`.
 
 
 ## fs.writeFileSync(file, data[, options])
@@ -4948,3 +4961,4 @@ the file contents.
 [chcp]: https://ss64.com/nt/chcp.html
 [inode]: https://en.wikipedia.org/wiki/Inode
 [support of file system `flags`]: #fs_file_system_flags
+[`Number.MAX_SAFE_INTEGER`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER

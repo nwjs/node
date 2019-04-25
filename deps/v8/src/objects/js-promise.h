@@ -5,7 +5,7 @@
 #ifndef V8_OBJECTS_JS_PROMISE_H_
 #define V8_OBJECTS_JS_PROMISE_H_
 
-#include "src/objects.h"
+#include "src/objects/js-objects.h"
 #include "src/objects/promise.h"
 
 // Has to be the last include (doesn't have include guards):
@@ -31,10 +31,10 @@ class JSPromise : public JSObject {
   DECL_ACCESSORS(reactions_or_result, Object)
 
   // [result]: Checks that the promise is settled and returns the result.
-  inline Object* result() const;
+  inline Object result() const;
 
   // [reactions]: Checks that the promise is pending and returns the reactions.
-  inline Object* reactions() const;
+  inline Object reactions() const;
 
   DECL_INT_ACCESSORS(flags)
 
@@ -68,12 +68,11 @@ class JSPromise : public JSObject {
   DECL_PRINTER(JSPromise)
   DECL_VERIFIER(JSPromise)
 
-  // Layout description.
-  static const int kReactionsOrResultOffset = JSObject::kHeaderSize;
-  static const int kFlagsOffset = kReactionsOrResultOffset + kPointerSize;
-  static const int kSize = kFlagsOffset + kPointerSize;
+  DEFINE_FIELD_OFFSET_CONSTANTS(JSObject::kHeaderSize,
+                                TORQUE_GENERATED_JSPROMISE_FIELDS)
+
   static const int kSizeWithEmbedderFields =
-      kSize + v8::Promise::kEmbedderFieldCount * kPointerSize;
+      kSize + v8::Promise::kEmbedderFieldCount * kEmbedderDataSlotSize;
 
   // Flags layout.
   // The first two bits store the v8::Promise::PromiseState.
@@ -94,6 +93,8 @@ class JSPromise : public JSObject {
                                                 Handle<Object> reactions,
                                                 Handle<Object> argument,
                                                 PromiseReaction::Type type);
+
+  OBJECT_CONSTRUCTORS(JSPromise, JSObject);
 };
 
 }  // namespace internal

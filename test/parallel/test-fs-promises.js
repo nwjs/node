@@ -142,7 +142,7 @@ async function getHandle(dest) {
       assert.deepStrictEqual((await readFile(dest)).toString(), 'hello');
     }
 
-    // invalid change of ownership
+    // Invalid change of ownership
     {
       const handle = await getHandle(dest);
 
@@ -163,7 +163,7 @@ async function getHandle(dest) {
         },
         {
           code: 'ERR_OUT_OF_RANGE',
-          name: 'RangeError [ERR_OUT_OF_RANGE]',
+          name: 'RangeError',
           message: 'The value of "gid" is out of range. ' +
                   'It must be >= 0 && < 4294967296. Received -1'
         });
@@ -174,13 +174,13 @@ async function getHandle(dest) {
         },
         {
           code: 'ERR_OUT_OF_RANGE',
-          name: 'RangeError [ERR_OUT_OF_RANGE]',
+          name: 'RangeError',
           message: 'The value of "gid" is out of range. ' +
                     'It must be >= 0 && < 4294967296. Received -1'
         });
     }
 
-    // set modification times
+    // Set modification times
     {
       const handle = await getHandle(dest);
 
@@ -270,7 +270,7 @@ async function getHandle(dest) {
       await unlink(newFile);
     }
 
-    // mkdir when options is number.
+    // `mkdir` when options is number.
     {
       const dir = path.join(tmpDir, nextdir());
       await mkdir(dir, 777);
@@ -278,7 +278,7 @@ async function getHandle(dest) {
       assert(stats.isDirectory());
     }
 
-    // mkdir when options is string.
+    // `mkdir` when options is string.
     {
       const dir = path.join(tmpDir, nextdir());
       await mkdir(dir, '777');
@@ -294,19 +294,37 @@ async function getHandle(dest) {
       assert(stats.isDirectory());
     }
 
-    // mkdirp when path is a file.
+    // `mkdirp` when path is a file.
     {
       const dir = path.join(tmpDir, nextdir(), nextdir());
       await mkdir(path.dirname(dir));
       await writeFile(dir);
-      try {
-        await mkdir(dir, { recursive: true });
-        throw new Error('unreachable');
-      } catch (err) {
-        assert.notStrictEqual(err.message, 'unreachable');
-        assert.strictEqual(err.code, 'EEXIST');
-        assert.strictEqual(err.syscall, 'mkdir');
-      }
+      assert.rejects(
+        mkdir(dir, { recursive: true }),
+        {
+          code: 'EEXIST',
+          message: /EEXIST: .*mkdir/,
+          name: 'Error',
+          syscall: 'mkdir',
+        }
+      );
+    }
+
+    // `mkdirp` when part of the path is a file.
+    {
+      const file = path.join(tmpDir, nextdir(), nextdir());
+      const dir = path.join(file, nextdir(), nextdir());
+      await mkdir(path.dirname(file));
+      await writeFile(file);
+      assert.rejects(
+        mkdir(dir, { recursive: true }),
+        {
+          code: 'ENOTDIR',
+          message: /ENOTDIR: .*mkdir/,
+          name: 'Error',
+          syscall: 'mkdir',
+        }
+      );
     }
 
     // mkdirp ./
@@ -335,7 +353,7 @@ async function getHandle(dest) {
           async () => mkdir(dir, { recursive }),
           {
             code: 'ERR_INVALID_ARG_TYPE',
-            name: 'TypeError [ERR_INVALID_ARG_TYPE]',
+            name: 'TypeError',
             message: 'The "recursive" argument must be of type boolean. ' +
               `Received type ${typeof recursive}`
           }
@@ -351,7 +369,7 @@ async function getHandle(dest) {
         async () => mkdtemp(1),
         {
           code: 'ERR_INVALID_ARG_TYPE',
-          name: 'TypeError [ERR_INVALID_ARG_TYPE]'
+          name: 'TypeError'
         }
       );
     }

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "src/debug/debug-interface.h"
+#include "src/handles.h"
 #include "src/objects.h"
 
 namespace v8 {
@@ -57,13 +58,13 @@ class Coverage : public std::vector<CoverageScript> {
   static std::unique_ptr<Coverage> CollectBestEffort(Isolate* isolate);
 
   // Select code coverage mode.
-  static void SelectMode(Isolate* isolate, debug::Coverage::Mode mode);
+  static void SelectMode(Isolate* isolate, debug::CoverageMode mode);
 
  private:
   static std::unique_ptr<Coverage> Collect(
-      Isolate* isolate, v8::debug::Coverage::Mode collectionMode);
+      Isolate* isolate, v8::debug::CoverageMode collectionMode);
 
-  Coverage() {}
+  Coverage() = default;
 };
 
 }  // namespace internal

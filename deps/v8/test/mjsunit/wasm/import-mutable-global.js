@@ -2,9 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --experimental-wasm-mut-global --expose-gc
+// Flags: --expose-gc
 
-load("test/mjsunit/wasm/wasm-constants.js");
 load("test/mjsunit/wasm/wasm-module-builder.js");
 
 (function TestBasic() {
@@ -195,7 +194,7 @@ function addGlobalGetterAndSetter(builder, index, name, type) {
 (function TestImportedAndNonImportedMutableGlobal() {
   let global = new WebAssembly.Global({value: 'i32', mutable: true}, 1);
   let builder = new WasmModuleBuilder();
-  builder.addGlobal(kWasmI32, true).exportAs('i32');
   builder.addImportedGlobal("mod", "g", kWasmI32, true);
+  builder.addGlobal(kWasmI32, true).exportAs('i32');
   builder.instantiate({mod: {g: global}});
 })();

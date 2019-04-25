@@ -4,35 +4,12 @@
 
 #include "src/torque/declaration-visitor.h"
 
+#include "src/globals.h"
+#include "src/torque/ast.h"
+
 namespace v8 {
 namespace internal {
 namespace torque {
-
-void DeclarationVisitor::Visit(Expression* expr) {
-  CurrentSourcePosition::Scope scope(expr->pos);
-  switch (expr->kind) {
-#define ENUM_ITEM(name)        \
-  case AstNode::Kind::k##name: \
-    return Visit(name::cast(expr));
-    AST_EXPRESSION_NODE_KIND_LIST(ENUM_ITEM)
-#undef ENUM_ITEM
-    default:
-      UNIMPLEMENTED();
-  }
-}
-
-void DeclarationVisitor::Visit(Statement* stmt) {
-  CurrentSourcePosition::Scope scope(stmt->pos);
-  switch (stmt->kind) {
-#define ENUM_ITEM(name)        \
-  case AstNode::Kind::k##name: \
-    return Visit(name::cast(stmt));
-    AST_STATEMENT_NODE_KIND_LIST(ENUM_ITEM)
-#undef ENUM_ITEM
-    default:
-      UNIMPLEMENTED();
-  }
-}
 
 void DeclarationVisitor::Visit(Declaration* decl) {
   CurrentSourcePosition::Scope scope(decl->pos);
@@ -48,7 +25,7 @@ void DeclarationVisitor::Visit(Declaration* decl) {
 }
 
 void DeclarationVisitor::Visit(CallableNode* decl, const Signature& signature,
-                               Statement* body) {
+                               base::Optional<Statement*> body) {
   switch (decl->kind) {
 #define ENUM_ITEM(name)        \
   case AstNode::Kind::k##name: \
@@ -60,8 +37,11 @@ void DeclarationVisitor::Visit(CallableNode* decl, const Signature& signature,
   }
 }
 
-Builtin* DeclarationVisitor::BuiltinDeclarationCommon(
-    BuiltinDeclaration* decl, bool external, const Signature& signature) {
+Builtin* DeclarationVisitor::CreateBuiltin(BuiltinDeclaration* decl,
+                                           std::string external_name,
+                                           std::string readable_name,
+                                           Signature signature,
+                                           base::Optional<Statement*> body) {
   const bool javascript = decl->javascript_linkage;
   const bool varargs = decl->signature->parameters.has_varargs;
   Builtin::Kind kind = !javascript ? Builtin::kStub
@@ -70,7 +50,7 @@ Builtin* DeclarationVisitor::BuiltinDeclarationCommon(
 
   if (signature.types().size() == 0 ||
       !(signature.types()[0] ==
-        declarations()->LookupGlobalType(CONTEXT_TYPE_STRING))) {
+        Declarations::LookupGlobalType(CONTEXT_TYPE_STRING))) {
     std::stringstream stream;
     stream << "first parameter to builtin " << decl->name
            << " is not a context but should be";
@@ -87,7 +67,7 @@ Builtin* DeclarationVisitor::BuiltinDeclarationCommon(
   if (javascript) {
     if (signature.types().size() < 2 ||
         !(signature.types()[1] ==
-          declarations()->LookupGlobalType(OBJECT_TYPE_STRING))) {
+          Declarations::LookupGlobalType(OBJECT_TYPE_STRING))) {
       std::stringstream stream;
       stream << "second parameter to javascript builtin " << decl->name
              << " is " << *signature.types()[1] << " but should be Object";
@@ -95,31 +75,42 @@ Builtin* DeclarationVisitor::BuiltinDeclarationCommon(
     }
   }
 
+  for (size_t i = 0; i < signature.types().size(); ++i) {
+    if (const StructType* type =
+            StructType::DynamicCast(signature.types()[i])) {
+      std::stringstream stream;
+      stream << "builtin '" << decl->name << "' uses the struct '"
+             << type->name() << "' as argument '"
+             << signature.parameter_names[i] << "'. This is not supported.";
+      ReportError(stream.str());
+    }
+  }
+
   if (const StructType* struct_type =
           StructType::DynamicCast(signature.return_type)) {
     std::stringstream stream;
-    stream << "builtins (in this case" << decl->name
+    stream << "builtins (in this case " << decl->name
            << ") cannot return structs (in this case " << struct_type->name()
            << ")";
     ReportError(stream.str());
   }
 
-  std::string generated_name = GetGeneratedCallableName(
-      decl->name, declarations()->GetCurrentSpecializationTypeNamesVector());
-  return declarations()->DeclareBuiltin(generated_name, kind, external,
-                                        signature);
+  return Declarations::CreateBuiltin(
+      std::move(external_name), std::move(readable_name), kind,
+      std::move(signature), decl->transitioning, body);
 }
 
 void DeclarationVisitor::Visit(ExternalRuntimeDeclaration* decl,
-                               const Signature& signature, Statement* body) {
-  if (global_context_.verbose()) {
+                               const Signature& signature,
+                               base::Optional<Statement*> body) {
+  if (GlobalContext::verbose()) {
     std::cout << "found declaration of external runtime " << decl->name
               << " with signature ";
   }
 
   if (signature.parameter_types.types.size() == 0 ||
       !(signature.parameter_types.types[0] ==
-        declarations()->LookupGlobalType(CONTEXT_TYPE_STRING))) {
+        Declarations::LookupGlobalType(CONTEXT_TYPE_STRING))) {
     std::stringstream stream;
     stream << "first parameter to runtime " << decl->name
            << " is not a context but should be";
@@ -135,67 +126,45 @@ void DeclarationVisitor::Visit(ExternalRuntimeDeclaration* decl,
     ReportError(stream.str());
   }
 
-  declarations()->DeclareRuntimeFunction(decl->name, signature);
+  Declarations::DeclareRuntimeFunction(decl->name, signature,
+                                       decl->transitioning);
 }
 
 void DeclarationVisitor::Visit(ExternalMacroDeclaration* decl,
-                               const Signature& signature, Statement* body) {
-  if (global_context_.verbose()) {
+                               const Signature& signature,
+                               base::Optional<Statement*> body) {
+  if (GlobalContext::verbose()) {
     std::cout << "found declaration of external macro " << decl->name
               << " with signature ";
   }
 
-  std::string generated_name = GetGeneratedCallableName(
-      decl->name, declarations()->GetCurrentSpecializationTypeNamesVector());
-  declarations()->DeclareMacro(generated_name, signature, decl->op);
+  Declarations::DeclareMacro(decl->name, decl->external_assembler_name,
+                             signature, decl->transitioning, body, decl->op);
 }
 
 void DeclarationVisitor::Visit(TorqueBuiltinDeclaration* decl,
-                               const Signature& signature, Statement* body) {
-  Builtin* builtin = BuiltinDeclarationCommon(decl, false, signature);
-  CurrentCallableActivator activator(global_context_, builtin, decl);
-  DeclareSignature(signature);
-  if (signature.parameter_types.var_args) {
-    declarations()->DeclareExternConstant(
-        decl->signature->parameters.arguments_variable,
-        TypeOracle::GetArgumentsType(), "arguments");
-  }
-  torque_builtins_.push_back(builtin);
-  Visit(body);
+                               const Signature& signature,
+                               base::Optional<Statement*> body) {
+  Declarations::Declare(
+      decl->name, CreateBuiltin(decl, decl->name, decl->name, signature, body));
 }
 
 void DeclarationVisitor::Visit(TorqueMacroDeclaration* decl,
-                               const Signature& signature, Statement* body) {
-  std::string generated_name = GetGeneratedCallableName(
-      decl->name, declarations()->GetCurrentSpecializationTypeNamesVector());
-  Macro* macro =
-      declarations()->DeclareMacro(generated_name, signature, decl->op);
+                               const Signature& signature,
+                               base::Optional<Statement*> body) {
+  Declarations::DeclareMacro(decl->name, base::nullopt, signature,
+                             decl->transitioning, body, decl->op);
+}
 
-  CurrentCallableActivator activator(global_context_, macro, decl);
-
-  DeclareSignature(signature);
-  Variable* return_variable = nullptr;
-  if (!signature.return_type->IsVoidOrNever()) {
-    return_variable =
-        DeclareVariable(kReturnValueVariable, signature.return_type,
-                        signature.return_type->IsConstexpr());
-  }
-
-  PushControlSplit();
-  if (body != nullptr) {
-    Visit(body);
-  }
-  auto changed_vars = PopControlSplit();
-  if (return_variable) changed_vars.insert(return_variable);
-  global_context_.AddControlSplitChangedVariables(
-      decl, declarations()->GetCurrentSpecializationTypeNamesVector(),
-      changed_vars);
+void DeclarationVisitor::Visit(IntrinsicDeclaration* decl,
+                               const Signature& signature,
+                               base::Optional<Statement*> body) {
+  Declarations::DeclareIntrinsic(decl->name, signature);
 }
 
 void DeclarationVisitor::Visit(ConstDeclaration* decl) {
-  declarations()->DeclareModuleConstant(decl->name,
-                                        declarations()->GetType(decl->type));
-  Visit(decl->expression);
+  Declarations::DeclareNamespaceConstant(
+      decl->name, Declarations::GetType(decl->type), decl->expression);
 }
 
 void DeclarationVisitor::Visit(StandardDeclaration* decl) {
@@ -204,7 +173,7 @@ void DeclarationVisitor::Visit(StandardDeclaration* decl) {
 }
 
 void DeclarationVisitor::Visit(GenericDeclaration* decl) {
-  declarations()->DeclareGeneric(decl->callable->name, CurrentModule(), decl);
+  Declarations::DeclareGeneric(decl->callable->name, decl);
 }
 
 void DeclarationVisitor::Visit(SpecializationDeclaration* decl) {
@@ -215,126 +184,54 @@ void DeclarationVisitor::Visit(SpecializationDeclaration* decl) {
     ReportError(stream.str());
   }
 
-  GenericList* generic_list = declarations()->LookupGeneric(decl->name);
+  std::vector<Generic*> generic_list = Declarations::LookupGeneric(decl->name);
   // Find the matching generic specialization based on the concrete parameter
   // list.
-  CallableNode* matching_callable = nullptr;
-  SpecializationKey matching_key;
+  Generic* matching_generic = nullptr;
   Signature signature_with_types = MakeSignature(decl->signature.get());
-  for (Generic* generic : generic_list->list()) {
-    SpecializationKey key = {generic, GetTypeVector(decl->generic_parameters)};
-    CallableNode* callable_candidate = generic->declaration()->callable;
-    // Abuse the Specialization nodes' scope to temporarily declare the
-    // specialization aliases for the generic types to compare signatures. This
-    // scope is never used for anything else, so it's OK to pollute it.
-    Declarations::CleanNodeScopeActivator specialization_activator(
-        declarations(), decl);
-    DeclareSpecializedTypes(key);
-    Signature generic_signature_with_types =
-        MakeSignature(generic->declaration()->callable->signature.get());
-    if (signature_with_types.HasSameTypesAs(generic_signature_with_types)) {
-      if (matching_callable != nullptr) {
+  for (Generic* generic : generic_list) {
+    Signature generic_signature_with_types = MakeSpecializedSignature(
+        SpecializationKey{generic, GetTypeVector(decl->generic_parameters)});
+    if (signature_with_types.HasSameTypesAs(generic_signature_with_types,
+                                            ParameterMode::kIgnoreImplicit)) {
+      if (matching_generic != nullptr) {
         std::stringstream stream;
-        stream << "specialization of " << callable_candidate->name
+        stream << "specialization of " << decl->name
                << " is ambigous, it matches more than one generic declaration ("
-               << *matching_key.first << " and " << *key.first << ")";
+               << *matching_generic << " and " << *generic << ")";
         ReportError(stream.str());
       }
-      matching_callable = callable_candidate;
-      matching_key = key;
+      matching_generic = generic;
     }
   }
 
-  if (matching_callable == nullptr) {
+  if (matching_generic == nullptr) {
     std::stringstream stream;
+    if (generic_list.size() == 0) {
+      stream << "no generic defined with the name " << decl->name;
+      ReportError(stream.str());
+    }
     stream << "specialization of " << decl->name
-           << " doesn't match any generic declaration";
+           << " doesn't match any generic declaration\n";
+    stream << "specialization signature:";
+    stream << "\n  " << signature_with_types;
+    stream << "\ncandidates are:";
+    for (Generic* generic : generic_list) {
+      stream << "\n  "
+             << MakeSpecializedSignature(SpecializationKey{
+                    generic, GetTypeVector(decl->generic_parameters)});
+    }
     ReportError(stream.str());
   }
 
-  // Make sure the declarations of the parameter types for the specialization
-  // are the ones from the matching generic.
-  {
-    Declarations::CleanNodeScopeActivator specialization_activator(
-        declarations(), decl);
-    DeclareSpecializedTypes(matching_key);
-  }
-
-  SpecializeGeneric({matching_key, matching_callable, decl->signature.get(),
-                     decl->body, decl->pos});
-}
-
-void DeclarationVisitor::Visit(ReturnStatement* stmt) {
-  if (stmt->value) {
-    Visit(*stmt->value);
-  }
-}
-
-Variable* DeclarationVisitor::DeclareVariable(const std::string& name,
-                                              const Type* type, bool is_const) {
-  Variable* result = declarations()->DeclareVariable(name, type, is_const);
-  if (type->IsStructType()) {
-    const StructType* struct_type = StructType::cast(type);
-    for (auto& field : struct_type->fields()) {
-      std::string field_var_name = name + "." + field.name;
-      DeclareVariable(field_var_name, field.type, is_const);
-    }
-  }
-  return result;
-}
-
-Parameter* DeclarationVisitor::DeclareParameter(const std::string& name,
-                                                const Type* type) {
-  Parameter* result = declarations()->DeclareParameter(
-      name, GetParameterVariableFromName(name), type);
-  if (type->IsStructType()) {
-    const StructType* struct_type = StructType::cast(type);
-    for (auto& field : struct_type->fields()) {
-      std::string field_var_name = name + "." + field.name;
-      DeclareParameter(field_var_name, field.type);
-    }
-  }
-  return result;
-}
-
-void DeclarationVisitor::Visit(VarDeclarationStatement* stmt) {
-  std::string variable_name = stmt->name;
-  if (!stmt->const_qualified) {
-    if (!stmt->type) {
-      ReportError(
-          "variable declaration is missing type. Only 'const' bindings can "
-          "infer the type.");
-    }
-    const Type* type = declarations()->GetType(*stmt->type);
-    if (type->IsConstexpr()) {
-      ReportError(
-          "cannot declare variable with constexpr type. Use 'const' instead.");
-    }
-    DeclareVariable(variable_name, type, stmt->const_qualified);
-    if (global_context_.verbose()) {
-      std::cout << "declared variable " << variable_name << " with type "
-                << *type << "\n";
-    }
-  }
-
-  // const qualified variables are required to be initialized properly.
-  if (stmt->const_qualified && !stmt->initializer) {
-    std::stringstream stream;
-    stream << "local constant \"" << variable_name << "\" is not initialized.";
-    ReportError(stream.str());
-  }
-
-  if (stmt->initializer) {
-    Visit(*stmt->initializer);
-    if (global_context_.verbose()) {
-      std::cout << "variable has initialization expression at "
-                << CurrentPositionAsString() << "\n";
-    }
-  }
+  Specialize(SpecializationKey{matching_generic,
+                               GetTypeVector(decl->generic_parameters)},
+             matching_generic->declaration()->callable, decl->signature.get(),
+             decl->body);
 }
 
 void DeclarationVisitor::Visit(ExternConstDeclaration* decl) {
-  const Type* type = declarations()->GetType(decl->type);
+  const Type* type = Declarations::GetType(decl->type);
   if (!type->IsConstexpr()) {
     std::stringstream stream;
     stream << "extern constants must have constexpr type, but found: \""
@@ -342,355 +239,374 @@ void DeclarationVisitor::Visit(ExternConstDeclaration* decl) {
     ReportError(stream.str());
   }
 
-  declarations()->DeclareExternConstant(decl->name, type, decl->literal);
+  Declarations::DeclareExternConstant(decl->name, type, decl->literal);
+}
+
+void DeclarationVisitor::DeclareMethods(
+    AggregateType* container_type, const std::vector<Declaration*>& methods) {
+  // Declare the class' methods
+  for (auto declaration : methods) {
+    CurrentSourcePosition::Scope pos_scope(declaration->pos);
+    StandardDeclaration* standard_declaration =
+        StandardDeclaration::DynamicCast(declaration);
+    DCHECK(standard_declaration);
+    TorqueMacroDeclaration* method =
+        TorqueMacroDeclaration::DynamicCast(standard_declaration->callable);
+    Signature signature = MakeSignature(method->signature.get());
+    signature.parameter_names.insert(
+        signature.parameter_names.begin() + signature.implicit_count,
+        MakeNode<Identifier>(kThisParameterName));
+    Statement* body = *(standard_declaration->body);
+    std::string method_name(method->name);
+      signature.parameter_types.types.insert(
+          signature.parameter_types.types.begin() + signature.implicit_count,
+          container_type);
+      Declarations::CreateMethod(container_type, method_name, signature, false,
+                                 body);
+  }
 }
 
 void DeclarationVisitor::Visit(StructDeclaration* decl) {
-  std::vector<NameAndType> fields;
-  for (auto& field : decl->fields) {
-    const Type* field_type = declarations()->GetType(field.type);
-    fields.push_back({field.name, field_type});
-  }
-  declarations()->DeclareStruct(CurrentModule(), decl->name, fields);
+  StructType* struct_type = Declarations::DeclareStruct(decl->name);
+  struct_declarations_.push_back(
+      std::make_tuple(CurrentScope::Get(), decl, struct_type));
 }
 
-void DeclarationVisitor::Visit(LogicalOrExpression* expr) {
-  {
-    Declarations::NodeScopeActivator scope(declarations(), expr->left);
-    declarations()->DeclareLabel(kFalseLabelName);
-    Visit(expr->left);
-  }
-  Visit(expr->right);
-}
-
-void DeclarationVisitor::Visit(LogicalAndExpression* expr) {
-  {
-    Declarations::NodeScopeActivator scope(declarations(), expr->left);
-    declarations()->DeclareLabel(kTrueLabelName);
-    Visit(expr->left);
-  }
-  Visit(expr->right);
-}
-
-void DeclarationVisitor::DeclareExpressionForBranch(Expression* node) {
-  Declarations::NodeScopeActivator scope(declarations(), node);
-  // Conditional expressions can either explicitly return a bit
-  // type, or they can be backed by macros that don't return but
-  // take a true and false label. By declaring the labels before
-  // visiting the conditional expression, those label-based
-  // macro conditionals will be able to find them through normal
-  // label lookups.
-  declarations()->DeclareLabel(kTrueLabelName);
-  declarations()->DeclareLabel(kFalseLabelName);
-  Visit(node);
-}
-
-void DeclarationVisitor::Visit(ConditionalExpression* expr) {
-  DeclareExpressionForBranch(expr->condition);
-  PushControlSplit();
-  Visit(expr->if_true);
-  Visit(expr->if_false);
-  auto changed_vars = PopControlSplit();
-  global_context_.AddControlSplitChangedVariables(
-      expr, declarations()->GetCurrentSpecializationTypeNamesVector(),
-      changed_vars);
-}
-
-void DeclarationVisitor::Visit(IfStatement* stmt) {
-  if (!stmt->is_constexpr) {
-    PushControlSplit();
-  }
-  DeclareExpressionForBranch(stmt->condition);
-  Visit(stmt->if_true);
-  if (stmt->if_false) Visit(*stmt->if_false);
-  if (!stmt->is_constexpr) {
-    auto changed_vars = PopControlSplit();
-    global_context_.AddControlSplitChangedVariables(
-        stmt, declarations()->GetCurrentSpecializationTypeNamesVector(),
-        changed_vars);
-  }
-}
-
-void DeclarationVisitor::Visit(WhileStatement* stmt) {
-  Declarations::NodeScopeActivator scope(declarations(), stmt);
-  DeclareExpressionForBranch(stmt->condition);
-  PushControlSplit();
-  Visit(stmt->body);
-  auto changed_vars = PopControlSplit();
-  global_context_.AddControlSplitChangedVariables(
-      stmt, declarations()->GetCurrentSpecializationTypeNamesVector(),
-      changed_vars);
-}
-
-void DeclarationVisitor::Visit(ForOfLoopStatement* stmt) {
-  // Scope for for iteration variable
-  Declarations::NodeScopeActivator scope(declarations(), stmt);
-  Visit(stmt->var_declaration);
-  Visit(stmt->iterable);
-  if (stmt->begin) Visit(*stmt->begin);
-  if (stmt->end) Visit(*stmt->end);
-  PushControlSplit();
-  Visit(stmt->body);
-  auto changed_vars = PopControlSplit();
-  global_context_.AddControlSplitChangedVariables(
-      stmt, declarations()->GetCurrentSpecializationTypeNamesVector(),
-      changed_vars);
-}
-
-void DeclarationVisitor::Visit(ForLoopStatement* stmt) {
-  Declarations::NodeScopeActivator scope(declarations(), stmt);
-  if (stmt->var_declaration) Visit(*stmt->var_declaration);
-  PushControlSplit();
-
-  // Same as DeclareExpressionForBranch, but without the extra scope.
-  // If no test expression is present we can not use it for the scope.
-  declarations()->DeclareLabel(kTrueLabelName);
-  declarations()->DeclareLabel(kFalseLabelName);
-  if (stmt->test) Visit(*stmt->test);
-
-  Visit(stmt->body);
-  if (stmt->action) Visit(*stmt->action);
-  auto changed_vars = PopControlSplit();
-  global_context_.AddControlSplitChangedVariables(
-      stmt, declarations()->GetCurrentSpecializationTypeNamesVector(),
-      changed_vars);
-}
-
-void DeclarationVisitor::Visit(TryLabelStatement* stmt) {
-  // Activate a new scope to declare handler labels, they should not be
-  // visible outside the label block.
-  {
-    Declarations::NodeScopeActivator scope(declarations(), stmt);
-
-    // Declare labels
-    for (LabelBlock* block : stmt->label_blocks) {
-      CurrentSourcePosition::Scope scope(block->pos);
-      Label* shared_label = declarations()->DeclareLabel(block->label);
-      {
-        Declarations::NodeScopeActivator scope(declarations(), block->body);
-        if (block->parameters.has_varargs) {
-          std::stringstream stream;
-          stream << "cannot use ... for label parameters";
-          ReportError(stream.str());
-        }
-
-        size_t i = 0;
-        for (auto p : block->parameters.names) {
-          const Type* type =
-              declarations()->GetType(block->parameters.types[i]);
-          if (type->IsConstexpr()) {
-            ReportError("no constexpr type allowed for label arguments");
-          }
-
-          shared_label->AddVariable(DeclareVariable(p, type, false));
-          ++i;
-        }
-      }
-      if (global_context_.verbose()) {
-        std::cout << " declaring label " << block->label << "\n";
+void DeclarationVisitor::Visit(ClassDeclaration* decl) {
+  ClassType* new_class;
+  if (decl->is_extern) {
+    if (!decl->super) {
+      ReportError("Extern class must extend another type.");
+    }
+    // Compute the offset of the class' first member. If the class extends
+    // another class, it's the size of the extended class, otherwise zero.
+    const Type* super_type = Declarations::LookupType(*decl->super);
+    if (super_type != TypeOracle::GetTaggedType()) {
+      const ClassType* super_class = ClassType::DynamicCast(super_type);
+      if (!super_class) {
+        ReportError(
+            "class \"", decl->name->value,
+            "\" must extend either Tagged or an already declared class");
       }
     }
 
-    Visit(stmt->try_block);
-  }
+    // The generates clause must create a TNode<>
+    std::string generates = decl->name->value;
+    if (decl->generates) {
+      generates = *decl->generates;
+      if (generates.length() < 7 || generates.substr(0, 6) != "TNode<" ||
+          generates.substr(generates.length() - 1, 1) != ">") {
+        ReportError("generated type \"", generates,
+                    "\" should be of the form \"TNode<...>\"");
+      }
+      generates = generates.substr(6, generates.length() - 7);
+    }
 
-  for (LabelBlock* block : stmt->label_blocks) {
-    Visit(block->body);
+    new_class = Declarations::DeclareClass(
+        super_type, decl->name, decl->is_extern, decl->transient, generates);
+  } else {
+    if (decl->super) {
+      ReportError("Only extern classes can inherit.");
+    }
+    if (decl->generates) {
+      ReportError("Only extern classes can specify a generated type.");
+    }
+    new_class = Declarations::DeclareClass(TypeOracle::GetTaggedType(),
+                                           decl->name, decl->is_extern,
+                                           decl->transient, "FixedArray");
   }
+  GlobalContext::RegisterClass(decl->name->value, new_class);
+  class_declarations_.push_back(
+      std::make_tuple(CurrentScope::Get(), decl, new_class));
 }
 
-void DeclarationVisitor::GenerateHeader(std::string& file_name) {
-  std::stringstream new_contents_stream;
-  new_contents_stream
-      << "#ifndef V8_BUILTINS_BUILTIN_DEFINITIONS_FROM_DSL_H_\n"
-         "#define V8_BUILTINS_BUILTIN_DEFINITIONS_FROM_DSL_H_\n"
-         "\n"
-         "#define BUILTIN_LIST_FROM_DSL(CPP, API, TFJ, TFC, TFS, TFH, ASM) "
-         "\\\n";
-  for (auto builtin : torque_builtins_) {
-    int firstParameterIndex = 1;
-    bool declareParameters = true;
-    if (builtin->IsStub()) {
-      new_contents_stream << "TFS(" << builtin->name();
-    } else {
-      new_contents_stream << "TFJ(" << builtin->name();
-      if (builtin->IsVarArgsJavaScript()) {
-        new_contents_stream
-            << ", SharedFunctionInfo::kDontAdaptArgumentsSentinel";
-        declareParameters = false;
-      } else {
-        assert(builtin->IsFixedArgsJavaScript());
-        // FixedArg javascript builtins need to offer the parameter
-        // count.
-        assert(builtin->parameter_names().size() >= 2);
-        new_contents_stream << ", " << (builtin->parameter_names().size() - 2);
-        // And the receiver is explicitly declared.
-        new_contents_stream << ", kReceiver";
-        firstParameterIndex = 2;
-      }
-    }
-    if (declareParameters) {
-      int index = 0;
-      for (auto parameter : builtin->parameter_names()) {
-        if (index >= firstParameterIndex) {
-          new_contents_stream << ", k" << CamelifyString(parameter);
-        }
-        index++;
-      }
-    }
-    new_contents_stream << ") \\\n";
-  }
-  new_contents_stream
-      << "\n"
-         "#endif  // V8_BUILTINS_BUILTIN_DEFINITIONS_FROM_DSL_H_\n";
-
-  std::string new_contents(new_contents_stream.str());
-  ReplaceFileContentsIfDifferent(file_name, new_contents);
-}
-
-void DeclarationVisitor::Visit(IdentifierExpression* expr) {
-  if (expr->generic_arguments.size() != 0) {
-    TypeVector specialization_types;
-    for (auto t : expr->generic_arguments) {
-      specialization_types.push_back(declarations()->GetType(t));
-    }
-    // Specialize all versions of the generic, since the exact parameter type
-    // list cannot be resolved until the call's parameter expressions are
-    // evaluated. This is an overly conservative but simple way to make sure
-    // that the correct specialization exists.
-    for (auto generic : declarations()->LookupGeneric(expr->name)->list()) {
-      CallableNode* callable = generic->declaration()->callable;
-      if (generic->declaration()->body) {
-        QueueGenericSpecialization({generic, specialization_types}, callable,
-                                   callable->signature.get(),
-                                   generic->declaration()->body);
-      }
-    }
-  }
-}
-
-void DeclarationVisitor::Visit(CallExpression* expr) {
-  Visit(&expr->callee);
-  for (Expression* arg : expr->arguments) Visit(arg);
+void DeclarationVisitor::Visit(CppIncludeDeclaration* decl) {
+  GlobalContext::AddCppInclude(decl->include_path);
 }
 
 void DeclarationVisitor::Visit(TypeDeclaration* decl) {
   std::string generates = decl->generates ? *decl->generates : std::string("");
-  const AbstractType* type = declarations()->DeclareAbstractType(
-      decl->name, generates, {}, decl->extends);
+  if (decl->generates) {
+    if (generates.length() < 7 || generates.substr(0, 6) != "TNode<" ||
+        generates.substr(generates.length() - 1, 1) != ">") {
+      ReportError("generated type \"", generates,
+                  "\" should be of the form \"TNode<...>\"");
+    }
+    generates = generates.substr(6, generates.length() - 7);
+  }
+
+  const AbstractType* type = Declarations::DeclareAbstractType(
+      decl->name, decl->transient, generates, {}, decl->extends);
 
   if (decl->constexpr_generates) {
-    std::string constexpr_name = CONSTEXPR_TYPE_PREFIX + decl->name;
+    if (decl->transient) {
+      ReportError("cannot declare a transient type that is also constexpr");
+    }
+    // DeclareAbstractType expects an Identifier*. A new one is created from the
+    // declaration, and the SourcePosition copied from the original name.
+    Identifier* constexpr_name =
+        MakeNode<Identifier>(CONSTEXPR_TYPE_PREFIX + decl->name->value);
+    constexpr_name->pos = decl->name->pos;
+
     base::Optional<std::string> constexpr_extends;
     if (decl->extends)
       constexpr_extends = CONSTEXPR_TYPE_PREFIX + *decl->extends;
-    declarations()->DeclareAbstractType(
-        constexpr_name, *decl->constexpr_generates, type, constexpr_extends);
-  }
-}
-
-void DeclarationVisitor::MarkLocationModified(Expression* location) {
-  if (IdentifierExpression* id = IdentifierExpression::cast(location)) {
-    const Value* value = declarations()->LookupValue(id->name);
-    if (value->IsVariable()) {
-      const Variable* variable = Variable::cast(value);
-      bool was_live = MarkVariableModified(variable);
-      if (was_live && global_context_.verbose()) {
-        std::cout << *variable << " was modified in control split at "
-                  << PositionAsString(id->pos) << "\n";
-      }
-    }
-  }
-}
-
-bool DeclarationVisitor::MarkVariableModified(const Variable* variable) {
-  auto e = live_and_changed_variables_.rend();
-  auto c = live_and_changed_variables_.rbegin();
-  bool was_live_in_preceeding_split = false;
-  while (c != e) {
-    if (c->live.find(variable) != c->live.end()) {
-      c->changed.insert(variable);
-      was_live_in_preceeding_split = true;
-    }
-    c++;
-  }
-  return was_live_in_preceeding_split;
-}
-
-void DeclarationVisitor::DeclareSignature(const Signature& signature) {
-  auto type_iterator = signature.parameter_types.types.begin();
-  for (auto name : signature.parameter_names) {
-    const Type* t(*type_iterator++);
-    if (name.size() != 0) {
-      DeclareParameter(name, t);
-    }
-  }
-  for (auto& label : signature.labels) {
-    auto label_params = label.types;
-    Label* new_label = declarations()->DeclareLabel(label.name);
-    size_t i = 0;
-    for (auto var_type : label_params) {
-      if (var_type->IsConstexpr()) {
-        ReportError("no constexpr type allowed for label arguments");
-      }
-
-      std::string var_name = label.name + std::to_string(i++);
-      new_label->AddVariable(DeclareVariable(var_name, var_type, false));
-    }
+    Declarations::DeclareAbstractType(constexpr_name, false,
+                                      *decl->constexpr_generates, type,
+                                      constexpr_extends);
   }
 }
 
 void DeclarationVisitor::DeclareSpecializedTypes(const SpecializationKey& key) {
   size_t i = 0;
-  Generic* generic = key.first;
   const std::size_t generic_parameter_count =
-      generic->declaration()->generic_parameters.size();
-  if (generic_parameter_count != key.second.size()) {
+      key.generic->declaration()->generic_parameters.size();
+  if (generic_parameter_count != key.specialized_types.size()) {
     std::stringstream stream;
     stream << "Wrong generic argument count for specialization of \""
-           << generic->name() << "\", expected: " << generic_parameter_count
-           << ", actual: " << key.second.size();
+           << key.generic->name() << "\", expected: " << generic_parameter_count
+           << ", actual: " << key.specialized_types.size();
     ReportError(stream.str());
   }
 
-  for (auto type : key.second) {
-    std::string generic_type_name =
-        generic->declaration()->generic_parameters[i++];
-    declarations()->DeclareType(generic_type_name, type);
+  for (auto type : key.specialized_types) {
+    Identifier* generic_type_name =
+        key.generic->declaration()->generic_parameters[i++];
+    Declarations::DeclareType(generic_type_name, type, true);
   }
 }
 
-void DeclarationVisitor::Specialize(const SpecializationKey& key,
-                                    CallableNode* callable,
-                                    const CallableNodeSignature* signature,
-                                    Statement* body) {
-  Generic* generic = key.first;
+Signature DeclarationVisitor::MakeSpecializedSignature(
+    const SpecializationKey& key) {
+  CurrentScope::Scope generic_scope(key.generic->ParentScope());
+  // Create a temporary fake-namespace just to temporarily declare the
+  // specialization aliases for the generic types to create a signature.
+  Namespace tmp_namespace("_tmp");
+  CurrentScope::Scope tmp_namespace_scope(&tmp_namespace);
+  DeclareSpecializedTypes(key);
+  return MakeSignature(key.generic->declaration()->callable->signature.get());
+}
 
+Callable* DeclarationVisitor::SpecializeImplicit(const SpecializationKey& key) {
+  if (!key.generic->declaration()->body &&
+      IntrinsicDeclaration::DynamicCast(key.generic->declaration()->callable) ==
+          nullptr) {
+    ReportError("missing specialization of ", key.generic->name(),
+                " with types <", key.specialized_types, "> declared at ",
+                key.generic->pos());
+  }
+  CurrentScope::Scope generic_scope(key.generic->ParentScope());
+  Callable* result =
+      Specialize(key, key.generic->declaration()->callable, base::nullopt,
+                 key.generic->declaration()->body);
+  CurrentScope::Scope callable_scope(result);
+  DeclareSpecializedTypes(key);
+  return result;
+}
+
+Callable* DeclarationVisitor::Specialize(
+    const SpecializationKey& key, CallableNode* declaration,
+    base::Optional<const CallableNodeSignature*> signature,
+    base::Optional<Statement*> body) {
   // TODO(tebbi): The error should point to the source position where the
   // instantiation was requested.
-  CurrentSourcePosition::Scope pos_scope(generic->declaration()->pos);
+  CurrentSourcePosition::Scope pos_scope(key.generic->declaration()->pos);
   size_t generic_parameter_count =
-      generic->declaration()->generic_parameters.size();
-  if (generic_parameter_count != key.second.size()) {
+      key.generic->declaration()->generic_parameters.size();
+  if (generic_parameter_count != key.specialized_types.size()) {
     std::stringstream stream;
     stream << "number of template parameters ("
-           << std::to_string(key.second.size())
-           << ") to intantiation of generic " << callable->name
+           << std::to_string(key.specialized_types.size())
+           << ") to intantiation of generic " << declaration->name
            << " doesnt match the generic's declaration ("
            << std::to_string(generic_parameter_count) << ")";
     ReportError(stream.str());
   }
-
-  Signature type_signature;
-  {
-    // Manually activate the specialized generic's scope when declaring the
-    // generic parameter specializations.
-    Declarations::GenericScopeActivator namespace_scope(declarations(), key);
-    DeclareSpecializedTypes(key);
-    type_signature = MakeSignature(signature);
+  if (key.generic->GetSpecialization(key.specialized_types)) {
+    ReportError("cannot redeclare specialization of ", key.generic->name(),
+                " with types <", key.specialized_types, ">");
   }
 
-  Visit(callable, type_signature, body);
+  Signature type_signature =
+      signature ? MakeSignature(*signature) : MakeSpecializedSignature(key);
+
+  std::string generated_name = Declarations::GetGeneratedCallableName(
+      declaration->name, key.specialized_types);
+  std::stringstream readable_name;
+  readable_name << declaration->name << "<";
+  bool first = true;
+  for (const Type* t : key.specialized_types) {
+    if (!first) readable_name << ", ";
+    readable_name << *t;
+    first = false;
+  }
+  readable_name << ">";
+  Callable* callable;
+  if (MacroDeclaration::DynamicCast(declaration) != nullptr) {
+    callable = Declarations::CreateMacro(generated_name, readable_name.str(),
+                                         base::nullopt, type_signature,
+                                         declaration->transitioning, *body);
+  } else if (IntrinsicDeclaration::DynamicCast(declaration) != nullptr) {
+    callable = Declarations::CreateIntrinsic(declaration->name, type_signature);
+  } else {
+    BuiltinDeclaration* builtin = BuiltinDeclaration::cast(declaration);
+    callable = CreateBuiltin(builtin, generated_name, readable_name.str(),
+                             type_signature, *body);
+  }
+  key.generic->AddSpecialization(key.specialized_types, callable);
+  return callable;
+}
+
+void DeclarationVisitor::FinalizeStructFieldsAndMethods(
+    StructType* struct_type, StructDeclaration* struct_declaration) {
+  size_t offset = 0;
+  for (auto& field : struct_declaration->fields) {
+    const Type* field_type = Declarations::GetType(field.name_and_type.type);
+    struct_type->RegisterField({field.name_and_type.type->pos,
+                                struct_type,
+                                base::nullopt,
+                                {field.name_and_type.name->value, field_type},
+                                offset,
+                                false});
+    offset += LoweredSlotCount(field_type);
+  }
+  CurrentSourcePosition::Scope position_activator(struct_declaration->pos);
+  DeclareMethods(struct_type, struct_declaration->methods);
+}
+
+void DeclarationVisitor::FinalizeClassFieldsAndMethods(
+    ClassType* class_type, ClassDeclaration* class_declaration) {
+  const ClassType* super_class = class_type->GetSuperClass();
+  size_t class_offset = super_class ? super_class->size() : 0;
+  bool seen_indexed_field = false;
+  for (ClassFieldExpression& field_expression : class_declaration->fields) {
+    CurrentSourcePosition::Scope position_activator(
+        field_expression.name_and_type.type->pos);
+    const Type* field_type =
+        Declarations::GetType(field_expression.name_and_type.type);
+    if (!class_declaration->is_extern) {
+      if (!field_type->IsSubtypeOf(TypeOracle::GetTaggedType())) {
+        ReportError("non-extern classes do not support untagged fields");
+      }
+      if (field_expression.weak) {
+        ReportError("non-extern classes do not support weak fields");
+      }
+    }
+    if (field_expression.index) {
+      if (seen_indexed_field ||
+          (super_class && super_class->HasIndexedField())) {
+        ReportError(
+            "only one indexable field is currently supported per class");
+      }
+      seen_indexed_field = true;
+      const Field* index_field =
+          &(class_type->LookupField(*field_expression.index));
+      class_type->RegisterField(
+          {field_expression.name_and_type.type->pos,
+           class_type,
+           index_field,
+           {field_expression.name_and_type.name->value, field_type},
+           class_offset,
+           field_expression.weak});
+    } else {
+      if (seen_indexed_field) {
+        ReportError("cannot declare non-indexable field \"",
+                    field_expression.name_and_type.name,
+                    "\" after an indexable field "
+                    "declaration");
+      }
+      const Field& field = class_type->RegisterField(
+          {field_expression.name_and_type.type->pos,
+           class_type,
+           base::nullopt,
+           {field_expression.name_and_type.name->value, field_type},
+           class_offset,
+           field_expression.weak});
+      size_t field_size;
+      std::string size_string;
+      std::string machine_type;
+      std::tie(field_size, size_string, machine_type) =
+          field.GetFieldSizeInformation();
+      // Our allocations don't support alignments beyond kTaggedSize.
+      size_t alignment = std::min(size_t{kTaggedSize}, field_size);
+      if (class_offset % alignment != 0) {
+        ReportError("field ", field_expression.name_and_type.name,
+                    " at offset ", class_offset, " is not ", alignment,
+                    "-byte aligned.");
+      }
+      class_offset += field_size;
+    }
+  }
+  class_type->SetSize(class_offset);
+
+  // For each field, construct AST snippits that implement a CSA accessor
+  // function and define a corresponding '.field' operator. The
+  // implementation iterator will turn the snippits into code.
+  for (auto& field : class_type->fields()) {
+    if (field.index) continue;
+    CurrentSourcePosition::Scope position_activator(field.pos);
+    IdentifierExpression* parameter =
+        MakeNode<IdentifierExpression>(MakeNode<Identifier>(std::string{"o"}));
+
+    // Load accessor
+    std::string camel_field_name = CamelifyString(field.name_and_type.name);
+    std::string load_macro_name =
+        "Load" + class_type->name() + camel_field_name;
+    std::string load_operator_name = "." + field.name_and_type.name;
+    Signature load_signature;
+    load_signature.parameter_names.push_back(MakeNode<Identifier>("o"));
+    load_signature.parameter_types.types.push_back(class_type);
+    load_signature.parameter_types.var_args = false;
+    load_signature.return_type = field.name_and_type.type;
+    Statement* load_body =
+        MakeNode<ReturnStatement>(MakeNode<LoadObjectFieldExpression>(
+            parameter, field.name_and_type.name));
+    Declarations::DeclareMacro(load_macro_name, base::nullopt, load_signature,
+                               false, load_body, load_operator_name);
+
+    // Store accessor
+    IdentifierExpression* value = MakeNode<IdentifierExpression>(
+        std::vector<std::string>{}, MakeNode<Identifier>(std::string{"v"}));
+    std::string store_macro_name =
+        "Store" + class_type->name() + camel_field_name;
+    std::string store_operator_name = "." + field.name_and_type.name + "=";
+    Signature store_signature;
+    store_signature.parameter_names.push_back(MakeNode<Identifier>("o"));
+    store_signature.parameter_names.push_back(MakeNode<Identifier>("v"));
+    store_signature.parameter_types.types.push_back(class_type);
+    store_signature.parameter_types.types.push_back(field.name_and_type.type);
+    store_signature.parameter_types.var_args = false;
+    // TODO(danno): Store macros probably should return their value argument
+    store_signature.return_type = TypeOracle::GetVoidType();
+    Statement* store_body =
+        MakeNode<ExpressionStatement>(MakeNode<StoreObjectFieldExpression>(
+            parameter, field.name_and_type.name, value));
+    Declarations::DeclareMacro(store_macro_name, base::nullopt, store_signature,
+                               false, store_body, store_operator_name);
+  }
+
+  DeclareMethods(class_type, class_declaration->methods);
+}
+
+void DeclarationVisitor::FinalizeStructsAndClasses() {
+  for (auto current_struct_info : struct_declarations_) {
+    Scope* scope;
+    StructDeclaration* struct_declaration;
+    StructType* struct_type;
+    std::tie(scope, struct_declaration, struct_type) = current_struct_info;
+    CurrentScope::Scope scope_activator(scope);
+    FinalizeStructFieldsAndMethods(struct_type, struct_declaration);
+  }
+
+  for (auto current_class_info : class_declarations_) {
+    Scope* scope;
+    ClassDeclaration* class_declaration;
+    ClassType* class_type;
+    std::tie(scope, class_declaration, class_type) = current_class_info;
+    CurrentScope::Scope scope_activator(scope);
+    CurrentSourcePosition::Scope position_activator(class_declaration->pos);
+    FinalizeClassFieldsAndMethods(class_type, class_declaration);
+  }
 }
 
 }  // namespace torque

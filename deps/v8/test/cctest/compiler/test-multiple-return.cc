@@ -9,7 +9,6 @@
 
 #include "src/assembler.h"
 #include "src/base/bits.h"
-#include "src/codegen.h"
 #include "src/compiler.h"
 #include "src/compiler/linkage.h"
 #include "src/compiler/wasm-compiler.h"
@@ -123,15 +122,11 @@ std::unique_ptr<wasm::NativeModule> AllocateNativeModule(Isolate* isolate,
                                                          size_t code_size) {
   std::shared_ptr<wasm::WasmModule> module(new wasm::WasmModule());
   module->num_declared_functions = 1;
-  wasm::ModuleEnv env(
-      module.get(), wasm::UseTrapHandler::kNoTrapHandler,
-      wasm::RuntimeExceptionSupport::kNoRuntimeExceptionSupport);
   // We have to add the code object to a NativeModule, because the
   // WasmCallDescriptor assumes that code is on the native heap and not
   // within a code object.
-  return isolate->wasm_engine()->code_manager()->NewNativeModule(
-      isolate, wasm::kAllWasmFeatures, code_size, false, std::move(module),
-      env);
+  return isolate->wasm_engine()->NewNativeModule(
+      isolate, wasm::kAllWasmFeatures, code_size, false, std::move(module));
 }
 
 void TestReturnMultipleValues(MachineType type) {
@@ -190,11 +185,10 @@ void TestReturnMultipleValues(MachineType type) {
 
       std::unique_ptr<wasm::NativeModule> module = AllocateNativeModule(
           handles.main_isolate(), code->raw_instruction_size());
-      byte* code_start = module->AddCodeCopy(code, wasm::WasmCode::kFunction, 0)
-                             ->instructions()
-                             .start();
+      byte* code_start =
+          module->AddCodeForTesting(code)->instructions().start();
 
-      RawMachineAssemblerTester<int32_t> mt;
+      RawMachineAssemblerTester<int32_t> mt(Code::Kind::JS_TO_WASM_FUNCTION);
       const int input_count = 2 + param_count;
       Node* call_inputs[2 + kMaxParamCount];
       call_inputs[0] = mt.PointerConstant(code_start);
@@ -280,9 +274,7 @@ void ReturnLastValue(MachineType type) {
 
     std::unique_ptr<wasm::NativeModule> module = AllocateNativeModule(
         handles.main_isolate(), code->raw_instruction_size());
-    byte* code_start = module->AddCodeCopy(code, wasm::WasmCode::kFunction, 0)
-                           ->instructions()
-                           .start();
+    byte* code_start = module->AddCodeForTesting(code)->instructions().start();
 
     // Generate caller.
     int expect = return_count - 1;
@@ -343,9 +335,7 @@ void ReturnSumOfReturns(MachineType type) {
 
     std::unique_ptr<wasm::NativeModule> module = AllocateNativeModule(
         handles.main_isolate(), code->raw_instruction_size());
-    byte* code_start = module->AddCodeCopy(code, wasm::WasmCode::kFunction, 0)
-                           ->instructions()
-                           .start();
+    byte* code_start = module->AddCodeForTesting(code)->instructions().start();
 
     // Generate caller.
     RawMachineAssemblerTester<int32_t> mt;

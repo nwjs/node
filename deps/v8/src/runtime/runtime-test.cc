@@ -10,11 +10,19 @@
 #include "src/api-inl.h"
 #include "src/arguments-inl.h"
 #include "src/assembler-inl.h"
+#include "src/base/platform/mutex.h"
 #include "src/compiler-dispatcher/optimizing-compile-dispatcher.h"
 #include "src/compiler.h"
+#include "src/counters.h"
 #include "src/deoptimizer.h"
 #include "src/frames-inl.h"
+#include "src/heap/heap-inl.h"  // For ToBoolean. TODO(jkummerow): Drop.
+#include "src/heap/heap-write-barrier-inl.h"
+#include "src/ic/stub-cache.h"
 #include "src/isolate-inl.h"
+#include "src/objects/heap-object-inl.h"
+#include "src/objects/smi.h"
+#include "src/ostreams.h"
 #include "src/runtime-profiler.h"
 #include "src/snapshot/natives.h"
 #include "src/trap-handler/trap-handler.h"
@@ -25,23 +33,28 @@
 #include "src/wasm/wasm-objects-inl.h"
 #include "src/wasm/wasm-serialization.h"
 
+namespace v8 {
+namespace internal {
+
 namespace {
 struct WasmCompileControls {
   uint32_t MaxWasmBufferSize = std::numeric_limits<uint32_t>::max();
   bool AllowAnySizeForAsync = true;
 };
+using WasmCompileControlsMap = std::map<v8::Isolate*, WasmCompileControls>;
 
 // We need per-isolate controls, because we sometimes run tests in multiple
-// isolates
-// concurrently.
+// isolates concurrently. Methods need to hold the accompanying mutex on access.
 // To avoid upsetting the static initializer count, we lazy initialize this.
-v8::base::LazyInstance<std::map<v8::Isolate*, WasmCompileControls>>::type
-    g_PerIsolateWasmControls = LAZY_INSTANCE_INITIALIZER;
+DEFINE_LAZY_LEAKY_OBJECT_GETTER(WasmCompileControlsMap,
+                                GetPerIsolateWasmControls)
+base::LazyMutex g_PerIsolateWasmControlsMutex = LAZY_MUTEX_INITIALIZER;
 
 bool IsWasmCompileAllowed(v8::Isolate* isolate, v8::Local<v8::Value> value,
                           bool is_async) {
-  DCHECK_GT(g_PerIsolateWasmControls.Get().count(isolate), 0);
-  const WasmCompileControls& ctrls = g_PerIsolateWasmControls.Get().at(isolate);
+  base::MutexGuard guard(g_PerIsolateWasmControlsMutex.Pointer());
+  DCHECK_GT(GetPerIsolateWasmControls()->count(isolate), 0);
+  const WasmCompileControls& ctrls = GetPerIsolateWasmControls()->at(isolate);
   return (is_async && ctrls.AllowAnySizeForAsync) ||
          (value->IsArrayBuffer() &&
           v8::Local<v8::ArrayBuffer>::Cast(value)->ByteLength() <=
@@ -52,15 +65,17 @@ bool IsWasmCompileAllowed(v8::Isolate* isolate, v8::Local<v8::Value> value,
 bool IsWasmInstantiateAllowed(v8::Isolate* isolate,
                               v8::Local<v8::Value> module_or_bytes,
                               bool is_async) {
-  DCHECK_GT(g_PerIsolateWasmControls.Get().count(isolate), 0);
-  const WasmCompileControls& ctrls = g_PerIsolateWasmControls.Get().at(isolate);
+  base::MutexGuard guard(g_PerIsolateWasmControlsMutex.Pointer());
+  DCHECK_GT(GetPerIsolateWasmControls()->count(isolate), 0);
+  const WasmCompileControls& ctrls = GetPerIsolateWasmControls()->at(isolate);
   if (is_async && ctrls.AllowAnySizeForAsync) return true;
   if (!module_or_bytes->IsWebAssemblyCompiledModule()) {
     return IsWasmCompileAllowed(isolate, module_or_bytes, is_async);
   }
-  v8::Local<v8::WasmCompiledModule> module =
-      v8::Local<v8::WasmCompiledModule>::Cast(module_or_bytes);
-  return static_cast<uint32_t>(module->GetWasmWireBytesRef().size) <=
+  v8::Local<v8::WasmModuleObject> module =
+      v8::Local<v8::WasmModuleObject>::Cast(module_or_bytes);
+  return static_cast<uint32_t>(
+             module->GetCompiledModule().GetWireBytesRef().size()) <=
          ctrls.MaxWasmBufferSize;
 }
 
@@ -91,8 +106,13 @@ bool WasmInstanceOverride(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
 }  // namespace
 
-namespace v8 {
-namespace internal {
+RUNTIME_FUNCTION(Runtime_ClearMegamorphicStubCache) {
+  HandleScope scope(isolate);
+  DCHECK_EQ(0, args.length());
+  isolate->load_stub_cache()->Clear();
+  isolate->store_stub_cache()->Clear();
+  return ReadOnlyRoots(isolate).undefined_value();
+}
 
 RUNTIME_FUNCTION(Runtime_ConstructDouble) {
   HandleScope scope(isolate);
@@ -152,7 +172,6 @@ RUNTIME_FUNCTION(Runtime_DeoptimizeFunction) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
-
 RUNTIME_FUNCTION(Runtime_DeoptimizeNow) {
   HandleScope scope(isolate);
   DCHECK_EQ(0, args.length());
@@ -172,7 +191,6 @@ RUNTIME_FUNCTION(Runtime_DeoptimizeNow) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
-
 RUNTIME_FUNCTION(Runtime_RunningInSimulator) {
   SealHandleScope shs(isolate);
   DCHECK_EQ(0, args.length());
@@ -183,6 +201,11 @@ RUNTIME_FUNCTION(Runtime_RunningInSimulator) {
 #endif
 }
 
+RUNTIME_FUNCTION(Runtime_ICsAreEnabled) {
+  SealHandleScope shs(isolate);
+  DCHECK_EQ(0, args.length());
+  return isolate->heap()->ToBoolean(FLAG_use_ic);
+}
 
 RUNTIME_FUNCTION(Runtime_IsConcurrentRecompilationSupported) {
   SealHandleScope shs(isolate);
@@ -215,8 +238,16 @@ RUNTIME_FUNCTION(Runtime_OptimizeFunctionOnNextCall) {
   }
 
   // If function isn't compiled, compile it now.
-  if (!function->shared()->is_compiled() &&
-      !Compiler::Compile(function, Compiler::CLEAR_EXCEPTION)) {
+  IsCompiledScope is_compiled_scope(function->shared()->is_compiled_scope());
+  if (!is_compiled_scope.is_compiled() &&
+      !Compiler::Compile(function, Compiler::CLEAR_EXCEPTION,
+                         &is_compiled_scope)) {
+    return ReadOnlyRoots(isolate).undefined_value();
+  }
+
+  if (function->shared()->optimization_disabled() &&
+      function->shared()->disable_optimization_reason() ==
+          BailoutReason::kNeverOptimize) {
     return ReadOnlyRoots(isolate).undefined_value();
   }
 
@@ -233,8 +264,13 @@ RUNTIME_FUNCTION(Runtime_OptimizeFunctionOnNextCall) {
 
   ConcurrencyMode concurrency_mode = ConcurrencyMode::kNotConcurrent;
   if (args.length() == 2) {
-    CONVERT_ARG_HANDLE_CHECKED(String, type, 1);
-    if (type->IsOneByteEqualTo(STATIC_CHAR_VECTOR("concurrent")) &&
+    // Ignore invalid inputs produced by fuzzers.
+    CONVERT_ARG_HANDLE_CHECKED(Object, type, 1);
+    if (!type->IsString()) {
+      return ReadOnlyRoots(isolate).undefined_value();
+    }
+    if (Handle<String>::cast(type)->IsOneByteEqualTo(
+            StaticCharVector("concurrent")) &&
         isolate->concurrent_recompilation_enabled()) {
       concurrency_mode = ConcurrencyMode::kConcurrent;
     }
@@ -260,6 +296,60 @@ RUNTIME_FUNCTION(Runtime_OptimizeFunctionOnNextCall) {
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
+RUNTIME_FUNCTION(Runtime_PrepareFunctionForOptimization) {
+  HandleScope scope(isolate);
+  DCHECK_EQ(1, args.length());
+  CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
+
+  // Only one function should be prepared for optimization at a time
+  CHECK(isolate->heap()->pending_optimize_for_test_bytecode()->IsUndefined());
+
+  // Check function allows lazy compilation.
+  if (!function->shared()->allows_lazy_compilation()) {
+    return ReadOnlyRoots(isolate).undefined_value();
+  }
+
+  // If function isn't compiled, compile it now.
+  IsCompiledScope is_compiled_scope(function->shared()->is_compiled_scope());
+  if (!is_compiled_scope.is_compiled() &&
+      !Compiler::Compile(function, Compiler::CLEAR_EXCEPTION,
+                         &is_compiled_scope)) {
+    return ReadOnlyRoots(isolate).undefined_value();
+  }
+
+  // Ensure function has a feedback vector to hold type feedback for
+  // optimization.
+  JSFunction::EnsureFeedbackVector(function);
+
+  // If optimization is disabled for the function, return without making it
+  // pending optimize for test.
+  if (function->shared()->optimization_disabled() &&
+      function->shared()->disable_optimization_reason() ==
+          BailoutReason::kNeverOptimize) {
+    return ReadOnlyRoots(isolate).undefined_value();
+  }
+
+  // If the function is already optimized, return without making it pending
+  // optimize for test.
+  if (function->IsOptimized() || function->shared()->HasAsmWasmData()) {
+    return ReadOnlyRoots(isolate).undefined_value();
+  }
+
+  // If the function has optimized code, ensure that we check for it and then
+  // return without making it pending optimize for test.
+  if (function->HasOptimizedCode()) {
+    DCHECK(function->ChecksOptimizationMarker());
+    return ReadOnlyRoots(isolate).undefined_value();
+  }
+
+  // Hold onto the bytecode array between marking and optimization to ensure
+  // it's not flushed.
+  isolate->heap()->SetPendingOptimizeForTestBytecode(
+      function->shared()->GetBytecodeArray());
+
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
 RUNTIME_FUNCTION(Runtime_OptimizeOsr) {
   HandleScope scope(isolate);
   DCHECK(args.length() == 0 || args.length() == 1);
@@ -278,6 +368,12 @@ RUNTIME_FUNCTION(Runtime_OptimizeOsr) {
   // If the function is already optimized, just return.
   if (function->IsOptimized()) return ReadOnlyRoots(isolate).undefined_value();
 
+  if (function->shared()->optimization_disabled() &&
+      function->shared()->disable_optimization_reason() ==
+          BailoutReason::kNeverOptimize) {
+    return ReadOnlyRoots(isolate).undefined_value();
+  }
+
   // Ensure that the function is marked for non-concurrent optimization, so that
   // subsequent runs don't also optimize.
   if (!function->HasOptimizedCode()) {
@@ -292,7 +388,8 @@ RUNTIME_FUNCTION(Runtime_OptimizeOsr) {
   // Make the profiler arm all back edges in unoptimized code.
   if (it.frame()->type() == StackFrame::INTERPRETED) {
     isolate->runtime_profiler()->AttemptOnStackReplacement(
-        it.frame(), AbstractCode::kMaxLoopNestingMarker);
+        InterpretedFrame::cast(it.frame()),
+        AbstractCode::kMaxLoopNestingMarker);
   }
 
   return ReadOnlyRoots(isolate).undefined_value();
@@ -309,8 +406,7 @@ RUNTIME_FUNCTION(Runtime_NeverOptimizeFunction) {
     return ReadOnlyRoots(isolate).undefined_value();
   }
   Handle<JSFunction> function = Handle<JSFunction>::cast(function_object);
-  function->shared()->DisableOptimization(
-      BailoutReason::kOptimizationDisabledForTest);
+  function->shared()->DisableOptimization(BailoutReason::kNeverOptimize);
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
@@ -318,6 +414,9 @@ RUNTIME_FUNCTION(Runtime_GetOptimizationStatus) {
   HandleScope scope(isolate);
   DCHECK(args.length() == 1 || args.length() == 2);
   int status = 0;
+  if (FLAG_lite_mode) {
+    status |= static_cast<int>(OptimizationStatus::kLiteMode);
+  }
   if (!isolate->use_optimizer()) {
     status |= static_cast<int>(OptimizationStatus::kNeverOptimize);
   }
@@ -343,7 +442,7 @@ RUNTIME_FUNCTION(Runtime_GetOptimizationStatus) {
     if (!sync_object->IsString())
       return ReadOnlyRoots(isolate).undefined_value();
     Handle<String> sync = Handle<String>::cast(sync_object);
-    if (sync->IsOneByteEqualTo(STATIC_CHAR_VECTOR("no sync"))) {
+    if (sync->IsOneByteEqualTo(StaticCharVector("no sync"))) {
       sync_with_compiler_thread = false;
     }
   }
@@ -429,7 +528,7 @@ RUNTIME_FUNCTION(Runtime_GetUndetectable) {
   desc->SetCallAsFunctionHandler(ReturnThis);
   Local<v8::Object> obj;
   if (!desc->NewInstance(v8_isolate->GetCurrentContext()).ToLocal(&obj)) {
-    return nullptr;
+    return Object();
   }
   return *Utils::OpenHandle(*obj);
 }
@@ -477,7 +576,8 @@ RUNTIME_FUNCTION(Runtime_SetWasmCompileControls) {
   CHECK_EQ(args.length(), 2);
   CONVERT_ARG_HANDLE_CHECKED(Smi, block_size, 0);
   CONVERT_BOOLEAN_ARG_CHECKED(allow_async, 1);
-  WasmCompileControls& ctrl = (*g_PerIsolateWasmControls.Pointer())[v8_isolate];
+  base::MutexGuard guard(g_PerIsolateWasmControlsMutex.Pointer());
+  WasmCompileControls& ctrl = (*GetPerIsolateWasmControls())[v8_isolate];
   ctrl.AllowAnySizeForAsync = allow_async;
   ctrl.MaxWasmBufferSize = static_cast<uint32_t>(block_size->value());
   v8_isolate->SetWasmModuleCallback(WasmModuleOverride);
@@ -528,26 +628,17 @@ RUNTIME_FUNCTION(Runtime_DebugPrint) {
   SealHandleScope shs(isolate);
   DCHECK_EQ(1, args.length());
 
-  // Hack: The argument is passed as Object* but here it's really a
-  // MaybeObject*.
-  MaybeObject* maybe_object = reinterpret_cast<MaybeObject*>(args[0]);
+  MaybeObject maybe_object(*args.address_of_arg_at(0));
 
   StdoutStream os;
-  if (maybe_object->IsClearedWeakHeapObject()) {
+  if (maybe_object->IsCleared()) {
     os << "[weak cleared]";
   } else {
-    Object* object;
-    bool weak = false;
-    if (maybe_object->IsWeakHeapObject()) {
-      weak = true;
-      object = maybe_object->ToWeakHeapObject();
-    } else {
-      // Strong reference or SMI.
-      object = maybe_object->ToObject();
-    }
+    Object object = maybe_object.GetHeapObjectOrSmi();
+    bool weak = maybe_object.IsWeak();
 
 #ifdef DEBUG
-    if (object->IsString() && isolate->context() != nullptr) {
+    if (object->IsString() && !isolate->context().is_null()) {
       DCHECK(!weak);
       // If we have a string, assume it's a code "marker"
       // and print some interesting cpu debugging info.
@@ -619,7 +710,7 @@ RUNTIME_FUNCTION(Runtime_DebugTrackRetainingPath) {
     if (args.length() == 2) {
       CONVERT_ARG_HANDLE_CHECKED(String, str, 1);
       const char track_ephemeron_path[] = "track-ephemeron-path";
-      if (str->IsOneByteEqualTo(STATIC_CHAR_VECTOR(track_ephemeron_path))) {
+      if (str->IsOneByteEqualTo(StaticCharVector(track_ephemeron_path))) {
         option = RetainingPathOption::kTrackEphemeronPath;
       } else if (str->length() != 0) {
         PrintF("Unexpected second argument of DebugTrackRetainingPath.\n");
@@ -689,7 +780,7 @@ RUNTIME_FUNCTION(Runtime_AbortJS) {
   CONVERT_ARG_HANDLE_CHECKED(String, message, 0);
   if (FLAG_disable_abortjs) {
     base::OS::PrintError("[disabled] abort: %s\n", message->ToCString().get());
-    return nullptr;
+    return Object();
   }
   base::OS::PrintError("abort: %s\n", message->ToCString().get());
   isolate->PrintStack(stderr);
@@ -704,8 +795,9 @@ RUNTIME_FUNCTION(Runtime_DisassembleFunction) {
   DCHECK_EQ(1, args.length());
   // Get the function and make sure it is compiled.
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, func, 0);
+  IsCompiledScope is_compiled_scope;
   if (!func->is_compiled() &&
-      !Compiler::Compile(func, Compiler::KEEP_EXCEPTION)) {
+      !Compiler::Compile(func, Compiler::KEEP_EXCEPTION, &is_compiled_scope)) {
     return ReadOnlyRoots(isolate).exception();
   }
   StdoutStream os;
@@ -769,7 +861,7 @@ RUNTIME_FUNCTION(Runtime_InNewSpace) {
   SealHandleScope shs(isolate);
   DCHECK_EQ(1, args.length());
   CONVERT_ARG_CHECKED(Object, obj, 0);
-  return isolate->heap()->ToBoolean(Heap::InNewSpace(obj));
+  return isolate->heap()->ToBoolean(ObjectInYoungGeneration(obj));
 }
 
 RUNTIME_FUNCTION(Runtime_IsAsmWasmCode) {
@@ -829,11 +921,44 @@ RUNTIME_FUNCTION(Runtime_IsWasmTrapHandlerEnabled) {
   return isolate->heap()->ToBoolean(trap_handler::IsTrapHandlerEnabled());
 }
 
+RUNTIME_FUNCTION(Runtime_IsThreadInWasm) {
+  DisallowHeapAllocation no_gc;
+  DCHECK_EQ(0, args.length());
+  return isolate->heap()->ToBoolean(trap_handler::IsThreadInWasm());
+}
+
 RUNTIME_FUNCTION(Runtime_GetWasmRecoveredTrapCount) {
-  HandleScope shs(isolate);
+  HandleScope scope(isolate);
   DCHECK_EQ(0, args.length());
   size_t trap_count = trap_handler::GetRecoveredTrapCount();
   return *isolate->factory()->NewNumberFromSize(trap_count);
+}
+
+RUNTIME_FUNCTION(Runtime_GetWasmExceptionId) {
+  HandleScope scope(isolate);
+  DCHECK_EQ(2, args.length());
+  CONVERT_ARG_HANDLE_CHECKED(JSReceiver, exception, 0);
+  CONVERT_ARG_HANDLE_CHECKED(WasmInstanceObject, instance, 1);
+  Handle<Object> tag =
+      WasmExceptionPackage::GetExceptionTag(isolate, exception);
+  if (tag->IsWasmExceptionTag()) {
+    Handle<FixedArray> exceptions_table(instance->exceptions_table(), isolate);
+    for (int index = 0; index < exceptions_table->length(); ++index) {
+      if (exceptions_table->get(index) == *tag) return Smi::FromInt(index);
+    }
+  }
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
+RUNTIME_FUNCTION(Runtime_GetWasmExceptionValues) {
+  HandleScope scope(isolate);
+  DCHECK_EQ(1, args.length());
+  CONVERT_ARG_HANDLE_CHECKED(JSReceiver, exception, 0);
+  Handle<Object> values_obj =
+      WasmExceptionPackage::GetExceptionValues(isolate, exception);
+  CHECK(values_obj->IsFixedArray());  // Only called with correct input.
+  Handle<FixedArray> values = Handle<FixedArray>::cast(values_obj);
+  return *isolate->factory()->NewJSArrayWithElements(values);
 }
 
 namespace {
@@ -866,6 +991,7 @@ ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(SmiOrObjectElements)
 ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(DoubleElements)
 ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(HoleyElements)
 ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(DictionaryElements)
+ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(PackedElements)
 ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(SloppyArgumentsElements)
 // Properties test sitting with elements tests - not fooling anyone.
 ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(FastProperties)
@@ -888,18 +1014,23 @@ RUNTIME_FUNCTION(Runtime_ArraySpeciesProtector) {
   return isolate->heap()->ToBoolean(isolate->IsArraySpeciesLookupChainIntact());
 }
 
-RUNTIME_FUNCTION(Runtime_TypedArraySpeciesProtector) {
+RUNTIME_FUNCTION(Runtime_MapIteratorProtector) {
   SealHandleScope shs(isolate);
   DCHECK_EQ(0, args.length());
-  return isolate->heap()->ToBoolean(
-      isolate->IsTypedArraySpeciesLookupChainIntact());
+  return isolate->heap()->ToBoolean(isolate->IsMapIteratorLookupChainIntact());
 }
 
-RUNTIME_FUNCTION(Runtime_PromiseSpeciesProtector) {
+RUNTIME_FUNCTION(Runtime_SetIteratorProtector) {
+  SealHandleScope shs(isolate);
+  DCHECK_EQ(0, args.length());
+  return isolate->heap()->ToBoolean(isolate->IsSetIteratorLookupChainIntact());
+}
+
+RUNTIME_FUNCTION(Runtime_StringIteratorProtector) {
   SealHandleScope shs(isolate);
   DCHECK_EQ(0, args.length());
   return isolate->heap()->ToBoolean(
-      isolate->IsPromiseSpeciesLookupChainIntact());
+      isolate->IsStringIteratorLookupChainIntact());
 }
 
 // Take a compiled wasm module and serialize it into an array buffer, which is
@@ -910,10 +1041,11 @@ RUNTIME_FUNCTION(Runtime_SerializeWasmModule) {
   CONVERT_ARG_HANDLE_CHECKED(WasmModuleObject, module_obj, 0);
 
   wasm::NativeModule* native_module = module_obj->native_module();
-  wasm::WasmSerializer wasm_serializer(isolate, native_module);
+  wasm::WasmSerializer wasm_serializer(native_module);
   size_t compiled_size = wasm_serializer.GetSerializedNativeModuleSize();
   void* array_data = isolate->array_buffer_allocator()->Allocate(compiled_size);
-  Handle<JSArrayBuffer> array_buffer = isolate->factory()->NewJSArrayBuffer();
+  Handle<JSArrayBuffer> array_buffer =
+      isolate->factory()->NewJSArrayBuffer(SharedFlag::kNotShared);
   JSArrayBuffer::Setup(array_buffer, isolate, false, array_data, compiled_size);
   if (!array_data ||
       !wasm_serializer.SerializeNativeModule(
@@ -937,9 +1069,9 @@ RUNTIME_FUNCTION(Runtime_DeserializeWasmModule) {
       wasm::DeserializeNativeModule(
           isolate,
           {reinterpret_cast<uint8_t*>(buffer->backing_store()),
-           static_cast<size_t>(buffer->byte_length()->Number())},
+           buffer->byte_length()},
           {reinterpret_cast<uint8_t*>(wire_bytes->backing_store()),
-           static_cast<size_t>(wire_bytes->byte_length()->Number())});
+           wire_bytes->byte_length()});
   Handle<WasmModuleObject> module_object;
   if (!maybe_module_object.ToHandle(&module_object)) {
     return ReadOnlyRoots(isolate).undefined_value();
@@ -969,9 +1101,9 @@ RUNTIME_FUNCTION(Runtime_WasmGetNumberOfInstances) {
   DCHECK_EQ(1, args.length());
   CONVERT_ARG_HANDLE_CHECKED(WasmModuleObject, module_obj, 0);
   int instance_count = 0;
-  WeakArrayList* weak_instance_list = module_obj->weak_instance_list();
+  WeakArrayList weak_instance_list = module_obj->weak_instance_list();
   for (int i = 0; i < weak_instance_list->length(); ++i) {
-    if (weak_instance_list->Get(i)->IsWeakHeapObject()) instance_count++;
+    if (weak_instance_list->Get(i)->IsWeak()) instance_count++;
   }
   return Smi::FromInt(instance_count);
 }
@@ -980,7 +1112,7 @@ RUNTIME_FUNCTION(Runtime_WasmNumInterpretedCalls) {
   DCHECK_EQ(1, args.length());
   HandleScope scope(isolate);
   CONVERT_ARG_HANDLE_CHECKED(WasmInstanceObject, instance, 0);
-  if (!instance->has_debug_info()) return 0;
+  if (!instance->has_debug_info()) return Object();
   uint64_t num = instance->debug_info()->NumInterpretedCalls();
   return *isolate->factory()->NewNumberFromSize(static_cast<size_t>(num));
 }
@@ -1003,7 +1135,7 @@ RUNTIME_FUNCTION(Runtime_WasmTraceMemory) {
   CONVERT_ARG_CHECKED(Smi, info_addr, 0);
 
   wasm::MemoryTracingInfo* info =
-      reinterpret_cast<wasm::MemoryTracingInfo*>(info_addr);
+      reinterpret_cast<wasm::MemoryTracingInfo*>(info_addr.ptr());
 
   // Find the caller wasm frame.
   StackTraceFrameIterator it(isolate);
@@ -1031,11 +1163,10 @@ RUNTIME_FUNCTION(Runtime_WasmTierUpFunction) {
   DCHECK_EQ(2, args.length());
   CONVERT_ARG_HANDLE_CHECKED(WasmInstanceObject, instance, 0);
   CONVERT_SMI_ARG_CHECKED(function_index, 1);
-  if (!isolate->wasm_engine()->CompileFunction(
-          isolate, instance->module_object()->native_module(), function_index,
-          wasm::ExecutionTier::kOptimized)) {
-    return ReadOnlyRoots(isolate).exception();
-  }
+  auto* native_module = instance->module_object()->native_module();
+  isolate->wasm_engine()->CompileFunction(
+      isolate, native_module, function_index, wasm::ExecutionTier::kOptimized);
+  CHECK(!native_module->compilation_state()->failed());
   return ReadOnlyRoots(isolate).undefined_value();
 }
 

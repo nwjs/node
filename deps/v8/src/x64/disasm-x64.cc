@@ -12,7 +12,8 @@
 #include "src/base/lazy-instance.h"
 #include "src/base/v8-fallthrough.h"
 #include "src/disasm.h"
-#include "src/macro-assembler.h"
+#include "src/utils.h"
+#include "src/x64/register-x64.h"
 #include "src/x64/sse-instr.h"
 
 namespace disasm {
@@ -250,10 +251,9 @@ void InstructionTable::AddJumpConditionalShort() {
   }
 }
 
-
-static v8::base::LazyInstance<InstructionTable>::type instruction_table =
-    LAZY_INSTANCE_INITIALIZER;
-
+namespace {
+DEFINE_LAZY_LEAKY_OBJECT_GETTER(InstructionTable, GetInstructionTable)
+}
 
 static const InstructionDesc cmov_instructions[16] = {
   {"cmovo", TWO_OPERANDS_INSTR, REG_OPER_OP_ORDER, false},
@@ -296,7 +296,7 @@ class DisassemblerX64 {
         vex_byte1_(0),
         vex_byte2_(0),
         byte_size_operand_(false),
-        instruction_table_(instruction_table.Pointer()) {
+        instruction_table_(GetInstructionTable()) {
     tmp_buffer_[0] = '\0';
   }
 
@@ -580,7 +580,7 @@ int DisassemblerX64::PrintRightOperandHelper(
                        disp < 0 ? -disp : disp);
         if (rm == i::kRootRegister.code()) {
           // For root-relative accesses, try to append a description.
-          TryAppendRootRelativeName(i::kRootRegisterBias + disp);
+          TryAppendRootRelativeName(disp);
         }
         return (mod == 2) ? 5 : 2;
       }
@@ -1816,7 +1816,7 @@ int DisassemblerX64::TwoByteOpcodeInstruction(byte* data) {
         AppendToBuffer(",0x%x", (*current) & 7);
         current += 1;
       } else {
-        const char* mnemonic = "?";
+        const char* mnemonic;
         if (opcode == 0x54) {
           mnemonic = "andpd";
         } else  if (opcode == 0x56) {
@@ -2166,7 +2166,6 @@ int DisassemblerX64::TwoByteOpcodeInstruction(byte* data) {
   } else if (opcode == 0xA2) {
     // CPUID
     AppendToBuffer("%s", mnemonic);
-
   } else if ((opcode & 0xF0) == 0x40) {
     // CMOVcc: conditional move.
     int condition = opcode & 0x0F;
@@ -2229,13 +2228,13 @@ int DisassemblerX64::TwoByteOpcodeInstruction(byte* data) {
              opcode == 0xB7 || opcode == 0xAF) {
     // Size-extending moves, IMUL.
     current += PrintOperands(mnemonic, REG_OPER_OP_ORDER, current);
-
   } else if ((opcode & 0xF0) == 0x90) {
     // SETcc: Set byte on condition. Needs pointer to beginning of instruction.
     current = data + SetCC(data);
-
-  } else if (opcode == 0xAB || opcode == 0xA5 || opcode == 0xAD) {
-    // SHLD, SHRD (double-precision shift), BTS (bit set).
+  } else if (opcode == 0xA3 || opcode == 0xA5 || opcode == 0xAB ||
+             opcode == 0xAD) {
+    // BT (bit test), SHLD, BTS (bit test and set),
+    // SHRD (double-precision shift)
     AppendToBuffer("%s ", mnemonic);
     int mod, regop, rm;
     get_modrm(*current, &mod, &regop, &rm);
@@ -2245,6 +2244,14 @@ int DisassemblerX64::TwoByteOpcodeInstruction(byte* data) {
     } else {
       AppendToBuffer(",%s,cl", NameOfCPURegister(regop));
     }
+  } else if (opcode == 0xBA) {
+    // BTS / BTR (bit test and set/reset) with immediate
+    int mod, regop, rm;
+    get_modrm(*current, &mod, &regop, &rm);
+    mnemonic = regop == 5 ? "bts" : regop == 6 ? "btr" : "?";
+    AppendToBuffer("%s ", mnemonic);
+    current += PrintRightOperand(current);
+    AppendToBuffer(",%d", *current++);
   } else if (opcode == 0xB8 || opcode == 0xBC || opcode == 0xBD) {
     // POPCNT, CTZ, CLZ.
     AppendToBuffer("%s%c ", mnemonic, operand_size_code());
@@ -2297,6 +2304,8 @@ const char* DisassemblerX64::TwoByteMnemonic(byte opcode) {
       return (group_1_prefix_ == 0xF2) ? "maxsd" : "maxss";
     case 0xA2:
       return "cpuid";
+    case 0xA3:
+      return "bt";
     case 0xA5:
       return "shld";
     case 0xAB:

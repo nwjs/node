@@ -1,15 +1,14 @@
 {
   'variables': {
+    'v8_use_siphash%': 0,
+    'v8_use_snapshot%': 0,
     'icu_gyp_path%': '../icu/icu.gyp',
-    'v8_use_snapshot%': 'false',
-    'v8_use_siphash%': 'false',
     'coverage': 'false',
     'node_report': 'false',
     'v8_trace_maps%': 0,
     'node_use_dtrace%': 'false',
     'node_use_etw%': 'false',
     'node_no_browser_globals%': 'false',
-    'node_code_cache_path%': '',
     'node_use_v8_platform%': 'true',
     'force_dynamic_crt%': 0,
     'node_use_bundled_v8': 'false',
@@ -22,7 +21,6 @@
     'node_module_version%': '',
     'node_shared_brotli%': 'false',
     'node_shared_zlib%': 'false',
-    'node_experimental_http_parser%': 'false',
     'node_shared_http_parser%': 'false',
     'node_shared_cares%': 'false',
     'node_shared_libuv%': 'false',
@@ -49,12 +47,11 @@
     'LIBCXX%': '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libc++.a',
     'LIBCXXABI%': '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++abi/libc++abi.a',
     'library_files': [
-      'lib/internal/bootstrap/primordials.js',
-      'lib/internal/bootstrap/cache.js',
       'lib/internal/bootstrap/environment.js',
       'lib/internal/bootstrap/loaders.js',
       'lib/internal/bootstrap/node.js',
       'lib/internal/bootstrap/pre_execution.js',
+      'lib/internal/per_context/primordials.js',
       'lib/internal/per_context/setup.js',
       'lib/internal/per_context/domexception.js',
       'lib/async_hooks.js',
@@ -141,6 +138,7 @@
       'lib/internal/dgram.js',
       'lib/internal/dns/promises.js',
       'lib/internal/dns/utils.js',
+      'lib/internal/dtrace.js',
       'lib/internal/encoding.js',
       'lib/internal/errors.js',
       'lib/internal/error-serdes.js',
@@ -193,7 +191,6 @@
       'lib/internal/process/worker_thread_only.js',
       'lib/internal/process/report.js',
       'lib/internal/process/task_queues.js',
-      'lib/internal/profiler.js',
       'lib/internal/querystring.js',
       'lib/internal/readline.js',
       'lib/internal/repl.js',
@@ -249,6 +246,7 @@
       'deps/acorn/acorn/dist/acorn.js',
       'deps/acorn/acorn-walk/dist/walk.js',
     ],
+    'mkcodecache_exec': '<(PRODUCT_DIR)/<(EXECUTABLE_PREFIX)mkcodecache<(EXECUTABLE_SUFFIX)',
     'conditions': [
       [ 'node_shared=="true"', {
         'node_target_type%': 'shared_library',
@@ -276,6 +274,30 @@
     ],
   },
 
+  'target_defaults': {
+    # Putting these explicitly here so not to depend on `common.gypi`.
+    # `common.gypi` need to be more general because it is used to build userland native addons.
+    # Refs: https://github.com/nodejs/node-gyp/issues/1118
+    'cflags': [ '-Wall', '-Wextra', '-Wno-unused-parameter', ],
+    'xcode_settings': {
+      'WARNING_CFLAGS': [
+        '-Wall',
+        '-Wendif-labels',
+        '-W',
+        '-Wno-unused-parameter',
+        '-Werror=undefined-inline',
+      ],
+    },
+
+    # Relevant only for x86.
+    # Refs: https://github.com/nodejs/node/pull/25852
+    # Refs: https://docs.microsoft.com/en-us/cpp/build/reference/safeseh-image-has-safe-exception-handlers
+    'msvs_settings': {
+      'VCLinkerTool': {
+        'ImageHasSafeExceptionHandlers': 'false',
+      },
+    },
+  },
   'includes': [
     '../../build/util/version.gypi',
   ],
@@ -284,17 +306,35 @@
     {
       'target_name': '<(node_core_target_name)',
       'type': 'executable',
-      'sources': [
-        'src/node_main.cc'
+
+      'defines': [
+        'NODE_WANT_INTERNALS=1',
       ],
+
       'includes': [
         'node.gypi'
       ],
+
       'include_dirs': [
         'src',
         'deps/v8/include'
       ],
+
+      'sources': [
+        'src/node_main.cc'
+      ],
+
       'dependencies': [ 'deps/histogram/histogram.gyp:histogram' ],
+
+      'msvs_settings': {
+        'VCLinkerTool': {
+          'GenerateMapFile': 'true', # /MAP
+          'MapExports': 'true', # /MAPINFO:EXPORTS
+          'RandomizedBaseAddress': 2, # enable ASLR
+          'DataExecutionPrevention': 2, # enable DEP
+          'AllowIsolation': 'true',
+        },
+      },
 
       # - "C4244: conversion from 'type1' to 'type2', possible loss of data"
       #   Ususaly safe. Disable for `dep`, enable for `src`
@@ -311,8 +351,7 @@
         }, {
           'dependencies': [ '<(node_lib_target_name)' ],
         }],
-        [ 'node_intermediate_lib_type=="static_library" and '
-            'node_shared=="false"', {
+        [ 'node_intermediate_lib_type=="static_library" and node_shared=="false"', {
           'xcode_settings': {
             'OTHER_LDFLAGS': [
               '-Wl,-force_load,<(PRODUCT_DIR)/<(STATIC_LIB_PREFIX)'
@@ -322,7 +361,7 @@
           'msvs_settings': {
             'VCLinkerTool': {
               'AdditionalOptions': [
-                '/WHOLEARCHIVE:<(node_core_target_name)<(STATIC_LIB_SUFFIX)',
+                '/WHOLEARCHIVE:<(node_lib_target_name)<(STATIC_LIB_SUFFIX)',
               ],
             },
           },
@@ -351,12 +390,6 @@
             'OTHER_LDFLAGS': [ '-Wl,-rpath,@loader_path', ],
           },
         }],
-        [ 'node_intermediate_lib_type=="shared_library" and OS=="win"', {
-          # On Windows, having the same name for both executable and shared
-          # lib causes filename collision. Need a different PRODUCT_NAME for
-          # the executable and rename it back to node.exe later
-          'product_name': '<(node_core_target_name)-win',
-        }],
         [ 'node_report=="true"', {
           'defines': [
             'NODE_REPORT',
@@ -365,17 +398,62 @@
           ],
           'conditions': [
             ['OS=="win"', {
-              'libraries': [
-                'dbghelp.lib',
-                'PsApi.lib',
-                'Ws2_32.lib',
-              ],
-              'dll_files': [
-                'dbghelp.dll',
-                'PsApi.dll',
-                'Ws2_32.dll',
-              ],
+              'libraries': [ 'Ws2_32' ],
             }],
+          ],
+        }],
+        ['node_with_ltcg=="true"', {
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              'WholeProgramOptimization': 'true'   # /GL, whole program optimization, needed for LTCG
+            },
+            'VCLibrarianTool': {
+              'AdditionalOptions': [
+                '/LTCG:INCREMENTAL',               # link time code generation
+              ],
+            },
+            'VCLinkerTool': {
+              'OptimizeReferences': 2,             # /OPT:REF
+              'EnableCOMDATFolding': 2,            # /OPT:ICF
+              'LinkIncremental': 1,                # disable incremental linking
+              'AdditionalOptions': [
+                '/LTCG:INCREMENTAL',               # incremental link-time code generation
+              ],
+            }
+          }
+        }, {
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              'WholeProgramOptimization': 'false'
+            },
+            'VCLinkerTool': {
+              'LinkIncremental': 2                 # enable incremental linking
+            },
+          },
+         }],
+        ['want_separate_host_toolset==0', {
+          'dependencies': [
+            'mkcodecache',
+          ],
+          'actions': [
+            {
+              'action_name': 'run_mkcodecache',
+              'process_outputs_as_sources': 1,
+              'inputs': [
+                '<(mkcodecache_exec)',
+              ],
+              'outputs': [
+                '<(SHARED_INTERMEDIATE_DIR)/node_code_cache.cc',
+              ],
+              'action': [
+                '<@(_inputs)',
+                '<@(_outputs)',
+              ],
+            },
+          ],
+        }, {
+          'sources': [
+            'src/node_code_cache_stub.cc'
           ],
         }],
       ],
@@ -383,10 +461,8 @@
     {
       'target_name': '<(node_lib_target_name)',
       'type': '<(node_intermediate_lib_type)',
-      'product_name': '<(node_lib_target_name)',
-
       'includes': [
-        'node.gypi'
+        'node.gypi',
       ],
       'msvs_disabled_warnings': [4146, 4267, 4003, 4065, 4477],
 
@@ -417,6 +493,7 @@
       },
 
       'sources': [
+        'src/api/async_resource.cc',
         'src/api/callback.cc',
         'src/api/encoding.cc',
         'src/api/environment.cc',
@@ -456,9 +533,11 @@
         'src/node_http_parser_traditional.cc',
         'src/node_http2.cc',
         'src/node_i18n.cc',
+        'src/node_main_instance.cc',
         'src/node_messaging.cc',
         'src/node_metadata.cc',
         'src/node_native_module.cc',
+        'src/node_native_module_env.cc',
         'src/node_options.cc',
         'src/node_os.cc',
         'src/node_perf.cc',
@@ -535,10 +614,12 @@
         'src/node_http2_state.h',
         'src/node_i18n.h',
         'src/node_internals.h',
+        'src/node_main_instance.h',
         'src/node_messaging.h',
         'src/node_metadata.h',
         'src/node_mutex.h',
         'src/node_native_module.h',
+        'src/node_native_module_env.h',
         'src/node_object_wrap.h',
         'src/node_options.h',
         'src/node_options-inl.h',
@@ -611,11 +692,6 @@
       'msvs_disabled_warnings!': [4244],
 
       'conditions': [
-        [ 'node_code_cache_path!=""', {
-          'sources': [ '<(node_code_cache_path)' ]
-        }, {
-          'sources': [ 'src/node_code_cache_stub.cc' ]
-        }],
         [ 'node_shared=="true" and node_module_version!="" and OS!="win"', {
           'product_extension': '<(shlib_suffix)',
           'xcode_settings': {
@@ -734,16 +810,7 @@
           ],
           'conditions': [
             ['OS=="win"', {
-              'libraries': [
-                'dbghelp.lib',
-                'PsApi.lib',
-                'Ws2_32.lib',
-              ],
-              'dll_files': [
-                'dbghelp.dll',
-                'PsApi.dll',
-                'Ws2_32.dll',
-              ],
+              'libraries': [ 'Ws2_32' ],
             }],
           ],
         }],
@@ -809,20 +876,20 @@
           'inputs': [
             '<@(library_files)',
             'config.gypi',
-            'tools/check_macros.py'
+            'tools/js2c_macros/check_macros.py'
           ],
           'outputs': [
             '<(SHARED_INTERMEDIATE_DIR)/node_javascript.cc',
           ],
           'conditions': [
             [ 'node_use_dtrace=="false" and node_use_etw=="false"', {
-              'inputs': [ 'src/notrace_macros.py' ]
+              'inputs': [ 'tools/js2c_macros/notrace_macros.py' ]
             }],
             [ 'node_debug_lib=="false"', {
-              'inputs': [ 'tools/nodcheck_macros.py' ]
+              'inputs': [ 'tools/js2c_macros/nodcheck_macros.py' ]
             }],
             [ 'node_debug_lib=="true"', {
-              'inputs': [ 'tools/dcheck_macros.py' ]
+              'inputs': [ 'tools/js2c_macros/dcheck_macros.py' ]
             }]
           ],
           'action': [
@@ -992,41 +1059,11 @@
       ]
     }, # specialize_node_d
     {
-      # When using shared lib to build executable in Windows, in order to avoid
-      # filename collision, the executable name is node-win.exe. Need to rename
-      # it back to node.exe
-      'target_name': 'rename_node_bin_win',
-      'type': 'none',
-      'dependencies': [
-        '<(node_core_target_name)',
-      ],
-      'conditions': [
-        [ 'OS=="win" and node_intermediate_lib_type=="shared_library"', {
-          'actions': [
-            {
-              'action_name': 'rename_node_bin_win',
-              'inputs': [
-                '<(PRODUCT_DIR)/<(node_core_target_name)-win.exe'
-              ],
-              'outputs': [
-                '<(PRODUCT_DIR)/<(node_core_target_name).exe',
-              ],
-              'action': [
-                'move', '<@(_inputs)', '<@(_outputs)',
-              ],
-            },
-          ],
-        } ],
-      ]
-    }, # rename_node_bin_win
-    {
       'target_name': 'cctest',
       'type': 'executable',
 
       'dependencies': [
         '<(node_lib_target_name)',
-        'rename_node_bin_win',
-        'deps/gtest/gtest.gyp:gtest',
         'deps/histogram/histogram.gyp:histogram',
         'node_dtrace_header',
         'node_dtrace_ustack',
@@ -1043,13 +1080,17 @@
         '../../v8/include',
         'deps/cares/include',
         'deps/uv/include',
-        '<(SHARED_INTERMEDIATE_DIR)', # for node_natives.h
+        'test/cctest',
       ],
 
       'defines': [ 'NODE_WANT_INTERNALS=1' ],
 
       'sources': [
+        'src/node_code_cache_stub.cc',
+        'test/cctest/gtest/gtest-all.cc',
+        'test/cctest/gtest/gtest_main.cc',
         'test/cctest/node_test_fixture.cc',
+        'test/cctest/node_test_fixture.h',
         'test/cctest/test_aliased_buffer.cc',
         'test/cctest/test_base64.cc',
         'test/cctest/test_node_postmortem_metadata.cc',
@@ -1059,7 +1100,7 @@
         'test/cctest/test_report_util.cc',
         'test/cctest/test_traced_value.cc',
         'test/cctest/test_util.cc',
-        'test/cctest/test_url.cc'
+        'test/cctest/test_url.cc',
       ],
 
       'conditions': [
@@ -1077,7 +1118,9 @@
             'HAVE_INSPECTOR=1',
           ],
         }, {
-          'defines': [ 'HAVE_INSPECTOR=0' ]
+           'defines': [
+             'HAVE_INSPECTOR=0',
+           ]
         }],
         ['OS=="solaris"', {
           'ldflags': [ '-I<(SHARED_INTERMEDIATE_DIR)' ]
@@ -1099,6 +1142,53 @@
           ],
           'conditions': [
             ['OS=="win"', {
+              'libraries': [ 'Ws2_32' ],
+            }],
+          ],
+        }],
+      ],
+    }, # cctest
+    # TODO(joyeecheung): do not depend on node_lib,
+    # instead create a smaller static library node_lib_base that does
+    # just enough for node_native_module.cc and the cache builder to
+    # compile without compiling the generated code cache C++ file.
+    # So generate_code_cache -> mkcodecache -> node_lib_base,
+    #    node_lib -> node_lib_base & generate_code_cache
+    {
+      'target_name': 'mkcodecache',
+      'type': 'executable',
+
+      'dependencies': [
+        '<(node_lib_target_name)',
+        'deps/histogram/histogram.gyp:histogram',
+      ],
+
+      'includes': [
+        'node.gypi'
+      ],
+
+      'include_dirs': [
+        'src',
+        'tools/msvs/genfiles',
+        'deps/v8/include',
+        'deps/cares/include',
+        'deps/uv/include',
+      ],
+
+      'defines': [
+        'NODE_WANT_INTERNALS=1'
+      ],
+      'sources': [
+        'src/node_code_cache_stub.cc',
+        'tools/code_cache/mkcodecache.cc',
+        'tools/code_cache/cache_builder.cc',
+        'tools/code_cache/cache_builder.h',
+      ],
+
+      'conditions': [
+        [ 'node_report=="true"', {
+          'conditions': [
+            ['OS=="win"', {
               'libraries': [
                 'dbghelp.lib',
                 'PsApi.lib',
@@ -1113,22 +1203,22 @@
           ],
         }],
       ],
-    }, # cctest
-  ], # end targets
+    }, # mkcodecache
+  ],  # end targets
 
   'conditions': [
-    [ 'OS=="aix" and node_shared=="true"', {
+    ['OS=="aix" and node_shared=="true"', {
       'targets': [
         {
           'target_name': 'node_aix_shared',
           'type': 'shared_library',
           'product_name': '<(node_core_target_name)',
-          'ldflags': [ '--shared' ],
+          'ldflags': ['--shared'],
           'product_extension': '<(shlib_suffix)',
           'includes': [
             'node.gypi'
           ],
-          'dependencies': [ '<(node_lib_target_name)' ],
+          'dependencies': ['<(node_lib_target_name)'],
           'include_dirs': [
             'src',
             'deps/v8/include',

@@ -15,7 +15,6 @@
 #include <cstring>
 #include <ctime>
 #include <cwctype>
-#include <atomic>
 #include <fstream>
 #include <iomanip>
 #include <climits>  // PATH_MAX
@@ -73,9 +72,6 @@ static void PrintLoadedLibraries(JSONWriter* writer);
 static void PrintComponentVersions(JSONWriter* writer);
 static void PrintRelease(JSONWriter* writer);
 
-// Global variables
-static std::atomic_int seq = {0};  // sequence number for report filenames
-
 // External function to trigger a report, writing to file.
 // The 'name' parameter is in/out: an input filename is used
 // if supplied, and the actual filename is returned.
@@ -99,7 +95,7 @@ std::string TriggerNodeReport(Isolate* isolate,
     filename = options->report_filename;
   } else {
     filename = *DiagnosticFilename(env != nullptr ? env->thread_id() : 0,
-                                   "report", "json", seq++);
+                                   "report", "json");
   }
 
   // Open the report file stream for writing. Supports stdout/err,
@@ -213,11 +209,14 @@ static void WriteNodeReport(Isolate* isolate,
            tm_struct.tm_min,
            tm_struct.tm_sec);
   writer.json_keyvalue("dumpEventTime", timebuf);
-  struct timeval ts;
-  gettimeofday(&ts, nullptr);
-  writer.json_keyvalue("dumpEventTimeStamp",
-                       std::to_string(ts.tv_sec * 1000 + ts.tv_usec / 1000));
 #endif
+
+  uv_timeval64_t ts;
+  if (uv_gettimeofday(&ts) == 0) {
+    writer.json_keyvalue("dumpEventTimeStamp",
+                         std::to_string(ts.tv_sec * 1000 + ts.tv_usec / 1000));
+  }
+
   // Report native process ID
   writer.json_keyvalue("processId", pid);
 
@@ -344,7 +343,7 @@ static void PrintJavaScriptStack(JSONWriter* writer,
     String::Utf8Value sv(isolate, stackstr);
     ss = std::string(*sv, sv.length());
   }
-  int line = ss.find("\n");
+  int line = ss.find('\n');
   if (line == -1) {
     writer->json_keyvalue("message", ss);
     writer->json_objectend();
@@ -353,7 +352,7 @@ static void PrintJavaScriptStack(JSONWriter* writer,
     writer->json_keyvalue("message", l);
     writer->json_arraystart("stack");
     ss = ss.substr(line + 1);
-    line = ss.find("\n");
+    line = ss.find('\n');
     while (line != -1) {
       l = ss.substr(0, line);
       l.erase(l.begin(), std::find_if(l.begin(), l.end(), [](int ch) {
@@ -361,7 +360,7 @@ static void PrintJavaScriptStack(JSONWriter* writer,
               }));
       writer->json_element(l);
       ss = ss.substr(line + 1);
-      line = ss.find("\n");
+      line = ss.find('\n');
     }
   }
   writer->json_arrayend();

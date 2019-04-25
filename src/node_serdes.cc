@@ -192,9 +192,8 @@ void SerializerContext::SetTreatArrayBufferViewsAsHostObjects(
   SerializerContext* ctx;
   ASSIGN_OR_RETURN_UNWRAP(&ctx, args.Holder());
 
-  Maybe<bool> value = args[0]->BooleanValue(ctx->env()->context());
-  if (value.IsNothing()) return;
-  ctx->serializer_.SetTreatArrayBufferViewsAsHostObjects(value.FromJust());
+  bool value = args[0]->BooleanValue(ctx->env()->isolate());
+  ctx->serializer_.SetTreatArrayBufferViewsAsHostObjects(value);
 }
 
 void SerializerContext::ReleaseBuffer(const FunctionCallbackInfo<Value>& args) {
@@ -285,7 +284,7 @@ DeserializerContext::DeserializerContext(Environment* env,
     data_(reinterpret_cast<const uint8_t*>(Buffer::Data(buffer))),
     length_(Buffer::Length(buffer)),
     deserializer_(env->isolate(), data_, length_, this) {
-  object()->Set(env->context(), env->buffer_string(), buffer).FromJust();
+  object()->Set(env->context(), env->buffer_string(), buffer).Check();
   deserializer_.SetExpectInlineWasm(true);
 
   MakeWeak();
@@ -300,6 +299,7 @@ MaybeLocal<Object> DeserializerContext::ReadHostObject(Isolate* isolate) {
     return ValueDeserializer::Delegate::ReadHostObject(isolate);
   }
 
+  Isolate::AllowJavascriptExecutionScope allow_js(isolate);
   MaybeLocal<Value> ret =
       read_host_object.As<Function>()->Call(env()->context(),
                                             object(),
@@ -471,7 +471,7 @@ void Initialize(Local<Object> target,
   ser->SetClassName(serializerString);
   target->Set(env->context(),
               serializerString,
-              ser->GetFunction(env->context()).ToLocalChecked()).FromJust();
+              ser->GetFunction(env->context()).ToLocalChecked()).Check();
 
   Local<FunctionTemplate> des =
       env->NewFunctionTemplate(DeserializerContext::New);
@@ -496,7 +496,7 @@ void Initialize(Local<Object> target,
   des->SetClassName(deserializerString);
   target->Set(env->context(),
               deserializerString,
-              des->GetFunction(env->context()).ToLocalChecked()).FromJust();
+              des->GetFunction(env->context()).ToLocalChecked()).Check();
 }
 
 }  // anonymous namespace

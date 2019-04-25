@@ -299,7 +299,9 @@ bool SafeGetenv(const char* key, std::string* text, Environment* env = nullptr);
 }  // namespace credentials
 
 void DefineZlibConstants(v8::Local<v8::Object> target);
-
+v8::Isolate* NewIsolate(v8::Isolate::CreateParams* params,
+                        uv_loop_t* event_loop,
+                        MultiIsolatePlatform* platform);
 v8::MaybeLocal<v8::Value> RunBootstrapping(Environment* env);
 v8::MaybeLocal<v8::Value> StartExecution(Environment* env,
                                          const char* main_script_id);
@@ -310,9 +312,23 @@ v8::MaybeLocal<v8::Value> ExecuteBootstrapper(
     std::vector<v8::Local<v8::String>>* parameters,
     std::vector<v8::Local<v8::Value>>* arguments);
 void MarkBootstrapComplete(const v8::FunctionCallbackInfo<v8::Value>& args);
+
+struct InitializationResult {
+  int exit_code = 0;
+  std::vector<std::string> args;
+  std::vector<std::string> exec_args;
+  bool early_return = false;
+};
+InitializationResult InitializeOncePerProcess(int argc, char** argv);
+void TearDownOncePerProcess();
+
+#if HAVE_INSPECTOR
 namespace profiler {
 void StartCoverageCollection(Environment* env);
+void StartCpuProfiling(Environment* env, const std::string& profile_name);
+void EndStartedProfilers(Environment* env);
 }
+#endif  // HAVE_INSPECTOR
 
 #ifdef _WIN32
 typedef SYSTEMTIME TIME_TYPE;
@@ -320,21 +336,25 @@ typedef SYSTEMTIME TIME_TYPE;
 typedef struct tm TIME_TYPE;
 #endif
 
+double GetCurrentTimeInMicroseconds();
+int WriteFileSync(const char* path, uv_buf_t buf);
+int WriteFileSync(v8::Isolate* isolate,
+                  const char* path,
+                  v8::Local<v8::String> string);
+
 class DiagnosticFilename {
  public:
   static void LocalTime(TIME_TYPE* tm_struct);
 
   DiagnosticFilename(Environment* env,
                      const char* prefix,
-                     const char* ext,
-                     int seq = -1) :
-      filename_(MakeFilename(env->thread_id(), prefix, ext, seq)) {}
+                     const char* ext) :
+      filename_(MakeFilename(env->thread_id(), prefix, ext)) {}
 
   DiagnosticFilename(uint64_t thread_id,
                      const char* prefix,
-                     const char* ext,
-                     int seq = -1) :
-      filename_(MakeFilename(thread_id, prefix, ext, seq)) {}
+                     const char* ext) :
+      filename_(MakeFilename(thread_id, prefix, ext)) {}
 
   const char* operator*() const { return filename_.c_str(); }
 
@@ -342,10 +362,26 @@ class DiagnosticFilename {
   static std::string MakeFilename(
       uint64_t thread_id,
       const char* prefix,
-      const char* ext,
-      int seq = -1);
+      const char* ext);
 
   std::string filename_;
+};
+
+class TraceEventScope {
+ public:
+  TraceEventScope(const char* category,
+                  const char* name,
+                  void* id) : category_(category), name_(name), id_(id) {
+    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(category_, name_, id_);
+  }
+  ~TraceEventScope() {
+    TRACE_EVENT_NESTABLE_ASYNC_END0(category_, name_, id_);
+  }
+
+ private:
+  const char* category_;
+  const char* name_;
+  void* id_;
 };
 
 }  // namespace node

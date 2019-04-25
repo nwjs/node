@@ -88,7 +88,7 @@ assert.strictEqual(
   true
 );
 
-// test base64 encoding
+// Test base64 encoding
 assert.strictEqual(
   Buffer.from(b.toString('base64'), 'base64')
     .includes('ZA==', 0, 'base64'),
@@ -112,7 +112,7 @@ assert.strictEqual(
   true
 );
 
-// test latin1 encoding
+// Test latin1 encoding
 assert.strictEqual(
   Buffer.from(b.toString('latin1'), 'latin1')
     .includes('d', 0, 'latin1'),
@@ -124,7 +124,7 @@ assert.strictEqual(
   true
 );
 
-// test binary encoding
+// Test binary encoding
 assert.strictEqual(
   Buffer.from(b.toString('binary'), 'binary')
     .includes('d', 0, 'binary'),
@@ -214,8 +214,9 @@ assert(asciiString.includes('leb', 0));
 
 // Search in string containing many non-ASCII chars.
 const allCodePoints = [];
-for (let i = 0; i < 65536; i++) allCodePoints[i] = i;
-const allCharsString = String.fromCharCode.apply(String, allCodePoints);
+for (let i = 0; i < 65534; i++) allCodePoints[i] = i;
+const allCharsString = String.fromCharCode.apply(String, allCodePoints) +
+    String.fromCharCode(65534, 65535);
 const allCharsBufferUtf8 = Buffer.from(allCharsString);
 const allCharsBufferUcs2 = Buffer.from(allCharsString, 'ucs2');
 

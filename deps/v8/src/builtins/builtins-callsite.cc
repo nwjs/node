@@ -5,6 +5,7 @@
 #include "src/builtins/builtins-utils-inl.h"
 #include "src/builtins/builtins.h"
 #include "src/counters.h"
+#include "src/heap/heap-inl.h"  // For ToBoolean.
 #include "src/objects-inl.h"
 #include "src/objects/frame-array-inl.h"
 
@@ -24,7 +25,7 @@ namespace internal {
 
 namespace {
 
-Object* PositiveNumberOrNull(int value, Isolate* isolate) {
+Object PositiveNumberOrNull(int value, Isolate* isolate) {
   if (value >= 0) return *isolate->factory()->NewNumberFromInt(value);
   return ReadOnlyRoots(isolate).null_value();
 }
@@ -110,6 +111,14 @@ BUILTIN(CallSitePrototypeGetPosition) {
   return Smi::FromInt(it.Frame()->GetPosition());
 }
 
+BUILTIN(CallSitePrototypeGetPromiseIndex) {
+  HandleScope scope(isolate);
+  CHECK_CALLSITE(recv, "getPromiseIndex");
+  FrameArrayIterator it(isolate, GetFrameArray(isolate, recv),
+                        GetFrameIndex(isolate, recv));
+  return PositiveNumberOrNull(it.Frame()->GetPromiseIndex(), isolate);
+}
+
 BUILTIN(CallSitePrototypeGetScriptNameOrSourceURL) {
   HandleScope scope(isolate);
   CHECK_CALLSITE(recv, "getScriptNameOrSourceUrl");
@@ -137,6 +146,14 @@ BUILTIN(CallSitePrototypeGetTypeName) {
   return *it.Frame()->GetTypeName();
 }
 
+BUILTIN(CallSitePrototypeIsAsync) {
+  HandleScope scope(isolate);
+  CHECK_CALLSITE(recv, "isAsync");
+  FrameArrayIterator it(isolate, GetFrameArray(isolate, recv),
+                        GetFrameIndex(isolate, recv));
+  return isolate->heap()->ToBoolean(it.Frame()->IsAsync());
+}
+
 BUILTIN(CallSitePrototypeIsConstructor) {
   HandleScope scope(isolate);
   CHECK_CALLSITE(recv, "isConstructor");
@@ -159,6 +176,14 @@ BUILTIN(CallSitePrototypeIsNative) {
   FrameArrayIterator it(isolate, GetFrameArray(isolate, recv),
                         GetFrameIndex(isolate, recv));
   return isolate->heap()->ToBoolean(it.Frame()->IsNative());
+}
+
+BUILTIN(CallSitePrototypeIsPromiseAll) {
+  HandleScope scope(isolate);
+  CHECK_CALLSITE(recv, "isPromiseAll");
+  FrameArrayIterator it(isolate, GetFrameArray(isolate, recv),
+                        GetFrameIndex(isolate, recv));
+  return isolate->heap()->ToBoolean(it.Frame()->IsPromiseAll());
 }
 
 BUILTIN(CallSitePrototypeIsToplevel) {

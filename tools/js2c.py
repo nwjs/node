@@ -34,17 +34,10 @@
 import os
 import re
 import sys
-import string
-import hashlib
-
-try:
-    xrange          # Python 2
-except NameError:
-    xrange = range  # Python 3
 
 
 def ToCArray(elements, step=10):
-  slices = (elements[i:i+step] for i in xrange(0, len(elements), step))
+  slices = (elements[i:i+step] for i in range(0, len(elements), step))
   slices = map(lambda s: ','.join(str(x) for x in s), slices)
   return ',\n'.join(slices)
 
@@ -149,7 +142,8 @@ def ReadMacros(lines):
     hash = line.find('#')
     if hash != -1: line = line[:hash]
     line = line.strip()
-    if len(line) is 0: continue
+    if len(line) == 0:
+      continue
     const_match = CONST_PATTERN.match(line)
     if const_match:
       name = const_match.group(1)
@@ -159,14 +153,14 @@ def ReadMacros(lines):
       macro_match = MACRO_PATTERN.match(line)
       if macro_match:
         name = macro_match.group(1)
-        args = map(string.strip, macro_match.group(2).split(','))
+        args = [s.strip() for s in macro_match.group(2).split(',')]
         body = macro_match.group(3).strip()
         macros[name] = TextMacro(args, body)
       else:
         python_match = PYTHON_MACRO_PATTERN.match(line)
         if python_match:
           name = python_match.group(1)
-          args = map(string.strip, python_match.group(2).split(','))
+          args = [s.strip() for s in python_match.group(2).split(',')]
           body = python_match.group(3).strip()
           fun = eval("lambda " + ",".join(args) + ': ' + body)
           macros[name] = PythonMacro(args, fun)
@@ -214,14 +208,6 @@ source_.emplace(
 );
 """
 
-DEPRECATED_DEPS = """\
-'use strict';
-process.emitWarning(
-  'Requiring Node.js-bundled \\'{module}\\' module is deprecated. Please ' +
-  'install the necessary module locally.', 'DeprecationWarning', 'DEP0084');
-module.exports = require('internal/deps/{module}');
-"""
-
 def JS2C(source, target):
   modules = []
   consts = {}
@@ -245,7 +231,7 @@ def JS2C(source, target):
     # Treat non-ASCII as UTF-8 and convert it to UTF-16.
     if any(ord(c) > 127 for c in source):
       source = map(ord, source.decode('utf-8').encode('utf-16be'))
-      source = [source[i] * 256 + source[i+1] for i in xrange(0, len(source), 2)]
+      source = [source[i] * 256 + source[i+1] for i in range(0, len(source), 2)]
       source = ToCArray(source)
       return TWO_BYTE_STRING.format(var=var, data=source)
     else:
@@ -265,15 +251,11 @@ def JS2C(source, target):
     lines = ExpandConstants(lines, consts)
     lines = ExpandMacros(lines, macros)
 
-    deprecated_deps = None
-
     # On Windows, "./foo.bar" in the .gyp file is passed as "foo.bar"
     # so don't assume there is always a slash in the file path.
     if '/' in name or '\\' in name:
       split = re.split('/|\\\\', name)
       if split[0] == 'deps':
-        if split[1] == 'node-inspect' or split[1] == 'v8':
-          deprecated_deps = split[1:]
         split = ['internal'] + split
       else:
         split = split[1:]
@@ -292,12 +274,6 @@ def JS2C(source, target):
       definitions.append(definition)
     else:
       AddModule(name.split('.', 1)[0], lines)
-
-    # Add deprecated aliases for deps without 'deps/'
-    if deprecated_deps is not None:
-      module = '/'.join(deprecated_deps).split('.', 1)[0]
-      source = DEPRECATED_DEPS.format(module=module)
-      AddModule(module, source)
 
   # Emit result
   output = open(str(target[0]), "w")

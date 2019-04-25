@@ -4,7 +4,6 @@
 
 // Flags: --no-wasm-disable-structured-cloning
 
-load("test/mjsunit/wasm/wasm-constants.js");
 load("test/mjsunit/wasm/wasm-module-builder.js");
 
 (function TestPostModule() {
@@ -31,7 +30,7 @@ load("test/mjsunit/wasm/wasm-module-builder.js");
   Realm.shared = { m:module, s:workerScript };
 
   let realmScript = `
-    let worker = new Worker(Realm.shared.s);
+    let worker = new Worker(Realm.shared.s, {type: 'string'});
     worker.postMessage(Realm.shared.m);
     let message = worker.getMessage();
     worker.terminate();

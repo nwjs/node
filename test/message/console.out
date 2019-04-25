@@ -1,5 +1,4 @@
 Trace: foo
-    at Console.trace (*)
     at Object.<anonymous> (*console.js:*:*)
     at *
     at *

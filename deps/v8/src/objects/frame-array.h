@@ -25,20 +25,22 @@ class Handle;
   V(Function, JSFunction)             \
   V(Code, AbstractCode)               \
   V(Offset, Smi)                      \
-  V(Flags, Smi)
+  V(Flags, Smi)                       \
+  V(Parameters, FixedArray)
 
 // Container object for data collected during simple stack trace captures.
 class FrameArray : public FixedArray {
  public:
 #define DECL_FRAME_ARRAY_ACCESSORS(name, type) \
-  inline type* name(int frame_ix) const;       \
-  inline void Set##name(int frame_ix, type* value);
+  inline type name(int frame_ix) const;        \
+  inline void Set##name(int frame_ix, type value);
   FRAME_ARRAY_FIELD_LIST(DECL_FRAME_ARRAY_ACCESSORS)
 #undef DECL_FRAME_ARRAY_ACCESSORS
 
   inline bool IsWasmFrame(int frame_ix) const;
   inline bool IsWasmInterpretedFrame(int frame_ix) const;
   inline bool IsAsmJsWasmFrame(int frame_ix) const;
+  inline bool IsAnyWasmFrame(int frame_ix) const;
   inline int FrameCount() const;
 
   void ShrinkToFit(Isolate* isolate);
@@ -50,14 +52,17 @@ class FrameArray : public FixedArray {
     kIsAsmJsWasmFrame = 1 << 2,
     kIsStrict = 1 << 3,
     kIsConstructor = 1 << 4,
-    kAsmJsAtNumberConversion = 1 << 5
+    kAsmJsAtNumberConversion = 1 << 5,
+    kIsAsync = 1 << 6,
+    kIsPromiseAll = 1 << 7
   };
 
   static Handle<FrameArray> AppendJSFrame(Handle<FrameArray> in,
                                           Handle<Object> receiver,
                                           Handle<JSFunction> function,
                                           Handle<AbstractCode> code, int offset,
-                                          int flags);
+                                          int flags,
+                                          Handle<FixedArray> parameters);
   static Handle<FrameArray> AppendWasmFrame(
       Handle<FrameArray> in, Handle<WasmInstanceObject> wasm_instance,
       int wasm_function_index, wasm::WasmCode* code, int offset, int flags);
@@ -84,7 +89,9 @@ class FrameArray : public FixedArray {
 
   static const int kFlagsOffset = 4;
 
-  static const int kElementsPerFrame = 5;
+  static const int kParametersOffset = 5;
+
+  static const int kElementsPerFrame = 6;
 
   // Array layout indices.
 
@@ -99,7 +106,7 @@ class FrameArray : public FixedArray {
                                         Handle<FrameArray> array, int length);
 
   friend class Factory;
-  DISALLOW_IMPLICIT_CONSTRUCTORS(FrameArray);
+  OBJECT_CONSTRUCTORS(FrameArray, FixedArray);
 };
 
 }  // namespace internal

@@ -9,6 +9,7 @@
 
 #include "src/base/macros.h"
 #include "src/torque/ast.h"
+#include "src/torque/cfg.h"
 #include "src/torque/file-visitor.h"
 #include "src/torque/global-context.h"
 #include "src/torque/types.h"
@@ -18,96 +19,299 @@ namespace v8 {
 namespace internal {
 namespace torque {
 
-struct LocationReference {
-  LocationReference(Value* value, VisitResult base, VisitResult index)
-      : value(value), base(base), index(index) {}
-  Value* value;
-  VisitResult base;
-  VisitResult index;
+// LocationReference is the representation of an l-value, so a value that might
+// allow for assignment. For uniformity, this class can also represent
+// unassignable temporaries. Assignable values fall in two categories:
+//   - stack ranges that represent mutable variables, including structs.
+//   - field or element access expressions that generate operator calls.
+class LocationReference {
+ public:
+  // An assignable stack range.
+  static LocationReference VariableAccess(VisitResult variable) {
+    DCHECK(variable.IsOnStack());
+    LocationReference result;
+    result.variable_ = std::move(variable);
+    return result;
+  }
+  // An unassignable value. {description} is only used for error messages.
+  static LocationReference Temporary(VisitResult temporary,
+                                     std::string description) {
+    LocationReference result;
+    result.temporary_ = std::move(temporary);
+    result.temporary_description_ = std::move(description);
+    return result;
+  }
+  static LocationReference ArrayAccess(VisitResult base, VisitResult offset) {
+    LocationReference result;
+    result.eval_function_ = std::string{"[]"};
+    result.assign_function_ = std::string{"[]="};
+    result.call_arguments_ = {base, offset};
+    return result;
+  }
+  static LocationReference FieldAccess(VisitResult object,
+                                       std::string fieldname) {
+    LocationReference result;
+    result.eval_function_ = "." + fieldname;
+    result.assign_function_ = "." + fieldname + "=";
+    result.call_arguments_ = {object};
+    result.index_field_ = base::nullopt;
+    return result;
+  }
+  static LocationReference IndexedFieldIndexedAccess(
+      const LocationReference& indexed_field, VisitResult index) {
+    LocationReference result;
+    DCHECK(indexed_field.IsIndexedFieldAccess());
+    std::string fieldname = *indexed_field.index_field_;
+    result.eval_function_ = "." + fieldname + "[]";
+    result.assign_function_ = "." + fieldname + "[]=";
+    result.call_arguments_ = indexed_field.call_arguments_;
+    result.call_arguments_.push_back(index);
+    result.index_field_ = fieldname;
+    return result;
+  }
+  static LocationReference IndexedFieldAccess(VisitResult object,
+                                              std::string fieldname) {
+    LocationReference result;
+    result.call_arguments_ = {object};
+    result.index_field_ = fieldname;
+    return result;
+  }
+
+  bool IsConst() const { return temporary_.has_value(); }
+
+  bool IsVariableAccess() const { return variable_.has_value(); }
+  const VisitResult& variable() const {
+    DCHECK(IsVariableAccess());
+    return *variable_;
+  }
+  bool IsTemporary() const { return temporary_.has_value(); }
+  const VisitResult& temporary() const {
+    DCHECK(IsTemporary());
+    return *temporary_;
+  }
+
+  const VisitResult& GetVisitResult() const {
+    if (IsVariableAccess()) return variable();
+    DCHECK(IsTemporary());
+    return temporary();
+  }
+
+  // For error reporting.
+  const std::string& temporary_description() const {
+    DCHECK(IsTemporary());
+    return *temporary_description_;
+  }
+
+  bool IsArrayField() const { return index_field_.has_value(); }
+  bool IsIndexedFieldAccess() const {
+    return IsArrayField() && !IsCallAccess();
+  }
+  bool IsIndexedFieldIndexedAccess() const {
+    return IsArrayField() && IsCallAccess();
+  }
+  bool IsCallAccess() const {
+    bool is_call_access = eval_function_.has_value();
+    DCHECK_EQ(is_call_access, assign_function_.has_value());
+    return is_call_access;
+  }
+  const VisitResultVector& call_arguments() const {
+    DCHECK(IsCallAccess());
+    return call_arguments_;
+  }
+  const std::string& eval_function() const {
+    DCHECK(IsCallAccess());
+    return *eval_function_;
+  }
+  const std::string& assign_function() const {
+    DCHECK(IsCallAccess());
+    return *assign_function_;
+  }
+
+ private:
+  base::Optional<VisitResult> variable_;
+  base::Optional<VisitResult> temporary_;
+  base::Optional<std::string> temporary_description_;
+  base::Optional<std::string> eval_function_;
+  base::Optional<std::string> assign_function_;
+  VisitResultVector call_arguments_;
+  base::Optional<std::string> index_field_;
+
+  LocationReference() = default;
 };
+
+struct InitializerResults {
+  std::vector<VisitResult> results;
+};
+
+template <class T>
+class Binding;
+
+template <class T>
+class BindingsManager {
+ public:
+  base::Optional<Binding<T>*> TryLookup(const std::string& name) {
+    return current_bindings_[name];
+  }
+
+ private:
+  friend class Binding<T>;
+  std::unordered_map<std::string, base::Optional<Binding<T>*>>
+      current_bindings_;
+};
+
+template <class T>
+class Binding : public T {
+ public:
+  template <class... Args>
+  Binding(BindingsManager<T>* manager, const std::string& name, Args&&... args)
+      : T(std::forward<Args>(args)...),
+        manager_(manager),
+        name_(name),
+        previous_binding_(this) {
+    std::swap(previous_binding_, manager_->current_bindings_[name]);
+  }
+  template <class... Args>
+  Binding(BindingsManager<T>* manager, const Identifier* name, Args&&... args)
+      : Binding(manager, name->value, std::forward<Args>(args)...) {
+    declaration_position_ = name->pos;
+  }
+  ~Binding() { manager_->current_bindings_[name_] = previous_binding_; }
+
+  const std::string& name() const { return name_; }
+  SourcePosition declaration_position() const { return declaration_position_; }
+
+ private:
+  BindingsManager<T>* manager_;
+  const std::string name_;
+  base::Optional<Binding*> previous_binding_;
+  SourcePosition declaration_position_ = CurrentSourcePosition::Get();
+  DISALLOW_COPY_AND_ASSIGN(Binding);
+};
+
+template <class T>
+class BlockBindings {
+ public:
+  explicit BlockBindings(BindingsManager<T>* manager) : manager_(manager) {}
+  void Add(std::string name, T value) {
+    ReportErrorIfAlreadyBound(name);
+    bindings_.push_back(base::make_unique<Binding<T>>(manager_, std::move(name),
+                                                      std::move(value)));
+  }
+
+  void Add(const Identifier* name, T value) {
+    ReportErrorIfAlreadyBound(name->value);
+    bindings_.push_back(
+        base::make_unique<Binding<T>>(manager_, name, std::move(value)));
+  }
+
+  std::vector<Binding<T>*> bindings() const {
+    std::vector<Binding<T>*> result;
+    result.reserve(bindings_.size());
+    for (auto& b : bindings_) {
+      result.push_back(b.get());
+    }
+    return result;
+  }
+
+ private:
+  void ReportErrorIfAlreadyBound(const std::string& name) {
+    for (const auto& binding : bindings_) {
+      if (binding->name() == name) {
+        ReportError(
+            "redeclaration of name \"", name,
+            "\" in the same block is illegal, previous declaration at: ",
+            binding->declaration_position());
+      }
+    }
+  }
+
+  BindingsManager<T>* manager_;
+  std::vector<std::unique_ptr<Binding<T>>> bindings_;
+};
+
+struct LocalValue {
+  bool is_const;
+  VisitResult value;
+};
+
+struct LocalLabel {
+  Block* block;
+  std::vector<const Type*> parameter_types;
+
+  explicit LocalLabel(Block* block,
+                      std::vector<const Type*> parameter_types = {})
+      : block(block), parameter_types(std::move(parameter_types)) {}
+};
+
+struct Arguments {
+  VisitResultVector parameters;
+  std::vector<Binding<LocalLabel>*> labels;
+};
+
+// Determine if a callable should be considered as an overload.
+bool IsCompatibleSignature(const Signature& sig, const TypeVector& types,
+                           size_t label_count);
 
 class ImplementationVisitor : public FileVisitor {
  public:
-  explicit ImplementationVisitor(GlobalContext& global_context)
-      : FileVisitor(global_context), indent_(0), next_temp_(0) {}
-
-  void Visit(Ast* ast) { Visit(ast->default_module()); }
+  void GenerateBuiltinDefinitions(std::string& file_name);
+  void GenerateClassDefinitions(std::string& file_name);
 
   VisitResult Visit(Expression* expr);
   const Type* Visit(Statement* stmt);
-  void Visit(Declaration* decl);
 
+  InitializerResults VisitInitializerResults(
+      const std::vector<Expression*>& expressions);
+
+  size_t InitializeAggregateHelper(
+      const AggregateType* aggregate_type, VisitResult allocate_result,
+      const InitializerResults& initializer_results);
+
+  void InitializeAggregate(const AggregateType* aggregate_type,
+                           VisitResult allocate_result,
+                           const InitializerResults& initializer_results);
+
+  VisitResult TemporaryUninitializedStruct(const StructType* struct_type,
+                                           const std::string& reason);
   VisitResult Visit(StructExpression* decl);
 
-  LocationReference GetLocationReference(LocationExpression* location);
-  LocationReference GetLocationReference(IdentifierExpression* expr) {
-    return LocationReference(declarations()->LookupValue(expr->name), {}, {});
-  }
+  LocationReference GetLocationReference(Expression* location);
+  LocationReference GetLocationReference(IdentifierExpression* expr);
   LocationReference GetLocationReference(FieldAccessExpression* expr);
-  LocationReference GetLocationReference(ElementAccessExpression* expr) {
-    return LocationReference({}, Visit(expr->array), Visit(expr->index));
-  }
+  LocationReference GetLocationReference(ElementAccessExpression* expr);
 
-  std::string RValueFlattenStructs(VisitResult result);
-
-  VisitResult GenerateFetchFromLocation(LocationReference reference) {
-    const Value* value = reference.value;
-    return VisitResult(value->type(), value);
-  }
-  VisitResult GenerateFetchFromLocation(LocationExpression* location,
-                                        LocationReference reference);
-  VisitResult GenerateFetchFromLocation(IdentifierExpression* expr,
-                                        LocationReference reference) {
-    return GenerateFetchFromLocation(reference);
-  }
-  VisitResult GenerateFetchFromLocation(FieldAccessExpression* expr,
-                                        LocationReference reference);
-  VisitResult GenerateFetchFromLocation(ElementAccessExpression* expr,
-                                        LocationReference reference) {
-    Arguments arguments;
-    arguments.parameters = {reference.base, reference.index};
-    return GenerateCall("[]", arguments);
-  }
+  VisitResult GenerateFetchFromLocation(const LocationReference& reference);
 
   VisitResult GetBuiltinCode(Builtin* builtin);
 
   VisitResult Visit(IdentifierExpression* expr);
   VisitResult Visit(FieldAccessExpression* expr) {
-    return GenerateFetchFromLocation(expr, GetLocationReference(expr));
+    StackScope scope(this);
+    return scope.Yield(GenerateFetchFromLocation(GetLocationReference(expr)));
   }
   VisitResult Visit(ElementAccessExpression* expr) {
-    return GenerateFetchFromLocation(expr, GetLocationReference(expr));
+    StackScope scope(this);
+    return scope.Yield(GenerateFetchFromLocation(GetLocationReference(expr)));
   }
 
-  void Visit(ModuleDeclaration* decl);
-  void Visit(DefaultModuleDeclaration* decl) {
-    Visit(implicit_cast<ModuleDeclaration*>(decl));
-  }
-  void Visit(ExplicitModuleDeclaration* decl) {
-    Visit(implicit_cast<ModuleDeclaration*>(decl));
-  }
-  void Visit(TypeDeclaration* decl) {}
-  void Visit(TypeAliasDeclaration* decl) {}
-  void Visit(ExternConstDeclaration* decl) {}
-  void Visit(StructDeclaration* decl);
-  void Visit(StandardDeclaration* decl);
-  void Visit(GenericDeclaration* decl) {}
-  void Visit(SpecializationDeclaration* decl);
-
-  void Visit(TorqueMacroDeclaration* decl, const Signature& signature,
-             Statement* body);
-  void Visit(TorqueBuiltinDeclaration* decl, const Signature& signature,
-             Statement* body);
-  void Visit(ExternalMacroDeclaration* decl, const Signature& signature,
-             Statement* body) {}
-  void Visit(ExternalBuiltinDeclaration* decl, const Signature& signature,
-             Statement* body) {}
-  void Visit(ExternalRuntimeDeclaration* decl, const Signature& signature,
-             Statement* body) {}
-  void Visit(CallableNode* decl, const Signature& signature, Statement* body);
-  void Visit(ConstDeclaration* decl);
+  void VisitAllDeclarables();
+  void Visit(Declarable* delarable);
+  void Visit(TypeAlias* decl);
+  VisitResult InlineMacro(Macro* macro,
+                          base::Optional<LocationReference> this_reference,
+                          const std::vector<VisitResult>& arguments,
+                          const std::vector<Block*> label_blocks);
+  void VisitMacroCommon(Macro* macro);
+  void Visit(Macro* macro);
+  void Visit(Method* macro);
+  void Visit(Builtin* builtin);
+  void Visit(NamespaceConstant* decl);
 
   VisitResult Visit(CallExpression* expr, bool is_tail = false);
+  VisitResult Visit(CallMethodExpression* expr);
+  VisitResult Visit(IntrinsicCallExpression* intrinsic);
+  VisitResult Visit(LoadObjectFieldExpression* expr);
+  VisitResult Visit(StoreObjectFieldExpression* expr);
   const Type* Visit(TailCallStatement* stmt);
 
   VisitResult Visit(ConditionalExpression* expr);
@@ -120,8 +324,10 @@ class ImplementationVisitor : public FileVisitor {
   VisitResult Visit(StringLiteralExpression* expr);
   VisitResult Visit(NumberLiteralExpression* expr);
   VisitResult Visit(AssumeTypeImpossibleExpression* expr);
+  VisitResult Visit(TryLabelExpression* expr);
+  VisitResult Visit(StatementExpression* expr);
+  VisitResult Visit(NewExpression* expr);
 
-  const Type* Visit(TryLabelStatement* stmt);
   const Type* Visit(ReturnStatement* stmt);
   const Type* Visit(GotoStatement* stmt);
   const Type* Visit(IfStatement* stmt);
@@ -130,98 +336,172 @@ class ImplementationVisitor : public FileVisitor {
   const Type* Visit(ContinueStatement* stmt);
   const Type* Visit(ForLoopStatement* stmt);
   const Type* Visit(VarDeclarationStatement* stmt);
+  const Type* Visit(VarDeclarationStatement* stmt,
+                    BlockBindings<LocalValue>* block_bindings);
   const Type* Visit(ForOfLoopStatement* stmt);
   const Type* Visit(BlockStatement* block);
   const Type* Visit(ExpressionStatement* stmt);
   const Type* Visit(DebugStatement* stmt);
   const Type* Visit(AssertStatement* stmt);
 
-  void BeginModuleFile(Module* module);
-  void EndModuleFile(Module* module);
+  void BeginNamespaceFile(Namespace* nspace);
+  void EndNamespaceFile(Namespace* nspace);
 
-  void GenerateImplementation(const std::string& dir, Module* module);
+  void GenerateImplementation(const std::string& dir, Namespace* nspace);
+
+  DECLARE_CONTEXTUAL_VARIABLE(ValueBindingsManager,
+                              BindingsManager<LocalValue>);
+  DECLARE_CONTEXTUAL_VARIABLE(LabelBindingsManager,
+                              BindingsManager<LocalLabel>);
+  DECLARE_CONTEXTUAL_VARIABLE(CurrentCallable, Callable*);
+  DECLARE_CONTEXTUAL_VARIABLE(CurrentReturnValue, base::Optional<VisitResult>);
+
+  // A BindingsManagersScope has to be active for local bindings to be created.
+  // Shadowing an existing BindingsManagersScope by creating a new one hides all
+  // existing bindings while the additional BindingsManagersScope is active.
+  struct BindingsManagersScope {
+    ValueBindingsManager::Scope value_bindings_manager;
+    LabelBindingsManager::Scope label_bindings_manager;
+  };
 
  private:
-  std::string GetBaseAssemblerName(Module* module);
+  base::Optional<Block*> GetCatchBlock();
+  void GenerateCatchBlock(base::Optional<Block*> catch_block);
 
-  std::string GetDSLAssemblerName(Module* module);
-
-  void GenerateIndent();
-
-  class ScopedIndent {
+  // {StackScope} records the stack height at creation time and reconstructs it
+  // when being destructed by emitting a {DeleteRangeInstruction}, except for
+  // the slots protected by {StackScope::Yield}. Calling {Yield(v)} deletes all
+  // slots above the initial stack height except for the slots of {v}, which are
+  // moved to form the only slots above the initial height and marks them to
+  // survive destruction of the {StackScope}. A typical pattern is the
+  // following:
+  //
+  // VisitResult result;
+  // {
+  //   StackScope stack_scope(this);
+  //   // ... create temporary slots ...
+  //   result = stack_scope.Yield(surviving_slots);
+  // }
+  class StackScope {
    public:
-    explicit ScopedIndent(ImplementationVisitor* visitor, bool new_lines = true)
-        : new_lines_(new_lines), visitor_(visitor) {
-      if (new_lines) visitor->GenerateIndent();
-      visitor->source_out() << "{";
-      if (new_lines) visitor->source_out() << "\n";
-      visitor->indent_++;
+    explicit StackScope(ImplementationVisitor* visitor) : visitor_(visitor) {
+      base_ = visitor_->assembler().CurrentStack().AboveTop();
     }
-    ~ScopedIndent() {
-      visitor_->indent_--;
-      visitor_->GenerateIndent();
-      visitor_->source_out() << "}";
-      if (new_lines_) visitor_->source_out() << "\n";
+    VisitResult Yield(VisitResult result) {
+      DCHECK(!closed_);
+      closed_ = true;
+      if (!result.IsOnStack()) {
+        if (!visitor_->assembler().CurrentBlockIsComplete()) {
+          visitor_->assembler().DropTo(base_);
+        }
+        return result;
+      }
+      DCHECK_LE(base_, result.stack_range().begin());
+      DCHECK_LE(result.stack_range().end(),
+                visitor_->assembler().CurrentStack().AboveTop());
+      visitor_->assembler().DropTo(result.stack_range().end());
+      visitor_->assembler().DeleteRange(
+          StackRange{base_, result.stack_range().begin()});
+      base_ = visitor_->assembler().CurrentStack().AboveTop();
+      return VisitResult(result.type(), visitor_->assembler().TopRange(
+                                            result.stack_range().Size()));
+    }
+
+    void Close() {
+      DCHECK(!closed_);
+      closed_ = true;
+      if (!visitor_->assembler().CurrentBlockIsComplete()) {
+        visitor_->assembler().DropTo(base_);
+      }
+    }
+
+    ~StackScope() {
+      if (closed_) {
+        DCHECK_IMPLIES(
+            !visitor_->assembler().CurrentBlockIsComplete(),
+            base_ == visitor_->assembler().CurrentStack().AboveTop());
+      } else {
+        Close();
+      }
     }
 
    private:
-    bool new_lines_;
     ImplementationVisitor* visitor_;
+    BottomOffset base_;
+    bool closed_ = false;
   };
 
-  Callable* LookupCall(const std::string& name, const Arguments& arguments,
+  class BreakContinueActivator {
+   public:
+    BreakContinueActivator(Block* break_block, Block* continue_block)
+        : break_binding_{&LabelBindingsManager::Get(), "_break",
+                         LocalLabel{break_block}},
+          continue_binding_{&LabelBindingsManager::Get(), "_continue",
+                            LocalLabel{continue_block}} {}
+
+   private:
+    Binding<LocalLabel> break_binding_;
+    Binding<LocalLabel> continue_binding_;
+  };
+
+  base::Optional<Binding<LocalValue>*> TryLookupLocalValue(
+      const std::string& name);
+  base::Optional<Binding<LocalLabel>*> TryLookupLabel(const std::string& name);
+  Binding<LocalLabel>* LookupLabel(const std::string& name);
+  Block* LookupSimpleLabel(const std::string& name);
+  template <class Container>
+  Callable* LookupCallable(const QualifiedName& name,
+                           const Container& declaration_container,
+                           const TypeVector& types,
+                           const std::vector<Binding<LocalLabel>*>& labels,
+                           const TypeVector& specialization_types);
+
+  template <class Container>
+  Callable* LookupCallable(const QualifiedName& name,
+                           const Container& declaration_container,
+                           const Arguments& arguments,
+                           const TypeVector& specialization_types);
+
+  Method* LookupMethod(const std::string& name, LocationReference target,
+                       const Arguments& arguments,
                        const TypeVector& specialization_types);
-
-  bool GenerateChangedVarFromControlSplit(const Variable* v, bool first = true);
-
-  void GetFlattenedStructsVars(const Variable* base,
-                               std::set<const Variable*>* vars);
-
-  void GenerateChangedVarsFromControlSplit(AstNode* node);
 
   const Type* GetCommonType(const Type* left, const Type* right);
 
   VisitResult GenerateCopy(const VisitResult& to_copy);
 
-  void GenerateAssignToVariable(Variable* var, VisitResult value);
+  void GenerateAssignToLocation(const LocationReference& reference,
+                                const VisitResult& assignment_value);
 
-  void GenerateAssignToLocation(LocationExpression* location,
-                                const LocationReference& reference,
-                                VisitResult assignment_value);
+  void AddCallParameter(Callable* callable, VisitResult parameter,
+                        const Type* parameter_type,
+                        std::vector<VisitResult>* converted_arguments,
+                        StackRange* argument_range,
+                        std::vector<std::string>* constexpr_arguments);
 
-  void GenerateVariableDeclaration(const Variable* var);
-
-  Variable* GeneratePredeclaredVariableDeclaration(
-      const std::string& name,
-      const base::Optional<VisitResult>& initialization);
-
-  Variable* GenerateVariableDeclaration(
-      AstNode* node, const std::string& name, bool is_const,
-      const base::Optional<const Type*>& type,
-      const base::Optional<VisitResult>& initialization = {});
-
-  void GenerateParameter(const std::string& parameter_name);
-
-  void GenerateParameterList(const NameVector& list, size_t first = 0);
-
-  VisitResult GenerateCall(const std::string& callable_name,
+  VisitResult GenerateCall(Callable* callable,
+                           base::Optional<LocationReference> this_parameter,
                            Arguments parameters,
                            const TypeVector& specialization_types = {},
                            bool tail_call = false);
+  VisitResult GenerateCall(const QualifiedName& callable_name,
+                           Arguments parameters,
+                           const TypeVector& specialization_types = {},
+                           bool tail_call = false);
+  VisitResult GenerateCall(std::string callable_name, Arguments parameters,
+                           const TypeVector& specialization_types = {},
+                           bool tail_call = false) {
+    return GenerateCall(QualifiedName(std::move(callable_name)),
+                        std::move(parameters), specialization_types, tail_call);
+  }
   VisitResult GeneratePointerCall(Expression* callee,
                                   const Arguments& parameters, bool tail_call);
 
-  bool GenerateLabeledStatementBlocks(
-      const std::vector<Statement*>& blocks,
-      const std::vector<Label*>& statement_labels, Label* merge_label);
+  void GenerateBranch(const VisitResult& condition, Block* true_block,
+                      Block* false_block);
 
-  void GenerateBranch(const VisitResult& condition, Label* true_label,
-                      Label* false_label);
-
-  bool GenerateExpressionBranch(Expression* expression,
-                                const std::vector<Label*>& statement_labels,
-                                const std::vector<Statement*>& statement_blocks,
-                                Label* merge_label);
+  void GenerateExpressionBranch(Expression* expression, Block* true_block,
+                                Block* false_block);
 
   void GenerateMacroFunctionDeclaration(std::ostream& o,
                                         const std::string& macro_prefix,
@@ -235,32 +515,56 @@ class ImplementationVisitor : public FileVisitor {
   VisitResult GenerateImplicitConvert(const Type* destination_type,
                                       VisitResult source);
 
-  void Specialize(const SpecializationKey& key, CallableNode* callable,
-                  const CallableNodeSignature* signature,
-                  Statement* body) override {
-    Declarations::GenericScopeActivator scope(declarations(), key);
-    Visit(callable, MakeSignature(signature), body);
-  }
+  StackRange GenerateLabelGoto(LocalLabel* label,
+                               base::Optional<StackRange> arguments = {});
 
-  std::string NewTempVariable();
-
-  std::string GenerateNewTempVariable(const Type* type);
-
-  void GenerateLabelDefinition(Label* label, AstNode* node = nullptr);
-
-  void GenerateLabelBind(Label* label);
-
-  void GenerateLabelGoto(Label* label);
-
-  std::vector<Label*> LabelsFromIdentifiers(
+  std::vector<Binding<LocalLabel>*> LabelsFromIdentifiers(
       const std::vector<std::string>& names);
 
-  std::ostream& source_out() { return module_->source_stream(); }
+  StackRange LowerParameter(const Type* type, const std::string& parameter_name,
+                            Stack<std::string>* lowered_parameters);
 
-  std::ostream& header_out() { return module_->header_stream(); }
+  void LowerLabelParameter(const Type* type, const std::string& parameter_name,
+                           std::vector<std::string>* lowered_parameters);
 
-  size_t indent_;
-  int32_t next_temp_;
+  std::string ExternalLabelName(const std::string& label_name);
+  std::string ExternalLabelParameterName(const std::string& label_name,
+                                         size_t i);
+  std::string ExternalParameterName(const std::string& name);
+
+  std::ostream& source_out() {
+    Callable* callable = CurrentCallable::Get();
+    if (!callable || callable->ShouldGenerateExternalCode()) {
+      return CurrentNamespace()->source_stream();
+    } else {
+      return null_stream_;
+    }
+  }
+  std::ostream& header_out() {
+    Callable* callable = CurrentCallable::Get();
+    if (!callable || callable->ShouldGenerateExternalCode()) {
+      return CurrentNamespace()->header_stream();
+    } else {
+      return null_stream_;
+    }
+  }
+  CfgAssembler& assembler() { return *assembler_; }
+
+  void SetReturnValue(VisitResult return_value) {
+    base::Optional<VisitResult>& current_return_value =
+        CurrentReturnValue::Get();
+    DCHECK_IMPLIES(current_return_value, *current_return_value == return_value);
+    current_return_value = std::move(return_value);
+  }
+
+  VisitResult GetAndClearReturnValue() {
+    VisitResult return_value = *CurrentReturnValue::Get();
+    CurrentReturnValue::Get() = base::nullopt;
+    return return_value;
+  }
+
+  base::Optional<CfgAssembler> assembler_;
+  NullOStream null_stream_;
 };
 
 }  // namespace torque

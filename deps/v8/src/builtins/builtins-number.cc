@@ -111,6 +111,9 @@ BUILTIN(NumberPrototypeToFixed) {
 // ES6 section 20.1.3.4 Number.prototype.toLocaleString ( [ r1 [ , r2 ] ] )
 BUILTIN(NumberPrototypeToLocaleString) {
   HandleScope scope(isolate);
+
+  isolate->CountUsage(v8::Isolate::UseCounterFeature::kNumberToLocaleString);
+
   Handle<Object> value = args.at(0);
 
   // Unwrap the receiver {value}.
@@ -222,7 +225,7 @@ BUILTIN(NumberPrototypeToString) {
 
   // Fast case where the result is a one character string.
   if ((IsUint32Double(value_number) && value_number < radix_number) ||
-      value_number == -0.0) {
+      IsMinusZero(value_number)) {
     // Character array used for conversion.
     static const char kCharTable[] = "0123456789abcdefghijklmnopqrstuvwxyz";
     return *isolate->factory()->LookupSingleCharacterStringFromCode(

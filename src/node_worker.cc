@@ -84,12 +84,12 @@ Worker::Worker(Environment* env,
 
   object()->Set(env->context(),
                 env->message_port_string(),
-                parent_port_->object()).FromJust();
+                parent_port_->object()).Check();
 
   object()->Set(env->context(),
                 env->thread_id_string(),
                 Number::New(env->isolate(), static_cast<double>(thread_id_)))
-      .FromJust();
+      .Check();
 
 #if NODE_USE_V8_PLATFORM && HAVE_INSPECTOR
   inspector_parent_handle_ =
@@ -117,7 +117,7 @@ class WorkerThreadData {
  public:
   explicit WorkerThreadData(Worker* w)
     : w_(w),
-      array_buffer_allocator_(CreateArrayBufferAllocator()) {
+      array_buffer_allocator_(ArrayBufferAllocator::Create()) {
     CHECK_EQ(uv_loop_init(&loop_), 0);
 
     Isolate* isolate = NewIsolate(array_buffer_allocator_.get(), &loop_);
@@ -153,16 +153,20 @@ class WorkerThreadData {
 
     w_->platform_->CancelPendingDelayedTasks(isolate);
 
+    bool platform_finished = false;
+
     isolate_data_.reset();
+
+    w_->platform_->AddIsolateFinishedCallback(isolate, [](void* data) {
+      *static_cast<bool*>(data) = true;
+    }, &platform_finished);
     w_->platform_->UnregisterIsolate(isolate);
 
     isolate->Dispose();
 
-    // Need to run the loop twice more to close the platform's uv_async_t
-    // TODO(addaleax): It would be better for the platform itself to provide
-    // some kind of notification when it has fully cleaned up.
-    uv_run(&loop_, UV_RUN_ONCE);
-    uv_run(&loop_, UV_RUN_ONCE);
+    // Wait until the platform has cleaned up all relevant resources.
+    while (!platform_finished)
+      uv_run(&loop_, UV_RUN_ONCE);
 
     CheckedUvLoopClose(&loop_);
   }
@@ -170,8 +174,7 @@ class WorkerThreadData {
  private:
   Worker* const w_;
   uv_loop_t loop_;
-  DeleteFnPtr<ArrayBufferAllocator, FreeArrayBufferAllocator>
-    array_buffer_allocator_;
+  std::unique_ptr<ArrayBufferAllocator> array_buffer_allocator_;
   DeleteFnPtr<IsolateData, FreeIsolateData> isolate_data_;
 
   friend class Worker;
@@ -325,6 +328,9 @@ void Worker::Run() {
       if (exit_code_ == 0 && !stopped)
         exit_code_ = exit_code;
 
+#if HAVE_INSPECTOR
+      profiler::EndStartedProfilers(env_.get());
+#endif
       Debug(this, "Exiting thread for worker %llu with exit code %d",
             thread_id_, exit_code_);
     }
@@ -365,7 +371,7 @@ void Worker::OnThreadStopped() {
     // Reset the parent port as we're closing it now anyway.
     object()->Set(env()->context(),
                   env()->message_port_string(),
-                  Undefined(env()->isolate())).FromJust();
+                  Undefined(env()->isolate())).Check();
 
     Local<Value> code = Integer::New(env()->isolate(), exit_code_);
     MakeCallback(env()->onexit_string(), 1, &code);
@@ -452,13 +458,17 @@ void Worker::New(const FunctionCallbackInfo<Value>& args) {
     // The first argument is program name.
     invalid_args.erase(invalid_args.begin());
     if (errors.size() > 0 || invalid_args.size() > 0) {
-      v8::Local<v8::Value> error =
-          ToV8Value(env->context(),
-                    errors.size() > 0 ? errors : invalid_args)
-              .ToLocalChecked();
+      v8::Local<v8::Value> error;
+      if (!ToV8Value(env->context(),
+                     errors.size() > 0 ? errors : invalid_args)
+                         .ToLocal(&error)) {
+        return;
+      }
       Local<String> key =
           FIXED_ONE_BYTE_STRING(env->isolate(), "invalidExecArgv");
-      USE(args.This()->Set(env->context(), key, error).FromJust());
+      // Ignore the return value of Set() because exceptions bubble up to JS
+      // when we return anyway.
+      USE(args.This()->Set(env->context(), key, error));
       return;
     }
   }
@@ -595,7 +605,7 @@ void InitWorker(Local<Object> target,
     w->SetClassName(workerString);
     target->Set(env->context(),
                 workerString,
-                w->GetFunction(env->context()).ToLocalChecked()).FromJust();
+                w->GetFunction(env->context()).ToLocalChecked()).Check();
   }
 
   env->SetMethod(target, "getEnvMessagePort", GetEnvMessagePort);
@@ -604,19 +614,19 @@ void InitWorker(Local<Object> target,
       ->Set(env->context(),
             env->thread_id_string(),
             Number::New(env->isolate(), static_cast<double>(env->thread_id())))
-      .FromJust();
+      .Check();
 
   target
       ->Set(env->context(),
             FIXED_ONE_BYTE_STRING(env->isolate(), "isMainThread"),
             Boolean::New(env->isolate(), env->is_main_thread()))
-      .FromJust();
+      .Check();
 
   target
       ->Set(env->context(),
             FIXED_ONE_BYTE_STRING(env->isolate(), "ownsProcessState"),
             Boolean::New(env->isolate(), env->owns_process_state()))
-      .FromJust();
+      .Check();
 }
 
 }  // anonymous namespace

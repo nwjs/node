@@ -58,7 +58,7 @@ Node* ProxiesCodeStubAssembler::AllocateProxy(Node* target, Node* handler,
   Node* proxy = Allocate(JSProxy::kSize);
   StoreMapNoWriteBarrier(proxy, map.value());
   StoreObjectFieldRoot(proxy, JSProxy::kPropertiesOrHashOffset,
-                       Heap::kEmptyPropertyDictionaryRootIndex);
+                       RootIndex::kEmptyPropertyDictionary);
   StoreObjectFieldNoWriteBarrier(proxy, JSProxy::kTargetOffset, target);
   StoreObjectFieldNoWriteBarrier(proxy, JSProxy::kHandlerOffset, handler);
 
@@ -81,24 +81,24 @@ Node* ProxiesCodeStubAssembler::AllocateJSArrayForCodeStubArguments(
                                                   kAllowLargeObjectAllocation);
     elements.Bind(allocated_elements);
 
-    VARIABLE(index, MachineType::PointerRepresentation(),
-             IntPtrConstant(FixedArrayBase::kHeaderSize - kHeapObjectTag));
-    VariableList list({&index}, zone());
+    TVARIABLE(IntPtrT, offset,
+              IntPtrConstant(FixedArrayBase::kHeaderSize - kHeapObjectTag));
+    VariableList list({&offset}, zone());
 
     GotoIf(SmiGreaterThan(length, SmiConstant(FixedArray::kMaxRegularLength)),
            &if_large_object);
-    args.ForEach(list, [=, &index](Node* arg) {
+    args.ForEach(list, [=, &offset](Node* arg) {
       StoreNoWriteBarrier(MachineRepresentation::kTagged, allocated_elements,
-                          index.value(), arg);
-      Increment(&index, kPointerSize);
+                          offset.value(), arg);
+      Increment(&offset, kTaggedSize);
     });
     Goto(&allocate_js_array);
 
     BIND(&if_large_object);
     {
-      args.ForEach(list, [=, &index](Node* arg) {
-        Store(allocated_elements, index.value(), arg);
-        Increment(&index, kPointerSize);
+      args.ForEach(list, [=, &offset](Node* arg) {
+        Store(allocated_elements, offset.value(), arg);
+        Increment(&offset, kTaggedSize);
       });
       Goto(&allocate_js_array);
     }
@@ -113,10 +113,10 @@ Node* ProxiesCodeStubAssembler::AllocateJSArrayForCodeStubArguments(
   BIND(&allocate_js_array);
   // Allocate the result JSArray.
   Node* native_context = LoadNativeContext(context);
-  Node* array_map = LoadJSArrayElementsMap(PACKED_ELEMENTS, native_context);
-  Node* array = AllocateUninitializedJSArrayWithoutElements(array_map, length);
-  StoreObjectFieldNoWriteBarrier(array, JSObject::kElementsOffset,
-                                 elements.value());
+  TNode<Map> array_map =
+      LoadJSArrayElementsMap(PACKED_ELEMENTS, native_context);
+  TNode<JSArray> array =
+      AllocateJSArray(array_map, CAST(elements.value()), length);
 
   return array;
 }
@@ -124,7 +124,7 @@ Node* ProxiesCodeStubAssembler::AllocateJSArrayForCodeStubArguments(
 Node* ProxiesCodeStubAssembler::CreateProxyRevokeFunctionContext(
     Node* proxy, Node* native_context) {
   Node* const context = Allocate(FixedArray::SizeFor(kProxyContextLength));
-  StoreMapNoWriteBarrier(context, Heap::kFunctionContextMapRootIndex);
+  StoreMapNoWriteBarrier(context, RootIndex::kFunctionContextMap);
   InitializeFunctionContext(native_context, context, kProxyContextLength);
   StoreContextElementNoWriteBarrier(context, kProxySlot, proxy);
   return context;
@@ -230,9 +230,9 @@ TF_BUILTIN(ProxyRevocable, ProxiesCodeStubAssembler) {
       native_context, Context::PROXY_REVOCABLE_RESULT_MAP_INDEX);
   StoreMapNoWriteBarrier(result, result_map);
   StoreObjectFieldRoot(result, JSProxyRevocableResult::kPropertiesOrHashOffset,
-                       Heap::kEmptyFixedArrayRootIndex);
+                       RootIndex::kEmptyFixedArray);
   StoreObjectFieldRoot(result, JSProxyRevocableResult::kElementsOffset,
-                       Heap::kEmptyFixedArrayRootIndex);
+                       RootIndex::kEmptyFixedArray);
   StoreObjectFieldNoWriteBarrier(result, JSProxyRevocableResult::kProxyOffset,
                                  proxy);
   StoreObjectFieldNoWriteBarrier(result, JSProxyRevocableResult::kRevokeOffset,
@@ -545,7 +545,6 @@ TF_BUILTIN(ProxySetProperty, ProxiesCodeStubAssembler) {
   Node* name = Parameter(Descriptor::kName);
   Node* value = Parameter(Descriptor::kValue);
   Node* receiver = Parameter(Descriptor::kReceiverValue);
-  TNode<Smi> language_mode = CAST(Parameter(Descriptor::kLanguageMode));
 
   CSA_ASSERT(this, IsJSProxy(proxy));
 
@@ -596,13 +595,10 @@ TF_BUILTIN(ProxySetProperty, ProxiesCodeStubAssembler) {
 
   BIND(&failure);
   {
-    Label if_throw(this, Label::kDeferred);
-    Branch(SmiEqual(language_mode, SmiConstant(LanguageMode::kStrict)),
-           &if_throw, &success);
-
-    BIND(&if_throw);
-    ThrowTypeError(context, MessageTemplate::kProxyTrapReturnedFalsishFor,
-                   HeapConstant(set_string), name);
+    CallRuntime(Runtime::kThrowTypeErrorIfStrict, context,
+                SmiConstant(MessageTemplate::kProxyTrapReturnedFalsishFor),
+                HeapConstant(set_string), name);
+    Goto(&success);
   }
 
   // 12. Return true.
@@ -611,23 +607,18 @@ TF_BUILTIN(ProxySetProperty, ProxiesCodeStubAssembler) {
 
   BIND(&private_symbol);
   {
-    Label failure(this), throw_error(this, Label::kDeferred);
+    Label failure(this);
 
-    Branch(SmiEqual(language_mode, SmiConstant(LanguageMode::kStrict)),
-           &throw_error, &failure);
-
-    BIND(&failure);
+    CallRuntime(Runtime::kThrowTypeErrorIfStrict, context,
+                SmiConstant(MessageTemplate::kProxyPrivate));
     Return(UndefinedConstant());
-
-    BIND(&throw_error);
-    ThrowTypeError(context, MessageTemplate::kProxyPrivate);
   }
 
   BIND(&trap_undefined);
   {
     // 7.a. Return ? target.[[Set]](P, V, Receiver).
     CallRuntime(Runtime::kSetPropertyWithReceiver, context, target, name, value,
-                receiver, language_mode);
+                receiver);
     Return(value);
   }
 
@@ -645,6 +636,7 @@ void ProxiesCodeStubAssembler::CheckGetSetTrapResult(
 
   Label if_found_value(this), check_in_runtime(this, Label::kDeferred);
 
+  GotoIfNot(IsUniqueNameNoIndex(CAST(name)), &check_in_runtime);
   Node* instance_type = LoadInstanceType(target);
   TryGetOwnProperty(context, target, target, map, instance_type, name,
                     &if_found_value, &var_value, &var_details, &var_raw_value,
@@ -752,6 +744,7 @@ void ProxiesCodeStubAssembler::CheckHasTrapResult(Node* context, Node* target,
       throw_non_extensible(this, Label::kDeferred);
 
   // 9.a. Let targetDesc be ? target.[[GetOwnProperty]](P).
+  GotoIfNot(IsUniqueNameNoIndex(CAST(name)), if_bailout);
   Node* instance_type = LoadInstanceType(target);
   TryGetOwnProperty(context, target, target, target_map, instance_type, name,
                     &if_found_value, &var_value, &var_details, &var_raw_value,

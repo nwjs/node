@@ -5,7 +5,7 @@
 #ifndef V8_CCTEST_COMPILER_CODEGEN_TESTER_H_
 #define V8_CCTEST_COMPILER_CODEGEN_TESTER_H_
 
-#include "src/compiler/instruction-selector.h"
+#include "src/compiler/backend/instruction-selector.h"
 #include "src/compiler/pipeline.h"
 #include "src/compiler/raw-machine-assembler.h"
 #include "src/optimized-compilation-info.h"
@@ -39,13 +39,31 @@ class RawMachineAssemblerTester : public HandleAndZoneScope,
             InstructionSelector::SupportedMachineOperatorFlags(),
             InstructionSelector::AlignmentRequirements()) {}
 
-  virtual ~RawMachineAssemblerTester() {}
+  template <typename... ParamMachTypes>
+  RawMachineAssemblerTester(Code::Kind kind, ParamMachTypes... p)
+      : HandleAndZoneScope(),
+        CallHelper<ReturnType>(
+            main_isolate(),
+            CSignature::New(main_zone(), MachineTypeForC<ReturnType>(), p...)),
+        RawMachineAssembler(
+            main_isolate(), new (main_zone()) Graph(main_zone()),
+            Linkage::GetSimplifiedCDescriptor(
+                main_zone(),
+                CSignature::New(main_zone(), MachineTypeForC<ReturnType>(),
+                                p...),
+                true),
+            MachineType::PointerRepresentation(),
+            InstructionSelector::SupportedMachineOperatorFlags(),
+            InstructionSelector::AlignmentRequirements()),
+        kind_(kind) {}
 
-  void CheckNumber(double expected, Object* number) {
+  ~RawMachineAssemblerTester() override = default;
+
+  void CheckNumber(double expected, Object number) {
     CHECK(this->isolate()->factory()->NewNumber(expected)->SameValue(number));
   }
 
-  void CheckString(const char* expected, Object* string) {
+  void CheckString(const char* expected, Object string) {
     CHECK(
         this->isolate()->factory()->InternalizeUtf8String(expected)->SameValue(
             string));
@@ -59,13 +77,12 @@ class RawMachineAssemblerTester : public HandleAndZoneScope,
   }
 
  protected:
-  virtual Address Generate() {
+  Address Generate() override {
     if (code_.is_null()) {
       Schedule* schedule = this->Export();
       auto call_descriptor = this->call_descriptor();
       Graph* graph = this->graph();
-      OptimizedCompilationInfo info(ArrayVector("testing"), main_zone(),
-                                    Code::STUB);
+      OptimizedCompilationInfo info(ArrayVector("testing"), main_zone(), kind_);
       code_ = Pipeline::GenerateCodeForTesting(
           &info, main_isolate(), call_descriptor, graph,
           AssemblerOptions::Default(main_isolate()), schedule);
@@ -74,6 +91,7 @@ class RawMachineAssemblerTester : public HandleAndZoneScope,
   }
 
  private:
+  Code::Kind kind_ = Code::Kind::STUB;
   MaybeHandle<Code> code_;
 };
 
@@ -113,15 +131,27 @@ class BufferedRawMachineAssemblerTester
   // Store node is provided as a parameter. By storing the return value in
   // memory it is possible to return 64 bit values.
   void Return(Node* input) {
-    Store(MachineTypeForC<ReturnType>().representation(),
-          RawMachineAssembler::Parameter(return_parameter_index_), input,
-          kNoWriteBarrier);
+    if (COMPRESS_POINTERS_BOOL && MachineTypeForC<ReturnType>().IsTagged()) {
+      // Since we are returning values via storing to off-heap location
+      // generate full-word store here.
+      Store(MachineType::PointerRepresentation(),
+            RawMachineAssembler::Parameter(return_parameter_index_),
+            BitcastTaggedToWord(input), kNoWriteBarrier);
+
+    } else {
+      Store(MachineTypeForC<ReturnType>().representation(),
+            RawMachineAssembler::Parameter(return_parameter_index_), input,
+            kNoWriteBarrier);
+    }
     RawMachineAssembler::Return(Int32Constant(1234));
   }
 
   template <typename... Params>
   ReturnType Call(Params... p) {
+    uintptr_t zap_data[] = {kZapValue, kZapValue};
     ReturnType return_value;
+    STATIC_ASSERT(sizeof(return_value) <= sizeof(zap_data));
+    MemCopy(&return_value, &zap_data, sizeof(return_value));
     CSignature::VerifyParams<Params...>(test_graph_signature_);
     CallHelper<int32_t>::Call(reinterpret_cast<void*>(&p)...,
                               reinterpret_cast<void*>(&return_value));
@@ -395,7 +425,7 @@ class BinopGen {
  public:
   virtual void gen(RawMachineAssemblerTester<int32_t>* m, Node* a, Node* b) = 0;
   virtual T expected(T a, T b) = 0;
-  virtual ~BinopGen() {}
+  virtual ~BinopGen() = default;
 };
 
 // A helper class to generate various combination of input shape combinations

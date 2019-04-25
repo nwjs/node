@@ -6,10 +6,12 @@
 #ifdef NODE_REPORT
 #include "node_report.h"
 #endif
+#include "node_v8_platform-inl.h"
 
 namespace node {
 
 using errors::TryCatchScope;
+using v8::Boolean;
 using v8::Context;
 using v8::Exception;
 using v8::Function;
@@ -172,13 +174,10 @@ void PrintStackTrace(Isolate* isolate, Local<StackTrace> stack) {
   fflush(stderr);
 }
 
-void PrintCaughtException(Isolate* isolate,
-                          Local<Context> context,
-                          const v8::TryCatch& try_catch) {
-  CHECK(try_catch.HasCaught());
-  Local<Value> err = try_catch.Exception();
-  Local<Message> message = try_catch.Message();
-  Local<v8::StackTrace> stack = message->GetStackTrace();
+void PrintException(Isolate* isolate,
+                    Local<Context> context,
+                    Local<Value> err,
+                    Local<Message> message) {
   node::Utf8Value reason(isolate,
                          err->ToDetailString(context).ToLocalChecked());
   bool added_exception_line = false;
@@ -186,7 +185,16 @@ void PrintCaughtException(Isolate* isolate,
       GetErrorSource(isolate, context, message, &added_exception_line);
   fprintf(stderr, "%s\n", source.c_str());
   fprintf(stderr, "%s\n", *reason);
-  PrintStackTrace(isolate, stack);
+
+  Local<v8::StackTrace> stack = message->GetStackTrace();
+  if (!stack.IsEmpty()) PrintStackTrace(isolate, stack);
+}
+
+void PrintCaughtException(Isolate* isolate,
+                          Local<Context> context,
+                          const v8::TryCatch& try_catch) {
+  CHECK(try_catch.HasCaught());
+  PrintException(isolate, context, try_catch.Exception(), try_catch.Message());
 }
 
 void AppendExceptionLine(Environment* env,
@@ -773,14 +781,26 @@ void DecorateErrorStack(Environment* env,
 
 void FatalException(Isolate* isolate,
                     Local<Value> error,
-                    Local<Message> message) {
+                    Local<Message> message,
+                    bool from_promise) {
   CHECK(!error.IsEmpty());
   HandleScope scope(isolate);
 
-  Environment* env = Environment::GetCurrent(isolate);
-  if (!env) //FIXME: check why env is null #4912
+  CHECK(isolate->InContext());
+  Local<Context> context = isolate->GetCurrentContext();
+  Environment* env = Environment::GetCurrent(context);
+  if (env == nullptr) {
+    // This means that the exception happens before Environment is assigned
+    // to the context e.g. when there is a SyntaxError in a per-context
+    // script - which usually indicates that there is a bug because no JS
+    // error is supposed to be thrown at this point.
+    // Since we don't have access to Environment here, there is not
+    // much we can do, so we just print whatever is useful and crash.
+    //PrintException(isolate, context, error, message);
+    //Abort();
     return;
-  CHECK_NOT_NULL(env);  // TODO(addaleax): Handle nullptr here.
+  }
+
   Local<Object> process_object = env->process_object();
   Local<String> fatal_exception_string = env->fatal_exception_string();
   Local<Value> fatal_exception_function_value =
@@ -800,9 +820,12 @@ void FatalException(Isolate* isolate,
     // Do not call FatalException when _fatalException handler throws
     fatal_try_catch.SetVerbose(false);
 
+    Local<Value> argv[2] = { error,
+                             Boolean::New(env->isolate(), from_promise) };
+
     // This will return true if the JS layer handled it, false otherwise
     MaybeLocal<Value> caught = fatal_exception_function.As<Function>()->Call(
-        env->context(), process_object, 1, &error);
+        env->context(), process_object, arraysize(argv), argv);
 
     if (fatal_try_catch.HasTerminated()) return;
 
@@ -828,6 +851,12 @@ void FatalException(Isolate* isolate,
   if (!node_is_nwjs && exit_code) {
     exit(exit_code);
   }
+}
+
+void FatalException(Isolate* isolate,
+                    Local<Value> error,
+                    Local<Message> message) {
+  FatalException(isolate, error, message, false /* from_promise */);
 }
 
 }  // namespace node

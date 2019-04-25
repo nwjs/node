@@ -34,12 +34,10 @@
 #include "src/disasm.h"
 #include "src/macro-assembler.h"
 #include "src/ppc/constants-ppc.h"
-
+#include "src/register-configuration.h"
 
 namespace v8 {
 namespace internal {
-
-const auto GetRegConfig = RegisterConfiguration::Default;
 
 //------------------------------------------------------------------------------
 
@@ -120,7 +118,7 @@ void Decoder::PrintRegister(int reg) {
 
 // Print the double FP register name according to the active name converter.
 void Decoder::PrintDRegister(int reg) {
-  Print(GetRegConfig()->GetDoubleRegisterName(reg));
+  Print(RegisterName(DoubleRegister::from_code(reg)));
 }
 
 
@@ -665,6 +663,10 @@ void Decoder::DecodeExt2(Instruction* instr) {
       Format(instr, "stwcx   'rs, 'ra, 'rb");
       return;
     }
+    case STDCX: {
+      Format(instr, "stdcx   'rs, 'ra, 'rb");
+      return;
+    }
   }
 
   // ?? are all of these xo_form?
@@ -896,6 +898,10 @@ void Decoder::DecodeExt2(Instruction* instr) {
     }
     case LDUX: {
       Format(instr, "ldux    'rt, 'ra, 'rb");
+      return;
+    }
+    case LDARX: {
+      Format(instr, "ldarx   'rt, 'ra, 'rb");
       return;
     }
     case STDX: {
@@ -1489,18 +1495,16 @@ const char* NameConverter::NameOfConstant(byte* addr) const {
 
 
 const char* NameConverter::NameOfCPURegister(int reg) const {
-  return v8::internal::GetRegConfig()->GetGeneralRegisterName(reg);
+  return RegisterName(i::Register::from_code(reg));
 }
 
 const char* NameConverter::NameOfByteCPURegister(int reg) const {
   UNREACHABLE();  // PPC does not have the concept of a byte register
-  return "nobytereg";
 }
 
 
 const char* NameConverter::NameOfXMMRegister(int reg) const {
   UNREACHABLE();  // PPC does not have any XMM registers
-  return "noxmmreg";
 }
 
 const char* NameConverter::NameInCode(byte* addr) const {

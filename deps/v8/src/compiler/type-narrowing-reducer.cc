@@ -5,19 +5,16 @@
 #include "src/compiler/type-narrowing-reducer.h"
 
 #include "src/compiler/js-graph.h"
-#include "src/objects-inl.h"
 
 namespace v8 {
 namespace internal {
 namespace compiler {
 
 TypeNarrowingReducer::TypeNarrowingReducer(Editor* editor, JSGraph* jsgraph,
-                                           JSHeapBroker* js_heap_broker)
-    : AdvancedReducer(editor),
-      jsgraph_(jsgraph),
-      op_typer_(jsgraph->isolate(), js_heap_broker, zone()) {}
+                                           JSHeapBroker* broker)
+    : AdvancedReducer(editor), jsgraph_(jsgraph), op_typer_(broker, zone()) {}
 
-TypeNarrowingReducer::~TypeNarrowingReducer() {}
+TypeNarrowingReducer::~TypeNarrowingReducer() = default;
 
 Reduction TypeNarrowingReducer::Reduce(Node* node) {
   DisallowHeapAccess no_heap_access;

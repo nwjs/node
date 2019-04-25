@@ -6,18 +6,25 @@
 
 #include "src/handles-inl.h"
 #include "src/objects-inl.h"
+#include "src/objects/allocation-site-inl.h"
 
 namespace v8 {
 namespace internal {
 namespace compiler {
 
-CompilationDependencies::CompilationDependencies(Isolate* isolate, Zone* zone)
-    : zone_(zone), dependencies_(zone) {}
+CompilationDependencies::CompilationDependencies(JSHeapBroker* broker,
+                                                 Zone* zone)
+    : zone_(zone), broker_(broker), dependencies_(zone) {}
 
 class CompilationDependencies::Dependency : public ZoneObject {
  public:
   virtual bool IsValid() const = 0;
-  virtual void Install(MaybeObjectHandle code) = 0;
+  virtual void PrepareInstall() {}
+  virtual void Install(const MaybeObjectHandle& code) = 0;
+
+#ifdef DEBUG
+  virtual bool IsPretenureModeDependency() const { return false; }
+#endif
 };
 
 class InitialMapDependency final : public CompilationDependencies::Dependency {
@@ -31,15 +38,15 @@ class InitialMapDependency final : public CompilationDependencies::Dependency {
   }
 
   bool IsValid() const override {
-    Handle<JSFunction> function = function_.object<JSFunction>();
+    Handle<JSFunction> function = function_.object();
     return function->has_initial_map() &&
-           function->initial_map() == *initial_map_.object<Map>();
+           function->initial_map() == *initial_map_.object();
   }
 
-  void Install(MaybeObjectHandle code) override {
+  void Install(const MaybeObjectHandle& code) override {
     SLOW_DCHECK(IsValid());
     DependentCode::InstallDependency(function_.isolate(), code,
-                                     initial_map_.object<Map>(),
+                                     initial_map_.object(),
                                      DependentCode::kInitialMapChangedGroup);
   }
 
@@ -62,16 +69,22 @@ class PrototypePropertyDependency final
   }
 
   bool IsValid() const override {
-    Handle<JSFunction> function = function_.object<JSFunction>();
+    Handle<JSFunction> function = function_.object();
     return function->has_prototype_slot() && function->has_prototype() &&
            !function->PrototypeRequiresRuntimeLookup() &&
            function->prototype() == *prototype_.object();
   }
 
-  void Install(MaybeObjectHandle code) override {
+  void PrepareInstall() override {
     SLOW_DCHECK(IsValid());
-    Handle<JSFunction> function = function_.object<JSFunction>();
+    Handle<JSFunction> function = function_.object();
     if (!function->has_initial_map()) JSFunction::EnsureHasInitialMap(function);
+  }
+
+  void Install(const MaybeObjectHandle& code) override {
+    SLOW_DCHECK(IsValid());
+    Handle<JSFunction> function = function_.object();
+    DCHECK(function->has_initial_map());
     Handle<Map> initial_map(function->initial_map(), function_.isolate());
     DependentCode::InstallDependency(function_.isolate(), code, initial_map,
                                      DependentCode::kInitialMapChangedGroup);
@@ -88,11 +101,11 @@ class StableMapDependency final : public CompilationDependencies::Dependency {
     DCHECK(map_.is_stable());
   }
 
-  bool IsValid() const override { return map_.object<Map>()->is_stable(); }
+  bool IsValid() const override { return map_.object()->is_stable(); }
 
-  void Install(MaybeObjectHandle code) override {
+  void Install(const MaybeObjectHandle& code) override {
     SLOW_DCHECK(IsValid());
-    DependentCode::InstallDependency(map_.isolate(), code, map_.object<Map>(),
+    DependentCode::InstallDependency(map_.isolate(), code, map_.object(),
                                      DependentCode::kPrototypeCheckGroup);
   }
 
@@ -106,11 +119,11 @@ class TransitionDependency final : public CompilationDependencies::Dependency {
     DCHECK(!map_.is_deprecated());
   }
 
-  bool IsValid() const override { return !map_.object<Map>()->is_deprecated(); }
+  bool IsValid() const override { return !map_.object()->is_deprecated(); }
 
-  void Install(MaybeObjectHandle code) override {
+  void Install(const MaybeObjectHandle& code) override {
     SLOW_DCHECK(IsValid());
-    DependentCode::InstallDependency(map_.isolate(), code, map_.object<Map>(),
+    DependentCode::InstallDependency(map_.isolate(), code, map_.object(),
                                      DependentCode::kTransitionGroup);
   }
 
@@ -129,15 +142,19 @@ class PretenureModeDependency final
   }
 
   bool IsValid() const override {
-    return mode_ == site_.object<AllocationSite>()->GetPretenureMode();
+    return mode_ == site_.object()->GetPretenureMode();
   }
 
-  void Install(MaybeObjectHandle code) override {
+  void Install(const MaybeObjectHandle& code) override {
     SLOW_DCHECK(IsValid());
     DependentCode::InstallDependency(
-        site_.isolate(), code, site_.object<AllocationSite>(),
+        site_.isolate(), code, site_.object(),
         DependentCode::kAllocationSiteTenuringChangedGroup);
   }
+
+#ifdef DEBUG
+  bool IsPretenureModeDependency() const override { return true; }
+#endif
 
  private:
   AllocationSiteRef site_;
@@ -157,15 +174,14 @@ class FieldTypeDependency final : public CompilationDependencies::Dependency {
 
   bool IsValid() const override {
     DisallowHeapAllocation no_heap_allocation;
-    Handle<Map> owner = owner_.object<Map>();
-    Handle<FieldType> type = type_.object<FieldType>();
+    Handle<Map> owner = owner_.object();
+    Handle<Object> type = type_.object();
     return *type == owner->instance_descriptors()->GetFieldType(descriptor_);
   }
 
-  void Install(MaybeObjectHandle code) override {
+  void Install(const MaybeObjectHandle& code) override {
     SLOW_DCHECK(IsValid());
-    DependentCode::InstallDependency(owner_.isolate(), code,
-                                     owner_.object<Map>(),
+    DependentCode::InstallDependency(owner_.isolate(), code, owner_.object(),
                                      DependentCode::kFieldOwnerGroup);
   }
 
@@ -173,6 +189,34 @@ class FieldTypeDependency final : public CompilationDependencies::Dependency {
   MapRef owner_;
   int descriptor_;
   ObjectRef type_;
+};
+
+class FieldConstnessDependency final
+    : public CompilationDependencies::Dependency {
+ public:
+  FieldConstnessDependency(const MapRef& owner, int descriptor)
+      : owner_(owner), descriptor_(descriptor) {
+    DCHECK(owner_.equals(owner_.FindFieldOwner(descriptor_)));
+    DCHECK_EQ(PropertyConstness::kConst,
+              owner_.GetPropertyDetails(descriptor_).constness());
+  }
+
+  bool IsValid() const override {
+    DisallowHeapAllocation no_heap_allocation;
+    Handle<Map> owner = owner_.object();
+    return PropertyConstness::kConst ==
+           owner->instance_descriptors()->GetDetails(descriptor_).constness();
+  }
+
+  void Install(const MaybeObjectHandle& code) override {
+    SLOW_DCHECK(IsValid());
+    DependentCode::InstallDependency(owner_.isolate(), code, owner_.object(),
+                                     DependentCode::kFieldOwnerGroup);
+  }
+
+ private:
+  MapRef owner_;
+  int descriptor_;
 };
 
 class GlobalPropertyDependency final
@@ -188,15 +232,23 @@ class GlobalPropertyDependency final
   }
 
   bool IsValid() const override {
-    Handle<PropertyCell> cell = cell_.object<PropertyCell>();
+    Handle<PropertyCell> cell = cell_.object();
+    // The dependency is never valid if the cell is 'invalidated'. This is
+    // marked by setting the value to the hole.
+    if (cell->value() == *(cell_.isolate()->factory()->the_hole_value())) {
+      DCHECK(cell->property_details().cell_type() ==
+                 PropertyCellType::kInvalidated ||
+             cell->property_details().cell_type() ==
+                 PropertyCellType::kUninitialized);
+      return false;
+    }
     return type_ == cell->property_details().cell_type() &&
            read_only_ == cell->property_details().IsReadOnly();
   }
 
-  void Install(MaybeObjectHandle code) override {
+  void Install(const MaybeObjectHandle& code) override {
     SLOW_DCHECK(IsValid());
-    DependentCode::InstallDependency(cell_.isolate(), code,
-                                     cell_.object<PropertyCell>(),
+    DependentCode::InstallDependency(cell_.isolate(), code, cell_.object(),
                                      DependentCode::kPropertyCellChangedGroup);
   }
 
@@ -213,14 +265,13 @@ class ProtectorDependency final : public CompilationDependencies::Dependency {
   }
 
   bool IsValid() const override {
-    Handle<PropertyCell> cell = cell_.object<PropertyCell>();
+    Handle<PropertyCell> cell = cell_.object();
     return cell->value() == Smi::FromInt(Isolate::kProtectorValid);
   }
 
-  void Install(MaybeObjectHandle code) override {
+  void Install(const MaybeObjectHandle& code) override {
     SLOW_DCHECK(IsValid());
-    DependentCode::InstallDependency(cell_.isolate(), code,
-                                     cell_.object<PropertyCell>(),
+    DependentCode::InstallDependency(cell_.isolate(), code, cell_.object(),
                                      DependentCode::kPropertyCellChangedGroup);
   }
 
@@ -242,17 +293,17 @@ class ElementsKindDependency final
   }
 
   bool IsValid() const override {
-    Handle<AllocationSite> site = site_.object<AllocationSite>();
+    Handle<AllocationSite> site = site_.object();
     ElementsKind kind = site->PointsToLiteral()
                             ? site->boilerplate()->GetElementsKind()
                             : site->GetElementsKind();
     return kind_ == kind;
   }
 
-  void Install(MaybeObjectHandle code) override {
+  void Install(const MaybeObjectHandle& code) override {
     SLOW_DCHECK(IsValid());
     DependentCode::InstallDependency(
-        site_.isolate(), code, site_.object<AllocationSite>(),
+        site_.isolate(), code, site_.object(),
         DependentCode::kAllocationSiteTransitionChangedGroup);
   }
 
@@ -271,16 +322,22 @@ class InitialMapInstanceSizePredictionDependency final
   bool IsValid() const override {
     // The dependency is valid if the prediction is the same as the current
     // slack tracking result.
-    int instance_size =
-        function_.object<JSFunction>()->ComputeInstanceSizeWithMinSlack(
-            function_.isolate());
+    if (!function_.object()->has_initial_map()) return false;
+    int instance_size = function_.object()->ComputeInstanceSizeWithMinSlack(
+        function_.isolate());
     return instance_size == instance_size_;
   }
 
-  void Install(MaybeObjectHandle code) override {
-    DCHECK(IsValid());
-    // Finish the slack tracking.
-    function_.object<JSFunction>()->CompleteInobjectSlackTrackingIfActive();
+  void PrepareInstall() override {
+    SLOW_DCHECK(IsValid());
+    function_.object()->CompleteInobjectSlackTrackingIfActive();
+  }
+
+  void Install(const MaybeObjectHandle& code) override {
+    SLOW_DCHECK(IsValid());
+    DCHECK(!function_.object()
+                ->initial_map()
+                ->IsInobjectSlackTrackingInProgress());
   }
 
  private:
@@ -326,6 +383,30 @@ PretenureFlag CompilationDependencies::DependOnPretenureMode(
   return mode;
 }
 
+PropertyConstness CompilationDependencies::DependOnFieldConstness(
+    const MapRef& map, int descriptor) {
+  MapRef owner = map.FindFieldOwner(descriptor);
+  PropertyConstness constness =
+      owner.GetPropertyDetails(descriptor).constness();
+  if (constness == PropertyConstness::kMutable) return constness;
+
+  // If the map can have fast elements transitions, then the field can be only
+  // considered constant if the map does not transition.
+  if (Map::CanHaveFastTransitionableElementsKind(map.instance_type())) {
+    // If the map can already transition away, let us report the field as
+    // mutable.
+    if (!map.is_stable()) {
+      return PropertyConstness::kMutable;
+    }
+    DependOnStableMap(map);
+  }
+
+  DCHECK_EQ(constness, PropertyConstness::kConst);
+  dependencies_.push_front(new (zone_)
+                               FieldConstnessDependency(owner, descriptor));
+  return PropertyConstness::kConst;
+}
+
 void CompilationDependencies::DependOnFieldType(const MapRef& map,
                                                 int descriptor) {
   MapRef owner = map.FindFieldOwner(descriptor);
@@ -343,8 +424,46 @@ void CompilationDependencies::DependOnGlobalProperty(
                                GlobalPropertyDependency(cell, type, read_only));
 }
 
-void CompilationDependencies::DependOnProtector(const PropertyCellRef& cell) {
+bool CompilationDependencies::DependOnProtector(const PropertyCellRef& cell) {
+  if (cell.value().AsSmi() != Isolate::kProtectorValid) return false;
   dependencies_.push_front(new (zone_) ProtectorDependency(cell));
+  return true;
+}
+
+bool CompilationDependencies::DependOnArrayBufferDetachingProtector() {
+  return DependOnProtector(PropertyCellRef(
+      broker_,
+      broker_->isolate()->factory()->array_buffer_detaching_protector()));
+}
+
+bool CompilationDependencies::DependOnArrayIteratorProtector() {
+  return DependOnProtector(PropertyCellRef(
+      broker_, broker_->isolate()->factory()->array_iterator_protector()));
+}
+
+bool CompilationDependencies::DependOnArraySpeciesProtector() {
+  return DependOnProtector(PropertyCellRef(
+      broker_, broker_->isolate()->factory()->array_species_protector()));
+}
+
+bool CompilationDependencies::DependOnNoElementsProtector() {
+  return DependOnProtector(PropertyCellRef(
+      broker_, broker_->isolate()->factory()->no_elements_protector()));
+}
+
+bool CompilationDependencies::DependOnPromiseHookProtector() {
+  return DependOnProtector(PropertyCellRef(
+      broker_, broker_->isolate()->factory()->promise_hook_protector()));
+}
+
+bool CompilationDependencies::DependOnPromiseSpeciesProtector() {
+  return DependOnProtector(PropertyCellRef(
+      broker_, broker_->isolate()->factory()->promise_species_protector()));
+}
+
+bool CompilationDependencies::DependOnPromiseThenProtector() {
+  return DependOnProtector(PropertyCellRef(
+      broker_, broker_->isolate()->factory()->promise_then_protector()));
 }
 
 void CompilationDependencies::DependOnElementsKind(
@@ -366,58 +485,75 @@ bool CompilationDependencies::AreValid() const {
 }
 
 bool CompilationDependencies::Commit(Handle<Code> code) {
-  // Check validity of all dependencies first, such that we can avoid installing
-  // anything when there's already an invalid dependency.
-  if (!AreValid()) {
-    dependencies_.clear();
-    return false;
+  for (auto dep : dependencies_) {
+    if (!dep->IsValid()) {
+      dependencies_.clear();
+      return false;
+    }
+    dep->PrepareInstall();
   }
 
+  DisallowCodeDependencyChange no_dependency_change;
   for (auto dep : dependencies_) {
     // Check each dependency's validity again right before installing it,
-    // because a GC can trigger invalidation for some dependency kinds.
+    // because the first iteration above might have invalidated some
+    // dependencies. For example, PrototypePropertyDependency::PrepareInstall
+    // can call EnsureHasInitialMap, which can invalidate a StableMapDependency
+    // on the prototype object's map.
     if (!dep->IsValid()) {
       dependencies_.clear();
       return false;
     }
     dep->Install(MaybeObjectHandle::Weak(code));
   }
+
+  // It is even possible that a GC during the above installations invalidated
+  // one of the dependencies. However, this should only affect pretenure mode
+  // dependencies, which we assert below. It is safe to return successfully in
+  // these cases, because once the code gets executed it will do a stack check
+  // that triggers its deoptimization.
+  if (FLAG_stress_gc_during_compilation) {
+    broker_->isolate()->heap()->PreciseCollectAllGarbage(
+        Heap::kNoGCFlags, GarbageCollectionReason::kTesting,
+        kGCCallbackFlagForced);
+  }
+#ifdef DEBUG
+  for (auto dep : dependencies_) {
+    CHECK_IMPLIES(!dep->IsValid(), dep->IsPretenureModeDependency());
+  }
+#endif
+
   dependencies_.clear();
   return true;
 }
 
 namespace {
-void DependOnStablePrototypeChain(JSHeapBroker* broker,
-                                  CompilationDependencies* deps,
-                                  Handle<Map> map,
-                                  MaybeHandle<JSReceiver> last_prototype) {
-  for (PrototypeIterator i(broker->isolate(), map); !i.IsAtEnd(); i.Advance()) {
-    Handle<JSReceiver> const current =
-        PrototypeIterator::GetCurrent<JSReceiver>(i);
-    deps->DependOnStableMap(
-        MapRef(broker, handle(current->map(), broker->isolate())));
-    Handle<JSReceiver> last;
-    if (last_prototype.ToHandle(&last) && last.is_identical_to(current)) {
-      break;
-    }
+// This function expects to never see a JSProxy.
+void DependOnStablePrototypeChain(CompilationDependencies* deps, MapRef map,
+                                  const JSObjectRef& last_prototype) {
+  while (true) {
+    map.SerializePrototype();
+    JSObjectRef proto = map.prototype().AsJSObject();
+    map = proto.map();
+    deps->DependOnStableMap(map);
+    if (proto.equals(last_prototype)) break;
   }
 }
 }  // namespace
 
 void CompilationDependencies::DependOnStablePrototypeChains(
-    JSHeapBroker* broker, Handle<Context> native_context,
-    std::vector<Handle<Map>> const& receiver_maps, Handle<JSObject> holder) {
-  Isolate* isolate = holder->GetIsolate();
+    std::vector<Handle<Map>> const& receiver_maps, const JSObjectRef& holder) {
   // Determine actual holder and perform prototype chain checks.
   for (auto map : receiver_maps) {
-    // Perform the implicit ToObject for primitives here.
-    // Implemented according to ES6 section 7.3.2 GetV (V, P).
-    Handle<JSFunction> constructor;
-    if (Map::GetConstructorFunction(map, native_context)
-            .ToHandle(&constructor)) {
-      map = handle(constructor->initial_map(), isolate);
+    MapRef receiver_map(broker_, map);
+    if (receiver_map.IsPrimitiveMap()) {
+      // Perform the implicit ToObject for primitives here.
+      // Implemented according to ES6 section 7.3.2 GetV (V, P).
+      base::Optional<JSFunctionRef> constructor =
+          broker_->native_context().GetConstructorFunction(receiver_map);
+      if (constructor.has_value()) receiver_map = constructor->initial_map();
     }
-    DependOnStablePrototypeChain(broker, this, map, holder);
+    DependOnStablePrototypeChain(this, receiver_map, holder);
   }
 }
 
@@ -436,7 +572,7 @@ SlackTrackingPrediction::SlackTrackingPrediction(MapRef initial_map,
                                                  int instance_size)
     : instance_size_(instance_size),
       inobject_property_count_(
-          (instance_size >> kPointerSizeLog2) -
+          (instance_size >> kTaggedSizeLog2) -
           initial_map.GetInObjectPropertiesStartInWords()) {}
 
 SlackTrackingPrediction

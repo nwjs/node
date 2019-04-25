@@ -49,7 +49,7 @@ struct TestCaseData {
   const char* arguments() const { return arguments_; }
 
  private:
-  TestCaseData();
+  TestCaseData() = delete;
 
   const char* const script_;
   const char* const declaration_parameters_;
@@ -113,6 +113,7 @@ class OptimizedBytecodeSourcePositionTester final {
     SaveOptimizationFlags();
     saved_flag_always_opt_ = FLAG_always_opt;
     FLAG_always_opt = false;
+    FLAG_enable_lazy_source_positions = false;
   }
 
   ~OptimizedBytecodeSourcePositionTester() {

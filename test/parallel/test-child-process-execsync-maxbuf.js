@@ -21,6 +21,8 @@ const args = [
   }, (e) => {
     assert.ok(e, 'maxBuffer should error');
     assert.strictEqual(e.errno, 'ENOBUFS');
+    // We can have buffers larger than maxBuffer because underneath we alloc 64k
+    // that matches our read sizes.
     assert.deepStrictEqual(e.stdout, msgOutBuf);
     return true;
   });
@@ -34,4 +36,29 @@ const args = [
   );
 
   assert.deepStrictEqual(ret, msgOutBuf);
+}
+
+// Default maxBuffer size is 1024 * 1024.
+{
+  assert.throws(() => {
+    execSync(
+      `"${process.execPath}" -e "console.log('a'.repeat(1024 * 1024))"`
+    );
+  }, (e) => {
+    assert.ok(e, 'maxBuffer should error');
+    assert.strictEqual(e.errno, 'ENOBUFS');
+    return true;
+  });
+}
+
+// Default maxBuffer size is 1024 * 1024.
+{
+  const ret = execSync(
+    `"${process.execPath}" -e "console.log('a'.repeat(1024 * 1024 - 1))"`
+  );
+
+  assert.deepStrictEqual(
+    ret.toString().trim(),
+    'a'.repeat(1024 * 1024 - 1)
+  );
 }

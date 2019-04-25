@@ -108,6 +108,15 @@ assert.strictEqual(require('../fixtures/packages/index').ok, 'ok');
 assert.strictEqual(require('../fixtures/packages/main').ok, 'ok');
 assert.strictEqual(require('../fixtures/packages/main-index').ok, 'ok');
 assert.strictEqual(require('../fixtures/packages/missing-main').ok, 'ok');
+assert.throws(
+  () => require('../fixtures/packages/missing-main-no-index'),
+  {
+    code: 'MODULE_NOT_FOUND',
+    message: /packages[/\\]missing-main-no-index[/\\]doesnotexist\.js'\. Please.+package\.json.+valid "main"/,
+    path: /fixtures[/\\]packages[/\\]missing-main-no-index[/\\]package\.json/,
+    requestPath: /^\.\.[/\\]fixtures[/\\]packages[/\\]missing-main-no-index$/
+  }
+);
 
 assert.throws(
   function() { require('../fixtures/packages/unparseable'); },
@@ -134,7 +143,7 @@ require('../fixtures/node_modules/foo');
   assert.ok(my_path.path_func instanceof Function);
   // This one does not exist and should throw
   assert.throws(function() { require('./utils'); },
-                /^Error: Cannot find module '\.\/utils'$/);
+                /^Error: Cannot find module '\.\/utils'/);
 }
 
 let errorThrown = false;
@@ -173,12 +182,13 @@ assert.strictEqual(require('../fixtures/registerExt2').custom, 'passed');
 assert.strictEqual(require('../fixtures/foo').foo, 'ok');
 
 // Should not attempt to load a directory
-try {
-  tmpdir.refresh();
-  require(tmpdir.path);
-} catch (err) {
-  assert.strictEqual(err.message, `Cannot find module '${tmpdir.path}'`);
-}
+assert.throws(
+  () => {
+    tmpdir.refresh();
+    require(tmpdir.path);
+  },
+  (err) => err.message.startsWith(`Cannot find module '${tmpdir.path}`)
+);
 
 {
   // Check load order is as expected

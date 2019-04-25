@@ -19,7 +19,7 @@ namespace internal {
 namespace heap {
 
 void PublishSegment(ConcurrentMarking::MarkingWorklist* worklist,
-                    HeapObject* object) {
+                    HeapObject object) {
   for (size_t i = 0; i <= ConcurrentMarking::MarkingWorklist::kSegmentCapacity;
        i++) {
     worklist->Push(0, object);
@@ -38,10 +38,11 @@ TEST(ConcurrentMarking) {
     collector->EnsureSweepingCompleted();
   }
 
-  ConcurrentMarking::MarkingWorklist shared, bailout, on_hold;
+  ConcurrentMarking::MarkingWorklist shared, on_hold;
+  ConcurrentMarking::EmbedderTracingWorklist embedder_objects;
   WeakObjects weak_objects;
-  ConcurrentMarking* concurrent_marking =
-      new ConcurrentMarking(heap, &shared, &bailout, &on_hold, &weak_objects);
+  ConcurrentMarking* concurrent_marking = new ConcurrentMarking(
+      heap, &shared, &on_hold, &weak_objects, &embedder_objects);
   PublishSegment(&shared, ReadOnlyRoots(heap).undefined_value());
   concurrent_marking->ScheduleTasks();
   concurrent_marking->Stop(
@@ -60,10 +61,11 @@ TEST(ConcurrentMarkingReschedule) {
     collector->EnsureSweepingCompleted();
   }
 
-  ConcurrentMarking::MarkingWorklist shared, bailout, on_hold;
+  ConcurrentMarking::MarkingWorklist shared, on_hold;
+  ConcurrentMarking::EmbedderTracingWorklist embedder_objects;
   WeakObjects weak_objects;
-  ConcurrentMarking* concurrent_marking =
-      new ConcurrentMarking(heap, &shared, &bailout, &on_hold, &weak_objects);
+  ConcurrentMarking* concurrent_marking = new ConcurrentMarking(
+      heap, &shared, &on_hold, &weak_objects, &embedder_objects);
   PublishSegment(&shared, ReadOnlyRoots(heap).undefined_value());
   concurrent_marking->ScheduleTasks();
   concurrent_marking->Stop(
@@ -86,10 +88,11 @@ TEST(ConcurrentMarkingPreemptAndReschedule) {
     collector->EnsureSweepingCompleted();
   }
 
-  ConcurrentMarking::MarkingWorklist shared, bailout, on_hold;
+  ConcurrentMarking::MarkingWorklist shared, on_hold;
+  ConcurrentMarking::EmbedderTracingWorklist embedder_objects;
   WeakObjects weak_objects;
-  ConcurrentMarking* concurrent_marking =
-      new ConcurrentMarking(heap, &shared, &bailout, &on_hold, &weak_objects);
+  ConcurrentMarking* concurrent_marking = new ConcurrentMarking(
+      heap, &shared, &on_hold, &weak_objects, &embedder_objects);
   for (int i = 0; i < 5000; i++)
     PublishSegment(&shared, ReadOnlyRoots(heap).undefined_value());
   concurrent_marking->ScheduleTasks();

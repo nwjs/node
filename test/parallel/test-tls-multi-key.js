@@ -157,7 +157,7 @@ function test(options) {
     }, common.mustCall(function() {
       assert.deepStrictEqual(ecdsa.getCipher(), {
         name: 'ECDHE-ECDSA-AES256-GCM-SHA384',
-        version: 'TLSv1/SSLv3'
+        version: 'TLSv1.2'
       });
       assert.strictEqual(ecdsa.getPeerCertificate().subject.CN, eccCN);
       assert.strictEqual(ecdsa.getPeerCertificate().asn1Curve, 'prime256v1');
@@ -175,7 +175,7 @@ function test(options) {
     }, common.mustCall(function() {
       assert.deepStrictEqual(rsa.getCipher(), {
         name: 'ECDHE-RSA-AES256-GCM-SHA384',
-        version: 'TLSv1/SSLv3'
+        version: 'TLSv1.2'
       });
       assert.strictEqual(rsa.getPeerCertificate().subject.CN, rsaCN);
       assert(rsa.getPeerCertificate().exponent, 'cert for an RSA key');

@@ -36,6 +36,7 @@
 #include "src/frames-inl.h"
 #include "src/macro-assembler.h"
 #include "src/objects-inl.h"
+#include "src/ostreams.h"
 #include "test/cctest/cctest.h"
 
 namespace v8 {
@@ -43,17 +44,13 @@ namespace internal {
 
 #define __ assm.
 
-
-static void DummyStaticFunction(Object* result) {
-}
-
 TEST(DisasmX64) {
   CcTest::InitializeVM();
   Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
   v8::internal::byte buffer[8192];
-  Assembler assm(AssemblerOptions{}, buffer, sizeof buffer);
-  DummyStaticFunction(nullptr);  // just bloody use it (DELETE; debugging)
+  Assembler assm(AssemblerOptions{},
+                 ExternalAssemblerBuffer(buffer, sizeof buffer));
 
   // Short immediate instructions
   __ addq(rax, Immediate(12345678));
@@ -142,8 +139,11 @@ TEST(DisasmX64) {
   __ shll_cl(Operand(rdi, rax, times_4, 100));
   __ shll(rdx, Immediate(1));
   __ shll(rdx, Immediate(6));
-  __ bts(Operand(rdx, 0), rcx);
-  __ bts(Operand(rbx, rcx, times_4, 0), rcx);
+  __ btq(Operand(rdx, 0), rcx);
+  __ btsq(Operand(rdx, 0), rcx);
+  __ btsq(Operand(rbx, rcx, times_4, 0), rcx);
+  __ btsq(rcx, Immediate(13));
+  __ btrq(rcx, Immediate(13));
   __ nop();
   __ pushq(Immediate(12));
   __ pushq(Immediate(23456));
@@ -205,8 +205,7 @@ TEST(DisasmX64) {
   __ incq(Operand(rbx, rcx, times_4, 10000));
   __ pushq(Operand(rbx, rcx, times_4, 10000));
   __ popq(Operand(rbx, rcx, times_4, 10000));
-  // TODO(mstarzinger): The following is protected.
-  // __ jmp(Operand(rbx, rcx, times_4, 10000));
+  __ jmp(Operand(rbx, rcx, times_4, 10000));
 
   __ leaq(rdx, Operand(rbx, rcx, times_4, 10000));
   __ orq(rdx, Immediate(12345));
@@ -267,7 +266,6 @@ TEST(DisasmX64) {
 
   __ xorq(rdx, Immediate(12345));
   __ xorq(rdx, Operand(rbx, rcx, times_8, 10000));
-  __ bts(Operand(rbx, rcx, times_8, 10000), rdx);
   __ pshufw(xmm5, xmm1, 3);
   __ hlt();
   __ int3();
@@ -292,8 +290,7 @@ TEST(DisasmX64) {
   __ nop();
 
   __ jmp(&L1);
-  // TODO(mstarzinger): The following is protected.
-  // __ jmp(Operand(rbx, rcx, times_4, 10000));
+  __ jmp(Operand(rbx, rcx, times_4, 10000));
   __ jmp(ic, RelocInfo::CODE_TARGET);
   __ nop();
 

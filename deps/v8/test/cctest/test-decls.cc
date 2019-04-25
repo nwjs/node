@@ -29,8 +29,6 @@
 
 #include "src/v8.h"
 
-#include "src/heap/heap-inl.h"
-#include "src/heap/heap.h"
 #include "test/cctest/cctest.h"
 
 namespace v8 {
@@ -123,11 +121,9 @@ void DeclarationContext::InitializeIfNeeded() {
   Local<FunctionTemplate> function = FunctionTemplate::New(isolate);
   Local<Value> data = External::New(CcTest::isolate(), this);
   GetHolder(function)->SetHandler(v8::NamedPropertyHandlerConfiguration(
-      &HandleGet, &HandleSet, &HandleQuery, 0, 0, data));
-  Local<Context> context = Context::New(isolate,
-                                        0,
-                                        function->InstanceTemplate(),
-                                        Local<Value>());
+      &HandleGet, &HandleSet, &HandleQuery, nullptr, nullptr, data));
+  Local<Context> context = Context::New(
+      isolate, nullptr, function->InstanceTemplate(), Local<Value>());
   context_.Reset(isolate, context);
   context->Enter();
   is_initialized_ = true;
@@ -256,7 +252,7 @@ TEST(Unknown) {
 
 class AbsentPropertyContext: public DeclarationContext {
  protected:
-  virtual v8::Local<Integer> Query(Local<Name> key) {
+  v8::Local<Integer> Query(Local<Name> key) override {
     return v8::Local<Integer>();
   }
 };
@@ -306,7 +302,7 @@ class AppearingPropertyContext: public DeclarationContext {
   AppearingPropertyContext() : state_(DECLARE) { }
 
  protected:
-  virtual v8::Local<Integer> Query(Local<Name> key) {
+  v8::Local<Integer> Query(Local<Name> key) override {
     switch (state_) {
       case DECLARE:
         // Force declaration by returning that the
@@ -361,13 +357,13 @@ class ExistsInPrototypeContext: public DeclarationContext {
  public:
   ExistsInPrototypeContext() { InitializeIfNeeded(); }
  protected:
-  virtual v8::Local<Integer> Query(Local<Name> key) {
+  v8::Local<Integer> Query(Local<Name> key) override {
     // Let it seem that the property exists in the prototype object.
     return Integer::New(isolate(), v8::None);
   }
 
   // Use the prototype as the holder for the interceptors.
-  virtual Local<ObjectTemplate> GetHolder(Local<FunctionTemplate> function) {
+  Local<ObjectTemplate> GetHolder(Local<FunctionTemplate> function) override {
     return function->PrototypeTemplate();
   }
 };
@@ -404,13 +400,13 @@ TEST(ExistsInPrototype) {
 
 class AbsentInPrototypeContext: public DeclarationContext {
  protected:
-  virtual v8::Local<Integer> Query(Local<Name> key) {
+  v8::Local<Integer> Query(Local<Name> key) override {
     // Let it seem that the property is absent in the prototype object.
     return Local<Integer>();
   }
 
   // Use the prototype as the holder for the interceptors.
-  virtual Local<ObjectTemplate> GetHolder(Local<FunctionTemplate> function) {
+  Local<ObjectTemplate> GetHolder(Local<FunctionTemplate> function) override {
     return function->PrototypeTemplate();
   }
 };
@@ -426,61 +422,6 @@ TEST(AbsentInPrototype) {
                   0,
                   0,
                   EXPECT_RESULT, Undefined(CcTest::isolate()));
-  }
-}
-
-
-
-class ExistsInHiddenPrototypeContext: public DeclarationContext {
- public:
-  ExistsInHiddenPrototypeContext() {
-    hidden_proto_ = FunctionTemplate::New(CcTest::isolate());
-    hidden_proto_->SetHiddenPrototype(true);
-  }
-
- protected:
-  virtual v8::Local<Integer> Query(Local<Name> key) {
-    // Let it seem that the property exists in the hidden prototype object.
-    return Integer::New(isolate(), v8::None);
-  }
-
-  // Install the hidden prototype after the global object has been created.
-  virtual void PostInitializeContext(Local<Context> context) {
-    Local<Object> global_object = context->Global();
-    Local<Object> hidden_proto = hidden_proto_->GetFunction(context)
-                                     .ToLocalChecked()
-                                     ->NewInstance(context)
-                                     .ToLocalChecked();
-    Local<Object> inner_global =
-        Local<Object>::Cast(global_object->GetPrototype());
-    inner_global->SetPrototype(context, hidden_proto).FromJust();
-  }
-
-  // Use the hidden prototype as the holder for the interceptors.
-  virtual Local<ObjectTemplate> GetHolder(Local<FunctionTemplate> function) {
-    return hidden_proto_->InstanceTemplate();
-  }
-
- private:
-  Local<FunctionTemplate> hidden_proto_;
-};
-
-
-TEST(ExistsInHiddenPrototype) {
-  HandleScope scope(CcTest::isolate());
-
-  { ExistsInHiddenPrototypeContext context;
-    context.Check("var x; x", 0, 0, 0, EXPECT_RESULT,
-                  Undefined(CcTest::isolate()));
-  }
-
-  { ExistsInHiddenPrototypeContext context;
-    context.Check("var x = 0; x", 0, 0, 0, EXPECT_RESULT,
-                  Number::New(CcTest::isolate(), 0));
-  }
-
-  { ExistsInHiddenPrototypeContext context;
-    context.Check("function x() { }; x", 0, 1, 1, EXPECT_RESULT);
   }
 }
 

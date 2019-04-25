@@ -13,6 +13,7 @@ using v8::Context;
 using v8::DEFAULT;
 using v8::EscapableHandleScope;
 using v8::Function;
+using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
 using v8::HandleScope;
 using v8::Integer;
@@ -84,20 +85,6 @@ MaybeLocal<Object> CreateProcessObject(
     return MaybeLocal<Object>();
   }
 
-  // process.title
-  auto title_string = FIXED_ONE_BYTE_STRING(env->isolate(), "title");
-  CHECK(process
-            ->SetAccessor(
-                env->context(),
-                title_string,
-                ProcessTitleGetter,
-                env->owns_process_state() ? ProcessTitleSetter : nullptr,
-                env->as_callback_data(),
-                DEFAULT,
-                None,
-                SideEffectType::kHasNoSideEffect)
-            .FromJust());
-
   if (node_is_nwjs)
     READONLY_PROPERTY(process, "__nwjs", Integer::New(env->isolate(), 1));
 
@@ -143,34 +130,56 @@ MaybeLocal<Object> CreateProcessObject(
 #endif  // _WIN32
 #endif  // NODE_HAS_RELEASE_URLS
 
+  // process._rawDebug: may be overwritten later in JS land, but should be
+  // availbale from the begining for debugging purposes
+  env->SetMethod(process, "_rawDebug", RawDebug);
+
+  return scope.Escape(process);
+}
+
+void PatchProcessObject(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  Local<Context> context = isolate->GetCurrentContext();
+  Environment* env = Environment::GetCurrent(context);
+  CHECK(args[0]->IsObject());
+  Local<Object> process = args[0].As<Object>();
+
+  // process.title
+  CHECK(process
+            ->SetAccessor(
+                context,
+                FIXED_ONE_BYTE_STRING(isolate, "title"),
+                ProcessTitleGetter,
+                env->owns_process_state() ? ProcessTitleSetter : nullptr,
+                env->as_callback_data(),
+                DEFAULT,
+                None,
+                SideEffectType::kHasNoSideEffect)
+            .FromJust());
+
   // process.argv
-  process->Set(env->context(),
-               FIXED_ONE_BYTE_STRING(env->isolate(), "argv"),
-               ToV8Value(env->context(), args).ToLocalChecked()).FromJust();
+  process->Set(context,
+               FIXED_ONE_BYTE_STRING(isolate, "argv"),
+               ToV8Value(context, env->argv()).ToLocalChecked()).Check();
 
   // process.execArgv
-  process->Set(env->context(),
-               FIXED_ONE_BYTE_STRING(env->isolate(), "execArgv"),
-               ToV8Value(env->context(), exec_args)
-                   .ToLocalChecked()).FromJust();
+  process->Set(context,
+               FIXED_ONE_BYTE_STRING(isolate, "execArgv"),
+               ToV8Value(context, env->exec_argv())
+                   .ToLocalChecked()).Check();
 
   READONLY_PROPERTY(process, "pid",
-                    Integer::New(env->isolate(), uv_os_getpid()));
+                    Integer::New(isolate, uv_os_getpid()));
 
-  CHECK(process->SetAccessor(env->context(),
-                             FIXED_ONE_BYTE_STRING(env->isolate(), "ppid"),
+  CHECK(process->SetAccessor(context,
+                             FIXED_ONE_BYTE_STRING(isolate, "ppid"),
                              GetParentProcessId).FromJust());
-
-  // TODO(joyeecheung): make this available in JS during pre-execution.
-  // Note that to use this in releases the code doing the revert need to be
-  // careful to delay the check until after the bootstrap but that may not
-  // be possible depending on the feature being reverted.
 
   // --security-revert flags
 #define V(code, _, __)                                                        \
   do {                                                                        \
     if (IsReverted(SECURITY_REVERT_ ## code)) {                               \
-      READONLY_PROPERTY(process, "REVERT_" #code, True(env->isolate()));      \
+      READONLY_PROPERTY(process, "REVERT_" #code, True(isolate));             \
     }                                                                         \
   } while (0);
   SECURITY_REVERSIONS(V)
@@ -184,7 +193,7 @@ MaybeLocal<Object> CreateProcessObject(
     if (uv_exepath(exec_path_buf, &exec_path_len) == 0) {
       exec_path = std::string(exec_path_buf, exec_path_len);
     } else {
-      exec_path = args[0];
+      exec_path = env->argv()[0];
     }
     // On OpenBSD process.execPath will be relative unless we
     // get the full path before process.execPath is used.
@@ -199,31 +208,24 @@ MaybeLocal<Object> CreateProcessObject(
     uv_fs_req_cleanup(&req);
 #endif
     process
-        ->Set(env->context(),
-              FIXED_ONE_BYTE_STRING(env->isolate(), "execPath"),
-              String::NewFromUtf8(env->isolate(),
+        ->Set(context,
+              FIXED_ONE_BYTE_STRING(isolate, "execPath"),
+              String::NewFromUtf8(isolate,
                                   exec_path.c_str(),
                                   NewStringType::kInternalized,
                                   exec_path.size())
                   .ToLocalChecked())
-        .FromJust();
+        .Check();
   }
 
   // process.debugPort
-  auto debug_port_string = FIXED_ONE_BYTE_STRING(env->isolate(), "debugPort");
   CHECK(process
-            ->SetAccessor(env->context(),
-                          debug_port_string,
+            ->SetAccessor(context,
+                          FIXED_ONE_BYTE_STRING(isolate, "debugPort"),
                           DebugPortGetter,
                           env->owns_process_state() ? DebugPortSetter : nullptr,
                           env->as_callback_data())
             .FromJust());
-
-  // process._rawDebug: may be overwritten later in JS land, but should be
-  // availbale from the begining for debugging purposes
-  env->SetMethod(process, "_rawDebug", RawDebug);
-
-  return scope.Escape(process);
 }
 
 }  // namespace node

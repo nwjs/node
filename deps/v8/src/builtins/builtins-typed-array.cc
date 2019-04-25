@@ -7,6 +7,7 @@
 #include "src/counters.h"
 #include "src/elements.h"
 #include "src/objects-inl.h"
+#include "src/objects/heap-number-inl.h"
 #include "src/objects/js-array-buffer-inl.h"
 
 namespace v8 {
@@ -26,21 +27,18 @@ BUILTIN(TypedArrayPrototypeBuffer) {
 namespace {
 
 int64_t CapRelativeIndex(Handle<Object> num, int64_t minimum, int64_t maximum) {
-  int64_t relative;
   if (V8_LIKELY(num->IsSmi())) {
-    relative = Smi::ToInt(*num);
+    int64_t relative = Smi::ToInt(*num);
+    return relative < 0 ? std::max<int64_t>(relative + maximum, minimum)
+                        : std::min<int64_t>(relative, maximum);
   } else {
     DCHECK(num->IsHeapNumber());
-    double fp = HeapNumber::cast(*num)->value();
-    if (V8_UNLIKELY(!std::isfinite(fp))) {
-      // +Infinity / -Infinity
-      DCHECK(!std::isnan(fp));
-      return fp < 0 ? minimum : maximum;
-    }
-    relative = static_cast<int64_t>(fp);
+    double relative = HeapNumber::cast(*num)->value();
+    DCHECK(!std::isnan(relative));
+    return static_cast<int64_t>(
+        relative < 0 ? std::max<double>(relative + maximum, minimum)
+                     : std::min<double>(relative, maximum));
   }
-  return relative < 0 ? std::max<int64_t>(relative + maximum, minimum)
-                      : std::min<int64_t>(relative, maximum);
 }
 
 }  // namespace
@@ -86,7 +84,7 @@ BUILTIN(TypedArrayPrototypeCopyWithin) {
   // TODO(caitp): throw here, as though the full algorithm were performed (the
   // throw would have come from ecma262/#sec-integerindexedelementget)
   // (see )
-  if (V8_UNLIKELY(array->WasNeutered())) return *array;
+  if (V8_UNLIKELY(array->WasDetached())) return *array;
 
   // Ensure processed indexes are within array bounds
   DCHECK_GE(from, 0);
@@ -149,7 +147,7 @@ BUILTIN(TypedArrayPrototypeFill) {
   int64_t count = end - start;
   if (count <= 0) return *array;
 
-  if (V8_UNLIKELY(array->WasNeutered())) return *array;
+  if (V8_UNLIKELY(array->WasDetached())) return *array;
 
   // Ensure processed indexes are within array bounds
   DCHECK_GE(start, 0);
@@ -185,7 +183,7 @@ BUILTIN(TypedArrayPrototypeIncludes) {
   }
 
   // TODO(cwhan.tunz): throw. See the above comment in CopyWithin.
-  if (V8_UNLIKELY(array->WasNeutered()))
+  if (V8_UNLIKELY(array->WasDetached()))
     return ReadOnlyRoots(isolate).false_value();
 
   Handle<Object> search_element = args.atOrUndefined(isolate, 1);
@@ -217,7 +215,7 @@ BUILTIN(TypedArrayPrototypeIndexOf) {
   }
 
   // TODO(cwhan.tunz): throw. See the above comment in CopyWithin.
-  if (V8_UNLIKELY(array->WasNeutered())) return Smi::FromInt(-1);
+  if (V8_UNLIKELY(array->WasDetached())) return Smi::FromInt(-1);
 
   Handle<Object> search_element = args.atOrUndefined(isolate, 1);
   ElementsAccessor* elements = array->GetElementsAccessor();
@@ -252,7 +250,7 @@ BUILTIN(TypedArrayPrototypeLastIndexOf) {
   if (index < 0) return Smi::FromInt(-1);
 
   // TODO(cwhan.tunz): throw. See the above comment in CopyWithin.
-  if (V8_UNLIKELY(array->WasNeutered())) return Smi::FromInt(-1);
+  if (V8_UNLIKELY(array->WasDetached())) return Smi::FromInt(-1);
 
   Handle<Object> search_element = args.atOrUndefined(isolate, 1);
   ElementsAccessor* elements = array->GetElementsAccessor();

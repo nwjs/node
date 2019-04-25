@@ -12,6 +12,7 @@
 namespace v8 {
 namespace internal {
 
+class ByteArray;
 class Callable;
 template <typename T>
 class Handle;
@@ -23,6 +24,11 @@ class RootVisitor;
 enum class InterpreterPushArgsMode : unsigned;
 namespace compiler {
 class CodeAssemblerState;
+}
+
+template <typename T>
+static constexpr T FirstFromVarArgs(T x, ...) noexcept {
+  return x;
 }
 
 // Convenience macro to avoid generating named accessors for all builtins.
@@ -40,13 +46,16 @@ class Builtins {
 
   enum Name : int32_t {
 #define DEF_ENUM(Name, ...) k##Name,
-#define DEF_ENUM_BYTECODE_HANDLER(Name, ...) \
-  k##Name##Handler, k##Name##WideHandler, k##Name##ExtraWideHandler,
     BUILTIN_LIST(DEF_ENUM, DEF_ENUM, DEF_ENUM, DEF_ENUM, DEF_ENUM, DEF_ENUM,
-                 DEF_ENUM_BYTECODE_HANDLER, DEF_ENUM)
+                 DEF_ENUM, DEF_ENUM)
 #undef DEF_ENUM
-#undef DEF_ENUM_BYTECODE_HANDLER
-        builtin_count
+        builtin_count,
+
+#define EXTRACT_NAME(Name, ...) k##Name,
+    // Define kFirstBytecodeHandler,
+    kFirstBytecodeHandler =
+        FirstFromVarArgs(BUILTIN_LIST_BYTECODE_HANDLERS(EXTRACT_NAME) 0)
+#undef EXTRACT_NAME
   };
 
   static const int32_t kNoBuiltinId = -1;
@@ -67,16 +76,12 @@ class Builtins {
   Handle<Code> NonPrimitiveToPrimitive(
       ToPrimitiveHint hint = ToPrimitiveHint::kDefault);
   Handle<Code> OrdinaryToPrimitive(OrdinaryToPrimitiveHint hint);
-  Handle<Code> InterpreterPushArgsThenCall(ConvertReceiverMode receiver_mode,
-                                           InterpreterPushArgsMode mode);
-  Handle<Code> InterpreterPushArgsThenConstruct(InterpreterPushArgsMode mode);
-  Handle<Code> NewFunctionContext(ScopeType scope_type);
   Handle<Code> JSConstructStubGeneric();
 
-  // Used by BuiltinDeserializer and CreateOffHeapTrampolines in isolate.cc.
-  void set_builtin(int index, HeapObject* builtin);
+  // Used by CreateOffHeapTrampolines in isolate.cc.
+  void set_builtin(int index, Code builtin);
 
-  Code* builtin(int index);
+  Code builtin(int index);
   V8_EXPORT_PRIVATE Handle<Code> builtin_handle(int index);
 
   V8_EXPORT_PRIVATE static Callable CallableFor(Isolate* isolate, Name name);
@@ -84,6 +89,10 @@ class Builtins {
   static int GetStackParameterCount(Name name);
 
   static const char* name(int index);
+
+  // Support for --print-builtin-size and --print-builtin-code.
+  void PrintBuiltinCode();
+  void PrintBuiltinSize();
 
   // Returns the C++ entry point for builtins implemented in C++, and the null
   // Address otherwise.
@@ -97,28 +106,42 @@ class Builtins {
 
   // True, iff the given code object is a builtin. Note that this does not
   // necessarily mean that its kind is Code::BUILTIN.
-  static bool IsBuiltin(const Code* code);
+  static bool IsBuiltin(const Code code);
 
   // As above, but safe to access off the main thread since the check is done
   // by handle location. Similar to Heap::IsRootHandle.
   bool IsBuiltinHandle(Handle<HeapObject> maybe_code, int* index) const;
 
   // True, iff the given code object is a builtin with off-heap embedded code.
-  static bool IsIsolateIndependentBuiltin(const Code* code);
+  static bool IsIsolateIndependentBuiltin(const Code code);
 
-  // Returns true iff the given builtin can be lazy-loaded from the snapshot.
-  // This is true in general for most builtins with the exception of a few
-  // special cases such as CompileLazy and DeserializeLazy.
-  static bool IsLazy(int index);
+  static constexpr int kFirstWideBytecodeHandler =
+      kFirstBytecodeHandler + kNumberOfBytecodeHandlers;
+  static constexpr int kFirstExtraWideBytecodeHandler =
+      kFirstWideBytecodeHandler + kNumberOfWideBytecodeHandlers;
+  STATIC_ASSERT(kFirstExtraWideBytecodeHandler +
+                    kNumberOfWideBytecodeHandlers ==
+                builtin_count);
 
-  // Helper methods used for testing isolate-independent builtins.
-  // TODO(jgruber,v8:6666): Remove once all builtins have been migrated.
-  static bool IsIsolateIndependent(int index);
+  // True, iff the given builtin contains no isolate-specific code and can be
+  // embedded into the binary.
+  static constexpr bool kAllBuiltinsAreIsolateIndependent = true;
+  static constexpr bool AllBuiltinsAreIsolateIndependent() {
+    return kAllBuiltinsAreIsolateIndependent;
+  }
+  static constexpr bool IsIsolateIndependent(int index) {
+    STATIC_ASSERT(kAllBuiltinsAreIsolateIndependent);
+    return kAllBuiltinsAreIsolateIndependent;
+  }
 
   // Wasm runtime stubs are treated specially by wasm. To guarantee reachability
   // through near jumps, their code is completely copied into a fresh off-heap
   // area.
   static bool IsWasmRuntimeStub(int index);
+
+  // Updates the table of builtin entry points based on the current contents of
+  // the builtins table.
+  static void UpdateBuiltinEntryTable(Isolate* isolate);
 
   bool is_initialized() const { return initialized_; }
 
@@ -150,6 +173,35 @@ class Builtins {
   // function.
   static Handle<Code> GenerateOffHeapTrampolineFor(Isolate* isolate,
                                                    Address off_heap_entry);
+
+  // Generate the RelocInfo ByteArray that would be generated for an offheap
+  // trampoline.
+  static Handle<ByteArray> GenerateOffHeapTrampolineRelocInfo(Isolate* isolate);
+
+  static bool IsJSEntryVariant(int builtin_index) {
+    switch (builtin_index) {
+      case kJSEntry:
+      case kJSConstructEntry:
+      case kJSRunMicrotasksEntry:
+        return true;
+      default:
+        return false;
+    }
+    UNREACHABLE();
+  }
+
+  int js_entry_handler_offset() const {
+    DCHECK_NE(js_entry_handler_offset_, 0);
+    return js_entry_handler_offset_;
+  }
+
+  void SetJSEntryHandlerOffset(int offset) {
+    // Check the stored offset is either uninitialized or unchanged (we
+    // generate multiple variants of this builtin but they should all have the
+    // same handler offset).
+    CHECK(js_entry_handler_offset_ == 0 || js_entry_handler_offset_ == offset);
+    js_entry_handler_offset_ = offset;
+  }
 
  private:
   static void Generate_CallFunction(MacroAssembler* masm,
@@ -187,10 +239,18 @@ class Builtins {
   Isolate* isolate_;
   bool initialized_ = false;
 
+  // Stores the offset of exception handler entry point (the handler_entry
+  // label) in JSEntry and its variants. It's used to generate the handler table
+  // during codegen (mksnapshot-only).
+  int js_entry_handler_offset_ = 0;
+
   friend class SetupIsolateDelegate;
 
   DISALLOW_COPY_AND_ASSIGN(Builtins);
 };
+
+Builtins::Name ExampleBuiltinForTorqueFunctionPointerType(
+    size_t function_pointer_type_id);
 
 }  // namespace internal
 }  // namespace v8

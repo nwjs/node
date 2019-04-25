@@ -134,7 +134,7 @@ console.dir(custom_inspect, { showHidden: false });
 console.dir({ foo: { bar: { baz: true } } }, { depth: 0 });
 console.dir({ foo: { bar: { baz: true } } }, { depth: 1 });
 
-// test console.dirxml()
+// Test console.dirxml()
 console.dirxml(custom_inspect, custom_inspect);
 console.dirxml(
   { foo: { bar: { baz: true } } },
@@ -142,7 +142,7 @@ console.dirxml(
   { foo: { bar: { quux: true } } }
 );
 
-// test console.trace()
+// Test console.trace()
 console.trace('This is a %j %d', { formatted: 'trace' }, 10, 'foo');
 
 // Test console.time() and console.timeEnd() output
@@ -234,11 +234,11 @@ for (const expected of expectedStrings) {
 }
 
 assert.strictEqual(strings.shift(),
-                   "{ foo: 'bar',\n  [Symbol(nodejs.util.inspect.custom)]: " +
-                    '[Function: [nodejs.util.inspect.custom]] }\n');
+                   "{\n  foo: 'bar',\n  [Symbol(nodejs.util.inspect.custom)]:" +
+                    ' [Function: [nodejs.util.inspect.custom]]\n}\n');
 assert.strictEqual(strings.shift(),
-                   "{ foo: 'bar',\n  [Symbol(nodejs.util.inspect.custom)]: " +
-                    '[Function: [nodejs.util.inspect.custom]] }\n');
+                   "{\n  foo: 'bar',\n  [Symbol(nodejs.util.inspect.custom)]:" +
+                    ' [Function: [nodejs.util.inspect.custom]]\n}\n');
 assert.ok(strings.shift().includes('foo: [Object]'));
 assert.strictEqual(strings.shift().includes('baz'), false);
 assert.strictEqual(strings.shift(), 'inspect inspect\n');

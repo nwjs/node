@@ -22,7 +22,7 @@ namespace internal {
 // See builtins-arraybuffer.cc for implementations of
 // SharedArrayBuffer.prototye.byteLength and SharedArrayBuffer.prototype.slice
 
-inline bool AtomicIsLockFree(uint32_t size) {
+inline bool AtomicIsLockFree(double size) {
   return size == 1 || size == 2 || size == 4;
 }
 
@@ -74,6 +74,7 @@ V8_WARN_UNUSED_RESULT Maybe<size_t> ValidateAtomicAccess(
 
   size_t access_index;
   if (!TryNumberToSize(*access_index_obj, &access_index) ||
+      typed_array->WasDetached() ||
       access_index >= typed_array->length_value()) {
     isolate->Throw(*isolate->factory()->NewRangeError(
         MessageTemplate::kInvalidAtomicAccessIndex));
@@ -82,28 +83,24 @@ V8_WARN_UNUSED_RESULT Maybe<size_t> ValidateAtomicAccess(
   return Just<size_t>(access_index);
 }
 
-// ES #sec-atomics.wake
-// Atomics.wake( typedArray, index, count )
-BUILTIN(AtomicsWake) {
-  HandleScope scope(isolate);
-  Handle<Object> array = args.atOrUndefined(isolate, 1);
-  Handle<Object> index = args.atOrUndefined(isolate, 2);
-  Handle<Object> count = args.atOrUndefined(isolate, 3);
-
+namespace {
+MaybeHandle<Object> AtomicsWake(Isolate* isolate, Handle<Object> array,
+                                Handle<Object> index, Handle<Object> count) {
   Handle<JSTypedArray> sta;
-  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
-      isolate, sta, ValidateSharedIntegerTypedArray(isolate, array, true));
+  ASSIGN_RETURN_ON_EXCEPTION(
+      isolate, sta, ValidateSharedIntegerTypedArray(isolate, array, true),
+      Object);
 
   Maybe<size_t> maybe_index = ValidateAtomicAccess(isolate, sta, index);
-  if (maybe_index.IsNothing()) return ReadOnlyRoots(isolate).exception();
+  MAYBE_RETURN_NULL(maybe_index);
   size_t i = maybe_index.FromJust();
 
   uint32_t c;
   if (count->IsUndefined(isolate)) {
     c = kMaxUInt32;
   } else {
-    ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, count,
-                                       Object::ToInteger(isolate, count));
+    ASSIGN_RETURN_ON_EXCEPTION(isolate, count,
+                               Object::ToInteger(isolate, count), Object);
     double count_double = count->Number();
     if (count_double < 0)
       count_double = 0;
@@ -113,9 +110,35 @@ BUILTIN(AtomicsWake) {
   }
 
   Handle<JSArrayBuffer> array_buffer = sta->GetBuffer();
-  size_t addr = (i << 2) + NumberToSize(sta->byte_offset());
+  size_t addr = (i << 2) + sta->byte_offset();
 
-  return FutexEmulation::Wake(array_buffer, addr, c);
+  return Handle<Object>(FutexEmulation::Wake(array_buffer, addr, c), isolate);
+}
+
+}  // namespace
+
+// ES #sec-atomics.wake
+// Atomics.wake( typedArray, index, count )
+BUILTIN(AtomicsWake) {
+  HandleScope scope(isolate);
+  Handle<Object> array = args.atOrUndefined(isolate, 1);
+  Handle<Object> index = args.atOrUndefined(isolate, 2);
+  Handle<Object> count = args.atOrUndefined(isolate, 3);
+
+  isolate->CountUsage(v8::Isolate::UseCounterFeature::kAtomicsWake);
+  RETURN_RESULT_OR_FAILURE(isolate, AtomicsWake(isolate, array, index, count));
+}
+
+// ES #sec-atomics.notify
+// Atomics.notify( typedArray, index, count )
+BUILTIN(AtomicsNotify) {
+  HandleScope scope(isolate);
+  Handle<Object> array = args.atOrUndefined(isolate, 1);
+  Handle<Object> index = args.atOrUndefined(isolate, 2);
+  Handle<Object> count = args.atOrUndefined(isolate, 3);
+
+  isolate->CountUsage(v8::Isolate::UseCounterFeature::kAtomicsNotify);
+  RETURN_RESULT_OR_FAILURE(isolate, AtomicsWake(isolate, array, index, count));
 }
 
 // ES #sec-atomics.wait
@@ -158,10 +181,10 @@ BUILTIN(AtomicsWait) {
   }
 
   Handle<JSArrayBuffer> array_buffer = sta->GetBuffer();
-  size_t addr = (i << 2) + NumberToSize(sta->byte_offset());
+  size_t addr = (i << 2) + sta->byte_offset();
 
-  return FutexEmulation::Wait(isolate, array_buffer, addr, value_int32,
-                              timeout_number);
+  return FutexEmulation::WaitJs(isolate, array_buffer, addr, value_int32,
+                                timeout_number);
 }
 
 }  // namespace internal

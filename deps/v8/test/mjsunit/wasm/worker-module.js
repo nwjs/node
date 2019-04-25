@@ -4,7 +4,6 @@
 
 // Flags: --wasm-shared-engine --no-wasm-disable-structured-cloning
 
-load("test/mjsunit/wasm/wasm-constants.js");
 load("test/mjsunit/wasm/wasm-module-builder.js");
 
 (function TestPostModule() {
@@ -27,7 +26,7 @@ load("test/mjsunit/wasm/wasm-module-builder.js");
     }
   `;
 
-  let worker = new Worker(workerScript);
+  let worker = new Worker(workerScript, {type: 'string'});
   worker.postMessage(module);
   assertEquals(42, worker.getMessage());
   worker.terminate();

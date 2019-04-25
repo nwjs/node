@@ -25,16 +25,13 @@
 
 #include "debug_utils.h"
 #include "node_binding.h"
-#include "node_buffer.h"
-#include "node_constants.h"
-#include "node_context_data.h"
 #include "node_errors.h"
 #include "node_internals.h"
+#include "node_main_instance.h"
 #include "node_metadata.h"
-#include "node_native_module.h"
+#include "node_native_module_env.h"
 #include "node_options-inl.h"
 #include "node_perf.h"
-#include "node_platform.h"
 #include "node_process.h"
 #include "node_revert.h"
 #include "node_v8_platform-inl.h"
@@ -62,13 +59,6 @@
 #include "node_dtrace.h"
 #endif
 
-#include "async_wrap-inl.h"
-#include "env-inl.h"
-#include "handle_wrap.h"
-#include "req_wrap-inl.h"
-#include "string_bytes.h"
-#include "util.h"
-#include "uv.h"
 #if NODE_USE_V8_PLATFORM
 #include "libplatform/libplatform.h"
 #endif  // NODE_USE_V8_PLATFORM
@@ -128,26 +118,23 @@ NODE_EXTERN void* g_get_node_env();
 
 namespace node {
 
+using native_module::NativeModuleEnv;
 using options_parser::kAllowedInEnvironment;
 using options_parser::kDisallowedInEnvironment;
-using v8::Array;
+
 using v8::Boolean;
 using v8::Context;
-using v8::DEFAULT;
 using v8::EscapableHandleScope;
 using v8::Exception;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::HandleScope;
 using v8::Isolate;
-using v8::Just;
 using v8::Local;
-using v8::Locker;
 using v8::Maybe;
 using v8::MaybeLocal;
 using v8::Object;
 using v8::Script;
-using v8::SealHandleScope;
 using v8::String;
 using v8::Undefined;
 using v8::V8;
@@ -189,6 +176,8 @@ static const unsigned kMaxSignal = 32;
 
 void WaitForInspectorDisconnect(Environment* env) {
 #if HAVE_INSPECTOR
+  profiler::EndStartedProfilers(env);
+
   if (env->inspector_agent()->IsActive()) {
     // Restore signal dispositions, the app is done and is no longer
     // capable of handling signals.
@@ -225,8 +214,7 @@ MaybeLocal<Value> ExecuteBootstrapper(Environment* env,
                                       std::vector<Local<Value>>* arguments) {
   EscapableHandleScope scope(env->isolate());
   MaybeLocal<Function> maybe_fn =
-      per_process::native_module_loader.LookupAndCompile(
-          env->context(), id, parameters, env);
+      NativeModuleEnv::LookupAndCompile(env->context(), id, parameters, env);
 
   if (maybe_fn.IsEmpty()) {
     return MaybeLocal<Value>();
@@ -259,21 +247,28 @@ MaybeLocal<Value> RunBootstrapping(Environment* env) {
   Isolate* isolate = env->isolate();
   Local<Context> context = env->context();
 
-  std::string coverage;
-  bool rc = credentials::SafeGetenv("NODE_V8_COVERAGE", &coverage);
-  if (rc && !coverage.empty()) {
+  Local<String> coverage_str = env->env_vars()->Get(
+      isolate, FIXED_ONE_BYTE_STRING(isolate, "NODE_V8_COVERAGE"));
+  if (!coverage_str.IsEmpty() && coverage_str->Length() > 0) {
 #if HAVE_INSPECTOR
     profiler::StartCoverageCollection(env);
 #else
-    fprintf(stderr, "NODE_V8_COVERAGE cannot be used without inspector");
+    fprintf(stderr, "NODE_V8_COVERAGE cannot be used without inspector\n");
 #endif  // HAVE_INSPECTOR
   }
+
+#if HAVE_INSPECTOR
+  if (env->options()->cpu_prof) {
+    env->InitializeCPUProfDir(env->options()->cpu_prof_dir);
+    profiler::StartCpuProfiling(env, env->options()->cpu_prof_name);
+  }
+#endif  // HAVE_INSPECTOR
 
   // Add a reference to the global object
   Local<Object> global = context->Global();
 
 #if defined HAVE_DTRACE || defined HAVE_ETW
-  InitDTrace(env, global);
+  InitDTrace(env);
 #endif
 
   Local<Object> process = env->process_object();
@@ -283,16 +278,18 @@ MaybeLocal<Value> RunBootstrapping(Environment* env) {
   // Expose the global object as a property on itself
   // (Allows you to set stuff on `global` from anywhere in JavaScript.)
   global->Set(context, FIXED_ONE_BYTE_STRING(env->isolate(), "global"), global)
-      .FromJust();
+      .Check();
 
-  // Store primordials
-  env->set_primordials(Object::New(isolate));
-  std::vector<Local<String>> primordials_params = {
-    env->primordials_string()
-  };
-  std::vector<Local<Value>> primordials_args = {
-    env->primordials()
-  };
+  // Store primordials setup by the per-context script in the environment.
+  Local<Object> per_context_bindings;
+  Local<Value> primordials;
+  if (!GetPerContextExports(context).ToLocal(&per_context_bindings) ||
+      !per_context_bindings->Get(context, env->primordials_string())
+           .ToLocal(&primordials) ||
+      !primordials->IsObject()) {
+    //return MaybeLocal<Value>();
+  } else
+  env->set_primordials(primordials.As<Object>());
 
 #if HAVE_INSPECTOR
   if (env->options()->debug_options().break_node_first_line) {
@@ -300,14 +297,6 @@ MaybeLocal<Value> RunBootstrapping(Environment* env) {
         "Break at bootstrap");
   }
 #endif  // HAVE_INSPECTOR
-  MaybeLocal<Value> primordials_ret =
-      ExecuteBootstrapper(env,
-                          "internal/bootstrap/primordials",
-                          &primordials_params,
-                          &primordials_args);
-  if (primordials_ret.IsEmpty()) {
-    return MaybeLocal<Value>();
-  }
 
   // Create binding loaders
   std::vector<Local<String>> loaders_params = {
@@ -398,12 +387,14 @@ MaybeLocal<Value> StartExecution(Environment* env, const char* main_script_id) {
       env->process_string(),
       env->require_string(),
       env->internal_binding_string(),
+      env->primordials_string(),
       FIXED_ONE_BYTE_STRING(env->isolate(), "markBootstrapComplete")};
 
   std::vector<Local<Value>> arguments = {
       env->process_object(),
       env->native_module_require(),
       env->internal_binding_loader(),
+      env->primordials(),
       env->NewFunctionTemplate(MarkBootstrapComplete)
           ->GetFunction(env->context())
           .ToLocalChecked()};
@@ -417,7 +408,7 @@ MaybeLocal<Value> StartMainThreadExecution(Environment* env) {
   // To allow people to extend Node in different ways, this hook allows
   // one to drop a file lib/_third_party_main.js into the build
   // directory which will be executed instead of Node's normal loading.
-  if (per_process::native_module_loader.Exists("_third_party_main")) {
+  if (NativeModuleEnv::Exists("_third_party_main")) {
     return StartExecution(env, "internal/main/run_third_party_main");
   }
 
@@ -709,11 +700,49 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
 
 #if !defined(NODE_WITHOUT_NODE_OPTIONS)
   std::string node_options;
+
   if (credentials::SafeGetenv("NODE_OPTIONS", &node_options)) {
-    // [0] is expected to be the program name, fill it in from the real argv
-    // and use 'x' as a placeholder while parsing.
-    std::vector<std::string> env_argv = SplitString("x " + node_options, ' ');
-    env_argv[0] = argv->at(0);
+    std::vector<std::string> env_argv;
+    // [0] is expected to be the program name, fill it in from the real argv.
+    env_argv.push_back(argv->at(0));
+
+    bool is_in_string = false;
+    bool will_start_new_arg = true;
+    for (std::string::size_type index = 0;
+         index < node_options.size();
+         ++index) {
+      char c = node_options.at(index);
+
+      // Backslashes escape the following character
+      if (c == '\\' && is_in_string) {
+        if (index + 1 == node_options.size()) {
+          errors->push_back("invalid value for NODE_OPTIONS "
+                            "(invalid escape)\n");
+          return 9;
+        } else {
+          c = node_options.at(++index);
+        }
+      } else if (c == ' ' && !is_in_string) {
+        will_start_new_arg = true;
+        continue;
+      } else if (c == '"') {
+        is_in_string = !is_in_string;
+        continue;
+      }
+
+      if (will_start_new_arg) {
+        env_argv.push_back(std::string(1, c));
+        will_start_new_arg = false;
+      } else {
+        env_argv.back() += c;
+      }
+    }
+
+    if (is_in_string) {
+      errors->push_back("invalid value for NODE_OPTIONS "
+                        "(unterminated string)\n");
+      return 9;
+    }
 
     const int exit_code = ProcessGlobalArgs(&env_argv, nullptr, errors, true);
     if (exit_code != 0) return exit_code;
@@ -741,6 +770,8 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
   }
   per_process::metadata.versions.InitializeIntlVersions();
 #endif
+
+//NativeModuleEnv::InitializeCodeCache();
 
   // We should set node_is_initialized here instead of in node::Start,
   // otherwise embedders using node::Init to initialize everything will not be
@@ -786,160 +817,6 @@ void Init(int* argc,
     (*exec_argv)[i] = strdup(exec_argv_[i].c_str());
   for (int i = 0; i < *argc; ++i)
     argv[i] = strdup(argv_[i].c_str());
-}
-
-void RunBeforeExit(Environment* env) {
-  env->RunBeforeExitCallbacks();
-
-  if (!uv_loop_alive(env->event_loop()))
-    EmitBeforeExit(env);
-}
-
-// TODO(joyeecheung): align this with the CreateEnvironment exposed in node.h
-// and the environment creation routine in workers somehow.
-inline std::unique_ptr<Environment> CreateMainEnvironment(
-    IsolateData* isolate_data,
-    const std::vector<std::string>& args,
-    const std::vector<std::string>& exec_args,
-    int* exit_code) {
-  Isolate* isolate = isolate_data->isolate();
-  HandleScope handle_scope(isolate);
-
-  // TODO(addaleax): This should load a real per-Isolate option, currently
-  // this is still effectively per-process.
-  if (isolate_data->options()->track_heap_objects) {
-    isolate->GetHeapProfiler()->StartTrackingHeapObjects(true);
-  }
-
-  Local<Context> context = NewContext(isolate);
-  Context::Scope context_scope(context);
-
-  std::unique_ptr<Environment> env = std::make_unique<Environment>(
-      isolate_data,
-      context,
-      static_cast<Environment::Flags>(Environment::kIsMainThread |
-                                      Environment::kOwnsProcessState |
-                                      Environment::kOwnsInspector));
-  env->InitializeLibuv(per_process::v8_is_profiling);
-  env->ProcessCliArgs(args, exec_args);
-
-#if HAVE_INSPECTOR && NODE_USE_V8_PLATFORM
-  CHECK(!env->inspector_agent()->IsListening());
-  // Inspector agent can't fail to start, but if it was configured to listen
-  // right away on the websocket port and fails to bind/etc, this will return
-  // false.
-  env->inspector_agent()->Start(args.size() > 1 ? args[1].c_str() : "",
-                                env->options()->debug_options(),
-                                env->inspector_host_port(),
-                                true);
-  if (env->options()->debug_options().inspector_enabled &&
-      !env->inspector_agent()->IsListening()) {
-    *exit_code = 12;  // Signal internal error.
-    return env;
-  }
-#else
-  // inspector_enabled can't be true if !HAVE_INSPECTOR or !NODE_USE_V8_PLATFORM
-  // - the option parser should not allow that.
-  CHECK(!env->options()->debug_options().inspector_enabled);
-#endif  // HAVE_INSPECTOR && NODE_USE_V8_PLATFORM
-
-  if (RunBootstrapping(env.get()).IsEmpty()) {
-    *exit_code = 1;
-  }
-
-  return env;
-}
-
-inline int StartNodeWithIsolate(Isolate* isolate,
-                                IsolateData* isolate_data,
-                                const std::vector<std::string>& args,
-                                const std::vector<std::string>& exec_args) {
-  int exit_code = 0;
-  std::unique_ptr<Environment> env =
-      CreateMainEnvironment(isolate_data, args, exec_args, &exit_code);
-  CHECK_NOT_NULL(env);
-  HandleScope handle_scope(env->isolate());
-  Context::Scope context_scope(env->context());
-
-  if (exit_code == 0) {
-    {
-      AsyncCallbackScope callback_scope(env.get());
-      env->async_hooks()->push_async_ids(1, 0);
-      LoadEnvironment(env.get());
-      env->async_hooks()->pop_async_id(1);
-    }
-
-    {
-      SealHandleScope seal(isolate);
-      bool more;
-      env->performance_state()->Mark(
-          node::performance::NODE_PERFORMANCE_MILESTONE_LOOP_START);
-      do {
-        uv_run(env->event_loop(), UV_RUN_DEFAULT);
-
-        per_process::v8_platform.DrainVMTasks(isolate);
-
-        more = uv_loop_alive(env->event_loop());
-        if (more && !env->is_stopping()) continue;
-
-        RunBeforeExit(env.get());
-
-        // Emit `beforeExit` if the loop became alive either after emitting
-        // event, or after running some callbacks.
-        more = uv_loop_alive(env->event_loop());
-      } while (more == true && !env->is_stopping());
-      env->performance_state()->Mark(
-          node::performance::NODE_PERFORMANCE_MILESTONE_LOOP_EXIT);
-    }
-
-    env->set_trace_sync_io(false);
-    exit_code = EmitExit(env.get());
-    WaitForInspectorDisconnect(env.get());
-  }
-
-  env->set_can_call_into_js(false);
-  env->stop_sub_worker_contexts();
-  uv_tty_reset_mode();
-  env->RunCleanup();
-  RunAtExit(env.get());
-
-  per_process::v8_platform.DrainVMTasks(isolate);
-  per_process::v8_platform.CancelVMTasks(isolate);
-
-#if defined(LEAK_SANITIZER)
-  __lsan_do_leak_check();
-#endif
-
-  return exit_code;
-}
-
-inline int StartNodeWithLoopAndArgs(uv_loop_t* event_loop,
-                                    const std::vector<std::string>& args,
-                                    const std::vector<std::string>& exec_args) {
-  std::unique_ptr<ArrayBufferAllocator, decltype(&FreeArrayBufferAllocator)>
-      allocator(CreateArrayBufferAllocator(), &FreeArrayBufferAllocator);
-  Isolate* const isolate = NewIsolate(allocator.get(), event_loop);
-  if (isolate == nullptr)
-    return 12;  // Signal internal error.
-
-  int exit_code;
-  {
-    Locker locker(isolate);
-    Isolate::Scope isolate_scope(isolate);
-    HandleScope handle_scope(isolate);
-    std::unique_ptr<IsolateData, decltype(&FreeIsolateData)> isolate_data(
-        CreateIsolateData(isolate,
-                          event_loop,
-                          per_process::v8_platform.Platform()),
-        &FreeIsolateData);
-    exit_code =
-        StartNodeWithIsolate(isolate, isolate_data.get(), args, exec_args);
-  }
-
-  isolate->Dispose();
-  per_process::v8_platform.Platform()->UnregisterIsolate(isolate);
-
-  return exit_code;
 }
 
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
@@ -1051,7 +928,7 @@ void StartupDataHandler::Load(const char* blob_file,
 #endif  // V8_USE_EXTERNAL_STARTUP_DATA
 
 
-int Start(int argc, char** argv) {
+InitializationResult InitializeOncePerProcess(int argc, char** argv) {
   atexit([] () { uv_tty_reset_mode(); });
   PlatformInit();
   per_process::node_start_time = uv_hrtime();
@@ -1069,20 +946,27 @@ int Start(int argc, char** argv) {
   // Hack around with the argv pointer. Used for process.title = "blah".
   argv = uv_setup_args(argc, argv);
 
-  std::vector<std::string> args(argv, argv + argc);
-  std::vector<std::string> exec_args;
+  InitializationResult result;
+  result.args = std::vector<std::string>(argv, argv + argc);
   std::vector<std::string> errors;
+
   // This needs to run *before* V8::Initialize().
   {
-    const int exit_code = InitializeNodeWithArgs(&args, &exec_args, &errors);
+    result.exit_code =
+        InitializeNodeWithArgs(&(result.args), &(result.exec_args), &errors);
     for (const std::string& error : errors)
-      fprintf(stderr, "%s: %s\n", args.at(0).c_str(), error.c_str());
-    if (exit_code != 0) return exit_code;
+      fprintf(stderr, "%s: %s\n", result.args.at(0).c_str(), error.c_str());
+    if (result.exit_code != 0) {
+      result.early_return = true;
+      return result;
+    }
   }
 
   if (per_process::cli_options->print_version) {
     printf("%s\n", NODE_VERSION);
-    return 0;
+    result.exit_code = 0;
+    result.early_return = true;
+    return result;
   }
 
   if (per_process::cli_options->print_v8_help) {
@@ -1124,8 +1008,10 @@ int Start(int argc, char** argv) {
   V8::Initialize();
   //performance::performance_v8_start = PERFORMANCE_NOW();
   per_process::v8_initialized = true;
-  const int exit_code =
-      StartNodeWithLoopAndArgs(uv_default_loop(), args, exec_args);
+  return result;
+}
+
+void TearDownOncePerProcess() {
   per_process::v8_initialized = false;
   V8::Dispose();
 
@@ -1136,8 +1022,22 @@ int Start(int argc, char** argv) {
   // Since uv_run cannot be called, uv_async handles held by the platform
   // will never be fully cleaned up.
   per_process::v8_platform.Dispose();
+}
 
-  return exit_code;
+int Start(int argc, char** argv) {
+  InitializationResult result = InitializeOncePerProcess(argc, argv);
+  if (result.early_return) {
+    return result.exit_code;
+  }
+
+  {
+    NodeMainInstance main_instance(
+        uv_default_loop(), result.args, result.exec_args);
+    result.exit_code = main_instance.Run();
+  }
+
+  TearDownOncePerProcess();
+  return result.exit_code;
 }
 
 int Stop(Environment* env) {
@@ -1439,6 +1339,7 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
     node::binding::RegisterBuiltinModules();
   }
   node::IsolateData* isolate_data = node::CreateIsolateData(isolate, uv_default_loop());
+  node::NewContext(isolate, v8::Local<v8::ObjectTemplate>(), false);
   tls_ctx->env = node::CreateEnvironment(isolate_data, context, argc, argv, 0, nullptr);
   isolate->SetFatalErrorHandler(node::OnFatalError);
   isolate->AddMessageListener(node::OnMessage);

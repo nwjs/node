@@ -677,22 +677,22 @@ Local<Object> SyncProcessRunner::BuildResultObject() {
 
   if (GetError() != 0) {
     js_result->Set(context, env()->error_string(),
-                   Integer::New(env()->isolate(), GetError())).FromJust();
+                   Integer::New(env()->isolate(), GetError())).Check();
   }
 
   if (exit_status_ >= 0) {
     if (term_signal_ > 0) {
       js_result->Set(context, env()->status_string(),
-                     Null(env()->isolate())).FromJust();
+                     Null(env()->isolate())).Check();
     } else {
       js_result->Set(context, env()->status_string(),
                      Number::New(env()->isolate(),
-                                 static_cast<double>(exit_status_))).FromJust();
+                                 static_cast<double>(exit_status_))).Check();
     }
   } else {
     // If exit_status_ < 0 the process was never started because of some error.
     js_result->Set(context, env()->status_string(),
-                   Null(env()->isolate())).FromJust();
+                   Null(env()->isolate())).Check();
   }
 
   if (term_signal_ > 0)
@@ -701,20 +701,20 @@ Local<Object> SyncProcessRunner::BuildResultObject() {
                                        signo_string(term_signal_),
                                        v8::NewStringType::kNormal)
                        .ToLocalChecked())
-        .FromJust();
+        .Check();
   else
     js_result->Set(context, env()->signal_string(),
-                   Null(env()->isolate())).FromJust();
+                   Null(env()->isolate())).Check();
 
   if (exit_status_ >= 0)
     js_result->Set(context, env()->output_string(),
-                   BuildOutputArray()).FromJust();
+                   BuildOutputArray()).Check();
   else
     js_result->Set(context, env()->output_string(),
-                   Null(env()->isolate())).FromJust();
+                   Null(env()->isolate())).Check();
 
   js_result->Set(context, env()->pid_string(),
-                 Number::New(env()->isolate(), uv_process_.pid)).FromJust();
+                 Number::New(env()->isolate(), uv_process_.pid)).Check();
 
   return scope.Escape(js_result);
 }
@@ -731,16 +731,17 @@ Local<Array> SyncProcessRunner::BuildOutputArray() {
   for (uint32_t i = 0; i < stdio_pipes_.size(); i++) {
     SyncProcessStdioPipe* h = stdio_pipes_[i].get();
     if (h != nullptr && h->writable())
-      js_output->Set(context, i, h->GetOutputAsBuffer(env())).FromJust();
+      js_output->Set(context, i, h->GetOutputAsBuffer(env())).Check();
     else
-      js_output->Set(context, i, Null(env()->isolate())).FromJust();
+      js_output->Set(context, i, Null(env()->isolate())).Check();
   }
 
   return scope.Escape(js_output);
 }
 
 Maybe<int> SyncProcessRunner::ParseOptions(Local<Value> js_value) {
-  HandleScope scope(env()->isolate());
+  Isolate* isolate = env()->isolate();
+  HandleScope scope(isolate);
   int r;
 
   if (!js_value->IsObject()) return Just<int>(UV_EINVAL);
@@ -797,19 +798,19 @@ Maybe<int> SyncProcessRunner::ParseOptions(Local<Value> js_value) {
 
   Local<Value> js_detached =
       js_options->Get(context, env()->detached_string()).ToLocalChecked();
-  if (js_detached->BooleanValue(context).FromJust())
+  if (js_detached->BooleanValue(isolate))
     uv_process_options_.flags |= UV_PROCESS_DETACHED;
 
   Local<Value> js_win_hide =
       js_options->Get(context, env()->windows_hide_string()).ToLocalChecked();
-  if (js_win_hide->BooleanValue(context).FromJust())
+  if (js_win_hide->BooleanValue(isolate))
     uv_process_options_.flags |= UV_PROCESS_WINDOWS_HIDE;
 
   Local<Value> js_wva =
       js_options->Get(context, env()->windows_verbatim_arguments_string())
           .ToLocalChecked();
 
-  if (js_wva->BooleanValue(context).FromJust())
+  if (js_wva->BooleanValue(isolate))
     uv_process_options_.flags |= UV_PROCESS_WINDOWS_VERBATIM_ARGUMENTS;
 
   Local<Value> js_timeout =
@@ -889,14 +890,15 @@ int SyncProcessRunner::ParseStdioOption(int child_fd,
     return AddStdioIgnore(child_fd);
 
   } else if (js_type->StrictEquals(env()->pipe_string())) {
+    Isolate* isolate = env()->isolate();
     Local<String> rs = env()->readable_string();
     Local<String> ws = env()->writable_string();
 
     bool readable = js_stdio_option->Get(context, rs)
-        .ToLocalChecked()->BooleanValue(context).FromJust();
+        .ToLocalChecked()->BooleanValue(isolate);
     bool writable =
         js_stdio_option->Get(context, ws)
-        .ToLocalChecked()->BooleanValue(context).FromJust();
+        .ToLocalChecked()->BooleanValue(isolate);
 
     uv_buf_t buf = uv_buf_init(nullptr, 0);
 
@@ -1043,7 +1045,7 @@ Maybe<int> SyncProcessRunner::CopyJsStringArray(Local<Value> js_value,
                 i,
                 value->ToString(env()->isolate()->GetCurrentContext())
                     .ToLocalChecked())
-          .FromJust();
+          .Check();
     }
 
     Maybe<size_t> maybe_size = StringBytes::StorageSize(isolate, value, UTF8);

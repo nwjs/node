@@ -44,6 +44,7 @@
     '../../src/inspector_io.cc',
     '../../src/inspector_agent.h',
     '../../src/inspector_io.h',
+    '../../src/inspector_profiler.h',
     '../../src/inspector_profiler.cc',
     '../../src/inspector_js_api.cc',
     '../../src/inspector_socket.cc',
@@ -96,7 +97,7 @@
       'action': [
         'python',
         'tools/inspector_protocol/code_generator.py',
-        '--jinja_dir', '<@(protocol_tool_path)/..',
+        '--jinja_dir', '<@(protocol_tool_path)',
         '--output_base', '<(SHARED_INTERMEDIATE_DIR)/src/',
         '--config', 'src/inspector/node_protocol_config.json',
       ],

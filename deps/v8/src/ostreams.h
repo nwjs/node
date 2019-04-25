@@ -18,10 +18,10 @@
 namespace v8 {
 namespace internal {
 
-class OFStreamBase : public std::streambuf {
+class V8_EXPORT_PRIVATE OFStreamBase : public std::streambuf {
  public:
   explicit OFStreamBase(FILE* f);
-  virtual ~OFStreamBase();
+  ~OFStreamBase() override = default;
 
  protected:
   FILE* const f_;
@@ -31,11 +31,33 @@ class OFStreamBase : public std::streambuf {
   std::streamsize xsputn(const char* s, std::streamsize n) override;
 };
 
+// Output buffer and stream writing into debugger's command window.
+class V8_EXPORT_PRIVATE DbgStreamBuf : public std::streambuf {
+ public:
+  DbgStreamBuf();
+  ~DbgStreamBuf();
+
+ private:
+  int sync() override;
+  int overflow(int c) override;
+
+  char data_[256];
+};
+
+class DbgStdoutStream : public std::ostream {
+ public:
+  DbgStdoutStream();
+  ~DbgStdoutStream() = default;
+
+ private:
+  DbgStreamBuf streambuf_;
+};
+
 // An output stream writing to a file.
 class V8_EXPORT_PRIVATE OFStream : public std::ostream {
  public:
   explicit OFStream(FILE* f);
-  virtual ~OFStream();
+  ~OFStream() override = default;
 
  private:
   OFStreamBase buf_;
@@ -99,6 +121,10 @@ struct AsHex {
   uint64_t value;
   uint8_t min_width;
   bool with_prefix;
+
+  static AsHex Address(Address a) {
+    return AsHex(a, kSystemPointerHexDigits, true);
+  }
 };
 
 // Output the given value as hex, separated in individual bytes.

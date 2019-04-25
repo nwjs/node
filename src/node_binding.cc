@@ -1,8 +1,8 @@
 #include "node_binding.h"
-#include "env-inl.h"
-#include "node_native_module.h"
-#include "util.h"
 #include <atomic>
+#include "env-inl.h"
+#include "node_native_module_env.h"
+#include "util.h"
 
 #if HAVE_OPENSSL
 #define NODE_BUILTIN_OPENSSL_MODULES(V) V(crypto) V(tls_wrap)
@@ -26,6 +26,12 @@
 #define NODE_BUILTIN_PROFILER_MODULES(V) V(profiler)
 #else
 #define NODE_BUILTIN_PROFILER_MODULES(V)
+#endif
+
+#if HAVE_DTRACE || HAVE_ETW
+#define NODE_BUILTIN_DTRACE_MODULES(V) V(dtrace)
+#else
+#define NODE_BUILTIN_DTRACE_MODULES(V)
 #endif
 
 // A list of built-in modules. In order to do module registration
@@ -85,7 +91,8 @@
   NODE_BUILTIN_OPENSSL_MODULES(V)                                              \
   NODE_BUILTIN_ICU_MODULES(V)                                                  \
   NODE_BUILTIN_REPORT_MODULES(V)                                               \
-  NODE_BUILTIN_PROFILER_MODULES(V)
+  NODE_BUILTIN_PROFILER_MODULES(V)                                             \
+  NODE_BUILTIN_DTRACE_MODULES(V)
 
 // This is used to load built-in modules. Instead of using
 // __attribute__((constructor)), we call the _register_<modname>
@@ -609,13 +616,13 @@ void GetInternalBinding(const FunctionCallbackInfo<Value>& args) {
         exports->SetPrototype(env->context(), Null(env->isolate())).FromJust());
     DefineConstants(env->isolate(), exports);
   } else if (!strcmp(*module_v, "natives")) {
-    exports = per_process::native_module_loader.GetSourceObject(env->context());
+    exports = native_module::NativeModuleEnv::GetSourceObject(env->context());
     // Legacy feature: process.binding('natives').config contains stringified
     // config.gypi
     CHECK(exports
               ->Set(env->context(),
                     env->config_string(),
-                    per_process::native_module_loader.GetConfigString(
+                    native_module::NativeModuleEnv::GetConfigString(
                         env->isolate()))
               .FromJust());
   } else {
@@ -649,7 +656,7 @@ void GetLinkedBinding(const FunctionCallbackInfo<Value>& args) {
   Local<String> exports_prop =
       String::NewFromUtf8(env->isolate(), "exports", NewStringType::kNormal)
           .ToLocalChecked();
-  module->Set(env->context(), exports_prop, exports).FromJust();
+  module->Set(env->context(), exports_prop, exports).Check();
 
   if (mod->nm_context_register_func != nullptr) {
     mod->nm_context_register_func(

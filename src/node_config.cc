@@ -1,14 +1,13 @@
 #include "env-inl.h"
 #include "node.h"
 #include "node_i18n.h"
-#include "node_options-inl.h"
+#include "node_native_module_env.h"
+#include "node_options.h"
 #include "util-inl.h"
 
 namespace node {
 
-using v8::Boolean;
 using v8::Context;
-using v8::Integer;
 using v8::Isolate;
 using v8::Local;
 using v8::Number;
@@ -58,10 +57,6 @@ static void Initialize(Local<Object> target,
   READONLY_TRUE_PROPERTY(target, "hasNodeOptions");
 #endif
 
-  // TODO(addaleax): This seems to be an unused, private API. Remove it?
-  READONLY_STRING_PROPERTY(target, "icuDataDir",
-      per_process::cli_options->icu_data_dir);
-
 #endif  // NODE_HAVE_I18N_SUPPORT
 
 #if HAVE_INSPECTOR
@@ -79,20 +74,14 @@ static void Initialize(Local<Object> target,
 
   READONLY_PROPERTY(target,
                     "bits",
-                    Number::New(env->isolate(), 8 * sizeof(intptr_t)));
+                    Number::New(isolate, 8 * sizeof(intptr_t)));
 
-  Local<Object> debug_options_obj = Object::New(isolate);
-  READONLY_PROPERTY(target, "debugOptions", debug_options_obj);
+#if defined HAVE_DTRACE || defined HAVE_ETW
+  READONLY_TRUE_PROPERTY(target, "hasDtrace");
+#endif
 
-  const DebugOptions& debug_options = env->options()->debug_options();
-  READONLY_PROPERTY(debug_options_obj,
-                    "inspectorEnabled",
-                    Boolean::New(isolate, debug_options.inspector_enabled));
-  READONLY_STRING_PROPERTY(
-      debug_options_obj, "host", debug_options.host_port.host());
-  READONLY_PROPERTY(debug_options_obj,
-                    "port",
-                    Integer::New(isolate, debug_options.host_port.port()));
+  READONLY_PROPERTY(target, "hasCachedBuiltins",
+                    v8::Boolean::New(isolate, true /*native_module::has_code_cache*/));
 }  // InitConfig
 
 }  // namespace node

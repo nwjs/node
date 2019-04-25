@@ -6,10 +6,10 @@
 #define V8_COMPILER_MACHINE_OPERATOR_H_
 
 #include "src/base/compiler-specific.h"
+#include "src/base/enum-set.h"
 #include "src/base/flags.h"
 #include "src/globals.h"
 #include "src/machine-type.h"
-#include "src/utils.h"
 #include "src/zone/zone.h"
 
 namespace v8 {
@@ -172,8 +172,8 @@ class V8_EXPORT_PRIVATE MachineOperatorBuilder final
       return AlignmentRequirements(kNoSupport);
     }
     static AlignmentRequirements SomeUnalignedAccessUnsupported(
-        EnumSet<MachineRepresentation> unalignedLoadUnsupportedTypes,
-        EnumSet<MachineRepresentation> unalignedStoreUnsupportedTypes) {
+        base::EnumSet<MachineRepresentation> unalignedLoadUnsupportedTypes,
+        base::EnumSet<MachineRepresentation> unalignedStoreUnsupportedTypes) {
       return AlignmentRequirements(kSomeSupport, unalignedLoadUnsupportedTypes,
                                    unalignedStoreUnsupportedTypes);
     }
@@ -181,15 +181,15 @@ class V8_EXPORT_PRIVATE MachineOperatorBuilder final
    private:
     explicit AlignmentRequirements(
         AlignmentRequirements::UnalignedAccessSupport unalignedAccessSupport,
-        EnumSet<MachineRepresentation> unalignedLoadUnsupportedTypes =
-            EnumSet<MachineRepresentation>(),
-        EnumSet<MachineRepresentation> unalignedStoreUnsupportedTypes =
-            EnumSet<MachineRepresentation>())
+        base::EnumSet<MachineRepresentation> unalignedLoadUnsupportedTypes =
+            base::EnumSet<MachineRepresentation>(),
+        base::EnumSet<MachineRepresentation> unalignedStoreUnsupportedTypes =
+            base::EnumSet<MachineRepresentation>())
         : unalignedSupport_(unalignedAccessSupport),
           unalignedLoadUnsupportedTypes_(unalignedLoadUnsupportedTypes),
           unalignedStoreUnsupportedTypes_(unalignedStoreUnsupportedTypes) {}
 
-    bool IsUnalignedSupported(EnumSet<MachineRepresentation> unsupported,
+    bool IsUnalignedSupported(base::EnumSet<MachineRepresentation> unsupported,
                               MachineRepresentation rep) const {
       // All accesses of bytes in memory are aligned.
       DCHECK_NE(MachineRepresentation::kWord8, rep);
@@ -199,14 +199,14 @@ class V8_EXPORT_PRIVATE MachineOperatorBuilder final
         case kNoSupport:
           return false;
         case kSomeSupport:
-          return !unsupported.Contains(rep);
+          return !unsupported.contains(rep);
       }
       UNREACHABLE();
     }
 
     const AlignmentRequirements::UnalignedAccessSupport unalignedSupport_;
-    const EnumSet<MachineRepresentation> unalignedLoadUnsupportedTypes_;
-    const EnumSet<MachineRepresentation> unalignedStoreUnsupportedTypes_;
+    const base::EnumSet<MachineRepresentation> unalignedLoadUnsupportedTypes_;
+    const base::EnumSet<MachineRepresentation> unalignedStoreUnsupportedTypes_;
   };
 
   explicit MachineOperatorBuilder(
@@ -319,8 +319,10 @@ class V8_EXPORT_PRIVATE MachineOperatorBuilder final
   // the input value is representable in the target value.
   const Operator* ChangeFloat32ToFloat64();
   const Operator* ChangeFloat64ToInt32();   // narrowing
+  const Operator* ChangeFloat64ToInt64();
   const Operator* ChangeFloat64ToUint32();  // narrowing
   const Operator* ChangeFloat64ToUint64();
+  const Operator* TruncateFloat64ToInt64();
   const Operator* TruncateFloat64ToUint32();
   const Operator* TruncateFloat32ToInt32();
   const Operator* TruncateFloat32ToUint32();
@@ -330,6 +332,7 @@ class V8_EXPORT_PRIVATE MachineOperatorBuilder final
   const Operator* TryTruncateFloat64ToUint64();
   const Operator* ChangeInt32ToFloat64();
   const Operator* ChangeInt32ToInt64();
+  const Operator* ChangeInt64ToFloat64();
   const Operator* ChangeUint32ToFloat64();
   const Operator* ChangeUint32ToUint64();
 
@@ -648,20 +651,6 @@ class V8_EXPORT_PRIVATE MachineOperatorBuilder final
   const Operator* Word64AtomicOr(MachineType type);
   // atomic-xor [base + index], value
   const Operator* Word64AtomicXor(MachineType rep);
-  // atomic-narrow-add [base + index], value
-  const Operator* Word64AtomicNarrowAdd(MachineType type);
-  // atomic-narow-sub [base + index], value
-  const Operator* Word64AtomicNarrowSub(MachineType type);
-  // atomic-narrow-and [base + index], value
-  const Operator* Word64AtomicNarrowAnd(MachineType type);
-  // atomic-narrow-or [base + index], value
-  const Operator* Word64AtomicNarrowOr(MachineType type);
-  // atomic-narrow-xor [base + index], value
-  const Operator* Word64AtomicNarrowXor(MachineType type);
-  // atomic-narrow-exchange [base + index], value
-  const Operator* Word64AtomicNarrowExchange(MachineType type);
-  // atomic-narrow-compare-exchange [base + index], old_value, new_value
-  const Operator* Word64AtomicNarrowCompareExchange(MachineType type);
   // atomic-pair-load [base + index]
   const Operator* Word32AtomicPairLoad();
   // atomic-pair-sub [base + index], value_high, value-low

@@ -18,7 +18,9 @@
 #include "src/interpreter/interpreter-intrinsics.h"
 #include "src/interpreter/interpreter.h"
 #include "src/objects-inl.h"
+#include "src/objects/heap-number-inl.h"
 #include "src/objects/module-inl.h"
+#include "src/ostreams.h"
 #include "src/runtime/runtime.h"
 #include "src/source-position-table.h"
 #include "test/cctest/cctest.h"
@@ -275,7 +277,7 @@ void BytecodeExpectationsPrinter::PrintSourcePosition(
 }
 
 void BytecodeExpectationsPrinter::PrintV8String(std::ostream& stream,
-                                                i::String* string) const {
+                                                i::String string) const {
   stream << '"';
   for (int i = 0, length = string->length(); i < length; ++i) {
     stream << i::AsEscapedUC16ForJSON(string->Get(i));
@@ -305,11 +307,10 @@ void BytecodeExpectationsPrinter::PrintConstant(
 
 void BytecodeExpectationsPrinter::PrintFrameSize(
     std::ostream& stream, i::Handle<i::BytecodeArray> bytecode_array) const {
-  const int kPointerSize = sizeof(void*);
   int frame_size = bytecode_array->frame_size();
 
-  DCHECK_EQ(frame_size % kPointerSize, 0);
-  stream << "frame size: " << frame_size / kPointerSize
+  DCHECK(IsAligned(frame_size, kSystemPointerSize));
+  stream << "frame size: " << frame_size / kSystemPointerSize
          << "\nparameter count: " << bytecode_array->parameter_count() << '\n';
 }
 
@@ -332,7 +333,7 @@ void BytecodeExpectationsPrinter::PrintBytecodeSequence(
 }
 
 void BytecodeExpectationsPrinter::PrintConstantPool(
-    std::ostream& stream, i::FixedArray* constant_pool) const {
+    std::ostream& stream, i::FixedArray constant_pool) const {
   stream << "constant pool: [\n";
   int num_constants = constant_pool->length();
   if (num_constants > 0) {

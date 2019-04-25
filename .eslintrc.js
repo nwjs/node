@@ -1,5 +1,7 @@
 'use strict';
 
+/* eslint-env node */
+
 const Module = require('module');
 const path = require('path');
 
@@ -31,13 +33,14 @@ Module._findPath = (request, paths, isMain) => {
 module.exports = {
   root: true,
   plugins: ['markdown', 'node-core'],
-  env: { node: true, es6: true },
   parser: 'babel-eslint',
   parserOptions: { sourceType: 'script' },
   overrides: [
     {
       files: [
         'doc/api/esm.md',
+        'test/es-module/test-esm-type-flag.js',
+        'test/es-module/test-esm-type-flag-alias.js',
         '*.mjs',
         'test/es-module/test-esm-example-loader.js',
       ],
@@ -60,9 +63,9 @@ module.exports = {
     'brace-style': ['error', '1tbs', { allowSingleLine: true }],
     'capitalized-comments': ['error', 'always', {
       line: {
-        // Ignore all lines that have less characters than 30 and all lines that
+        // Ignore all lines that have less characters than 20 and all lines that
         // start with something that looks like a variable name or code.
-        ignorePattern: '^.{0,30}$|^ [a-z]+ ?[0-9A-Z_.(/=:[#-]|^ std',
+        ignorePattern: '.{0,20}$|[a-z]+ ?[0-9A-Z_.(/=:[#-]|std',
         ignoreInlineComments: true,
         ignoreConsecutiveComments: true,
       },
@@ -212,22 +215,6 @@ module.exports = {
         message: 'Use `new` keyword when throwing an `Error`.',
       },
       {
-        selector: "CallExpression[callee.property.name='notDeepStrictEqual'][arguments.length<2]",
-        message: 'assert.notDeepStrictEqual() must be invoked with at least two arguments.',
-      },
-      {
-        selector: "CallExpression[callee.property.name='deepStrictEqual'][arguments.length<2]",
-        message: 'assert.deepStrictEqual() must be invoked with at least two arguments.',
-      },
-      {
-        selector: "CallExpression[callee.property.name='notStrictEqual'][arguments.length<2]",
-        message: 'assert.notStrictEqual() must be invoked with at least two arguments.',
-      },
-      {
-        selector: "CallExpression[callee.property.name='strictEqual'][arguments.length<2]",
-        message: 'assert.strictEqual() must be invoked with at least two arguments.',
-      },
-      {
         selector: "CallExpression[callee.property.name='notDeepStrictEqual'][arguments.0.type='Literal']:not([arguments.1.type='Literal']):not([arguments.1.type='ObjectExpression']):not([arguments.1.type='ArrayExpression']):not([arguments.1.type='UnaryExpression'])",
         message: 'The first argument should be the `actual`, not the `expected` value.',
       },
@@ -314,18 +301,6 @@ module.exports = {
     BigInt: 'readable',
     BigInt64Array: 'readable',
     BigUint64Array: 'readable',
-    COUNTER_HTTP_CLIENT_REQUEST: 'readable',
-    COUNTER_HTTP_CLIENT_RESPONSE: 'readable',
-    COUNTER_HTTP_SERVER_REQUEST: 'readable',
-    COUNTER_HTTP_SERVER_RESPONSE: 'readable',
-    COUNTER_NET_SERVER_CONNECTION: 'readable',
-    COUNTER_NET_SERVER_CONNECTION_CLOSE: 'readable',
-    DTRACE_HTTP_CLIENT_REQUEST: 'readable',
-    DTRACE_HTTP_CLIENT_RESPONSE: 'readable',
-    DTRACE_HTTP_SERVER_REQUEST: 'readable',
-    DTRACE_HTTP_SERVER_RESPONSE: 'readable',
-    DTRACE_NET_SERVER_CONNECTION: 'readable',
-    DTRACE_NET_STREAM_END: 'readable',
     TextEncoder: 'readable',
     TextDecoder: 'readable',
     queueMicrotask: 'readable',

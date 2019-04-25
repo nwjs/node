@@ -6,6 +6,7 @@
 #define V8_AST_VARIABLES_H_
 
 #include "src/ast/ast-value-factory.h"
+#include "src/base/threaded-list.h"
 #include "src/globals.h"
 #include "src/zone/zone.h"
 
@@ -59,7 +60,7 @@ class Variable final : public ZoneObject {
     return ForceContextAllocationField::decode(bit_field_);
   }
   void ForceContextAllocation() {
-    DCHECK(IsUnallocated() || IsContextSlot() ||
+    DCHECK(IsUnallocated() || IsContextSlot() || IsLookupSlot() ||
            location() == VariableLocation::MODULE);
     bit_field_ = ForceContextAllocationField::update(bit_field_, true);
   }
@@ -131,10 +132,14 @@ class Variable final : public ZoneObject {
     return kind() != SLOPPY_FUNCTION_NAME_VARIABLE || is_strict(language_mode);
   }
 
-  bool is_function() const { return kind() == FUNCTION_VARIABLE; }
   bool is_this() const { return kind() == THIS_VARIABLE; }
   bool is_sloppy_function_name() const {
     return kind() == SLOPPY_FUNCTION_NAME_VARIABLE;
+  }
+
+  bool is_parameter() const { return kind() == PARAMETER_VARIABLE; }
+  bool is_sloppy_block_function() {
+    return kind() == SLOPPY_BLOCK_FUNCTION_VARIABLE;
   }
 
   Variable* local_if_not_shadowed() const {
@@ -175,13 +180,20 @@ class Variable final : public ZoneObject {
     index_ = index;
   }
 
+  void MakeParameterNonSimple() {
+    DCHECK(is_parameter());
+    bit_field_ = VariableModeField::update(bit_field_, VariableMode::kLet);
+    bit_field_ =
+        InitializationFlagField::update(bit_field_, kNeedsInitialization);
+  }
+
   static InitializationFlag DefaultInitializationFlag(VariableMode mode) {
     DCHECK(IsDeclaredVariableMode(mode));
     return mode == VariableMode::kVar ? kCreatedInitialized
                                       : kNeedsInitialization;
   }
 
-  typedef ThreadedList<Variable> List;
+  typedef base::ThreadedList<Variable> List;
 
  private:
   Scope* scope_;
@@ -215,6 +227,7 @@ class Variable final : public ZoneObject {
                           ForceHoleInitializationField::kNext, 1> {};
   Variable** next() { return &next_; }
   friend List;
+  friend base::ThreadedListTraits<Variable>;
 };
 }  // namespace internal
 }  // namespace v8

@@ -254,8 +254,10 @@ MaybeLocal<Object> New(Isolate* isolate,
   if (length > 0) {
     data = UncheckedMalloc(length);
 
-    if (data == nullptr)
+    if (data == nullptr) {
+      THROW_ERR_MEMORY_ALLOCATION_FAILED(isolate);
       return Local<Object>();
+    }
 
     actual = StringBytes::Write(isolate, data, length, string, enc);
     CHECK(actual <= length);
@@ -291,6 +293,7 @@ MaybeLocal<Object> New(Environment* env, size_t length) {
 
   // V8 currently only allows a maximum Typed Array index of max Smi.
   if (length > kMaxLength) {
+    env->isolate()->ThrowException(ERR_BUFFER_TOO_LARGE(env->isolate()));
     return Local<Object>();
   }
 
@@ -298,6 +301,7 @@ MaybeLocal<Object> New(Environment* env, size_t length) {
   if (length > 0) {
     ret = env->AllocateManaged(length, false);
     if (ret.data() == nullptr) {
+      THROW_ERR_MEMORY_ALLOCATION_FAILED(env);
       return Local<Object>();
     }
   }
@@ -325,6 +329,7 @@ MaybeLocal<Object> Copy(Environment* env, const char* data, size_t length) {
 
   // V8 currently only allows a maximum Typed Array index of max Smi.
   if (length > kMaxLength) {
+    env->isolate()->ThrowException(ERR_BUFFER_TOO_LARGE(env->isolate()));
     return Local<Object>();
   }
 
@@ -333,6 +338,7 @@ MaybeLocal<Object> Copy(Environment* env, const char* data, size_t length) {
     CHECK_NOT_NULL(data);
     ret = env->AllocateManaged(length, false);
     if (ret.data() == nullptr) {
+      THROW_ERR_MEMORY_ALLOCATION_FAILED(env);
       return Local<Object>();
     }
     memcpy(ret.data(), data, length);
@@ -369,17 +375,19 @@ MaybeLocal<Object> New(Environment* env,
   EscapableHandleScope scope(env->isolate());
 
   if (length > kMaxLength) {
+    env->isolate()->ThrowException(ERR_BUFFER_TOO_LARGE(env->isolate()));
+    callback(data, hint);
     return Local<Object>();
   }
 
   Local<ArrayBuffer> ab = ArrayBuffer::New(env->isolate(), data, length);
   MaybeLocal<Uint8Array> ui = Buffer::New(env, ab, 0, length);
 
-  if (ui.IsEmpty()) {
-    return Local<Object>();
-  }
-
   CallbackInfo::New(env->isolate(), ab, callback, data, hint);
+
+  if (ui.IsEmpty())
+    return MaybeLocal<Object>();
+
   return scope.Escape(ui.ToLocalChecked());
 }
 
@@ -412,7 +420,7 @@ MaybeLocal<Object> New(Environment* env,
   }
 
   if (uses_malloc) {
-    if (env->isolate_data()->uses_node_allocator()) {
+    if (!env->isolate_data()->uses_node_allocator()) {
       // We don't know for sure that the allocator is malloc()-based, so we need
       // to fall back to the FreeCallback variant.
       auto free_callback = [](char* data, void* hint) { free(data); };
@@ -1088,11 +1096,11 @@ void Initialize(Local<Object> target,
 
   target->Set(env->context(),
               FIXED_ONE_BYTE_STRING(env->isolate(), "kMaxLength"),
-              Integer::NewFromUnsigned(env->isolate(), kMaxLength)).FromJust();
+              Integer::NewFromUnsigned(env->isolate(), kMaxLength)).Check();
 
   target->Set(env->context(),
               FIXED_ONE_BYTE_STRING(env->isolate(), "kStringMaxLength"),
-              Integer::New(env->isolate(), String::kMaxLength)).FromJust();
+              Integer::New(env->isolate(), String::kMaxLength)).Check();
 
   env->SetMethodNoSideEffect(target, "asciiSlice", StringSlice<ASCII>);
   env->SetMethodNoSideEffect(target, "base64Slice", StringSlice<BASE64>);

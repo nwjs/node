@@ -18,12 +18,11 @@ struct AssemblerOptions;
 class OptimizedCompilationInfo;
 class OptimizedCompilationJob;
 class RegisterConfiguration;
-class JumpOptimizationInfo;
 
 namespace wasm {
-enum ModuleOrigin : uint8_t;
 struct FunctionBody;
 class NativeModule;
+class WasmCode;
 class WasmEngine;
 struct WasmModule;
 }  // namespace wasm
@@ -33,6 +32,7 @@ namespace compiler {
 class CallDescriptor;
 class Graph;
 class InstructionSequence;
+class JSHeapBroker;
 class MachineGraph;
 class NodeOriginTable;
 class Schedule;
@@ -45,21 +45,34 @@ class Pipeline : public AllStatic {
                                                     Handle<JSFunction> function,
                                                     bool has_script);
 
-  // Returns a new compilation job for the WebAssembly compilation info.
-  static OptimizedCompilationJob* NewWasmCompilationJob(
+  // Run the pipeline for the WebAssembly compilation info.
+  static void GenerateCodeForWasmFunction(
       OptimizedCompilationInfo* info, wasm::WasmEngine* wasm_engine,
       MachineGraph* mcgraph, CallDescriptor* call_descriptor,
       SourcePositionTable* source_positions, NodeOriginTable* node_origins,
-      wasm::FunctionBody function_body, wasm::WasmModule* wasm_module,
-      wasm::NativeModule* native_module, int function_index,
-      wasm::ModuleOrigin wasm_origin);
+      wasm::FunctionBody function_body, const wasm::WasmModule* module,
+      int function_index);
 
-  // Run the pipeline on a machine graph and generate code. The {schedule} must
-  // be valid, hence the given {graph} does not need to be schedulable.
+  // Run the pipeline on a machine graph and generate code.
+  static wasm::WasmCode* GenerateCodeForWasmNativeStub(
+      wasm::WasmEngine* wasm_engine, CallDescriptor* call_descriptor,
+      MachineGraph* mcgraph, Code::Kind kind, int wasm_kind,
+      const char* debug_name, const AssemblerOptions& assembler_options,
+      wasm::NativeModule* native_module,
+      SourcePositionTable* source_positions = nullptr);
+
+  // Run the pipeline on a machine graph and generate code.
+  static MaybeHandle<Code> GenerateCodeForWasmHeapStub(
+      Isolate* isolate, CallDescriptor* call_descriptor, Graph* graph,
+      Code::Kind kind, const char* debug_name,
+      const AssemblerOptions& assembler_options,
+      SourcePositionTable* source_positions = nullptr);
+
+  // Run the pipeline on a machine graph and generate code.
   static MaybeHandle<Code> GenerateCodeForCodeStub(
       Isolate* isolate, CallDescriptor* call_descriptor, Graph* graph,
-      Schedule* schedule, Code::Kind kind, const char* debug_name,
-      uint32_t stub_key, int32_t builtin_index, JumpOptimizationInfo* jump_opt,
+      SourcePositionTable* source_positions, Code::Kind kind,
+      const char* debug_name, int32_t builtin_index,
       PoisoningMitigationLevel poisoning_level,
       const AssemblerOptions& options);
 
@@ -68,16 +81,18 @@ class Pipeline : public AllStatic {
   // ---------------------------------------------------------------------------
 
   // Run the pipeline on JavaScript bytecode and generate code.
+  // If requested, hands out the heap broker, which is allocated
+  // in {info}'s zone.
   static MaybeHandle<Code> GenerateCodeForTesting(
-      OptimizedCompilationInfo* info, Isolate* isolate);
+      OptimizedCompilationInfo* info, Isolate* isolate,
+      JSHeapBroker** out_broker = nullptr);
 
   // Run the pipeline on a machine graph and generate code. If {schedule} is
   // {nullptr}, then compute a new schedule for code generation.
   V8_EXPORT_PRIVATE static MaybeHandle<Code> GenerateCodeForTesting(
       OptimizedCompilationInfo* info, Isolate* isolate,
       CallDescriptor* call_descriptor, Graph* graph,
-      const AssemblerOptions& options, Schedule* schedule = nullptr,
-      SourcePositionTable* source_positions = nullptr);
+      const AssemblerOptions& options, Schedule* schedule = nullptr);
 
   // Run just the register allocator phases.
   V8_EXPORT_PRIVATE static bool AllocateRegistersForTesting(

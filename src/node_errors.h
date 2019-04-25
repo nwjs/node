@@ -14,10 +14,14 @@
 
 namespace node {
 
+using v8::Local;
+using v8::Message;
+using v8::Value;
+
 enum ErrorHandlingMode { CONTEXTIFY_ERROR, FATAL_ERROR, MODULE_ERROR };
 void AppendExceptionLine(Environment* env,
-                         v8::Local<v8::Value> er,
-                         v8::Local<v8::Message> message,
+                         Local<Value> er,
+                         Local<Message> message,
                          enum ErrorHandlingMode mode);
 
 [[noreturn]] void FatalError(const char* location, const char* message);
@@ -27,9 +31,18 @@ void PrintErrorString(const char* format, ...);
 
 void ReportException(Environment* env, const v8::TryCatch& try_catch);
 
+void ReportException(Environment* env,
+                     Local<Value> er,
+                     Local<Message> message);
+
 void FatalException(v8::Isolate* isolate,
-                    v8::Local<v8::Value> error,
-                    v8::Local<v8::Message> message);
+                    Local<Value> error,
+                    Local<Message> message);
+
+void FatalException(v8::Isolate* isolate,
+                    Local<Value> error,
+                    Local<Message> message,
+                    bool from_promise);
 
 // Helpers to construct errors similar to the ones provided by
 // lib/internal/errors.js.
@@ -45,16 +58,20 @@ void FatalException(v8::Isolate* isolate,
   V(ERR_CONSTRUCT_CALL_REQUIRED, Error)                                      \
   V(ERR_INVALID_ARG_VALUE, TypeError)                                        \
   V(ERR_INVALID_ARG_TYPE, TypeError)                                         \
+  V(ERR_INVALID_MODULE_SPECIFIER, TypeError)                                 \
+  V(ERR_INVALID_PACKAGE_CONFIG, SyntaxError)                                 \
   V(ERR_INVALID_TRANSFER_OBJECT, TypeError)                                  \
   V(ERR_MEMORY_ALLOCATION_FAILED, Error)                                     \
   V(ERR_MISSING_ARGS, TypeError)                                             \
   V(ERR_MISSING_MESSAGE_PORT_IN_TRANSFER_LIST, TypeError)                    \
-  V(ERR_MISSING_MODULE, Error)                                               \
+  V(ERR_MISSING_PASSPHRASE, TypeError)                                       \
   V(ERR_MISSING_PLATFORM_FOR_WORKER, Error)                                  \
+  V(ERR_MODULE_NOT_FOUND, Error)                                             \
   V(ERR_OUT_OF_RANGE, RangeError)                                            \
   V(ERR_SCRIPT_EXECUTION_INTERRUPTED, Error)                                 \
   V(ERR_SCRIPT_EXECUTION_TIMEOUT, Error)                                     \
   V(ERR_STRING_TOO_LONG, Error)                                              \
+  V(ERR_TLS_INVALID_PROTOCOL_METHOD, TypeError)                              \
   V(ERR_TRANSFERRING_EXTERNALIZED_SHAREDARRAYBUFFER, TypeError)              \
 
 #define V(code, type)                                                         \
@@ -66,7 +83,7 @@ void FatalException(v8::Isolate* isolate,
         v8::Exception::type(js_msg)->ToObject(                                \
             isolate->GetCurrentContext()).ToLocalChecked();                   \
     e->Set(isolate->GetCurrentContext(), OneByteString(isolate, "code"),      \
-           js_code).FromJust();                                               \
+           js_code).Check();                                                  \
     return e;                                                                 \
   }                                                                           \
   inline void THROW_ ## code(v8::Isolate* isolate, const char* message) {     \

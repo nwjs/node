@@ -18,22 +18,12 @@
 namespace v8 {
 namespace internal {
 
+OBJECT_CONSTRUCTORS_IMPL(JSCollator, JSObject)
+
 ACCESSORS(JSCollator, icu_collator, Managed<icu::Collator>, kICUCollatorOffset)
-ACCESSORS(JSCollator, bound_compare, Object, kBoundCompareOffset);
-SMI_ACCESSORS(JSCollator, flags, kFlagsOffset)
+ACCESSORS(JSCollator, bound_compare, Object, kBoundCompareOffset)
 
-inline void JSCollator::set_usage(Usage usage) {
-  DCHECK_LT(usage, Usage::COUNT);
-  int hints = flags();
-  hints = UsageBits::update(hints, usage);
-  set_flags(hints);
-}
-
-inline JSCollator::Usage JSCollator::usage() const {
-  return UsageBits::decode(flags());
-}
-
-CAST_ACCESSOR(JSCollator);
+CAST_ACCESSOR(JSCollator)
 
 }  // namespace internal
 }  // namespace v8

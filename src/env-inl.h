@@ -38,6 +38,14 @@
 
 #include <utility>
 
+#ifdef _WIN32
+/* MAX_PATH is in characters, not bytes. Make sure we have enough headroom. */
+#define CWD_BUFSIZE (MAX_PATH * 4)
+#else
+#include <climits>  // PATH_MAX on Solaris.
+#define CWD_BUFSIZE (PATH_MAX)
+#endif
+
 namespace node {
 
 inline v8::Isolate* IsolateData::isolate() const {
@@ -287,7 +295,7 @@ inline void Environment::AssignToContext(v8::Local<v8::Context> context,
                                          const ContextInfo& info) {
   context->SetAlignedPointerInEmbedderData(
       ContextEmbedderIndex::kEnvironment, this);
-  // Used by EnvPromiseHook to know that we are on a node context.
+  // Used by Environment::GetCurrent to know that we are on a node context.
   context->SetAlignedPointerInEmbedderData(
     ContextEmbedderIndex::kContextTag, Environment::kNodeContextTagPtr);
 #if HAVE_INSPECTOR
@@ -302,15 +310,18 @@ inline Environment* Environment::GetCurrent(v8::Isolate* isolate) {
 }
 
 inline Environment* Environment::GetCurrent(v8::Local<v8::Context> context) {
-  if (UNLIKELY(context.IsEmpty() ||
-      context->GetNumberOfEmbedderDataFields() <
-          ContextEmbedderIndex::kContextTag ||
-      context->GetAlignedPointerFromEmbedderData(
-          ContextEmbedderIndex::kContextTag) !=
-          Environment::kNodeContextTagPtr)) {
+  if (UNLIKELY(context.IsEmpty())) {
     return nullptr;
   }
-
+  if (UNLIKELY(context->GetNumberOfEmbedderDataFields() <=
+               ContextEmbedderIndex::kContextTag)) {
+    return nullptr;
+  }
+  if (UNLIKELY(context->GetAlignedPointerFromEmbedderData(
+                   ContextEmbedderIndex::kContextTag) !=
+               Environment::kNodeContextTagPtr)) {
+    return nullptr;
+  }
   return static_cast<Environment*>(
       context->GetAlignedPointerFromEmbedderData(
           ContextEmbedderIndex::kEnvironment));
@@ -638,6 +649,54 @@ inline const std::vector<std::string>& Environment::exec_argv() {
   return exec_argv_;
 }
 
+#if HAVE_INSPECTOR
+inline void Environment::set_coverage_directory(const char* dir) {
+  coverage_directory_ = std::string(dir);
+}
+
+inline void Environment::set_coverage_connection(
+    std::unique_ptr<profiler::V8CoverageConnection> connection) {
+  CHECK_NULL(coverage_connection_);
+  std::swap(coverage_connection_, connection);
+}
+
+inline profiler::V8CoverageConnection* Environment::coverage_connection() {
+  return coverage_connection_.get();
+}
+
+inline const std::string& Environment::coverage_directory() const {
+  return coverage_directory_;
+}
+
+inline void Environment::set_cpu_profiler_connection(
+    std::unique_ptr<profiler::V8CpuProfilerConnection> connection) {
+  CHECK_NULL(cpu_profiler_connection_);
+  std::swap(cpu_profiler_connection_, connection);
+}
+
+inline profiler::V8CpuProfilerConnection*
+Environment::cpu_profiler_connection() {
+  return cpu_profiler_connection_.get();
+}
+
+inline void Environment::set_cpu_profile_path(const std::string& path) {
+  cpu_profile_path_ = path;
+}
+
+inline const std::string& Environment::cpu_profile_path() const {
+  return cpu_profile_path_;
+}
+
+inline void Environment::set_cpu_prof_dir(const std::string& path) {
+  cpu_prof_dir_ = path;
+}
+
+inline const std::string& Environment::cpu_prof_dir() const {
+  return cpu_prof_dir_;
+}
+
+#endif  // HAVE_INSPECTOR
+
 inline std::shared_ptr<HostPort> Environment::inspector_host_port() {
   return inspector_host_port_;
 }
@@ -906,9 +965,7 @@ inline void Environment::SetMethod(v8::Local<v8::Object> that,
   v8::Local<v8::Context> context = isolate()->GetCurrentContext();
   v8::Local<v8::Function> function =
       NewFunctionTemplate(callback, v8::Local<v8::Signature>(),
-                          // TODO(TimothyGu): Investigate if SetMethod is ever
-                          // used for constructors.
-                          v8::ConstructorBehavior::kAllow,
+                          v8::ConstructorBehavior::kThrow,
                           v8::SideEffectType::kHasSideEffect)
           ->GetFunction(context)
           .ToLocalChecked();
@@ -916,7 +973,7 @@ inline void Environment::SetMethod(v8::Local<v8::Object> that,
   const v8::NewStringType type = v8::NewStringType::kInternalized;
   v8::Local<v8::String> name_string =
       v8::String::NewFromUtf8(isolate(), name, type).ToLocalChecked();
-  that->Set(context, name_string, function).FromJust();
+  that->Set(context, name_string, function).Check();
   function->SetName(name_string);  // NODE_SET_METHOD() compatibility.
 }
 
@@ -926,9 +983,7 @@ inline void Environment::SetMethodNoSideEffect(v8::Local<v8::Object> that,
   v8::Local<v8::Context> context = isolate()->GetCurrentContext();
   v8::Local<v8::Function> function =
       NewFunctionTemplate(callback, v8::Local<v8::Signature>(),
-                          // TODO(TimothyGu): Investigate if SetMethod is ever
-                          // used for constructors.
-                          v8::ConstructorBehavior::kAllow,
+                          v8::ConstructorBehavior::kThrow,
                           v8::SideEffectType::kHasNoSideEffect)
           ->GetFunction(context)
           .ToLocalChecked();
@@ -936,7 +991,7 @@ inline void Environment::SetMethodNoSideEffect(v8::Local<v8::Object> that,
   const v8::NewStringType type = v8::NewStringType::kInternalized;
   v8::Local<v8::String> name_string =
       v8::String::NewFromUtf8(isolate(), name, type).ToLocalChecked();
-  that->Set(context, name_string, function).FromJust();
+  that->Set(context, name_string, function).Check();
   function->SetName(name_string);  // NODE_SET_METHOD() compatibility.
 }
 
@@ -984,17 +1039,17 @@ void Environment::RemoveCleanupHook(void (*fn)(void*), void* arg) {
   cleanup_hooks_.erase(search);
 }
 
-size_t Environment::CleanupHookCallback::Hash::operator()(
+size_t CleanupHookCallback::Hash::operator()(
     const CleanupHookCallback& cb) const {
   return std::hash<void*>()(cb.arg_);
 }
 
-bool Environment::CleanupHookCallback::Equal::operator()(
+bool CleanupHookCallback::Equal::operator()(
     const CleanupHookCallback& a, const CleanupHookCallback& b) const {
   return a.fn_ == b.fn_ && a.arg_ == b.arg_;
 }
 
-BaseObject* Environment::CleanupHookCallback::GetBaseObject() const {
+BaseObject* CleanupHookCallback::GetBaseObject() const {
   if (fn_ == BaseObject::DeleteMe)
     return static_cast<BaseObject*>(arg_);
   else
@@ -1058,6 +1113,7 @@ void AsyncRequest::set_stopped(bool flag) {
     PropertyName ## _.Reset(isolate(), value);                                \
   }
   ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)
+  ENVIRONMENT_STRONG_PERSISTENT_VALUES(V)
 #undef V
 
 }  // namespace node

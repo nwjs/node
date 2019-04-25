@@ -211,7 +211,7 @@ static void AsyncTaskScheduledWrapper(const FunctionCallbackInfo<Value>& args) {
   void* task = GetAsyncTask(task_id);
 
   CHECK(args[2]->IsBoolean());
-  bool recurring = args[2]->BooleanValue(env->context()).FromJust();
+  bool recurring = args[2]->BooleanValue(args.GetIsolate());
 
   env->inspector_agent()->AsyncTaskScheduled(task_name_view, task, recurring);
 }
@@ -248,7 +248,7 @@ void Open(const FunctionCallbackInfo<Value>& args) {
   }
 
   if (args.Length() > 2 && args[2]->IsBoolean()) {
-    wait_for_connect = args[2]->BooleanValue(env->context()).FromJust();
+    wait_for_connect = args[2]->BooleanValue(args.GetIsolate());
   }
   agent->StartIoThread();
   if (wait_for_connect)
@@ -281,7 +281,7 @@ void Initialize(Local<Object> target, Local<Value> unused,
           ->GetFunction(context)
           .ToLocalChecked();
   auto name_string = FIXED_ONE_BYTE_STRING(env->isolate(), "consoleCall");
-  target->Set(context, name_string, consoleCallFunc).FromJust();
+  target->Set(context, name_string, consoleCallFunc).Check();
   consoleCallFunc->SetName(name_string);
 
   env->SetMethod(

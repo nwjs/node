@@ -12,7 +12,6 @@
 namespace v8 {
 namespace internal {
 
-#ifndef V8_INTERPRETED_REGEXP
 class RegExpMacroAssemblerS390 : public NativeRegExpMacroAssembler {
  public:
   RegExpMacroAssemblerS390(Isolate* isolate, Zone* zone, Mode mode,
@@ -80,7 +79,8 @@ class RegExpMacroAssemblerS390 : public NativeRegExpMacroAssembler {
   // Called from RegExp if the stack-guard is triggered.
   // If the code object is relocated, the return address is fixed before
   // returning.
-  static int CheckStackGuardState(Address* return_address, Code* re_code,
+  // {raw_code} is an Address because this is called via ExternalReference.
+  static int CheckStackGuardState(Address* return_address, Address raw_code,
                                   Address re_frame);
 
  private:
@@ -116,7 +116,7 @@ class RegExpMacroAssemblerS390 : public NativeRegExpMacroAssembler {
   static const int kRegisterZero = kStringStartMinusOne - kPointerSize;
 
   // Initial size of code buffer.
-  static const size_t kRegExpCodeSize = 1024;
+  static const int kRegExpCodeSize = 1024;
 
   // Load a number of characters at the given offset from the
   // current position, into the current-character register.
@@ -206,7 +206,6 @@ class RegExpMacroAssemblerS390 : public NativeRegExpMacroAssembler {
 const RegList kRegExpCalleeSaved =
     1 << 6 | 1 << 7 | 1 << 8 | 1 << 9 | 1 << 10 | 1 << 11 | 1 << 13;
 
-#endif  // V8_INTERPRETED_REGEXP
 }  // namespace internal
 }  // namespace v8
 

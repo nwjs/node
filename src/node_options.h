@@ -75,16 +75,6 @@ class DebugOptions : public Options {
 
   HostPort host_port{"127.0.0.1", kDefaultInspectorPort};
 
-  bool deprecated_invocation() const {
-    return deprecated_debug &&
-      inspector_enabled &&
-      break_first_line;
-  }
-
-  bool invalid_invocation() const {
-    return deprecated_debug && !inspector_enabled;
-  }
-
   // Used to patch the options as if --inspect-brk is passed.
   void EnableBreakFirstLine() {
     inspector_enabled = true;
@@ -101,18 +91,17 @@ class DebugOptions : public Options {
 class EnvironmentOptions : public Options {
  public:
   bool abort_on_uncaught_exception = false;
+  bool experimental_json_modules = false;
   bool experimental_modules = false;
+  std::string es_module_specifier_resolution;
+  std::string module_type;
   std::string experimental_policy;
   bool experimental_repl_await = false;
   bool experimental_vm_modules = false;
   bool expose_internals = false;
   bool frozen_intrinsics = false;
-  std::string http_parser =
-#ifdef NODE_EXPERIMENTAL_HTTP_DEFAULT
-    "llhttp";
-#else
-    "legacy";
-#endif
+  std::string heap_snapshot_signal;
+  std::string http_parser = "llhttp";
   bool no_deprecation = false;
   bool no_force_async_hooks_checks = false;
   bool no_warnings = false;
@@ -120,11 +109,17 @@ class EnvironmentOptions : public Options {
   bool preserve_symlinks = false;
   bool preserve_symlinks_main = false;
   bool prof_process = false;
+#if HAVE_INSPECTOR
+  std::string cpu_prof_dir;
+  std::string cpu_prof_name;
+  bool cpu_prof = false;
+#endif  // HAVE_INSPECTOR
   std::string redirect_warnings;
   bool throw_deprecation = false;
   bool trace_deprecation = false;
   bool trace_sync_io = false;
   bool trace_warnings = false;
+  std::string unhandled_rejections;
   std::string userland_loader;
 
   bool syntax_check_only = false;
@@ -135,6 +130,12 @@ class EnvironmentOptions : public Options {
   std::string eval_string;
   bool print_eval = false;
   bool force_repl = false;
+
+  bool tls_min_v1_0 = false;
+  bool tls_min_v1_1 = false;
+  bool tls_min_v1_3 = false;
+  bool tls_max_v1_2 = false;
+  bool tls_max_v1_3 = false;
 
   std::vector<std::string> preload_modules;
 

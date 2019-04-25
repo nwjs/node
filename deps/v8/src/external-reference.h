@@ -27,14 +27,14 @@ class StatsCounter;
   V(builtins_address, "builtins")                                              \
   V(handle_scope_implementer_address,                                          \
     "Isolate::handle_scope_implementer_address")                               \
-  V(pending_microtask_count_address,                                           \
-    "Isolate::pending_microtask_count_address()")                              \
+  V(address_of_interpreter_entry_trampoline_instruction_start,                 \
+    "Address of the InterpreterEntryTrampoline instruction start")             \
   V(interpreter_dispatch_counters, "Interpreter::dispatch_counters")           \
   V(interpreter_dispatch_table_address, "Interpreter::dispatch_table_address") \
   V(date_cache_stamp, "date_cache_stamp")                                      \
   V(stress_deopt_count, "Isolate::stress_deopt_count_address()")               \
   V(force_slow_path, "Isolate::force_slow_path_address()")                     \
-  V(roots_array_start, "Heap::roots_array_start()")                            \
+  V(isolate_root, "Isolate::isolate_root()")                                   \
   V(allocation_sites_list_address, "Heap::allocation_sites_list_address()")    \
   V(address_of_stack_limit, "StackGuard::address_of_jslimit()")                \
   V(address_of_real_stack_limit, "StackGuard::address_of_real_jslimit()")      \
@@ -51,12 +51,14 @@ class StatsCounter;
   V(handle_scope_limit_address, "HandleScope::limit")                          \
   V(scheduled_exception_address, "Isolate::scheduled_exception")               \
   V(address_of_pending_message_obj, "address_of_pending_message_obj")          \
-  V(get_or_create_hash_raw, "get_or_create_hash_raw")                          \
-  V(jsreceiver_create_identity_hash, "jsreceiver_create_identity_hash")        \
   V(promise_hook_address, "Isolate::promise_hook_address()")                   \
   V(async_event_delegate_address, "Isolate::async_event_delegate_address()")   \
   V(promise_hook_or_async_event_delegate_address,                              \
     "Isolate::promise_hook_or_async_event_delegate_address()")                 \
+  V(promise_hook_or_debug_is_active_or_async_event_delegate_address,           \
+    "Isolate::promise_hook_or_debug_is_active_or_async_event_delegate_"        \
+    "address()")                                                               \
+  V(debug_execution_mode_address, "Isolate::debug_execution_mode_address()")   \
   V(debug_is_active_address, "Debug::is_active_address()")                     \
   V(debug_hook_on_function_call_address,                                       \
     "Debug::hook_on_function_call_address()")                                  \
@@ -66,9 +68,20 @@ class StatsCounter;
   V(debug_suspended_generator_address,                                         \
     "Debug::step_suspended_generator_address()")                               \
   V(debug_restart_fp_address, "Debug::restart_fp_address()")                   \
-  V(wasm_thread_in_wasm_flag_address_address,                                  \
-    "&Isolate::thread_in_wasm_flag_address")                                   \
-  EXTERNAL_REFERENCE_LIST_NON_INTERPRETED_REGEXP(V)
+  V(fast_c_call_caller_fp_address,                                             \
+    "IsolateData::fast_c_call_caller_fp_address")                              \
+  V(fast_c_call_caller_pc_address,                                             \
+    "IsolateData::fast_c_call_caller_pc_address")                              \
+  V(address_of_regexp_stack_limit, "RegExpStack::limit_address()")             \
+  V(address_of_regexp_stack_memory_address, "RegExpStack::memory_address()")   \
+  V(address_of_regexp_stack_memory_size, "RegExpStack::memory_size()")         \
+  V(address_of_static_offsets_vector, "OffsetsVector::static_offsets_vector")  \
+  V(re_case_insensitive_compare_uc16,                                          \
+    "NativeRegExpMacroAssembler::CaseInsensitiveCompareUC16()")                \
+  V(re_check_stack_guard_state,                                                \
+    "RegExpMacroAssembler*::CheckStackGuardState()")                           \
+  V(re_grow_stack, "NativeRegExpMacroAssembler::GrowStack()")                  \
+  V(re_word_character_map, "NativeRegExpMacroAssembler::word_character_map")
 
 #define EXTERNAL_REFERENCE_LIST(V)                                            \
   V(abort_with_reason, "abort_with_reason")                                   \
@@ -76,7 +89,11 @@ class StatsCounter;
   V(address_of_double_neg_constant, "double_negate_constant")                 \
   V(address_of_float_abs_constant, "float_absolute_constant")                 \
   V(address_of_float_neg_constant, "float_negate_constant")                   \
+  V(address_of_harmony_await_optimization_flag,                               \
+    "FLAG_harmony_await_optimization")                                        \
   V(address_of_min_int, "LDoubleConstant::min_int")                           \
+  V(address_of_mock_arraybuffer_allocator_flag,                               \
+    "FLAG_mock_arraybuffer_allocator")                                        \
   V(address_of_one_half, "LDoubleConstant::one_half")                         \
   V(address_of_runtime_stats_flag, "FLAG_runtime_stats")                      \
   V(address_of_the_hole_nan, "the_hole_nan")                                  \
@@ -95,24 +112,25 @@ class StatsCounter;
   V(f64_acos_wrapper_function, "f64_acos_wrapper")                            \
   V(f64_asin_wrapper_function, "f64_asin_wrapper")                            \
   V(f64_mod_wrapper_function, "f64_mod_wrapper")                              \
-  V(fixed_typed_array_base_data_offset, "fixed_typed_array_base_data_offset") \
   V(get_date_field_function, "JSDate::GetField")                              \
+  V(get_or_create_hash_raw, "get_or_create_hash_raw")                         \
   V(ieee754_acos_function, "base::ieee754::acos")                             \
   V(ieee754_acosh_function, "base::ieee754::acosh")                           \
   V(ieee754_asin_function, "base::ieee754::asin")                             \
   V(ieee754_asinh_function, "base::ieee754::asinh")                           \
-  V(ieee754_atan2_function, "base::ieee754::atan2")                           \
   V(ieee754_atan_function, "base::ieee754::atan")                             \
+  V(ieee754_atan2_function, "base::ieee754::atan2")                           \
   V(ieee754_atanh_function, "base::ieee754::atanh")                           \
   V(ieee754_cbrt_function, "base::ieee754::cbrt")                             \
   V(ieee754_cos_function, "base::ieee754::cos")                               \
   V(ieee754_cosh_function, "base::ieee754::cosh")                             \
   V(ieee754_exp_function, "base::ieee754::exp")                               \
   V(ieee754_expm1_function, "base::ieee754::expm1")                           \
+  V(ieee754_log_function, "base::ieee754::log")                               \
   V(ieee754_log10_function, "base::ieee754::log10")                           \
   V(ieee754_log1p_function, "base::ieee754::log1p")                           \
   V(ieee754_log2_function, "base::ieee754::log2")                             \
-  V(ieee754_log_function, "base::ieee754::log")                               \
+  V(ieee754_pow_function, "base::ieee754::pow")                               \
   V(ieee754_sin_function, "base::ieee754::sin")                               \
   V(ieee754_sinh_function, "base::ieee754::sinh")                             \
   V(ieee754_tan_function, "base::ieee754::tan")                               \
@@ -123,6 +141,9 @@ class StatsCounter;
     "JSObject::InvalidatePrototypeChains()")                                  \
   V(invoke_accessor_getter_callback, "InvokeAccessorGetterCallback")          \
   V(invoke_function_callback, "InvokeFunctionCallback")                       \
+  V(jsarray_array_join_concat_to_sequential_string,                           \
+    "jsarray_array_join_concat_to_sequential_string")                         \
+  V(jsreceiver_create_identity_hash, "jsreceiver_create_identity_hash")       \
   V(libc_memchr_function, "libc_memchr")                                      \
   V(libc_memcpy_function, "libc_memcpy")                                      \
   V(libc_memmove_function, "libc_memmove")                                    \
@@ -132,13 +153,14 @@ class StatsCounter;
   V(mod_two_doubles_operation, "mod_two_doubles")                             \
   V(new_deoptimizer_function, "Deoptimizer::New()")                           \
   V(orderedhashmap_gethash_raw, "orderedhashmap_gethash_raw")                 \
-  V(power_double_double_function, "power_double_double_function")             \
   V(printf_function, "printf")                                                \
-  V(store_buffer_overflow_function, "StoreBuffer::StoreBufferOverflow")       \
+  V(refill_math_random, "MathRandom::RefillCache")                            \
   V(search_string_raw_one_one, "search_string_raw_one_one")                   \
   V(search_string_raw_one_two, "search_string_raw_one_two")                   \
   V(search_string_raw_two_one, "search_string_raw_two_one")                   \
   V(search_string_raw_two_two, "search_string_raw_two_two")                   \
+  V(smi_lexicographic_compare_function, "smi_lexicographic_compare_function") \
+  V(store_buffer_overflow_function, "StoreBuffer::StoreBufferOverflow")       \
   V(try_internalize_string_function, "try_internalize_string_function")       \
   V(wasm_call_trap_callback_for_testing,                                      \
     "wasm::call_trap_callback_for_testing")                                   \
@@ -169,23 +191,21 @@ class StatsCounter;
   V(wasm_word32_ror, "wasm::word32_ror")                                      \
   V(wasm_word64_ctz, "wasm::word64_ctz")                                      \
   V(wasm_word64_popcnt, "wasm::word64_popcnt")                                \
+  V(wasm_memory_copy, "wasm::memory_copy")                                    \
+  V(wasm_memory_fill, "wasm::memory_fill")                                    \
+  V(call_enqueue_microtask_function, "MicrotaskQueue::CallEnqueueMicrotask")  \
+  V(call_enter_context_function, "call_enter_context_function")               \
+  V(atomic_pair_load_function, "atomic_pair_load_function")                   \
+  V(atomic_pair_store_function, "atomic_pair_store_function")                 \
+  V(atomic_pair_add_function, "atomic_pair_add_function")                     \
+  V(atomic_pair_sub_function, "atomic_pair_sub_function")                     \
+  V(atomic_pair_and_function, "atomic_pair_and_function")                     \
+  V(atomic_pair_or_function, "atomic_pair_or_function")                       \
+  V(atomic_pair_xor_function, "atomic_pair_xor_function")                     \
+  V(atomic_pair_exchange_function, "atomic_pair_exchange_function")           \
+  V(atomic_pair_compare_exchange_function,                                    \
+    "atomic_pair_compare_exchange_function")                                  \
   EXTERNAL_REFERENCE_LIST_INTL(V)
-
-#ifndef V8_INTERPRETED_REGEXP
-#define EXTERNAL_REFERENCE_LIST_NON_INTERPRETED_REGEXP(V)                     \
-  V(address_of_regexp_stack_limit, "RegExpStack::limit_address()")            \
-  V(address_of_regexp_stack_memory_address, "RegExpStack::memory_address()")  \
-  V(address_of_regexp_stack_memory_size, "RegExpStack::memory_size()")        \
-  V(address_of_static_offsets_vector, "OffsetsVector::static_offsets_vector") \
-  V(re_case_insensitive_compare_uc16,                                         \
-    "NativeRegExpMacroAssembler::CaseInsensitiveCompareUC16()")               \
-  V(re_check_stack_guard_state,                                               \
-    "RegExpMacroAssembler*::CheckStackGuardState()")                          \
-  V(re_grow_stack, "NativeRegExpMacroAssembler::GrowStack()")                 \
-  V(re_word_character_map, "NativeRegExpMacroAssembler::word_character_map")
-#else
-#define EXTERNAL_REFERENCE_LIST_NON_INTERPRETED_REGEXP(V)
-#endif  // V8_INTERPRETED_REGEXP
 
 #ifdef V8_INTL_SUPPORT
 #define EXTERNAL_REFERENCE_LIST_INTL(V)                               \
@@ -200,12 +220,12 @@ class StatsCounter;
 // in an ExternalReference instance. This is done in order to track the
 // origin of all external references in the code so that they can be bound
 // to the correct addresses when deserializing a heap.
-class ExternalReference BASE_EMBEDDED {
+class ExternalReference {
  public:
   // Used in the simulator to support different native api calls.
   enum Type {
     // Builtin call.
-    // Object* f(v8::internal::Arguments).
+    // Address f(v8::internal::Arguments).
     BUILTIN_CALL,  // default
 
     // Builtin call returning object pair.
@@ -266,16 +286,14 @@ class ExternalReference BASE_EMBEDDED {
   template <typename SubjectChar, typename PatternChar>
   static ExternalReference search_string_raw();
 
-  static ExternalReference page_flags(Page* page);
-
-  static ExternalReference ForDeoptEntry(Address entry);
+  static ExternalReference FromRawAddress(Address address);
 
 #define DECL_EXTERNAL_REFERENCE(name, desc) static ExternalReference name();
   EXTERNAL_REFERENCE_LIST(DECL_EXTERNAL_REFERENCE)
 #undef DECL_EXTERNAL_REFERENCE
 
 #define DECL_EXTERNAL_REFERENCE(name, desc) \
-  static ExternalReference name(Isolate* isolate);
+  static V8_EXPORT_PRIVATE ExternalReference name(Isolate* isolate);
   EXTERNAL_REFERENCE_LIST_WITH_ISOLATE(DECL_EXTERNAL_REFERENCE)
 #undef DECL_EXTERNAL_REFERENCE
 

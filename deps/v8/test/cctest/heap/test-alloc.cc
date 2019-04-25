@@ -30,6 +30,7 @@
 
 #include "src/accessors.h"
 #include "src/api-inl.h"
+#include "src/heap/heap-inl.h"
 #include "src/objects-inl.h"
 #include "src/objects/api-callbacks.h"
 #include "src/property.h"
@@ -48,15 +49,16 @@ Handle<Object> HeapTester::TestAllocateAfterFailures() {
   AlwaysAllocateScope scope(CcTest::i_isolate());
   Heap* heap = CcTest::heap();
   int size = FixedArray::SizeFor(100);
-  // New space.
-  HeapObject* obj = heap->AllocateRaw(size, NEW_SPACE).ToObjectChecked();
+  // Young generation.
+  HeapObject obj =
+      heap->AllocateRaw(size, AllocationType::kYoung).ToObjectChecked();
   // In order to pass heap verification on Isolate teardown, mark the
   // allocated area as a filler.
   heap->CreateFillerObjectAt(obj->address(), size, ClearRecordedSlots::kNo);
 
-  // Old space.
+  // Old generation.
   heap::SimulateFullSpace(heap->old_space());
-  obj = heap->AllocateRaw(size, OLD_SPACE).ToObjectChecked();
+  obj = heap->AllocateRaw(size, AllocationType::kOld).ToObjectChecked();
   heap->CreateFillerObjectAt(obj->address(), size, ClearRecordedSlots::kNo);
 
   // Large object space.
@@ -67,24 +69,24 @@ Handle<Object> HeapTester::TestAllocateAfterFailures() {
   CHECK_GT(kLargeObjectSpaceFillerSize,
            static_cast<size_t>(heap->old_space()->AreaSize()));
   while (heap->OldGenerationSpaceAvailable() > kLargeObjectSpaceFillerSize) {
-    obj = heap->AllocateRaw(kLargeObjectSpaceFillerSize, OLD_SPACE)
+    obj = heap->AllocateRaw(kLargeObjectSpaceFillerSize, AllocationType::kOld)
               .ToObjectChecked();
     heap->CreateFillerObjectAt(obj->address(), size, ClearRecordedSlots::kNo);
   }
-  obj = heap->AllocateRaw(kLargeObjectSpaceFillerSize, OLD_SPACE)
+  obj = heap->AllocateRaw(kLargeObjectSpaceFillerSize, AllocationType::kOld)
             .ToObjectChecked();
   heap->CreateFillerObjectAt(obj->address(), size, ClearRecordedSlots::kNo);
 
   // Map space.
   heap::SimulateFullSpace(heap->map_space());
-  obj = heap->AllocateRaw(Map::kSize, MAP_SPACE).ToObjectChecked();
+  obj = heap->AllocateRaw(Map::kSize, AllocationType::kMap).ToObjectChecked();
   heap->CreateFillerObjectAt(obj->address(), Map::kSize,
                              ClearRecordedSlots::kNo);
 
   // Code space.
   heap::SimulateFullSpace(heap->code_space());
   size = CcTest::i_isolate()->builtins()->builtin(Builtins::kIllegal)->Size();
-  obj = heap->AllocateRaw(size, CODE_SPACE).ToObjectChecked();
+  obj = heap->AllocateRaw(size, AllocationType::kCode).ToObjectChecked();
   heap->CreateFillerObjectAt(obj->address(), size, ClearRecordedSlots::kNo);
   return CcTest::i_isolate()->factory()->true_value();
 }
@@ -150,7 +152,7 @@ TEST(StressJS) {
 
   Descriptor d = Descriptor::AccessorConstant(
       Handle<Name>(Name::cast(foreign->name()), isolate), foreign, attrs);
-  map->AppendDescriptor(&d);
+  map->AppendDescriptor(isolate, &d);
 
   // Add the Foo constructor the global object.
   CHECK(env->Global()
@@ -168,82 +170,8 @@ TEST(StressJS) {
           .ToLocalChecked()
           ->Run(env)
           .ToLocalChecked();
-  CHECK_EQ(true, result->BooleanValue(env).FromJust());
+  CHECK_EQ(true, result->BooleanValue(CcTest::isolate()));
   env->Exit();
-}
-
-
-// CodeRange test.
-// Tests memory management in a CodeRange by allocating and freeing blocks,
-// using a pseudorandom generator to choose block sizes geometrically
-// distributed between 2 * Page::kPageSize and 2^5 + 1 * Page::kPageSize.
-// Ensure that the freed chunks are collected and reused by allocating (in
-// total) more than the size of the CodeRange.
-
-// This pseudorandom generator does not need to be particularly good.
-// Use the lower half of the V8::Random() generator.
-unsigned int Pseudorandom() {
-  static uint32_t lo = 2345;
-  lo = 18273 * (lo & 0xFFFF) + (lo >> 16);  // Provably not 0.
-  return lo & 0xFFFF;
-}
-
-namespace {
-
-// Plain old data class.  Represents a block of allocated memory.
-class Block {
- public:
-  Block(Address base_arg, int size_arg)
-      : base(base_arg), size(size_arg) {}
-
-  Address base;
-  int size;
-};
-
-}  // namespace
-
-TEST(CodeRange) {
-  const size_t code_range_size = 32*MB;
-  CcTest::InitializeVM();
-  CodeRange code_range(reinterpret_cast<Isolate*>(CcTest::isolate()),
-                       code_range_size);
-  size_t current_allocated = 0;
-  size_t total_allocated = 0;
-  std::vector<Block> blocks;
-  blocks.reserve(1000);
-
-  while (total_allocated < 5 * code_range_size) {
-    if (current_allocated < code_range_size / 10) {
-      // Allocate a block.
-      // Geometrically distributed sizes, greater than
-      // kMaxRegularHeapObjectSize (which is greater than code page area).
-      // TODO(gc): instead of using 3 use some contant based on code_range_size
-      // kMaxRegularHeapObjectSize.
-      size_t requested = (kMaxRegularHeapObjectSize << (Pseudorandom() % 3)) +
-                         Pseudorandom() % 5000 + 1;
-      requested = RoundUp(requested, MemoryAllocator::GetCommitPageSize());
-      size_t allocated = 0;
-
-      // The request size has to be at least 2 code guard pages larger than the
-      // actual commit size.
-      Address base = code_range.AllocateRawMemory(
-          requested, requested - (2 * MemoryAllocator::CodePageGuardSize()),
-          &allocated);
-      CHECK_NE(base, kNullAddress);
-      blocks.emplace_back(base, static_cast<int>(allocated));
-      current_allocated += static_cast<int>(allocated);
-      total_allocated += static_cast<int>(allocated);
-    } else {
-      // Free a block.
-      size_t index = Pseudorandom() % blocks.size();
-      code_range.FreeRawMemory(blocks[index].base, blocks[index].size);
-      current_allocated -= blocks[index].size;
-      if (index < blocks.size() - 1) {
-        blocks[index] = blocks.back();
-      }
-      blocks.pop_back();
-    }
-  }
 }
 
 }  // namespace heap

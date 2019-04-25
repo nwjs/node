@@ -38,7 +38,8 @@ SimdScalarLowering::SimdScalarLowering(
   DCHECK_NOT_NULL(graph());
   DCHECK_NOT_NULL(graph()->end());
   replacements_ = zone()->NewArray<Replacement>(graph()->NodeCount());
-  memset(replacements_, 0, sizeof(Replacement) * graph()->NodeCount());
+  memset(static_cast<void*>(replacements_), 0,
+         sizeof(Replacement) * graph()->NodeCount());
 }
 
 void SimdScalarLowering::LowerGraph() {
@@ -1077,6 +1078,15 @@ void SimdScalarLowering::LowerNode(Node* node) {
         }
       }
       ReplaceNode(node, rep_node, num_lanes);
+      break;
+    }
+    case IrOpcode::kS128Zero: {
+      DCHECK_EQ(0, node->InputCount());
+      Node* rep_node[kNumLanes32];
+      for (int i = 0; i < kNumLanes32; ++i) {
+        rep_node[i] = mcgraph_->Int32Constant(0);
+      }
+      ReplaceNode(node, rep_node, kNumLanes32);
       break;
     }
     case IrOpcode::kS128Not: {

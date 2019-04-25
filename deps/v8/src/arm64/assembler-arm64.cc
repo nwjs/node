@@ -33,9 +33,9 @@
 #include "src/arm64/assembler-arm64-inl.h"
 #include "src/base/bits.h"
 #include "src/base/cpu.h"
-#include "src/code-stubs.h"
 #include "src/frame-constants.h"
 #include "src/register-configuration.h"
+#include "src/string-constants.h"
 
 namespace v8 {
 namespace internal {
@@ -67,7 +67,7 @@ CPURegister CPURegList::PopLowestIndex() {
     return NoCPUReg;
   }
   int index = CountTrailingZeros(list_, kRegListSizeInBits);
-  DCHECK((1 << index) & list_);
+  DCHECK((1LL << index) & list_);
   Remove(index);
   return CPURegister::Create(index, size_, type_);
 }
@@ -80,7 +80,7 @@ CPURegister CPURegList::PopHighestIndex() {
   }
   int index = CountLeadingZeros(list_, kRegListSizeInBits);
   index = kRegListSizeInBits - 1 - index;
-  DCHECK((1 << index) & list_);
+  DCHECK((1LL << index) & list_);
   Remove(index);
   return CPURegister::Create(index, size_, type_);
 }
@@ -109,8 +109,14 @@ CPURegList CPURegList::GetCalleeSavedV(int size) {
 
 
 CPURegList CPURegList::GetCallerSaved(int size) {
+#if defined(V8_OS_WIN)
+  // x18 is reserved as platform register on Windows arm64.
+  // Registers x0-x17 and lr (x30) are caller-saved.
+  CPURegList list = CPURegList(CPURegister::kRegister, size, 0, 17);
+#else
   // Registers x0-x18 and lr (x30) are caller-saved.
   CPURegList list = CPURegList(CPURegister::kRegister, size, 0, 18);
+#endif
   list.Combine(lr);
   return list;
 }
@@ -143,9 +149,13 @@ CPURegList CPURegList::GetSafepointSavedRegisters() {
   list.Remove(16);
   list.Remove(17);
 
+// Don't add x18 to safepoint list on Windows arm64 because it is reserved
+// as platform register.
+#if !defined(V8_OS_WIN)
   // Add x18 to the safepoint list, as although it's not in kJSCallerSaved, it
   // is a caller-saved register according to the procedure call standard.
   list.Combine(18);
+#endif
 
   // Add the link register (x30) to the safepoint list.
   list.Combine(30);
@@ -178,29 +188,6 @@ bool RelocInfo::IsCodedSpecially() {
 bool RelocInfo::IsInConstantPool() {
   Instruction* instr = reinterpret_cast<Instruction*>(pc_);
   return instr->IsLdrLiteralX();
-}
-
-int RelocInfo::GetDeoptimizationId(Isolate* isolate, DeoptimizeKind kind) {
-  DCHECK(IsRuntimeEntry(rmode_));
-  Instruction* movz_instr = reinterpret_cast<Instruction*>(pc_)->preceding();
-  DCHECK(movz_instr->IsMovz());
-  uint64_t imm = static_cast<uint64_t>(movz_instr->ImmMoveWide())
-                 << (16 * movz_instr->ShiftMoveWide());
-  DCHECK_LE(imm, INT_MAX);
-
-  return static_cast<int>(imm);
-}
-
-void RelocInfo::set_js_to_wasm_address(Address address,
-                                       ICacheFlushMode icache_flush_mode) {
-  DCHECK_EQ(rmode_, JS_TO_WASM_CALL);
-  Assembler::set_target_address_at(pc_, constant_pool_, address,
-                                   icache_flush_mode);
-}
-
-Address RelocInfo::js_to_wasm_address() const {
-  DCHECK_EQ(rmode_, JS_TO_WASM_CALL);
-  return Assembler::target_address_at(pc_, constant_pool_);
 }
 
 uint32_t RelocInfo::wasm_call_tag() const {
@@ -333,8 +320,7 @@ bool ConstPool::AddSharedEntry(SharedEntryMap& entry_map, uint64_t data,
 
 // Constant Pool.
 bool ConstPool::RecordEntry(intptr_t data, RelocInfo::Mode mode) {
-  DCHECK(mode != RelocInfo::COMMENT && mode != RelocInfo::CONST_POOL &&
-         mode != RelocInfo::VENEER_POOL &&
+  DCHECK(mode != RelocInfo::CONST_POOL && mode != RelocInfo::VENEER_POOL &&
          mode != RelocInfo::DEOPT_SCRIPT_OFFSET &&
          mode != RelocInfo::DEOPT_INLINING_ID &&
          mode != RelocInfo::DEOPT_REASON && mode != RelocInfo::DEOPT_ID);
@@ -391,7 +377,7 @@ int ConstPool::WorstCaseSize() {
   //   blr xzr
   //   nop
   // All entries are 64-bit for now.
-  return 4 * kInstrSize + EntryCount() * kPointerSize;
+  return 4 * kInstrSize + EntryCount() * kSystemPointerSize;
 }
 
 
@@ -409,7 +395,7 @@ int ConstPool::SizeIfEmittedAtCurrentPc(bool require_jump) {
       IsAligned(assm_->pc_offset() + prologue_size, 8) ? 0 : kInstrSize;
 
   // All entries are 64-bit for now.
-  return prologue_size + EntryCount() * kPointerSize;
+  return prologue_size + EntryCount() * kSystemPointerSize;
 }
 
 
@@ -505,11 +491,11 @@ MemOperand::PairResult MemOperand::AreConsistentForPair(
   }
   // Step two: check that the offsets are contiguous and that the range
   // is OK for ldp/stp.
-  if ((operandB.offset() == operandA.offset() + (1 << access_size_log2)) &&
+  if ((operandB.offset() == operandA.offset() + (1LL << access_size_log2)) &&
       is_int7(operandA.offset() >> access_size_log2)) {
     return kPairAB;
   }
-  if ((operandA.offset() == operandB.offset() + (1 << access_size_log2)) &&
+  if ((operandA.offset() == operandB.offset() + (1LL << access_size_log2)) &&
       is_int7(operandB.offset() >> access_size_log2)) {
     return kPairBA;
   }
@@ -547,9 +533,9 @@ void ConstPool::EmitEntries() {
 
 
 // Assembler
-Assembler::Assembler(const AssemblerOptions& options, void* buffer,
-                     int buffer_size)
-    : AssemblerBase(options, buffer, buffer_size),
+Assembler::Assembler(const AssemblerOptions& options,
+                     std::unique_ptr<AssemblerBuffer> buffer)
+    : AssemblerBase(options, std::move(buffer)),
       constpool_(this),
       unresolved_branches_() {
   const_pool_blocked_nesting_ = 0;
@@ -557,25 +543,25 @@ Assembler::Assembler(const AssemblerOptions& options, void* buffer,
   Reset();
 }
 
-
 Assembler::~Assembler() {
   DCHECK(constpool_.IsEmpty());
   DCHECK_EQ(const_pool_blocked_nesting_, 0);
   DCHECK_EQ(veneer_pool_blocked_nesting_, 0);
 }
 
+void Assembler::AbortedCodeGeneration() { constpool_.Clear(); }
 
 void Assembler::Reset() {
 #ifdef DEBUG
-  DCHECK((pc_ >= buffer_) && (pc_ < buffer_ + buffer_size_));
+  DCHECK((pc_ >= buffer_start_) && (pc_ < buffer_start_ + buffer_->size()));
   DCHECK_EQ(const_pool_blocked_nesting_, 0);
   DCHECK_EQ(veneer_pool_blocked_nesting_, 0);
   DCHECK(unresolved_branches_.empty());
-  memset(buffer_, 0, pc_ - buffer_);
+  memset(buffer_start_, 0, pc_ - buffer_start_);
 #endif
-  pc_ = buffer_;
+  pc_ = buffer_start_;
   ReserveCodeTargetSpace(64);
-  reloc_info_writer.Reposition(buffer_ + buffer_size_, pc_);
+  reloc_info_writer.Reposition(buffer_start_ + buffer_->size(), pc_);
   constpool_.Clear();
   next_constant_pool_check_ = 0;
   next_veneer_pool_check_ = kMaxInt;
@@ -583,8 +569,9 @@ void Assembler::Reset() {
 }
 
 void Assembler::AllocateAndInstallRequestedHeapObjects(Isolate* isolate) {
+  DCHECK_IMPLIES(isolate == nullptr, heap_object_requests_.empty());
   for (auto& request : heap_object_requests_) {
-    Address pc = reinterpret_cast<Address>(buffer_) + request.offset();
+    Address pc = reinterpret_cast<Address>(buffer_start_) + request.offset();
     switch (request.kind()) {
       case HeapObjectRequest::kHeapNumber: {
         Handle<HeapObject> object =
@@ -592,41 +579,49 @@ void Assembler::AllocateAndInstallRequestedHeapObjects(Isolate* isolate) {
         set_target_address_at(pc, 0 /* unused */, object.address());
         break;
       }
-      case HeapObjectRequest::kCodeStub: {
-        request.code_stub()->set_isolate(isolate);
-        Instruction* instr = reinterpret_cast<Instruction*>(pc);
-        DCHECK(instr->IsBranchAndLink() || instr->IsUnconditionalBranch());
-        DCHECK_EQ(instr->ImmPCOffset() % kInstrSize, 0);
-        UpdateCodeTarget(instr->ImmPCOffset() >> kInstrSizeLog2,
-                         request.code_stub()->GetCode());
+      case HeapObjectRequest::kStringConstant: {
+        const StringConstantBase* str = request.string();
+        CHECK_NOT_NULL(str);
+        set_target_address_at(pc, 0 /* unused */,
+                              str->AllocateStringConstant(isolate).address());
         break;
       }
     }
   }
 }
 
-void Assembler::GetCode(Isolate* isolate, CodeDesc* desc) {
+void Assembler::GetCode(Isolate* isolate, CodeDesc* desc,
+                        SafepointTableBuilder* safepoint_table_builder,
+                        int handler_table_offset) {
   // Emit constant pool if necessary.
   CheckConstPool(true, false);
   DCHECK(constpool_.IsEmpty());
 
+  int code_comments_size = WriteCodeComments();
+
   AllocateAndInstallRequestedHeapObjects(isolate);
 
   // Set up code descriptor.
-  if (desc) {
-    desc->buffer = reinterpret_cast<byte*>(buffer_);
-    desc->buffer_size = buffer_size_;
-    desc->instr_size = pc_offset();
-    desc->reloc_size =
-        static_cast<int>((reinterpret_cast<byte*>(buffer_) + buffer_size_) -
-                         reloc_info_writer.pos());
-    desc->origin = this;
-    desc->constant_pool_size = 0;
-    desc->unwinding_info_size = 0;
-    desc->unwinding_info = nullptr;
-  }
-}
+  // TODO(jgruber): Reconsider how these offsets and sizes are maintained up to
+  // this point to make CodeDesc initialization less fiddly.
 
+  static constexpr int kConstantPoolSize = 0;
+  const int instruction_size = pc_offset();
+  const int code_comments_offset = instruction_size - code_comments_size;
+  const int constant_pool_offset = code_comments_offset - kConstantPoolSize;
+  const int handler_table_offset2 = (handler_table_offset == kNoHandlerTable)
+                                        ? constant_pool_offset
+                                        : handler_table_offset;
+  const int safepoint_table_offset =
+      (safepoint_table_builder == kNoSafepointTable)
+          ? handler_table_offset2
+          : safepoint_table_builder->GetCodeOffset();
+  const int reloc_info_offset =
+      static_cast<int>(reloc_info_writer.pos() - buffer_->start());
+  CodeDesc::Initialize(desc, this, safepoint_table_offset,
+                       handler_table_offset2, constant_pool_offset,
+                       code_comments_offset, reloc_info_offset);
+}
 
 void Assembler::Align(int m) {
   DCHECK(m >= 4 && base::bits::IsPowerOfTwo(m));
@@ -635,6 +630,10 @@ void Assembler::Align(int m) {
   }
 }
 
+void Assembler::CodeTargetAlign() {
+  // Preferred alignment of jump targets on some ARM chips.
+  Align(8);
+}
 
 void Assembler::CheckLabelLinkChain(Label const * label) {
 #ifdef DEBUG
@@ -687,7 +686,7 @@ void Assembler::RemoveBranchFromLabelLinkChain(Instruction* branch,
       label->Unuse();
     } else {
       label->link_to(
-          static_cast<int>(reinterpret_cast<byte*>(next_link) - buffer_));
+          static_cast<int>(reinterpret_cast<byte*>(next_link) - buffer_start_));
     }
 
   } else if (branch == next_link) {
@@ -1104,6 +1103,12 @@ void Assembler::adr(const Register& rd, int imm21) {
 
 void Assembler::adr(const Register& rd, Label* label) {
   adr(rd, LinkAndGetByteOffsetTo(label));
+}
+
+
+void Assembler::nop(NopMarkerTypes n) {
+  DCHECK((FIRST_NOP_MARKER <= n) && (n <= LAST_NOP_MARKER));
+  mov(Register::XRegFromCode(n), Register::XRegFromCode(n));
 }
 
 
@@ -1710,9 +1715,9 @@ Operand Operand::EmbeddedNumber(double number) {
   return result;
 }
 
-Operand Operand::EmbeddedCode(CodeStub* stub) {
-  Operand result(0, RelocInfo::CODE_TARGET);
-  result.heap_object_request_.emplace(stub);
+Operand Operand::EmbeddedStringConstant(const StringConstantBase* str) {
+  Operand result(0, RelocInfo::EMBEDDED_OBJECT);
+  result.heap_object_request_.emplace(str);
   DCHECK(result.IsHeapObjectRequest());
   return result;
 }
@@ -3909,7 +3914,7 @@ void Assembler::dcptr(Label* label) {
     // In this case, label->pos() returns the offset of the label from the
     // start of the buffer.
     internal_reference_positions_.push_back(pc_offset());
-    dc64(reinterpret_cast<uintptr_t>(buffer_ + label->pos()));
+    dc64(reinterpret_cast<uintptr_t>(buffer_start_ + label->pos()));
   } else {
     int32_t offset;
     if (label->is_linked()) {
@@ -3986,16 +3991,16 @@ void Assembler::MoveWide(const Register& rd, uint64_t imm, int shift,
     // Calculate a new immediate and shift combination to encode the immediate
     // argument.
     shift = 0;
-    if ((imm & ~0xFFFFUL) == 0) {
+    if ((imm & ~0xFFFFULL) == 0) {
       // Nothing to do.
-    } else if ((imm & ~(0xFFFFUL << 16)) == 0) {
+    } else if ((imm & ~(0xFFFFULL << 16)) == 0) {
       imm >>= 16;
       shift = 1;
-    } else if ((imm & ~(0xFFFFUL << 32)) == 0) {
+    } else if ((imm & ~(0xFFFFULL << 32)) == 0) {
       DCHECK(rd.Is64Bits());
       imm >>= 32;
       shift = 2;
-    } else if ((imm & ~(0xFFFFUL << 48)) == 0) {
+    } else if ((imm & ~(0xFFFFULL << 48)) == 0) {
       DCHECK(rd.Is64Bits());
       imm >>= 48;
       shift = 3;
@@ -4694,45 +4699,33 @@ bool Assembler::IsImmFP64(double imm) {
 
 
 void Assembler::GrowBuffer() {
-  if (!own_buffer_) FATAL("external code buffer is too small");
-
   // Compute new buffer size.
-  CodeDesc desc;  // the new buffer
-  if (buffer_size_ < 1 * MB) {
-    desc.buffer_size = 2 * buffer_size_;
-  } else {
-    desc.buffer_size = buffer_size_ + 1 * MB;
-  }
+  int old_size = buffer_->size();
+  int new_size = std::min(2 * old_size, old_size + 1 * MB);
 
   // Some internal data structures overflow for very large buffers,
   // they must ensure that kMaximalBufferSize is not too large.
-  if (desc.buffer_size > kMaximalBufferSize) {
+  if (new_size > kMaximalBufferSize) {
     V8::FatalProcessOutOfMemory(nullptr, "Assembler::GrowBuffer");
   }
 
-  byte* buffer = reinterpret_cast<byte*>(buffer_);
-
   // Set up new buffer.
-  desc.buffer = NewArray<byte>(desc.buffer_size);
-  desc.origin = this;
-
-  desc.instr_size = pc_offset();
-  desc.reloc_size =
-      static_cast<int>((buffer + buffer_size_) - reloc_info_writer.pos());
+  std::unique_ptr<AssemblerBuffer> new_buffer = buffer_->Grow(new_size);
+  DCHECK_EQ(new_size, new_buffer->size());
+  byte* new_start = new_buffer->start();
 
   // Copy the data.
-  intptr_t pc_delta = desc.buffer - buffer;
-  intptr_t rc_delta = (desc.buffer + desc.buffer_size) -
-                      (buffer + buffer_size_);
-  memmove(desc.buffer, buffer, desc.instr_size);
-  memmove(reloc_info_writer.pos() + rc_delta,
-          reloc_info_writer.pos(), desc.reloc_size);
+  intptr_t pc_delta = new_start - buffer_start_;
+  intptr_t rc_delta = (new_start + new_size) - (buffer_start_ + old_size);
+  size_t reloc_size = (buffer_start_ + old_size) - reloc_info_writer.pos();
+  memmove(new_start, buffer_start_, pc_offset());
+  memmove(reloc_info_writer.pos() + rc_delta, reloc_info_writer.pos(),
+          reloc_size);
 
   // Switch buffers.
-  DeleteArray(buffer_);
-  buffer_ = desc.buffer;
-  buffer_size_ = desc.buffer_size;
-  pc_ = pc_ + pc_delta;
+  buffer_ = std::move(new_buffer);
+  buffer_start_ = new_start;
+  pc_ += pc_delta;
   reloc_info_writer.Reposition(reloc_info_writer.pos() + rc_delta,
                                reloc_info_writer.last_pc() + pc_delta);
 
@@ -4742,7 +4735,7 @@ void Assembler::GrowBuffer() {
 
   // Relocate internal references.
   for (auto pos : internal_reference_positions_) {
-    intptr_t* p = reinterpret_cast<intptr_t*>(buffer_ + pos);
+    intptr_t* p = reinterpret_cast<intptr_t*>(buffer_start_ + pos);
     *p += pc_delta;
   }
 
@@ -4751,44 +4744,34 @@ void Assembler::GrowBuffer() {
 
 void Assembler::RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data,
                                 ConstantPoolMode constant_pool_mode) {
-  // Non-relocatable constants should not end up in the literal pool.
-  DCHECK(!RelocInfo::IsNone(rmode));
-  if (options().disable_reloc_info_for_patching) return;
-
-  // We do not try to reuse pool constants.
-  RelocInfo rinfo(reinterpret_cast<Address>(pc_), rmode, data, nullptr);
-  bool write_reloc_info = true;
-
-  if ((rmode == RelocInfo::COMMENT) ||
-      (rmode == RelocInfo::INTERNAL_REFERENCE) ||
+  if ((rmode == RelocInfo::INTERNAL_REFERENCE) ||
       (rmode == RelocInfo::CONST_POOL) || (rmode == RelocInfo::VENEER_POOL) ||
       (rmode == RelocInfo::DEOPT_SCRIPT_OFFSET) ||
       (rmode == RelocInfo::DEOPT_INLINING_ID) ||
       (rmode == RelocInfo::DEOPT_REASON) || (rmode == RelocInfo::DEOPT_ID)) {
     // Adjust code for new modes.
-    DCHECK(RelocInfo::IsComment(rmode) || RelocInfo::IsDeoptReason(rmode) ||
-           RelocInfo::IsDeoptId(rmode) || RelocInfo::IsDeoptPosition(rmode) ||
+    DCHECK(RelocInfo::IsDeoptReason(rmode) || RelocInfo::IsDeoptId(rmode) ||
+           RelocInfo::IsDeoptPosition(rmode) ||
            RelocInfo::IsInternalReference(rmode) ||
            RelocInfo::IsConstPool(rmode) || RelocInfo::IsVeneerPool(rmode));
     // These modes do not need an entry in the constant pool.
   } else if (constant_pool_mode == NEEDS_POOL_ENTRY) {
-    write_reloc_info = constpool_.RecordEntry(data, rmode);
+    bool new_constpool_entry = constpool_.RecordEntry(data, rmode);
     // Make sure the constant pool is not emitted in place of the next
     // instruction for which we just recorded relocation info.
     BlockConstPoolFor(1);
+    if (!new_constpool_entry) return;
   }
   // For modes that cannot use the constant pool, a different sequence of
   // instructions will be emitted by this function's caller.
 
-  if (write_reloc_info) {
-    // Don't record external references unless the heap will be serialized.
-    if (RelocInfo::IsOnlyForSerializer(rmode) &&
-        !options().record_reloc_info_for_serialization && !emit_debug_code()) {
-      return;
-    }
-    DCHECK_GE(buffer_space(), kMaxRelocSize);  // too late to grow buffer here
-    reloc_info_writer.Write(&rinfo);
-  }
+  if (!ShouldRecordRelocInfo(rmode)) return;
+
+  // We do not try to reuse pool constants.
+  RelocInfo rinfo(reinterpret_cast<Address>(pc_), rmode, data, Code());
+
+  DCHECK_GE(buffer_space(), kMaxRelocSize);  // too late to grow buffer here
+  reloc_info_writer.Write(&rinfo);
 }
 
 void Assembler::near_jump(int offset, RelocInfo::Mode rmode) {
@@ -4887,8 +4870,8 @@ bool Assembler::ShouldEmitVeneer(int max_reachable_pc, int margin) {
 
 
 void Assembler::RecordVeneerPool(int location_offset, int size) {
-  RelocInfo rinfo(reinterpret_cast<Address>(buffer_) + location_offset,
-                  RelocInfo::VENEER_POOL, static_cast<intptr_t>(size), nullptr);
+  RelocInfo rinfo(reinterpret_cast<Address>(buffer_start_) + location_offset,
+                  RelocInfo::VENEER_POOL, static_cast<intptr_t>(size), Code());
   reloc_info_writer.Write(&rinfo);
 }
 
@@ -4913,7 +4896,9 @@ void Assembler::EmitVeneers(bool force_emit, bool need_protection, int margin) {
 
   EmitVeneersGuard();
 
+#ifdef DEBUG
   Label veneer_size_check;
+#endif
 
   std::multimap<int, FarBranchInfo>::iterator it, it_to_delete;
 

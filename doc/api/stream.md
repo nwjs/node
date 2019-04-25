@@ -481,7 +481,7 @@ added: v11.4.0
 
 * {boolean}
 
-Is `true` if it is safe to call [`writable.write()`][].
+Is `true` if it is safe to call [`writable.write()`][stream-write].
 
 ##### writable.writableHighWaterMark
 <!-- YAML
@@ -683,7 +683,7 @@ pass.unpipe(writable);
 // readableFlowing is now false
 
 pass.on('data', (chunk) => { console.log(chunk.toString()); });
-pass.write('ok');  // will not emit 'data'
+pass.write('ok');  // Will not emit 'data'
 pass.resume();     // Must be called to make stream emit 'data'
 ```
 
@@ -1066,7 +1066,7 @@ added: v11.4.0
 
 * {boolean}
 
-Is `true` if it is safe to call [`readable.read()`][].
+Is `true` if it is safe to call [`readable.read()`][stream-read].
 
 ##### readable.readableHighWaterMark
 <!-- YAML
@@ -1222,7 +1222,7 @@ function parseHeader(stream, callback) {
     while (null !== (chunk = stream.read())) {
       const str = decoder.write(chunk);
       if (str.match(/\n\n/)) {
-        // found the header boundary
+        // Found the header boundary
         const split = str.split(/\n\n/);
         header += split.shift();
         const remaining = split.join('\n\n');
@@ -1235,7 +1235,7 @@ function parseHeader(stream, callback) {
         // Now the body of the message can be read from the stream.
         callback(null, header, stream);
       } else {
-        // still reading the header.
+        // Still reading the header.
         header += str;
       }
     }

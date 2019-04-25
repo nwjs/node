@@ -19,22 +19,11 @@
 namespace v8 {
 namespace internal {
 
-// Base locale accessors.
-ACCESSORS(JSLocale, language, Object, kLanguageOffset);
-ACCESSORS(JSLocale, script, Object, kScriptOffset);
-ACCESSORS(JSLocale, region, Object, kRegionOffset);
-ACCESSORS(JSLocale, base_name, Object, kBaseNameOffset);
-ACCESSORS(JSLocale, locale, String, kLocaleOffset);
+OBJECT_CONSTRUCTORS_IMPL(JSLocale, JSObject)
 
-// Unicode extension accessors.
-ACCESSORS(JSLocale, calendar, Object, kCalendarOffset);
-ACCESSORS(JSLocale, case_first, Object, kCaseFirstOffset);
-ACCESSORS(JSLocale, collation, Object, kCollationOffset);
-ACCESSORS(JSLocale, hour_cycle, Object, kHourCycleOffset);
-ACCESSORS(JSLocale, numeric, Object, kNumericOffset);
-ACCESSORS(JSLocale, numbering_system, Object, kNumberingSystemOffset);
+ACCESSORS(JSLocale, icu_locale, Managed<icu::Locale>, kICULocaleOffset)
 
-CAST_ACCESSOR(JSLocale);
+CAST_ACCESSOR(JSLocale)
 
 }  // namespace internal
 }  // namespace v8

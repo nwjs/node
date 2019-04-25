@@ -111,12 +111,14 @@ static void SetPromiseRejectCallback(
 static void TriggerFatalException(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
   Environment* env = Environment::GetCurrent(isolate);
-  if (env != nullptr && env->abort_on_uncaught_exception()) {
-    Abort();
-  }
   Local<Value> exception = args[0];
   Local<Message> message = Exception::CreateMessage(isolate, exception);
-  FatalException(isolate, exception, message);
+  if (env != nullptr && env->abort_on_uncaught_exception()) {
+    ReportException(env, exception, message);
+    Abort();
+  }
+  bool from_promise = args[1]->IsTrue();
+  FatalException(isolate, exception, message, from_promise);
 }
 
 static void Initialize(Local<Object> target,
@@ -132,7 +134,7 @@ static void Initialize(Local<Object> target,
   env->SetMethod(target, "runMicrotasks", RunMicrotasks);
   target->Set(env->context(),
               FIXED_ONE_BYTE_STRING(isolate, "tickInfo"),
-              env->tick_info()->fields().GetJSArray()).FromJust();
+              env->tick_info()->fields().GetJSArray()).Check();
 
   Local<Object> events = Object::New(isolate);
   NODE_DEFINE_CONSTANT(events, kPromiseRejectWithNoHandler);
@@ -142,7 +144,7 @@ static void Initialize(Local<Object> target,
 
   target->Set(env->context(),
               FIXED_ONE_BYTE_STRING(isolate, "promiseRejectEvents"),
-              events).FromJust();
+              events).Check();
   env->SetMethod(target,
                  "setPromiseRejectCallback",
                  SetPromiseRejectCallback);

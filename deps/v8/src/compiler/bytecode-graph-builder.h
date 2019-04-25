@@ -29,9 +29,10 @@ class SourcePositionTable;
 class BytecodeGraphBuilder {
  public:
   BytecodeGraphBuilder(
-      Zone* local_zone, Handle<SharedFunctionInfo> shared,
-      Handle<FeedbackVector> feedback_vector, BailoutId osr_offset,
-      JSGraph* jsgraph, CallFrequency& invocation_frequency,
+      Zone* local_zone, Handle<BytecodeArray> bytecode_array,
+      Handle<SharedFunctionInfo> shared, Handle<FeedbackVector> feedback_vector,
+      BailoutId osr_offset, JSGraph* jsgraph,
+      CallFrequency& invocation_frequency,
       SourcePositionTable* source_positions, Handle<Context> native_context,
       int inlining_id = SourcePosition::kNotInlined,
       JSTypeHintLowering::Flags flags = JSTypeHintLowering::kNoFlags,
@@ -370,6 +371,8 @@ class BytecodeGraphBuilder {
     needs_eager_checkpoint_ = value;
   }
 
+  Handle<SharedFunctionInfo> shared_info() const { return shared_info_; }
+
   Handle<Context> native_context() const { return native_context_; }
 
 #define DECLARE_VISIT_BYTECODE(name, ...) void Visit##name();
@@ -430,6 +433,8 @@ class BytecodeGraphBuilder {
   SourcePositionTable* source_positions_;
 
   SourcePosition const start_position_;
+
+  Handle<SharedFunctionInfo> const shared_info_;
 
   // The native context for which we optimize.
   Handle<Context> const native_context_;

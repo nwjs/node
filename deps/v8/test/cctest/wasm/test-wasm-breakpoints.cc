@@ -22,7 +22,7 @@ namespace wasm {
 namespace {
 
 void CheckLocations(
-    WasmModuleObject* module_object, debug::Location start, debug::Location end,
+    WasmModuleObject module_object, debug::Location start, debug::Location end,
     std::initializer_list<debug::Location> expected_locations_init) {
   std::vector<debug::BreakLocation> locations;
   bool success = module_object->GetPossibleBreakpoints(start, end, &locations);
@@ -45,7 +45,7 @@ void CheckLocations(
   }
 }
 
-void CheckLocationsFail(WasmModuleObject* module_object, debug::Location start,
+void CheckLocationsFail(WasmModuleObject module_object, debug::Location start,
                         debug::Location end) {
   std::vector<debug::BreakLocation> locations;
   bool success = module_object->GetPossibleBreakpoints(start, end, &locations);
@@ -72,7 +72,7 @@ class BreakHandler : public debug::DebugDelegate {
       : isolate_(isolate), expected_breaks_(expected_breaks) {
     v8::debug::SetDebugDelegate(reinterpret_cast<v8::Isolate*>(isolate_), this);
   }
-  ~BreakHandler() {
+  ~BreakHandler() override {
     // Check that all expected breakpoints have been hit.
     CHECK_EQ(count_, expected_breaks_.size());
     v8::debug::SetDebugDelegate(reinterpret_cast<v8::Isolate*>(isolate_),
@@ -181,7 +181,7 @@ class CollectValuesBreakHandler : public debug::DebugDelegate {
       : isolate_(isolate), expected_values_(expected_values) {
     v8::debug::SetDebugDelegate(reinterpret_cast<v8::Isolate*>(isolate_), this);
   }
-  ~CollectValuesBreakHandler() {
+  ~CollectValuesBreakHandler() override {
     v8::debug::SetDebugDelegate(reinterpret_cast<v8::Isolate*>(isolate_),
                                 nullptr);
   }
@@ -246,8 +246,8 @@ WASM_COMPILED_EXEC_TEST(WasmCollectPossibleBreakpoints) {
 
   BUILD(runner, WASM_NOP, WASM_I32_ADD(WASM_ZERO, WASM_ONE));
 
-  WasmInstanceObject* instance = *runner.builder().instance_object();
-  WasmModuleObject* module_object = instance->module_object();
+  WasmInstanceObject instance = *runner.builder().instance_object();
+  WasmModuleObject module_object = instance->module_object();
 
   std::vector<debug::Location> locations;
   // Check all locations for function 0.

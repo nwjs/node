@@ -36,7 +36,7 @@ v8::MaybeLocal<v8::Object> CreateProcessObject(
     const std::vector<std::string>& args,
     const std::vector<std::string>& exec_args,
     bool node_is_nwjs);
-
+void PatchProcessObject(const v8::FunctionCallbackInfo<v8::Value>& args);
 }  // namespace node
 #endif  // defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
 #endif  // SRC_NODE_PROCESS_H_

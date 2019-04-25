@@ -152,11 +152,13 @@ struct StringPtr {
   size_t size_;
 };
 
-
 class Parser : public AsyncWrap, public StreamListener {
  public:
   Parser(Environment* env, Local<Object> wrap, parser_type_t type)
-      : AsyncWrap(env, wrap, AsyncWrap::PROVIDER_HTTPPARSER),
+      : AsyncWrap(env, wrap,
+                  type == HTTP_REQUEST ?
+                      AsyncWrap::PROVIDER_HTTPINCOMINGMESSAGE :
+                      AsyncWrap::PROVIDER_HTTPCLIENTREQUEST),
         current_buffer_len_(0),
         current_buffer_data_(nullptr) {
     Init(type);
@@ -503,12 +505,12 @@ class Parser : public AsyncWrap, public StreamListener {
   }
 
 
-  static void Reinitialize(const FunctionCallbackInfo<Value>& args) {
+  static void Initialize(const FunctionCallbackInfo<Value>& args) {
     Environment* env = Environment::GetCurrent(args);
 
     CHECK(args[0]->IsInt32());
-    CHECK(args[1]->IsBoolean());
-    bool isReused = args[1]->IsTrue();
+    CHECK(args[1]->IsObject());
+
     parser_type_t type =
         static_cast<parser_type_t>(args[0].As<Int32>()->Value());
 
@@ -517,15 +519,15 @@ class Parser : public AsyncWrap, public StreamListener {
     ASSIGN_OR_RETURN_UNWRAP(&parser, args.Holder());
     // Should always be called from the same context.
     CHECK_EQ(env, parser->env());
-    // This parser has either just been created or it is being reused.
-    // We must only call AsyncReset for the latter case, because AsyncReset has
-    // already been called via the constructor for the former case.
-    if (isReused) {
-      parser->AsyncReset();
-    }
+
+    AsyncWrap::ProviderType provider =
+        (type == HTTP_REQUEST ?
+            AsyncWrap::PROVIDER_HTTPINCOMINGMESSAGE
+            : AsyncWrap::PROVIDER_HTTPCLIENTREQUEST);
+
+    parser->set_provider_type(provider);
     parser->Init(type);
   }
-
 
   template <bool should_pause>
   static void Pause(const FunctionCallbackInfo<Value>& args) {
@@ -733,7 +735,7 @@ class Parser : public AsyncWrap, public StreamListener {
         .ToLocalChecked();
       obj->Set(env()->context(),
                env()->bytes_parsed_string(),
-               nread_obj).FromJust();
+               nread_obj).Check();
 #ifdef NODE_EXPERIMENTAL_HTTP
       const char* errno_reason = llhttp_get_error_reason(&parser_);
 
@@ -750,13 +752,13 @@ class Parser : public AsyncWrap, public StreamListener {
         reason = OneByteString(env()->isolate(), errno_reason);
       }
 
-      obj->Set(env()->context(), env()->code_string(), code).FromJust();
-      obj->Set(env()->context(), env()->reason_string(), reason).FromJust();
+      obj->Set(env()->context(), env()->code_string(), code).Check();
+      obj->Set(env()->context(), env()->reason_string(), reason).Check();
 #else  /* !NODE_EXPERIMENTAL_HTTP */
       obj->Set(env()->context(),
                env()->code_string(),
                OneByteString(env()->isolate(),
-                             http_errno_name(err))).FromJust();
+                             http_errno_name(err))).Check();
 #endif  /* NODE_EXPERIMENTAL_HTTP */
       return scope.Escape(e);
     }
@@ -946,19 +948,19 @@ void InitializeHttpParser(Local<Object> target,
   Local<Array> methods = Array::New(env->isolate());
 #define V(num, name, string)                                                  \
     methods->Set(env->context(),                                              \
-        num, FIXED_ONE_BYTE_STRING(env->isolate(), #string)).FromJust();
+        num, FIXED_ONE_BYTE_STRING(env->isolate(), #string)).Check();
   HTTP_METHOD_MAP(V)
 #undef V
   target->Set(env->context(),
               FIXED_ONE_BYTE_STRING(env->isolate(), "methods"),
-              methods).FromJust();
+              methods).Check();
 
   t->Inherit(AsyncWrap::GetConstructorTemplate(env));
   env->SetProtoMethod(t, "close", Parser::Close);
   env->SetProtoMethod(t, "free", Parser::Free);
   env->SetProtoMethod(t, "execute", Parser::Execute);
   env->SetProtoMethod(t, "finish", Parser::Finish);
-  env->SetProtoMethod(t, "reinitialize", Parser::Reinitialize);
+  env->SetProtoMethod(t, "initialize", Parser::Initialize);
   env->SetProtoMethod(t, "pause", Parser::Pause<true>);
   env->SetProtoMethod(t, "resume", Parser::Pause<false>);
   env->SetProtoMethod(t, "consume", Parser::Consume);
@@ -967,7 +969,7 @@ void InitializeHttpParser(Local<Object> target,
 
   target->Set(env->context(),
               FIXED_ONE_BYTE_STRING(env->isolate(), "HTTPParser"),
-              t->GetFunction(env->context()).ToLocalChecked()).FromJust();
+              t->GetFunction(env->context()).ToLocalChecked()).Check();
 
 #ifndef NODE_EXPERIMENTAL_HTTP
   static uv_once_t init_once = UV_ONCE_INIT;

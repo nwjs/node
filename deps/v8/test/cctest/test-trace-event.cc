@@ -39,7 +39,7 @@ typedef std::vector<MockTraceObject*> MockTraceObjectList;
 class MockTracingController : public v8::TracingController {
  public:
   MockTracingController() = default;
-  ~MockTracingController() {
+  ~MockTracingController() override {
     for (size_t i = 0; i < trace_object_list_.size(); ++i) {
       delete trace_object_list_[i];
     }
@@ -98,7 +98,7 @@ class MockTracingPlatform : public TestPlatform {
     // Now that it's completely constructed, make this the current platform.
     i::V8::SetPlatformForTesting(this);
   }
-  virtual ~MockTracingPlatform() {}
+  ~MockTracingPlatform() override = default;
 
   v8::TracingController* GetTracingController() override {
     return &tracing_controller_;
@@ -234,26 +234,6 @@ TEST(TestEventWithId) {
   CHECK_EQ(event_id, GET_TRACE_OBJECT(1)->id);
 }
 
-TEST(TestEventInContext) {
-  MockTracingPlatform platform;
-
-  static uint64_t isolate_id = 0x20151021;
-  {
-    TRACE_EVENT_SCOPED_CONTEXT("v8-cat", "Isolate", isolate_id);
-    TRACE_EVENT0("v8-cat", "e");
-  }
-
-  CHECK_EQ(3, GET_TRACE_OBJECTS_LIST->size());
-  CHECK_EQ(TRACE_EVENT_PHASE_ENTER_CONTEXT, GET_TRACE_OBJECT(0)->phase);
-  CHECK_EQ("Isolate", GET_TRACE_OBJECT(0)->name);
-  CHECK_EQ(isolate_id, GET_TRACE_OBJECT(0)->id);
-  CHECK_EQ(TRACE_EVENT_PHASE_COMPLETE, GET_TRACE_OBJECT(1)->phase);
-  CHECK_EQ("e", GET_TRACE_OBJECT(1)->name);
-  CHECK_EQ(TRACE_EVENT_PHASE_LEAVE_CONTEXT, GET_TRACE_OBJECT(2)->phase);
-  CHECK_EQ("Isolate", GET_TRACE_OBJECT(2)->name);
-  CHECK_EQ(isolate_id, GET_TRACE_OBJECT(2)->id);
-}
-
 TEST(TestEventWithTimestamp) {
   MockTracingPlatform platform;
 
@@ -289,7 +269,6 @@ TEST(BuiltinsIsTraceCategoryEnabled) {
 
   v8::Isolate* isolate = CcTest::isolate();
   v8::HandleScope handle_scope(isolate);
-  v8::Local<v8::Context> context = isolate->GetCurrentContext();
   LocalContext env;
 
   v8::Local<v8::Object> binding = env->GetExtrasBindingObject();
@@ -308,7 +287,7 @@ TEST(BuiltinsIsTraceCategoryEnabled) {
                       .ToLocalChecked()
                       .As<v8::Boolean>();
 
-    CHECK(result->BooleanValue(context).ToChecked());
+    CHECK(result->BooleanValue(isolate));
   }
 
   {
@@ -318,7 +297,7 @@ TEST(BuiltinsIsTraceCategoryEnabled) {
                       .ToLocalChecked()
                       .As<v8::Boolean>();
 
-    CHECK(!result->BooleanValue(context).ToChecked());
+    CHECK(!result->BooleanValue(isolate));
   }
 
   {
@@ -328,7 +307,7 @@ TEST(BuiltinsIsTraceCategoryEnabled) {
                       .ToLocalChecked()
                       .As<v8::Boolean>();
 
-    CHECK(result->BooleanValue(context).ToChecked());
+    CHECK(result->BooleanValue(isolate));
   }
 }
 
@@ -362,7 +341,7 @@ TEST(BuiltinsTrace) {
                       .ToLocalChecked()
                       .As<v8::Boolean>();
 
-    CHECK(!result->BooleanValue(context).ToChecked());
+    CHECK(!result->BooleanValue(isolate));
     CHECK_EQ(0, GET_TRACE_OBJECTS_LIST->size());
   }
 
@@ -381,7 +360,7 @@ TEST(BuiltinsTrace) {
                       .ToLocalChecked()
                       .As<v8::Boolean>();
 
-    CHECK(result->BooleanValue(context).ToChecked());
+    CHECK(result->BooleanValue(isolate));
     CHECK_EQ(1, GET_TRACE_OBJECTS_LIST->size());
 
     CHECK_EQ(123, GET_TRACE_OBJECT(0)->id);
@@ -405,7 +384,7 @@ TEST(BuiltinsTrace) {
                       .ToLocalChecked()
                       .As<v8::Boolean>();
 
-    CHECK(result->BooleanValue(context).ToChecked());
+    CHECK(result->BooleanValue(isolate));
     CHECK_EQ(2, GET_TRACE_OBJECTS_LIST->size());
 
     CHECK_EQ(123, GET_TRACE_OBJECT(1)->id);

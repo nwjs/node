@@ -25,8 +25,7 @@ class V8_EXPORT_PRIVATE Typer {
   };
   typedef base::Flags<Flag> Flags;
 
-  Typer(Isolate* isolate, JSHeapBroker* js_heap_broker, Flags flags,
-        Graph* graph);
+  Typer(JSHeapBroker* broker, Flags flags, Graph* graph);
   ~Typer();
 
   void Run();
@@ -42,13 +41,13 @@ class V8_EXPORT_PRIVATE Typer {
   Graph* graph() const { return graph_; }
   Zone* zone() const { return graph()->zone(); }
   OperationTyper* operation_typer() { return &operation_typer_; }
-  JSHeapBroker* js_heap_broker() const { return js_heap_broker_; }
+  JSHeapBroker* broker() const { return broker_; }
 
   Flags const flags_;
   Graph* const graph_;
   Decorator* decorator_;
-  TypeCache const& cache_;
-  JSHeapBroker* js_heap_broker_;
+  TypeCache const* cache_;
+  JSHeapBroker* broker_;
   OperationTyper operation_typer_;
 
   Type singleton_false_;
@@ -57,7 +56,7 @@ class V8_EXPORT_PRIVATE Typer {
   DISALLOW_COPY_AND_ASSIGN(Typer);
 };
 
-DEFINE_OPERATORS_FOR_FLAGS(Typer::Flags);
+DEFINE_OPERATORS_FOR_FLAGS(Typer::Flags)
 
 }  // namespace compiler
 }  // namespace internal

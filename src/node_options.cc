@@ -33,6 +33,17 @@ void DebugOptions::CheckOptions(std::vector<std::string>* errors) {
                       "--without-v8-platform");
   }
 #endif
+
+  if (deprecated_debug && !inspector_enabled) {
+    errors->push_back("[DEP0062]: `node --debug` and `node --debug-brk` "
+                      "are invalid. Please use `node --inspect` or "
+                      "`node --inspect-brk` instead.");
+  }
+
+  if (deprecated_debug && inspector_enabled && break_first_line) {
+    errors->push_back("[DEP0062]: `node --inspect --debug-brk` is deprecated. "
+                      "Please use `node --inspect-brk` instead.");
+  }
 }
 
 void PerProcessOptions::CheckOptions(std::vector<std::string>* errors) {
@@ -58,34 +69,34 @@ void PerIsolateOptions::CheckOptions(std::vector<std::string>* errors) {
   }
 
   if (!report_directory.empty()) {
-    errors->push_back("--diagnostic-report-directory option is valid only when "
+    errors->push_back("--report-directory option is valid only when "
                       "--experimental-report is set");
   }
 
   if (!report_filename.empty()) {
-    errors->push_back("--diagnostic-report-filename option is valid only when "
+    errors->push_back("--report-filename option is valid only when "
                       "--experimental-report is set");
   }
 
   if (!report_signal.empty()) {
-    errors->push_back("--diagnostic-report-signal option is valid only when "
+    errors->push_back("--report-signal option is valid only when "
                       "--experimental-report is set");
   }
 
   if (report_on_fatalerror) {
     errors->push_back(
-        "--diagnostic-report-on-fatalerror option is valid only when "
+        "--report-on-fatalerror option is valid only when "
         "--experimental-report is set");
   }
 
   if (report_on_signal) {
-    errors->push_back("--diagnostic-report-on-signal option is valid only when "
+    errors->push_back("--report-on-signal option is valid only when "
                       "--experimental-report is set");
   }
 
   if (report_uncaught_exception) {
     errors->push_back(
-        "--diagnostic-report-uncaught-exception option is valid only when "
+        "--report-uncaught-exception option is valid only when "
         "--experimental-report is set");
   }
 #endif  // NODE_REPORT
@@ -96,6 +107,32 @@ void EnvironmentOptions::CheckOptions(std::vector<std::string>* errors) {
     errors->push_back("--loader requires --experimental-modules be enabled");
   }
 
+  if (!module_type.empty()) {
+    if (!experimental_modules) {
+      errors->push_back("--input-type requires "
+                        "--experimental-modules to be enabled");
+    }
+    if (module_type != "commonjs" && module_type != "module") {
+      errors->push_back("--input-type must be \"module\" or \"commonjs\"");
+    }
+  }
+
+  if (experimental_json_modules && !experimental_modules) {
+    errors->push_back("--experimental-json-modules requires "
+                      "--experimental-modules be enabled");
+  }
+
+  if (!es_module_specifier_resolution.empty()) {
+    if (!experimental_modules) {
+      errors->push_back("--es-module-specifier-resolution requires "
+                        "--experimental-modules be enabled");
+    }
+    if (es_module_specifier_resolution != "node" &&
+        es_module_specifier_resolution != "explicit") {
+      errors->push_back("invalid value for --es-module-specifier-resolution");
+    }
+  }
+
   if (syntax_check_only && has_eval_string) {
     errors->push_back("either --check or --eval can be used, not both");
   }
@@ -104,7 +141,23 @@ void EnvironmentOptions::CheckOptions(std::vector<std::string>* errors) {
     errors->push_back("invalid value for --http-parser");
   }
 
+  if (!unhandled_rejections.empty() &&
+      unhandled_rejections != "strict" &&
+      unhandled_rejections != "warn" &&
+      unhandled_rejections != "none") {
+    errors->push_back("invalid value for --unhandled-rejections");
+  }
+
 #if HAVE_INSPECTOR
+  if (!cpu_prof) {
+    if (!cpu_prof_name.empty()) {
+      errors->push_back("--cpu-prof-name must be used with --cpu-prof");
+    }
+    if (!cpu_prof_dir.empty()) {
+      errors->push_back("--cpu-prof-dir must be used with --cpu-prof");
+    }
+  }
+
   debug_options_.CheckOptions(errors);
 #endif  // HAVE_INSPECTOR
 }
@@ -203,6 +256,10 @@ DebugOptionsParser::DebugOptionsParser() {
 }
 
 EnvironmentOptionsParser::EnvironmentOptionsParser() {
+  AddOption("--experimental-json-modules",
+            "experimental JSON interop support for the ES Module loader",
+            &EnvironmentOptions::experimental_json_modules,
+            kAllowedInEnvironment);
   AddOption("--experimental-modules",
             "experimental ES Module support and caching modules",
             &EnvironmentOptions::experimental_modules,
@@ -232,19 +289,28 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             "experimental frozen intrinsics support",
             &EnvironmentOptions::frozen_intrinsics,
             kAllowedInEnvironment);
+  AddOption("--heapsnapshot-signal",
+            "Generate heap snapshot on specified signal",
+            &EnvironmentOptions::heap_snapshot_signal,
+            kAllowedInEnvironment);
   AddOption("--http-parser",
             "Select which HTTP parser to use; either 'legacy' or 'llhttp' "
-#ifdef NODE_EXPERIMENTAL_HTTP_DEFAULT
             "(default: llhttp).",
-#else
-            "(default: legacy).",
-#endif
             &EnvironmentOptions::http_parser,
+            kAllowedInEnvironment);
+  AddOption("--input-type",
+            "set module type for string input",
+            &EnvironmentOptions::module_type,
             kAllowedInEnvironment);
   AddOption("--loader",
             "(with --experimental-modules) use the specified file as a "
             "custom loader",
             &EnvironmentOptions::userland_loader,
+            kAllowedInEnvironment);
+  AddOption("--es-module-specifier-resolution",
+            "Select extension resolution algorithm for es modules; "
+            "either 'explicit' (default) or 'node'",
+            &EnvironmentOptions::es_module_specifier_resolution,
             kAllowedInEnvironment);
   AddOption("--no-deprecation",
             "silence deprecation warnings",
@@ -264,15 +330,32 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             kAllowedInEnvironment);
   AddOption("--preserve-symlinks",
             "preserve symbolic links when resolving",
-            &EnvironmentOptions::preserve_symlinks);
+            &EnvironmentOptions::preserve_symlinks,
+            kAllowedInEnvironment);
   AddOption("--preserve-symlinks-main",
             "preserve symbolic links when resolving the main module",
-            &EnvironmentOptions::preserve_symlinks_main);
+            &EnvironmentOptions::preserve_symlinks_main,
+            kAllowedInEnvironment);
   AddOption("--prof-process",
             "process V8 profiler output generated using --prof",
             &EnvironmentOptions::prof_process);
   // Options after --prof-process are passed through to the prof processor.
   AddAlias("--prof-process", { "--prof-process", "--" });
+#if HAVE_INSPECTOR
+  AddOption("--cpu-prof",
+            "Start the V8 CPU profiler on start up, and write the CPU profile "
+            "to disk before exit. If --cpu-prof-dir is not specified, write "
+            "the profile to the current working directory.",
+            &EnvironmentOptions::cpu_prof);
+  AddOption("--cpu-prof-name",
+            "specified file name of the V8 CPU profile generated with "
+            "--cpu-prof",
+            &EnvironmentOptions::cpu_prof_name);
+  AddOption("--cpu-prof-dir",
+            "Directory where the V8 profiles generated by --cpu-prof will be "
+            "placed. Does not affect --prof.",
+            &EnvironmentOptions::cpu_prof_dir);
+#endif  // HAVE_INSPECTOR
   AddOption("--redirect-warnings",
             "write warnings to file instead of stderr",
             &EnvironmentOptions::redirect_warnings,
@@ -293,6 +376,11 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
   AddOption("--trace-warnings",
             "show stack traces on process warnings",
             &EnvironmentOptions::trace_warnings,
+            kAllowedInEnvironment);
+  AddOption("--unhandled-rejections",
+            "define unhandled rejections behavior. Options are 'strict' (raise "
+            "an error), 'warn' (enforce warnings) or 'none' (silence warnings)",
+            &EnvironmentOptions::unhandled_rejections,
             kAllowedInEnvironment);
 
   AddOption("--check",
@@ -327,6 +415,31 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
   AddAlias("-i", "--interactive");
 
   AddOption("--napi-modules", "", NoOp{}, kAllowedInEnvironment);
+
+  AddOption("--tls-min-v1.0",
+            "set default TLS minimum to TLSv1.0 (default: TLSv1.2)",
+            &EnvironmentOptions::tls_min_v1_0,
+            kAllowedInEnvironment);
+  AddOption("--tls-min-v1.1",
+            "set default TLS minimum to TLSv1.1 (default: TLSv1.2)",
+            &EnvironmentOptions::tls_min_v1_1,
+            kAllowedInEnvironment);
+  AddOption("--tls-min-v1.3",
+            "set default TLS minimum to TLSv1.3 (default: TLSv1.2)",
+            &EnvironmentOptions::tls_min_v1_3,
+            kAllowedInEnvironment);
+  AddOption("--tls-max-v1.2",
+            "set default TLS maximum to TLSv1.2 (default: TLSv1.3)",
+            &EnvironmentOptions::tls_max_v1_2,
+            kAllowedInEnvironment);
+  // Current plan is:
+  // - 11.x and below: TLS1.3 is opt-in with --tls-max-v1.3
+  // - 12.x: TLS1.3 is opt-out with --tls-max-v1.2
+  // In either case, support both options they are uniformly available.
+  AddOption("--tls-max-v1.3",
+            "set default TLS maximum to TLSv1.3 (default: TLSv1.3)",
+            &EnvironmentOptions::tls_max_v1_3,
+            kAllowedInEnvironment);
 }
 
 PerIsolateOptionsParser::PerIsolateOptionsParser(
@@ -356,30 +469,30 @@ PerIsolateOptionsParser::PerIsolateOptionsParser(
   AddOption("--stack-trace-limit", "", V8Option{}, kAllowedInEnvironment);
 
 #ifdef NODE_REPORT
-  AddOption("--diagnostic-report-uncaught-exception",
+  AddOption("--report-uncaught-exception",
             "generate diagnostic report on uncaught exceptions",
             &PerIsolateOptions::report_uncaught_exception,
             kAllowedInEnvironment);
-  AddOption("--diagnostic-report-on-signal",
+  AddOption("--report-on-signal",
             "generate diagnostic report upon receiving signals",
             &PerIsolateOptions::report_on_signal,
             kAllowedInEnvironment);
-  AddOption("--diagnostic-report-on-fatalerror",
+  AddOption("--report-on-fatalerror",
             "generate diagnostic report on fatal (internal) errors",
             &PerIsolateOptions::report_on_fatalerror,
             kAllowedInEnvironment);
-  AddOption("--diagnostic-report-signal",
+  AddOption("--report-signal",
             "causes diagnostic report to be produced on provided signal,"
             " unsupported in Windows. (default: SIGUSR2)",
             &PerIsolateOptions::report_signal,
             kAllowedInEnvironment);
-  Implies("--diagnostic-report-signal", "--diagnostic-report-on-signal");
-  AddOption("--diagnostic-report-filename",
+  Implies("--report-signal", "--report-on-signal");
+  AddOption("--report-filename",
             "define custom report file name."
             " (default: YYYYMMDD.HHMMSS.PID.SEQUENCE#.txt)",
             &PerIsolateOptions::report_filename,
             kAllowedInEnvironment);
-  AddOption("--diagnostic-report-directory",
+  AddOption("--report-directory",
             "define custom report pathname."
             " (default: current working directory of Node.js process)",
             &PerIsolateOptions::report_directory,
@@ -682,7 +795,7 @@ void Initialize(Local<Object> target,
   target
       ->Set(
           context, FIXED_ONE_BYTE_STRING(isolate, "envSettings"), env_settings)
-      .FromJust();
+      .Check();
 
   Local<Object> types = Object::New(isolate);
   NODE_DEFINE_CONSTANT(types, kNoOp);
@@ -694,7 +807,7 @@ void Initialize(Local<Object> target,
   NODE_DEFINE_CONSTANT(types, kHostPort);
   NODE_DEFINE_CONSTANT(types, kStringList);
   target->Set(context, FIXED_ONE_BYTE_STRING(isolate, "types"), types)
-      .FromJust();
+      .Check();
 }
 
 }  // namespace options_parser

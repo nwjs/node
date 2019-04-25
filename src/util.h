@@ -284,6 +284,10 @@ inline void SwapBytes64(char* data, size_t nbytes);
 inline char ToLower(char c);
 inline std::string ToLower(const std::string& in);
 
+// toupper() is locale-sensitive.  Use ToUpper() instead.
+inline char ToUpper(char c);
+inline std::string ToUpper(const std::string& in);
+
 // strcasecmp() is locale-sensitive.  Use StringEqualNoCase() instead.
 inline bool StringEqualNoCase(const char* a, const char* b);
 
@@ -578,7 +582,7 @@ inline v8::MaybeLocal<v8::Value> ToV8Value(v8::Local<v8::Context> context,
   do {                                                                         \
     obj->DefineOwnProperty(                                                    \
            context, FIXED_ONE_BYTE_STRING(isolate, name), value, v8::ReadOnly) \
-        .FromJust();                                                           \
+        .Check();                                                              \
   } while (0)
 
 #define READONLY_DONT_ENUM_PROPERTY(obj, name, var)                            \
@@ -588,7 +592,7 @@ inline v8::MaybeLocal<v8::Value> ToV8Value(v8::Local<v8::Context> context,
            OneByteString(isolate, name),                                       \
            var,                                                                \
            static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontEnum))    \
-        .FromJust();                                                           \
+        .Check();                                                              \
   } while (0)
 
 #define READONLY_FALSE_PROPERTY(obj, name)                                     \
@@ -617,7 +621,7 @@ inline v8::MaybeLocal<v8::Value> ToV8Value(v8::Local<v8::Context> context,
                             constant_name,                                     \
                             constant_value,                                    \
                             constant_attributes)                               \
-        .FromJust();                                                           \
+        .Check();                                                              \
   } while (0)
 
 enum Endianness {

@@ -181,7 +181,7 @@ function checkErrors(path) {
       path[method].apply(path, input);
     }, {
       code: 'ERR_INVALID_ARG_TYPE',
-      name: 'TypeError [ERR_INVALID_ARG_TYPE]'
+      name: 'TypeError'
     });
   });
 }

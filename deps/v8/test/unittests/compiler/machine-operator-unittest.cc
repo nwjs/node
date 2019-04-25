@@ -13,8 +13,6 @@ namespace internal {
 namespace compiler {
 namespace machine_operator_unittest {
 
-#if GTEST_HAS_COMBINE
-
 template <typename T>
 class MachineOperatorTestWithParam
     : public TestWithZone,
@@ -91,12 +89,10 @@ TEST_P(MachineLoadOperatorTest, ParameterIsCorrect) {
   EXPECT_EQ(GetParam(), LoadRepresentationOf(machine.Load(GetParam())));
 }
 
-
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     MachineOperatorTest, MachineLoadOperatorTest,
     ::testing::Combine(::testing::ValuesIn(kMachineReps),
                        ::testing::ValuesIn(kMachineTypesForAccess)));
-
 
 // -----------------------------------------------------------------------------
 // Store operator.
@@ -151,15 +147,13 @@ TEST_P(MachineStoreOperatorTest, ParameterIsCorrect) {
   EXPECT_EQ(GetParam(), StoreRepresentationOf(machine.Store(GetParam())));
 }
 
-
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     MachineOperatorTest, MachineStoreOperatorTest,
     ::testing::Combine(
         ::testing::ValuesIn(kMachineReps),
         ::testing::Combine(::testing::ValuesIn(kRepresentationsForStore),
                            ::testing::Values(kNoWriteBarrier,
                                              kFullWriteBarrier))));
-#endif
 
 // -----------------------------------------------------------------------------
 // Pure operators.

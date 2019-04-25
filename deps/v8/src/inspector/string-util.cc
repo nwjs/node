@@ -4,10 +4,11 @@
 
 #include "src/inspector/string-util.h"
 
+#include <cmath>
+
 #include "src/base/platform/platform.h"
 #include "src/conversions.h"
 #include "src/inspector/protocol/Protocol.h"
-#include "src/unicode-cache.h"
 
 namespace v8_inspector {
 
@@ -99,10 +100,9 @@ namespace protocol {
 
 // static
 double StringUtil::toDouble(const char* s, size_t len, bool* isOk) {
-  v8::internal::UnicodeCache unicode_cache;
   int flags = v8::internal::ALLOW_HEX | v8::internal::ALLOW_OCTAL |
               v8::internal::ALLOW_BINARY;
-  double result = StringToDouble(&unicode_cache, s, flags);
+  double result = v8::internal::StringToDouble(s, flags);
   *isOk = !std::isnan(result);
   return result;
 }
@@ -122,6 +122,26 @@ std::unique_ptr<protocol::Value> StringUtil::parseJSON(const String16& string) {
   if (!string.length()) return nullptr;
   return parseJSONCharacters(string.characters16(),
                              static_cast<int>(string.length()));
+}
+
+// static
+std::unique_ptr<protocol::Value> StringUtil::parseProtocolMessage(
+    const ProtocolMessage& message) {
+  return parseJSON(message.json);
+}
+
+// static
+ProtocolMessage StringUtil::jsonToMessage(String message) {
+  ProtocolMessage result;
+  result.json = std::move(message);
+  return result;
+}
+
+// static
+ProtocolMessage StringUtil::binaryToMessage(std::vector<uint8_t> message) {
+  ProtocolMessage result;
+  result.binary = std::move(message);
+  return result;
 }
 
 // static

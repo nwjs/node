@@ -6,12 +6,15 @@ if (!common.hasCrypto)
 
 const assert = require('assert');
 const {
+  constants,
   createSign,
   createVerify,
   generateKeyPair,
   generateKeyPairSync,
   publicEncrypt,
-  privateDecrypt
+  privateDecrypt,
+  sign,
+  verify
 } = require('crypto');
 const { promisify } = require('util');
 
@@ -40,13 +43,24 @@ function testEncryptDecrypt(publicKey, privateKey) {
 
 // Tests that a key pair can be used for signing / verification.
 function testSignVerify(publicKey, privateKey) {
-  const message = 'Hello Node.js world!';
-  const signature = createSign('SHA256').update(message)
-                                        .sign(privateKey, 'hex');
-  for (const key of [publicKey, privateKey]) {
-    const okay = createVerify('SHA256').update(message)
-                                       .verify(key, signature, 'hex');
-    assert(okay);
+  const message = Buffer.from('Hello Node.js world!');
+
+  function oldSign(algo, data, key) {
+    return createSign(algo).update(data).sign(key);
+  }
+
+  function oldVerify(algo, data, key, signature) {
+    return createVerify(algo).update(data).verify(key, signature);
+  }
+
+  for (const signFn of [sign, oldSign]) {
+    const signature = signFn('SHA256', message, privateKey);
+    for (const verifyFn of [verify, oldVerify]) {
+      for (const key of [publicKey, privateKey]) {
+        const okay = verifyFn('SHA256', message, key, signature);
+        assert(okay);
+      }
+    }
   }
 }
 
@@ -73,7 +87,7 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
   // To make the test faster, we will only test sync key generation once and
   // with a relatively small key.
   const ret = generateKeyPairSync('rsa', {
-    publicExponent: 0x10001,
+    publicExponent: 3,
     modulusLength: 512,
     publicKeyEncoding: {
       type: 'pkcs1',
@@ -146,7 +160,7 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
 
   // Now do the same with an encrypted private key.
   generateKeyPair('rsa', {
-    publicExponent: 0x10001,
+    publicExponent: 0x1001,
     modulusLength: 512,
     publicKeyEncoding,
     privateKeyEncoding: {
@@ -166,9 +180,11 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
 
     // Since the private key is encrypted, signing shouldn't work anymore.
     const publicKey = { key: publicKeyDER, ...publicKeyEncoding };
-    assert.throws(() => {
-      testSignVerify(publicKey, privateKey);
-    }, /bad decrypt|asn1 encoding routines/);
+    common.expectsError(() => testSignVerify(publicKey, privateKey), {
+      type: TypeError,
+      code: 'ERR_MISSING_PASSPHRASE',
+      message: 'Passphrase required for encrypted key'
+    });
 
     const key = { key: privateKey, passphrase: 'secret' };
     testEncryptDecrypt(publicKey, key);
@@ -196,13 +212,19 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
 
     // Since the private key is encrypted, signing shouldn't work anymore.
     const publicKey = { key: publicKeyDER, ...publicKeyEncoding };
-    assert.throws(() => {
+    common.expectsError(() => {
       testSignVerify(publicKey, {
         key: privateKeyDER,
         format: 'der',
         type: 'pkcs8'
       });
-    }, /bad decrypt|asn1 encoding routines/);
+    }, {
+      type: TypeError,
+      code: 'ERR_MISSING_PASSPHRASE',
+      message: 'Passphrase required for encrypted key'
+    });
+
+    // Signing should work with the correct password.
 
     const privateKey = {
       key: privateKeyDER,
@@ -244,6 +266,43 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
 }
 
 {
+  // Test RSA-PSS.
+  generateKeyPair('rsa-pss', {
+    modulusLength: 512,
+    saltLength: 16,
+    hash: 'sha256',
+    mgf1Hash: 'sha256'
+  }, common.mustCall((err, publicKey, privateKey) => {
+    assert.ifError(err);
+
+    assert.strictEqual(publicKey.type, 'public');
+    assert.strictEqual(publicKey.asymmetricKeyType, 'rsa-pss');
+
+    assert.strictEqual(privateKey.type, 'private');
+    assert.strictEqual(privateKey.asymmetricKeyType, 'rsa-pss');
+
+    // Unlike RSA, RSA-PSS does not allow encryption.
+    assert.throws(() => {
+      testEncryptDecrypt(publicKey, privateKey);
+    }, /operation not supported for this keytype/);
+
+    // RSA-PSS also does not permit signing with PKCS1 padding.
+    assert.throws(() => {
+      testSignVerify({
+        key: publicKey,
+        padding: constants.RSA_PKCS1_PADDING
+      }, {
+        key: privateKey,
+        padding: constants.RSA_PKCS1_PADDING
+      });
+    }, /illegal or unsupported padding mode/);
+
+    // The padding should correctly default to RSA_PKCS1_PSS_PADDING now.
+    testSignVerify(publicKey, privateKey);
+  }));
+}
+
+{
   const privateKeyEncoding = {
     type: 'pkcs8',
     format: 'der'
@@ -274,12 +333,16 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     assertApproximateSize(privateKeyDER, 336);
 
     // Since the private key is encrypted, signing shouldn't work anymore.
-    assert.throws(() => {
-      testSignVerify(publicKey, {
+    common.expectsError(() => {
+      return testSignVerify(publicKey, {
         key: privateKeyDER,
         ...privateKeyEncoding
       });
-    }, /bad decrypt|asn1 encoding routines/);
+    }, {
+      type: TypeError,
+      code: 'ERR_MISSING_PASSPHRASE',
+      message: 'Passphrase required for encrypted key'
+    });
 
     // Signing should work with the correct password.
     testSignVerify(publicKey, {
@@ -338,9 +401,11 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     assert(sec1EncExp('AES-128-CBC').test(privateKey));
 
     // Since the private key is encrypted, signing shouldn't work anymore.
-    assert.throws(() => {
-      testSignVerify(publicKey, privateKey);
-    }, /bad decrypt|asn1 encoding routines/);
+    common.expectsError(() => testSignVerify(publicKey, privateKey), {
+      type: TypeError,
+      code: 'ERR_MISSING_PASSPHRASE',
+      message: 'Passphrase required for encrypted key'
+    });
 
     testSignVerify(publicKey, { key: privateKey, passphrase: 'secret' });
   }));
@@ -371,15 +436,40 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     assert(pkcs8EncExp.test(privateKey));
 
     // Since the private key is encrypted, signing shouldn't work anymore.
-    assert.throws(() => {
-      testSignVerify(publicKey, privateKey);
-    }, /bad decrypt|asn1 encoding routines/);
+    common.expectsError(() => testSignVerify(publicKey, privateKey), {
+      type: TypeError,
+      code: 'ERR_MISSING_PASSPHRASE',
+      message: 'Passphrase required for encrypted key'
+    });
 
     testSignVerify(publicKey, {
       key: privateKey,
       passphrase: 'top secret'
     });
   }));
+}
+
+// Test invalid parameter encoding.
+{
+  common.expectsError(() => generateKeyPairSync('ec', {
+    namedCurve: 'P-256',
+    paramEncoding: 'otherEncoding',
+    publicKeyEncoding: {
+      type: 'spki',
+      format: 'pem'
+    },
+    privateKeyEncoding: {
+      type: 'pkcs8',
+      format: 'pem',
+      cipher: 'aes-128-cbc',
+      passphrase: 'top secret'
+    }
+  }), {
+    type: TypeError,
+    code: 'ERR_INVALID_OPT_VALUE',
+    message: 'The value "otherEncoding" is invalid for ' +
+    'option "paramEncoding"'
+  });
 }
 
 {
@@ -424,8 +514,7 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
   common.expectsError(() => generateKeyPairSync('rsa2', {}), {
     type: TypeError,
     code: 'ERR_INVALID_ARG_VALUE',
-    message: "The argument 'type' must be one of " +
-             "'rsa', 'dsa', 'ec'. Received 'rsa2'"
+    message: "The argument 'type' must be a supported key type. Received 'rsa2'"
   });
 }
 
@@ -436,6 +525,15 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     code: 'ERR_INVALID_ARG_TYPE',
     message: 'The "options" argument must be of ' +
       'type object. Received type undefined'
+  });
+
+  // Even if no options are required, it should be impossible to pass anything
+  // but an object (or undefined).
+  common.expectsError(() => generateKeyPair('ed448', 0, common.mustNotCall()), {
+    type: TypeError,
+    code: 'ERR_INVALID_ARG_TYPE',
+    message: 'The "options" argument must be of ' +
+      'type object. Received type number'
   });
 }
 
@@ -596,7 +694,7 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     });
   }
 
-  // cipher of invalid type.
+  // Cipher of invalid type.
   for (const cipher of [0, true, {}]) {
     common.expectsError(() => generateKeyPairSync('rsa', {
       modulusLength: 4096,
@@ -772,6 +870,23 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
   }, common.mustCall((err, publicKey, privateKey) => {
     assert.ifError(err);
   }));
+}
+
+// Test EdDSA key generation.
+{
+  if (!/^1\.1\.0/.test(process.versions.openssl)) {
+    ['ed25519', 'ed448', 'x25519', 'x448'].forEach((keyType) => {
+      generateKeyPair(keyType, common.mustCall((err, publicKey, privateKey) => {
+        assert.ifError(err);
+
+        assert.strictEqual(publicKey.type, 'public');
+        assert.strictEqual(publicKey.asymmetricKeyType, keyType);
+
+        assert.strictEqual(privateKey.type, 'private');
+        assert.strictEqual(privateKey.asymmetricKeyType, keyType);
+      }));
+    });
+  }
 }
 
 // Test invalid key encoding types.

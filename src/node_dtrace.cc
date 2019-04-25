@@ -48,6 +48,7 @@
 
 namespace node {
 
+using v8::Context;
 using v8::FunctionCallbackInfo;
 using v8::GCCallbackFlags;
 using v8::GCType;
@@ -247,46 +248,26 @@ void DTRACE_HTTP_CLIENT_RESPONSE(const FunctionCallbackInfo<Value>& args) {
   NODE_HTTP_CLIENT_RESPONSE(&conn, conn.remote, conn.port, conn.fd);
 }
 
-
-void dtrace_gc_start(Isolate* isolate, GCType type, GCCallbackFlags flags) {
+void dtrace_gc_start(Isolate* isolate,
+                     GCType type,
+                     GCCallbackFlags flags,
+                     void* data) {
   // Previous versions of this probe point only logged type and flags.
   // That's why for reasons of backwards compatibility the isolate goes last.
   NODE_GC_START(type, flags, isolate);
 }
 
-
-void dtrace_gc_done(Isolate* isolate, GCType type, GCCallbackFlags flags) {
+void dtrace_gc_done(Isolate* isolate,
+                    GCType type,
+                    GCCallbackFlags flags,
+                    void* data) {
   // Previous versions of this probe point only logged type and flags.
   // That's why for reasons of backwards compatibility the isolate goes last.
   NODE_GC_DONE(type, flags, isolate);
 }
 
 
-void InitDTrace(Environment* env, Local<Object> target) {
-  HandleScope scope(env->isolate());
-
-  static struct {
-    const char* name;
-    void (*func)(const FunctionCallbackInfo<Value>&);
-  } tab[] = {
-#define NODE_PROBE(name) #name, name
-    { NODE_PROBE(DTRACE_NET_SERVER_CONNECTION) },
-    { NODE_PROBE(DTRACE_NET_STREAM_END) },
-    { NODE_PROBE(DTRACE_HTTP_SERVER_REQUEST) },
-    { NODE_PROBE(DTRACE_HTTP_SERVER_RESPONSE) },
-    { NODE_PROBE(DTRACE_HTTP_CLIENT_REQUEST) },
-    { NODE_PROBE(DTRACE_HTTP_CLIENT_RESPONSE) }
-#undef NODE_PROBE
-  };
-
-  for (size_t i = 0; i < arraysize(tab); i++) {
-    Local<String> key = OneByteString(env->isolate(), tab[i].name);
-    Local<Value> val = env->NewFunctionTemplate(tab[i].func)
-                           ->GetFunction(env->context())
-                           .ToLocalChecked();
-    target->Set(env->context(), key, val).FromJust();
-  }
-
+void InitDTrace(Environment* env) {
 #ifdef HAVE_ETW
   // ETW is neither thread-safe nor does it clean up resources on exit,
   // so we can use it only on the main thread.
@@ -295,10 +276,35 @@ void InitDTrace(Environment* env, Local<Object> target) {
   }
 #endif
 
+  // We need to use the variant of GC callbacks that takes data to
+  // avoid running into DCHECKs when multiple Environments try to add
+  // the same callback to the same isolate multiple times.
+  env->isolate()->AddGCPrologueCallback(dtrace_gc_start, env);
+  env->isolate()->AddGCEpilogueCallback(dtrace_gc_done, env);
+  env->AddCleanupHook([](void* data) {
+    Environment* env = static_cast<Environment*>(data);
+    env->isolate()->RemoveGCPrologueCallback(dtrace_gc_start, env);
+    env->isolate()->RemoveGCEpilogueCallback(dtrace_gc_done, env);
+  }, env);
+}
+
+void InitializeDTrace(Local<Object> target,
+                      Local<Value> unused,
+                      Local<Context> context,
+                      void* priv) {
+  Environment* env = Environment::GetCurrent(context);
+
 #if defined HAVE_DTRACE || defined HAVE_ETW
-  env->isolate()->AddGCPrologueCallback(dtrace_gc_start);
-  env->isolate()->AddGCEpilogueCallback(dtrace_gc_done);
+# define NODE_PROBE(name) env->SetMethod(target, #name, name);
+  NODE_PROBE(DTRACE_NET_SERVER_CONNECTION)
+  NODE_PROBE(DTRACE_NET_STREAM_END)
+  NODE_PROBE(DTRACE_HTTP_SERVER_REQUEST)
+  NODE_PROBE(DTRACE_HTTP_SERVER_RESPONSE)
+  NODE_PROBE(DTRACE_HTTP_CLIENT_REQUEST)
+  NODE_PROBE(DTRACE_HTTP_CLIENT_RESPONSE)
+# undef NODE_PROBE
 #endif
 }
 
 }  // namespace node
+NODE_MODULE_CONTEXT_AWARE_INTERNAL(dtrace, node::InitializeDTrace)

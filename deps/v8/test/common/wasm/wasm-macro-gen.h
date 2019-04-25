@@ -17,12 +17,22 @@
 
 #define WASM_MODULE_HEADER U32_LE(kWasmMagic), U32_LE(kWasmVersion)
 
-#define IMPORT_SIG_INDEX(v) U32V_1(v)
+#define SIG_INDEX(v) U32V_1(v)
 #define FUNC_INDEX(v) U32V_1(v)
-#define TABLE_INDEX(v) U32V_1(v)
+#define EXCEPTION_INDEX(v) U32V_1(v)
 #define NO_NAME U32V_1(0)
-#define NAME_LENGTH(v) U32V_1(v)
 #define ENTRY_COUNT(v) U32V_1(v)
+
+// Segment flags
+#define ACTIVE_NO_INDEX 0
+#define PASSIVE 1
+#define ACTIVE_WITH_INDEX 2
+
+// The table index field in an element segment was repurposed as a flags field.
+// To specify a table index, we have to set the flag value to 2, followed by
+// the table index.
+#define TABLE_INDEX0 U32V_1(ACTIVE_NO_INDEX)
+#define TABLE_INDEX(v) U32V_1(ACTIVE_WITH_INDEX), U32V_1(v)
 
 #define ZERO_ALIGNMENT 0
 #define ZERO_OFFSET 0
@@ -125,6 +135,10 @@
 #define WASM_IF_ELSE_X(index, cond, tstmt, fstmt)                            \
   cond, kExprIf, static_cast<byte>(index), tstmt, kExprElse, fstmt, kExprEnd
 
+#define WASM_TRY_CATCH_T(t, trystmt, catchstmt)                          \
+  kExprTry, static_cast<byte>(ValueTypes::ValueTypeCodeFor(t)), trystmt, \
+      kExprCatch, catchstmt, kExprEnd
+
 #define WASM_SELECT(tval, fval, cond) tval, fval, cond, kExprSelect
 
 #define WASM_RETURN0 kExprReturn
@@ -144,10 +158,12 @@
 #define WASM_CASE(x) static_cast<byte>(x), static_cast<byte>(x >> 8)
 #define WASM_CASE_BR(x) static_cast<byte>(x), static_cast<byte>(0x80 | (x) >> 8)
 
+#define WASM_THROW(index) kExprThrow, static_cast<byte>(index)
+
 //------------------------------------------------------------------------------
 // Misc expressions.
 //------------------------------------------------------------------------------
-#define WASM_ID(...) __VA_ARGS__
+#define WASM_STMTS(...) __VA_ARGS__
 #define WASM_ZERO kExprI32Const, 0
 #define WASM_ONE kExprI32Const, 1
 
@@ -338,6 +354,10 @@ inline WasmOpcode LoadStoreOpcodeOf(MachineType type, bool store) {
 #define WASM_GET_GLOBAL(index) kExprGetGlobal, static_cast<byte>(index)
 #define WASM_SET_GLOBAL(index, val) \
   val, kExprSetGlobal, static_cast<byte>(index)
+#define WASM_GET_TABLE(table_index, index) \
+  index, kExprGetTable, static_cast<byte>(table_index)
+#define WASM_SET_TABLE(table_index, index, val) \
+  index, val, kExprSetTable, static_cast<byte>(table_index)
 #define WASM_LOAD_MEM(type, index)                                           \
   index,                                                                     \
       static_cast<byte>(v8::internal::wasm::LoadStoreOpcodeOf(type, false)), \
@@ -367,6 +387,11 @@ inline WasmOpcode LoadStoreOpcodeOf(MachineType type, bool store) {
 #define WASM_CALL_FUNCTION(index, ...) \
   __VA_ARGS__, kExprCallFunction, static_cast<byte>(index)
 
+#define WASM_RETURN_CALL_FUNCTION0(index) \
+  kExprReturnCall, static_cast<byte>(index)
+#define WASM_RETURN_CALL_FUNCTION(index, ...) \
+  __VA_ARGS__, kExprReturnCall, static_cast<byte>(index)
+
 #define TABLE_ZERO 0
 
 // TODO(titzer): change usages of these macros to put func last.
@@ -384,6 +409,12 @@ inline WasmOpcode LoadStoreOpcodeOf(MachineType type, bool store) {
   a, b, c, d, e, func, kExprCallIndirect, static_cast<byte>(index), TABLE_ZERO
 #define WASM_CALL_INDIRECTN(arity, index, func, ...) \
   __VA_ARGS__, func, kExprCallIndirect, static_cast<byte>(index), TABLE_ZERO
+
+#define WASM_RETURN_CALL_INDIRECT0(index, func) \
+  func, kExprReturnCallIndirect, static_cast<byte>(index), TABLE_ZERO
+#define WASM_RETURN_CALL_INDIRECT(index, func, ...)                     \
+  __VA_ARGS__, func, kExprReturnCallIndirect, static_cast<byte>(index), \
+      TABLE_ZERO
 
 #define WASM_NOT(x) x, kExprI32Eqz
 #define WASM_SEQ(...) __VA_ARGS__
@@ -572,10 +603,25 @@ inline WasmOpcode LoadStoreOpcodeOf(MachineType type, bool store) {
 #define WASM_I64_SCONVERT_SAT_F64(x) x, WASM_NUMERIC_OP(kExprI64SConvertSatF64)
 #define WASM_I64_UCONVERT_SAT_F64(x) x, WASM_NUMERIC_OP(kExprI64UConvertSatF64)
 
+#define MEMORY_ZERO 0
+
+#define WASM_MEMORY_INIT(seg, dst, src, size) \
+  dst, src, size, WASM_NUMERIC_OP(kExprMemoryInit), U32V_1(seg), MEMORY_ZERO
+#define WASM_DATA_DROP(seg) WASM_NUMERIC_OP(kExprDataDrop), U32V_1(seg)
+#define WASM_MEMORY_COPY(dst, src, size) \
+  dst, src, size, WASM_NUMERIC_OP(kExprMemoryCopy), MEMORY_ZERO, MEMORY_ZERO
+#define WASM_MEMORY_FILL(dst, val, size) \
+  dst, val, size, WASM_NUMERIC_OP(kExprMemoryFill), MEMORY_ZERO
+#define WASM_TABLE_INIT(seg, dst, src, size) \
+  dst, src, size, WASM_NUMERIC_OP(kExprTableInit), U32V_1(seg), TABLE_ZERO
+#define WASM_ELEM_DROP(seg) WASM_NUMERIC_OP(kExprElemDrop), U32V_1(seg)
+#define WASM_TABLE_COPY(dst, src, size) \
+  dst, src, size, WASM_NUMERIC_OP(kExprTableCopy), TABLE_ZERO, TABLE_ZERO
+
 //------------------------------------------------------------------------------
 // Memory Operations.
 //------------------------------------------------------------------------------
-#define WASM_GROW_MEMORY(x) x, kExprGrowMemory, 0
+#define WASM_GROW_MEMORY(x) x, kExprMemoryGrow, 0
 #define WASM_MEMORY_SIZE kExprMemorySize, 0
 
 #define SIG_ENTRY_v_v kWasmFunctionTypeCode, 0, 0
@@ -624,6 +670,8 @@ inline WasmOpcode LoadStoreOpcodeOf(MachineType type, bool store) {
 #define WASM_ATOMICS_STORE_OP(op, x, y, representation) \
   x, y, WASM_ATOMICS_OP(op),                            \
       static_cast<byte>(ElementSizeLog2Of(representation)), ZERO_OFFSET
+#define WASM_ATOMICS_WAIT(op, index, value, timeout, offset) \
+  index, value, timeout, WASM_ATOMICS_OP(op), ZERO_ALIGNMENT, offset
 
 //------------------------------------------------------------------------------
 // Sign Externsion Operations.

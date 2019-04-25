@@ -15,20 +15,21 @@ assert.strictEqual(
 // Verify that existing paths are removed.
 assert.throws(() => {
   require.resolve('bar', { paths: [] })
-}, /^Error: Cannot find module 'bar'$/);
+}, /^Error: Cannot find module 'bar'/);
 
 // Verify that resolution path can be overwritten.
 {
   // three.js cannot be loaded from this file by default.
   assert.throws(() => {
     require.resolve('three')
-  }, /^Error: Cannot find module 'three'$/);
+  }, /^Error: Cannot find module 'three'/);
 
-  // However, it can be found if resolution contains the nested index directory.
-  assert.strictEqual(
-    require.resolve('three', { paths: [nestedIndex] }),
-    path.join(nestedIndex, 'three.js')
-  );
+  // If the nested-index directory is provided as a resolve path, 'three'
+  // cannot be found because nested-index is used as a starting point and not
+  // a searched directory.
+  assert.throws(() => {
+    require.resolve('three', { paths: [nestedIndex] })
+  }, /^Error: Cannot find module 'three'/);
 
   // Resolution from nested index directory also checks node_modules.
   assert.strictEqual(
@@ -50,6 +51,6 @@ assert.throws(() => {
   paths.unshift(nestedNodeModules);
   assert.strictEqual(
     require.resolve('bar', { paths }),
-    path.join(nestedNodeModules, 'bar.js')
+    path.join(nodeModules, 'bar.js')
   );
 }

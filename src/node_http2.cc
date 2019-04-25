@@ -332,7 +332,7 @@ Http2Priority::Http2Priority(Environment* env,
   Local<Context> context = env->context();
   int32_t parent_ = parent->Int32Value(context).ToChecked();
   int32_t weight_ = weight->Int32Value(context).ToChecked();
-  bool exclusive_ = exclusive->BooleanValue(context).ToChecked();
+  bool exclusive_ = exclusive->BooleanValue(env->isolate());
   Debug(env, DebugCategory::HTTP2STREAM,
         "Http2Priority: parent: %d, weight: %d, exclusive: %d\n",
         parent_, weight_, exclusive_);
@@ -1094,7 +1094,7 @@ int Http2Session::OnStreamClose(nghttp2_session* handle,
     stream->MakeCallback(env->http2session_on_stream_close_function(),
                           1, &arg);
   if (answer.IsEmpty() ||
-      !(answer.ToLocalChecked()->BooleanValue(env->context()).FromJust())) {
+      !(answer.ToLocalChecked()->BooleanValue(env->isolate()))) {
     // Skip to destroy
     stream->Destroy();
   }
@@ -2446,7 +2446,7 @@ void Http2Session::Destroy(const FunctionCallbackInfo<Value>& args) {
   Local<Context> context = env->context();
 
   uint32_t code = args[0]->Uint32Value(context).ToChecked();
-  bool socketDestroyed = args[1]->BooleanValue(context).ToChecked();
+  bool socketDestroyed = args[1]->BooleanValue(env->isolate());
 
   session->Close(code, socketDestroyed);
 }
@@ -2534,7 +2534,7 @@ void Http2Session::UpdateChunksSent(const FunctionCallbackInfo<Value>& args) {
 
   session->object()->Set(env->context(),
                          env->chunks_sent_since_last_write_string(),
-                         Integer::NewFromUnsigned(isolate, length)).FromJust();
+                         Integer::NewFromUnsigned(isolate, length)).Check();
 
   args.GetReturnValue().Set(length);
 }
@@ -2654,12 +2654,11 @@ void Http2Stream::PushPromise(const FunctionCallbackInfo<Value>& args) {
 // Send a PRIORITY frame
 void Http2Stream::Priority(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
-  Local<Context> context = env->context();
   Http2Stream* stream;
   ASSIGN_OR_RETURN_UNWRAP(&stream, args.Holder());
 
   Http2Priority priority(env, args[0], args[1], args[2]);
-  bool silent = args[3]->BooleanValue(context).ToChecked();
+  bool silent = args[3]->BooleanValue(env->isolate());
 
   CHECK_EQ(stream->SubmitPriority(*priority, silent), 0);
   Debug(stream, "priority submitted");
@@ -3020,7 +3019,7 @@ void Initialize(Local<Object> target,
   env->set_http2stream_constructor_template(streamt);
   target->Set(context,
               FIXED_ONE_BYTE_STRING(env->isolate(), "Http2Stream"),
-              stream->GetFunction(env->context()).ToLocalChecked()).FromJust();
+              stream->GetFunction(env->context()).ToLocalChecked()).Check();
 
   Local<FunctionTemplate> session =
       env->NewFunctionTemplate(Http2Session::New);
@@ -3048,7 +3047,7 @@ void Initialize(Local<Object> target,
       Http2Session::RefreshSettings<nghttp2_session_get_remote_settings>);
   target->Set(context,
               http2SessionClassName,
-              session->GetFunction(env->context()).ToLocalChecked()).FromJust();
+              session->GetFunction(env->context()).ToLocalChecked()).Check();
 
   Local<Object> constants = Object::New(isolate);
   Local<Array> name_for_error_code = Array::New(isolate);
@@ -3083,7 +3082,7 @@ void Initialize(Local<Object> target,
   name_for_error_code->Set(env->context(),                              \
                            static_cast<int>(name),                      \
                            FIXED_ONE_BYTE_STRING(isolate,               \
-                                                 #name)).FromJust();
+                                                 #name)).Check();
   NODE_NGHTTP2_ERROR_CODES(V)
 #undef V
 
@@ -3151,10 +3150,10 @@ HTTP_STATUS_CODES(V)
 
   target->Set(context,
               env->constants_string(),
-              constants).FromJust();
+              constants).Check();
   target->Set(context,
               FIXED_ONE_BYTE_STRING(isolate, "nameForErrorCode"),
-              name_for_error_code).FromJust();
+              name_for_error_code).Check();
 }
 }  // namespace http2
 }  // namespace node

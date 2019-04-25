@@ -27,8 +27,7 @@ if (!common.hasCrypto)
 
 common.expectWarning({
   DeprecationWarning: [
-    ['crypto.createCipher is deprecated.', 'DEP0106'],
-    ['crypto._toBuf is deprecated.', 'DEP0114']
+    ['crypto.createCipher is deprecated.', 'DEP0106']
   ]
 });
 
@@ -38,19 +37,19 @@ const tls = require('tls');
 const fixtures = require('../common/fixtures');
 
 // Test Certificates
-const caPem = fixtures.readSync('test_ca.pem', 'ascii');
-const certPem = fixtures.readSync('test_cert.pem', 'ascii');
 const certPfx = fixtures.readSync('test_cert.pfx');
-const keyPem = fixtures.readSync('test_key.pem', 'ascii');
 
 // 'this' safety
 // https://github.com/joyent/node/issues/6690
 assert.throws(function() {
-  const options = { key: keyPem, cert: certPem, ca: caPem };
-  const credentials = tls.createSecureContext(options);
+  const credentials = tls.createSecureContext();
   const context = credentials.context;
-  const notcontext = { setOptions: context.setOptions, setKey: context.setKey };
-  tls.createSecureContext({ secureOptions: 1 }, notcontext);
+  const notcontext = { setOptions: context.setOptions };
+
+  // Methods of native objects should not segfault when reassigned to a new
+  // object and called illegally. This core dumped in 0.10 and was fixed in
+  // 0.11.
+  notcontext.setOptions();
 }, (err) => {
   // Throws TypeError, so there is no opensslErrorStack property.
   if ((err instanceof Error) &&
@@ -130,6 +129,7 @@ validateList(cryptoCiphers);
 // Assume that we have at least AES256-SHA.
 const tlsCiphers = tls.getCiphers();
 assert(tls.getCiphers().includes('aes256-sha'));
+assert(tls.getCiphers().includes('tls_aes_128_ccm_8_sha256'));
 // There should be no capital letters in any element.
 const noCapitals = /^[^A-Z]+$/;
 assert(tlsCiphers.every((value) => noCapitals.test(value)));
@@ -238,15 +238,19 @@ assert.throws(function() {
   // This would inject errors onto OpenSSL's error stack
   crypto.createSign('sha1').sign(sha1_privateKey);
 }, (err) => {
+  // Do the standard checks, but then do some custom checks afterwards.
+  assert.throws(() => { throw err; }, {
+    message: 'error:0D0680A8:asn1 encoding routines:asn1_check_tlen:wrong tag',
+    library: 'asn1 encoding routines',
+    function: 'asn1_check_tlen',
+    reason: 'wrong tag',
+    code: 'ERR_OSSL_ASN1_WRONG_TAG',
+  });
   // Throws crypto error, so there is an opensslErrorStack property.
   // The openSSL stack should have content.
-  if ((err instanceof Error) &&
-      /asn1 encoding routines:[^:]*:wrong tag/.test(err) &&
-      err.opensslErrorStack !== undefined &&
-      Array.isArray(err.opensslErrorStack) &&
-      err.opensslErrorStack.length > 0) {
-    return true;
-  }
+  assert(Array.isArray(err.opensslErrorStack));
+  assert(err.opensslErrorStack.length > 0);
+  return true;
 });
 
 // Make sure memory isn't released before being returned
@@ -301,8 +305,3 @@ testEncoding({
 testEncoding({
   defaultEncoding: 'latin1'
 }, assertionHashLatin1);
-
-{
-  // Test that the exported _toBuf function is deprecated.
-  crypto._toBuf(Buffer.alloc(0));
-}

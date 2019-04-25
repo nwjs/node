@@ -51,6 +51,7 @@ FrameInspector::FrameInspector(StandardFrame* frame, int inlined_frame_index,
   }
 }
 
+// NOLINTNEXTLINE
 FrameInspector::~FrameInspector() {
   // Destructor needs to be defined in the .cc file, because it instantiates
   // std::unique_ptr destructors but the types are not known in the header.
@@ -88,7 +89,7 @@ bool FrameInspector::ParameterIsShadowedByContextLocal(
   VariableMode mode;
   InitializationFlag init_flag;
   MaybeAssignedFlag maybe_assigned_flag;
-  return ScopeInfo::ContextSlotIndex(info, parameter_name, &mode, &init_flag,
+  return ScopeInfo::ContextSlotIndex(*info, *parameter_name, &mode, &init_flag,
                                      &maybe_assigned_flag) != -1;
 }
 }  // namespace internal

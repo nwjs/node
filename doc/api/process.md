@@ -205,7 +205,16 @@ most convenient for scripts).
 ### Event: 'uncaughtException'
 <!-- YAML
 added: v0.1.18
+changes:
+  - version: v12.0.0
+    pr-url: https://github.com/nodejs/node/pull/26599
+    description: Added the `origin` argument.
 -->
+
+* `err` {Error} The uncaught exception.
+* `origin` {string} Indicates if the exception originates from an unhandled
+  rejection or from synchronous errors. Can either be `'uncaughtException'` or
+  `'unhandledRejection'`.
 
 The `'uncaughtException'` event is emitted when an uncaught JavaScript
 exception bubbles all the way back to the event loop. By default, Node.js
@@ -217,12 +226,13 @@ behavior. Alternatively, change the [`process.exitCode`][] in the
 provided exit code. Otherwise, in the presence of such handler the process will
 exit with 0.
 
-The listener function is called with the `Error` object passed as the only
-argument.
-
 ```js
-process.on('uncaughtException', (err) => {
-  fs.writeSync(1, `Caught exception: ${err}\n`);
+process.on('uncaughtException', (err, origin) => {
+  fs.writeSync(
+    process.stderr.fd,
+    `Caught exception: ${err}\n` +
+    `Exception origin: ${origin}`
+  );
 });
 
 setTimeout(() => {
@@ -274,6 +284,10 @@ changes:
                  a process warning.
 -->
 
+* `reason` {Error|any} The object with which the promise was rejected
+  (typically an [`Error`][] object).
+* `promise` {Promise} The rejected promise.
+
 The `'unhandledRejection'` event is emitted whenever a `Promise` is rejected and
 no error handler is attached to the promise within a turn of the event loop.
 When programming with Promises, exceptions are encapsulated as "rejected
@@ -282,21 +296,15 @@ are propagated through a `Promise` chain. The `'unhandledRejection'` event is
 useful for detecting and keeping track of promises that were rejected whose
 rejections have not yet been handled.
 
-The listener function is called with the following arguments:
-
-* `reason` {Error|any} The object with which the promise was rejected
-  (typically an [`Error`][] object).
-* `p` the `Promise` that was rejected.
-
 ```js
-process.on('unhandledRejection', (reason, p) => {
-  console.log('Unhandled Rejection at:', p, 'reason:', reason);
+process.on('unhandledRejection', (reason, promise) => {
+  console.log('Unhandled Rejection at:', promise, 'reason:', reason);
   // Application specific logging, throwing an error, or other logic here
 });
 
 somePromise.then((res) => {
-  return reportToUser(JSON.pasre(res)); // note the typo (`pasre`)
-}); // no `.catch()` or `.then()`
+  return reportToUser(JSON.pasre(res)); // Note the typo (`pasre`)
+}); // No `.catch()` or `.then()`
 ```
 
 The following will also trigger the `'unhandledRejection'` event to be
@@ -317,7 +325,7 @@ as would typically be the case for other `'unhandledRejection'` events. To
 address such failures, a non-operational
 [`.catch(() => { })`][`promise.catch()`] handler may be attached to
 `resource.loaded`, which would prevent the `'unhandledRejection'` event from
-being emitted. Alternatively, the [`'rejectionHandled'`][] event may be used.
+being emitted.
 
 ### Event: 'warning'
 <!-- YAML
@@ -533,8 +541,8 @@ added: v0.5.0
 The `process.arch` property returns a string identifying the operating system
 CPU architecture for which the Node.js binary was compiled.
 
-The current possible values are: `'arm'`, `'arm64'`, `'ia32'`, `'mips'`,
-`'mipsel'`, `'ppc'`, `'ppc64'`, `'s390'`, `'s390x'`, `'x32'`, and `'x64'`.
+The current possible values are: `'arm'`, `'arm64'`, `'ia32'`,
+`'ppc'`, `'ppc64'`, `'s390'`, `'s390x'`, `'x32'`, and `'x64'`.
 
 ```js
 console.log(`This processor architecture is ${process.arch}`);
@@ -669,7 +677,7 @@ An example of the possible output looks like:
      node_shared_openssl: 'false',
      strict_aliasing: 'true',
      target_arch: 'x64',
-     v8_use_snapshot: 'true'
+     v8_use_snapshot: 1
    }
 }
 ```
@@ -2282,7 +2290,6 @@ cases:
 
 [`'exit'`]: #process_event_exit
 [`'message'`]: child_process.html#child_process_event_message
-[`'rejectionHandled'`]: #process_event_rejectionhandled
 [`'uncaughtException'`]: #process_event_uncaughtexception
 [`ChildProcess.disconnect()`]: child_process.html#child_process_subprocess_disconnect
 [`ChildProcess.send()`]: child_process.html#child_process_subprocess_send_message_sendhandle_options_callback

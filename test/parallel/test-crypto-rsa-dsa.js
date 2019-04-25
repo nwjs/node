@@ -24,8 +24,14 @@ const dsaKeyPemEncrypted = fixtures.readSync('test_dsa_privkey_encrypted.pem',
 const rsaPkcs8KeyPem = fixtures.readSync('test_rsa_pkcs8_privkey.pem');
 const dsaPkcs8KeyPem = fixtures.readSync('test_dsa_pkcs8_privkey.pem');
 
-const decryptError =
-  /^Error: error:06065064:digital envelope routines:EVP_DecryptFinal_ex:bad decrypt$/;
+const decryptError = {
+  message: 'error:06065064:digital envelope routines:EVP_DecryptFinal_ex:' +
+    'bad decrypt',
+  code: 'ERR_OSSL_EVP_BAD_DECRYPT',
+  reason: 'bad decrypt',
+  function: 'EVP_DecryptFinal_ex',
+  library: 'digital envelope routines',
+};
 
 // Test RSA encryption/decryption
 {
@@ -67,6 +73,42 @@ const decryptError =
     passphrase: Buffer.from('password')
   }, encryptedBuffer);
   assert.strictEqual(decryptedBufferWithPassword.toString(), input);
+
+  // Now with explicit RSA_PKCS1_PADDING.
+  encryptedBuffer = crypto.privateEncrypt({
+    padding: crypto.constants.RSA_PKCS1_PADDING,
+    key: rsaKeyPemEncrypted,
+    passphrase: Buffer.from('password')
+  }, bufferToEncrypt);
+
+  decryptedBufferWithPassword = crypto.publicDecrypt({
+    padding: crypto.constants.RSA_PKCS1_PADDING,
+    key: rsaKeyPemEncrypted,
+    passphrase: Buffer.from('password')
+  }, encryptedBuffer);
+  assert.strictEqual(decryptedBufferWithPassword.toString(), input);
+
+  // Omitting padding should be okay because RSA_PKCS1_PADDING is the default.
+  decryptedBufferWithPassword = crypto.publicDecrypt({
+    key: rsaKeyPemEncrypted,
+    passphrase: Buffer.from('password')
+  }, encryptedBuffer);
+  assert.strictEqual(decryptedBufferWithPassword.toString(), input);
+
+  // Now with RSA_NO_PADDING. Plaintext needs to match key size.
+  const plaintext = 'x'.repeat(128);
+  encryptedBuffer = crypto.privateEncrypt({
+    padding: crypto.constants.RSA_NO_PADDING,
+    key: rsaKeyPemEncrypted,
+    passphrase: Buffer.from('password')
+  }, Buffer.from(plaintext));
+
+  decryptedBufferWithPassword = crypto.publicDecrypt({
+    padding: crypto.constants.RSA_NO_PADDING,
+    key: rsaKeyPemEncrypted,
+    passphrase: Buffer.from('password')
+  }, encryptedBuffer);
+  assert.strictEqual(decryptedBufferWithPassword.toString(), plaintext);
 
   encryptedBuffer = crypto.publicEncrypt(certPem, bufferToEncrypt);
 

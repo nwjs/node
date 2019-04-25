@@ -29,6 +29,7 @@ if (!common.hasCrypto)
 const assert = require('assert');
 const crypto = require('crypto');
 const { kMaxLength } = require('buffer');
+const { inspect } = require('util');
 
 const kMaxUint32 = Math.pow(2, 32) - 1;
 const kMaxPossibleLength = Math.min(kMaxLength, kMaxUint32);
@@ -44,7 +45,7 @@ common.expectWarning('DeprecationWarning',
     [undefined, null, false, true, {}, []].forEach((value) => {
       const errObj = {
         code: 'ERR_INVALID_ARG_TYPE',
-        name: 'TypeError [ERR_INVALID_ARG_TYPE]',
+        name: 'TypeError',
         message: 'The "size" argument must be of type number. ' +
                 `Received type ${typeof value}`
       };
@@ -55,7 +56,7 @@ common.expectWarning('DeprecationWarning',
     [-1, NaN, 2 ** 32].forEach((value) => {
       const errObj = {
         code: 'ERR_OUT_OF_RANGE',
-        name: 'RangeError [ERR_OUT_OF_RANGE]',
+        name: 'RangeError',
         message: 'The value of "size" is out of range. It must be >= 0 && <= ' +
                  `${kMaxPossibleLength}. Received ${value}`
       };
@@ -199,7 +200,7 @@ common.expectWarning('DeprecationWarning',
 
     const typeErrObj = {
       code: 'ERR_INVALID_ARG_TYPE',
-      name: 'TypeError [ERR_INVALID_ARG_TYPE]',
+      name: 'TypeError',
       message: 'The "offset" argument must be of type number. ' +
                'Received type string'
     };
@@ -222,7 +223,7 @@ common.expectWarning('DeprecationWarning',
     [NaN, kMaxPossibleLength + 1, -10, (-1 >>> 0) + 1].forEach((offsetSize) => {
       const errObj = {
         code: 'ERR_OUT_OF_RANGE',
-        name: 'RangeError [ERR_OUT_OF_RANGE]',
+        name: 'RangeError',
         message: 'The value of "offset" is out of range. ' +
                  `It must be >= 0 && <= 10. Received ${offsetSize}`
       };
@@ -245,7 +246,7 @@ common.expectWarning('DeprecationWarning',
 
     const rangeErrObj = {
       code: 'ERR_OUT_OF_RANGE',
-      name: 'RangeError [ERR_OUT_OF_RANGE]',
+      name: 'RangeError',
       message: 'The value of "size + offset" is out of range. ' +
                'It must be <= 10. Received 11'
     };
@@ -265,7 +266,7 @@ assert.throws(
   () => crypto.randomBytes((-1 >>> 0) + 1),
   {
     code: 'ERR_OUT_OF_RANGE',
-    name: 'RangeError [ERR_OUT_OF_RANGE]',
+    name: 'RangeError',
     message: 'The value of "size" is out of range. ' +
              `It must be >= 0 && <= ${kMaxPossibleLength}. Received 4294967296`
   }
@@ -292,7 +293,7 @@ assert.throws(
     {
       code: 'ERR_INVALID_CALLBACK',
       type: TypeError,
-      message: 'Callback must be a function',
+      message: `Callback must be a function. Received ${inspect(i)}`
     });
 });
 
@@ -302,7 +303,7 @@ assert.throws(
     {
       code: 'ERR_INVALID_CALLBACK',
       type: TypeError,
-      message: 'Callback must be a function',
+      message: `Callback must be a function. Received ${inspect(i)}`
     }
   );
 });

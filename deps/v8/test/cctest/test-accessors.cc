@@ -181,7 +181,7 @@ THREADED_TEST(GlobalVariableAccess) {
   templ->InstanceTemplate()->SetAccessor(
       v8_str("baz"), GetIntValue, SetIntValue,
       v8::External::New(isolate, &baz));
-  LocalContext env(0, templ->InstanceTemplate());
+  LocalContext env(nullptr, templ->InstanceTemplate());
   v8_compile("foo = (++bar) + baz")->Run(env.local()).ToLocalChecked();
   CHECK_EQ(-3, bar);
   CHECK_EQ(7, foo);
@@ -538,7 +538,7 @@ static void StackCheck(Local<String> name,
   for (int i = 0; !iter.done(); i++) {
     i::StackFrame* frame = iter.frame();
     CHECK(i != 0 || (frame->type() == i::StackFrame::EXIT));
-    i::Code* code = frame->LookupCode();
+    i::Code code = frame->LookupCode();
     CHECK(code->IsCode());
     CHECK(code->contains(frame->pc()));
     iter.Advance();

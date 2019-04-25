@@ -51,6 +51,7 @@ const hasCrypto = Boolean(process.versions.openssl);
 // If the binary was built without-ssl then the crypto flags are
 // invalid (bad option). The test itself should handle this case.
 if (process.argv.length === 2 &&
+    !process.env.NODE_SKIP_FLAG_CHECK &&
     isMainThread &&
     hasCrypto &&
     module.parent &&
@@ -82,7 +83,8 @@ if (process.argv.length === 2 &&
           (process.features.inspector || !flag.startsWith('--inspect'))) {
         console.log(
           'NOTE: The test started as a child_process using these flags:',
-          util.inspect(flags)
+          util.inspect(flags),
+          'Use NODE_SKIP_FLAG_CHECK to run the test with the original flags.'
         );
         const args = [...flags, ...process.execArgv, ...process.argv.slice(1)];
         const options = { encoding: 'utf8', stdio: 'inherit' };
@@ -263,66 +265,49 @@ function platformTimeout(ms) {
 }
 
 let knownGlobals = [
-  Buffer,
   clearImmediate,
   clearInterval,
   clearTimeout,
   global,
-  process,
   setImmediate,
   setInterval,
-  setTimeout
+  setTimeout,
+  queueMicrotask,
 ];
 
 if (global.gc) {
   knownGlobals.push(global.gc);
 }
 
-if (global.DTRACE_HTTP_SERVER_RESPONSE) {
-  knownGlobals.push(DTRACE_HTTP_SERVER_RESPONSE);
-  knownGlobals.push(DTRACE_HTTP_SERVER_REQUEST);
-  knownGlobals.push(DTRACE_HTTP_CLIENT_RESPONSE);
-  knownGlobals.push(DTRACE_HTTP_CLIENT_REQUEST);
-  knownGlobals.push(DTRACE_NET_STREAM_END);
-  knownGlobals.push(DTRACE_NET_SERVER_CONNECTION);
-}
-
-if (global.COUNTER_NET_SERVER_CONNECTION) {
-  knownGlobals.push(COUNTER_NET_SERVER_CONNECTION);
-  knownGlobals.push(COUNTER_NET_SERVER_CONNECTION_CLOSE);
-  knownGlobals.push(COUNTER_HTTP_SERVER_REQUEST);
-  knownGlobals.push(COUNTER_HTTP_SERVER_RESPONSE);
-  knownGlobals.push(COUNTER_HTTP_CLIENT_REQUEST);
-  knownGlobals.push(COUNTER_HTTP_CLIENT_RESPONSE);
-}
-
-if (process.env.NODE_TEST_KNOWN_GLOBALS) {
-  const knownFromEnv = process.env.NODE_TEST_KNOWN_GLOBALS.split(',');
-  allowGlobals(...knownFromEnv);
-}
-
 function allowGlobals(...whitelist) {
   knownGlobals = knownGlobals.concat(whitelist);
 }
 
-function leakedGlobals() {
-  const leaked = [];
+if (process.env.NODE_TEST_KNOWN_GLOBALS !== '0') {
+  if (process.env.NODE_TEST_KNOWN_GLOBALS) {
+    const knownFromEnv = process.env.NODE_TEST_KNOWN_GLOBALS.split(',');
+    allowGlobals(...knownFromEnv);
+  }
 
-  for (const val in global) {
-    if (!knownGlobals.includes(global[val])) {
-      leaked.push(val);
+  function leakedGlobals() {
+    const leaked = [];
+
+    for (const val in global) {
+      if (!knownGlobals.includes(global[val])) {
+        leaked.push(val);
+      }
     }
+
+    return leaked;
   }
 
-  return leaked;
+  process.on('exit', function() {
+    const leaked = leakedGlobals();
+    if (leaked.length > 0) {
+      assert.fail(`Unexpected global(s) found: ${leaked.join(', ')}`);
+    }
+  });
 }
-
-process.on('exit', function() {
-  const leaked = leakedGlobals();
-  if (leaked.length > 0) {
-    assert.fail(`Unexpected global(s) found: ${leaked.join(', ')}`);
-  }
-});
 
 const mustCallChecks = [];
 
@@ -524,7 +509,11 @@ function _expectWarning(name, expected, code) {
   return mustCall((warning) => {
     const [ message, code ] = expected.shift();
     assert.strictEqual(warning.name, name);
-    assert.strictEqual(warning.message, message);
+    if (typeof message === 'string') {
+      assert.strictEqual(warning.message, message);
+    } else {
+      assert(message.test(warning.message));
+    }
     assert.strictEqual(warning.code, code);
   }, expected.length);
 }
@@ -821,7 +810,7 @@ module.exports = {
     if (opensslCli !== null) return opensslCli;
 
     if (process.config.variables.node_shared_openssl) {
-      // use external command
+      // Use external command
       opensslCli = 'openssl';
     } else {
       // Use command built from sources included in Node.js repository

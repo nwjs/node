@@ -22,6 +22,9 @@ class SourcePosition;
 namespace compiler {
 
 class Graph;
+class Instruction;
+class InstructionBlock;
+class InstructionOperand;
 class InstructionSequence;
 class NodeOrigin;
 class NodeOriginTable;
@@ -31,7 +34,12 @@ class SourcePositionTable;
 
 struct TurboJsonFile : public std::ofstream {
   TurboJsonFile(OptimizedCompilationInfo* info, std::ios_base::openmode mode);
-  ~TurboJsonFile();
+  ~TurboJsonFile() override;
+};
+
+struct TurboCfgFile : public std::ofstream {
+  explicit TurboCfgFile(Isolate* isolate = nullptr);
+  ~TurboCfgFile() override;
 };
 
 struct SourcePositionAsJSON {
@@ -146,6 +154,32 @@ std::ostream& operator<<(std::ostream& os, const AsC1VCompilation& ac);
 std::ostream& operator<<(std::ostream& os, const AsC1V& ac);
 std::ostream& operator<<(std::ostream& os,
                          const AsC1VRegisterAllocationData& ac);
+
+struct InstructionOperandAsJSON {
+  const InstructionOperand* op_;
+  const InstructionSequence* code_;
+};
+
+std::ostream& operator<<(std::ostream& os, const InstructionOperandAsJSON& o);
+
+struct InstructionAsJSON {
+  int index_;
+  const Instruction* instr_;
+  const InstructionSequence* code_;
+};
+std::ostream& operator<<(std::ostream& os, const InstructionAsJSON& i);
+
+struct InstructionBlockAsJSON {
+  const InstructionBlock* block_;
+  const InstructionSequence* code_;
+};
+
+std::ostream& operator<<(std::ostream& os, const InstructionBlockAsJSON& b);
+
+struct InstructionSequenceAsJSON {
+  const InstructionSequence* sequence_;
+};
+std::ostream& operator<<(std::ostream& os, const InstructionSequenceAsJSON& s);
 
 }  // namespace compiler
 }  // namespace internal

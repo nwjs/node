@@ -25,7 +25,7 @@ namespace internal {
   V(BigUint64, biguint64, BIGUINT64, uint64_t)           \
   V(BigInt64, bigint64, BIGINT64, int64_t)
 
-enum ElementsKind {
+enum ElementsKind : uint8_t {
   // The "fast" kind for elements that only contain SMI values. Must be first
   // to make it possible to efficiently check maps for this kind.
   PACKED_SMI_ELEMENTS,
@@ -68,15 +68,22 @@ enum ElementsKind {
   LAST_FAST_ELEMENTS_KIND = HOLEY_DOUBLE_ELEMENTS,
   FIRST_FIXED_TYPED_ARRAY_ELEMENTS_KIND = UINT8_ELEMENTS,
   LAST_FIXED_TYPED_ARRAY_ELEMENTS_KIND = BIGINT64_ELEMENTS,
-  TERMINAL_FAST_ELEMENTS_KIND = HOLEY_ELEMENTS
+  TERMINAL_FAST_ELEMENTS_KIND = HOLEY_ELEMENTS,
+
+// Alias for kSystemPointerSize-sized elements
+#ifdef V8_COMPRESS_POINTERS
+  SYSTEM_POINTER_ELEMENTS = PACKED_DOUBLE_ELEMENTS,
+#else
+  SYSTEM_POINTER_ELEMENTS = PACKED_ELEMENTS,
+#endif
 };
 
-const int kElementsKindCount = LAST_ELEMENTS_KIND - FIRST_ELEMENTS_KIND + 1;
-const int kFastElementsKindCount =
+constexpr int kElementsKindCount = LAST_ELEMENTS_KIND - FIRST_ELEMENTS_KIND + 1;
+constexpr int kFastElementsKindCount =
     LAST_FAST_ELEMENTS_KIND - FIRST_FAST_ELEMENTS_KIND + 1;
 
 // The number to add to a packed elements kind to reach a holey elements kind
-const int kFastElementsKindPackedToHoley =
+constexpr int kFastElementsKindPackedToHoley =
     HOLEY_SMI_ELEMENTS - PACKED_SMI_ELEMENTS;
 
 int ElementsKindToShiftSize(ElementsKind elements_kind);

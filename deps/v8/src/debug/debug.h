@@ -7,27 +7,20 @@
 
 #include <vector>
 
-#include "src/allocation.h"
-#include "src/base/atomicops.h"
-#include "src/base/hashmap.h"
-#include "src/base/platform/platform.h"
 #include "src/debug/debug-interface.h"
 #include "src/debug/interface-types.h"
-#include "src/execution.h"
-#include "src/flags.h"
 #include "src/frames.h"
 #include "src/globals.h"
-#include "src/heap/factory.h"
+#include "src/handles.h"
+#include "src/isolate.h"
 #include "src/objects/debug-objects.h"
-#include "src/runtime/runtime.h"
 #include "src/source-position-table.h"
-#include "src/string-stream.h"
-#include "src/v8threads.h"
 
 namespace v8 {
 namespace internal {
 
 // Forward declarations.
+class AbstractCode;
 class DebugScope;
 class JSGeneratorObject;
 
@@ -92,7 +85,7 @@ class BreakLocation {
 
   debug::BreakLocationType type() const;
 
-  JSGeneratorObject* GetGeneratorObjectForSuspendedFrame(
+  JSGeneratorObject GetGeneratorObjectForSuspendedFrame(
       JavaScriptFrame* frame) const;
 
  private:
@@ -170,7 +163,7 @@ class BreakIterator {
 // weak handles to avoid a debug info object to keep a function alive.
 class DebugInfoListNode {
  public:
-  DebugInfoListNode(Isolate* isolate, DebugInfo* debug_info);
+  DebugInfoListNode(Isolate* isolate, DebugInfo debug_info);
   ~DebugInfoListNode();
 
   DebugInfoListNode* next() { return next_; }
@@ -179,7 +172,7 @@ class DebugInfoListNode {
 
  private:
   // Global (weak) handle to the debug info object.
-  DebugInfo** debug_info_;
+  Address* debug_info_;
 
   // Next pointer for linked list.
   DebugInfoListNode* next_;
@@ -269,6 +262,8 @@ class Debug {
                               int end_position, bool restrict_to_function,
                               std::vector<BreakLocation>* locations);
 
+  MaybeHandle<JSArray> GetPrivateFields(Handle<JSReceiver> receiver);
+
   bool IsBlackboxed(Handle<SharedFunctionInfo> shared);
 
   bool CanBreakAtEntry(Handle<SharedFunctionInfo> shared);
@@ -326,7 +321,11 @@ class Debug {
 
   bool PerformSideEffectCheck(Handle<JSFunction> function,
                               Handle<Object> receiver);
-  bool PerformSideEffectCheckForCallback(Handle<Object> callback_info);
+
+  enum AccessorKind { kNotAccessor, kGetter, kSetter };
+  bool PerformSideEffectCheckForCallback(Handle<Object> callback_info,
+                                         Handle<Object> receiver,
+                                         AccessorKind accessor_kind);
   bool PerformSideEffectCheckAtBytecode(InterpretedFrame* frame);
   bool PerformSideEffectCheckForObject(Handle<Object> object);
 
@@ -345,8 +344,8 @@ class Debug {
   StackFrame::Id break_frame_id() { return thread_local_.break_frame_id_; }
 
   Handle<Object> return_value_handle();
-  Object* return_value() { return thread_local_.return_value_; }
-  void set_return_value(Object* value) { thread_local_.return_value_ = value; }
+  Object return_value() { return thread_local_.return_value_; }
+  void set_return_value(Object value) { thread_local_.return_value_ = value; }
 
   // Support for embedding into generated code.
   Address is_active_address() {
@@ -363,6 +362,9 @@ class Debug {
 
   Address restart_fp_address() {
     return reinterpret_cast<Address>(&thread_local_.restart_fp_);
+  }
+  bool will_restart() const {
+    return thread_local_.restart_fp_ != kNullAddress;
   }
 
   StepAction last_step_action() { return thread_local_.last_step_action_; }
@@ -406,7 +408,8 @@ class Debug {
 
   bool IsExceptionBlackboxed(bool uncaught);
 
-  void OnException(Handle<Object> exception, Handle<Object> promise);
+  void OnException(Handle<Object> exception, Handle<Object> promise,
+                   v8::debug::ExceptionType exception_type);
 
   void ProcessCompileEvent(bool has_compile_error, Handle<Script> script);
 
@@ -447,7 +450,7 @@ class Debug {
 
   // Wraps logic for clearing and maybe freeing all debug infos.
   typedef std::function<void(Handle<DebugInfo>)> DebugInfoClearFunction;
-  void ClearAllDebugInfos(DebugInfoClearFunction clear_function);
+  void ClearAllDebugInfos(const DebugInfoClearFunction& clear_function);
 
   void FindDebugInfo(Handle<DebugInfo> debug_info, DebugInfoListNode** prev,
                      DebugInfoListNode** curr);
@@ -501,7 +504,7 @@ class Debug {
 
     // If set, next PrepareStepIn will ignore this function until stepped into
     // another function, at which point this will be cleared.
-    Object* ignore_step_into_function_;
+    Object ignore_step_into_function_;
 
     // If set then we need to repeat StepOut action at return.
     bool fast_forward_to_return_;
@@ -516,10 +519,10 @@ class Debug {
     int target_frame_count_;
 
     // Value of the accumulator at the point of entering the debugger.
-    Object* return_value_;
+    Object return_value_;
 
     // The suspended generator object to track when stepping.
-    Object* suspended_generator_;
+    Object suspended_generator_;
 
     // The new frame pointer to drop to when restarting a frame.
     Address restart_fp_;
@@ -551,7 +554,7 @@ class Debug {
 
 // This scope is used to load and enter the debug context and create a new
 // break state.  Leaving the scope will restore the previous state.
-class DebugScope BASE_EMBEDDED {
+class DebugScope {
  public:
   explicit DebugScope(Debug* debug);
   ~DebugScope();
@@ -580,7 +583,7 @@ class ReturnValueScope {
 };
 
 // Stack allocated class for disabling break.
-class DisableBreak BASE_EMBEDDED {
+class DisableBreak {
  public:
   explicit DisableBreak(Debug* debug, bool disable = true)
       : debug_(debug), previous_break_disabled_(debug->break_disabled_) {
@@ -596,8 +599,7 @@ class DisableBreak BASE_EMBEDDED {
   DISALLOW_COPY_AND_ASSIGN(DisableBreak);
 };
 
-
-class SuppressDebug BASE_EMBEDDED {
+class SuppressDebug {
  public:
   explicit SuppressDebug(Debug* debug)
       : debug_(debug), old_state_(debug->is_suppressed_) {

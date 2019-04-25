@@ -179,12 +179,13 @@ function testError() {
 
       // The sync error, with individual property echoes
       'Thrown:',
-      /^{ Error: ENOENT: no such file or directory, scandir '.*nonexistent.*'/,
+      /^Error: ENOENT: no such file or directory, scandir '.*nonexistent\?'/,
       /Object\.readdirSync/,
       /^  errno: -(2|4058),$/,
       "  syscall: 'scandir',",
       "  code: 'ENOENT',",
-      "  path: '/nonexistent?' }",
+      "  path: '/nonexistent?'",
+      '}',
       "'ENOENT'",
       "'scandir'",
 
@@ -195,9 +196,6 @@ function testError() {
       // The message from the original throw
       'Thrown:',
       'Error: baz',
-      /setImmediate/,
-      /^    at/,
-      /^    at/,
     ];
     for (const line of lines) {
       const expected = expectedLines.shift();

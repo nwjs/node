@@ -4,7 +4,6 @@
 
 // Flags: --allow-natives-syntax
 
-load('test/mjsunit/wasm/wasm-constants.js');
 load('test/mjsunit/wasm/wasm-module-builder.js');
 
 // The number of locals must be greater than the constant defined here:
@@ -60,7 +59,7 @@ let worker_onmessage = function(msg) {
 }
 let workerScript = "onmessage = " + worker_onmessage.toString();
 
-let worker = new Worker(workerScript);
+let worker = new Worker(workerScript, {type: 'string'});
 worker.postMessage({serialized_m1, m1_bytes});
 
 // Wait for worker to finish.

@@ -189,16 +189,13 @@ class PromiseWrap : public AsyncWrap {
   SET_MEMORY_INFO_NAME(PromiseWrap)
   SET_SELF_SIZE(PromiseWrap)
 
-  static constexpr int kPromiseField = 1;
-  static constexpr int kIsChainedPromiseField = 2;
-  static constexpr int kInternalFieldCount = 3;
+  static constexpr int kIsChainedPromiseField = 1;
+  static constexpr int kInternalFieldCount = 2;
 
   static PromiseWrap* New(Environment* env,
                           Local<Promise> promise,
                           PromiseWrap* parent_wrap,
                           bool silent);
-  static void GetPromise(Local<String> property,
-                         const PropertyCallbackInfo<Value>& info);
   static void getIsChainedPromise(Local<String> property,
                                   const PropertyCallbackInfo<Value>& info);
 };
@@ -210,18 +207,12 @@ PromiseWrap* PromiseWrap::New(Environment* env,
   Local<Object> obj;
   if (!env->promise_wrap_template()->NewInstance(env->context()).ToLocal(&obj))
     return nullptr;
-  obj->SetInternalField(PromiseWrap::kPromiseField, promise);
   obj->SetInternalField(PromiseWrap::kIsChainedPromiseField,
                         parent_wrap != nullptr ? v8::True(env->isolate())
                                                : v8::False(env->isolate()));
   CHECK_NULL(promise->GetAlignedPointerFromInternalField(0));
   promise->SetInternalField(0, obj);
   return new PromiseWrap(env, obj, silent);
-}
-
-void PromiseWrap::GetPromise(Local<String> property,
-                             const PropertyCallbackInfo<Value>& info) {
-  info.GetReturnValue().Set(info.Holder()->GetInternalField(kPromiseField));
 }
 
 void PromiseWrap::getIsChainedPromise(Local<String> property,
@@ -241,8 +232,14 @@ static PromiseWrap* extractPromiseWrap(Local<Promise> promise) {
 }
 
 static void PromiseHook(PromiseHookType type, Local<Promise> promise,
-                        Local<Value> parent, void* arg) {
-  Environment* env = static_cast<Environment*>(arg);
+                        Local<Value> parent) {
+  Local<Context> context = promise->CreationContext();
+
+  Environment* env = Environment::GetCurrent(context);
+  if (env == nullptr) return;
+  TraceEventScope trace_scope(TRACING_CATEGORY_NODE1(environment),
+                              "EnvPromiseHook", env);
+
   PromiseWrap* wrap = extractPromiseWrap(promise);
   if (type == PromiseHookType::kInit || wrap == nullptr) {
     bool silent = type != PromiseHookType::kInit;
@@ -324,9 +321,6 @@ static void SetupHooks(const FunctionCallbackInfo<Value>& args) {
     promise_wrap_template->SetInternalFieldCount(
         PromiseWrap::kInternalFieldCount);
     promise_wrap_template->SetAccessor(
-        FIXED_ONE_BYTE_STRING(env->isolate(), "promise"),
-        PromiseWrap::GetPromise);
-    promise_wrap_template->SetAccessor(
         FIXED_ONE_BYTE_STRING(env->isolate(), "isChainedPromise"),
         PromiseWrap::getIsChainedPromise);
     env->set_promise_wrap_template(promise_wrap_template);
@@ -335,20 +329,22 @@ static void SetupHooks(const FunctionCallbackInfo<Value>& args) {
 
 
 static void EnablePromiseHook(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-  env->AddPromiseHook(PromiseHook, static_cast<void*>(env));
+  args.GetIsolate()->SetPromiseHook(PromiseHook);
 }
 
 
 static void DisablePromiseHook(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+  Isolate* isolate = args.GetIsolate();
 
   // Delay the call to `RemovePromiseHook` because we might currently be
   // between the `before` and `after` calls of a Promise.
-  env->isolate()->EnqueueMicrotask([](void* data) {
-    Environment* env = static_cast<Environment*>(data);
-    env->RemovePromiseHook(PromiseHook, data);
-  }, static_cast<void*>(env));
+  isolate->EnqueueMicrotask([](void* data) {
+    // The per-Isolate API provides no way of knowing whether there are multiple
+    // users of the PromiseHook. That hopefully goes away when V8 introduces
+    // a per-context API.
+    Isolate* isolate = static_cast<Isolate*>(data);
+    isolate->SetPromiseHook(nullptr);
+  }, static_cast<void*>(isolate));
 }
 
 
@@ -497,11 +493,11 @@ void AsyncWrap::Initialize(Local<Object> target,
 
   target->Set(context,
               env->async_ids_stack_string(),
-              env->async_hooks()->async_ids_stack().GetJSArray()).FromJust();
+              env->async_hooks()->async_ids_stack().GetJSArray()).Check();
 
   target->Set(context,
               FIXED_ONE_BYTE_STRING(env->isolate(), "owner_symbol"),
-              env->owner_symbol()).FromJust();
+              env->owner_symbol()).Check();
 
   Local<Object> constants = Object::New(isolate);
 #define SET_HOOKS_CONSTANT(name)                                              \
@@ -552,7 +548,7 @@ void AsyncWrap::Initialize(Local<Object> target,
     instance_template->SetInternalFieldCount(1);
     auto function =
         function_template->GetFunction(env->context()).ToLocalChecked();
-    target->Set(env->context(), class_name, function).FromJust();
+    target->Set(env->context(), class_name, function).Check();
     env->set_async_wrap_object_ctor_template(function_template);
   }
 }
@@ -614,11 +610,15 @@ void AsyncWrap::EmitDestroy(Environment* env, double async_id) {
   env->destroy_async_id_list()->push_back(async_id);
 }
 
+void AsyncWrap::AsyncReset(double execution_async_id, bool silent) {
+  AsyncReset(object(), execution_async_id, silent);
+}
 
 // Generalized call for both the constructor and for handles that are pooled
 // and reused over their lifetime. This way a new uid can be assigned when
 // the resource is pulled out of the pool and put back into use.
-void AsyncWrap::AsyncReset(double execution_async_id, bool silent) {
+void AsyncWrap::AsyncReset(Local<Object> resource, double execution_async_id,
+                           bool silent) {
   if (async_id_ != -1) {
     // This instance was in use before, we have already emitted an init with
     // its previous async_id and need to emit a matching destroy for that
@@ -656,7 +656,7 @@ void AsyncWrap::AsyncReset(double execution_async_id, bool silent) {
 #endif
   if (silent) return;
 
-  EmitAsyncInit(env(), object(),
+  EmitAsyncInit(env(), resource,
                 env()->async_hooks()->provider_string(provider_type()),
                 async_id_, trigger_async_id_);
 }

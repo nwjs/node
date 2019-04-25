@@ -18,21 +18,26 @@
 namespace v8 {
 namespace internal {
 
+OBJECT_CONSTRUCTORS_IMPL(SloppyArgumentsElements, FixedArray)
+OBJECT_CONSTRUCTORS_IMPL(JSArgumentsObject, JSObject)
+OBJECT_CONSTRUCTORS_IMPL(AliasedArgumentsEntry, Struct)
+
 CAST_ACCESSOR(AliasedArgumentsEntry)
-CAST_ACCESSOR(JSArgumentsObject)
 CAST_ACCESSOR(SloppyArgumentsElements)
+CAST_ACCESSOR(JSArgumentsObject)
 
-SMI_ACCESSORS(AliasedArgumentsEntry, aliased_context_slot, kAliasedContextSlot)
+SMI_ACCESSORS(AliasedArgumentsEntry, aliased_context_slot,
+              kAliasedContextSlotOffset)
 
-Context* SloppyArgumentsElements::context() {
+Context SloppyArgumentsElements::context() {
   return Context::cast(get(kContextIndex));
 }
 
-FixedArray* SloppyArgumentsElements::arguments() {
+FixedArray SloppyArgumentsElements::arguments() {
   return FixedArray::cast(get(kArgumentsIndex));
 }
 
-void SloppyArgumentsElements::set_arguments(FixedArray* arguments) {
+void SloppyArgumentsElements::set_arguments(FixedArray arguments) {
   set(kArgumentsIndex, arguments);
 }
 
@@ -40,11 +45,11 @@ uint32_t SloppyArgumentsElements::parameter_map_length() {
   return length() - kParameterMapStart;
 }
 
-Object* SloppyArgumentsElements::get_mapped_entry(uint32_t entry) {
+Object SloppyArgumentsElements::get_mapped_entry(uint32_t entry) {
   return get(entry + kParameterMapStart);
 }
 
-void SloppyArgumentsElements::set_mapped_entry(uint32_t entry, Object* object) {
+void SloppyArgumentsElements::set_mapped_entry(uint32_t entry, Object object) {
   set(entry + kParameterMapStart, object);
 }
 
@@ -55,21 +60,22 @@ void SloppyArgumentsElements::set_mapped_entry(uint32_t entry, Object* object) {
 bool JSSloppyArgumentsObject::GetSloppyArgumentsLength(Isolate* isolate,
                                                        Handle<JSObject> object,
                                                        int* out) {
-  Context* context = *isolate->native_context();
-  Map* map = object->map();
+  Context context = *isolate->native_context();
+  Map map = object->map();
   if (map != context->sloppy_arguments_map() &&
       map != context->strict_arguments_map() &&
       map != context->fast_aliased_arguments_map()) {
     return false;
   }
   DCHECK(object->HasFastElements() || object->HasFastArgumentsElements());
-  Object* len_obj = object->InObjectPropertyAt(JSArgumentsObject::kLengthIndex);
+  Object len_obj =
+      object->InObjectPropertyAt(JSArgumentsObjectWithLength::kLengthIndex);
   if (!len_obj->IsSmi()) return false;
   *out = Max(0, Smi::ToInt(len_obj));
 
-  FixedArray* parameters = FixedArray::cast(object->elements());
+  FixedArray parameters = FixedArray::cast(object->elements());
   if (object->HasSloppyArgumentsElements()) {
-    FixedArray* arguments = FixedArray::cast(parameters->get(1));
+    FixedArray arguments = FixedArray::cast(parameters->get(1));
     return *out <= arguments->length();
   }
   return *out <= parameters->length();

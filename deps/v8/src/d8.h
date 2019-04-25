@@ -94,7 +94,8 @@ class SourceGroup {
 
   void End(int offset) { end_offset_ = offset; }
 
-  void Execute(Isolate* isolate);
+  // Returns true on success, false if an uncaught exception was thrown.
+  bool Execute(Isolate* isolate);
 
   void StartExecuteInThread();
   void WaitForThread();
@@ -105,9 +106,7 @@ class SourceGroup {
    public:
     explicit IsolateThread(SourceGroup* group);
 
-    virtual void Run() {
-      group_->ExecuteInThread();
-    }
+    void Run() override { group_->ExecuteInThread(); }
 
    private:
     SourceGroup* group_;
@@ -188,7 +187,7 @@ class SerializationData {
   shared_array_buffer_contents() {
     return shared_array_buffer_contents_;
   }
-  const std::vector<WasmCompiledModule::TransferrableModule>&
+  const std::vector<WasmModuleObject::TransferrableModule>&
   transferrable_modules() {
     return transferrable_modules_;
   }
@@ -202,7 +201,7 @@ class SerializationData {
   size_t size_;
   std::vector<ArrayBuffer::Contents> array_buffer_contents_;
   std::vector<SharedArrayBuffer::Contents> shared_array_buffer_contents_;
-  std::vector<WasmCompiledModule::TransferrableModule> transferrable_modules_;
+  std::vector<WasmModuleObject::TransferrableModule> transferrable_modules_;
 
  private:
   friend class Serializer;
@@ -257,7 +256,7 @@ class Worker {
         : base::Thread(base::Thread::Options("WorkerThread")),
           worker_(worker) {}
 
-    virtual void Run() { worker_->ExecuteInThread(); }
+    void Run() override { worker_->ExecuteInThread(); }
 
    private:
     Worker* worker_;
@@ -369,6 +368,7 @@ class ShellOptions {
   bool test_shell;
   bool expected_to_throw;
   bool mock_arraybuffer_allocator;
+  size_t mock_arraybuffer_allocator_limit = 0;
   bool enable_inspector;
   int num_isolates;
   v8::ScriptCompiler::CompileOptions compile_options;
@@ -387,6 +387,9 @@ class ShellOptions {
   bool enable_os_system = false;
   bool quiet_load = false;
   int thread_pool_size = 0;
+  bool stress_delay_tasks = false;
+  std::vector<const char*> arguments;
+  bool include_arguments = true;
 };
 
 class Shell : public i::AllStatic {
@@ -415,7 +418,7 @@ class Shell : public i::AllStatic {
   static void OnExit(Isolate* isolate);
   static void CollectGarbage(Isolate* isolate);
   static bool EmptyMessageQueues(Isolate* isolate);
-  static void CompleteMessageLoop(Isolate* isolate);
+  static bool CompleteMessageLoop(Isolate* isolate);
 
   static std::unique_ptr<SerializationData> SerializeValue(
       Isolate* isolate, Local<Value> value, Local<Value> transfer);
@@ -541,6 +544,7 @@ class Shell : public i::AllStatic {
   static Global<Context> evaluation_context_;
   static base::OnceType quit_once_;
   static Global<Function> stringify_function_;
+  static const char* stringify_source_;
   static CounterMap* counter_map_;
   // We statically allocate a set of local counters to be used if we
   // don't want to store the stats in a memory-mapped file

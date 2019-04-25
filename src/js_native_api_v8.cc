@@ -227,10 +227,11 @@ class Reference : private Finalizer {
   // from one of Unwrap or napi_delete_reference.
   //
   // When it is called from Unwrap or napi_delete_reference we only
-  // want to do the delete if the finalizer has already run,
+  // want to do the delete if the finalizer has already run or
+  // cannot have been queued to run (ie the reference count is > 0),
   // otherwise we may crash when the finalizer does run.
-  // If the finalizer has not already run delay the delete until
-  // the finalizer runs by not doing the delete
+  // If the finalizer may have been queued and has not already run
+  // delay the delete until the finalizer runs by not doing the delete
   // and setting _delete_self to true so that the finalizer will
   // delete it when it runs.
   //
@@ -238,13 +239,14 @@ class Reference : private Finalizer {
   // the finalizer and _delete_self is set. In this case we
   // know we need to do the deletion so just do it.
   static void Delete(Reference* reference) {
-    if ((reference->_delete_self) || (reference->_finalize_ran)) {
+    if ((reference->RefCount() != 0) ||
+        (reference->_delete_self) ||
+        (reference->_finalize_ran)) {
       delete reference;
     } else {
-      // reduce the reference count to 0 and defer until
-      // finalizer runs
+      // defer until finalizer runs as
+      // it may alread be queued
       reference->_delete_self = true;
-      while (reference->Unref() != 0) {}
     }
   }
 
@@ -1513,7 +1515,6 @@ static inline napi_status set_error_code(napi_env env,
                                          napi_value code,
                                          const char* code_cstring) {
   if ((code != nullptr) || (code_cstring != nullptr)) {
-    v8::Isolate* isolate = env->isolate;
     v8::Local<v8::Context> context = env->context();
     v8::Local<v8::Object> err_object = error.As<v8::Object>();
 
@@ -1529,33 +1530,6 @@ static inline napi_status set_error_code(napi_env env,
     CHECK_NEW_FROM_UTF8(env, code_key, "code");
 
     v8::Maybe<bool> set_maybe = err_object->Set(context, code_key, code_value);
-    RETURN_STATUS_IF_FALSE(env,
-                           set_maybe.FromMaybe(false),
-                           napi_generic_failure);
-
-    // now update the name to be "name [code]" where name is the
-    // original name and code is the code associated with the Error
-    v8::Local<v8::String> name_string;
-    CHECK_NEW_FROM_UTF8(env, name_string, "");
-    v8::Local<v8::Name> name_key;
-    CHECK_NEW_FROM_UTF8(env, name_key, "name");
-
-    auto maybe_name = err_object->Get(context, name_key);
-    if (!maybe_name.IsEmpty()) {
-      v8::Local<v8::Value> name = maybe_name.ToLocalChecked();
-      if (name->IsString()) {
-        name_string =
-            v8::String::Concat(isolate, name_string, name.As<v8::String>());
-      }
-    }
-    name_string = v8::String::Concat(
-        isolate, name_string, NAPI_FIXED_ONE_BYTE_STRING(isolate, " ["));
-    name_string =
-        v8::String::Concat(isolate, name_string, code_value.As<v8::String>());
-    name_string = v8::String::Concat(
-        isolate, name_string, NAPI_FIXED_ONE_BYTE_STRING(isolate, "]"));
-
-    set_maybe = err_object->Set(context, name_key, name_string);
     RETURN_STATUS_IF_FALSE(env,
                            set_maybe.FromMaybe(false),
                            napi_generic_failure);

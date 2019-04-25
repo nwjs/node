@@ -20,6 +20,36 @@
 #define UNIMPLEMENTED_PPC()
 #endif
 
+#if V8_HOST_ARCH_PPC && \
+    (V8_OS_AIX || (V8_TARGET_ARCH_PPC64 && V8_TARGET_BIG_ENDIAN))
+#define ABI_USES_FUNCTION_DESCRIPTORS 1
+#else
+#define ABI_USES_FUNCTION_DESCRIPTORS 0
+#endif
+
+#if !V8_HOST_ARCH_PPC || V8_OS_AIX || V8_TARGET_ARCH_PPC64
+#define ABI_PASSES_HANDLES_IN_REGS 1
+#else
+#define ABI_PASSES_HANDLES_IN_REGS 0
+#endif
+
+#if !V8_HOST_ARCH_PPC || !V8_TARGET_ARCH_PPC64 || V8_TARGET_LITTLE_ENDIAN
+#define ABI_RETURNS_OBJECT_PAIRS_IN_REGS 1
+#else
+#define ABI_RETURNS_OBJECT_PAIRS_IN_REGS 0
+#endif
+
+#if !V8_HOST_ARCH_PPC || (V8_TARGET_ARCH_PPC64 && V8_TARGET_LITTLE_ENDIAN)
+#define ABI_CALL_VIA_IP 1
+#else
+#define ABI_CALL_VIA_IP 0
+#endif
+
+#if !V8_HOST_ARCH_PPC || V8_OS_AIX || V8_TARGET_ARCH_PPC64
+#define ABI_TOC_REGISTER 2
+#else
+#define ABI_TOC_REGISTER 13
+#endif
 namespace v8 {
 namespace internal {
 
@@ -1201,13 +1231,15 @@ typedef uint32_t Instr;
   /* Compare Logical */             \
   V(cmpl, CMPL, 0x7C000040)
 
-#define PPC_X_OPCODE_EH_S_FORM_LIST(V)              \
-  /* Store Byte Conditional Indexed */              \
-  V(stbcx, STBCX, 0x7C00056D)                       \
-  /* Store Halfword Conditional Indexed Xform */    \
-  V(sthcx, STHCX, 0x7C0005AD)                       \
-  /* Store Word Conditional Indexed & record CR0 */ \
-  V(stwcx, STWCX, 0x7C00012D)
+#define PPC_X_OPCODE_EH_S_FORM_LIST(V)                    \
+  /* Store Byte Conditional Indexed */                    \
+  V(stbcx, STBCX, 0x7C00056D)                             \
+  /* Store Halfword Conditional Indexed Xform */          \
+  V(sthcx, STHCX, 0x7C0005AD)                             \
+  /* Store Word Conditional Indexed & record CR0 */       \
+  V(stwcx, STWCX, 0x7C00012D)                             \
+  /* Store Doubleword Conditional Indexed & record CR0 */ \
+  V(stdcx, STDCX, 0x7C0001AD)
 
 #define PPC_X_OPCODE_EH_L_FORM_LIST(V)          \
   /* Load Byte And Reserve Indexed */           \
@@ -1215,15 +1247,15 @@ typedef uint32_t Instr;
   /* Load Halfword And Reserve Indexed Xform */ \
   V(lharx, LHARX, 0x7C0000E8)                   \
   /* Load Word and Reserve Indexed */           \
-  V(lwarx, LWARX, 0x7C000028)
+  V(lwarx, LWARX, 0x7C000028)                   \
+  /* Load Doubleword And Reserve Indexed */     \
+  V(ldarx, LDARX, 0x7C0000A8)
 
 #define PPC_X_OPCODE_UNUSED_LIST(V)                                            \
   /* Bit Permute Doubleword */                                                 \
   V(bpermd, BPERMD, 0x7C0001F8)                                                \
   /* Extend Sign Word */                                                       \
   V(extsw, EXTSW, 0x7C0007B4)                                                  \
-  /* Load Doubleword And Reserve Indexed */                                    \
-  V(ldarx, LDARX, 0x7C0000A8)                                                  \
   /* Load Word Algebraic with Update Indexed */                                \
   V(lwaux, LWAUX, 0x7C0002EA)                                                  \
   /* Load Word Algebraic Indexed */                                            \
@@ -1232,8 +1264,6 @@ typedef uint32_t Instr;
   V(prtyd, PRTYD, 0x7C000174)                                                  \
   /* Store Doubleword Byte-Reverse Indexed */                                  \
   V(stdbrx, STDBRX, 0x7C000528)                                                \
-  /* Store Doubleword Conditional Indexed & record CR0 */                      \
-  V(stdcx, STDCX, 0x7C0001AD)                                                  \
   /* Trap Doubleword */                                                        \
   V(td, TD, 0x7C000088)                                                        \
   /* Branch Conditional to Branch Target Address Register */                   \
@@ -2799,11 +2829,11 @@ class Instruction {
   inline int RSValue() const { return Bits(25, 21); }
   inline int RTValue() const { return Bits(25, 21); }
   inline int RAValue() const { return Bits(20, 16); }
-  DECLARE_STATIC_ACCESSOR(RAValue);
+  DECLARE_STATIC_ACCESSOR(RAValue)
   inline int RBValue() const { return Bits(15, 11); }
-  DECLARE_STATIC_ACCESSOR(RBValue);
+  DECLARE_STATIC_ACCESSOR(RBValue)
   inline int RCValue() const { return Bits(10, 6); }
-  DECLARE_STATIC_ACCESSOR(RCValue);
+  DECLARE_STATIC_ACCESSOR(RCValue)
 
   inline int OpcodeValue() const { return static_cast<Opcode>(Bits(31, 26)); }
   inline uint32_t OpcodeField() const {

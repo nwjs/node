@@ -59,7 +59,7 @@ class AstRawStringInternalizationKey : public StringTableKey {
   explicit AstRawStringInternalizationKey(const AstRawString* string)
       : StringTableKey(string->hash_field()), string_(string) {}
 
-  bool IsMatch(Object* other) override {
+  bool IsMatch(Object other) override {
     if (string_->is_one_byte())
       return String::cast(other)->IsOneByteEqualTo(string_->literal_bytes_);
     return String::cast(other)->IsTwoByteEqualTo(
@@ -124,6 +124,7 @@ bool AstRawString::Compare(void* a, void* b) {
   DCHECK_EQ(lhs->Hash(), rhs->Hash());
 
   if (lhs->length() != rhs->length()) return false;
+  if (lhs->length() == 0) return true;
   const unsigned char* l = lhs->raw_data();
   const unsigned char* r = rhs->raw_data();
   size_t length = rhs->length();
@@ -208,9 +209,9 @@ AstStringConstants::AstStringConstants(Isolate* isolate, uint64_t hash_seed)
 
 AstRawString* AstValueFactory::GetOneByteStringInternal(
     Vector<const uint8_t> literal) {
-  if (literal.length() == 1 && IsInRange(literal[0], 'a', 'z')) {
-    int key = literal[0] - 'a';
-    if (one_character_strings_[key] == nullptr) {
+  if (literal.length() == 1 && literal[0] < kMaxOneCharStringValue) {
+    int key = literal[0];
+    if (V8_UNLIKELY(one_character_strings_[key] == nullptr)) {
       uint32_t hash_field = StringHasher::HashSequentialString<uint8_t>(
           literal.start(), literal.length(), hash_seed_);
       one_character_strings_[key] = GetString(hash_field, true, literal);
@@ -232,13 +233,21 @@ AstRawString* AstValueFactory::GetTwoByteStringInternal(
 const AstRawString* AstValueFactory::GetString(Handle<String> literal) {
   AstRawString* result = nullptr;
   DisallowHeapAllocation no_gc;
-  String::FlatContent content = literal->GetFlatContent();
+  String::FlatContent content = literal->GetFlatContent(no_gc);
   if (content.IsOneByte()) {
     result = GetOneByteStringInternal(content.ToOneByteVector());
   } else {
     DCHECK(content.IsTwoByte());
     result = GetTwoByteStringInternal(content.ToUC16Vector());
   }
+  return result;
+}
+
+const AstRawString* AstValueFactory::CloneFromOtherFactory(
+    const AstRawString* raw_string) {
+  const AstRawString* result = GetString(
+      raw_string->hash_field(), raw_string->is_one_byte(),
+      Vector<const byte>(raw_string->raw_data(), raw_string->byte_length()));
   return result;
 }
 

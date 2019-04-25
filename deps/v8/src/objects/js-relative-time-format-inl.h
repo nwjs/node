@@ -18,12 +18,13 @@
 namespace v8 {
 namespace internal {
 
+OBJECT_CONSTRUCTORS_IMPL(JSRelativeTimeFormat, JSObject)
+
 // Base relative time format accessors.
 ACCESSORS(JSRelativeTimeFormat, locale, String, kLocaleOffset)
-ACCESSORS(JSRelativeTimeFormat, formatter, Foreign, kFormatterOffset)
+ACCESSORS(JSRelativeTimeFormat, icu_formatter,
+          Managed<icu::RelativeDateTimeFormatter>, kICUFormatterOffset)
 SMI_ACCESSORS(JSRelativeTimeFormat, flags, kFlagsOffset)
-
-// TODO(ftang): Use bit field accessor for style and numeric later.
 
 inline void JSRelativeTimeFormat::set_style(Style style) {
   DCHECK_GT(Style::COUNT, style);
@@ -47,7 +48,7 @@ inline JSRelativeTimeFormat::Numeric JSRelativeTimeFormat::numeric() const {
   return NumericBits::decode(flags());
 }
 
-CAST_ACCESSOR(JSRelativeTimeFormat);
+CAST_ACCESSOR(JSRelativeTimeFormat)
 
 }  // namespace internal
 }  // namespace v8

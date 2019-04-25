@@ -130,6 +130,7 @@ class SecureContext : public BaseObject {
   static void AddCACert(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void AddCRL(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void AddRootCerts(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetCipherSuites(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetCiphers(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetECDHCurve(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetDHParam(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -138,6 +139,10 @@ class SecureContext : public BaseObject {
       const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetSessionTimeout(
       const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetMinProto(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetMaxProto(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetMinProto(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetMaxProto(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Close(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void LoadPKCS12(const v8::FunctionCallbackInfo<v8::Value>& args);
 #ifndef OPENSSL_NO_ENGINE
@@ -264,7 +269,7 @@ class SSLWrap {
   static void LoadSession(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void IsSessionReused(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void VerifyError(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void GetCurrentCipher(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetCipher(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void EndParser(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void CertCbDone(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Renegotiate(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -448,7 +453,7 @@ class KeyObject : public BaseObject {
 
   static void GetAsymmetricKeyType(
       const v8::FunctionCallbackInfo<v8::Value>& args);
-  v8::Local<v8::String> GetAsymmetricKeyType() const;
+  v8::Local<v8::Value> GetAsymmetricKeyType() const;
 
   static void GetSymmetricKeySize(
       const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -665,7 +670,7 @@ class Sign : public SignBase {
   SignResult SignFinal(
       const ManagedEVPPKey& pkey,
       int padding,
-      int saltlen);
+      const v8::Maybe<int>& saltlen);
 
  protected:
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -686,7 +691,7 @@ class Verify : public SignBase {
                     const char* sig,
                     int siglen,
                     int padding,
-                    int saltlen,
+                    const v8::Maybe<int>& saltlen,
                     bool* verify_result);
 
  protected:

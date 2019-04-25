@@ -88,6 +88,8 @@ class TLSWrap : public AsyncWrap,
   SET_MEMORY_INFO_NAME(TLSWrap)
   SET_SELF_SIZE(TLSWrap)
 
+  std::string diagnostic_name() const override;
+
  protected:
   // Alternative to StreamListener::stream(), that returns a StreamBase instead
   // of a StreamResource.
@@ -172,6 +174,7 @@ class TLSWrap : public AsyncWrap,
   std::vector<uv_buf_t> pending_cleartext_input_;
   size_t write_size_ = 0;
   WriteWrap* current_write_ = nullptr;
+  bool in_dowrite_ = false;
   WriteWrap* current_empty_write_ = nullptr;
   bool write_callback_scheduled_ = false;
   bool started_ = false;

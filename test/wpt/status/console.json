@@ -1,8 +1,5 @@
 {
   "idlharness.any.js": {
     "fail": ".table, .dir and .timeLog parameter lengths are wrong"
-  },
-  "console-is-a-namespace.any.js": {
-    "fail": "The [[Prototype]]'s [[Prototype]] must be %ObjectPrototype%"
   }
 }

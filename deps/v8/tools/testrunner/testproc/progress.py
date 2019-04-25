@@ -2,6 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+# for py2/py3 compatibility
+from __future__ import print_function
+
 import json
 import os
 import sys
@@ -16,29 +19,22 @@ def print_failure_header(test):
     negative_marker = '[negative] '
   else:
     negative_marker = ''
-  print "=== %(label)s %(negative)s===" % {
+  print("=== %(label)s %(negative)s===" % {
     'label': test,
     'negative': negative_marker,
-  }
-
-
-class TestsCounter(base.TestProcObserver):
-  def __init__(self):
-    super(TestsCounter, self).__init__()
-    self.total = 0
-
-  def _on_next_test(self, test):
-    self.total += 1
+  })
 
 
 class ResultsTracker(base.TestProcObserver):
-  def __init__(self):
+  """Tracks number of results and stops to run tests if max_failures reached."""
+  def __init__(self, max_failures):
     super(ResultsTracker, self).__init__()
     self._requirement = base.DROP_OUTPUT
 
     self.failed = 0
     self.remaining = 0
     self.total = 0
+    self.max_failures = max_failures
 
   def _on_next_test(self, test):
     self.total += 1
@@ -48,6 +44,9 @@ class ResultsTracker(base.TestProcObserver):
     self.remaining -= 1
     if result.has_unexpected_output:
       self.failed += 1
+      if self.max_failures and self.failed >= self.max_failures:
+        print('>>> Too many failures, exiting...')
+        self.stop()
 
 
 class ProgressIndicator(base.TestProcObserver):
@@ -61,10 +60,6 @@ class SimpleProgressIndicator(ProgressIndicator):
     self._requirement = base.DROP_PASS_OUTPUT
 
     self._failed = []
-    self._total = 0
-
-  def _on_next_test(self, test):
-    self._total += 1
 
   def _on_result_for(self, test, result):
     # TODO(majeski): Support for dummy/grouped results
@@ -73,33 +68,33 @@ class SimpleProgressIndicator(ProgressIndicator):
 
   def finished(self):
     crashed = 0
-    print
+    print()
     for test, result in self._failed:
       print_failure_header(test)
       if result.output.stderr:
-        print "--- stderr ---"
-        print result.output.stderr.strip()
+        print("--- stderr ---")
+        print(result.output.stderr.strip())
       if result.output.stdout:
-        print "--- stdout ---"
-        print result.output.stdout.strip()
-      print "Command: %s" % result.cmd.to_string()
+        print("--- stdout ---")
+        print(result.output.stdout.strip())
+      print("Command: %s" % result.cmd.to_string())
       if result.output.HasCrashed():
-        print "exit code: %d" % result.output.exit_code
-        print "--- CRASHED ---"
+        print("exit code: %d" % result.output.exit_code)
+        print("--- CRASHED ---")
         crashed += 1
       if result.output.HasTimedOut():
-        print "--- TIMEOUT ---"
+        print("--- TIMEOUT ---")
     if len(self._failed) == 0:
-      print "==="
-      print "=== All tests succeeded"
-      print "==="
+      print("===")
+      print("=== All tests succeeded")
+      print("===")
     else:
-      print
-      print "==="
-      print "=== %i tests failed" % len(self._failed)
+      print()
+      print("===")
+      print("=== %i tests failed" % len(self._failed))
       if crashed > 0:
-        print "=== %i tests CRASHED" % crashed
-      print "==="
+        print("=== %i tests CRASHED" % crashed)
+      print("===")
 
 
 class VerboseProgressIndicator(SimpleProgressIndicator):
@@ -108,7 +103,7 @@ class VerboseProgressIndicator(SimpleProgressIndicator):
     self._last_printed_time = time.time()
 
   def _print(self, text):
-    print text
+    print(text)
     sys.stdout.flush()
     self._last_printed_time = time.time()
 
@@ -122,7 +117,9 @@ class VerboseProgressIndicator(SimpleProgressIndicator):
         outcome = 'FAIL'
     else:
       outcome = 'pass'
-    self._print('Done running %s: %s' % (test, outcome))
+
+    self._print('Done running %s %s: %s' % (
+      test, test.variant or 'default', outcome))
 
   def _on_heartbeat(self):
     if time.time() - self._last_printed_time > 30:
@@ -137,6 +134,7 @@ class DotsProgressIndicator(SimpleProgressIndicator):
     self._count = 0
 
   def _on_result_for(self, test, result):
+    super(DotsProgressIndicator, self)._on_result_for(test, result)
     # TODO(majeski): Support for dummy/grouped results
     self._count += 1
     if self._count > 1 and self._count % 50 == 1:
@@ -165,12 +163,11 @@ class CompactProgressIndicator(ProgressIndicator):
     self._last_status_length = 0
     self._start_time = time.time()
 
-    self._total = 0
     self._passed = 0
     self._failed = 0
 
-  def _on_next_test(self, test):
-    self._total += 1
+  def set_test_count(self, test_count):
+    self._total = test_count
 
   def _on_result_for(self, test, result):
     # TODO(majeski): Support for dummy/grouped results
@@ -188,27 +185,27 @@ class CompactProgressIndicator(ProgressIndicator):
       self._clear_line(self._last_status_length)
       print_failure_header(test)
       if len(stdout):
-        print self._templates['stdout'] % stdout
+        print(self._templates['stdout'] % stdout)
       if len(stderr):
-        print self._templates['stderr'] % stderr
-      print "Command: %s" % result.cmd
+        print(self._templates['stderr'] % stderr)
+      print("Command: %s" % result.cmd.to_string(relative=True))
       if output.HasCrashed():
-        print "exit code: %d" % output.exit_code
-        print "--- CRASHED ---"
+        print("exit code: %d" % output.exit_code)
+        print("--- CRASHED ---")
       if output.HasTimedOut():
-        print "--- TIMEOUT ---"
+        print("--- TIMEOUT ---")
 
   def finished(self):
     self._print_progress('Done')
-    print
+    print()
 
   def _print_progress(self, name):
     self._clear_line(self._last_status_length)
     elapsed = time.time() - self._start_time
-    if not self._total:
-      progress = 0
-    else:
+    if self._total:
       progress = (self._passed + self._failed) * 100 // self._total
+    else:
+      progress = 0
     status = self._templates['status_line'] % {
       'passed': self._passed,
       'progress': progress,
@@ -219,7 +216,7 @@ class CompactProgressIndicator(ProgressIndicator):
     }
     status = self._truncate(status, 78)
     self._last_status_length = len(status)
-    print status,
+    print(status, end='')
     sys.stdout.flush()
 
   def _truncate(self, string, length):
@@ -245,7 +242,7 @@ class ColorProgressIndicator(CompactProgressIndicator):
     super(ColorProgressIndicator, self).__init__(templates)
 
   def _clear_line(self, last_length):
-    print "\033[1K\r",
+    print("\033[1K\r", end='')
 
 
 class MonochromeProgressIndicator(CompactProgressIndicator):
@@ -259,7 +256,7 @@ class MonochromeProgressIndicator(CompactProgressIndicator):
     super(MonochromeProgressIndicator, self).__init__(templates)
 
   def _clear_line(self, last_length):
-    print ("\r" + (" " * last_length) + "\r"),
+    print(("\r" + (" " * last_length) + "\r"), end='')
 
 
 class JUnitTestProgressIndicator(ProgressIndicator):
@@ -367,7 +364,7 @@ class JsonTestProgressIndicator(ProgressIndicator):
           float(len(self.tests)))
 
     # Sort tests by duration.
-    self.tests.sort(key=lambda (_, duration, cmd): duration, reverse=True)
+    self.tests.sort(key=lambda __duration_cmd: __duration_cmd[1], reverse=True)
     slowest_tests = [
       {
         "name": str(test),

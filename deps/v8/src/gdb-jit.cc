@@ -14,11 +14,11 @@
 #include "src/frames-inl.h"
 #include "src/frames.h"
 #include "src/global-handles.h"
-#include "src/messages.h"
 #include "src/objects.h"
 #include "src/ostreams.h"
 #include "src/snapshot/natives.h"
 #include "src/splay-tree-inl.h"
+#include "src/vector.h"
 #include "src/zone/zone-chunk-list.h"
 
 namespace v8 {
@@ -41,7 +41,7 @@ typedef ELF DebugObject;
 typedef ELFSection DebugSection;
 #endif
 
-class Writer BASE_EMBEDDED {
+class Writer {
  public:
   explicit Writer(DebugObject* debug_object)
       : debug_object_(debug_object),
@@ -177,7 +177,7 @@ class ELFStringTable;
 template<typename THeader>
 class DebugSectionBase : public ZoneObject {
  public:
-  virtual ~DebugSectionBase() { }
+  virtual ~DebugSectionBase() = default;
 
   virtual void WriteBody(Writer::Slot<THeader> header, Writer* writer) {
     uintptr_t start = writer->position();
@@ -238,7 +238,7 @@ class MachOSection : public DebugSectionBase<MachOSectionHeader> {
     }
   }
 
-  virtual ~MachOSection() { }
+  ~MachOSection() override = default;
 
   virtual void PopulateHeader(Writer::Slot<Header> header) {
     header->addr = 0;
@@ -314,11 +314,11 @@ class ELFSection : public DebugSectionBase<ELFSectionHeader> {
   ELFSection(const char* name, Type type, uintptr_t align)
       : name_(name), type_(type), align_(align) { }
 
-  virtual ~ELFSection() { }
+  ~ELFSection() override = default;
 
   void PopulateHeader(Writer::Slot<Header> header, ELFStringTable* strtab);
 
-  virtual void WriteBody(Writer::Slot<Header> header, Writer* w) {
+  void WriteBody(Writer::Slot<Header> header, Writer* w) override {
     uintptr_t start = w->position();
     if (WriteBodyInternal(w)) {
       uintptr_t end = w->position();
@@ -327,9 +327,7 @@ class ELFSection : public DebugSectionBase<ELFSectionHeader> {
     }
   }
 
-  virtual bool WriteBodyInternal(Writer* w) {
-    return false;
-  }
+  bool WriteBodyInternal(Writer* w) override { return false; }
 
   uint16_t index() const { return index_; }
   void set_index(uint16_t index) { index_ = index; }
@@ -396,7 +394,7 @@ class FullHeaderELFSection : public ELFSection {
         flags_(flags) { }
 
  protected:
-  virtual void PopulateHeader(Writer::Slot<Header> header) {
+  void PopulateHeader(Writer::Slot<Header> header) override {
     ELFSection::PopulateHeader(header);
     header->address = addr_;
     header->offset = offset_;
@@ -438,7 +436,7 @@ class ELFStringTable : public ELFSection {
 
   void DetachWriter() { writer_ = nullptr; }
 
-  virtual void WriteBody(Writer::Slot<Header> header, Writer* w) {
+  void WriteBody(Writer::Slot<Header> header, Writer* w) override {
     DCHECK_NULL(writer_);
     header->offset = offset_;
     header->size = size_;
@@ -472,7 +470,7 @@ void ELFSection::PopulateHeader(Writer::Slot<ELFSection::Header> header,
 
 
 #if defined(__MACH_O)
-class MachO BASE_EMBEDDED {
+class MachO {
  public:
   explicit MachO(Zone* zone) : sections_(zone) {}
 
@@ -604,7 +602,7 @@ class MachO BASE_EMBEDDED {
 
 
 #if defined(__ELF)
-class ELF BASE_EMBEDDED {
+class ELF {
  public:
   explicit ELF(Zone* zone) : sections_(zone) {
     sections_.push_back(new (zone) ELFSection("", ELFSection::TYPE_NULL, 0));
@@ -647,8 +645,7 @@ class ELF BASE_EMBEDDED {
   void WriteHeader(Writer* w) {
     DCHECK_EQ(w->position(), 0);
     Writer::Slot<ELFHeader> header = w->CreateSlotHere<ELFHeader>();
-#if (V8_TARGET_ARCH_IA32 || V8_TARGET_ARCH_ARM || \
-     (V8_TARGET_ARCH_X64 && V8_TARGET_ARCH_32_BIT))
+#if (V8_TARGET_ARCH_IA32 || V8_TARGET_ARCH_ARM)
     const uint8_t ident[16] = {0x7F, 'E', 'L', 'F', 1, 1, 1, 0,
                                0,    0,   0,   0,   0, 0, 0, 0};
 #elif(V8_TARGET_ARCH_X64 && V8_TARGET_ARCH_64_BIT) || \
@@ -746,8 +743,7 @@ class ELF BASE_EMBEDDED {
   ZoneChunkList<ELFSection*> sections_;
 };
 
-
-class ELFSymbol BASE_EMBEDDED {
+class ELFSymbol {
  public:
   enum Type {
     TYPE_NOTYPE = 0,
@@ -785,7 +781,6 @@ class ELFSymbol BASE_EMBEDDED {
     return static_cast<Binding>(info >> 4);
   }
 #if (V8_TARGET_ARCH_IA32 || V8_TARGET_ARCH_ARM ||     \
-     (V8_TARGET_ARCH_X64 && V8_TARGET_ARCH_32_BIT) || \
      (V8_TARGET_ARCH_S390 && V8_TARGET_ARCH_32_BIT))
   struct SerializedLayout {
     SerializedLayout(uint32_t name,
@@ -862,7 +857,7 @@ class ELFSymbolTable : public ELFSection {
         locals_(zone),
         globals_(zone) {}
 
-  virtual void WriteBody(Writer::Slot<Header> header, Writer* w) {
+  void WriteBody(Writer::Slot<Header> header, Writer* w) override {
     w->Align(header->alignment);
     size_t total_symbols = locals_.size() + globals_.size() + 1;
     header->offset = w->position();
@@ -899,7 +894,7 @@ class ELFSymbolTable : public ELFSection {
   }
 
  protected:
-  virtual void PopulateHeader(Writer::Slot<Header> header) {
+  void PopulateHeader(Writer::Slot<Header> header) override {
     ELFSection::PopulateHeader(header);
     // We are assuming that string table will follow symbol table.
     header->link = index() + 1;
@@ -946,8 +941,7 @@ class LineInfo : public Malloced {
   std::vector<PCInfo> pc_info_;
 };
 
-
-class CodeDescription BASE_EMBEDDED {
+class CodeDescription {
  public:
 #if V8_TARGET_ARCH_X64
   enum StackState {
@@ -958,7 +952,7 @@ class CodeDescription BASE_EMBEDDED {
   };
 #endif
 
-  CodeDescription(const char* name, Code* code, SharedFunctionInfo* shared,
+  CodeDescription(const char* name, Code code, SharedFunctionInfo shared,
                   LineInfo* lineinfo)
       : name_(name), code_(code), shared_info_(shared), lineinfo_(lineinfo) {}
 
@@ -973,9 +967,9 @@ class CodeDescription BASE_EMBEDDED {
     return kind == Code::OPTIMIZED_FUNCTION;
   }
 
-  bool has_scope_info() const { return shared_info_ != nullptr; }
+  bool has_scope_info() const { return !shared_info_.is_null(); }
 
-  ScopeInfo* scope_info() const {
+  ScopeInfo scope_info() const {
     DCHECK(has_scope_info());
     return shared_info_->scope_info();
   }
@@ -993,10 +987,10 @@ class CodeDescription BASE_EMBEDDED {
   }
 
   bool has_script() {
-    return shared_info_ != nullptr && shared_info_->script()->IsScript();
+    return !shared_info_.is_null() && shared_info_->script()->IsScript();
   }
 
-  Script* script() { return Script::cast(shared_info_->script()); }
+  Script script() { return Script::cast(shared_info_->script()); }
 
   bool IsLineInfoAvailable() { return lineinfo_ != nullptr; }
 
@@ -1013,7 +1007,7 @@ class CodeDescription BASE_EMBEDDED {
 #endif
 
   std::unique_ptr<char[]> GetFilename() {
-    if (shared_info_ != nullptr) {
+    if (!shared_info_.is_null()) {
       return String::cast(script()->name())->ToCString();
     } else {
       std::unique_ptr<char[]> result(new char[1]);
@@ -1023,7 +1017,7 @@ class CodeDescription BASE_EMBEDDED {
   }
 
   int GetScriptLineNumber(int pos) {
-    if (shared_info_ != nullptr) {
+    if (!shared_info_.is_null()) {
       return script()->GetLineNumber(pos) + 1;
     } else {
       return 0;
@@ -1032,8 +1026,8 @@ class CodeDescription BASE_EMBEDDED {
 
  private:
   const char* name_;
-  Code* code_;
-  SharedFunctionInfo* shared_info_;
+  Code code_;
+  SharedFunctionInfo shared_info_;
   LineInfo* lineinfo_;
 #if V8_TARGET_ARCH_X64
   uintptr_t stack_state_start_addresses_[STACK_STATE_MAX];
@@ -1115,7 +1109,7 @@ class DebugInfoSection : public DebugSection {
     DW_ATE_SIGNED = 0x5
   };
 
-  bool WriteBodyInternal(Writer* w) {
+  bool WriteBodyInternal(Writer* w) override {
     uintptr_t cu_start = w->position();
     Writer::Slot<uint32_t> size = w->CreateSlotHere<uint32_t>();
     uintptr_t start = w->position();
@@ -1131,11 +1125,11 @@ class DebugInfoSection : public DebugSection {
 
     uint32_t ty_offset = static_cast<uint32_t>(w->position() - cu_start);
     w->WriteULEB128(3);
-    w->Write<uint8_t>(kPointerSize);
+    w->Write<uint8_t>(kSystemPointerSize);
     w->WriteString("v8value");
 
     if (desc_->has_scope_info()) {
-      ScopeInfo* scope = desc_->scope_info();
+      ScopeInfo scope = desc_->scope_info();
       w->WriteULEB128(2);
       w->WriteString(desc_->name());
       w->Write<intptr_t>(desc_->CodeStart());
@@ -1179,9 +1173,8 @@ class DebugInfoSection : public DebugSection {
         Writer::Slot<uint32_t> block_size = w->CreateSlotHere<uint32_t>();
         uintptr_t block_start = w->position();
         w->Write<uint8_t>(DW_OP_fbreg);
-        w->WriteSLEB128(
-          JavaScriptFrameConstants::kLastParameterOffset +
-              kPointerSize * (params - param - 1));
+        w->WriteSLEB128(JavaScriptFrameConstants::kLastParameterOffset +
+                        kSystemPointerSize * (params - param - 1));
         block_size.set(static_cast<uint32_t>(w->position() - block_start));
       }
 
@@ -1318,7 +1311,7 @@ class DebugAbbrevSection : public DebugSection {
     w->WriteULEB128(0);
   }
 
-  bool WriteBodyInternal(Writer* w) {
+  bool WriteBodyInternal(Writer* w) override {
     int current_abbreviation = 1;
     bool extra_info = desc_->has_scope_info();
     DCHECK(desc_->IsLineInfoAvailable());
@@ -1337,7 +1330,7 @@ class DebugAbbrevSection : public DebugSection {
     w->WriteULEB128(0);
 
     if (extra_info) {
-      ScopeInfo* scope = desc_->scope_info();
+      ScopeInfo scope = desc_->scope_info();
       int params = scope->ParameterCount();
       int context_slots = scope->ContextLocalCount();
       // The real slot ID is internal_slots + context_slot_id.
@@ -1435,7 +1428,7 @@ class DebugLineSection : public DebugSection {
     DW_LNE_DEFINE_FILE = 3
   };
 
-  bool WriteBodyInternal(Writer* w) {
+  bool WriteBodyInternal(Writer* w) override {
     // Write prologue.
     Writer::Slot<uint32_t> total_length = w->CreateSlotHere<uint32_t>();
     uintptr_t start = w->position();
@@ -1571,7 +1564,7 @@ class DebugLineSection : public DebugSection {
 class UnwindInfoSection : public DebugSection {
  public:
   explicit UnwindInfoSection(CodeDescription* desc);
-  virtual bool WriteBodyInternal(Writer* w);
+  bool WriteBodyInternal(Writer* w) override;
 
   int WriteCIE(Writer* w);
   void WriteFDE(Writer* w, int);
@@ -1640,15 +1633,15 @@ class UnwindInfoSection : public DebugSection {
 void UnwindInfoSection::WriteLength(Writer* w,
                                     Writer::Slot<uint32_t>* length_slot,
                                     int initial_position) {
-  uint32_t align = (w->position() - initial_position) % kPointerSize;
+  uint32_t align = (w->position() - initial_position) % kSystemPointerSize;
 
   if (align != 0) {
-    for (uint32_t i = 0; i < (kPointerSize - align); i++) {
+    for (uint32_t i = 0; i < (kSystemPointerSize - align); i++) {
       w->Write<uint8_t>(DW_CFA_NOP);
     }
   }
 
-  DCHECK_EQ((w->position() - initial_position) % kPointerSize, 0);
+  DCHECK_EQ((w->position() - initial_position) % kSystemPointerSize, 0);
   length_slot->set(static_cast<uint32_t>(w->position() - initial_position));
 }
 
@@ -1708,7 +1701,7 @@ void UnwindInfoSection::WriteFDEStateOnEntry(Writer* w) {
   // for the previous function. The previous RBP has not been pushed yet.
   w->Write<uint8_t>(DW_CFA_DEF_CFA_SF);
   w->WriteULEB128(AMD64_RSP);
-  w->WriteSLEB128(-kPointerSize);
+  w->WriteSLEB128(-kSystemPointerSize);
 
   // The RA is stored at location CFA + kCallerPCOffset. This is an invariant,
   // and hence omitted from the next states.
@@ -1770,7 +1763,7 @@ void UnwindInfoSection::WriteFDEStateAfterRBPPop(Writer* w) {
   // The CFA can is now calculated in the same way as in the first state.
   w->Write<uint8_t>(DW_CFA_DEF_CFA_SF);
   w->WriteULEB128(AMD64_RSP);
-  w->WriteSLEB128(-kPointerSize);
+  w->WriteSLEB128(-kSystemPointerSize);
 
   // The RBP
   w->Write<uint8_t>(DW_CFA_OFFSET_EXTENDED);
@@ -1840,10 +1833,10 @@ extern "C" {
   // GDB will inspect contents of this descriptor.
   // Static initialization is necessary to prevent GDB from seeing
   // uninitialized descriptor.
-  JITDescriptor __jit_debug_descriptor = { 1, 0, 0, 0 };
+  JITDescriptor __jit_debug_descriptor = {1, 0, nullptr, nullptr};
 
 #ifdef OBJECT_PRINT
-  void __gdb_print_v8_object(Object* object) {
+  void __gdb_print_v8_object(Object object) {
     StdoutStream os;
     object->Print(os);
     os << std::flush;
@@ -2087,8 +2080,7 @@ static void AddJITCodeEntry(CodeMap* map, const AddressRange& range,
   RegisterCodeEntry(entry);
 }
 
-
-static void AddCode(const char* name, Code* code, SharedFunctionInfo* shared,
+static void AddCode(const char* name, Code code, SharedFunctionInfo shared,
                     LineInfo* lineinfo) {
   DisallowHeapAllocation no_gc;
 
@@ -2125,23 +2117,23 @@ static void AddCode(const char* name, Code* code, SharedFunctionInfo* shared,
   AddJITCodeEntry(code_map, range, entry, should_dump, name_hint);
 }
 
-
 void EventHandler(const v8::JitCodeEvent* event) {
   if (!FLAG_gdbjit) return;
   if (event->code_type != v8::JitCodeEvent::JIT_CODE) return;
-  base::LockGuard<base::Mutex> lock_guard(mutex.Pointer());
+  base::MutexGuard lock_guard(mutex.Pointer());
   switch (event->type) {
     case v8::JitCodeEvent::CODE_ADDED: {
       Address addr = reinterpret_cast<Address>(event->code_start);
-      Code* code = Code::GetCodeFromTargetAddress(addr);
+      Isolate* isolate = reinterpret_cast<Isolate*>(event->isolate);
+      Code code = isolate->heap()->GcSafeFindCodeForInnerPointer(addr);
       LineInfo* lineinfo = GetLineInfo(addr);
       EmbeddedVector<char, 256> buffer;
       StringBuilder builder(buffer.start(), buffer.length());
       builder.AddSubstring(event->name.str, static_cast<int>(event->name.len));
       // It's called UnboundScript in the API but it's a SharedFunctionInfo.
-      SharedFunctionInfo* shared = event->script.IsEmpty()
-                                       ? nullptr
-                                       : *Utils::OpenHandle(*event->script);
+      SharedFunctionInfo shared = event->script.IsEmpty()
+                                      ? SharedFunctionInfo()
+                                      : *Utils::OpenHandle(*event->script);
       AddCode(builder.Finalize(), code, shared, lineinfo);
       break;
     }

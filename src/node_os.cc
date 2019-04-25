@@ -29,7 +29,6 @@
 
 #ifdef __POSIX__
 # include <unistd.h>        // gethostname, sysconf
-# include <sys/utsname.h>
 # include <climits>         // PATH_MAX on Solaris.
 #endif  // __POSIX__
 
@@ -77,21 +76,16 @@ static void GetHostname(const FunctionCallbackInfo<Value>& args) {
 
 static void GetOSType(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
-  const char* rval;
+  uv_utsname_t info;
+  int err = uv_os_uname(&info);
 
-#ifdef __POSIX__
-  struct utsname info;
-  if (uname(&info) < 0) {
+  if (err != 0) {
     CHECK_GE(args.Length(), 1);
-    env->CollectExceptionInfo(args[args.Length() - 1], errno, "uname");
+    env->CollectUVExceptionInfo(args[args.Length() - 1], err, "uv_os_uname");
     return args.GetReturnValue().SetUndefined();
   }
-  rval = info.sysname;
-#else  // __MINGW32__
-  rval = "Windows_NT";
-#endif  // __POSIX__
 
-  args.GetReturnValue().Set(OneByteString(env->isolate(), rval));
+  args.GetReturnValue().Set(OneByteString(env->isolate(), info.sysname));
 }
 
 
@@ -331,17 +325,17 @@ static void GetUserInfo(const FunctionCallbackInfo<Value>& args) {
 
   Local<Object> entry = Object::New(env->isolate());
 
-  entry->Set(env->context(), env->uid_string(), uid).FromJust();
-  entry->Set(env->context(), env->gid_string(), gid).FromJust();
+  entry->Set(env->context(), env->uid_string(), uid).Check();
+  entry->Set(env->context(), env->gid_string(), gid).Check();
   entry->Set(env->context(),
              env->username_string(),
-             username.ToLocalChecked()).FromJust();
+             username.ToLocalChecked()).Check();
   entry->Set(env->context(),
              env->homedir_string(),
-             homedir.ToLocalChecked()).FromJust();
+             homedir.ToLocalChecked()).Check();
   entry->Set(env->context(),
              env->shell_string(),
-             shell.ToLocalChecked()).FromJust();
+             shell.ToLocalChecked()).Check();
 
   args.GetReturnValue().Set(entry);
 }
@@ -407,7 +401,7 @@ void Initialize(Local<Object> target,
   env->SetMethod(target, "getPriority", GetPriority);
   target->Set(env->context(),
               FIXED_ONE_BYTE_STRING(env->isolate(), "isBigEndian"),
-              Boolean::New(env->isolate(), IsBigEndian())).FromJust();
+              Boolean::New(env->isolate(), IsBigEndian())).Check();
 }
 
 }  // namespace os

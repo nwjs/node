@@ -55,7 +55,7 @@ for (let i = 0; i < chunks.length; i++) {
   });
 
   tw.on('finish', common.mustCall(function() {
-    // got chunks in the right order
+    // Got chunks in the right order
     assert.deepStrictEqual(tw.buffer, chunks);
   }));
 
@@ -96,7 +96,7 @@ for (let i = 0; i < chunks.length; i++) {
   let drains = 0;
 
   tw.on('finish', common.mustCall(function() {
-    // got chunks in the right order
+    // Got chunks in the right order
     assert.deepStrictEqual(tw.buffer, chunks);
     assert.strictEqual(drains, 17);
   }));
@@ -142,7 +142,7 @@ for (let i = 0; i < chunks.length; i++) {
       undefined ];
 
   tw.on('finish', function() {
-    // got the expected chunks
+    // Got the expected chunks
     assert.deepStrictEqual(tw.buffer, chunks);
   });
 
@@ -181,7 +181,7 @@ for (let i = 0; i < chunks.length; i++) {
       undefined ];
 
   tw.on('finish', function() {
-    // got the expected chunks
+    // Got the expected chunks
     assert.deepStrictEqual(tw.buffer, chunks);
   });
 
@@ -210,9 +210,9 @@ for (let i = 0; i < chunks.length; i++) {
 
   tw.on('finish', common.mustCall(function() {
     process.nextTick(common.mustCall(function() {
-      // got chunks in the right order
+      // Got chunks in the right order
       assert.deepStrictEqual(tw.buffer, chunks);
-      // called all callbacks
+      // Called all callbacks
       assert.deepStrictEqual(callbacks._called, chunks);
     }));
   }));
@@ -322,13 +322,14 @@ for (let i = 0; i < chunks.length; i++) {
     assert.strictEqual(this.writing, undefined);
     wrote = true;
     this.writing = true;
-    setTimeout(function() {
+    setTimeout(() => {
       this.writing = false;
       cb();
     }, 1);
   };
   w.on('finish', common.mustCall(function() {
     assert.strictEqual(wrote, true);
+    assert.strictEqual(this.writing, false);
   }));
   w.write(Buffer.alloc(0));
   w.end();

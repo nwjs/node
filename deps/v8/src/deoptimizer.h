@@ -15,10 +15,12 @@
 #include "src/deoptimize-reason.h"
 #include "src/feedback-vector.h"
 #include "src/frame-constants.h"
+#include "src/frames.h"
 #include "src/globals.h"
 #include "src/isolate.h"
-#include "src/macro-assembler.h"
+#include "src/label.h"
 #include "src/objects/shared-function-info.h"
+#include "src/register-arch.h"
 #include "src/source-position.h"
 #include "src/zone/zone-chunk-list.h"
 
@@ -30,13 +32,14 @@ class TranslationIterator;
 class DeoptimizedFrameInfo;
 class TranslatedState;
 class RegisterValues;
+class MacroAssembler;
 
 class TranslatedValue {
  public:
   // Allocation-less getter of the value.
   // Returns ReadOnlyRoots::arguments_marker() if allocation would be necessary
   // to get the value.
-  Object* GetRawValue() const;
+  Object GetRawValue() const;
 
   // Getter for the value, takes care of materializing the subgraph
   // reachable from this value.
@@ -53,6 +56,7 @@ class TranslatedValue {
     kInvalid,
     kTagged,
     kInt32,
+    kInt64,
     kUInt32,
     kBoolBit,
     kFloat,
@@ -88,9 +92,10 @@ class TranslatedValue {
   static TranslatedValue NewFloat(TranslatedState* container, Float32 value);
   static TranslatedValue NewDouble(TranslatedState* container, Float64 value);
   static TranslatedValue NewInt32(TranslatedState* container, int32_t value);
+  static TranslatedValue NewInt64(TranslatedState* container, int64_t value);
   static TranslatedValue NewUInt32(TranslatedState* container, uint32_t value);
   static TranslatedValue NewBool(TranslatedState* container, uint32_t value);
-  static TranslatedValue NewTagged(TranslatedState* container, Object* literal);
+  static TranslatedValue NewTagged(TranslatedState* container, Object literal);
   static TranslatedValue NewInvalid(TranslatedState* container);
 
   Isolate* isolate() const;
@@ -123,11 +128,13 @@ class TranslatedValue {
 
   union {
     // kind kTagged. After handlification it is always nullptr.
-    Object* raw_literal_;
+    Object raw_literal_;
     // kind is kUInt32 or kBoolBit.
     uint32_t uint32_value_;
     // kind is kInt32.
     int32_t int32_value_;
+    // kind is kInt64.
+    int64_t int64_value_;
     // kind is kFloat
     Float32 float_value_;
     // kind is kDouble
@@ -137,8 +144,9 @@ class TranslatedValue {
   };
 
   // Checked accessors for the union members.
-  Object* raw_literal() const;
+  Object raw_literal() const;
   int32_t int32_value() const;
+  int64_t int64_value() const;
   uint32_t uint32_value() const;
   Float32 float_value() const;
   Float64 double_value() const;
@@ -165,9 +173,11 @@ class TranslatedFrame {
   BailoutId node_id() const { return node_id_; }
   Handle<SharedFunctionInfo> shared_info() const { return shared_info_; }
   int height() const { return height_; }
+  int return_value_offset() const { return return_value_offset_; }
+  int return_value_count() const { return return_value_count_; }
 
-  SharedFunctionInfo* raw_shared_info() const {
-    CHECK_NOT_NULL(raw_shared_info_);
+  SharedFunctionInfo raw_shared_info() const {
+    CHECK(!raw_shared_info_.is_null());
     return raw_shared_info_;
   }
 
@@ -180,8 +190,8 @@ class TranslatedFrame {
     }
 
     iterator operator++(int) {
+      iterator original(position_, input_index_);
       ++input_index_;
-      iterator original(position_);
       AdvanceIterator(&position_);
       return original;
     }
@@ -202,8 +212,9 @@ class TranslatedFrame {
    private:
     friend TranslatedFrame;
 
-    explicit iterator(std::deque<TranslatedValue>::iterator position)
-        : position_(position), input_index_(0) {}
+    explicit iterator(std::deque<TranslatedValue>::iterator position,
+                      int input_index = 0)
+        : position_(position), input_index_(input_index) {}
 
     std::deque<TranslatedValue>::iterator position_;
     int input_index_;
@@ -223,33 +234,38 @@ class TranslatedFrame {
 
   // Constructor static methods.
   static TranslatedFrame InterpretedFrame(BailoutId bytecode_offset,
-                                          SharedFunctionInfo* shared_info,
-                                          int height);
+                                          SharedFunctionInfo shared_info,
+                                          int height, int return_value_offset,
+                                          int return_value_count);
   static TranslatedFrame AccessorFrame(Kind kind,
-                                       SharedFunctionInfo* shared_info);
-  static TranslatedFrame ArgumentsAdaptorFrame(SharedFunctionInfo* shared_info,
+                                       SharedFunctionInfo shared_info);
+  static TranslatedFrame ArgumentsAdaptorFrame(SharedFunctionInfo shared_info,
                                                int height);
   static TranslatedFrame ConstructStubFrame(BailoutId bailout_id,
-                                            SharedFunctionInfo* shared_info,
+                                            SharedFunctionInfo shared_info,
                                             int height);
   static TranslatedFrame BuiltinContinuationFrame(
-      BailoutId bailout_id, SharedFunctionInfo* shared_info, int height);
+      BailoutId bailout_id, SharedFunctionInfo shared_info, int height);
   static TranslatedFrame JavaScriptBuiltinContinuationFrame(
-      BailoutId bailout_id, SharedFunctionInfo* shared_info, int height);
+      BailoutId bailout_id, SharedFunctionInfo shared_info, int height);
   static TranslatedFrame JavaScriptBuiltinContinuationWithCatchFrame(
-      BailoutId bailout_id, SharedFunctionInfo* shared_info, int height);
+      BailoutId bailout_id, SharedFunctionInfo shared_info, int height);
   static TranslatedFrame InvalidFrame() {
-    return TranslatedFrame(kInvalid, nullptr);
+    return TranslatedFrame(kInvalid, SharedFunctionInfo());
   }
 
   static void AdvanceIterator(std::deque<TranslatedValue>::iterator* iter);
 
-  TranslatedFrame(Kind kind, SharedFunctionInfo* shared_info = nullptr,
-                  int height = 0)
+  TranslatedFrame(Kind kind,
+                  SharedFunctionInfo shared_info = SharedFunctionInfo(),
+                  int height = 0, int return_value_offset = 0,
+                  int return_value_count = 0)
       : kind_(kind),
         node_id_(BailoutId::None()),
         raw_shared_info_(shared_info),
-        height_(height) {}
+        height_(height),
+        return_value_offset_(return_value_offset),
+        return_value_count_(return_value_count) {}
 
   void Add(const TranslatedValue& value) { values_.push_back(value); }
   TranslatedValue* ValueAt(int index) { return &(values_[index]); }
@@ -257,9 +273,11 @@ class TranslatedFrame {
 
   Kind kind_;
   BailoutId node_id_;
-  SharedFunctionInfo* raw_shared_info_;
+  SharedFunctionInfo raw_shared_info_;
   Handle<SharedFunctionInfo> shared_info_;
   int height_;
+  int return_value_offset_;
+  int return_value_count_;
 
   typedef std::deque<TranslatedValue> ValuesContainer;
 
@@ -284,7 +302,7 @@ class TranslatedFrame {
 
 class TranslatedState {
  public:
-  TranslatedState() {}
+  TranslatedState() = default;
   explicit TranslatedState(const JavaScriptFrame* frame);
 
   void Prepare(Address stack_frame_pointer);
@@ -309,7 +327,7 @@ class TranslatedState {
   Isolate* isolate() { return isolate_; }
 
   void Init(Isolate* isolate, Address input_frame_pointer,
-            TranslationIterator* iterator, FixedArray* literal_array,
+            TranslationIterator* iterator, FixedArray literal_array,
             RegisterValues* registers, FILE* trace_file, int parameter_count);
 
   void VerifyMaterializedObjects();
@@ -319,11 +337,10 @@ class TranslatedState {
   friend TranslatedValue;
 
   TranslatedFrame CreateNextTranslatedFrame(TranslationIterator* iterator,
-                                            FixedArray* literal_array,
-                                            Address fp,
-                                            FILE* trace_file);
+                                            FixedArray literal_array,
+                                            Address fp, FILE* trace_file);
   int CreateNextTranslatedValue(int frame_index, TranslationIterator* iterator,
-                                FixedArray* literal_array, Address fp,
+                                FixedArray literal_array, Address fp,
                                 RegisterValues* registers, FILE* trace_file);
   Address ComputeArgumentsPosition(Address input_frame_pointer,
                                    CreateArgumentsType type, int* length);
@@ -361,13 +378,14 @@ class TranslatedState {
       Handle<Map> map, const DisallowHeapAllocation& no_allocation);
 
   void ReadUpdateFeedback(TranslationIterator* iterator,
-                          FixedArray* literal_array, FILE* trace_file);
+                          FixedArray literal_array, FILE* trace_file);
 
   TranslatedValue* ResolveCapturedObject(TranslatedValue* slot);
   TranslatedValue* GetValueByObjectIndex(int object_index);
   Handle<Object> GetValueAndAdvance(TranslatedFrame* frame, int* value_index);
 
   static uint32_t GetUInt32Slot(Address fp, int slot_index);
+  static uint64_t GetUInt64Slot(Address fp, int slot_index);
   static Float32 GetFloatSlot(Address fp, int slot_index);
   static Float64 GetDoubleSlot(Address fp, int slot_index);
 
@@ -382,15 +400,14 @@ class TranslatedState {
   };
   std::deque<ObjectPosition> object_positions_;
   Handle<FeedbackVector> feedback_vector_handle_;
-  FeedbackVector* feedback_vector_ = nullptr;
+  FeedbackVector feedback_vector_;
   FeedbackSlot feedback_slot_;
 };
 
-
-class OptimizedFunctionVisitor BASE_EMBEDDED {
+class OptimizedFunctionVisitor {
  public:
-  virtual ~OptimizedFunctionVisitor() {}
-  virtual void VisitFunction(JSFunction* function) = 0;
+  virtual ~OptimizedFunctionVisitor() = default;
+  virtual void VisitFunction(JSFunction function) = 0;
 };
 
 class Deoptimizer : public Malloced {
@@ -407,9 +424,9 @@ class Deoptimizer : public Malloced {
     static const int kNoDeoptId = -1;
   };
 
-  static DeoptInfo GetDeoptInfo(Code* code, Address from);
+  static DeoptInfo GetDeoptInfo(Code code, Address from);
 
-  static int ComputeSourcePositionFromBytecodeArray(SharedFunctionInfo* shared,
+  static int ComputeSourcePositionFromBytecodeArray(SharedFunctionInfo shared,
                                                     BailoutId node_id);
 
   struct JumpTableEntry : public ZoneObject {
@@ -444,7 +461,7 @@ class Deoptimizer : public Malloced {
   // Number of created JS frames. Not all created frames are necessarily JS.
   int jsframe_count() const { return jsframe_count_; }
 
-  static Deoptimizer* New(JSFunction* function, DeoptimizeKind kind,
+  static Deoptimizer* New(Address raw_function, DeoptimizeKind kind,
                           unsigned bailout_id, Address from, int fp_to_sp_delta,
                           Isolate* isolate);
   static Deoptimizer* Grab(Isolate* isolate);
@@ -459,7 +476,7 @@ class Deoptimizer : public Malloced {
   // again and any activations of the optimized code will get deoptimized when
   // execution returns. If {code} is specified then the given code is targeted
   // instead of the function code (e.g. OSR code not installed on function).
-  static void DeoptimizeFunction(JSFunction* function, Code* code = nullptr);
+  static void DeoptimizeFunction(JSFunction function, Code code = Code());
 
   // Deoptimize all code in the given isolate.
   static void DeoptimizeAll(Isolate* isolate);
@@ -475,10 +492,7 @@ class Deoptimizer : public Malloced {
 
   static void ComputeOutputFrames(Deoptimizer* deoptimizer);
 
-  static Address GetDeoptimizationEntry(Isolate* isolate, int id,
-                                        DeoptimizeKind kind);
-  static int GetDeoptimizationId(Isolate* isolate, Address addr,
-                                 DeoptimizeKind kind);
+  static Address GetDeoptimizationEntry(Isolate* isolate, DeoptimizeKind kind);
 
   // Returns true if {addr} is a deoptimization entry and stores its type in
   // {type}. Returns false if {addr} is not a deoptimization entry.
@@ -500,51 +514,28 @@ class Deoptimizer : public Malloced {
 
   static const int kNotDeoptimizationEntry = -1;
 
-  // Generators for the deoptimization entry code.
-  class TableEntryGenerator BASE_EMBEDDED {
-   public:
-    TableEntryGenerator(MacroAssembler* masm, DeoptimizeKind kind, int count)
-        : masm_(masm), deopt_kind_(kind), count_(count) {}
-
-    void Generate();
-
-   protected:
-    MacroAssembler* masm() const { return masm_; }
-    DeoptimizeKind deopt_kind() const { return deopt_kind_; }
-    Isolate* isolate() const { return masm_->isolate(); }
-
-    void GeneratePrologue();
-
-   private:
-    int count() const { return count_; }
-
-    MacroAssembler* masm_;
-    DeoptimizeKind deopt_kind_;
-    int count_;
-  };
-
   static void EnsureCodeForDeoptimizationEntry(Isolate* isolate,
                                                DeoptimizeKind kind);
-  static void EnsureCodeForMaxDeoptimizationEntries(Isolate* isolate);
+  static void EnsureCodeForDeoptimizationEntries(Isolate* isolate);
 
   Isolate* isolate() const { return isolate_; }
 
- private:
-  friend class FrameWriter;
-  void QueueValueForMaterialization(Address output_address, Object* obj,
-                                    const TranslatedFrame::iterator& iterator);
-
-  static const int kMinNumberOfEntries = 64;
   static const int kMaxNumberOfEntries = 16384;
 
-  Deoptimizer(Isolate* isolate, JSFunction* function, DeoptimizeKind kind,
+ private:
+  friend class FrameWriter;
+  void QueueValueForMaterialization(Address output_address, Object obj,
+                                    const TranslatedFrame::iterator& iterator);
+
+
+  Deoptimizer(Isolate* isolate, JSFunction function, DeoptimizeKind kind,
               unsigned bailout_id, Address from, int fp_to_sp_delta);
-  Code* FindOptimizedCode();
+  Code FindOptimizedCode();
   void PrintFunctionName();
   void DeleteFrameDescriptions();
 
-  static bool IsInDeoptimizationTable(Isolate* isolate, Address addr,
-                                      DeoptimizeKind type);
+  static bool IsDeoptimizationEntry(Isolate* isolate, Address addr,
+                                    DeoptimizeKind type);
 
   void DoComputeOutputFrames();
   void DoComputeInterpretedFrame(TranslatedFrame* translated_frame,
@@ -573,19 +564,20 @@ class Deoptimizer : public Malloced {
 
   unsigned ComputeInputFrameAboveFpFixedSize() const;
   unsigned ComputeInputFrameSize() const;
-  static unsigned ComputeInterpretedFixedSize(SharedFunctionInfo* shared);
+  static unsigned ComputeInterpretedFixedSize(SharedFunctionInfo shared);
 
-  static unsigned ComputeIncomingArgumentSize(SharedFunctionInfo* shared);
-  static unsigned ComputeOutgoingArgumentSize(Code* code, unsigned bailout_id);
+  static unsigned ComputeIncomingArgumentSize(SharedFunctionInfo shared);
+  static unsigned ComputeOutgoingArgumentSize(Code code, unsigned bailout_id);
 
-  static void GenerateDeoptimizationEntries(MacroAssembler* masm, int count,
+  static void GenerateDeoptimizationEntries(MacroAssembler* masm,
+                                            Isolate* isolate,
                                             DeoptimizeKind kind);
 
   // Marks all the code in the given context for deoptimization.
-  static void MarkAllCodeForContext(Context* native_context);
+  static void MarkAllCodeForContext(Context native_context);
 
   // Deoptimizes all code marked in the given context.
-  static void DeoptimizeMarkedCodeForContext(Context* native_context);
+  static void DeoptimizeMarkedCodeForContext(Context native_context);
 
   // Some architectures need to push padding together with the TOS register
   // in order to maintain stack alignment.
@@ -594,11 +586,11 @@ class Deoptimizer : public Malloced {
   // Searches the list of known deoptimizing code for a Code object
   // containing the given address (which is supposedly faster than
   // searching all code objects).
-  Code* FindDeoptimizingCode(Address addr);
+  Code FindDeoptimizingCode(Address addr);
 
   Isolate* isolate_;
-  JSFunction* function_;
-  Code* compiled_code_;
+  JSFunction function_;
+  Code compiled_code_;
   unsigned bailout_id_;
   DeoptimizeKind deopt_kind_;
   Address from_;
@@ -702,9 +694,9 @@ class FrameDescription {
   explicit FrameDescription(uint32_t frame_size, int parameter_count = 0);
 
   void* operator new(size_t size, uint32_t frame_size) {
-    // Subtracts kPointerSize, as the member frame_content_ already supplies
-    // the first element of the area to store the frame.
-    return malloc(size + frame_size - kPointerSize);
+    // Subtracts kSystemPointerSize, as the member frame_content_ already
+    // supplies the first element of the area to store the frame.
+    return malloc(size + frame_size - kSystemPointerSize);
   }
 
   void operator delete(void* pointer, uint32_t frame_size) {
@@ -728,7 +720,7 @@ class FrameDescription {
   unsigned GetLastArgumentSlotOffset() {
     int parameter_slots = parameter_count();
     if (kPadArguments) parameter_slots = RoundUp(parameter_slots, 2);
-    return GetFrameSize() - parameter_slots * kPointerSize;
+    return GetFrameSize() - parameter_slots * kSystemPointerSize;
   }
 
   Address GetFramePointerAddress() {
@@ -849,13 +841,22 @@ class DeoptimizerData {
   explicit DeoptimizerData(Heap* heap);
   ~DeoptimizerData();
 
+#ifdef DEBUG
+  bool IsDeoptEntryCode(Code code) const {
+    for (int i = 0; i < kLastDeoptimizeKind + 1; i++) {
+      if (code == deopt_entry_code_[i]) return true;
+    }
+    return false;
+  }
+#endif  // DEBUG
+
  private:
   Heap* heap_;
   static const int kLastDeoptimizeKind =
       static_cast<int>(DeoptimizeKind::kLastDeoptimizeKind);
-  Code* deopt_entry_code_[kLastDeoptimizeKind + 1];
-  Code* deopt_entry_code(DeoptimizeKind kind);
-  void set_deopt_entry_code(DeoptimizeKind kind, Code* code);
+  Code deopt_entry_code_[kLastDeoptimizeKind + 1];
+  Code deopt_entry_code(DeoptimizeKind kind);
+  void set_deopt_entry_code(DeoptimizeKind kind, Code code);
 
   Deoptimizer* current_;
 
@@ -864,8 +865,7 @@ class DeoptimizerData {
   DISALLOW_COPY_AND_ASSIGN(DeoptimizerData);
 };
 
-
-class TranslationBuffer BASE_EMBEDDED {
+class TranslationBuffer {
  public:
   explicit TranslationBuffer(Zone* zone) : contents_(zone) {}
 
@@ -878,10 +878,9 @@ class TranslationBuffer BASE_EMBEDDED {
   ZoneChunkList<uint8_t> contents_;
 };
 
-
-class TranslationIterator BASE_EMBEDDED {
+class TranslationIterator {
  public:
-  TranslationIterator(ByteArray* buffer, int index);
+  TranslationIterator(ByteArray buffer, int index);
 
   int32_t Next();
 
@@ -892,7 +891,7 @@ class TranslationIterator BASE_EMBEDDED {
   }
 
  private:
-  ByteArray* buffer_;
+  ByteArray buffer_;
   int index_;
 };
 
@@ -910,12 +909,14 @@ class TranslationIterator BASE_EMBEDDED {
   V(CAPTURED_OBJECT)                                   \
   V(REGISTER)                                          \
   V(INT32_REGISTER)                                    \
+  V(INT64_REGISTER)                                    \
   V(UINT32_REGISTER)                                   \
   V(BOOL_REGISTER)                                     \
   V(FLOAT_REGISTER)                                    \
   V(DOUBLE_REGISTER)                                   \
   V(STACK_SLOT)                                        \
   V(INT32_STACK_SLOT)                                  \
+  V(INT64_STACK_SLOT)                                  \
   V(UINT32_STACK_SLOT)                                 \
   V(BOOL_STACK_SLOT)                                   \
   V(FLOAT_STACK_SLOT)                                  \
@@ -923,7 +924,7 @@ class TranslationIterator BASE_EMBEDDED {
   V(LITERAL)                                           \
   V(UPDATE_FEEDBACK)
 
-class Translation BASE_EMBEDDED {
+class Translation {
  public:
 #define DECLARE_TRANSLATION_OPCODE_ENUM(item) item,
   enum Opcode {
@@ -945,7 +946,8 @@ class Translation BASE_EMBEDDED {
 
   // Commands.
   void BeginInterpretedFrame(BailoutId bytecode_offset, int literal_id,
-                             unsigned height);
+                             unsigned height, int return_value_offset,
+                             int return_value_count);
   void BeginArgumentsAdaptorFrame(int literal_id, unsigned height);
   void BeginConstructStubFrame(BailoutId bailout_id, int literal_id,
                                unsigned height);
@@ -963,12 +965,14 @@ class Translation BASE_EMBEDDED {
   void DuplicateObject(int object_index);
   void StoreRegister(Register reg);
   void StoreInt32Register(Register reg);
+  void StoreInt64Register(Register reg);
   void StoreUint32Register(Register reg);
   void StoreBoolRegister(Register reg);
   void StoreFloatRegister(FloatRegister reg);
   void StoreDoubleRegister(DoubleRegister reg);
   void StoreStackSlot(int index);
   void StoreInt32StackSlot(int index);
+  void StoreInt64StackSlot(int index);
   void StoreUint32StackSlot(int index);
   void StoreBoolStackSlot(int index);
   void StoreFloatStackSlot(int index);

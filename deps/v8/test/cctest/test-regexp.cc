@@ -30,13 +30,14 @@
 #include <sstream>
 
 #include "include/v8.h"
-#include "src/v8.h"
-
 #include "src/api-inl.h"
+#include "src/assembler-arch.h"
 #include "src/ast/ast.h"
 #include "src/char-predicates-inl.h"
+#include "src/macro-assembler.h"
 #include "src/objects-inl.h"
 #include "src/ostreams.h"
+#include "src/regexp/interpreter-irregexp.h"
 #include "src/regexp/jsregexp.h"
 #include "src/regexp/regexp-macro-assembler-irregexp.h"
 #include "src/regexp/regexp-macro-assembler.h"
@@ -44,52 +45,29 @@
 #include "src/splay-tree-inl.h"
 #include "src/string-stream.h"
 #include "src/unicode-inl.h"
+#include "src/v8.h"
+#include "src/zone/zone-list-inl.h"
 
-#ifdef V8_INTERPRETED_REGEXP
-#include "src/regexp/interpreter-irregexp.h"
-#else  // V8_INTERPRETED_REGEXP
-#include "src/macro-assembler.h"
 #if V8_TARGET_ARCH_ARM
-#include "src/arm/assembler-arm.h"  // NOLINT
-#include "src/arm/macro-assembler-arm.h"
 #include "src/regexp/arm/regexp-macro-assembler-arm.h"
-#endif
-#if V8_TARGET_ARCH_ARM64
-#include "src/arm64/assembler-arm64.h"
-#include "src/arm64/macro-assembler-arm64.h"
+#elif V8_TARGET_ARCH_ARM64
 #include "src/regexp/arm64/regexp-macro-assembler-arm64.h"
-#endif
-#if V8_TARGET_ARCH_S390
+#elif V8_TARGET_ARCH_S390
 #include "src/regexp/s390/regexp-macro-assembler-s390.h"
-#include "src/s390/assembler-s390.h"
-#include "src/s390/macro-assembler-s390.h"
-#endif
-#if V8_TARGET_ARCH_PPC
-#include "src/ppc/assembler-ppc.h"
-#include "src/ppc/macro-assembler-ppc.h"
+#elif V8_TARGET_ARCH_PPC
 #include "src/regexp/ppc/regexp-macro-assembler-ppc.h"
-#endif
-#if V8_TARGET_ARCH_MIPS
-#include "src/mips/assembler-mips.h"
-#include "src/mips/macro-assembler-mips.h"
+#elif V8_TARGET_ARCH_MIPS
 #include "src/regexp/mips/regexp-macro-assembler-mips.h"
-#endif
-#if V8_TARGET_ARCH_MIPS64
-#include "src/mips64/assembler-mips64.h"
-#include "src/mips64/macro-assembler-mips64.h"
+#elif V8_TARGET_ARCH_MIPS64
 #include "src/regexp/mips64/regexp-macro-assembler-mips64.h"
-#endif
-#if V8_TARGET_ARCH_X64
+#elif V8_TARGET_ARCH_X64
 #include "src/regexp/x64/regexp-macro-assembler-x64.h"
-#include "src/x64/assembler-x64.h"
-#include "src/x64/macro-assembler-x64.h"
-#endif
-#if V8_TARGET_ARCH_IA32
-#include "src/ia32/assembler-ia32.h"
-#include "src/ia32/macro-assembler-ia32.h"
+#elif V8_TARGET_ARCH_IA32
 #include "src/regexp/ia32/regexp-macro-assembler-ia32.h"
+#else
+#error Unknown architecture.
 #endif
-#endif  // V8_INTERPRETED_REGEXP
+
 #include "test/cctest/cctest.h"
 
 namespace v8 {
@@ -531,7 +509,7 @@ static bool NotDigit(uc16 c) {
 static bool IsWhiteSpaceOrLineTerminator(uc16 c) {
   // According to ECMA 5.1, 15.10.2.12 the CharacterClassEscape \s includes
   // WhiteSpace (7.2) and LineTerminator (7.3) values.
-  return v8::internal::WhiteSpaceOrLineTerminator::Is(c);
+  return v8::internal::IsWhiteSpaceOrLineTerminator(c);
 }
 
 
@@ -754,9 +732,6 @@ TEST(ParsePossessiveRepetition) {
 
 // Tests of interpreter.
 
-
-#ifndef V8_INTERPRETED_REGEXP
-
 #if V8_TARGET_ARCH_IA32
 typedef RegExpMacroAssemblerIA32 ArchRegExpMacroAssembler;
 #elif V8_TARGET_ARCH_X64
@@ -792,16 +767,17 @@ class ContextInitializer {
   v8::Local<v8::Context> env_;
 };
 
-static ArchRegExpMacroAssembler::Result Execute(Code* code, String* input,
+static ArchRegExpMacroAssembler::Result Execute(Code code, String input,
                                                 int start_offset,
                                                 Address input_start,
                                                 Address input_end,
                                                 int* captures) {
-  return NativeRegExpMacroAssembler::Execute(
-      code, input, start_offset, reinterpret_cast<byte*>(input_start),
-      reinterpret_cast<byte*>(input_end), captures, 0, CcTest::i_isolate());
+  return static_cast<NativeRegExpMacroAssembler::Result>(
+      NativeRegExpMacroAssembler::Execute(code, input, start_offset,
+                                          reinterpret_cast<byte*>(input_start),
+                                          reinterpret_cast<byte*>(input_end),
+                                          captures, 0, CcTest::i_isolate()));
 }
-
 
 TEST(MacroAssemblerNativeSuccess) {
   v8::V8::Initialize();
@@ -1414,13 +1390,9 @@ TEST(MacroAssemblerNativeLotsOfRegisters) {
   isolate->clear_pending_exception();
 }
 
-#else  // V8_INTERPRETED_REGEXP
-
 TEST(MacroAssembler) {
-  byte codes[1024];
   Zone zone(CcTest::i_isolate()->allocator(), ZONE_NAME);
-  RegExpMacroAssemblerIrregexp m(CcTest::i_isolate(), Vector<byte>(codes, 1024),
-                                 &zone);
+  RegExpMacroAssemblerIrregexp m(CcTest::i_isolate(), &zone);
   // ^f(o)o.
   Label start, fail, backtrack;
 
@@ -1478,9 +1450,6 @@ TEST(MacroAssembler) {
   CHECK(!IrregexpInterpreter::Match(isolate, array, f2_16, captures, 0));
   CHECK_EQ(42, captures[0]);
 }
-
-#endif  // V8_INTERPRETED_REGEXP
-
 
 TEST(AddInverseToTable) {
   static const int kLimit = 1000;
@@ -1968,7 +1937,7 @@ class UncachedExternalString
  public:
   const char* data() const override { return "abcdefghijklmnopqrstuvwxyz"; }
   size_t length() const override { return 26; }
-  bool IsCompressible() const override { return true; }
+  bool IsCacheable() const override { return false; }
 };
 
 TEST(UncachedExternalString) {
@@ -1978,9 +1947,9 @@ TEST(UncachedExternalString) {
   v8::Local<v8::String> external =
       v8::String::NewExternalOneByte(isolate, new UncachedExternalString())
           .ToLocalChecked();
-  CHECK(
-      v8::Utils::OpenHandle(*external)->map() ==
-      ReadOnlyRoots(CcTest::i_isolate()).short_external_one_byte_string_map());
+  CHECK(v8::Utils::OpenHandle(*external)->map() ==
+        ReadOnlyRoots(CcTest::i_isolate())
+            .uncached_external_one_byte_string_map());
   v8::Local<v8::Object> global = env->Global();
   global->Set(env.local(), v8_str("external"), external).FromJust();
   CompileRun("var re = /y(.)/; re.test('ab');");

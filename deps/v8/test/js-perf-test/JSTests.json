@@ -60,48 +60,195 @@
       "results_regexp": "^Generators\\-Generators\\(Score\\): (.+)$"
     },
     {
-      "name": "ArrayLiteralInitialSpread",
-      "path": ["ArrayLiteralInitialSpread"],
+      "name": "ArrayLiteralInitialSpreadSmallPacked",
+      "path": ["ArrayLiteralInitialSpreadSmallPacked"],
       "main": "run.js",
       "resources": [],
-      "results_regexp": "^%s\\-ArrayLiteralInitialSpread\\(Score\\): (.+)$",
+      "results_regexp": "^%s\\-ArrayLiteralInitialSpreadSmallPacked\\(Score\\): (.+)$",
       "tests": [
-        {"name": "Spread-Small"},
-        {"name": "ForLength-Small"},
-        {"name": "ForLengthEmpty-Small"},
-        {"name": "Slice-Small"},
-        {"name": "Slice0-Small"},
-        {"name": "ConcatReceive-Small"},
-        {"name": "ConcatArg-Small"},
-        {"name": "ForOfPush-Small"},
-        {"name": "MapId-Small"},
-        {"name": "Spread-Large"},
-        {"name": "ForLength-Large"},
-        {"name": "ForLengthEmpty-Large"},
-        {"name": "Slice-Large"},
-        {"name": "Slice0-Large"},
-        {"name": "ConcatReceive-Large"},
-        {"name": "ConcatArg-Large"},
-        {"name": "ForOfPush-Large"},
-        {"name": "MapId-Large"},
-        {"name": "Spread-SmallHoley"},
-        {"name": "ForLength-SmallHoley"},
-        {"name": "ForLengthEmpty-SmallHoley"},
-        {"name": "Slice-SmallHoley"},
-        {"name": "Slice0-SmallHoley"},
-        {"name": "ConcatReceive-SmallHoley"},
-        {"name": "ConcatArg-SmallHoley"},
-        {"name": "ForOfPush-SmallHoley"},
-        {"name": "MapId-SmallHoley"},
-        {"name": "Spread-LargeHoley"},
-        {"name": "ForLength-LargeHoley"},
-        {"name": "ForLengthEmpty-LargeHoley"},
-        {"name": "Slice-LargeHoley"},
-        {"name": "Slice0-LargeHoley"},
-        {"name": "ConcatReceive-LargeHoley"},
-        {"name": "ConcatArg-LargeHoley"},
-        {"name": "ForOfPush-LargeHoley"},
-        {"name": "MapId-LargeHoley"}
+        {"name": "Spread"},
+        {"name": "ForLength"},
+        {"name": "ForLengthEmpty"},
+        {"name": "Slice"},
+        {"name": "Slice0"},
+        {"name": "ConcatReceive"},
+        {"name": "ConcatArg"},
+        {"name": "ForOfPush"},
+        {"name": "MapId"}
+      ]
+    },
+    {
+      "name": "ArrayLiteralInitialSpreadLargePacked",
+      "path": ["ArrayLiteralInitialSpreadLargePacked"],
+      "main": "run.js",
+      "resources": [],
+      "results_regexp": "^%s\\-ArrayLiteralInitialSpreadLargePacked\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "Spread"},
+        {"name": "ForLength"},
+        {"name": "ForLengthEmpty"},
+        {"name": "Slice"},
+        {"name": "Slice0"},
+        {"name": "ConcatReceive"},
+        {"name": "ConcatArg"}
+      ]
+    },
+    {
+      "name": "ArrayLiteralInitialSpreadSmallHoley",
+      "path": ["ArrayLiteralInitialSpreadSmallHoley"],
+      "main": "run.js",
+      "resources": [],
+      "results_regexp": "^%s\\-ArrayLiteralInitialSpreadSmallHoley\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "Spread"},
+        {"name": "ForLength"},
+        {"name": "ForLengthEmpty"},
+        {"name": "Slice"},
+        {"name": "Slice0"},
+        {"name": "ConcatReceive"},
+        {"name": "ConcatArg"},
+        {"name": "ForOfPush"},
+        {"name": "MapId"}
+      ]
+    },
+    {
+      "name": "ArrayLiteralInitialSpreadLargeHoley",
+      "path": ["ArrayLiteralInitialSpreadLargeHoley"],
+      "main": "run.js",
+      "resources": [],
+      "results_regexp": "^%s\\-ArrayLiteralInitialSpreadLargeHoley\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "Spread"},
+        {"name": "ForLength"},
+        {"name": "ForLengthEmpty"},
+        {"name": "Slice"},
+        {"name": "Slice0"},
+        {"name": "ConcatReceive"},
+        {"name": "ConcatArg"}
+      ]
+    },
+    {
+      "name": "ArrayLiteralInitialSpreadSmallDoublePacked",
+      "path": ["ArrayLiteralInitialSpreadSmallDoublePacked"],
+      "main": "run.js",
+      "resources": [],
+      "results_regexp": "^%s\\-ArrayLiteralInitialSpreadSmallDoublePacked\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "Spread"},
+        {"name": "ForLength"},
+        {"name": "ForLengthEmpty"},
+        {"name": "Slice"},
+        {"name": "Slice0"},
+        {"name": "ConcatReceive"},
+        {"name": "ConcatArg"},
+        {"name": "ForOfPush"},
+        {"name": "MapId"}
+      ]
+    },
+    {
+      "name": "ArrayLiteralInitialSpreadLargeDoublePacked",
+      "path": ["ArrayLiteralInitialSpreadLargeDoublePacked"],
+      "main": "run.js",
+      "resources": [],
+      "results_regexp": "^%s\\-ArrayLiteralInitialSpreadLargeDoublePacked\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "Spread"},
+        {"name": "ForLength"},
+        {"name": "ForLengthEmpty"},
+        {"name": "Slice"},
+        {"name": "Slice0"},
+        {"name": "ConcatReceive"},
+        {"name": "ConcatArg"}
+      ]
+    },
+    {
+      "name": "ArrayLiteralInitialSpreadSmallDoubleHoley",
+      "path": ["ArrayLiteralInitialSpreadSmallDoubleHoley"],
+      "main": "run.js",
+      "resources": [],
+      "results_regexp": "^%s\\-ArrayLiteralInitialSpreadSmallDoubleHoley\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "Spread"},
+        {"name": "ForLength"},
+        {"name": "ForLengthEmpty"},
+        {"name": "Slice"},
+        {"name": "Slice0"},
+        {"name": "ConcatReceive"},
+        {"name": "ConcatArg"},
+        {"name": "ForOfPush"},
+        {"name": "MapId"}
+      ]
+    },
+    {
+      "name": "ArrayLiteralInitialSpreadLargeDoubleHoley",
+      "path": ["ArrayLiteralInitialSpreadLargeDoubleHoley"],
+      "main": "run.js",
+      "resources": [],
+      "results_regexp": "^%s\\-ArrayLiteralInitialSpreadLargeDoubleHoley\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "Spread"},
+        {"name": "ForLength"},
+        {"name": "ForLengthEmpty"},
+        {"name": "Slice"},
+        {"name": "Slice0"},
+        {"name": "ConcatReceive"},
+        {"name": "ConcatArg"}
+      ]
+    },
+    {
+      "name": "ArrayLiteralInitialSpreadSmallSmiMap",
+      "path": ["ArrayLiteralInitialSpreadSmallSmiMap"],
+      "main": "run.js",
+      "resources": [],
+      "results_regexp": "^%s\\-ArrayLiteralInitialSpreadSmallSmiMap\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "ForOfKeys"},
+        {"name": "ForOfValues"},
+        {"name": "SpreadKeys"},
+        {"name": "SpreadValues"}
+      ]
+    },
+    {
+      "name": "ArrayLiteralInitialSpreadLargeSmiMap",
+      "path": ["ArrayLiteralInitialSpreadLargeSmiMap"],
+      "main": "run.js",
+      "resources": [],
+      "results_regexp": "^%s\\-ArrayLiteralInitialSpreadLargeSmiMap\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "ForOfKeys"},
+        {"name": "ForOfValues"},
+        {"name": "SpreadKeys"},
+        {"name": "SpreadValues"}
+      ]
+    },
+    {
+      "name": "ArrayLiteralInitialSpreadSmallSmiSet",
+      "path": ["ArrayLiteralInitialSpreadSmallSmiSet"],
+      "main": "run.js",
+      "resources": [],
+      "results_regexp": "^%s\\-ArrayLiteralInitialSpreadSmallSmiSet\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "ForOf"},
+        {"name": "ForOfKeys"},
+        {"name": "ForOfValues"},
+        {"name": "Spread"},
+        {"name": "SpreadKeys"},
+        {"name": "SpreadValues"}
+      ]
+    },
+    {
+      "name": "ArrayLiteralInitialSpreadLargeSmiSet",
+      "path": ["ArrayLiteralInitialSpreadLargeSmiSet"],
+      "main": "run.js",
+      "resources": [],
+      "results_regexp": "^%s\\-ArrayLiteralInitialSpreadLargeSmiSet\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "ForOf"},
+        {"name": "ForOfKeys"},
+        {"name": "ForOfValues"},
+        {"name": "Spread"},
+        {"name": "SpreadKeys"},
+        {"name": "SpreadValues"}
       ]
     },
     {
@@ -336,6 +483,45 @@
           ]
         },
         {
+          "name": "StringNormalize",
+          "main": "run.js",
+          "resources": [ "string-normalize.js" ],
+          "test_flags": [ "string-normalize" ],
+          "results_regexp": "^%s\\-Strings\\(Score\\): (.+)$",
+          "run_count": 1,
+          "tests": [
+            {"name": "StringNormalize"},
+            {"name": "StringNormalizeNFD"},
+            {"name": "StringNormalizeNFKC"},
+            {"name": "StringNormalizeNFKD"}
+          ]
+        },
+        {
+          "name": "StringLocaleCompare",
+          "main": "run.js",
+          "resources": [ "string-localeCompare.js" ],
+          "test_flags": [ "string-localeCompare" ],
+          "results_regexp": "^%s\\-Strings\\(Score\\): (.+)$",
+          "run_count": 1,
+          "tests": [
+            {"name": "StringLocaleCompare"}
+          ]
+        },
+        {
+          "name": "StringToLocaleCase",
+          "main": "run.js",
+          "resources": [ "string-toLocaleCase.js" ],
+          "test_flags": [ "string-toLocaleCase" ],
+          "results_regexp": "^%s\\-Strings\\(Score\\): (.+)$",
+          "run_count": 1,
+          "tests": [
+            {"name": "StringToLocaleLowerCase"},
+            {"name": "StringToLocaleUpperCase"},
+            {"name": "StringToLocaleLowerCaseTR"},
+            {"name": "StringToLocaleUpperCaseTR"}
+          ]
+        },
+        {
           "name": "StringMatchAll",
           "main": "run.js",
           "resources": [ "string-matchall.js" ],
@@ -368,6 +554,21 @@
             {"name": "startsIndex"},
             {"name": "endsWith"},
             {"name": "endsIndex"}
+          ]
+        },
+        {
+          "name": "StringStartsWith",
+          "main": "run.js",
+          "resources": [ "string-startswith.js" ],
+          "test_flags": [ "string-startswith" ],
+          "results_regexp": "^%s\\-Strings\\(Score\\): (.+)$",
+          "run_count": 1,
+          "flags": [ "--allow-natives-syntax" ],
+          "tests": [
+            {"name": "DirectStringsDirectSearch"},
+            {"name": "ConsStringsDirectSearch"},
+            {"name": "DirectStringsConsSearch"},
+            {"name": "ConsStringsConsSearch"}
           ]
         },
         {
@@ -587,6 +788,56 @@
           "test_flags": ["construct-all-typedarrays"]
         },
         {
+          "name": "FilterNoSpecies",
+          "main": "run.js",
+          "resources": ["filter-nospecies.js"],
+          "test_flags": ["filter-nospecies"],
+          "results_regexp": "^TypedArrays\\-%s\\(Score\\): (.+)$",
+          "tests": [
+            {"name": "Uint8Array"},
+            {"name": "Uint16Array"},
+            {"name": "Uint32Array"},
+            {"name": "Float32Array"},
+            {"name": "Float64Array"}
+          ]
+        },
+        {
+          "name": "JoinBigIntTypes",
+          "main": "run.js",
+          "resources": ["base.js", "join.js", "join-bigint.js"],
+          "test_flags": ["join-bigint"]
+        },
+        {
+          "name": "JoinFloatTypes",
+          "main": "run.js",
+          "resources": ["base.js", "join.js", "join-float.js"],
+          "test_flags": ["join-float"]
+        },
+        {
+          "name": "JoinIntTypes",
+          "main": "run.js",
+          "resources": ["base.js", "join.js", "join-int.js"],
+          "test_flags": ["join-int"]
+        },
+        {
+          "name": "JoinWithSeparatorBigIntTypes",
+          "main": "run.js",
+          "resources": ["base.js", "join.js", "join-sep-bigint.js"],
+          "test_flags": ["join-sep-bigint"]
+        },
+        {
+          "name": "JoinWithSeparatorFloatTypes",
+          "main": "run.js",
+          "resources": ["base.js", "join.js", "join-sep-float.js"],
+          "test_flags": ["join-sep-float"]
+        },
+        {
+          "name": "JoinWithSeparatorIntTypes",
+          "main": "run.js",
+          "resources": ["base.js", "join.js", "join-sep-int.js"],
+          "test_flags": ["join-sep-int"]
+        },
+        {
           "name": "SetFromArrayLike",
           "main": "run.js",
           "resources": ["set-from-arraylike.js"],
@@ -613,37 +864,37 @@
         {
           "name": "SortIntTypes",
           "main": "run.js",
-          "resources": ["sort.js", "sort-int.js"],
+          "resources": ["base.js", "sort.js", "sort-int.js"],
           "test_flags": ["sort-int"]
         },
         {
           "name": "SortBigIntTypes",
           "main": "run.js",
-          "resources": ["sort.js", "sort-bigint.js"],
+          "resources": ["base.js", "sort.js", "sort-bigint.js"],
           "test_flags": ["sort-bigint"]
         },
         {
           "name": "SortFloatTypes",
           "main": "run.js",
-          "resources": ["sort.js", "sort-float.js"],
+          "resources": ["base.js", "sort.js", "sort-float.js"],
           "test_flags": ["sort-float"]
         },
         {
           "name": "SortCustomCompareFnIntTypes",
           "main": "run.js",
-          "resources": ["sort.js", "sort-cmpfn-int.js"],
+          "resources": ["base.js", "sort.js", "sort-cmpfn-int.js"],
           "test_flags": ["sort-cmpfn-int"]
         },
         {
           "name": "SortCustomCompareFnBigIntTypes",
           "main": "run.js",
-          "resources": ["sort.js", "sort-cmpfn-bigint.js"],
+          "resources": ["base.js", "sort.js", "sort-cmpfn-bigint.js"],
           "test_flags": ["sort-cmpfn-bigint"]
         },
         {
           "name": "SortCustomCompareFnFloatTypes",
           "main": "run.js",
-          "resources": ["sort.js", "sort-cmpfn-float.js"],
+          "resources": ["base.js", "sort.js", "sort-cmpfn-float.js"],
           "test_flags": ["sort-cmpfn-float"]
         },
         {
@@ -740,13 +991,18 @@
         {"name": "SmallMixedArrayOf"},
         {"name": "SmiFrom"},
         {"name": "SmallSmiFrom"},
-        {"name": "SmiNoMapFrom"},
+        {"name": "SmiCowNoMapFrom"},
+        {"name": "SmiNonCowNoMapFrom"},
         {"name": "SmiNoIteratorFrom"},
         {"name": "TransplantedFrom"},
         {"name": "DoubleFrom"},
+        {"name": "DoubleNoMapFrom"},
         {"name": "StringFrom"},
-        {"name": "StringNoMapFrom"},
+        {"name": "StringCowNoMapFrom"},
+        {"name": "StringNonCowNoMapFrom"},
         {"name": "MixedFrom"},
+        {"name": "MixedCowNoMapFrom"},
+        {"name": "MixedNonCowNoMapFrom"},
         {"name": "Array.slice(500)"},
         {"name": "Array.slice(500,999)"},
         {"name": "Array.slice(-500)"},
@@ -761,6 +1017,43 @@
         {"name": "StringCopyWithin"},
         {"name": "SparseSmiCopyWithin"},
         {"name": "SparseStringCopyWithin"}
+      ]
+    },
+    {
+      "name": "ArrayIndexOfIncludesPolymorphic",
+      "path": ["ArrayIndexOfIncludesPolymorphic"],
+      "main": "run.js",
+      "resources": ["indexof-includes-polymorphic.js"],
+      "test_flags": ["indexof-includes-polymorphic"],
+      "results_regexp": "^%s\\-ArrayIndexOfIncludesPolymorphic\\(Score\\): (.+)$",
+      "flags": [
+        "--allow-natives-syntax"
+      ],
+      "tests": [
+        {"name": "for loop"},
+        {"name": "Array#indexOf"},
+        {"name": "Array#includes"}
+      ]
+    },
+    {
+      "name": "ArrayInOperator",
+      "path": ["ArrayInOperator"],
+      "main": "run.js",
+      "resources": [],
+      "results_regexp": "^%s\\-ArrayInOperator\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "PackedSMI"},
+        {"name": "PackedDouble"},
+        {"name": "PackedElements"},
+        {"name": "HoleySMI"},
+        {"name": "HoleyDouble"},
+        {"name": "HoleyElements"},
+        {"name": "SparseSMI"},
+        {"name": "SparseDouble"},
+        {"name": "SparseElements"},
+        {"name": "TypedUint8"},
+        {"name": "TypedInt32"},
+        {"name": "TypedFloat64"}
       ]
     },
     {
@@ -1038,6 +1331,18 @@
       ]
     },
     {
+      "name": "Dates",
+      "path": ["Dates"],
+      "main": "run.js",
+      "resources": ["toLocaleString.js"],
+      "results_regexp": "^%s\\-Dates\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "toLocaleDateString"},
+        {"name": "toLocaleString"},
+        {"name": "toLocaleTimeString"}
+      ]
+    },
+    {
       "name": "ExpressionDepth",
       "path": ["ExpressionDepth"],
       "main": "run.js",
@@ -1060,6 +1365,22 @@
         {"name": "Sub"},
         {"name": "StringConcat"},
         {"name": "BitwiseOr"}
+      ]
+    },
+    {
+      "name": "Intl",
+      "path": ["Intl"],
+      "main": "run.js",
+      "resources": [ "constructor.js" ],
+      "flags": [],
+      "results_regexp": "^%s\\-Intl\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "NewIntlCollator"},
+        {"name": "NewIntlDateTimeFormat"},
+        {"name": "NewIntlNumberFormat"},
+        {"name": "NewIntlPluralRules"},
+        {"name": "NewIntlListFormat"},
+        {"name": "NewIntlRelativeTimeFormat"}
       ]
     },
     {
@@ -1103,12 +1424,30 @@
       "path": ["Numbers"],
       "main": "run.js",
       "flags": ["--allow-natives-syntax"],
-      "resources": [ "toNumber.js"],
+      "resources": [
+	      "toNumber.js",
+	      "toLocaleString.js"
+      ],
       "results_regexp": "^%s\\-Numbers\\(Score\\): (.+)$",
       "tests": [
         {"name": "Constructor"},
         {"name": "UnaryPlus"},
-        {"name": "ParseFloat"}
+        {"name": "ParseFloat"},
+        {"name": "toLocaleString"}
+      ]
+    },
+    {
+      "name": "ObjectFreeze",
+      "path": ["ObjectFreeze"],
+      "main": "run.js",
+      "flags": [],
+      "resources": [
+	      "tagged-template.js"
+      ],
+      "results_regexp": "^%s\\-Numbers\\(Score\\): (.+)$",
+      "tests": [
+        {"name": "TaggedTemplate"},
+        {"name": "TaggedTemplateLoose"}
       ]
     },
     {

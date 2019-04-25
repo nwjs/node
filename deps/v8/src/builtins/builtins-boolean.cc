@@ -5,6 +5,7 @@
 #include "src/builtins/builtins-utils-inl.h"
 #include "src/builtins/builtins.h"
 #include "src/counters.h"
+#include "src/heap/heap-inl.h"  // For ToBoolean. TODO(jkummerow): Drop.
 #include "src/objects-inl.h"
 
 namespace v8 {
@@ -26,8 +27,9 @@ BUILTIN(BooleanConstructor) {
   Handle<JSReceiver> new_target = Handle<JSReceiver>::cast(args.new_target());
   DCHECK(*target == target->native_context()->boolean_function());
   Handle<JSObject> result;
-  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, result,
-                                     JSObject::New(target, new_target));
+  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+      isolate, result,
+      JSObject::New(target, new_target, Handle<AllocationSite>::null()));
   Handle<JSValue>::cast(result)->set_value(
       isolate->heap()->ToBoolean(value->BooleanValue(isolate)));
   return *result;

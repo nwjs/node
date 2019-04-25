@@ -60,7 +60,7 @@ struct WasmDisassemblyOffsetTableEntry {
 
 struct WasmDisassembly {
   using OffsetTable = std::vector<WasmDisassemblyOffsetTableEntry>;
-  WasmDisassembly() {}
+  WasmDisassembly() = default;
   WasmDisassembly(std::string disassembly, OffsetTable offset_table)
       : disassembly(std::move(disassembly)),
         offset_table(std::move(offset_table)) {}
@@ -84,6 +84,30 @@ enum BreakLocationType {
   kReturnBreakLocation,
   kDebuggerStatementBreakLocation,
   kCommonBreakLocation
+};
+
+enum class CoverageMode {
+  // Make use of existing information in feedback vectors on the heap.
+  // Only return a yes/no result. Optimization and GC are not affected.
+  // Collecting best effort coverage does not reset counters.
+  kBestEffort,
+  // Disable optimization and prevent feedback vectors from being garbage
+  // collected in order to preserve precise invocation counts. Collecting
+  // precise count coverage resets counters to get incremental updates.
+  kPreciseCount,
+  // We are only interested in a yes/no result for the function. Optimization
+  // and GC can be allowed once a function has been invoked. Collecting
+  // precise binary coverage resets counters for incremental updates.
+  kPreciseBinary,
+  // Similar to the precise coverage modes but provides coverage at a
+  // lower granularity. Design doc: goo.gl/lA2swZ.
+  kBlockCount,
+  kBlockBinary,
+};
+
+enum class TypeProfileMode {
+  kNone,
+  kCollect,
 };
 
 class V8_EXPORT_PRIVATE BreakLocation : public Location {
@@ -161,6 +185,8 @@ class ConsoleDelegate {
                           const ConsoleContext& context) {}
   virtual void Time(const ConsoleCallArguments& args,
                     const ConsoleContext& context) {}
+  virtual void TimeLog(const ConsoleCallArguments& args,
+                       const ConsoleContext& context) {}
   virtual void TimeEnd(const ConsoleCallArguments& args,
                        const ConsoleContext& context) {}
   virtual void TimeStamp(const ConsoleCallArguments& args,

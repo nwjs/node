@@ -5,8 +5,10 @@
 #include "src/profiler/tick-sample.h"
 
 #include "include/v8-profiler.h"
+#include "src/asan.h"
 #include "src/counters.h"
 #include "src/frames-inl.h"
+#include "src/heap/heap-inl.h"  // For MemoryAllocator::code_range.
 #include "src/msan.h"
 #include "src/simulator.h"
 #include "src/vm-state-inl.h"
@@ -169,12 +171,17 @@ DISABLE_ASAN void TickSample::Init(Isolate* v8_isolate,
     external_callback_entry = info.external_callback_entry;
   } else if (frames_count) {
     // sp register may point at an arbitrary place in memory, make
-    // sure MSAN doesn't complain about it.
+    // sure sanitizers don't complain about it.
+    ASAN_UNPOISON_MEMORY_REGION(regs.sp, sizeof(void*));
     MSAN_MEMORY_IS_INITIALIZED(regs.sp, sizeof(void*));
     // Sample potential return address value for frameless invocation of
     // stubs (we'll figure out later, if this value makes sense).
-    tos = reinterpret_cast<void*>(
-        i::Memory<i::Address>(reinterpret_cast<i::Address>(regs.sp)));
+
+    // TODO(petermarshall): This read causes guard page violations on Windows.
+    // Either fix this mechanism for frameless stubs or remove it.
+    // tos =
+    // i::ReadUnalignedValue<void*>(reinterpret_cast<i::Address>(regs.sp));
+    tos = nullptr;
   } else {
     tos = nullptr;
   }
@@ -206,7 +213,7 @@ bool TickSample::GetStackSample(Isolate* v8_isolate, RegisterState* regs,
   // Check whether we interrupted setup/teardown of a stack frame in JS code.
   // Avoid this check for C++ code, as that would trigger false positives.
   if (regs->pc &&
-      isolate->heap()->memory_allocator()->code_range()->contains(
+      isolate->heap()->memory_allocator()->code_range().contains(
           reinterpret_cast<i::Address>(regs->pc)) &&
       IsNoFrameRegion(reinterpret_cast<i::Address>(regs->pc))) {
     // The frame is not setup, so it'd be hard to iterate the stack. Bailout.
@@ -255,17 +262,16 @@ bool TickSample::GetStackSample(Isolate* v8_isolate, RegisterState* regs,
       // bytecode_array might be garbage, so don't actually dereference it. We
       // avoid the frame->GetXXX functions since they call BytecodeArray::cast,
       // which has a heap access in its DCHECK.
-      i::Object* bytecode_array = i::Memory<i::Object*>(
+      i::Address bytecode_array = i::Memory<i::Address>(
           frame->fp() + i::InterpreterFrameConstants::kBytecodeArrayFromFp);
-      i::Object* bytecode_offset = i::Memory<i::Object*>(
+      i::Address bytecode_offset = i::Memory<i::Address>(
           frame->fp() + i::InterpreterFrameConstants::kBytecodeOffsetFromFp);
 
       // If the bytecode array is a heap object and the bytecode offset is a
       // Smi, use those, otherwise fall back to using the frame's pc.
       if (HAS_HEAP_OBJECT_TAG(bytecode_array) && HAS_SMI_TAG(bytecode_offset)) {
         frames[i++] = reinterpret_cast<void*>(
-            reinterpret_cast<i::Address>(bytecode_array) +
-            i::Internals::SmiValue(bytecode_offset));
+            bytecode_array + i::Internals::SmiValue(bytecode_offset));
         continue;
       }
     }
@@ -285,6 +291,21 @@ void TickSample::Init(Isolate* isolate, const v8::RegisterState& state,
                        use_simulator_reg_state);
   if (pc == nullptr) return;
   timestamp = base::TimeTicks::HighResolutionNow();
+}
+
+void TickSample::print() const {
+  PrintF("TickSample: at %p\n", this);
+  PrintF(" - state: %s\n", StateToString(state));
+  PrintF(" - pc: %p\n", pc);
+  PrintF(" - stack: (%u frames)\n", frames_count);
+  for (unsigned i = 0; i < frames_count; i++) {
+    PrintF("    %p\n", stack[i]);
+  }
+  PrintF(" - has_external_callback: %d\n", has_external_callback);
+  PrintF(" - %s: %p\n",
+         has_external_callback ? "external_callback_entry" : "tos", tos);
+  PrintF(" - update_stats: %d\n", update_stats);
+  PrintF("\n");
 }
 
 }  // namespace internal

@@ -37,10 +37,9 @@ class RegExpCompiler;
 class RegExpNode;
 class RegExpTree;
 
-
-class RegExpVisitor BASE_EMBEDDED {
+class RegExpVisitor {
  public:
-  virtual ~RegExpVisitor() {}
+  virtual ~RegExpVisitor() = default;
 #define MAKE_CASE(Name) \
   virtual void* Visit##Name(RegExp##Name*, void* data) = 0;
   FOR_EACH_REG_EXP_TREE_TYPE(MAKE_CASE)
@@ -137,8 +136,7 @@ class CharacterRange {
   uc32 to_;
 };
 
-
-class CharacterSet final BASE_EMBEDDED {
+class CharacterSet final {
  public:
   explicit CharacterSet(uc16 standard_set_type)
       : ranges_(nullptr), standard_set_type_(standard_set_type) {}
@@ -159,8 +157,7 @@ class CharacterSet final BASE_EMBEDDED {
   uc16 standard_set_type_;
 };
 
-
-class TextElement final BASE_EMBEDDED {
+class TextElement final {
  public:
   enum TextType { ATOM, CHAR_CLASS };
 
@@ -198,7 +195,7 @@ class TextElement final BASE_EMBEDDED {
 class RegExpTree : public ZoneObject {
  public:
   static const int kInfinity = kMaxInt;
-  virtual ~RegExpTree() {}
+  virtual ~RegExpTree() = default;
   virtual void* Accept(RegExpVisitor* visitor, void* data) = 0;
   virtual RegExpNode* ToNode(RegExpCompiler* compiler,
                              RegExpNode* on_success) = 0;
@@ -415,8 +412,12 @@ class RegExpQuantifier final : public RegExpTree {
       : body_(body),
         min_(min),
         max_(max),
-        min_match_(min * body->min_match()),
         quantifier_type_(type) {
+    if (min > 0 && body->min_match() > kInfinity / min) {
+      min_match_ = kInfinity;
+    } else {
+      min_match_ = min * body->min_match();
+    }
     if (max > 0 && body->max_match() > kInfinity / max) {
       max_match_ = kInfinity;
     } else {
@@ -580,7 +581,7 @@ class RegExpBackReference final : public RegExpTree {
 
 class RegExpEmpty final : public RegExpTree {
  public:
-  RegExpEmpty() {}
+  RegExpEmpty() = default;
   void* Accept(RegExpVisitor* visitor, void* data) override;
   RegExpNode* ToNode(RegExpCompiler* compiler, RegExpNode* on_success) override;
   RegExpEmpty* AsEmpty() override;

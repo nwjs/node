@@ -256,10 +256,22 @@ class NODE_EXTERN MultiIsolatePlatform : public v8::Platform {
   virtual void DrainTasks(v8::Isolate* isolate) = 0;
   virtual void CancelPendingDelayedTasks(v8::Isolate* isolate) = 0;
 
-  // These will be called by the `IsolateData` creation/destruction functions.
+  // This needs to be called between the calls to `Isolate::Allocate()` and
+  // `Isolate::Initialize()`, so that initialization can already start
+  // using the platform.
+  // When using `NewIsolate()`, this is taken care of by that function.
+  // This function may only be called once per `Isolate`.
   virtual void RegisterIsolate(v8::Isolate* isolate,
                                struct uv_loop_s* loop) = 0;
+  // This needs to be called right before calling `Isolate::Dispose()`.
+  // This function may only be called once per `Isolate`.
   virtual void UnregisterIsolate(v8::Isolate* isolate) = 0;
+  // The platform should call the passed function once all state associated
+  // with the given isolate has been cleaned up. This can, but does not have to,
+  // happen asynchronously.
+  virtual void AddIsolateFinishedCallback(v8::Isolate* isolate,
+                                          void (*callback)(void*),
+                                          void* data) = 0;
 };
 
 // Set up some Node.js-specific defaults for `params`, in particular
@@ -285,7 +297,7 @@ NODE_EXTERN v8::Isolate* NewIsolate(ArrayBufferAllocator* allocator,
 NODE_EXTERN v8::Local<v8::Context> NewContext(
     v8::Isolate* isolate,
     v8::Local<v8::ObjectTemplate> object_template =
-        v8::Local<v8::ObjectTemplate>());
+    v8::Local<v8::ObjectTemplate>(), bool create = true);
 
 // If `platform` is passed, it will be used to register new Worker instances.
 // It can be `nullptr`, in which case creating new Workers inside of
@@ -362,7 +374,7 @@ NODE_DEPRECATED("Use v8::Date::ValueOf() directly",
     (target)->DefineOwnProperty(context,                                      \
                                 constant_name,                                \
                                 constant_value,                               \
-                                constant_attributes).FromJust();              \
+                                constant_attributes).Check();                 \
   }                                                                           \
   while (0)
 
@@ -383,7 +395,7 @@ NODE_DEPRECATED("Use v8::Date::ValueOf() directly",
     (target)->DefineOwnProperty(context,                                      \
                                 constant_name,                                \
                                 constant_value,                               \
-                                constant_attributes).FromJust();              \
+                                constant_attributes).Check();                 \
   }                                                                           \
   while (0)
 
@@ -414,7 +426,7 @@ inline void NODE_SET_METHOD(v8::Local<v8::Object> recv,
   v8::Local<v8::String> fn_name = v8::String::NewFromUtf8(isolate, name,
       v8::NewStringType::kInternalized).ToLocalChecked();
   fn->SetName(fn_name);
-  recv->Set(context, fn_name, fn).FromJust();
+  recv->Set(context, fn_name, fn).Check();
 }
 #define NODE_SET_METHOD node::NODE_SET_METHOD
 
@@ -639,23 +651,11 @@ NODE_EXTERN void AtExit(Environment* env,
                         void (*cb)(void* arg),
                         void* arg = nullptr);
 
-typedef void (*promise_hook_func) (v8::PromiseHookType type,
-                                   v8::Local<v8::Promise> promise,
-                                   v8::Local<v8::Value> parent,
-                                   void* arg);
-
 typedef double async_id;
 struct async_context {
   ::node::async_id async_id;
   ::node::async_id trigger_async_id;
 };
-
-/* Registers an additional v8::PromiseHook wrapper. This API exists because V8
- * itself supports only a single PromiseHook. */
-NODE_DEPRECATED("Use async_hooks directly instead",
-                NODE_EXTERN void AddPromiseHook(v8::Isolate* isolate,
-                                                promise_hook_func fn,
-                                                void* arg));
 
 /* This is a lot like node::AtExit, except that the hooks added via this
  * function are run before the AtExit ones and will always be registered
@@ -768,69 +768,41 @@ v8::MaybeLocal<v8::Value> MakeCallback(v8::Isolate* isolate,
 /* Helper class users can optionally inherit from. If
  * `AsyncResource::MakeCallback()` is used, then all four callbacks will be
  * called automatically. */
-class AsyncResource {
+class NODE_EXTERN AsyncResource {
  public:
   AsyncResource(v8::Isolate* isolate,
                 v8::Local<v8::Object> resource,
                 const char* name,
-                async_id trigger_async_id = -1)
-      : isolate_(isolate),
-        resource_(isolate, resource) {
-    async_context_ = EmitAsyncInit(isolate, resource, name,
-                                   trigger_async_id);
-  }
+                async_id trigger_async_id = -1);
 
-  virtual ~AsyncResource() {
-    EmitAsyncDestroy(isolate_, async_context_);
-    resource_.Reset();
-  }
+  virtual ~AsyncResource();
+
+  AsyncResource(const AsyncResource&) = delete;
+  void operator=(const AsyncResource&) = delete;
 
   v8::MaybeLocal<v8::Value> MakeCallback(
       v8::Local<v8::Function> callback,
       int argc,
-      v8::Local<v8::Value>* argv) {
-    return node::MakeCallback(isolate_, get_resource(),
-                              callback, argc, argv,
-                              async_context_);
-  }
+      v8::Local<v8::Value>* argv);
 
   v8::MaybeLocal<v8::Value> MakeCallback(
       const char* method,
       int argc,
-      v8::Local<v8::Value>* argv) {
-    return node::MakeCallback(isolate_, get_resource(),
-                              method, argc, argv,
-                              async_context_);
-  }
+      v8::Local<v8::Value>* argv);
 
   v8::MaybeLocal<v8::Value> MakeCallback(
       v8::Local<v8::String> symbol,
       int argc,
-      v8::Local<v8::Value>* argv) {
-    return node::MakeCallback(isolate_, get_resource(),
-                              symbol, argc, argv,
-                              async_context_);
-  }
+      v8::Local<v8::Value>* argv);
 
-  v8::Local<v8::Object> get_resource() {
-    return resource_.Get(isolate_);
-  }
-
-  async_id get_async_id() const {
-    return async_context_.async_id;
-  }
-
-  async_id get_trigger_async_id() const {
-    return async_context_.trigger_async_id;
-  }
+  v8::Local<v8::Object> get_resource();
+  async_id get_async_id() const;
+  async_id get_trigger_async_id() const;
 
  protected:
-  class CallbackScope : public node::CallbackScope {
+  class NODE_EXTERN CallbackScope : public node::CallbackScope {
    public:
-    explicit CallbackScope(AsyncResource* res)
-      : node::CallbackScope(res->isolate_,
-                            res->resource_.Get(res->isolate_),
-                            res->async_context_) {}
+    explicit CallbackScope(AsyncResource* res);
   };
 
  private:

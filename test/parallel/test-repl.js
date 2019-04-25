@@ -35,7 +35,7 @@ const prompt_tcp = 'node via TCP socket> ';
 // Absolute path to test/fixtures/a.js
 const moduleFilename = fixtures.path('a');
 
-// function for REPL to run
+// Function for REPL to run
 global.invoke_me = function(arg) {
   return `invoked ${arg}`;
 };
@@ -358,7 +358,7 @@ const errorTests = [
     send: ')',
     expect: 'undefined'
   },
-  // npm prompt error message
+  // `npm` prompt error message.
   {
     send: 'npm install foobar',
     expect: [
@@ -534,11 +534,16 @@ const errorTests = [
     send: 'require("internal/repl")',
     expect: [
       'Thrown:',
-      /^{ Error: Cannot find module 'internal\/repl'/,
+      /^Error: Cannot find module 'internal\/repl'/,
+      /^Require stack:/,
+      /^- <repl>/,
       /^    at .*/,
       /^    at .*/,
       /^    at .*/,
-      /^    at .*/
+      /^    at .*/,
+      "  code: 'MODULE_NOT_FOUND',",
+      "  requireStack: [ '<repl>' ]",
+      '}'
     ]
   },
   // REPL should handle quotes within regexp literal in multiline mode
@@ -674,7 +679,7 @@ const errorTests = [
       /^SyntaxError: /
     ]
   },
-  // bring back the repl to prompt
+  // Bring back the repl to prompt
   {
     send: '.break',
     expect: ''

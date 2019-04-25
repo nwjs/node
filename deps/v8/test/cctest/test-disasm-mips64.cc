@@ -70,12 +70,13 @@ bool DisassembleAndCompare(byte* pc, const char* compare_string) {
 // Set up V8 to a state where we can at least run the assembler and
 // disassembler. Declare the variables and allocate the data structures used
 // in the rest of the macros.
-#define SET_UP()                                            \
-  CcTest::InitializeVM();                                   \
-  Isolate* isolate = CcTest::i_isolate();                   \
-  HandleScope scope(isolate);                               \
-  byte* buffer = reinterpret_cast<byte*>(malloc(4 * 1024)); \
-  Assembler assm(AssemblerOptions{}, buffer, 4 * 1024);     \
+#define SET_UP()                                             \
+  CcTest::InitializeVM();                                    \
+  Isolate* isolate = CcTest::i_isolate();                    \
+  HandleScope scope(isolate);                                \
+  byte* buffer = reinterpret_cast<byte*>(malloc(4 * 1024));  \
+  Assembler assm(AssemblerOptions{},                         \
+                 ExternalAssemblerBuffer(buffer, 4 * 1024)); \
   bool failure = false;
 
 // This macro assembles one instruction using the preallocated assembler and
@@ -1176,19 +1177,6 @@ TEST(Type3) {
   COMPARE_PC_REL_COMPACT(bgtz(a0, 1), "1c800001       bgtz    a0, 1", 1);
   COMPARE_PC_REL_COMPACT(bgtz(a0, 32767), "1c807fff       bgtz    a0, 32767",
                          32767);
-
-  int64_t pc_region;
-  GET_PC_REGION(pc_region);
-
-  int64_t target = pc_region | 0x4;
-  COMPARE_PC_JUMP(j(target), "08000001       j      ", target);
-  target = pc_region | 0xFFFFFFC;
-  COMPARE_PC_JUMP(j(target), "0bffffff       j      ", target);
-
-  target = pc_region | 0x4;
-  COMPARE_PC_JUMP(jal(target), "0c000001       jal    ", target);
-  target = pc_region | 0xFFFFFFC;
-  COMPARE_PC_JUMP(jal(target), "0fffffff       jal    ", target);
 
   VERIFY_RUN();
 }

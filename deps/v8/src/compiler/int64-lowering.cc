@@ -129,7 +129,7 @@ void Int64Lowering::LowerWord64AtomicBinop(Node* node, const Operator* op) {
 void Int64Lowering::LowerWord64AtomicNarrowOp(Node* node, const Operator* op) {
   DefaultLowering(node, true);
   NodeProperties::ChangeOp(node, op);
-  ReplaceNodeWithProjections(node);
+  ReplaceNode(node, node, graph()->NewNode(common()->Int32Constant(0)));
 }
 
 // static
@@ -886,6 +886,7 @@ void Int64Lowering::LowerNode(Node* node) {
     case IrOpcode::kWord64AtomicLoad: {
       DCHECK_EQ(4, node->InputCount());
       MachineType type = AtomicOpType(node->op());
+      DefaultLowering(node, true);
       if (type == MachineType::Uint64()) {
         NodeProperties::ChangeOp(node, machine()->Word32AtomicPairLoad());
         ReplaceNodeWithProjections(node);
@@ -915,8 +916,7 @@ void Int64Lowering::LowerNode(Node* node) {
     if (type == MachineType::Uint64()) {                                    \
       LowerWord64AtomicBinop(node, machine()->Word32AtomicPair##name());    \
     } else {                                                                \
-      LowerWord64AtomicNarrowOp(node,                                       \
-                                machine()->Word64AtomicNarrow##name(type)); \
+      LowerWord64AtomicNarrowOp(node, machine()->Word32Atomic##name(type)); \
     }                                                                       \
     break;                                                                  \
   }
@@ -940,8 +940,12 @@ void Int64Lowering::LowerNode(Node* node) {
                                  machine()->Word32AtomicPairCompareExchange());
         ReplaceNodeWithProjections(node);
       } else {
-        LowerWord64AtomicNarrowOp(
-            node, machine()->Word64AtomicNarrowCompareExchange(type));
+        DCHECK(type == MachineType::Uint32() || type == MachineType::Uint16() ||
+               type == MachineType::Uint8());
+        DefaultLowering(node, true);
+        NodeProperties::ChangeOp(node,
+                                 machine()->Word32AtomicCompareExchange(type));
+        ReplaceNode(node, node, graph()->NewNode(common()->Int32Constant(0)));
       }
       break;
     }

@@ -28,15 +28,25 @@
 #include "uv.h"
 
 #ifdef _WIN32
+#include <io.h>  // _S_IREAD _S_IWRITE
 #include <time.h>
+#ifndef S_IRUSR
+#define S_IRUSR _S_IREAD
+#endif  // S_IRUSR
+#ifndef S_IWUSR
+#define S_IWUSR _S_IWRITE
+#endif  // S_IWUSR
 #else
 #include <sys/time.h>
 #include <sys/types.h>
 #endif
 
+#include <atomic>
 #include <cstdio>
 #include <iomanip>
 #include <sstream>
+
+static std::atomic_int seq = {0};  // Sequence number for diagnostic filenames.
 
 namespace node {
 
@@ -152,6 +162,45 @@ void ThrowErrStringTooLong(Isolate* isolate) {
   isolate->ThrowException(ERR_STRING_TOO_LONG(isolate));
 }
 
+double GetCurrentTimeInMicroseconds() {
+  constexpr double kMicrosecondsPerSecond = 1e6;
+  uv_timeval64_t tv;
+  CHECK_EQ(0, uv_gettimeofday(&tv));
+  return kMicrosecondsPerSecond * tv.tv_sec + tv.tv_usec;
+}
+
+int WriteFileSync(const char* path, uv_buf_t buf) {
+  uv_fs_t req;
+  int fd = uv_fs_open(nullptr,
+                      &req,
+                      path,
+                      O_WRONLY | O_CREAT | O_TRUNC,
+                      S_IWUSR | S_IRUSR,
+                      nullptr);
+  uv_fs_req_cleanup(&req);
+  if (fd < 0) {
+    return fd;
+  }
+
+  int err = uv_fs_write(nullptr, &req, fd, &buf, 1, 0, nullptr);
+  uv_fs_req_cleanup(&req);
+  if (err < 0) {
+    return err;
+  }
+
+  err = uv_fs_close(nullptr, &req, fd, nullptr);
+  uv_fs_req_cleanup(&req);
+  return err;
+}
+
+int WriteFileSync(v8::Isolate* isolate,
+                  const char* path,
+                  v8::Local<v8::String> string) {
+  node::Utf8Value utf8(isolate, string);
+  uv_buf_t buf = uv_buf_init(utf8.out(), utf8.length());
+  return WriteFileSync(path, buf);
+}
+
 void DiagnosticFilename::LocalTime(TIME_TYPE* tm_struct) {
 #ifdef _WIN32
   GetLocalTime(tm_struct);
@@ -166,8 +215,7 @@ void DiagnosticFilename::LocalTime(TIME_TYPE* tm_struct) {
 std::string DiagnosticFilename::MakeFilename(
     uint64_t thread_id,
     const char* prefix,
-    const char* ext,
-    int seq) {
+    const char* ext) {
   std::ostringstream oss;
   TIME_TYPE tm_struct;
   LocalTime(&tm_struct);
@@ -203,8 +251,7 @@ std::string DiagnosticFilename::MakeFilename(
 #endif
   oss << "." << uv_os_getpid();
   oss << "." << thread_id;
-  if (seq >= 0)
-    oss << "." << std::setfill('0') << std::setw(3) << ++seq;
+  oss << "." << std::setfill('0') << std::setw(3) << ++seq;
   oss << "." << ext;
   return oss.str();
 }

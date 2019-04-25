@@ -8,6 +8,8 @@ const assert = require('assert');
 const {
   createCipheriv,
   createDecipheriv,
+  createSign,
+  createVerify,
   createSecretKey,
   createPublicKey,
   createPrivateKey,
@@ -20,6 +22,10 @@ const fixtures = require('../common/fixtures');
 
 const publicPem = fixtures.readSync('test_rsa_pubkey.pem', 'ascii');
 const privatePem = fixtures.readSync('test_rsa_privkey.pem', 'ascii');
+
+const publicDsa = fixtures.readKey('dsa_public_1025.pem', 'ascii');
+const privateDsa = fixtures.readKey('dsa_private_encrypted_1025.pem',
+                                    'ascii');
 
 {
   // Attempting to create an empty key should throw.
@@ -165,21 +171,234 @@ const privatePem = fixtures.readSync('test_rsa_privkey.pem', 'ascii');
   // This should not cause a crash: https://github.com/nodejs/node/issues/25247
   assert.throws(() => {
     createPrivateKey({ key: '' });
-  }, /null/);
+  }, {
+    message: 'error:2007E073:BIO routines:BIO_new_mem_buf:null parameter',
+    code: 'ERR_OSSL_BIO_NULL_PARAMETER',
+    reason: 'null parameter',
+    library: 'BIO routines',
+    function: 'BIO_new_mem_buf',
+  });
+}
+
+[
+  { private: fixtures.readSync('test_ed25519_privkey.pem', 'ascii'),
+    public: fixtures.readSync('test_ed25519_pubkey.pem', 'ascii'),
+    keyType: 'ed25519' },
+  { private: fixtures.readSync('test_ed448_privkey.pem', 'ascii'),
+    public: fixtures.readSync('test_ed448_pubkey.pem', 'ascii'),
+    keyType: 'ed448' },
+  { private: fixtures.readSync('test_x25519_privkey.pem', 'ascii'),
+    public: fixtures.readSync('test_x25519_pubkey.pem', 'ascii'),
+    keyType: 'x25519' },
+  { private: fixtures.readSync('test_x448_privkey.pem', 'ascii'),
+    public: fixtures.readSync('test_x448_pubkey.pem', 'ascii'),
+    keyType: 'x448' }
+].forEach((info) => {
+  const keyType = info.keyType;
+
+  {
+    const exportOptions = { type: 'pkcs8', format: 'pem' };
+    const key = createPrivateKey(info.private);
+    assert.strictEqual(key.type, 'private');
+    assert.strictEqual(key.asymmetricKeyType, keyType);
+    assert.strictEqual(key.symmetricKeySize, undefined);
+    assert.strictEqual(key.export(exportOptions), info.private);
+  }
+
+  {
+    const exportOptions = { type: 'spki', format: 'pem' };
+    [info.private, info.public].forEach((pem) => {
+      const key = createPublicKey(pem);
+      assert.strictEqual(key.type, 'public');
+      assert.strictEqual(key.asymmetricKeyType, keyType);
+      assert.strictEqual(key.symmetricKeySize, undefined);
+      assert.strictEqual(key.export(exportOptions), info.public);
+    });
+  }
+});
+
+{
+  // Reading an encrypted key without a passphrase should fail.
+  common.expectsError(() => createPrivateKey(privateDsa), {
+    type: TypeError,
+    code: 'ERR_MISSING_PASSPHRASE',
+    message: 'Passphrase required for encrypted key'
+  });
+
+  // Reading an encrypted key with a passphrase that exceeds OpenSSL's buffer
+  // size limit should fail with an appropriate error code.
+  common.expectsError(() => createPrivateKey({
+    key: privateDsa,
+    format: 'pem',
+    passphrase: Buffer.alloc(1025, 'a')
+  }), {
+    code: 'ERR_OSSL_PEM_BAD_PASSWORD_READ',
+    type: Error
+  });
+
+  // The buffer has a size of 1024 bytes, so this passphrase should be permitted
+  // (but will fail decryption).
+  common.expectsError(() => createPrivateKey({
+    key: privateDsa,
+    format: 'pem',
+    passphrase: Buffer.alloc(1024, 'a')
+  }), {
+    message: /bad decrypt/
+  });
+
+  const publicKey = createPublicKey(publicDsa);
+  assert.strictEqual(publicKey.type, 'public');
+  assert.strictEqual(publicKey.asymmetricKeyType, 'dsa');
+  assert.strictEqual(publicKey.symmetricKeySize, undefined);
+
+  const privateKey = createPrivateKey({
+    key: privateDsa,
+    format: 'pem',
+    passphrase: 'secret'
+  });
+  assert.strictEqual(privateKey.type, 'private');
+  assert.strictEqual(privateKey.asymmetricKeyType, 'dsa');
+  assert.strictEqual(privateKey.symmetricKeySize, undefined);
+
 }
 
 {
-  // Exporting an encrypted private key requires a cipher
-  const privateKey = createPrivateKey(privatePem);
-  common.expectsError(() => {
-    privateKey.export({
-      format: 'pem', type: 'pkcs8', passphrase: 'super-secret'
+  // Test RSA-PSS.
+  {
+    // This key pair does not restrict the message digest algorithm or salt
+    // length.
+    const publicPem = fixtures.readKey('rsa_pss_public_2048.pem');
+    const privatePem = fixtures.readKey('rsa_pss_private_2048.pem');
+
+    const publicKey = createPublicKey(publicPem);
+    const privateKey = createPrivateKey(privatePem);
+
+    assert.strictEqual(publicKey.type, 'public');
+    assert.strictEqual(publicKey.asymmetricKeyType, 'rsa-pss');
+
+    assert.strictEqual(privateKey.type, 'private');
+    assert.strictEqual(privateKey.asymmetricKeyType, 'rsa-pss');
+
+    for (const key of [privatePem, privateKey]) {
+      // Any algorithm should work.
+      for (const algo of ['sha1', 'sha256']) {
+        // Any salt length should work.
+        for (const saltLength of [undefined, 8, 10, 12, 16, 18, 20]) {
+          const signature = createSign(algo)
+                            .update('foo')
+                            .sign({ key, saltLength });
+
+          for (const pkey of [key, publicKey, publicPem]) {
+            const okay = createVerify(algo)
+                         .update('foo')
+                         .verify({ key: pkey, saltLength }, signature);
+
+            assert.ok(okay);
+          }
+        }
+      }
+    }
+
+    // Exporting the key using PKCS#1 should not work since this would discard
+    // any algorithm restrictions.
+    common.expectsError(() => {
+      publicKey.export({ format: 'pem', type: 'pkcs1' });
+    }, {
+      code: 'ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS'
     });
-  }, {
-    type: TypeError,
-    code: 'ERR_INVALID_OPT_VALUE',
-    message: 'The value "undefined" is invalid for option "cipher"'
-  });
+  }
+
+  {
+    // This key pair enforces sha256 as the message digest and the MGF1
+    // message digest and a salt length of at least 16 bytes.
+    const publicPem =
+      fixtures.readKey('rsa_pss_public_2048_sha256_sha256_16.pem');
+    const privatePem =
+      fixtures.readKey('rsa_pss_private_2048_sha256_sha256_16.pem');
+
+    const publicKey = createPublicKey(publicPem);
+    const privateKey = createPrivateKey(privatePem);
+
+    assert.strictEqual(publicKey.type, 'public');
+    assert.strictEqual(publicKey.asymmetricKeyType, 'rsa-pss');
+
+    assert.strictEqual(privateKey.type, 'private');
+    assert.strictEqual(privateKey.asymmetricKeyType, 'rsa-pss');
+
+    for (const key of [privatePem, privateKey]) {
+      // Signing with anything other than sha256 should fail.
+      assert.throws(() => {
+        createSign('sha1').sign(key);
+      }, /digest not allowed/);
+
+      // Signing with salt lengths less than 16 bytes should fail.
+      for (const saltLength of [8, 10, 12]) {
+        assert.throws(() => {
+          createSign('sha1').sign({ key, saltLength });
+        }, /pss saltlen too small/);
+      }
+
+      // Signing with sha256 and appropriate salt lengths should work.
+      for (const saltLength of [undefined, 16, 18, 20]) {
+        const signature = createSign('sha256')
+                          .update('foo')
+                          .sign({ key, saltLength });
+
+        for (const pkey of [key, publicKey, publicPem]) {
+          const okay = createVerify('sha256')
+                       .update('foo')
+                       .verify({ key: pkey, saltLength }, signature);
+
+          assert.ok(okay);
+        }
+      }
+    }
+  }
+
+  {
+    // This key enforces sha512 as the message digest and sha256 as the MGF1
+    // message digest.
+    const publicPem =
+      fixtures.readKey('rsa_pss_public_2048_sha512_sha256_20.pem');
+    const privatePem =
+      fixtures.readKey('rsa_pss_private_2048_sha512_sha256_20.pem');
+
+    const publicKey = createPublicKey(publicPem);
+    const privateKey = createPrivateKey(privatePem);
+
+    assert.strictEqual(publicKey.type, 'public');
+    assert.strictEqual(publicKey.asymmetricKeyType, 'rsa-pss');
+
+    assert.strictEqual(privateKey.type, 'private');
+    assert.strictEqual(privateKey.asymmetricKeyType, 'rsa-pss');
+
+    // Node.js usually uses the same hash function for the message and for MGF1.
+    // However, when a different MGF1 message digest algorithm has been
+    // specified as part of the key, it should automatically switch to that.
+    // This behavior is required by sections 3.1 and 3.3 of RFC4055.
+    for (const key of [privatePem, privateKey]) {
+      // sha256 matches the MGF1 hash function and should be used internally,
+      // but it should not be permitted as the main message digest algorithm.
+      for (const algo of ['sha1', 'sha256']) {
+        assert.throws(() => {
+          createSign(algo).sign(key);
+        }, /digest not allowed/);
+      }
+
+      // sha512 should produce a valid signature.
+      const signature = createSign('sha512')
+                        .update('foo')
+                        .sign(key);
+
+      for (const pkey of [key, publicKey, publicPem]) {
+        const okay = createVerify('sha512')
+                     .update('foo')
+                     .verify(pkey, signature);
+
+        assert.ok(okay);
+      }
+    }
+  }
 }
 
 {

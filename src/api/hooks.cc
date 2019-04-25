@@ -52,7 +52,7 @@ int EmitExit(Environment* env) {
       ->Set(env->context(),
             FIXED_ONE_BYTE_STRING(env->isolate(), "_exiting"),
             True(env->isolate()))
-      .FromJust();
+      .Check();
 
   Local<String> exit_code = env->exit_code_string();
   int code = process_object->Get(env->context(), exit_code)
@@ -66,12 +66,6 @@ int EmitExit(Environment* env) {
       .ToLocalChecked()
       ->Int32Value(env->context())
       .ToChecked();
-}
-
-void AddPromiseHook(Isolate* isolate, promise_hook_func fn, void* arg) {
-  Environment* env = Environment::GetCurrent(isolate);
-  CHECK_NOT_NULL(env);
-  env->AddPromiseHook(fn, arg);
 }
 
 void AddEnvironmentCleanupHook(Isolate* isolate,

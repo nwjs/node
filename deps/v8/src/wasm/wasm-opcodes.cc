@@ -107,15 +107,10 @@ const char* WasmOpcodes::OpcodeName(WasmOpcode opcode) {
     CASE_FLOAT_OP(CopySign, "copysign")
     CASE_REF_OP(Null, "null")
     CASE_REF_OP(IsNull, "is_null")
+    CASE_REF_OP(Func, "func")
     CASE_I32_OP(ConvertI64, "wrap/i64")
     CASE_CONVERT_OP(Convert, INT, F32, "f32", "trunc")
     CASE_CONVERT_OP(Convert, INT, F64, "f64", "trunc")
-    // TODO(kschimpf): Simplify after filling in other saturating operations.
-    CASE_CONVERT_SAT_OP(Convert, I32, F32, "f32", "trunc")
-    CASE_CONVERT_SAT_OP(Convert, I32, F64, "f64", "trunc")
-    CASE_CONVERT_SAT_OP(Convert, I64, F32, "f32", "trunc")
-    CASE_CONVERT_SAT_OP(Convert, I64, F64, "f64", "trunc")
-
     CASE_CONVERT_OP(Convert, I64, I32, "i32", "extend")
     CASE_CONVERT_OP(Convert, F32, I32, "i32", "convert")
     CASE_CONVERT_OP(Convert, F32, I64, "i64", "convert")
@@ -143,6 +138,8 @@ const char* WasmOpcodes::OpcodeName(WasmOpcode opcode) {
     CASE_OP(Return, "return")
     CASE_OP(CallFunction, "call")
     CASE_OP(CallIndirect, "call_indirect")
+    CASE_OP(ReturnCall, "return_call")
+    CASE_OP(ReturnCallIndirect, "return_call_indirect")
     CASE_OP(Drop, "drop")
     CASE_OP(Select, "select")
     CASE_OP(GetLocal, "get_local")
@@ -150,9 +147,11 @@ const char* WasmOpcodes::OpcodeName(WasmOpcode opcode) {
     CASE_OP(TeeLocal, "tee_local")
     CASE_OP(GetGlobal, "get_global")
     CASE_OP(SetGlobal, "set_global")
+    CASE_OP(GetTable, "get_table")
+    CASE_OP(SetTable, "set_table")
     CASE_ALL_OP(Const, "const")
-    CASE_OP(MemorySize, "current_memory")
-    CASE_OP(GrowMemory, "grow_memory")
+    CASE_OP(MemorySize, "memory.size")
+    CASE_OP(MemoryGrow, "memory.grow")
     CASE_ALL_OP(LoadMem, "load")
     CASE_SIGN_OP(INT, LoadMem8, "load8")
     CASE_SIGN_OP(INT, LoadMem16, "load16")
@@ -164,12 +163,12 @@ const char* WasmOpcodes::OpcodeName(WasmOpcode opcode) {
     CASE_I64_OP(StoreMem32, "store32")
     CASE_S128_OP(StoreMem, "store128")
 
-    // Non-standard opcodes.
+    // Exception handling opcodes.
     CASE_OP(Try, "try")
+    CASE_OP(Catch, "catch")
     CASE_OP(Throw, "throw")
     CASE_OP(Rethrow, "rethrow")
-    CASE_OP(Catch, "catch")
-    CASE_OP(CatchAll, "catch_all")
+    CASE_OP(BrOnExn, "br_on_exn")
 
     // asm.js-only opcodes.
     CASE_F64_OP(Acos, "acos")
@@ -197,6 +196,19 @@ const char* WasmOpcodes::OpcodeName(WasmOpcode opcode) {
     CASE_I32_OP(AsmjsUConvertF32, "asmjs_convert_u/f32")
     CASE_I32_OP(AsmjsSConvertF64, "asmjs_convert_s/f64")
     CASE_I32_OP(AsmjsUConvertF64, "asmjs_convert_u/f64")
+
+    // Numeric Opcodes.
+    CASE_CONVERT_SAT_OP(Convert, I32, F32, "f32", "trunc")
+    CASE_CONVERT_SAT_OP(Convert, I32, F64, "f64", "trunc")
+    CASE_CONVERT_SAT_OP(Convert, I64, F32, "f32", "trunc")
+    CASE_CONVERT_SAT_OP(Convert, I64, F64, "f64", "trunc")
+    CASE_OP(MemoryInit, "memory.init")
+    CASE_OP(DataDrop, "data.drop")
+    CASE_OP(MemoryCopy, "memory.copy")
+    CASE_OP(MemoryFill, "memory.fill")
+    CASE_OP(TableInit, "table.init")
+    CASE_OP(ElemDrop, "elem.drop")
+    CASE_OP(TableCopy, "table.copy")
 
     // SIMD opcodes.
     CASE_SIMD_OP(Splat, "splat")
@@ -256,6 +268,8 @@ const char* WasmOpcodes::OpcodeName(WasmOpcode opcode) {
     CASE_S1x16_OP(AllTrue, "all_true")
 
     // Atomic operations.
+    CASE_OP(AtomicWake, "atomic_wake")
+    CASE_INT_OP(AtomicWait, "atomic_wait")
     CASE_UNSIGNED_ALL_OP(AtomicLoad, "atomic_load")
     CASE_UNSIGNED_ALL_OP(AtomicStore, "atomic_store")
     CASE_UNSIGNED_ALL_OP(AtomicAdd, "atomic_add")
@@ -359,6 +373,19 @@ bool WasmOpcodes::IsAnyRefOpcode(WasmOpcode opcode) {
   }
 }
 
+bool WasmOpcodes::IsThrowingOpcode(WasmOpcode opcode) {
+  // TODO(8729): Trapping opcodes are not yet considered to be throwing.
+  switch (opcode) {
+    case kExprThrow:
+    case kExprRethrow:
+    case kExprCallFunction:
+    case kExprCallIndirect:
+      return true;
+    default:
+      return false;
+  }
+}
+
 std::ostream& operator<<(std::ostream& os, const FunctionSig& sig) {
   if (sig.return_count() == 0) os << "v";
   for (auto ret : sig.returns()) {
@@ -372,11 +399,18 @@ std::ostream& operator<<(std::ostream& os, const FunctionSig& sig) {
   return os;
 }
 
-bool IsJSCompatibleSignature(const FunctionSig* sig) {
-  for (auto type : sig->all()) {
-    if (type == kWasmI64 || type == kWasmS128) return false;
+bool IsJSCompatibleSignature(const FunctionSig* sig, bool has_bigint_feature) {
+  if (sig->return_count() > 1) {
+    return false;
   }
-  return sig->return_count() <= 1;
+  for (auto type : sig->all()) {
+    if (!has_bigint_feature && type == kWasmI64) {
+      return false;
+    }
+
+    if (type == kWasmS128) return false;
+  }
+  return true;
 }
 
 namespace {
@@ -459,19 +493,7 @@ constexpr std::array<WasmOpcodeSig, 256> kAtomicExprSigTable =
 constexpr std::array<WasmOpcodeSig, 256> kNumericExprSigTable =
     base::make_array<256>(GetNumericOpcodeSigIndex{});
 
-// Computes a direct pointer to a cached signature for a simple opcode.
-struct GetSimpleOpcodeSig {
-  constexpr const FunctionSig* operator()(byte opcode) const {
-#define CASE(name, opc, sig) opcode == opc ? &kSig_##sig:
-    return FOREACH_SIMPLE_OPCODE(CASE) nullptr;
-#undef CASE
-  }
-};
-
 }  // namespace
-
-const std::array<const FunctionSig*, 256> kSimpleOpcodeSigs =
-    base::make_array<256>(GetSimpleOpcodeSig{});
 
 FunctionSig* WasmOpcodes::Signature(WasmOpcode opcode) {
   switch (opcode >> 8) {
@@ -506,7 +528,7 @@ constexpr uint8_t StoreType::kStoreSizeLog2[];
 constexpr ValueType StoreType::kValueType[];
 constexpr MachineRepresentation StoreType::kMemRep[];
 
-int WasmOpcodes::TrapReasonToMessageId(TrapReason reason) {
+MessageTemplate WasmOpcodes::TrapReasonToMessageId(TrapReason reason) {
   switch (reason) {
 #define TRAPREASON_TO_MESSAGE(name) \
   case k##name:                     \
@@ -519,7 +541,7 @@ int WasmOpcodes::TrapReasonToMessageId(TrapReason reason) {
 }
 
 const char* WasmOpcodes::TrapReasonMessage(TrapReason reason) {
-  return MessageTemplate::TemplateString(TrapReasonToMessageId(reason));
+  return MessageFormatter::TemplateString(TrapReasonToMessageId(reason));
 }
 }  // namespace wasm
 }  // namespace internal

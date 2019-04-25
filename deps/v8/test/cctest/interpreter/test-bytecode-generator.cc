@@ -91,6 +91,7 @@ class InitializedIgnitionHandleScope : public InitializedHandleScope {
   InitializedIgnitionHandleScope() {
     i::FLAG_always_opt = false;
     i::FLAG_allow_natives_syntax = true;
+    i::FLAG_enable_lazy_source_positions = false;
   }
 };
 
@@ -157,13 +158,14 @@ bool CompareTexts(const std::string& generated, const std::string& expected) {
   std::string expected_line;
   // Line number does not include golden file header.
   int line_number = 0;
+  bool strings_match = true;
 
   do {
     std::getline(generated_stream, generated_line);
     std::getline(expected_stream, expected_line);
 
     if (!generated_stream.good() && !expected_stream.good()) {
-      return true;
+      return strings_match;
     }
 
     if (!generated_stream.good()) {
@@ -182,7 +184,7 @@ bool CompareTexts(const std::string& generated, const std::string& expected) {
       std::cerr << "Inputs differ at line " << line_number << "\n";
       std::cerr << "  Generated: '" << generated_line << "'\n";
       std::cerr << "  Expected:  '" << expected_line << "'\n";
-      return false;
+      strings_match = false;
     }
     line_number++;
   } while (true);
@@ -627,6 +629,98 @@ TEST(IIFEWithOneshotOpt) {
         return arguments.callee;
       })();
     )",
+      // CallNoFeedback instead of CallProperty
+      R"(
+      this.f0 = function() {};
+      this.f1 = function(a) {};
+      this.f2 = function(a, b) {};
+      this.f3 = function(a, b, c) {};
+      this.f4 = function(a, b, c, d) {};
+      this.f5 = function(a, b, c, d, e) {};
+      (function() {
+        this.f0();
+        this.f1(1);
+        this.f2(1, 2);
+        this.f3(1, 2, 3);
+        this.f4(1, 2, 3, 4);
+        this.f5(1, 2, 3, 4, 5);
+        return arguments.callee;
+      })();
+    )",
+      // CallNoFeedback instead of CallUndefinedReceiver
+      R"(
+      function f0() {}
+      function f1(a) {}
+      function f2(a, b) {}
+      function f3(a, b, c) {}
+      function f4(a, b, c, d) {}
+      function f5(a, b, c, d, e) {}
+      (function() {
+        f0();
+        f1(1);
+        f2(1, 2);
+        f3(1, 2, 3);
+        f4(1, 2, 3, 4);
+        f5(1, 2, 3, 4, 5);
+        return arguments.callee;
+      })();
+    )",
+      // TODO(rmcilroy): Make this function produce one-shot code.
+      R"(
+      var t = 0;
+      function f2() {};
+      if (t == 0) {
+        (function(){
+          l = {};
+          l.a = 3;
+          l.b = 4;
+          f2();
+          return arguments.callee;
+        })();
+      }
+    )",
+      // No one-shot opt for IIFE`s within a function
+      R"(
+        function f2() {};
+        function f() {
+          return (function(){
+            l = {};
+            l.a = 3;
+            l.b = 4;
+            f2();
+            return arguments.callee;
+          })();
+        }
+        f();
+    )",
+      R"(
+        var f = function(l) {  l.a = 3; return l; };
+        f({});
+        f;
+    )",
+      // No one-shot opt for top-level functions enclosed in parentheses
+      R"(
+        var f = (function(l) {  l.a = 3; return l; });
+        f;
+    )",
+      R"(
+        var f = (function foo(l) {  l.a = 3; return l; });
+        f;
+    )",
+      R"(
+        var f = function foo(l) {  l.a = 3; return l; };
+        f({});
+        f;
+    )",
+      R"(
+        l = {};
+        var f = (function foo(l) {  l.a = 3; return arguments.callee; })(l);
+        f;
+    )",
+      R"(
+        var f = (function foo(l) {  l.a = 3; return arguments.callee; })({});
+        f;
+    )",
   };
   CHECK(CompareTexts(BuildActual(printer, snippets),
                      LoadGolden("IIFEWithOneshotOpt.golden")));
@@ -660,6 +754,40 @@ TEST(IIFEWithoutOneshotOpt) {
         } else {
           l.a = l.b;
         }
+        return arguments.callee;
+      })();
+    )",
+      R"(
+      this.f0 = function() {};
+      this.f1 = function(a) {};
+      this.f2 = function(a, b) {};
+      this.f3 = function(a, b, c) {};
+      this.f4 = function(a, b, c, d) {};
+      this.f5 = function(a, b, c, d, e) {};
+      (function() {
+        this.f0();
+        this.f1(1);
+        this.f2(1, 2);
+        this.f3(1, 2, 3);
+        this.f4(1, 2, 3, 4);
+        this.f5(1, 2, 3, 4, 5);
+        return arguments.callee;
+      })();
+    )",
+      R"(
+      function f0() {}
+      function f1(a) {}
+      function f2(a, b) {}
+      function f3(a, b, c) {}
+      function f4(a, b, c, d) {}
+      function f5(a, b, c, d, e) {}
+      (function() {
+        f0();
+        f1(1);
+        f2(1, 2);
+        f3(1, 2, 3);
+        f4(1, 2, 3, 4);
+        f5(1, 2, 3, 4, 5);
         return arguments.callee;
       })();
     )",
@@ -1372,6 +1500,8 @@ TEST(Delete) {
       "return delete a[1];\n",
 
       "return delete 'test';\n",
+
+      "return delete this;\n",
   };
 
   CHECK(CompareTexts(BuildActual(printer, snippets),
@@ -2145,6 +2275,33 @@ TEST(AssignmentsInBinaryExpression) {
                      LoadGolden("AssignmentsInBinaryExpression.golden")));
 }
 
+TEST(DestructuringAssignment) {
+  InitializedIgnitionHandleScope scope;
+  BytecodeExpectationsPrinter printer(CcTest::isolate());
+  const char* snippets[] = {
+      "var x, a = [0,1,2,3];\n"
+      "[x] = a;\n",
+
+      "var x, y, a = [0,1,2,3];\n"
+      "[,x,...y] = a;\n",
+
+      "var x={}, y, a = [0];\n"
+      "[x.foo,y=4] = a;\n",
+
+      "var x, a = {x:1};\n"
+      "({x} = a);\n",
+
+      "var x={}, a = {y:1};\n"
+      "({y:x.foo} = a);\n",
+
+      "var x, a = {y:1, w:2, v:3};\n"
+      "({x=0,...y} = a);\n",
+  };
+
+  CHECK(CompareTexts(BuildActual(printer, snippets),
+                     LoadGolden("DestructuringAssignment.golden")));
+}
+
 TEST(Eval) {
   InitializedIgnitionHandleScope scope;
   BytecodeExpectationsPrinter printer(CcTest::isolate());
@@ -2264,7 +2421,7 @@ TEST(WideRegisters) {
   // Prepare prologue that creates frame for lots of registers.
   std::ostringstream os;
   for (size_t i = 0; i < 157; ++i) {
-    os << "var x" << i << ";\n";
+    os << "var x" << i << " = 0;\n";
   }
   std::string prologue(os.str());
 
@@ -2377,26 +2534,6 @@ TEST(LetVariableContextSlot) {
 
   CHECK(CompareTexts(BuildActual(printer, snippets),
                      LoadGolden("LetVariableContextSlot.golden")));
-}
-
-TEST(DoExpression) {
-  bool old_flag = FLAG_harmony_do_expressions;
-  FLAG_harmony_do_expressions = true;
-
-  InitializedIgnitionHandleScope scope;
-  BytecodeExpectationsPrinter printer(CcTest::isolate());
-  const char* snippets[] = {
-      "var a = do { }; return a;\n",
-
-      "var a = do { var x = 100; }; return a;\n",
-
-      "while(true) { var a = 10; a = do { ++a; break; }; a = 20; }\n",
-  };
-
-  CHECK(CompareTexts(BuildActual(printer, snippets),
-                     LoadGolden("DoExpression.golden")));
-
-  FLAG_harmony_do_expressions = old_flag;
 }
 
 TEST(WithStatement) {

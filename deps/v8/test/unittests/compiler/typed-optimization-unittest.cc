@@ -27,8 +27,8 @@ namespace typed_optimization_unittest {
 class TypedOptimizationTest : public TypedGraphTest {
  public:
   TypedOptimizationTest()
-      : TypedGraphTest(3), simplified_(zone()), deps_(isolate(), zone()) {}
-  ~TypedOptimizationTest() override {}
+      : TypedGraphTest(3), simplified_(zone()), deps_(broker(), zone()) {}
+  ~TypedOptimizationTest() override = default;
 
  protected:
   Reduction Reduce(Node* node) {
@@ -38,8 +38,7 @@ class TypedOptimizationTest : public TypedGraphTest {
                     &machine);
     // TODO(titzer): mock the GraphReducer here for better unit testing.
     GraphReducer graph_reducer(zone(), graph());
-    TypedOptimization reducer(&graph_reducer, &deps_, &jsgraph,
-                              js_heap_broker());
+    TypedOptimization reducer(&graph_reducer, &deps_, &jsgraph, broker());
     return reducer.Reduce(node);
   }
 

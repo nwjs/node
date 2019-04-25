@@ -1,4 +1,4 @@
-// Flags: --experimental-report --diagnostic-report-on-fatalerror --diagnostic-report-on-signal --diagnostic-report-uncaught-exception
+// Flags: --experimental-report --report-on-fatalerror --report-on-signal --report-uncaught-exception
 'use strict';
 const common = require('../common');
 common.skipIfReportDisabled();
@@ -68,7 +68,16 @@ if (!common.isWindows) {
   }, { code: 'ERR_INVALID_ARG_TYPE' });
   common.expectsError(() => {
     process.report.signal = 'foo';
-  }, { code: 'ERR_UNKNOWN_SIGNAL' });
+  }, {
+    code: 'ERR_UNKNOWN_SIGNAL',
+    message: 'Unknown signal: foo'
+  });
+  common.expectsError(() => {
+    process.report.signal = 'sigusr1';
+  }, {
+    code: 'ERR_UNKNOWN_SIGNAL',
+    message: 'Unknown signal: sigusr1 (signals must use all capital letters)'
+  });
   assert.strictEqual(process.report.signal, 'SIGUSR2');
   process.report.signal = 'SIGUSR1';
   assert.strictEqual(process.report.signal, 'SIGUSR1');

@@ -421,6 +421,11 @@ parser.add_option('--with-ltcg',
     dest='with_ltcg',
     help='Use Link Time Code Generation. This feature is only available on Windows.')
 
+parser.add_option('--with-node-snapshot',
+    action='store_true',
+    dest='with_node_snapshot',
+    help='Turn on V8 snapshot integration. Currently experimental.')
+
 intl_optgroup.add_option('--download',
     action='store',
     dest='download_list',
@@ -928,6 +933,13 @@ def configure_node(o):
   o['variables']['want_separate_host_toolset'] = int(
       cross_compiling and want_snapshots)
 
+  if options.with_node_snapshot:
+    o['variables']['node_use_node_snapshot'] = 'true'
+  else:
+    # Default to false for now.
+    # TODO(joyeecheung): enable it once we fix the hashseed uniqueness
+    o['variables']['node_use_node_snapshot'] = 'false'
+
   if target_arch == 'arm':
     configure_arm(o)
 
@@ -1249,7 +1261,8 @@ def glob_to_var(dir_base, dir_sub, patch_dir):
 
 def configure_intl(o):
   def icu_download(path):
-    with open('tools/icu/current_ver.dep') as f:
+    depFile = 'tools/icu/current_ver.dep';
+    with open(depFile) as f:
       icus = json.load(f)
     # download ICU, if needed
     if not os.access(options.download_path, os.W_OK):
@@ -1258,7 +1271,12 @@ def configure_intl(o):
     attemptdownload = nodedownload.candownload(auto_downloads, "icu")
     for icu in icus:
       url = icu['url']
-      md5 = icu['md5']
+      (expectHash, hashAlgo, allAlgos) = nodedownload.findHash(icu)
+      if not expectHash:
+        error('''Could not find a hash to verify ICU download.
+          %s may be incorrect.
+          For the entry %s,
+          Expected one of these keys: %s''' % (depFile, url, ' '.join(allAlgos)))
       local = url.split('/')[-1]
       targetfile = os.path.join(options.download_path, local)
       if not os.path.isfile(targetfile):
@@ -1267,13 +1285,13 @@ def configure_intl(o):
       else:
         print('Re-using existing %s' % targetfile)
       if os.path.isfile(targetfile):
-        print('Checking file integrity with MD5:\r')
-        gotmd5 = nodedownload.md5sum(targetfile)
-        print('MD5:      %s  %s' % (gotmd5, targetfile))
-        if (md5 == gotmd5):
+        print('Checking file integrity with %s:\r' % hashAlgo)
+        gotHash = nodedownload.checkHash(targetfile, hashAlgo)
+        print('%s:      %s  %s' % (hashAlgo, gotHash, targetfile))
+        if (expectHash == gotHash):
           return targetfile
         else:
-          warn('Expected: %s      *MISMATCH*' % md5)
+          warn('Expected: %s      *MISMATCH*' % expectHash)
           warn('\n ** Corrupted ZIP? Delete %s to retry download.\n' % targetfile)
     return None
   icu_config = {

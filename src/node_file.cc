@@ -607,8 +607,8 @@ void AfterScanDir(uv_fs_t* req) {
     if (r == UV_EOF)
       break;
     if (r != 0) {
-      return req_wrap->Reject(
-          UVException(r, nullptr, req_wrap->syscall(), req->path));
+      return req_wrap->Reject(UVException(
+          env->isolate(), r, nullptr, req_wrap->syscall(), req->path));
     }
 
     MaybeLocal<Value> filename =
@@ -649,7 +649,7 @@ void AfterScanDirWithTypes(uv_fs_t* req) {
       break;
     if (r != 0) {
       return req_wrap->Reject(
-          UVException(r, nullptr, req_wrap->syscall(), req->path));
+          UVException(isolate, r, nullptr, req_wrap->syscall(), req->path));
     }
 
     MaybeLocal<Value> filename =
@@ -681,7 +681,7 @@ void AfterScanDirWithTypes(uv_fs_t* req) {
 // For async calls FSReqCallback is used.
 class FSReqWrapSync {
  public:
-  FSReqWrapSync() {}
+  FSReqWrapSync() = default;
   ~FSReqWrapSync() { uv_fs_req_cleanup(&req); }
   uv_fs_t req;
 
@@ -756,9 +756,9 @@ inline FSReqBase* GetReqWrap(Environment* env, Local<Value> value,
     return Unwrap<FSReqBase>(value.As<Object>());
   } else if (value->StrictEquals(env->fs_use_promises_symbol())) {
     if (use_bigint) {
-      return FSReqPromise<uint64_t, BigUint64Array>::New(env, use_bigint);
+      return FSReqPromise<AliasedBigUint64Array>::New(env, use_bigint);
     } else {
-      return FSReqPromise<double, Float64Array>::New(env, use_bigint);
+      return FSReqPromise<AliasedFloat64Array>::New(env, use_bigint);
     }
   }
   return nullptr;

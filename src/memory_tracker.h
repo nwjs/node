@@ -109,7 +109,7 @@ class CleanupHookCallback;
  */
 class MemoryRetainer {
  public:
-  virtual ~MemoryRetainer() {}
+  virtual ~MemoryRetainer() = default;
 
   // Subclasses should implement these methods to provide information
   // for the V8 heap snapshot generator.
@@ -215,7 +215,7 @@ class MemoryTracker {
                          const char* node_name = nullptr);
   template <class NativeT, class V8T>
   inline void TrackField(const char* edge_name,
-                         const AliasedBuffer<NativeT, V8T>& value,
+                         const AliasedBufferBase<NativeT, V8T>& value,
                          const char* node_name = nullptr);
 
   // Put a memory container into the graph, create an edge from

@@ -5,7 +5,6 @@
 #include "node_internals.h"
 #include "node_native_module_env.h"
 #include "node_platform.h"
-#include "node_process.h"
 #include "node_v8_platform-inl.h"
 #include "uv.h"
 
@@ -46,32 +45,6 @@ static bool ShouldAbortOnUncaughtException(Isolate* isolate) {
          (env->is_main_thread() || !env->is_stopping()) &&
          env->should_abort_on_uncaught_toggle()[0] &&
          !env->inside_should_not_abort_on_uncaught_scope();
-}
-
-NODE_EXTERN void OnMessage(Local<Message> message, Local<Value> error) {
-  Isolate* isolate = message->GetIsolate();
-  switch (message->ErrorLevel()) {
-    case Isolate::MessageErrorLevel::kMessageWarning: {
-      Environment* env = Environment::GetCurrent(isolate);
-      if (!env) {
-        break;
-      }
-      Utf8Value filename(isolate, message->GetScriptOrigin().ResourceName());
-      // (filename):(line) (message)
-      std::stringstream warning;
-      warning << *filename;
-      warning << ":";
-      warning << message->GetLineNumber(env->context()).FromMaybe(-1);
-      warning << " ";
-      v8::String::Utf8Value msg(isolate, message->Get());
-      warning << *msg;
-      USE(ProcessEmitWarningGeneric(env, warning.str().c_str(), "V8"));
-      break;
-    }
-    case Isolate::MessageErrorLevel::kMessageError:
-      FatalException(isolate, error, message);
-      break;
-  }
 }
 
 void* NodeArrayBufferAllocator::Allocate(size_t size) {
@@ -185,20 +158,33 @@ void SetIsolateCreateParamsForNode(Isolate::CreateParams* params) {
 #endif
 }
 
+void SetIsolateUpForNode(v8::Isolate* isolate, IsolateSettingCategories cat) {
+  switch (cat) {
+    case IsolateSettingCategories::kErrorHandlers:
+      isolate->AddMessageListenerWithErrorLevel(
+          errors::PerIsolateMessageListener,
+          Isolate::MessageErrorLevel::kMessageError |
+              Isolate::MessageErrorLevel::kMessageWarning);
+      //isolate->SetAbortOnUncaughtExceptionCallback(
+      //    ShouldAbortOnUncaughtException);
+      isolate->SetFatalErrorHandler(OnFatalError);
+      break;
+    case IsolateSettingCategories::kMisc:
+      isolate->SetMicrotasksPolicy(v8::MicrotasksPolicy::kScoped);
+      isolate->SetAllowWasmCodeGenerationCallback(
+          AllowWasmCodeGenerationCallback);
+      //isolate->SetPromiseRejectCallback(task_queue::PromiseRejectCallback);
+      //v8::CpuProfiler::UseDetailedSourcePositionsForProfiling(isolate);
+      break;
+    default:
+      UNREACHABLE();
+      break;
+  }
+}
+
 void SetIsolateUpForNode(v8::Isolate* isolate) {
-  isolate->AddMessageListenerWithErrorLevel(
-      OnMessage,
-      Isolate::MessageErrorLevel::kMessageError |
-          Isolate::MessageErrorLevel::kMessageWarning);
-#if 0
-  isolate->SetAbortOnUncaughtExceptionCallback(ShouldAbortOnUncaughtException);
-  isolate->SetMicrotasksPolicy(MicrotasksPolicy::kExplicit);
-#endif
-  isolate->SetMicrotasksPolicy(v8::MicrotasksPolicy::kScoped);
-  isolate->SetFatalErrorHandler(OnFatalError);
-  isolate->SetAllowWasmCodeGenerationCallback(AllowWasmCodeGenerationCallback);
-  //isolate->SetPromiseRejectCallback(task_queue::PromiseRejectCallback);
-  //v8::CpuProfiler::UseDetailedSourcePositionsForProfiling(isolate);
+  SetIsolateUpForNode(isolate, IsolateSettingCategories::kErrorHandlers);
+  SetIsolateUpForNode(isolate, IsolateSettingCategories::kMisc);
 }
 
 Isolate* NewIsolate(ArrayBufferAllocator* allocator, uv_loop_t* event_loop) {

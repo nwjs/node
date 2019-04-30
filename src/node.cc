@@ -399,9 +399,13 @@ MaybeLocal<Value> StartExecution(Environment* env, const char* main_script_id) {
           ->GetFunction(env->context())
           .ToLocalChecked()};
 
-  MaybeLocal<Value> result =
-      ExecuteBootstrapper(env, main_script_id, &parameters, &arguments);
-  return scope.EscapeMaybe(result);
+  Local<Value> result;
+  if (!ExecuteBootstrapper(env, main_script_id, &parameters, &arguments)
+           .ToLocal(&result) ||
+      !task_queue::RunNextTicksNative(env)) {
+    return MaybeLocal<Value>();
+  }
+  return scope.Escape(result);
 }
 
 MaybeLocal<Value> StartMainThreadExecution(Environment* env) {
@@ -1031,8 +1035,25 @@ int Start(int argc, char** argv) {
   }
 
   {
-    NodeMainInstance main_instance(
-        uv_default_loop(), result.args, result.exec_args);
+    Isolate::CreateParams params;
+    // TODO(joyeecheung): collect external references and set it in
+    // params.external_references.
+    std::vector<intptr_t> external_references = {
+        reinterpret_cast<intptr_t>(nullptr)};
+    v8::StartupData* blob = NodeMainInstance::GetEmbeddedSnapshotBlob();
+    const std::vector<size_t>* indexes =
+        NodeMainInstance::GetIsolateDataIndexes();
+    if (blob != nullptr) {
+      params.external_references = external_references.data();
+      params.snapshot_blob = blob;
+    }
+
+    NodeMainInstance main_instance(&params,
+                                   uv_default_loop(),
+                                   per_process::v8_platform.Platform(),
+                                   result.args,
+                                   result.exec_args,
+                                   indexes);
     result.exit_code = main_instance.Run();
   }
 
@@ -1342,7 +1363,7 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
   node::NewContext(isolate, v8::Local<v8::ObjectTemplate>(), false);
   tls_ctx->env = node::CreateEnvironment(isolate_data, context, argc, argv, 0, nullptr);
   isolate->SetFatalErrorHandler(node::OnFatalError);
-  isolate->AddMessageListener(node::OnMessage);
+  isolate->AddMessageListener(node::errors::PerIsolateMessageListener);
   //isolate->SetAutorunMicrotasks(false);
 #if 0
   const char* path = argc > 1 ? argv[1] : nullptr;

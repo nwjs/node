@@ -9,6 +9,7 @@
     'node_use_dtrace%': 'false',
     'node_use_etw%': 'false',
     'node_no_browser_globals%': 'false',
+    'node_use_node_snapshot': 'false',
     'node_use_v8_platform%': 'true',
     'force_dynamic_crt%': 0,
     'node_use_bundled_v8': 'false',
@@ -246,6 +247,7 @@
       'deps/acorn/acorn/dist/acorn.js',
       'deps/acorn/acorn-walk/dist/walk.js',
     ],
+    'node_mksnapshot_exec': '<(PRODUCT_DIR)/<(EXECUTABLE_PREFIX)node_mksnapshot<(EXECUTABLE_SUFFIX)',
     'mkcodecache_exec': '<(PRODUCT_DIR)/<(EXECUTABLE_PREFIX)mkcodecache<(EXECUTABLE_SUFFIX)',
     'conditions': [
       [ 'node_shared=="true"', {
@@ -456,6 +458,31 @@
             'src/node_code_cache_stub.cc'
           ],
         }],
+        ['node_use_node_snapshot=="true"', {
+          'dependencies': [
+            'node_mksnapshot',
+          ],
+          'actions': [
+            {
+              'action_name': 'node_mksnapshot',
+              'process_outputs_as_sources': 1,
+              'inputs': [
+                '<(node_mksnapshot_exec)',
+              ],
+              'outputs': [
+                '<(SHARED_INTERMEDIATE_DIR)/node_snapshot.cc',
+              ],
+              'action': [
+                '<@(_inputs)',
+                '<@(_outputs)',
+              ],
+            },
+          ],
+        }, {
+          'sources': [
+            'src/node_snapshot_stub.cc'
+          ],
+        }],
       ],
     }, # node_core_target_name
     {
@@ -518,6 +545,7 @@
         'src/js_stream.cc',
         'src/module_wrap.cc',
         'src/node.cc',
+        'src/node_snapshot_stub.cc',
         'src/node_api.cc',
         'src/node_binding.cc',
         'src/node_buffer.cc',
@@ -1086,6 +1114,7 @@
       'defines': [ 'NODE_WANT_INTERNALS=1' ],
 
       'sources': [
+        'src/node_snapshot_stub.cc',
         'src/node_code_cache_stub.cc',
         'test/cctest/gtest/gtest-all.cc',
         'test/cctest/gtest/gtest_main.cc',
@@ -1179,6 +1208,7 @@
         'NODE_WANT_INTERNALS=1'
       ],
       'sources': [
+        'src/node_snapshot_stub.cc',
         'src/node_code_cache_stub.cc',
         'tools/code_cache/mkcodecache.cc',
         'tools/code_cache/cache_builder.cc',
@@ -1204,7 +1234,48 @@
         }],
       ],
     }, # mkcodecache
-  ],  # end targets
+    {
+      'target_name': 'node_mksnapshot',
+      'type': 'executable',
+
+      'dependencies': [
+        '<(node_lib_target_name)',
+        'deps/histogram/histogram.gyp:histogram',
+      ],
+
+      'includes': [
+        'node.gypi'
+      ],
+
+      'include_dirs': [
+        'src',
+        'tools/msvs/genfiles',
+        'deps/v8/include',
+        'deps/cares/include',
+        'deps/uv/include',
+      ],
+
+      'defines': [ 'NODE_WANT_INTERNALS=1' ],
+
+      'sources': [
+        'src/node_snapshot_stub.cc',
+        'src/node_code_cache_stub.cc',
+        'tools/snapshot/node_mksnapshot.cc',
+        'tools/snapshot/snapshot_builder.cc',
+        'tools/snapshot/snapshot_builder.h',
+      ],
+
+      'conditions': [
+        [ 'node_report=="true"', {
+          'conditions': [
+            ['OS=="win"', {
+              'libraries': [ 'Ws2_32' ],
+            }],
+          ],
+        }],
+      ],
+    }, # node_mksnapshot
+  ], # end targets
 
   'conditions': [
     ['OS=="aix" and node_shared=="true"', {

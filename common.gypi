@@ -235,7 +235,7 @@
               },
             },
           }],
-          ['OS=="win" and component=="shared_library"', {
+          ['OS=="win"', {
             'msvs_settings': {
               'VCCLCompilerTool': {
                 'AdditionalOptions': [

@@ -673,16 +673,24 @@ Environment::cpu_profiler_connection() {
   return cpu_profiler_connection_.get();
 }
 
-inline void Environment::set_cpu_profile_path(const std::string& path) {
-  cpu_profile_path_ = path;
+inline void Environment::set_cpu_prof_interval(uint64_t interval) {
+  cpu_prof_interval_ = interval;
 }
 
-inline const std::string& Environment::cpu_profile_path() const {
-  return cpu_profile_path_;
+inline uint64_t Environment::cpu_prof_interval() const {
+  return cpu_prof_interval_;
 }
 
-inline void Environment::set_cpu_prof_dir(const std::string& path) {
-  cpu_prof_dir_ = path;
+inline void Environment::set_cpu_prof_name(const std::string& name) {
+  cpu_prof_name_ = name;
+}
+
+inline const std::string& Environment::cpu_prof_name() const {
+  return cpu_prof_name_;
+}
+
+inline void Environment::set_cpu_prof_dir(const std::string& dir) {
+  cpu_prof_dir_ = dir;
 }
 
 inline const std::string& Environment::cpu_prof_dir() const {
@@ -1106,10 +1114,13 @@ void AsyncRequest::set_stopped(bool flag) {
   inline void Environment::set_ ## PropertyName(v8::Local<TypeName> value) {  \
     PropertyName ## _.Reset(isolate(), value);                                \
   }
-  ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)
+  ENVIRONMENT_STRONG_PERSISTENT_TEMPLATES(V)
   ENVIRONMENT_STRONG_PERSISTENT_VALUES(V)
 #undef V
 
+  inline v8::Local<v8::Context> Environment::context() const {
+    return PersistentToLocal::Strong(context_);
+  }
 }  // namespace node
 
 #endif  // defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS

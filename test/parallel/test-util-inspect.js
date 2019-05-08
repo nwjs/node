@@ -33,11 +33,51 @@ assert.strictEqual(util.inspect(1), '1');
 assert.strictEqual(util.inspect(false), 'false');
 assert.strictEqual(util.inspect(''), "''");
 assert.strictEqual(util.inspect('hello'), "'hello'");
-assert.strictEqual(util.inspect(function() {}), '[Function]');
+assert.strictEqual(util.inspect(function abc() {}), '[Function: abc]');
 assert.strictEqual(util.inspect(() => {}), '[Function]');
-assert.strictEqual(util.inspect(async function() {}), '[AsyncFunction]');
+assert.strictEqual(
+  util.inspect(async function() {}),
+  '[AsyncFunction]'
+);
 assert.strictEqual(util.inspect(async () => {}), '[AsyncFunction]');
-assert.strictEqual(util.inspect(function*() {}), '[GeneratorFunction]');
+
+// Special function inspection.
+{
+  const fn = (() => function*() {})();
+  assert.strictEqual(
+    util.inspect(fn),
+    '[GeneratorFunction]'
+  );
+  Object.setPrototypeOf(fn, Object.getPrototypeOf(async () => {}));
+  assert.strictEqual(
+    util.inspect(fn),
+    '[GeneratorFunction] AsyncFunction'
+  );
+  Object.defineProperty(fn, 'name', { value: 5, configurable: true });
+  assert.strictEqual(
+    util.inspect(fn),
+    '[GeneratorFunction: 5] AsyncFunction'
+  );
+  Object.defineProperty(fn, Symbol.toStringTag, {
+    value: 'Foobar',
+    configurable: true
+  });
+  assert.strictEqual(
+    util.inspect({ ['5']: fn }),
+    "{ '5': [GeneratorFunction: 5] AsyncFunction [Foobar] }"
+  );
+  Object.defineProperty(fn, 'name', { value: '5', configurable: true });
+  Object.setPrototypeOf(fn, null);
+  assert.strictEqual(
+    util.inspect(fn),
+    '[GeneratorFunction (null prototype): 5] [Foobar]'
+  );
+  assert.strictEqual(
+    util.inspect({ ['5']: fn }),
+    "{ '5': [GeneratorFunction (null prototype): 5] [Foobar] }"
+  );
+}
+
 assert.strictEqual(util.inspect(undefined), 'undefined');
 assert.strictEqual(util.inspect(null), 'null');
 assert.strictEqual(util.inspect(/foo(bar\n)?/gi), '/foo(bar\\n)?/gi');
@@ -59,8 +99,9 @@ assert.strictEqual(util.inspect({}), '{}');
 assert.strictEqual(util.inspect({ a: 1 }), '{ a: 1 }');
 assert.strictEqual(util.inspect({ a: function() {} }), '{ a: [Function: a] }');
 assert.strictEqual(util.inspect({ a: () => {} }), '{ a: [Function: a] }');
-assert.strictEqual(util.inspect({ a: async function() {} }),
-                   '{ a: [AsyncFunction: a] }');
+// eslint-disable-next-line func-name-matching
+assert.strictEqual(util.inspect({ a: async function abc() {} }),
+                   '{ a: [AsyncFunction: abc] }');
 assert.strictEqual(util.inspect({ a: async () => {} }),
                    '{ a: [AsyncFunction: a] }');
 assert.strictEqual(util.inspect({ a: function*() {} }),
@@ -411,7 +452,10 @@ assert.strictEqual(
 {
   const value = (() => function() {})();
   value.aprop = 42;
-  assert.strictEqual(util.inspect(value), '[Function] { aprop: 42 }');
+  assert.strictEqual(
+    util.inspect(value),
+    '[Function] { aprop: 42 }'
+  );
 }
 
 // Regular expressions with properties.
@@ -1614,7 +1658,7 @@ util.inspect(process);
   assert.strict.equal(out, expected);
 }
 
-{ // Test WeakMap
+{ // Test WeakMap && WeakSet
   const obj = {};
   const arr = [];
   const weakMap = new WeakMap([[obj, arr], [arr, obj]]);
@@ -1634,16 +1678,16 @@ util.inspect(process);
   out = util.inspect(weakMap, { maxArrayLength: 1, showHidden: true });
   // It is not possible to determine the output reliable.
   expect = 'WeakMap { [ [length]: 0 ] => {}, ... 1 more item, extra: true }';
-  const expectAlt = 'WeakMap { {} => [ [length]: 0 ], ... 1 more item, ' +
-                    'extra: true }';
+  let expectAlt = 'WeakMap { {} => [ [length]: 0 ], ... 1 more item, ' +
+                  'extra: true }';
   assert(out === expect || out === expectAlt,
          `Found: "${out}"\nrather than: "${expect}"\nor: "${expectAlt}"`);
-}
 
-{ // Test WeakSet
-  const weakSet = new WeakSet([{}, [1]]);
-  let out = util.inspect(weakSet, { showHidden: true });
-  let expect = 'WeakSet { [ 1, [length]: 1 ], {} }';
+  // Test WeakSet
+  arr.push(1);
+  const weakSet = new WeakSet([obj, arr]);
+  out = util.inspect(weakSet, { showHidden: true });
+  expect = 'WeakSet { [ 1, [length]: 1 ], {} }';
   assert.strictEqual(out, expect);
 
   out = util.inspect(weakSet);
@@ -1658,10 +1702,12 @@ util.inspect(process);
   out = util.inspect(weakSet, { maxArrayLength: 1, showHidden: true });
   // It is not possible to determine the output reliable.
   expect = 'WeakSet { {}, ... 1 more item, extra: true }';
-  const expectAlt = 'WeakSet { [ 1, [length]: 1 ], ... 1 more item, ' +
-                    'extra: true }';
+  expectAlt = 'WeakSet { [ 1, [length]: 1 ], ... 1 more item, extra: true }';
   assert(out === expect || out === expectAlt,
          `Found: "${out}"\nrather than: "${expect}"\nor: "${expectAlt}"`);
+  // Keep references to the WeakMap entries, otherwise they could be GCed too
+  // early.
+  assert(obj && arr);
 }
 
 { // Test argument objects.
@@ -1955,10 +2001,14 @@ assert.strictEqual(
   let value = (function() { return function() {}; })();
   Object.setPrototypeOf(value, null);
   Object.setPrototypeOf(obj, value);
-  assert.strictEqual(util.inspect(obj), '<[Function]> { a: true }');
+  assert.strictEqual(
+    util.inspect(obj),
+    'Object <[Function (null prototype)]> { a: true }'
+  );
   assert.strictEqual(
     util.inspect(obj, { colors: true }),
-    '<\u001b[36m[Function]\u001b[39m> { a: \u001b[33mtrue\u001b[39m }'
+    'Object <\u001b[36m[Function (null prototype)]\u001b[39m> ' +
+      '{ a: \u001b[33mtrue\u001b[39m }'
   );
 
   obj = { a: true };
@@ -1967,14 +2017,14 @@ assert.strictEqual(
   Object.setPrototypeOf(obj, value);
   assert.strictEqual(
     util.inspect(obj),
-    '<[Array: null prototype] []> { a: true }'
+    'Object <[Array: null prototype] []> { a: true }'
   );
 
   function StorageObject() {}
   StorageObject.prototype = Object.create(null);
   assert.strictEqual(
     util.inspect(new StorageObject()),
-    '<[Object: null prototype] {}> {}'
+    'StorageObject <[Object: null prototype] {}> {}'
   );
 
   obj = [1, 2, 3];
@@ -1984,7 +2034,7 @@ assert.strictEqual(
   Object.setPrototypeOf(obj, Object.create(null));
   assert.strictEqual(
     inspect(obj),
-    "<[Object: null prototype] {}> { '0': 1, '1': 2, '2': 3 }"
+    "Array <[Object: null prototype] {}> { '0': 1, '1': 2, '2': 3 }"
   );
 }
 

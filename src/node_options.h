@@ -111,6 +111,8 @@ class EnvironmentOptions : public Options {
   bool prof_process = false;
 #if HAVE_INSPECTOR
   std::string cpu_prof_dir;
+  static const uint64_t kDefaultCpuProfInterval = 1000;
+  uint64_t cpu_prof_interval = kDefaultCpuProfInterval;
   std::string cpu_prof_name;
   bool cpu_prof = false;
 #endif  // HAVE_INSPECTOR
@@ -118,6 +120,7 @@ class EnvironmentOptions : public Options {
   bool throw_deprecation = false;
   bool trace_deprecation = false;
   bool trace_sync_io = false;
+  bool trace_tls = false;
   bool trace_warnings = false;
   std::string unhandled_rejections;
   std::string userland_loader;
@@ -133,6 +136,7 @@ class EnvironmentOptions : public Options {
 
   bool tls_min_v1_0 = false;
   bool tls_min_v1_1 = false;
+  bool tls_min_v1_2 = false;
   bool tls_min_v1_3 = false;
   bool tls_max_v1_2 = false;
   bool tls_max_v1_3 = false;

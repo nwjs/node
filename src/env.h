@@ -340,11 +340,10 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(x_forwarded_string, "x-forwarded-for")                                     \
   V(zero_return_string, "ZERO_RETURN")
 
-#define ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)                            \
+#define ENVIRONMENT_STRONG_PERSISTENT_TEMPLATES(V)                             \
   V(as_callback_data_template, v8::FunctionTemplate)                           \
   V(async_wrap_ctor_template, v8::FunctionTemplate)                            \
   V(async_wrap_object_ctor_template, v8::FunctionTemplate)                     \
-  V(context, v8::Context)                                                      \
   V(fd_constructor_template, v8::ObjectTemplate)                               \
   V(fdclose_constructor_template, v8::ObjectTemplate)                          \
   V(filehandlereadwrap_template, v8::ObjectTemplate)                           \
@@ -421,8 +420,8 @@ class IsolateData : public MemoryRetainer {
               MultiIsolatePlatform* platform = nullptr,
               ArrayBufferAllocator* node_allocator = nullptr,
               const std::vector<size_t>* indexes = nullptr);
-  SET_MEMORY_INFO_NAME(IsolateData);
-  SET_SELF_SIZE(IsolateData);
+  SET_MEMORY_INFO_NAME(IsolateData)
+  SET_SELF_SIZE(IsolateData)
   void MemoryInfo(MemoryTracker* tracker) const override;
   std::vector<size_t> Serialize(v8::SnapshotCreator* creator);
 
@@ -585,8 +584,8 @@ extern std::shared_ptr<KVStore> system_environment;
 
 class AsyncHooks : public MemoryRetainer {
  public:
-  SET_MEMORY_INFO_NAME(AsyncHooks);
-  SET_SELF_SIZE(AsyncHooks);
+  SET_MEMORY_INFO_NAME(AsyncHooks)
+  SET_SELF_SIZE(AsyncHooks)
   void MemoryInfo(MemoryTracker* tracker) const override;
 
   // Reason for both UidFields and Fields are that one is stored as a double*
@@ -688,8 +687,8 @@ class ImmediateInfo : public MemoryRetainer {
   ImmediateInfo(const ImmediateInfo&) = delete;
   ImmediateInfo& operator=(const ImmediateInfo&) = delete;
 
-  SET_MEMORY_INFO_NAME(ImmediateInfo);
-  SET_SELF_SIZE(ImmediateInfo);
+  SET_MEMORY_INFO_NAME(ImmediateInfo)
+  SET_SELF_SIZE(ImmediateInfo)
   void MemoryInfo(MemoryTracker* tracker) const override;
 
  private:
@@ -707,8 +706,8 @@ class TickInfo : public MemoryRetainer {
   inline bool has_tick_scheduled() const;
   inline bool has_rejection_to_warn() const;
 
-  SET_MEMORY_INFO_NAME(TickInfo);
-  SET_SELF_SIZE(TickInfo);
+  SET_MEMORY_INFO_NAME(TickInfo)
+  SET_SELF_SIZE(TickInfo)
   void MemoryInfo(MemoryTracker* tracker) const override;
 
   TickInfo(const TickInfo&) = delete;
@@ -787,7 +786,7 @@ class Environment : public MemoryRetainer {
   Environment(const Environment&) = delete;
   Environment& operator=(const Environment&) = delete;
 
-  SET_MEMORY_INFO_NAME(Environment);
+  SET_MEMORY_INFO_NAME(Environment)
 
   inline size_t SelfSize() const override;
   bool IsRootNode() const override { return true; }
@@ -929,7 +928,7 @@ class Environment : public MemoryRetainer {
   std::unordered_map<uint32_t, contextify::ContextifyScript*>
       id_to_script_map;
   std::unordered_set<CompileFnEntry*> compile_fn_entries;
-  std::unordered_map<uint32_t, Persistent<v8::Function>> id_to_function_map;
+  std::unordered_map<uint32_t, v8::Global<v8::Function>> id_to_function_map;
 
   inline uint32_t get_next_module_id();
   inline uint32_t get_next_script_id();
@@ -1063,8 +1062,10 @@ class Environment : public MemoryRetainer {
   inline v8::Local<TypeName> PropertyName() const;                            \
   inline void set_ ## PropertyName(v8::Local<TypeName> value);
   ENVIRONMENT_STRONG_PERSISTENT_VALUES(V)
-  ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)
+  ENVIRONMENT_STRONG_PERSISTENT_TEMPLATES(V)
 #undef V
+
+  inline v8::Local<v8::Context> context() const;
 
 #if HAVE_INSPECTOR
   inline inspector::Agent* inspector_agent() const {
@@ -1141,13 +1142,14 @@ class Environment : public MemoryRetainer {
       std::unique_ptr<profiler::V8CpuProfilerConnection> connection);
   profiler::V8CpuProfilerConnection* cpu_profiler_connection();
 
-  inline void set_cpu_profile_path(const std::string& path);
-  inline const std::string& cpu_profile_path() const;
+  inline void set_cpu_prof_name(const std::string& name);
+  inline const std::string& cpu_prof_name() const;
 
-  inline void set_cpu_prof_dir(const std::string& path);
+  inline void set_cpu_prof_interval(uint64_t interval);
+  inline uint64_t cpu_prof_interval() const;
+
+  inline void set_cpu_prof_dir(const std::string& dir);
   inline const std::string& cpu_prof_dir() const;
-
-  void InitializeCPUProfDir(const std::string& dir);
 #endif  // HAVE_INSPECTOR
 
  private:
@@ -1185,7 +1187,8 @@ class Environment : public MemoryRetainer {
   std::unique_ptr<profiler::V8CpuProfilerConnection> cpu_profiler_connection_;
   std::string coverage_directory_;
   std::string cpu_prof_dir_;
-  std::string cpu_profile_path_;
+  std::string cpu_prof_name_;
+  uint64_t cpu_prof_interval_;
 #endif  // HAVE_INSPECTOR
 
   std::shared_ptr<EnvironmentOptions> options_;
@@ -1294,10 +1297,12 @@ class Environment : public MemoryRetainer {
   template <typename T>
   void ForEachBaseObject(T&& iterator);
 
-#define V(PropertyName, TypeName) Persistent<TypeName> PropertyName ## _;
+#define V(PropertyName, TypeName) v8::Global<TypeName> PropertyName ## _;
   ENVIRONMENT_STRONG_PERSISTENT_VALUES(V)
-  ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)
+  ENVIRONMENT_STRONG_PERSISTENT_TEMPLATES(V)
 #undef V
+
+  v8::Global<v8::Context> context_;
 };
 
 }  // namespace node

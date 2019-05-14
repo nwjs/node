@@ -28,7 +28,6 @@
 #include "node.h"
 #include "node_binding.h"
 #include "node_mutex.h"
-#include "node_persistent.h"
 #include "tracing/trace_event.h"
 #include "util-inl.h"
 #include "uv.h"
@@ -327,8 +326,7 @@ void SetIsolateCreateParamsForNode(v8::Isolate::CreateParams* params);
 
 #if HAVE_INSPECTOR
 namespace profiler {
-void StartCoverageCollection(Environment* env);
-void StartCpuProfiling(Environment* env, const std::string& profile_name);
+void StartProfilers(Environment* env);
 void EndStartedProfilers(Environment* env);
 }
 #endif  // HAVE_INSPECTOR

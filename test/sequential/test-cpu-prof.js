@@ -3,12 +3,6 @@
 // This tests that --cpu-prof, --cpu-prof-dir and --cpu-prof-name works.
 
 const common = require('../common');
-if (process.features.debug && process.features.cached_builtins) {
-  // FIXME(joyeecheung): the profiler crashes when code cache
-  // is enabled in debug builds.
-  common.skip('--cpu-prof does not work in debug builds with code cache');
-}
-
 const fixtures = require('../common/fixtures');
 common.skipIfInspectorDisabled();
 
@@ -56,11 +50,34 @@ if (common.isWindows) {
   FIB = 40;
 }
 
+// We need to set --cpu-interval to a smaller value to make sure we can
+// find our workload in the samples. 50us should be a small enough sampling
+// interval for this.
+const kCpuProfInterval = 50;
 const env = {
   ...process.env,
   FIB,
   NODE_DEBUG_NATIVE: 'INSPECTOR_PROFILER'
 };
+
+// Test --cpu-prof without --cpu-prof-interval. Here we just verify that
+// we manage to generate a profile.
+{
+  tmpdir.refresh();
+  const output = spawnSync(process.execPath, [
+    '--cpu-prof',
+    fixtures.path('workload', 'fibonacci.js'),
+  ], {
+    cwd: tmpdir.path,
+    env
+  });
+  if (output.status !== 0) {
+    console.log(output.stderr.toString());
+  }
+  assert.strictEqual(output.status, 0);
+  const profiles = getCpuProfiles(tmpdir.path);
+  assert.strictEqual(profiles.length, 1);
+}
 
 // Outputs CPU profile when event loop is drained.
 // TODO(joyeecheung): share the fixutres with v8 coverage tests
@@ -68,6 +85,8 @@ const env = {
   tmpdir.refresh();
   const output = spawnSync(process.execPath, [
     '--cpu-prof',
+    '--cpu-prof-interval',
+    kCpuProfInterval,
     fixtures.path('workload', 'fibonacci.js'),
   ], {
     cwd: tmpdir.path,
@@ -87,6 +106,8 @@ const env = {
   tmpdir.refresh();
   const output = spawnSync(process.execPath, [
     '--cpu-prof',
+    '--cpu-prof-interval',
+    kCpuProfInterval,
     fixtures.path('workload', 'fibonacci-exit.js'),
   ], {
     cwd: tmpdir.path,
@@ -106,6 +127,8 @@ const env = {
   tmpdir.refresh();
   const output = spawnSync(process.execPath, [
     '--cpu-prof',
+    '--cpu-prof-interval',
+    kCpuProfInterval,
     fixtures.path('workload', 'fibonacci-sigint.js'),
   ], {
     cwd: tmpdir.path,
@@ -129,7 +152,10 @@ const env = {
     fixtures.path('workload', 'fibonacci-worker-argv.js'),
   ], {
     cwd: tmpdir.path,
-    env
+    env: {
+      ...process.env,
+      CPU_PROF_INTERVAL: kCpuProfInterval
+    }
   });
   if (output.status !== 0) {
     console.log(output.stderr.toString());
@@ -182,12 +208,35 @@ const env = {
     `${process.execPath}: --cpu-prof-dir must be used with --cpu-prof`);
 }
 
+// --cpu-prof-interval without --cpu-prof
+{
+  tmpdir.refresh();
+  const output = spawnSync(process.execPath, [
+    '--cpu-prof-interval',
+    kCpuProfInterval,
+    fixtures.path('workload', 'fibonacci.js'),
+  ], {
+    cwd: tmpdir.path,
+    env
+  });
+  const stderr = output.stderr.toString().trim();
+  if (output.status !== 9) {
+    console.log(stderr);
+  }
+  assert.strictEqual(output.status, 9);
+  assert.strictEqual(
+    stderr,
+    `${process.execPath}: --cpu-prof-interval must be used with --cpu-prof`);
+}
+
 // --cpu-prof-name
 {
   tmpdir.refresh();
   const file = path.join(tmpdir.path, 'test.cpuprofile');
   const output = spawnSync(process.execPath, [
     '--cpu-prof',
+    '--cpu-prof-interval',
+    kCpuProfInterval,
     '--cpu-prof-name',
     'test.cpuprofile',
     fixtures.path('workload', 'fibonacci.js'),
@@ -209,6 +258,8 @@ const env = {
   tmpdir.refresh();
   const output = spawnSync(process.execPath, [
     '--cpu-prof',
+    '--cpu-prof-interval',
+    kCpuProfInterval,
     '--cpu-prof-dir',
     'prof',
     fixtures.path('workload', 'fibonacci.js'),
@@ -233,6 +284,8 @@ const env = {
   const dir = path.join(tmpdir.path, 'prof');
   const output = spawnSync(process.execPath, [
     '--cpu-prof',
+    '--cpu-prof-interval',
+    kCpuProfInterval,
     '--cpu-prof-dir',
     dir,
     fixtures.path('workload', 'fibonacci.js'),
@@ -257,6 +310,8 @@ const env = {
   const file = path.join(dir, 'test.cpuprofile');
   const output = spawnSync(process.execPath, [
     '--cpu-prof',
+    '--cpu-prof-interval',
+    kCpuProfInterval,
     '--cpu-prof-name',
     'test.cpuprofile',
     '--cpu-prof-dir',
@@ -280,6 +335,8 @@ const env = {
 {
   tmpdir.refresh();
   const output = spawnSync(process.execPath, [
+    '--cpu-prof-interval',
+    kCpuProfInterval,
     '--cpu-prof-dir',
     'prof',
     '--cpu-prof',

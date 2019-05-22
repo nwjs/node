@@ -4,18 +4,12 @@
  */
 'use strict';
 
+const { isRequireCall, isString } = require('./rules-utils.js');
+
 //------------------------------------------------------------------------------
 // Rule Definition
 //------------------------------------------------------------------------------
 
-
-function isString(node) {
-  return node && node.type === 'Literal' && typeof node.value === 'string';
-}
-
-function isRequireCall(node) {
-  return node.callee.type === 'Identifier' && node.callee.name === 'require';
-}
 
 function isTopLevel(node) {
   do {

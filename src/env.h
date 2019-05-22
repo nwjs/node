@@ -130,6 +130,7 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
 // for the sake of convenience.
 #define PER_ISOLATE_SYMBOL_PROPERTIES(V)                                      \
   V(handle_onclose_symbol, "handle_onclose")                                  \
+  V(no_message_symbol, "no_message_symbol")                                   \
   V(oninit_symbol, "oninit")                                                  \
   V(owner_symbol, "owner")                                                    \
 
@@ -252,6 +253,7 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(onexit_string, "onexit")                                                   \
   V(onhandshakedone_string, "onhandshakedone")                                 \
   V(onhandshakestart_string, "onhandshakestart")                               \
+  V(onkeylog_string, "onkeylog")                                               \
   V(onmessage_string, "onmessage")                                             \
   V(onnewsession_string, "onnewsession")                                       \
   V(onocspresponse_string, "onocspresponse")                                   \
@@ -885,7 +887,7 @@ class Environment : public MemoryRetainer {
 
   inline IsolateData* isolate_data() const;
 
-  // Utilites that allocate memory using the Isolate's ArrayBuffer::Allocator.
+  // Utilities that allocate memory using the Isolate's ArrayBuffer::Allocator.
   // In particular, using AllocateManaged() will provide a RAII-style object
   // with easy conversion to `Buffer` and `ArrayBuffer` objects.
   inline AllocatedBuffer AllocateManaged(size_t size, bool checked = true);

@@ -24,6 +24,7 @@
 // ========== local headers ==========
 
 #include "debug_utils.h"
+#include "env-inl.h"
 #include "node_binding.h"
 #include "node_errors.h"
 #include "node_internals.h"
@@ -350,7 +351,7 @@ MaybeLocal<Value> RunBootstrapping(Environment* env) {
     return MaybeLocal<Value>();
 
   // Make sure that no request or handle is created during bootstrap -
-  // if necessary those should be done in pre-exeuction.
+  // if necessary those should be done in pre-execution.
   // TODO(joyeecheung): print handles/requests before aborting
   CHECK(env->req_wrap_queue()->IsEmpty());
   CHECK(env->handle_wrap_queue()->IsEmpty());

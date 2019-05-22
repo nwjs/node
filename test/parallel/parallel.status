@@ -14,8 +14,6 @@ test-tls-enable-trace-cli: PASS,FLAKY
 
 [$system==win32]
 test-http2-pipe: PASS,FLAKY
-test-worker-syntax-error: PASS,FLAKY
-test-worker-syntax-error-file: PASS,FLAKY
 # https://github.com/nodejs/node/issues/23277
 test-worker-memory: PASS,FLAKY
 # https://github.com/nodejs/node/issues/20750
@@ -25,8 +23,6 @@ test-http2-client-upload-reject: PASS,FLAKY
 [$system==linux]
 
 [$system==macos]
-# https://github.com/nodejs/node/issues/26938
-test-tls-js-stream: PASS,FLAKY
 
 [$arch==arm || $arch==arm64]
 # https://github.com/nodejs/node/issues/26610

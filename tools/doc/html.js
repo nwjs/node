@@ -394,12 +394,13 @@ function altDocs(filename, docCreated) {
   const [, docCreatedMajor, docCreatedMinor] = docCreated.map(Number);
   const host = 'https://nodejs.org';
   const versions = [
+    { num: '12.x' },
     { num: '11.x' },
     { num: '10.x', lts: true },
     { num: '9.x' },
     { num: '8.x', lts: true },
     { num: '7.x' },
-    { num: '6.x', lts: true },
+    { num: '6.x' },
     { num: '5.x' },
     { num: '4.x' },
     { num: '0.12.x' },

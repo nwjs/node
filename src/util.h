@@ -27,6 +27,7 @@
 #include "v8.h"
 
 #include <cassert>
+#include <climits>  // PATH_MAX
 #include <csignal>
 #include <cstddef>
 #include <cstdio>
@@ -42,6 +43,16 @@
 #include <utility>
 
 namespace node {
+
+// Maybe remove kPathSeparator when cpp17 is ready
+#ifdef _WIN32
+    constexpr char kPathSeparator = '\\';
+/* MAX_PATH is in characters, not bytes. Make sure we have enough headroom. */
+#define PATH_MAX_BYTES (MAX_PATH * 4)
+#else
+    constexpr char kPathSeparator = '/';
+#define PATH_MAX_BYTES (PATH_MAX)
+#endif
 
 // These should be used in our code as opposed to the native
 // versions as they abstract out some platform and or
@@ -105,6 +116,16 @@ void DumpBacktrace(FILE* fp);
 
 #define ABORT() node::Abort()
 
+#define ERROR_AND_ABORT(expr)                                                 \
+  do {                                                                        \
+    /* Make sure that this struct does not end up in inline code, but      */ \
+    /* rather in a read-only data section when modifying this code.        */ \
+    static const node::AssertionInfo args = {                                 \
+      __FILE__ ":" STRINGIFY(__LINE__), #expr, PRETTY_FUNCTION_NAME           \
+    };                                                                        \
+    node::Assert(args);                                                       \
+  } while (0)
+
 #ifdef __GNUC__
 #define LIKELY(expr) __builtin_expect(!!(expr), 1)
 #define UNLIKELY(expr) __builtin_expect(!!(expr), 0)
@@ -121,12 +142,7 @@ void DumpBacktrace(FILE* fp);
 #define CHECK(expr)                                                           \
   do {                                                                        \
     if (UNLIKELY(!(expr))) {                                                  \
-      /* Make sure that this struct does not end up in inline code, but    */ \
-      /* rather in a read-only data section when modifying this code.      */ \
-      static const node::AssertionInfo args = {                               \
-        __FILE__ ":" STRINGIFY(__LINE__), #expr, PRETTY_FUNCTION_NAME         \
-      };                                                                      \
-      node::Assert(args);                                                     \
+      ERROR_AND_ABORT(expr);                                                  \
     }                                                                         \
   } while (0)
 
@@ -165,7 +181,8 @@ void DumpBacktrace(FILE* fp);
 #endif
 
 
-#define UNREACHABLE() ABORT()
+#define UNREACHABLE(expr)                                                     \
+  ERROR_AND_ABORT("Unreachable code reached: " expr)
 
 // TAILQ-style intrusive list node.
 template <typename T>

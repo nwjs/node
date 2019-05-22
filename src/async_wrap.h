@@ -111,7 +111,7 @@ class AsyncWrap : public BaseObject {
             ProviderType provider,
             double execution_async_id = kInvalidAsyncId);
 
-  // This constructor creates a reuseable instance where user is responsible
+  // This constructor creates a reusable instance where user is responsible
   // to call set_provider_type() and AsyncReset() before use.
   AsyncWrap(Environment* env, v8::Local<v8::Object> object);
 
@@ -133,6 +133,7 @@ class AsyncWrap : public BaseObject {
   static void PushAsyncIds(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void PopAsyncIds(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void AsyncReset(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetProviderType(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void QueueDestroyAsyncId(
     const v8::FunctionCallbackInfo<v8::Value>& args);
 

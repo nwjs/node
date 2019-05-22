@@ -39,6 +39,7 @@ module.exports = {
     {
       files: [
         'doc/api/esm.md',
+        'doc/api/modules.md',
         'test/es-module/test-esm-type-flag.js',
         'test/es-module/test-esm-type-flag-alias.js',
         '*.mjs',
@@ -59,13 +60,15 @@ module.exports = {
     'array-callback-return': 'error',
     'arrow-parens': ['error', 'always'],
     'arrow-spacing': ['error', { before: true, after: true }],
+    'block-scoped-var': 'error',
     'block-spacing': 'error',
     'brace-style': ['error', '1tbs', { allowSingleLine: true }],
     'capitalized-comments': ['error', 'always', {
       line: {
         // Ignore all lines that have less characters than 20 and all lines that
         // start with something that looks like a variable name or code.
-        ignorePattern: '.{0,20}$|[a-z]+ ?[0-9A-Z_.(/=:[#-]|std',
+        // eslint-disable-next-line max-len
+        ignorePattern: '.{0,20}$|[a-z]+ ?[0-9A-Z_.(/=:[#-]|std|http|ssh|ftp|(let|var|const) [a-z_A-Z0-9]+ =|[b-z] |[a-z]*[0-9].* ',
         ignoreInlineComments: true,
         ignoreConsecutiveComments: true,
       },

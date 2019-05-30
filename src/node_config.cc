@@ -82,7 +82,7 @@ static void Initialize(Local<Object> target,
 #endif
 
   READONLY_PROPERTY(target, "hasCachedBuiltins",
-     v8::Boolean::New(isolate, native_module::has_code_cache));
+                    v8::Boolean::New(isolate, true /*native_module::has_code_cache*/));
 }  // InitConfig
 
 }  // namespace node

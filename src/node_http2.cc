@@ -649,6 +649,7 @@ inline bool HasHttp2Observer(Environment* env) {
 }
 
 void Http2Stream::EmitStatistics() {
+#if 0
   if (!HasHttp2Observer(env()))
     return;
   Http2StreamPerformanceEntry* entry =
@@ -685,9 +686,11 @@ void Http2Stream::EmitStatistics() {
     Local<Object> obj;
     if (entry->ToObject().ToLocal(&obj)) entry->Notify(obj);
   }, static_cast<void*>(entry));
+#endif
 }
 
 void Http2Session::EmitStatistics() {
+#if 0
   if (!HasHttp2Observer(env()))
     return;
   Http2SessionPerformanceEntry* entry =
@@ -714,6 +717,7 @@ void Http2Session::EmitStatistics() {
     Local<Object> obj;
     if (entry->ToObject().ToLocal(&obj)) entry->Notify(obj);
   }, static_cast<void*>(entry));
+#endif
 }
 
 // Closes the session and frees the associated resources

@@ -15,6 +15,7 @@
 
 namespace node {
 
+#if 0
 // Ensures that __metadata trace events are only emitted
 // when tracing is enabled.
 class NodeTraceStateObserver
@@ -77,10 +78,12 @@ class NodeTraceStateObserver
  private:
   v8::TracingController* controller_;
 };
+#endif
 
 struct V8Platform {
 #if NODE_USE_V8_PLATFORM
   inline void Initialize(int thread_pool_size) {
+#if 0
     tracing_agent_ = std::make_unique<tracing::Agent>();
     node::tracing::TraceEventHelper::SetAgent(tracing_agent_.get());
     node::tracing::TracingController* controller =
@@ -96,6 +99,10 @@ struct V8Platform {
     // Tracing must be initialized before platform threads are created.
     platform_ = new NodePlatform(thread_pool_size, controller);
     v8::V8::InitializePlatform(platform_);
+#endif
+    tracing_agent_.reset(nullptr);
+    platform_ = new NodePlatform(thread_pool_size, new v8::TracingController());
+    v8::V8::InitializePlatform(platform_);
   }
 
   inline void Dispose() {
@@ -106,7 +113,7 @@ struct V8Platform {
     // Destroy tracing after the platform (and platform threads) have been
     // stopped.
     tracing_agent_.reset(nullptr);
-    trace_state_observer_.reset(nullptr);
+    //trace_state_observer_.reset(nullptr);
   }
 
   inline void DrainVMTasks(v8::Isolate* isolate) {
@@ -118,6 +125,7 @@ struct V8Platform {
   }
 
   inline void StartTracingAgent() {
+#if 0
     // Attach a new NodeTraceWriter only if this function hasn't been called
     // before.
     if (tracing_file_writer_.IsDefaultHandle()) {
@@ -132,9 +140,10 @@ struct V8Platform {
                   per_process::cli_options->trace_event_file_pattern)),
           tracing::Agent::kUseDefaultCategories);
     }
+#endif
   }
 
-  inline void StopTracingAgent() { tracing_file_writer_.reset(); }
+  inline void StopTracingAgent() {} // tracing_file_writer_.reset(); }
 
   inline tracing::AgentWriterHandle* GetTracingAgentWriter() {
     return &tracing_file_writer_;
@@ -142,7 +151,7 @@ struct V8Platform {
 
   inline NodePlatform* Platform() { return platform_; }
 
-  std::unique_ptr<NodeTraceStateObserver> trace_state_observer_;
+  //std::unique_ptr<NodeTraceStateObserver> trace_state_observer_;
   std::unique_ptr<tracing::Agent> tracing_agent_;
   tracing::AgentWriterHandle tracing_file_writer_;
   NodePlatform* platform_;

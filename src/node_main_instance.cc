@@ -13,6 +13,8 @@ using v8::Local;
 using v8::Locker;
 using v8::SealHandleScope;
 
+extern bool node_is_nwjs;
+
 NodeMainInstance::NodeMainInstance(Isolate* isolate,
                                    uv_loop_t* event_loop,
                                    MultiIsolatePlatform* platform,
@@ -53,6 +55,8 @@ NodeMainInstance::NodeMainInstance(
       platform_(platform),
       isolate_data_(nullptr),
       owns_isolate_(true) {
+  if (node_is_nwjs)
+    array_buffer_allocator_.reset();
   params->array_buffer_allocator = array_buffer_allocator_.get();
   isolate_ = Isolate::Allocate();
   CHECK_NOT_NULL(isolate_);

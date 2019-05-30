@@ -5,6 +5,9 @@
 #ifndef SRC_TRACING_TRACE_EVENT_H_
 #define SRC_TRACING_TRACE_EVENT_H_
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-value"
+
 #include "node_platform.h"
 #include "v8-platform.h"
 #include "trace_event_common.h"
@@ -69,9 +72,7 @@ enum CategoryGroupEnabledFlags {
 // for best performance when tracing is disabled.
 // const uint8_t*
 //     TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(const char* category_group)
-#define TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED              \
-  node::tracing::TraceEventHelper::GetTracingController()       \
-      ->GetCategoryGroupEnabled
+#define TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED 
 
 // Get the number of times traces have been recorded. This is used to implement
 // the TRACE_EVENT_IS_NEW_TRACE facility.
@@ -91,7 +92,7 @@ enum CategoryGroupEnabledFlags {
 //                    const uint8_t* arg_types,
 //                    const uint64_t* arg_values,
 //                    unsigned int flags)
-#define TRACE_EVENT_API_ADD_TRACE_EVENT node::tracing::AddTraceEventImpl
+#define TRACE_EVENT_API_ADD_TRACE_EVENT //node::tracing::AddTraceEventImpl
 
 // Add a trace event to the platform tracing system.
 // uint64_t TRACE_EVENT_API_ADD_TRACE_EVENT_WITH_TIMESTAMP(
@@ -107,17 +108,15 @@ enum CategoryGroupEnabledFlags {
 //                    const uint64_t* arg_values,
 //                    unsigned int flags,
 //                    int64_t timestamp)
-#define TRACE_EVENT_API_ADD_TRACE_EVENT_WITH_TIMESTAMP \
-  node::tracing::AddTraceEventWithTimestampImpl
+#define TRACE_EVENT_API_ADD_TRACE_EVENT_WITH_TIMESTAMP
+  //  node::tracing::AddTraceEventWithTimestampImpl
 
 // Set the duration field of a COMPLETE trace event.
 // void TRACE_EVENT_API_UPDATE_TRACE_EVENT_DURATION(
 //     const uint8_t* category_group_enabled,
 //     const char* name,
 //     uint64_t id)
-#define TRACE_EVENT_API_UPDATE_TRACE_EVENT_DURATION             \
-  node::tracing::TraceEventHelper::GetTracingController()       \
-      ->UpdateTraceEventDuration
+#define TRACE_EVENT_API_UPDATE_TRACE_EVENT_DURATION  
 
 // Adds a metadata event to the trace log. The |AppendValueAsTraceFormat| method
 // on the convertable value will be called at flush time.
@@ -152,8 +151,9 @@ enum CategoryGroupEnabledFlags {
 // configuration for each isolate,
 // https://code.google.com/p/v8/issues/detail?id=4563
 #define INTERNAL_TRACE_EVENT_GET_CATEGORY_INFO_CUSTOM_VARIABLES(             \
-    category_group, atomic, category_group_enabled)                          \
-  category_group_enabled =                                                   \
+    category_group, atomic, category_group_enabled)
+#if 0
+category_group_enabled =                                                \
       reinterpret_cast<const uint8_t*>(TRACE_EVENT_API_ATOMIC_LOAD(atomic)); \
   if (!category_group_enabled) {                                             \
     category_group_enabled =                                                 \
@@ -162,6 +162,7 @@ enum CategoryGroupEnabledFlags {
         atomic, reinterpret_cast<TRACE_EVENT_API_ATOMIC_WORD_VALUE>(         \
                     category_group_enabled));                                \
   }
+#endif
 
 #define INTERNAL_TRACE_EVENT_GET_CATEGORY_INFO(category_group)             \
   static TRACE_EVENT_API_ATOMIC_WORD INTERNAL_TRACE_EVENT_UID(atomic) {0}; \
@@ -172,7 +173,8 @@ enum CategoryGroupEnabledFlags {
 
 // Implementation detail: internal macro to create static category and add
 // event if the category is enabled.
-#define INTERNAL_TRACE_EVENT_ADD(phase, category_group, name, flags, ...)    \
+#define INTERNAL_TRACE_EVENT_ADD(phase, category_group, name, flags, ...)
+#if 0
   do {                                                                       \
     INTERNAL_TRACE_EVENT_GET_CATEGORY_INFO(category_group);                  \
     if (INTERNAL_TRACE_EVENT_CATEGORY_GROUP_ENABLED_FOR_RECORDING_MODE()) {  \
@@ -182,7 +184,7 @@ enum CategoryGroupEnabledFlags {
           node::tracing::kNoId, flags, ##__VA_ARGS__);                       \
     }                                                                        \
   } while (0)
-
+#endif
 // Implementation detail: internal macro to create static category and add begin
 // event if the category is enabled. Also adds the end event when the scope
 // ends.
@@ -221,7 +223,8 @@ enum CategoryGroupEnabledFlags {
 // Implementation detail: internal macro to create static category and add
 // event if the category is enabled.
 #define INTERNAL_TRACE_EVENT_ADD_WITH_ID(phase, category_group, name, id,      \
-                                         flags, ...)                           \
+                                         flags, ...)                           
+#if 0
   do {                                                                         \
     INTERNAL_TRACE_EVENT_GET_CATEGORY_INFO(category_group);                    \
     if (INTERNAL_TRACE_EVENT_CATEGORY_GROUP_ENABLED_FOR_RECORDING_MODE()) {    \
@@ -234,6 +237,7 @@ enum CategoryGroupEnabledFlags {
           node::tracing::kNoId, trace_event_flags, ##__VA_ARGS__);             \
     }                                                                          \
   } while (0)
+#endif
 
 // Adds a trace event with a given timestamp.
 #define INTERNAL_TRACE_EVENT_ADD_WITH_TIMESTAMP(phase, category_group, name, \
@@ -446,6 +450,7 @@ class TraceStringWithCopy {
   const char* str_;
 };
 
+#if 0
 static inline uint64_t AddTraceEventImpl(
     char phase, const uint8_t* category_group_enabled, const char* name,
     const char* scope, uint64_t id, uint64_t bind_id, int32_t num_args,
@@ -489,6 +494,7 @@ static V8_INLINE uint64_t AddTraceEventWithTimestampImpl(
       phase, category_group_enabled, name, scope, id, bind_id, num_args,
       arg_names, arg_types, arg_values, arg_convertables, flags, timestamp);
 }
+#endif
 
 static V8_INLINE void AddMetadataEventImpl(
     const uint8_t* category_group_enabled, const char* name, int32_t num_args,
@@ -704,5 +710,7 @@ class ScopedTracer {
 
 }  // namespace tracing
 }  // namespace node
+
+#pragma clang diagnostic pop
 
 #endif  // SRC_TRACING_TRACE_EVENT_H_

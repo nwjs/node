@@ -69,6 +69,7 @@ class JSBindingsConnection : public AsyncWrap {
                        : AsyncWrap(env, wrap, PROVIDER_INSPECTORJSBINDING),
                          callback_(env->isolate(), callback) {
     Agent* inspector = env->inspector_agent();
+    if (inspector)
     session_ = inspector->Connect(std::make_unique<JSBindingsSessionDelegate>(
         env, this), false);
   }

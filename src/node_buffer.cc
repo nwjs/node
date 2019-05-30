@@ -429,16 +429,27 @@ MaybeLocal<Object> New(Environment* env,
     } else {
       // This is malloc()-based, so we can acquire it into our own
       // ArrayBufferAllocator.
-      CHECK_NOT_NULL(env->isolate_data()->node_allocator());
-      env->isolate_data()->node_allocator()->RegisterPointer(data, length);
+      //CHECK_NOT_NULL(env->isolate_data()->node_allocator());
+      //env->isolate_data()->node_allocator()->RegisterPointer(data, length);
     }
   }
 
-  Local<ArrayBuffer> ab =
+  Local<ArrayBuffer> ab;
+  if (!uses_malloc)
+    ab =
       ArrayBuffer::New(env->isolate(),
                        data,
                        length,
                        ArrayBufferCreationMode::kInternalized);
+  else {
+    ab =
+      ArrayBuffer::NewNode(env->isolate(),
+                       data,
+                       length,
+                       ArrayBufferCreationMode::kInternalized);
+    ab->set_nodejs(true);
+  }
+
   return Buffer::New(env, ab, 0, length).FromMaybe(Local<Object>());
 }
 

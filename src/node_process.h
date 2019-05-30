@@ -34,7 +34,8 @@ v8::Maybe<bool> ProcessEmitDeprecationWarning(Environment* env,
 v8::MaybeLocal<v8::Object> CreateProcessObject(
     Environment* env,
     const std::vector<std::string>& args,
-    const std::vector<std::string>& exec_args);
+    const std::vector<std::string>& exec_args,
+    bool node_is_nwjs);
 void PatchProcessObject(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 namespace task_queue {

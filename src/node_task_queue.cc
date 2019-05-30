@@ -44,7 +44,7 @@ static void EnqueueMicrotask(const FunctionCallbackInfo<Value>& args) {
 bool RunNextTicksNative(Environment* env) {
   TickInfo* tick_info = env->tick_info();
   if (!tick_info->has_tick_scheduled() && !tick_info->has_rejection_to_warn())
-    env->isolate()->RunMicrotasks();
+    v8::MicrotasksScope::PerformCheckpoint(env->isolate());
   if (!tick_info->has_tick_scheduled() && !tick_info->has_rejection_to_warn())
     return true;
 
@@ -55,7 +55,8 @@ bool RunNextTicksNative(Environment* env) {
 }
 
 static void RunMicrotasks(const FunctionCallbackInfo<Value>& args) {
-  args.GetIsolate()->RunMicrotasks();
+  //args.GetIsolate()->RunMicrotasks();
+  v8::MicrotasksScope::PerformCheckpoint(args.GetIsolate());
 }
 
 static void SetTickCallback(const FunctionCallbackInfo<Value>& args) {

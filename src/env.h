@@ -940,6 +940,8 @@ class Environment : public MemoryRetainer {
   std::unordered_map<std::string, const loader::PackageConfig>
       package_json_cache;
 
+  bool KickNextTick();
+
   inline double* heap_statistics_buffer() const;
   inline void set_heap_statistics_buffer(double* pointer);
 

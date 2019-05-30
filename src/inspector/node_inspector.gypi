@@ -82,7 +82,7 @@
       ],
       'action': [
         'python',
-        'tools/inspector_protocol/convert_protocol_to_json.py',
+        '../../v8/third_party/inspector_protocol/convert_protocol_to_json.py',
         '<@(_inputs)',
         '<@(_outputs)',
       ],
@@ -110,7 +110,7 @@
     {
       'action_name': 'concatenate_protocols',
       'inputs': [
-        '../../deps/v8/src/inspector/js_protocol.pdl',
+        #'../../../../v8/src/inspector/js_protocol.json',
         '<(SHARED_INTERMEDIATE_DIR)/src/node_protocol.json',
       ],
       'outputs': [
@@ -118,7 +118,7 @@
       ],
       'action': [
         'python',
-        'tools/inspector_protocol/concatenate_protocols.py',
+        '../../v8/third_party/inspector_protocol/concatenate_protocols.py',
         '<@(_inputs)',
         '<@(_outputs)',
       ],

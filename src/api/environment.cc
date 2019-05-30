@@ -31,6 +31,8 @@ using v8::Private;
 using v8::String;
 using v8::Value;
 
+extern bool node_is_nwjs;
+
 static bool AllowWasmCodeGenerationCallback(Local<Context> context,
                                             Local<String>) {
   Local<Value> wasm_code_gen =
@@ -200,17 +202,17 @@ void SetIsolateUpForNode(v8::Isolate* isolate, IsolateSettingCategories cat) {
           errors::PerIsolateMessageListener,
           Isolate::MessageErrorLevel::kMessageError |
               Isolate::MessageErrorLevel::kMessageWarning);
-      isolate->SetAbortOnUncaughtExceptionCallback(
-          ShouldAbortOnUncaughtException);
+      //isolate->SetAbortOnUncaughtExceptionCallback(
+      //    ShouldAbortOnUncaughtException);
       isolate->SetFatalErrorHandler(OnFatalError);
       isolate->SetPrepareStackTraceCallback(PrepareStackTraceCallback);
       break;
     case IsolateSettingCategories::kMisc:
-      isolate->SetMicrotasksPolicy(MicrotasksPolicy::kExplicit);
+      isolate->SetMicrotasksPolicy(v8::MicrotasksPolicy::kScoped);
       isolate->SetAllowWasmCodeGenerationCallback(
           AllowWasmCodeGenerationCallback);
-      isolate->SetPromiseRejectCallback(task_queue::PromiseRejectCallback);
-      v8::CpuProfiler::UseDetailedSourcePositionsForProfiling(isolate);
+      //isolate->SetPromiseRejectCallback(task_queue::PromiseRejectCallback);
+      //v8::CpuProfiler::UseDetailedSourcePositionsForProfiling(isolate);
       break;
     default:
       UNREACHABLE();
@@ -356,8 +358,8 @@ MaybeLocal<Object> GetPerContextExports(Local<Context> context) {
 }
 
 Local<Context> NewContext(Isolate* isolate,
-                          Local<ObjectTemplate> object_template) {
-  auto context = Context::New(isolate, nullptr, object_template);
+                          Local<ObjectTemplate> object_template, bool create) {
+  auto context = create ? Context::New(isolate, nullptr, object_template) : isolate->GetEnteredContext();
   if (context.IsEmpty()) return context;
   HandleScope handle_scope(isolate);
 

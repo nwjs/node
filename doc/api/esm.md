@@ -277,8 +277,7 @@ if this behavior is desired.
 
 These CommonJS variables are not available in ES modules.
 
-`require` can be imported into an ES module using
-[`module.createRequireFromPath()`][].
+`require` can be imported into an ES module using [`module.createRequire()`][].
 
 An equivalent for `__filename` and `__dirname` is [`import.meta.url`][].
 
@@ -313,7 +312,7 @@ For now, only modules using the `file:` protocol can be loaded.
 
 `require` always treats the files it references as CommonJS. This applies
 whether `require` is used the traditional way within a CommonJS environment, or
-in an ES module environment using [`module.createRequireFromPath()`][].
+in an ES module environment using [`module.createRequire()`][].
 
 To include an ES module into CommonJS, use [`import()`][].
 
@@ -321,7 +320,7 @@ To include an ES module into CommonJS, use [`import()`][].
 
 An `import` statement can reference either ES module or CommonJS JavaScript.
 Other file types such as JSON and Native modules are not supported. For those,
-use [`module.createRequireFromPath()`][].
+use [`module.createRequire()`][].
 
 `import` statements are permitted only in ES modules. For similar functionality
 in CommonJS, see [`import()`][].
@@ -362,14 +361,15 @@ to include ES module files from CommonJS code.
 
 ## CommonJS, JSON, and Native Modules
 
-CommonJS, JSON, and Native modules can be used with [`module.createRequireFromPath()`][].
+CommonJS, JSON, and Native modules can be used with
+[`module.createRequire()`][].
 
 ```js
 // cjs.js
 module.exports = 'cjs';
 
 // esm.mjs
-import { createRequireFromPath as createRequire } from 'module';
+import { createRequire } from 'module';
 import { fileURLToPath as fromURL } from 'url';
 
 const require = createRequire(fromURL(import.meta.url));
@@ -426,7 +426,7 @@ cache, to avoid duplication. The same object will be returned in
 CommonJS if the JSON module has already been imported from the
 same path.
 
-Assuming an `index.js` with
+Assuming an `index.mjs` with
 
 <!-- eslint-skip -->
 ```js
@@ -437,9 +437,33 @@ The `--experimental-json-modules` flag is needed for the module
 to work.
 
 ```bash
-node --experimental-modules --entry-type=module index.js # fails
-node --experimental-modules --entry-type=module --experimental-json-modules index.js # works
+node --experimental-modules index.mjs # fails
+node --experimental-modules --experimental-json-modules index.mjs # works
 ```
+
+## Experimental Wasm Modules
+
+Importing Web Assembly modules is supported under the
+`--experimental-wasm-modules` flag, allowing any `.wasm` files to be
+imported as normal modules while also supporting their module imports.
+
+This integration is in line with the
+[ES Module Integration Proposal for Web Assembly][].
+
+For example, an `index.mjs` containing:
+
+```js
+import * as M from './module.wasm';
+console.log(M);
+```
+
+executed under:
+
+```bash
+node --experimental-modules --experimental-wasm-modules index.mjs
+```
+
+would provide the exports interface for the instantiation of `module.wasm`.
 
 ## Experimental Loader hooks
 
@@ -467,7 +491,7 @@ export async function resolve(specifier,
                               defaultResolver) {
   return {
     url: new URL(specifier, parentModuleURL).href,
-    format: 'esm'
+    format: 'module'
   };
 }
 ```
@@ -484,11 +508,12 @@ module. This can be one of the following:
 
 | `format` | Description |
 | --- | --- |
-| `'module'` | Load a standard JavaScript module |
-| `'commonjs'` | Load a Node.js CommonJS module |
 | `'builtin'` | Load a Node.js builtin module |
-| `'json'` | Load a JSON file |
+| `'commonjs'` | Load a Node.js CommonJS module |
 | `'dynamic'` | Use a [dynamic instantiate hook][] |
+| `'json'` | Load a JSON file |
+| `'module'` | Load a standard JavaScript module |
+| `'wasm'` | Load a WebAssembly module |
 
 For example, a dummy loader to load JavaScript restricted to browser resolution
 rules with only JS file extension and Node.js builtin modules support could
@@ -526,7 +551,7 @@ export function resolve(specifier, parentModuleURL = baseURL, defaultResolve) {
   }
   return {
     url: resolved.href,
-    format: 'esm'
+    format: 'module'
   };
 }
 ```
@@ -585,16 +610,13 @@ format for that resolved URL given by the **ESM_FORMAT** routine.
 
 The _"module"_ format is returned for an ECMAScript Module, while the
 _"commonjs"_ format is used to indicate loading through the legacy
-CommonJS loader. Additional formats such as _"wasm"_ or _"addon"_ can be
-extended in future updates.
+CommonJS loader. Additional formats such as _"addon"_ can be extended in future
+updates.
 
 In the following algorithms, all subroutine errors are propagated as errors
 of these top-level routines.
 
 _isMain_ is **true** when resolving the Node.js application entry point.
-
-When using the `--entry-type` flag, it overrides the ESM_FORMAT result while
-providing errors in the case of explicit conflicts.
 
 <details>
 <summary>Resolver algorithm specification</summary>
@@ -737,10 +759,11 @@ success!
 [`import`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import
 [`import()`]: #esm_import-expressions
 [`import.meta.url`]: #esm_import_meta
-[`module.createRequireFromPath()`]: modules.html#modules_module_createrequirefrompath_filename
+[`module.createRequire()`]: modules.html#modules_module_createrequire_filename
 [CommonJS]: modules.html
 [ECMAScript-modules implementation]: https://github.com/nodejs/modules/blob/master/doc/plan-for-new-modules-implementation.md
 [Node.js EP for ES Modules]: https://github.com/nodejs/node-eps/blob/master/002-es-modules.md
 [WHATWG JSON modules]: https://github.com/whatwg/html/issues/4315
+[ES Module Integration Proposal for Web Assembly]: https://github.com/webassembly/esm-integration
 [dynamic instantiate hook]: #esm_dynamic_instantiate_hook
 [the official standard format]: https://tc39.github.io/ecma262/#sec-modules

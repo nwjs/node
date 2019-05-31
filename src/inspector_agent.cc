@@ -2,6 +2,7 @@
 
 #include "inspector/main_thread_interface.h"
 #include "inspector/node_string.h"
+#include "inspector/runtime_agent.h"
 #include "inspector/tracing_agent.h"
 #include "inspector/worker_agent.h"
 #include "inspector/worker_inspector.h"
@@ -12,6 +13,7 @@
 #include "node_options-inl.h"
 #include "node_process.h"
 #include "node_url.h"
+#include "util-inl.h"
 #include "v8-inspector.h"
 #include "v8-platform.h"
 
@@ -220,7 +222,8 @@ class ChannelImpl final : public v8_inspector::V8Inspector::Channel,
                        std::unique_ptr<InspectorSessionDelegate> delegate,
                        std::shared_ptr<MainThreadHandle> main_thread_,
                        bool prevent_shutdown)
-      : delegate_(std::move(delegate)), prevent_shutdown_(prevent_shutdown) {
+      : delegate_(std::move(delegate)), prevent_shutdown_(prevent_shutdown),
+        retaining_context_(false) {
     session_ = inspector->connect(1, this, StringView());
     node_dispatcher_ = std::make_unique<protocol::UberDispatcher>(this);
     tracing_agent_ =
@@ -228,6 +231,8 @@ class ChannelImpl final : public v8_inspector::V8Inspector::Channel,
     tracing_agent_->Wire(node_dispatcher_.get());
     worker_agent_ = std::make_unique<protocol::WorkerAgent>(worker_manager);
     worker_agent_->Wire(node_dispatcher_.get());
+    runtime_agent_ = std::make_unique<protocol::RuntimeAgent>(env);
+    runtime_agent_->Wire(node_dispatcher_.get());
   }
 
   ~ChannelImpl() override {
@@ -235,9 +240,11 @@ class ChannelImpl final : public v8_inspector::V8Inspector::Channel,
     tracing_agent_.reset();  // Dispose before the dispatchers
     worker_agent_->disable();
     worker_agent_.reset();  // Dispose before the dispatchers
+    runtime_agent_->disable();
+    runtime_agent_.reset();  // Dispose before the dispatchers
   }
 
-  std::string dispatchProtocolMessage(const StringView& message) {
+  void dispatchProtocolMessage(const StringView& message) {
     std::string raw_message = protocol::StringUtil::StringViewToUtf8(message);
     std::unique_ptr<protocol::DictionaryValue> value =
         protocol::DictionaryValue::cast(protocol::StringUtil::parseMessage(
@@ -252,7 +259,6 @@ class ChannelImpl final : public v8_inspector::V8Inspector::Channel,
       node_dispatcher_->dispatch(call_id, method, std::move(value),
                                  raw_message);
     }
-    return method;
   }
 
   void schedulePauseOnNextStatement(const std::string& reason) {
@@ -262,6 +268,15 @@ class ChannelImpl final : public v8_inspector::V8Inspector::Channel,
 
   bool preventShutdown() {
     return prevent_shutdown_;
+  }
+
+  bool notifyWaitingForDisconnect() {
+    retaining_context_ = runtime_agent_->notifyWaitingForDisconnect();
+    return retaining_context_;
+  }
+
+  bool retainingContext() {
+    return retaining_context_;
   }
 
  private:
@@ -303,12 +318,14 @@ class ChannelImpl final : public v8_inspector::V8Inspector::Channel,
     DCHECK(false);
   }
 
+  std::unique_ptr<protocol::RuntimeAgent> runtime_agent_;
   std::unique_ptr<protocol::TracingAgent> tracing_agent_;
   std::unique_ptr<protocol::WorkerAgent> worker_agent_;
   std::unique_ptr<InspectorSessionDelegate> delegate_;
   std::unique_ptr<v8_inspector::V8InspectorSession> session_;
   std::unique_ptr<protocol::UberDispatcher> node_dispatcher_;
   bool prevent_shutdown_;
+  bool retaining_context_;
 };
 
 class InspectorTimer {
@@ -494,9 +511,12 @@ class NodeInspectorClient : public V8InspectorClient {
     waiting_for_resume_ = false;
   }
 
+  void runIfWaitingForDebugger(int context_group_id) override {
+    waiting_for_frontend_ = false;
+  }
+
   int connectFrontend(std::unique_ptr<InspectorSessionDelegate> delegate,
                       bool prevent_shutdown) {
-    events_dispatched_ = true;
     int session_id = next_session_id_++;
     channels_[session_id] = std::make_unique<ChannelImpl>(env_,
                                                           client_,
@@ -508,16 +528,22 @@ class NodeInspectorClient : public V8InspectorClient {
   }
 
   void disconnectFrontend(int session_id) {
-    events_dispatched_ = true;
-    channels_.erase(session_id);
+    auto it = channels_.find(session_id);
+    if (it == channels_.end())
+      return;
+    bool retaining_context = it->second->retainingContext();
+    channels_.erase(it);
+    if (retaining_context) {
+      for (const auto& id_channel : channels_) {
+        if (id_channel.second->retainingContext())
+          return;
+      }
+      contextDestroyed(env_->context());
+    }
   }
 
   void dispatchMessageFromFrontend(int session_id, const StringView& message) {
-    events_dispatched_ = true;
-    std::string method =
-        channels_[session_id]->dispatchProtocolMessage(message);
-    if (waiting_for_frontend_)
-      waiting_for_frontend_ = method != "Runtime.runIfWaitingForDebugger";
+    channels_[session_id]->dispatchProtocolMessage(message);
   }
 
   Local<Context> ensureDefaultContextInGroup(int contextGroupId) override {
@@ -610,6 +636,15 @@ class NodeInspectorClient : public V8InspectorClient {
     return false;
   }
 
+  bool notifyWaitingForDisconnect() {
+    bool retaining_context = false;
+    for (const auto& id_channel : channels_) {
+      if (id_channel.second->notifyWaitingForDisconnect())
+        retaining_context = true;
+    }
+    return retaining_context;
+  }
+
   std::shared_ptr<MainThreadHandle> getThreadHandle() {
     if (interface_ == nullptr) {
       interface_.reset(new MainThreadInterface(
@@ -678,7 +713,6 @@ class NodeInspectorClient : public V8InspectorClient {
   std::unordered_map<int, std::unique_ptr<ChannelImpl>> channels_;
   std::unordered_map<void*, InspectorTimerHandle> timers_;
   int next_session_id_ = 1;
-  bool events_dispatched_ = false;
   bool waiting_for_resume_ = false;
   bool waiting_for_frontend_ = false;
   bool waiting_for_io_shutdown_ = false;
@@ -778,9 +812,8 @@ void Agent::WaitForDisconnect() {
     fprintf(stderr, "Waiting for the debugger to disconnect...\n");
     fflush(stderr);
   }
-  // TODO(addaleax): Maybe this should use an at-exit hook for the Environment
-  // or something similar?
-  client_->contextDestroyed(parent_env_->context());
+  if (!client_->notifyWaitingForDisconnect())
+    client_->contextDestroyed(parent_env_->context());
   if (io_ != nullptr) {
     io_->StopAcceptingNewConnections();
     client_->waitForIoShutdown();

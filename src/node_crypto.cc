@@ -149,6 +149,8 @@ template SSL_SESSION* SSLWrap<TLSWrap>::GetSessionCallback(
     int* copy);
 template int SSLWrap<TLSWrap>::NewSessionCallback(SSL* s,
                                                   SSL_SESSION* sess);
+template void SSLWrap<TLSWrap>::KeylogCallback(const SSL* s,
+                                               const char* line);
 template void SSLWrap<TLSWrap>::OnClientHello(
     void* arg,
     const ClientHelloParser::ClientHello& hello);
@@ -939,6 +941,24 @@ static X509_STORE* NewRootCertStore() {
   }
 
   return store;
+}
+
+
+void GetRootCertificates(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+  Local<Array> result = Array::New(env->isolate(), arraysize(root_certs));
+
+  for (size_t i = 0; i < arraysize(root_certs); i++) {
+    Local<Value> value;
+    if (!String::NewFromOneByte(env->isolate(),
+                                reinterpret_cast<const uint8_t*>(root_certs[i]),
+                                NewStringType::kNormal).ToLocal(&value) ||
+        !result->Set(env->context(), i, value).FromMaybe(false)) {
+      return;
+    }
+  }
+
+  args.GetReturnValue().Set(result);
 }
 
 
@@ -1746,6 +1766,21 @@ int SSLWrap<Base>::NewSessionCallback(SSL* s, SSL_SESSION* sess) {
   w->MakeCallback(env->onnewsession_string(), arraysize(argv), argv);
 
   return 0;
+}
+
+
+template <class Base>
+void SSLWrap<Base>::KeylogCallback(const SSL* s, const char* line) {
+  Base* w = static_cast<Base*>(SSL_get_app_data(s));
+  Environment* env = w->ssl_env();
+  HandleScope handle_scope(env->isolate());
+  Context::Scope context_scope(env->context());
+
+  const size_t size = strlen(line);
+  Local<Value> line_bf = Buffer::Copy(env, line, 1 + size).ToLocalChecked();
+  char* data = Buffer::Data(line_bf);
+  data[size] = '\n';
+  w->MakeCallback(env->onkeylog_string(), 1, &line_bf);
 }
 
 
@@ -3439,7 +3474,7 @@ static ManagedEVPPKey GetPublicOrPrivateKeyFromJs(
           is_public = false;
           break;
         default:
-          CHECK(!"Invalid key encoding type");
+          UNREACHABLE("Invalid key encoding type");
       }
 
       if (is_public) {
@@ -6853,6 +6888,8 @@ void Initialize(Local<Object> target,
   env->SetMethodNoSideEffect(target, "certVerifySpkac", VerifySpkac);
   env->SetMethodNoSideEffect(target, "certExportPublicKey", ExportPublicKey);
   env->SetMethodNoSideEffect(target, "certExportChallenge", ExportChallenge);
+  env->SetMethodNoSideEffect(target, "getRootCertificates",
+                             GetRootCertificates);
   // Exposed for testing purposes only.
   env->SetMethodNoSideEffect(target, "isExtraRootCertsFileLoaded",
                              IsExtraRootCertsFileLoaded);

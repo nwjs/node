@@ -334,6 +334,34 @@ added: v0.3.2
 The `tls.Server` class is a subclass of `net.Server` that accepts encrypted
 connections using TLS or SSL.
 
+### Event: 'keylog'
+<!-- YAML
+added: v12.3.0
+-->
+
+* `line` {Buffer} Line of ASCII text, in NSS `SSLKEYLOGFILE` format.
+* `tlsSocket` {tls.TLSSocket} The `tls.TLSSocket` instance on which it was
+  generated.
+
+The `keylog` event is emitted when key material is generated or received by
+a connection to this server (typically before handshake has completed, but not
+necessarily). This keying material can be stored for debugging, as it allows
+captured TLS traffic to be decrypted. It may be emitted multiple times for
+each socket.
+
+A typical use case is to append received lines to a common text file, which
+is later used by software (such as Wireshark) to decrypt the traffic:
+
+```js
+const logFile = fs.createWriteStream('/tmp/ssl-keys.log', { flags: 'a' });
+// ...
+server.on('keylog', (line, tlsSocket) => {
+  if (tlsSocket.remoteAddress !== '...')
+    return; // Only log keys for a particular IP
+  logFile.write(line);
+});
+```
+
 ### Event: 'newSession'
 <!-- YAML
 added: v0.9.2
@@ -624,6 +652,27 @@ changes:
 
 Construct a new `tls.TLSSocket` object from an existing TCP socket.
 
+### Event: 'keylog'
+<!-- YAML
+added: v12.3.0
+-->
+
+* `line` {Buffer} Line of ASCII text, in NSS `SSLKEYLOGFILE` format.
+
+The `keylog` event is emitted on a client `tls.TLSSocket` when key material
+is generated or received by the socket. This keying material can be stored
+for debugging, as it allows captured TLS traffic to be decrypted. It may
+be emitted multiple times, before or after the handshake completes.
+
+A typical use case is to append received lines to a common text file, which
+is later used by software (such as Wireshark) to decrypt the traffic:
+
+```js
+const logFile = fs.createWriteStream('/tmp/ssl-keys.log', { flags: 'a' });
+// ...
+tlsSocket.on('keylog', (line) => logFile.write(line));
+```
+
 ### Event: 'OCSPResponse'
 <!-- YAML
 added: v0.11.13
@@ -868,8 +917,8 @@ certificate.
    It is returned as a `:` separated hexadecimal string. Example:
    `'2A:7A:C2:DD:...'`.
 * `ext_key_usage` {Array} (Optional) The extended key usage, a set of OIDs.
-* `subjectaltname` {Array} (Optional) An array of names for the subject, an
-   alternative to the `subject` names.
+* `subjectaltname` {string} (Optional) A string containing concatenated names
+ for the subject, an alternative to the `subject` names.
 * `infoAccess` {Array} (Optional) An array describing the AuthorityInfoAccess,
    used with OCSP.
 * `issuerCertificate` {Object} (Optional) The issuer certificate object. For
@@ -1335,6 +1384,7 @@ changes:
     provided.
     For PEM encoded certificates, supported types are "TRUSTED CERTIFICATE",
     "X509 CERTIFICATE", and "CERTIFICATE".
+    See also [`tls.rootCertificates`].
   * `cert` {string|string[]|Buffer|Buffer[]} Cert chains in PEM format. One cert
     chain should be provided per private key. Each cert chain should consist of
     the PEM formatted certificate for a provided private `key`, followed by the
@@ -1436,6 +1486,10 @@ publicly trusted list of CAs as given in
 <!-- YAML
 added: v0.3.2
 changes:
+  - version: v12.3.0
+    pr-url: https://github.com/nodejs/node/pull/27665
+    description: The `options` parameter now supports `net.createServer()`
+                 options.
   - version: v9.3.0
     pr-url: https://github.com/nodejs/node/pull/14903
     description: The `options` parameter can now include `clientCertEngine`.
@@ -1486,6 +1540,7 @@ changes:
     data. See [Session Resumption][] for more information.
   * ...: Any [`tls.createSecureContext()`][] option can be provided. For
     servers, the identity options (`pfx` or `key`/`cert`) are usually required.
+  * ...: Any [`net.createServer()`][] option can be provided.
 * `secureConnectionListener` {Function}
 * Returns: {tls.Server}
 
@@ -1544,6 +1599,17 @@ TLSv1.2 and below.
 ```js
 console.log(tls.getCiphers()); // ['aes128-gcm-sha256', 'aes128-sha', ...]
 ```
+
+## tls.rootCertificates
+<!-- YAML
+added: v12.3.0
+-->
+
+* {string[]}
+
+An immutable array of strings representing the root certificates (in PEM format)
+used for verifying peer certificates. This is the default value of the `ca`
+option to [`tls.createSecureContext()`].
 
 ## tls.DEFAULT_ECDH_CURVE
 <!-- YAML
@@ -1706,6 +1772,7 @@ where `secureSocket` has the same API as `pair.cleartext`.
 [`NODE_OPTIONS`]: cli.html#cli_node_options_options
 [`crypto.getCurves()`]: crypto.html#crypto_crypto_getcurves
 [`dns.lookup()`]: dns.html#dns_dns_lookup_hostname_options_callback
+[`net.createServer()`]: net.html#net_net_createserver_options_connectionlistener
 [`net.Server.address()`]: net.html#net_server_address
 [`net.Server`]: net.html#net_class_net_server
 [`net.Socket`]: net.html#net_class_net_socket
@@ -1729,6 +1796,7 @@ where `secureSocket` has the same API as `pair.cleartext`.
 [`tls.createSecurePair()`]: #tls_tls_createsecurepair_context_isserver_requestcert_rejectunauthorized_options
 [`tls.createServer()`]: #tls_tls_createserver_options_secureconnectionlistener
 [`tls.getCiphers()`]: #tls_tls_getciphers
+[`tls.rootCertificates`]: #tls_tls_rootcertificates
 [Chrome's 'modern cryptography' setting]: https://www.chromium.org/Home/chromium-security/education/tls#TOC-Cipher-Suites
 [DHE]: https://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange
 [ECDHE]: https://en.wikipedia.org/wiki/Elliptic_curve_Diffie%E2%80%93Hellman

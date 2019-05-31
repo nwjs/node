@@ -300,12 +300,15 @@ static void SetupHooks(const FunctionCallbackInfo<Value>& args) {
 
   Local<Object> fn_obj = args[0].As<Object>();
 
-#define SET_HOOK_FN(name)                                                     \
-  Local<Value> name##_v = fn_obj->Get(                                        \
-      env->context(),                                                         \
-      FIXED_ONE_BYTE_STRING(env->isolate(), #name)).ToLocalChecked();         \
-  CHECK(name##_v->IsFunction());                                              \
-  env->set_async_hooks_##name##_function(name##_v.As<Function>());
+#define SET_HOOK_FN(name)                                                      \
+  do {                                                                         \
+    Local<Value> v =                                                           \
+        fn_obj->Get(env->context(),                                            \
+                    FIXED_ONE_BYTE_STRING(env->isolate(), #name))              \
+            .ToLocalChecked();                                                 \
+    CHECK(v->IsFunction());                                                    \
+    env->set_async_hooks_##name##_function(v.As<Function>());                  \
+  } while (0)
 
   SET_HOOK_FN(init);
   SET_HOOK_FN(before);
@@ -337,15 +340,10 @@ static void EnablePromiseHook(const FunctionCallbackInfo<Value>& args) {
 static void DisablePromiseHook(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
 
-  // Delay the call to `RemovePromiseHook` because we might currently be
-  // between the `before` and `after` calls of a Promise.
-  isolate->EnqueueMicrotask([](void* data) {
-    // The per-Isolate API provides no way of knowing whether there are multiple
-    // users of the PromiseHook. That hopefully goes away when V8 introduces
-    // a per-context API.
-    Isolate* isolate = static_cast<Isolate*>(data);
-    isolate->SetPromiseHook(nullptr);
-  }, static_cast<void*>(isolate));
+  // The per-Isolate API provides no way of knowing whether there are multiple
+  // users of the PromiseHook. That hopefully goes away when V8 introduces
+  // a per-context API.
+  isolate->SetPromiseHook(nullptr);
 }
 
 
@@ -418,12 +416,25 @@ void AsyncWrap::PopAsyncIds(const FunctionCallbackInfo<Value>& args) {
 
 
 void AsyncWrap::AsyncReset(const FunctionCallbackInfo<Value>& args) {
+  CHECK(args[0]->IsObject());
+
   AsyncWrap* wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+
+  Local<Object> resource = args[0].As<Object>();
   double execution_async_id =
-      args[0]->IsNumber() ? args[0].As<Number>()->Value() : kInvalidAsyncId;
-  wrap->AsyncReset(execution_async_id);
+      args[1]->IsNumber() ? args[1].As<Number>()->Value() : kInvalidAsyncId;
+  wrap->AsyncReset(resource, execution_async_id);
 }
+
+
+void AsyncWrap::GetProviderType(const FunctionCallbackInfo<Value>& args) {
+  AsyncWrap* wrap;
+  args.GetReturnValue().Set(AsyncWrap::PROVIDER_NONE);
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
+  args.GetReturnValue().Set(wrap->provider_type());
+}
+
 
 void AsyncWrap::EmitDestroy() {
   AsyncWrap::EmitDestroy(env(), async_id_);
@@ -445,6 +456,7 @@ Local<FunctionTemplate> AsyncWrap::GetConstructorTemplate(Environment* env) {
     tmpl->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "AsyncWrap"));
     env->SetProtoMethod(tmpl, "getAsyncId", AsyncWrap::GetAsyncId);
     env->SetProtoMethod(tmpl, "asyncReset", AsyncWrap::AsyncReset);
+    env->SetProtoMethod(tmpl, "getProviderType", AsyncWrap::GetProviderType);
     env->set_async_wrap_ctor_template(tmpl);
   }
   return tmpl;
@@ -508,7 +520,7 @@ void AsyncWrap::Initialize(Local<Object> target,
   Local<Object> constants = Object::New(isolate);
 #define SET_HOOKS_CONSTANT(name)                                              \
   FORCE_SET_TARGET_FIELD(                                                     \
-      constants, #name, Integer::New(isolate, AsyncHooks::name));
+      constants, #name, Integer::New(isolate, AsyncHooks::name))
 
   SET_HOOKS_CONSTANT(kInit);
   SET_HOOKS_CONSTANT(kBefore);

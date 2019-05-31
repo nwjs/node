@@ -6,7 +6,7 @@
 #include "node_buffer.h"
 #include "node_errors.h"
 #include "node_process.h"
-#include "util.h"
+#include "util-inl.h"
 
 using node::contextify::ContextifyContext;
 using v8::Array;
@@ -39,6 +39,10 @@ namespace worker {
 
 Message::Message(MallocedBuffer<char>&& buffer)
     : main_message_buf_(std::move(buffer)) {}
+
+bool Message::IsCloseMessage() const {
+  return main_message_buf_.data == nullptr;
+}
 
 namespace {
 
@@ -91,6 +95,8 @@ class DeserializerDelegate : public ValueDeserializer::Delegate {
 
 MaybeLocal<Value> Message::Deserialize(Environment* env,
                                        Local<Context> context) {
+  CHECK(!IsCloseMessage());
+
   EscapableHandleScope handle_scope(env->isolate());
   Context::Scope context_scope(context);
 
@@ -395,6 +401,7 @@ Maybe<bool> Message::Serialize(Environment* env,
 
   // The serializer gave us a buffer allocated using `malloc()`.
   std::pair<uint8_t*, size_t> data = serializer.Release();
+  CHECK_NOT_NULL(data.first);
   main_message_buf_ =
       MallocedBuffer<char>(reinterpret_cast<char*>(data.first), data.second);
   return Just(true);
@@ -430,23 +437,12 @@ void MessagePortData::AddToIncomingQueue(Message&& message) {
   }
 }
 
-bool MessagePortData::IsSiblingClosed() const {
-  Mutex::ScopedLock lock(*sibling_mutex_);
-  return sibling_ == nullptr;
-}
-
 void MessagePortData::Entangle(MessagePortData* a, MessagePortData* b) {
   CHECK_NULL(a->sibling_);
   CHECK_NULL(b->sibling_);
   a->sibling_ = b;
   b->sibling_ = a;
   a->sibling_mutex_ = b->sibling_mutex_;
-}
-
-void MessagePortData::PingOwnerAfterDisentanglement() {
-  Mutex::ScopedLock lock(mutex_);
-  if (owner_ != nullptr)
-    owner_->TriggerAsync();
 }
 
 void MessagePortData::Disentangle() {
@@ -462,11 +458,12 @@ void MessagePortData::Disentangle() {
     sibling_ = nullptr;
   }
 
-  // We close MessagePorts after disentanglement, so we trigger the
-  // corresponding uv_async_t to let them know that this happened.
-  PingOwnerAfterDisentanglement();
+  // We close MessagePorts after disentanglement, so we enqueue a corresponding
+  // message and trigger the corresponding uv_async_t to let them know that
+  // this happened.
+  AddToIncomingQueue(Message());
   if (sibling != nullptr) {
-    sibling->PingOwnerAfterDisentanglement();
+    sibling->AddToIncomingQueue(Message());
   }
 }
 
@@ -572,6 +569,40 @@ MessagePort* MessagePort::New(
   return port;
 }
 
+MaybeLocal<Value> MessagePort::ReceiveMessage(Local<Context> context,
+                                              bool only_if_receiving) {
+  Message received;
+  {
+    // Get the head of the message queue.
+    Mutex::ScopedLock lock(data_->mutex_);
+
+    Debug(this, "MessagePort has message");
+
+    bool wants_message = receiving_messages_ || !only_if_receiving;
+    // We have nothing to do if:
+    // - There are no pending messages
+    // - We are not intending to receive messages, and the message we would
+    //   receive is not the final "close" message.
+    if (data_->incoming_messages_.empty() ||
+        (!wants_message &&
+         !data_->incoming_messages_.front().IsCloseMessage())) {
+      return env()->no_message_symbol();
+    }
+
+    received = std::move(data_->incoming_messages_.front());
+    data_->incoming_messages_.pop_front();
+  }
+
+  if (received.IsCloseMessage()) {
+    Close();
+    return env()->no_message_symbol();
+  }
+
+  if (!env()->can_call_into_js()) return MaybeLocal<Value>();
+
+  return received.Deserialize(env(), context);
+}
+
 void MessagePort::OnMessage() {
   Debug(this, "Running MessagePort::OnMessage()");
   HandleScope handle_scope(env()->isolate());
@@ -582,21 +613,12 @@ void MessagePort::OnMessage() {
   // messages, so we need to check that this handle still owns its `data_` field
   // on every iteration.
   while (data_) {
-    Message received;
-    {
-      // Get the head of the message queue.
-      Mutex::ScopedLock lock(data_->mutex_);
+    HandleScope handle_scope(env()->isolate());
+    Context::Scope context_scope(context);
 
-      Debug(this, "MessagePort has message, receiving = %d",
-            static_cast<int>(data_->receiving_messages_));
-
-      if (!data_->receiving_messages_)
-        break;
-      if (data_->incoming_messages_.empty())
-        break;
-      received = std::move(data_->incoming_messages_.front());
-      data_->incoming_messages_.pop_front();
-    }
+    Local<Value> payload;
+    if (!ReceiveMessage(context, true).ToLocal(&payload)) break;
+    if (payload == env()->no_message_symbol()) break;
 
     if (!env()->can_call_into_js()) {
       Debug(this, "MessagePort drains queue because !can_call_into_js()");
@@ -604,39 +626,22 @@ void MessagePort::OnMessage() {
       continue;
     }
 
-    {
-      // Call the JS .onmessage() callback.
-      HandleScope handle_scope(env()->isolate());
-      Context::Scope context_scope(context);
-
-      Local<Object> event;
-      Local<Value> payload;
-      Local<Value> cb_args[1];
-      if (!received.Deserialize(env(), context).ToLocal(&payload) ||
-          !env()->message_event_object_template()->NewInstance(context)
-              .ToLocal(&event) ||
-          event->Set(context, env()->data_string(), payload).IsNothing() ||
-          event->Set(context, env()->target_string(), object()).IsNothing() ||
-          (cb_args[0] = event, false) ||
-          MakeCallback(env()->onmessage_string(),
-                       arraysize(cb_args),
-                       cb_args).IsEmpty()) {
-        // Re-schedule OnMessage() execution in case of failure.
-        if (data_)
-          TriggerAsync();
-        return;
-      }
+    Local<Object> event;
+    Local<Value> cb_args[1];
+    if (!env()->message_event_object_template()->NewInstance(context)
+            .ToLocal(&event) ||
+        event->Set(context, env()->data_string(), payload).IsNothing() ||
+        event->Set(context, env()->target_string(), object()).IsNothing() ||
+        (cb_args[0] = event, false) ||
+        MakeCallback(env()->onmessage_string(),
+                     arraysize(cb_args),
+                     cb_args).IsEmpty()) {
+      // Re-schedule OnMessage() execution in case of failure.
+      if (data_)
+        TriggerAsync();
+      return;
     }
   }
-
-  if (data_ && data_->IsSiblingClosed()) {
-    Close();
-  }
-}
-
-bool MessagePort::IsSiblingClosed() const {
-  CHECK(data_);
-  return data_->IsSiblingClosed();
 }
 
 void MessagePort::OnClose() {
@@ -722,17 +727,16 @@ void MessagePort::PostMessage(const FunctionCallbackInfo<Value>& args) {
 }
 
 void MessagePort::Start() {
-  Mutex::ScopedLock lock(data_->mutex_);
   Debug(this, "Start receiving messages");
-  data_->receiving_messages_ = true;
+  receiving_messages_ = true;
+  Mutex::ScopedLock lock(data_->mutex_);
   if (!data_->incoming_messages_.empty())
     TriggerAsync();
 }
 
 void MessagePort::Stop() {
-  Mutex::ScopedLock lock(data_->mutex_);
   Debug(this, "Stop receiving messages");
-  data_->receiving_messages_ = false;
+  receiving_messages_ = false;
 }
 
 void MessagePort::Start(const FunctionCallbackInfo<Value>& args) {
@@ -756,9 +760,24 @@ void MessagePort::Stop(const FunctionCallbackInfo<Value>& args) {
 
 void MessagePort::Drain(const FunctionCallbackInfo<Value>& args) {
   MessagePort* port;
-  CHECK(args[0]->IsObject());
   ASSIGN_OR_RETURN_UNWRAP(&port, args[0].As<Object>());
   port->OnMessage();
+}
+
+void MessagePort::ReceiveMessage(const FunctionCallbackInfo<Value>& args) {
+  CHECK(args[0]->IsObject());
+  MessagePort* port = Unwrap<MessagePort>(args[0].As<Object>());
+  if (port == nullptr) {
+    // Return 'no messages' for a closed port.
+    args.GetReturnValue().Set(
+        Environment::GetCurrent(args)->no_message_symbol());
+    return;
+  }
+
+  MaybeLocal<Value> payload =
+      port->ReceiveMessage(port->object()->CreationContext(), false);
+  if (!payload.IsEmpty())
+    args.GetReturnValue().Set(payload.ToLocalChecked());
 }
 
 void MessagePort::MoveToContext(const FunctionCallbackInfo<Value>& args) {
@@ -877,6 +896,7 @@ static void InitMessaging(Local<Object> target,
   // the browser equivalents do not provide them.
   env->SetMethod(target, "stopMessagePort", MessagePort::Stop);
   env->SetMethod(target, "drainMessagePort", MessagePort::Drain);
+  env->SetMethod(target, "receiveMessageOnPort", MessagePort::ReceiveMessage);
   env->SetMethod(target, "moveMessagePortToContext",
                  MessagePort::MoveToContext);
 }

@@ -47,5 +47,11 @@
   },
   "unsupported-encodings.any.js": {
     "skip": "decoding-helpers.js needs XMLHttpRequest"
+  },
+  "streams/*.js": {
+    "fail": "No implementation of TextDecoderStream and TextEncoderStream"
+  },
+  "encodeInto.any.js": {
+    "fail": "TextEncoder.prototype.encodeInto not implemented"
   }
 }

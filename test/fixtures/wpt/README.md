@@ -11,9 +11,9 @@ See [test/wpt](../../wpt/README.md) for information on how these tests are run.
 Last update:
 
 - console: https://github.com/web-platform-tests/wpt/tree/9786a4b131/console
-- encoding: https://github.com/web-platform-tests/wpt/tree/a093a659ed/encoding
-- url: https://github.com/web-platform-tests/wpt/tree/75b0f336c5/url
-- resources: https://github.com/web-platform-tests/wpt/tree/679a364421/resources
+- encoding: https://github.com/web-platform-tests/wpt/tree/7287608f90/encoding
+- url: https://github.com/web-platform-tests/wpt/tree/418f7fabeb/url
+- resources: https://github.com/web-platform-tests/wpt/tree/e1fddfbf80/resources
 - interfaces: https://github.com/web-platform-tests/wpt/tree/712c9f275e/interfaces
 - html/webappapis/microtask-queuing: https://github.com/web-platform-tests/wpt/tree/0c3bed38df/html/webappapis/microtask-queuing
 - html/webappapis/timers: https://github.com/web-platform-tests/wpt/tree/ddfe9c089b/html/webappapis/timers

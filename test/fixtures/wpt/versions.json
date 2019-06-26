@@ -4,15 +4,15 @@
     "path": "console"
   },
   "encoding": {
-    "commit": "a093a659ed118112138f8a1ffba97a66c1ea8235",
+    "commit": "7287608f90f6b9530635d10086fd2ab386faab38",
     "path": "encoding"
   },
   "url": {
-    "commit": "75b0f336c50105c6fea47ad253d57219dfa744d3",
+    "commit": "418f7fabebeeb642e79e05b48ffde1a601c7e058",
     "path": "url"
   },
   "resources": {
-    "commit": "679a364421ce3704289df21e1ff985c14b360981",
+    "commit": "e1fddfbf801e7cce9cac5645e992194e4059ef56",
     "path": "resources"
   },
   "interfaces": {

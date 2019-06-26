@@ -19,11 +19,13 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#include "memory_tracker-inl.h"
 #include "node.h"
 #include "node_buffer.h"
 
 #include "async_wrap-inl.h"
 #include "env-inl.h"
+#include "threadpoolwork-inl.h"
 #include "util-inl.h"
 
 #include "v8.h"

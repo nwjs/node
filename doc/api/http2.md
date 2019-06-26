@@ -907,8 +907,9 @@ the value is `undefined`, the stream is not yet ready for use.
 
 All [`Http2Stream`][] instances are destroyed either when:
 
-* An `RST_STREAM` frame for the stream is received by the connected peer.
-* The `http2stream.close()` method is called.
+* An `RST_STREAM` frame for the stream is received by the connected peer,
+  and pending data has been read.
+* The `http2stream.close()` method is called, and pending data has been read.
 * The `http2stream.destroy()` or `http2session.destroy()` methods are called.
 
 When an `Http2Stream` instance is destroyed, an attempt will be made to send an
@@ -1728,6 +1729,9 @@ The `'timeout'` event is emitted when there is no activity on the Server for
 a given number of milliseconds set using `http2server.setTimeout()`.
 **Default:** 2 minutes.
 
+To change the default timeout use the [`--http-server-default-timeout`][]
+flag.
+
 #### server.close([callback])
 <!-- YAML
 added: v8.4.0
@@ -1757,6 +1761,9 @@ The given callback is registered as a listener on the `'timeout'` event.
 
 In case of no callback function were assigned, a new `ERR_INVALID_CALLBACK`
 error will be thrown.
+
+To change the default timeout use the [`--http-server-default-timeout`][]
+flag.
 
 ### Class: Http2SecureServer
 <!-- YAML
@@ -1904,6 +1911,10 @@ error will be thrown.
 <!-- YAML
 added: v8.4.0
 changes:
+  - version: v12.4.0
+    pr-url: https://github.com/nodejs/node/pull/27782
+    description: The `options` parameter now supports `net.createServer()`
+                 options.
   - version: v8.9.3
     pr-url: https://github.com/nodejs/node/pull/17105
     description: Added the `maxOutstandingPings` option with a default limit of
@@ -1979,6 +1990,7 @@ changes:
     `Http2ServerResponse` class to use.
     Useful for extending the original `Http2ServerResponse`.
     **Default:** `Http2ServerResponse`.
+  * ...: Any [`net.createServer()`][] option can be provided.
 * `onRequestHandler` {Function} See [Compatibility API][]
 * Returns: {Http2Server}
 
@@ -3426,6 +3438,7 @@ following additional properties:
 * `type` {string} Either `'server'` or `'client'` to identify the type of
   `Http2Session`.
 
+[`--http-server-default-timeout`]: cli.html#cli_http_server_default_timeout_milliseconds
 [ALPN Protocol ID]: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids
 [ALPN negotiation]: #http2_alpn_negotiation
 [Compatibility API]: #http2_compatibility_api
@@ -3458,6 +3471,7 @@ following additional properties:
 [`http2.createServer()`]: #http2_http2_createserver_options_onrequesthandler
 [`http2session.close()`]: #http2_http2session_close_callback
 [`http2stream.pushStream()`]: #http2_http2stream_pushstream_headers_options_callback
+[`net.createServer()`]: net.html#net_net_createserver_options_connectionlistener
 [`net.Server.close()`]: net.html#net_server_close_callback
 [`net.Socket.bufferSize`]: net.html#net_socket_buffersize
 [`net.Socket.prototype.ref()`]: net.html#net_socket_ref

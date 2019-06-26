@@ -339,6 +339,15 @@ assert.strictEqual(
   const value = {};
   value.a = value;
   assert.strictEqual(util.inspect(value), '{ a: [Circular] }');
+  const getterFn = {
+    get one() {
+      return null;
+    }
+  };
+  assert.strictEqual(
+    util.inspect(getterFn, { getters: true }),
+    '{ one: [Getter: null] }'
+  );
 }
 
 // Array with dynamic properties.
@@ -511,6 +520,10 @@ assert.strictEqual(util.inspect(-5e-324), '-5e-324');
     util.inspect(a, { maxArrayLength: 4 }),
     "[ 'foo', <1 empty item>, 'baz', <97 empty items>, ... 1 more item ]"
   );
+  // test 4 special case
+  assert.strictEqual(util.inspect(a, {
+    maxArrayLength: 2
+  }), "[ 'foo', <1 empty item>, ... 99 more items ]");
 }
 
 // Test for Array constructor in different context.
@@ -853,6 +866,13 @@ util.inspect({ hasOwnProperty: null });
 }
 
 {
+  const subject = { [util.inspect.custom]: common.mustCall((depth) => {
+    assert.strictEqual(depth, null);
+  }) };
+  util.inspect(subject, { depth: null });
+}
+
+{
   // Returning `this` from a custom inspection function works.
   const subject = { a: 123, [util.inspect.custom]() { return this; } };
   const UIC = 'nodejs.util.inspect.custom';
@@ -895,6 +915,10 @@ assert.strictEqual(
 
 // Test boxed primitives output the correct values.
 assert.strictEqual(util.inspect(new String('test')), "[String: 'test']");
+assert.strictEqual(
+  util.inspect(new String('test'), { colors: true }),
+  "\u001b[32m[String: 'test']\u001b[39m"
+);
 assert.strictEqual(
   util.inspect(Object(Symbol('test'))),
   '[Symbol: Symbol(test)]'

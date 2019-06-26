@@ -1,5 +1,6 @@
 #include "inspector_agent.h"
 
+#include "env-inl.h"
 #include "inspector/main_thread_interface.h"
 #include "inspector/node_string.h"
 #include "inspector/runtime_agent.h"
@@ -24,6 +25,7 @@
 #include <climits>  // PTHREAD_STACK_MIN
 #endif  // __POSIX__
 
+#include <algorithm>
 #include <cstring>
 #include <sstream>
 #include <unordered_map>
@@ -110,12 +112,18 @@ static int StartDebugSignalHandler() {
   CHECK_EQ(0, uv_sem_init(&start_io_thread_semaphore, 0));
   pthread_attr_t attr;
   CHECK_EQ(0, pthread_attr_init(&attr));
-  // Don't shrink the thread's stack on FreeBSD.  Said platform decided to
-  // follow the pthreads specification to the letter rather than in spirit:
-  // https://lists.freebsd.org/pipermail/freebsd-current/2014-March/048885.html
-#ifndef __FreeBSD__
-  CHECK_EQ(0, pthread_attr_setstacksize(&attr, PTHREAD_STACK_MIN));
-#endif  // __FreeBSD__
+#if defined(PTHREAD_STACK_MIN) && !defined(__FreeBSD__)
+  // PTHREAD_STACK_MIN is 2 KB with musl libc, which is too small to safely
+  // receive signals. PTHREAD_STACK_MIN + MINSIGSTKSZ is 8 KB on arm64, which
+  // is the musl architecture with the biggest MINSIGSTKSZ so let's use that
+  // as a lower bound and let's quadruple it just in case. The goal is to avoid
+  // creating a big 2 or 4 MB address space gap (problematic on 32 bits
+  // because of fragmentation), not squeeze out every last byte.
+  // Omitted on FreeBSD because it doesn't seem to like small stacks.
+  const size_t stack_size = std::max(static_cast<size_t>(4 * 8192),
+                                     static_cast<size_t>(PTHREAD_STACK_MIN));
+  CHECK_EQ(0, pthread_attr_setstacksize(&attr, stack_size));
+#endif  // defined(PTHREAD_STACK_MIN) && !defined(__FreeBSD__)
   CHECK_EQ(0, pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED));
   sigset_t sigmask;
   // Mask all signals.
@@ -464,8 +472,8 @@ class NodeInspectorClient : public V8InspectorClient {
     runMessageLoop();
   }
 
-  void waitForIoShutdown() {
-    waiting_for_io_shutdown_ = true;
+  void waitForSessionsDisconnect() {
+    waiting_for_sessions_disconnect_ = true;
     runMessageLoop();
   }
 
@@ -540,6 +548,8 @@ class NodeInspectorClient : public V8InspectorClient {
       }
       contextDestroyed(env_->context());
     }
+    if (waiting_for_sessions_disconnect_ && !is_main_)
+      waiting_for_sessions_disconnect_ = false;
   }
 
   void dispatchMessageFromFrontend(int session_id, const StringView& message) {
@@ -670,8 +680,9 @@ class NodeInspectorClient : public V8InspectorClient {
   bool shouldRunMessageLoop() {
     if (waiting_for_frontend_)
       return true;
-    if (waiting_for_io_shutdown_ || waiting_for_resume_)
+    if (waiting_for_sessions_disconnect_ || waiting_for_resume_) {
       return hasConnectedSessions();
+    }
     return false;
   }
 
@@ -715,7 +726,7 @@ class NodeInspectorClient : public V8InspectorClient {
   int next_session_id_ = 1;
   bool waiting_for_resume_ = false;
   bool waiting_for_frontend_ = false;
-  bool waiting_for_io_shutdown_ = false;
+  bool waiting_for_sessions_disconnect_ = false;
   // Allows accessing Inspector from non-main threads
   std::unique_ptr<MainThreadInterface> interface_;
   std::shared_ptr<WorkerManager> worker_manager_;
@@ -812,11 +823,14 @@ void Agent::WaitForDisconnect() {
     fprintf(stderr, "Waiting for the debugger to disconnect...\n");
     fflush(stderr);
   }
-  if (!client_->notifyWaitingForDisconnect())
+  if (!client_->notifyWaitingForDisconnect()) {
     client_->contextDestroyed(parent_env_->context());
+  } else if (is_worker) {
+    client_->waitForSessionsDisconnect();
+  }
   if (io_ != nullptr) {
     io_->StopAcceptingNewConnections();
-    client_->waitForIoShutdown();
+    client_->waitForSessionsDisconnect();
   }
 }
 

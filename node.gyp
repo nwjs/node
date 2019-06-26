@@ -207,7 +207,6 @@
       'lib/internal/url.js',
       'lib/internal/util.js',
       'lib/internal/util/comparisons.js',
-      'lib/internal/util/print.js',
       'lib/internal/util/debuglog.js',
       'lib/internal/util/inspect.js',
       'lib/internal/util/inspector.js',
@@ -306,6 +305,14 @@
         'ImageHasSafeExceptionHandlers': 'false',
       },
     },
+
+    'conditions': [
+      ['OS=="aix"', {
+        'ldflags': [
+          '-Wl,-bnoerrmsg',
+        ],
+      }],
+    ],
   },
   'includes': [
     '../../build/util/version.gypi',
@@ -1132,6 +1139,7 @@
         'test/cctest/test_node_postmortem_metadata.cc',
         'test/cctest/test_environment.cc',
         'test/cctest/test_linked_binding.cc',
+        'test/cctest/test_per_process.cc',
         'test/cctest/test_platform.cc',
         'test/cctest/test_report_util.cc',
         'test/cctest/test_traced_value.cc',

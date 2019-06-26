@@ -24,7 +24,7 @@
 
 #if defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
 
-#include "env-inl.h"
+#include "env.h"
 #include "node.h"
 #include "node_binding.h"
 #include "node_mutex.h"
@@ -257,27 +257,6 @@ class ThreadPoolWork {
   uv_work_t work_req_;
 };
 
-void ThreadPoolWork::ScheduleWork() {
-  env_->IncreaseWaitingRequestCounter();
-  int status = uv_queue_work(
-      env_->event_loop(),
-      &work_req_,
-      [](uv_work_t* req) {
-        ThreadPoolWork* self = ContainerOf(&ThreadPoolWork::work_req_, req);
-        self->DoThreadPoolWork();
-      },
-      [](uv_work_t* req, int status) {
-        ThreadPoolWork* self = ContainerOf(&ThreadPoolWork::work_req_, req);
-        self->env_->DecreaseWaitingRequestCounter();
-        self->AfterThreadPoolWork(status);
-      });
-  CHECK_EQ(status, 0);
-}
-
-int ThreadPoolWork::CancelWork() {
-  return uv_cancel(reinterpret_cast<uv_req_t*>(&work_req_));
-}
-
 #define TRACING_CATEGORY_NODE "node"
 #define TRACING_CATEGORY_NODE1(one)                                           \
     TRACING_CATEGORY_NODE ","                                                 \
@@ -347,17 +326,15 @@ class DiagnosticFilename {
  public:
   static void LocalTime(TIME_TYPE* tm_struct);
 
-  DiagnosticFilename(Environment* env,
-                     const char* prefix,
-                     const char* ext) :
-      filename_(MakeFilename(env->thread_id(), prefix, ext)) {}
+  inline DiagnosticFilename(Environment* env,
+                            const char* prefix,
+                            const char* ext);
 
-  DiagnosticFilename(uint64_t thread_id,
-                     const char* prefix,
-                     const char* ext) :
-      filename_(MakeFilename(thread_id, prefix, ext)) {}
+  inline DiagnosticFilename(uint64_t thread_id,
+                            const char* prefix,
+                            const char* ext);
 
-  const char* operator*() const { return filename_.c_str(); }
+  inline const char* operator*() const;
 
  private:
   static std::string MakeFilename(

@@ -181,8 +181,8 @@ void DumpBacktrace(FILE* fp);
 #endif
 
 
-#define UNREACHABLE(expr)                                                     \
-  ERROR_AND_ABORT("Unreachable code reached: " expr)
+#define UNREACHABLE(...)                                                      \
+  ERROR_AND_ABORT("Unreachable code reached" __VA_OPT__(": ") __VA_ARGS__)
 
 // TAILQ-style intrusive list node.
 template <typename T>
@@ -446,6 +446,7 @@ class ArrayBufferViewContents {
   ArrayBufferViewContents() = default;
 
   explicit inline ArrayBufferViewContents(v8::Local<v8::Value> value);
+  explicit inline ArrayBufferViewContents(v8::Local<v8::Object> value);
   explicit inline ArrayBufferViewContents(v8::Local<v8::ArrayBufferView> abv);
   inline void Read(v8::Local<v8::ArrayBufferView> abv);
 

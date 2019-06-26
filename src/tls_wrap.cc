@@ -22,6 +22,7 @@
 #include "tls_wrap.h"
 #include "async_wrap-inl.h"
 #include "debug_utils.h"
+#include "memory_tracker-inl.h"
 #include "node_buffer.h"  // Buffer
 #include "node_crypto.h"  // SecureContext
 #include "node_crypto_bio.h"  // NodeBIO
@@ -186,9 +187,9 @@ void TLSWrap::Receive(const FunctionCallbackInfo<Value>& args) {
   TLSWrap* wrap;
   ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
 
-  CHECK(Buffer::HasInstance(args[0]));
-  char* data = Buffer::Data(args[0]);
-  size_t len = Buffer::Length(args[0]);
+  ArrayBufferViewContents<char> buffer(args[0]);
+  const char* data = buffer.data();
+  size_t len = buffer.length();
   Debug(wrap, "Receiving %zu bytes injected from JS", len);
 
   // Copy given buffer entirely or partiall if handle becomes closed
@@ -301,7 +302,7 @@ void TLSWrap::EncOut() {
   // No encrypted output ready to write to the underlying stream.
   if (BIO_pending(enc_out_) == 0) {
     Debug(this, "No pending encrypted output");
-    if (pending_cleartext_input_.empty()) {
+    if (pending_cleartext_input_.size() == 0) {
       if (!in_dowrite_) {
         Debug(this, "No pending cleartext input, not inside DoWrite()");
         InvokeQueued(0);
@@ -572,28 +573,21 @@ void TLSWrap::ClearIn() {
     return;
   }
 
-  std::vector<uv_buf_t> buffers;
-  buffers.swap(pending_cleartext_input_);
-
-  crypto::MarkPopErrorOnReturn mark_pop_error_on_return;
-
-  size_t i;
-  int written = 0;
-  for (i = 0; i < buffers.size(); ++i) {
-    size_t avail = buffers[i].len;
-    char* data = buffers[i].base;
-    written = SSL_write(ssl_.get(), data, avail);
-    Debug(this, "Writing %zu bytes, written = %d", avail, written);
-    CHECK(written == -1 || written == static_cast<int>(avail));
-    if (written == -1)
-      break;
+  if (pending_cleartext_input_.size() == 0) {
+    Debug(this, "Returning from ClearIn(), no pending data");
+    return;
   }
 
+  AllocatedBuffer data = std::move(pending_cleartext_input_);
+  crypto::MarkPopErrorOnReturn mark_pop_error_on_return;
+
+  int written = SSL_write(ssl_.get(), data.data(), data.size());
+  Debug(this, "Writing %zu bytes, written = %d", data.size(), written);
+  CHECK(written == -1 || written == static_cast<int>(data.size()));
+
   // All written
-  if (i == buffers.size()) {
+  if (written != -1) {
     Debug(this, "Successfully wrote all data to SSL");
-    // We wrote all the buffers, so no writes failed (written < 0 on failure).
-    CHECK_GE(written, 0);
     return;
   }
 
@@ -611,13 +605,10 @@ void TLSWrap::ClearIn() {
     // .code/.function/.etc, if possible.
     InvokeQueued(UV_EPROTO, error_str.c_str());
   } else {
-    Debug(this, "Pushing back %zu buffers", buffers.size() - i);
-    // Push back the not-yet-written pending buffers into their queue.
-    // This can be skipped in the error case because no further writes
-    // would succeed anyway.
-    pending_cleartext_input_.insert(pending_cleartext_input_.end(),
-                                    buffers.begin() + i,
-                                    buffers.end());
+    Debug(this, "Pushing data back");
+    // Push back the not-yet-written data. This can be skipped in the error
+    // case because no further writes would succeed anyway.
+    pending_cleartext_input_ = std::move(data);
   }
 
   return;
@@ -704,14 +695,10 @@ int TLSWrap::DoWrite(WriteWrap* w,
     return UV_EPROTO;
   }
 
-  bool empty = true;
+  size_t length = 0;
   size_t i;
-  for (i = 0; i < count; i++) {
-    if (bufs[i].len > 0) {
-      empty = false;
-      break;
-    }
-  }
+  for (i = 0; i < count; i++)
+    length += bufs[i].len;
 
   // We want to trigger a Write() on the underlying stream to drive the stream
   // system, but don't want to encrypt empty buffers into a TLS frame, so see
@@ -723,7 +710,7 @@ int TLSWrap::DoWrite(WriteWrap* w,
   // stream. Since the bufs are empty, it won't actually write non-TLS data
   // onto the socket, we just want the side-effects. After, make sure the
   // WriteWrap was accepted by the stream, or that we call Done() on it.
-  if (empty) {
+  if (length == 0) {
     Debug(this, "Empty write");
     ClearOut();
     if (BIO_pending(enc_out_) == 0) {
@@ -747,23 +734,36 @@ int TLSWrap::DoWrite(WriteWrap* w,
   current_write_ = w;
 
   // Write encrypted data to underlying stream and call Done().
-  if (empty) {
+  if (length == 0) {
     EncOut();
     return 0;
   }
 
+  AllocatedBuffer data;
   crypto::MarkPopErrorOnReturn mark_pop_error_on_return;
 
   int written = 0;
-  for (i = 0; i < count; i++) {
-    written = SSL_write(ssl_.get(), bufs[i].base, bufs[i].len);
-    CHECK(written == -1 || written == static_cast<int>(bufs[i].len));
-    Debug(this, "Writing %zu bytes, written = %d", bufs[i].len, written);
-    if (written == -1)
-      break;
+  if (count != 1) {
+    data = env()->AllocateManaged(length);
+    size_t offset = 0;
+    for (i = 0; i < count; i++) {
+      memcpy(data.data() + offset, bufs[i].base, bufs[i].len);
+      offset += bufs[i].len;
+    }
+    written = SSL_write(ssl_.get(), data.data(), length);
+  } else {
+    // Only one buffer: try to write directly, only store if it fails
+    written = SSL_write(ssl_.get(), bufs[0].base, bufs[0].len);
+    if (written == -1) {
+      data = env()->AllocateManaged(length);
+      memcpy(data.data(), bufs[0].base, bufs[0].len);
+    }
   }
 
-  if (i != count) {
+  CHECK(written == -1 || written == static_cast<int>(length));
+  Debug(this, "Writing %zu bytes, written = %d", length, written);
+
+  if (written == -1) {
     int err;
     Local<Value> arg = GetSSLError(written, &err, &error_);
 
@@ -774,11 +774,10 @@ int TLSWrap::DoWrite(WriteWrap* w,
       return UV_EPROTO;
     }
 
-    Debug(this, "Saving %zu buffers for later write", count - i);
+    Debug(this, "Saving data for later write");
     // Otherwise, save unwritten data so it can be written later by ClearIn().
-    pending_cleartext_input_.insert(pending_cleartext_input_.end(),
-                                    &bufs[i],
-                                    &bufs[count]);
+    CHECK_EQ(pending_cleartext_input_.size(), 0);
+    pending_cleartext_input_ = std::move(data);
   }
 
   // Write any encrypted/handshake output that may be ready.
@@ -938,9 +937,19 @@ void TLSWrap::EnableTrace(
 
 #if HAVE_SSL_TRACE
   if (wrap->ssl_) {
-    BIO* b = BIO_new_fp(stderr,  BIO_NOCLOSE | BIO_FP_TEXT);
-    SSL_set_msg_callback(wrap->ssl_.get(), SSL_trace);
-    SSL_set_msg_callback_arg(wrap->ssl_.get(), b);
+    wrap->bio_trace_.reset(BIO_new_fp(stderr,  BIO_NOCLOSE | BIO_FP_TEXT));
+    SSL_set_msg_callback(wrap->ssl_.get(), [](int write_p, int version, int
+          content_type, const void* buf, size_t len, SSL* ssl, void* arg)
+        -> void {
+        // BIO_write(), etc., called by SSL_trace, may error. The error should
+        // be ignored, trace is a "best effort", and its usually because stderr
+        // is a non-blocking pipe, and its buffer has overflowed. Leaving errors
+        // on the stack that can get picked up by later SSL_ calls causes
+        // unwanted failures in SSL_ calls, so keep the error stack unchanged.
+        crypto::MarkPopErrorOnReturn mark_pop_error_on_return;
+        SSL_trace(write_p,  version, content_type, buf, len, ssl, arg);
+    });
+    SSL_set_msg_callback_arg(wrap->ssl_.get(), wrap->bio_trace_.get());
   }
 #endif
 }
@@ -1033,6 +1042,14 @@ int TLSWrap::SelectSNIContextCallback(SSL* s, int* ad, void* arg) {
   Local<Object> object = p->object();
   Local<Value> ctx;
 
+  // Set the servername as early as possible
+  Local<Object> owner = p->GetOwner();
+  if (!owner->Set(env->context(),
+                  env->servername_string(),
+                  OneByteString(env->isolate(), servername)).FromMaybe(false)) {
+    return SSL_TLSEXT_ERR_NOACK;
+  }
+
   if (!object->Get(env->context(), env->sni_context_string()).ToLocal(&ctx))
     return SSL_TLSEXT_ERR_NOACK;
 
@@ -1073,7 +1090,9 @@ void TLSWrap::GetWriteQueueSize(const FunctionCallbackInfo<Value>& info) {
 
 void TLSWrap::MemoryInfo(MemoryTracker* tracker) const {
   tracker->TrackField("error", error_);
-  tracker->TrackField("pending_cleartext_input", pending_cleartext_input_);
+  tracker->TrackFieldWithSize("pending_cleartext_input",
+                              pending_cleartext_input_.size(),
+                              "AllocatedBuffer");
   if (enc_in_ != nullptr)
     tracker->TrackField("enc_in", crypto::NodeBIO::FromBIO(enc_in_));
   if (enc_out_ != nullptr)

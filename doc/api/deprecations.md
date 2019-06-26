@@ -796,7 +796,9 @@ changes:
 
 Type: Deprecation revoked
 
-The [`fs.lchown(path, uid, gid, callback)`][] API is deprecated.
+The [`fs.lchown(path, uid, gid, callback)`][] API was deprecated. The
+deprecation was revoked because the requisite supporting APIs were added in
+libuv.
 
 <a id="DEP0038"></a>
 ### DEP0038: fs.lchownSync(path, uid, gid)
@@ -816,7 +818,8 @@ changes:
 
 Type: Deprecation revoked
 
-The [`fs.lchownSync(path, uid, gid)`][] API is deprecated.
+The [`fs.lchownSync(path, uid, gid)`][] API was deprecated. The deprecation was
+revoked because the requisite supporting APIs were added in libuv.
 
 <a id="DEP0039"></a>
 ### DEP0039: require.extensions
@@ -1364,7 +1367,7 @@ The `NODE_REPL_MODE` environment variable is used to set the underlying
 removed. Please use `sloppy` instead.
 
 <a id="DEP0066"></a>
-### DEP0066: outgoingMessage.\_headers, outgoingMessage.\_headerNames
+### DEP0066: OutgoingMessage.prototype.\_headers, OutgoingMessage.prototype.\_headerNames
 <!-- YAML
 changes:
   - version: v12.0.0
@@ -1377,15 +1380,18 @@ changes:
 
 Type: Runtime
 
-The `http` module `outgoingMessage._headers` and `outgoingMessage._headerNames`
-properties are deprecated. Use one of the public methods
-(e.g. `outgoingMessage.getHeader()`, `outgoingMessage.getHeaders()`,
-`outgoingMessage.getHeaderNames()`, `outgoingMessage.hasHeader()`,
-`outgoingMessage.removeHeader()`, `outgoingMessage.setHeader()`) for working
-with outgoing headers.
+The `http` module `OutgoingMessage.prototype._headers` and
+`OutgoingMessage.prototype._headerNames` properties are deprecated. Use one of
+the public methods (e.g. `OutgoingMessage.prototype.getHeader()`,
+`OutgoingMessage.prototype.getHeaders()`,
+`OutgoingMessage.prototype.getHeaderNames()`,
+`OutgoingMessage.prototype.hasHeader()`,
+`OutgoingMessage.prototype.removeHeader()`,
+`OutgoingMessage.prototype.setHeader()`) for working with outgoing headers.
 
-The `outgoingMessage._headers` and `outgoingMessage._headerNames` properties
-were never documented as officially supported properties.
+The `OutgoingMessage.prototype._headers` and
+`OutgoingMessage.prototype._headerNames` properties were never documented as
+officially supported properties.
 
 <a id="DEP0067"></a>
 ### DEP0067: OutgoingMessage.prototype.\_renderHeaders
@@ -2316,6 +2322,8 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/23760
     description: Runtime deprecation.
 -->
+
+Type: Runtime
 
 The undocumented `net._setSimultaneousAccepts()` function was originally
 intended for debugging and performance tuning when using the `child_process`

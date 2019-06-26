@@ -2898,7 +2898,8 @@ changes:
 
 Asynchronously rename file at `oldPath` to the pathname provided
 as `newPath`. In the case that `newPath` already exists, it will
-be overwritten. No arguments other than a possible exception are
+be overwritten. If there is a directory at `newPath`, an error will
+be raised instead. No arguments other than a possible exception are
 given to the completion callback.
 
 See also: rename(2).
@@ -3733,9 +3734,14 @@ added: v10.0.0
 
 A `FileHandle` object is a wrapper for a numeric file descriptor.
 Instances of `FileHandle` are distinct from numeric file descriptors
-in that, if the `FileHandle` is not explicitly closed using the
-`filehandle.close()` method, they will automatically close the file descriptor
+in that they provide an object oriented API for working with files.
+
+If a `FileHandle` is not closed using the
+`filehandle.close()` method, it might automatically close the file descriptor
 and will emit a process warning, thereby helping to prevent memory leaks.
+Please do not rely on this behavior in your code because it is unreliable and
+your file may not be closed. Instead, always explicitly close `FileHandle`s.
+Node.js may change this behavior in the future.
 
 Instances of the `FileHandle` object are created internally by the
 `fsPromises.open()` method.

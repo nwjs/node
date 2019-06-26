@@ -1,4 +1,3 @@
-// Flags: --tls-min-v1.1
 'use strict';
 const common = require('../common');
 if (!common.hasCrypto)
@@ -12,10 +11,11 @@ const fixtures = require('../common/fixtures');
 const options = {
   key: fixtures.readKey('agent1-key.pem'),
   cert: fixtures.readKey('agent1-cert.pem'),
-  ca: fixtures.readKey('ca1-cert.pem')
+  ca: fixtures.readKey('ca1-cert.pem'),
+  minVersion: 'TLSv1.1',
 };
 
-const server = https.Server(options, function(req, res) {
+const server = https.Server(options, (req, res) => {
   res.writeHead(200);
   res.end('hello world\n');
 });
@@ -39,50 +39,39 @@ const updatedValues = new Map([
   ['sessionIdContext', 'sessionIdContext'],
 ]);
 
+let value;
 function variations(iter, port, cb) {
-  const { done, value } = iter.next();
-  if (done) {
-    return common.mustCall(cb);
-  } else {
-    const [key, val] = value;
-    return common.mustCall(function(res) {
-      res.resume();
-      https.globalAgent.once('free', common.mustCall(function() {
-        https.get(
-          Object.assign({}, getBaseOptions(port), { [key]: val }),
-          variations(iter, port, cb)
+  return common.mustCall((res) => {
+    res.resume();
+    https.globalAgent.once('free', common.mustCall(() => {
+      // Verify that the most recent connection is in the freeSockets pool.
+      const keys = Object.keys(https.globalAgent.freeSockets);
+      if (value) {
+        assert.ok(
+          keys.some((val) => val.startsWith(value.toString() + ':') ||
+                            val.endsWith(':' + value.toString()) ||
+                            val.includes(':' + value.toString() + ':')),
+          `missing value: ${value.toString()} in ${keys}`
         );
-      }));
-    });
-  }
+      }
+      const next = iter.next();
+
+      if (next.done) {
+        https.globalAgent.destroy();
+        server.close();
+      } else {
+        // Save `value` for check the next time.
+        value = next.value.val;
+        const [key, val] = next.value;
+        https.get(Object.assign({}, getBaseOptions(port), { [key]: val }),
+                  variations(iter, port, cb));
+      }
+    }));
+  });
 }
 
-server.listen(0, common.mustCall(function() {
-  const port = this.address().port;
-  const globalAgent = https.globalAgent;
-  globalAgent.keepAlive = true;
-  https.get(getBaseOptions(port), variations(
-    updatedValues.entries(),
-    port,
-    common.mustCall(function(res) {
-      res.resume();
-      globalAgent.once('free', common.mustCall(function() {
-        // Verify that different keep-alived connections are created
-        // for the base call and each variation
-        const keys = Object.keys(globalAgent.freeSockets);
-        assert.strictEqual(keys.length, 1 + updatedValues.size);
-        let i = 1;
-        for (const [, value] of updatedValues) {
-          assert.ok(
-            keys[i].startsWith(value.toString() + ':') ||
-            keys[i].endsWith(':' + value.toString()) ||
-            keys[i].includes(':' + value.toString() + ':')
-          );
-          i++;
-        }
-        globalAgent.destroy();
-        server.close();
-      }));
-    })
-  ));
+server.listen(0, common.mustCall(() => {
+  const port = server.address().port;
+  https.globalAgent.keepAlive = true;
+  https.get(getBaseOptions(port), variations(updatedValues.entries(), port));
 }));

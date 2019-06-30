@@ -114,6 +114,7 @@ module.exports = {
       tabWidth: 2,
     }],
     'new-parens': 'error',
+    'no-async-promise-executor': 'error',
     'no-class-assign': 'error',
     'no-confusing-arrow': 'error',
     'no-const-assign': 'error',
@@ -147,7 +148,7 @@ module.exports = {
     'no-octal': 'error',
     'no-path-concat': 'error',
     'no-proto': 'error',
-    'no-redeclare': 'error',
+    'no-redeclare': ['error', { 'builtinGlobals': false }],
     'no-restricted-modules': ['error', 'sys'],
     /* eslint-disable max-len */
     'no-restricted-properties': [
@@ -246,6 +247,7 @@ module.exports = {
     'no-return-await': 'error',
     'no-self-assign': 'error',
     'no-self-compare': 'error',
+    'no-shadow-restricted-names': 'error',
     'no-tabs': 'error',
     'no-template-curly-in-string': 'error',
     'no-this-before-super': 'error',

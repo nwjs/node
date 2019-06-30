@@ -4,11 +4,9 @@
 
 > Stability: 2 - Stable
 
-The `assert` module provides a simple set of assertion tests that can be used to
-test invariants.
-
-A `strict` and a `legacy` mode exist, while it is recommended to only use
-[`strict mode`][].
+The `assert` module provides a set of assertion functions for verifying
+invariants. The module provides a recommended [`strict` mode][] and a more
+lenient `legacy` mode.
 
 For more information about the used equality comparisons see
 [MDN's guide on equality comparisons and sameness][mdn-equality-guide].
@@ -89,7 +87,7 @@ changes:
     description: Added strict mode to the assert module.
 -->
 
-When using the `strict mode`, any `assert` function will use the equality used
+When using the `strict` mode, any `assert` function will use the equality used
 in the strict function mode. So [`assert.deepEqual()`][] will, for example,
 work the same as [`assert.deepStrictEqual()`][].
 
@@ -140,7 +138,7 @@ It can be accessed using:
 const assert = require('assert');
 ```
 
-It is recommended to use the [`strict mode`][] instead as the
+It is recommended to use the [`strict` mode][] instead as the
 [Abstract Equality Comparison][] can often have surprising results. This is
 especially true for [`assert.deepEqual()`][], where the comparison rules are
 lax:
@@ -1210,10 +1208,14 @@ assert.throws(
   () => {
     throw new Error('Wrong value');
   },
-  function(err) {
-    if ((err instanceof Error) && /value/.test(err)) {
-      return true;
-    }
+  (err) => {
+    assert(err instanceof Error);
+    assert(/value/.test(err));
+    // Returning anything from validation functions besides `true` is not
+    // recommended. Doing so results in the caught error being thrown again.
+    // That is usually not the desired outcome. Throw an error about the
+    // specific validation that failed instead (as done in this example).
+    return true;
   },
   'unexpected error'
 );
@@ -1284,7 +1286,7 @@ second argument. This might lead to difficult-to-spot errors.
 [`assert.ok()`]: #assert_assert_ok_value_message
 [`assert.strictEqual()`]: #assert_assert_strictequal_actual_expected_message
 [`assert.throws()`]: #assert_assert_throws_fn_error_message
-[`strict mode`]: #assert_strict_mode
+[`strict` mode]: #assert_strict_mode
 [Abstract Equality Comparison]: https://tc39.github.io/ecma262/#sec-abstract-equality-comparison
 [Object wrappers]: https://developer.mozilla.org/en-US/docs/Glossary/Primitive#Primitive_wrapper_objects_in_JavaScript
 [Object.prototype.toString()]: https://tc39.github.io/ecma262/#sec-object.prototype.tostring

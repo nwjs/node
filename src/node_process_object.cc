@@ -68,10 +68,7 @@ static void GetParentProcessId(Local<Name> property,
   info.GetReturnValue().Set(uv_os_getppid());
 }
 
-MaybeLocal<Object> CreateProcessObject(
-    Environment* env,
-    const std::vector<std::string>& args,
-    const std::vector<std::string>& exec_args, bool node_is_nwjs) {
+MaybeLocal<Object> CreateProcessObject(Environment* env, bool node_is_nwjs) {
   Isolate* isolate = env->isolate();
   EscapableHandleScope scope(isolate);
   Local<Context> context = env->context();

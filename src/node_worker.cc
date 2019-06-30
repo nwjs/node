@@ -42,17 +42,6 @@ namespace worker {
 namespace {
 
 #if NODE_USE_V8_PLATFORM && HAVE_INSPECTOR
-void StartWorkerInspector(
-    Environment* child,
-    std::unique_ptr<inspector::ParentInspectorHandle> parent_handle,
-    const std::string& url) {
-  child->inspector_agent()->SetParentHandle(std::move(parent_handle));
-  child->inspector_agent()->Start(url,
-                                  child->options()->debug_options(),
-                                  child->inspector_host_port(),
-                                  false);
-}
-
 void WaitForWorkerInspectorToStop(Environment* child) {
   child->inspector_agent()->WaitForDisconnect();
   child->inspector_agent()->Stop();
@@ -67,11 +56,10 @@ Worker::Worker(Environment* env,
                std::shared_ptr<PerIsolateOptions> per_isolate_opts,
                std::vector<std::string>&& exec_argv)
     : AsyncWrap(env, wrap, AsyncWrap::PROVIDER_WORKER),
-      url_(url),
       per_isolate_opts_(per_isolate_opts),
       exec_argv_(exec_argv),
       platform_(env->isolate_data()->platform()),
-      profiler_idle_notifier_started_(env->profiler_idle_notifier_started()),
+      start_profiler_idle_notifier_(env->profiler_idle_notifier_started()),
       thread_id_(Environment::AllocateThreadId()),
       env_vars_(env->env_vars()) {
   Debug(this, "Creating new worker instance with thread id %llu", thread_id_);
@@ -201,7 +189,9 @@ void Worker::Run() {
     Locker locker(isolate_);
     Isolate::Scope isolate_scope(isolate_);
     SealHandleScope outer_seal(isolate_);
+#if NODE_USE_V8_PLATFORM && HAVE_INSPECTOR
     bool inspector_started = false;
+#endif
 
     DeleteFnPtr<Environment, FreeEnvironment> env_;
     OnScopeLeave cleanup_env([&]() {
@@ -256,6 +246,8 @@ void Worker::Run() {
         // public API.
         env_.reset(new Environment(data.isolate_data_.get(),
                                    context,
+                                   std::move(argv_),
+                                   std::move(exec_argv_),
                                    Environment::kNoFlags,
                                    thread_id_));
         CHECK_NOT_NULL(env_);
@@ -263,8 +255,7 @@ void Worker::Run() {
         env_->set_abort_on_uncaught_exception(false);
         env_->set_worker_context(this);
 
-        env_->InitializeLibuv(profiler_idle_notifier_started_);
-        env_->ProcessCliArgs(std::move(argv_), std::move(exec_argv_));
+        env_->InitializeLibuv(start_profiler_idle_notifier_);
       }
       {
         Mutex::ScopedLock lock(mutex_);
@@ -274,17 +265,15 @@ void Worker::Run() {
       Debug(this, "Created Environment for worker with id %llu", thread_id_);
       if (is_stopped()) return;
       {
+        env_->InitializeDiagnostics();
 #if NODE_USE_V8_PLATFORM && HAVE_INSPECTOR
-        StartWorkerInspector(env_.get(),
-                             std::move(inspector_parent_handle_),
-                             url_);
-#endif
+        env_->InitializeInspector(inspector_parent_handle_.release());
         inspector_started = true;
-
+#endif
         HandleScope handle_scope(isolate_);
         AsyncCallbackScope callback_scope(env_.get());
         env_->async_hooks()->push_async_ids(1, 0);
-        if (!RunBootstrapping(env_.get()).IsEmpty()) {
+        if (!env_->RunBootstrapping().IsEmpty()) {
           CreateEnvMessagePort(env_.get());
           if (is_stopped()) return;
           Debug(this, "Created message port for worker %llu", thread_id_);
@@ -363,11 +352,8 @@ void Worker::JoinThread() {
   thread_joined_ = true;
 
   env()->remove_sub_worker_context(this);
-  OnThreadStopped();
   on_thread_finished_.Uninstall();
-}
 
-void Worker::OnThreadStopped() {
   {
     HandleScope handle_scope(env()->isolate());
     Context::Scope context_scope(env()->context());
@@ -381,7 +367,7 @@ void Worker::OnThreadStopped() {
     MakeCallback(env()->onexit_string(), 1, &code);
   }
 
-  // JoinThread() cleared all libuv handles bound to this Worker,
+  // We cleared all libuv handles bound to this Worker above,
   // the C++ object is no longer needed for anything now.
   MakeWeak();
 }
@@ -545,8 +531,6 @@ void Worker::StopThread(const FunctionCallbackInfo<Value>& args) {
 
   Debug(w, "Worker %llu is getting stopped by parent", w->thread_id_);
   w->Exit(1);
-  w->JoinThread();
-  delete w;
 }
 
 void Worker::Ref(const FunctionCallbackInfo<Value>& args) {

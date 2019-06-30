@@ -93,6 +93,7 @@ void PrintCaughtException(v8::Isolate* isolate,
                           const v8::TryCatch& try_catch);
 
 void WaitForInspectorDisconnect(Environment* env);
+void ResetStdio();  // Safe to call more than once and from signal handlers.
 void SignalExit(int signo);
 #ifdef __POSIX__
 void RegisterSignalHandler(int signal,
@@ -280,7 +281,6 @@ void DefineZlibConstants(v8::Local<v8::Object> target);
 v8::Isolate* NewIsolate(v8::Isolate::CreateParams* params,
                         uv_loop_t* event_loop,
                         MultiIsolatePlatform* platform);
-v8::MaybeLocal<v8::Value> RunBootstrapping(Environment* env);
 v8::MaybeLocal<v8::Value> StartExecution(Environment* env,
                                          const char* main_script_id);
 v8::MaybeLocal<v8::Object> GetPerContextExports(v8::Local<v8::Context> context);

@@ -8,6 +8,7 @@ This directory contains modules used to test the Node.js implementation.
 * [Benchmark module](#benchmark-module)
 * [Common module API](#common-module-api)
 * [Countdown module](#countdown-module)
+* [CPU Profiler module](#cpu-profiler-module)
 * [DNS module](#dns-module)
 * [Duplex pair helper](#duplex-pair-helper)
 * [Environment variables](#environment-variables)
@@ -431,6 +432,45 @@ Decrements the `Countdown` counter.
 Specifies the remaining number of times `Countdown.prototype.dec()` must be
 called before the callback is invoked.
 
+## CPU Profiler module
+
+The `cpu-prof` module provides utilities related to CPU profiling tests.
+
+### env
+
+* Default: { ...process.env, NODE_DEBUG_NATIVE: 'INSPECTOR_PROFILER' }
+
+Environment variables used in profiled processes.
+
+### getCpuProfiles(dir)
+
+* `dir` {string} The directory containing the CPU profile files.
+* return [&lt;string>]
+
+Returns an array of all `.cpuprofile` files found in `dir`.
+
+### getFrames(file, suffix)
+
+* `file` {string} Path to a `.cpuprofile` file.
+* `suffix` {string} Suffix of the URL of call frames to retrieve.
+* returns { frames: [&lt;Object>], nodes: [&lt;Object>] }
+
+Returns an object containing an array of the relevant call frames and an array
+of all the profile nodes.
+
+### kCpuProfInterval
+
+Sampling interval in microseconds.
+
+### verifyFrames(output, file, suffix)
+
+* `output` {string}
+* `file` {string}
+* `suffix` {string}
+
+Throws an `AssertionError` if there are no call frames with the expected
+`suffix` in the profiling data contained in `file`.
+
 ## DNS Module
 
 The `DNS` module provides utilities related to the `dns` built-in module.
@@ -852,7 +892,11 @@ The `tmpdir` module supports the use of a temporary directory for testing.
 
 The realpath of the testing temporary directory.
 
-### refresh()
+### refresh([opts])
+
+* `opts` [&lt;Object>] (optional) Extra options.
+  * `spawn` [&lt;boolean>] (default: `true`) Indicates that `refresh` is allowed
+    to optionally spawn a subprocess.
 
 Deletes and recreates the testing temporary directory.
 

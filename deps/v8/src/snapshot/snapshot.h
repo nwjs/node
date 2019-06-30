@@ -8,6 +8,7 @@
 #include "src/snapshot/partial-serializer.h"
 #include "src/snapshot/startup-serializer.h"
 
+#include "src/objects-inl.h"
 #include "src/utils.h"
 
 namespace v8 {
@@ -19,7 +20,7 @@ class PartialSerializer;
 class StartupSerializer;
 
 // Wrapper around reservation sizes and the serialization payload.
-class SnapshotData : public SerializedData {
+class V8_EXPORT_PRIVATE SnapshotData : public SerializedData {
  public:
   // Used when producing.
   explicit SnapshotData(const Serializer* serializer);
@@ -72,7 +73,7 @@ class Snapshot : public AllStatic {
   // To be implemented by the snapshot source.
   static const v8::StartupData* DefaultSnapshotBlob();
 
-  static bool VerifyChecksum(const v8::StartupData* data);
+  V8_EXPORT_PRIVATE static bool VerifyChecksum(const v8::StartupData* data);
 
   // ---------------- Serialization ----------------
 
@@ -86,11 +87,12 @@ class Snapshot : public AllStatic {
   static bool SnapshotIsValid(const v8::StartupData* snapshot_blob);
 #endif  // DEBUG
 
+  static bool ExtractRehashability(const v8::StartupData* data);
+
  private:
   static uint32_t ExtractNumContexts(const v8::StartupData* data);
   static uint32_t ExtractContextOffset(const v8::StartupData* data,
                                        uint32_t index);
-  static bool ExtractRehashability(const v8::StartupData* data);
   static Vector<const byte> ExtractStartupData(const v8::StartupData* data);
   static Vector<const byte> ExtractReadOnlyData(const v8::StartupData* data);
   static Vector<const byte> ExtractContextData(const v8::StartupData* data,
@@ -156,6 +158,12 @@ class Snapshot : public AllStatic {
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(Snapshot);
 };
+
+// Convenience wrapper around snapshot data blob creation used e.g. by tests and
+// mksnapshot.
+V8_EXPORT_PRIVATE v8::StartupData CreateSnapshotDataBlobInternal(
+    v8::SnapshotCreator::FunctionCodeHandling function_code_handling,
+    const char* embedded_source);
 
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
 void SetSnapshotFromFile(StartupData* snapshot_blob);

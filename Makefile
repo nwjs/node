@@ -586,8 +586,12 @@ test-hash-seed: all
 
 .PHONY: test-doc
 test-doc: doc-only ## Builds, lints, and verifies the docs.
-	$(MAKE) lint
-	$(PYTHON) tools/test.py $(PARALLEL_ARGS) $(CI_DOC)
+	@if [ "$(shell $(node_use_openssl))" != "true" ]; then \
+		echo "Skipping test-doc (no crypto)"; \
+	else \
+		$(MAKE) lint; \
+		$(PYTHON) tools/test.py $(PARALLEL_ARGS) $(CI_DOC); \
+	fi
 
 test-known-issues: all
 	$(PYTHON) tools/test.py $(PARALLEL_ARGS) known_issues
@@ -1159,7 +1163,7 @@ lint-md-clean:
 lint-md-build:
 	$(warning "Deprecated no-op target 'lint-md-build'")
 
-LINT_MD_DOC_FILES = $(shell ls doc/*.md doc/**/*.md)
+LINT_MD_DOC_FILES = $(shell find doc -type f -name '*.md')
 run-lint-doc-md = tools/lint-md.js -q -f $(LINT_MD_DOC_FILES)
 # Lint all changed markdown files under doc/
 tools/.docmdlintstamp: $(LINT_MD_DOC_FILES)

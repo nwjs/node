@@ -421,10 +421,10 @@ parser.add_option('--with-ltcg',
     dest='with_ltcg',
     help='Use Link Time Code Generation. This feature is only available on Windows.')
 
-parser.add_option('--with-node-snapshot',
+parser.add_option('--without-node-snapshot',
     action='store_true',
-    dest='with_node_snapshot',
-    help='Turn on V8 snapshot integration. Currently experimental.')
+    dest='without_node_snapshot',
+    help='Turn off V8 snapshot integration. Currently experimental.')
 
 intl_optgroup.add_option('--download',
     action='store',
@@ -615,24 +615,33 @@ def b(value):
   else:
     return 'false'
 
+def B(value):
+  """Returns 1 if value is truthy, 0 otherwise."""
+  if value:
+    return 1
+  else:
+    return 0
+
 
 def pkg_config(pkg):
   """Run pkg-config on the specified package
   Returns ("-l flags", "-I flags", "-L flags", "version")
   otherwise (None, None, None, None)"""
   pkg_config = os.environ.get('PKG_CONFIG', 'pkg-config')
+  args = []  # Print pkg-config warnings on first round.
   retval = ()
   for flag in ['--libs-only-l', '--cflags-only-I',
                '--libs-only-L', '--modversion']:
+    args += [flag, pkg]
     try:
-      proc = subprocess.Popen(
-          shlex.split(pkg_config) + ['--silence-errors', flag, pkg],
-          stdout=subprocess.PIPE)
+      proc = subprocess.Popen(shlex.split(pkg_config) + args,
+                              stdout=subprocess.PIPE)
       val = proc.communicate()[0].strip()
     except OSError as e:
       if e.errno != errno.ENOENT: raise e  # Unexpected error.
       return (None, None, None, None)  # No pkg-config/pkgconf installed.
     retval += (val,)
+    args = ['--silence-errors']
   return retval
 
 
@@ -703,7 +712,7 @@ def get_llvm_version(cc):
 
 def get_xcode_version(cc):
   return get_version_helper(
-    cc, r"(^Apple LLVM version) ([0-9]+\.[0-9]+)")
+    cc, r"(^Apple (?:clang|LLVM) version) ([0-9]+\.[0-9]+)")
 
 def get_gas_version(cc):
   try:
@@ -933,11 +942,9 @@ def configure_node(o):
   o['variables']['want_separate_host_toolset'] = int(
       cross_compiling and want_snapshots)
 
-  if options.with_node_snapshot:
-    o['variables']['node_use_node_snapshot'] = 'true'
+  if not options.without_node_snapshot:
+    o['variables']['node_use_node_snapshot'] = b(not cross_compiling)
   else:
-    # Default to false for now.
-    # TODO(joyeecheung): enable it once we fix the hashseed uniqueness
     o['variables']['node_use_node_snapshot'] = 'false'
 
   if target_arch == 'arm':
@@ -1339,7 +1346,7 @@ def configure_intl(o):
     # ICU from pkg-config.
     o['variables']['v8_enable_i18n_support'] = 1
     pkgicu = pkg_config('icu-i18n')
-    if pkgicu[0] is None:
+    if not pkgicu[0]:
       error('''Could not load pkg-config data for "icu-i18n".
        See above errors or the README.md.''')
     (libs, cflags, libpath, icuversion) = pkgicu
@@ -1594,6 +1601,7 @@ configure_inspector(output)
 # move everything else to target_defaults
 variables = output['variables']
 del output['variables']
+variables['is_debug'] = B(options.debug)
 
 # make_global_settings for special FIPS linking
 # should not be used to compile modules in node-gyp

@@ -182,7 +182,8 @@ void PrintException(Isolate* isolate,
                     Local<Value> err,
                     Local<Message> message) {
   node::Utf8Value reason(isolate,
-                         err->ToDetailString(context).ToLocalChecked());
+                         err->ToDetailString(context)
+                             .FromMaybe(Local<String>()));
   bool added_exception_line = false;
   std::string source =
       GetErrorSource(isolate, context, message, &added_exception_line);
@@ -231,7 +232,7 @@ void AppendExceptionLine(Environment* env,
     Mutex::ScopedLock lock(per_process::tty_mutex);
     env->set_printed_error(true);
 
-    uv_tty_reset_mode();
+    ResetStdio();
     PrintErrorString("\n%s", source.c_str());
     return;
   }

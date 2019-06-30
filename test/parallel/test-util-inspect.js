@@ -48,6 +48,10 @@ assert.strictEqual(util.inspect(async () => {}), '[AsyncFunction]');
     util.inspect(fn),
     '[GeneratorFunction]'
   );
+  assert.strictEqual(
+    util.inspect(async function* abc() {}),
+    '[AsyncGeneratorFunction: abc]'
+  );
   Object.setPrototypeOf(fn, Object.getPrototypeOf(async () => {}));
   assert.strictEqual(
     util.inspect(fn),
@@ -89,7 +93,7 @@ assert.strictEqual(util.inspect(new Date('')), (new Date('')).toString());
 assert.strictEqual(util.inspect('\n\u0001'), "'\\n\\u0001'");
 assert.strictEqual(
   util.inspect(`${Array(75).fill(1)}'\n\u001d\n\u0003`),
-  `"${Array(75).fill(1)}'\\n" +\n  '\\u001d\\n\\u0003'`
+  `"${Array(75).fill(1)}'\\n" +\n  '\\u001d\\n' +\n  '\\u0003'`
 );
 assert.strictEqual(util.inspect([]), '[]');
 assert.strictEqual(util.inspect(Object.create([])), 'Array {}');
@@ -1302,11 +1306,11 @@ if (typeof Symbol !== 'undefined') {
 {
   const x = new Uint8Array(101);
   assert(util.inspect(x).endsWith('1 more item\n]'));
-  assert(!util.inspect(x, { maxArrayLength: 101 }).endsWith('1 more item\n]'));
+  assert(!util.inspect(x, { maxArrayLength: 101 }).includes('1 more item'));
   assert.strictEqual(util.inspect(x, { maxArrayLength: 0 }),
                      'Uint8Array [ ... 101 more items ]');
-  assert(!util.inspect(x, { maxArrayLength: null }).endsWith('1 more item\n]'));
-  assert(util.inspect(x, { maxArrayLength: Infinity }).endsWith('  0, 0\n]'));
+  assert(!util.inspect(x, { maxArrayLength: null }).includes('1 more item'));
+  assert(util.inspect(x, { maxArrayLength: Infinity }).endsWith(' 0, 0\n]'));
 }
 
 {
@@ -1483,10 +1487,9 @@ util.inspect(process);
     '    2,',
     '    [',
     '      [',
-    "        'Lorem ipsum dolor\\nsit amet,\\tconsectetur ' +",
-    "          'adipiscing elit, sed do eiusmod tempor ' +",
-    "          'incididunt ut labore et dolore magna ' +",
-    "          'aliqua.',",
+    "        'Lorem ipsum dolor\\n' +",
+    "          'sit amet,\\tconsectetur adipiscing elit, sed do eiusmod " +
+      "tempor incididunt ut labore et dolore magna aliqua.',",
     "        'test',",
     "        'foo'",
     '      ]',
@@ -1503,12 +1506,9 @@ util.inspect(process);
 
   out = util.inspect(o.a[2][0][0], { compact: false, breakLength: 30 });
   expect = [
-    "'Lorem ipsum dolor\\nsit ' +",
-    "  'amet,\\tconsectetur ' +",
-    "  'adipiscing elit, sed do ' +",
-    "  'eiusmod tempor incididunt ' +",
-    "  'ut labore et dolore magna ' +",
-    "  'aliqua.'"
+    "'Lorem ipsum dolor\\n' +",
+    "  'sit amet,\\tconsectetur adipiscing elit, sed do eiusmod tempor " +
+      "incididunt ut labore et dolore magna aliqua.'"
   ].join('\n');
   assert.strictEqual(out, expect);
 
@@ -1522,30 +1522,7 @@ util.inspect(process);
     '12 45 78 01 34 67 90 23 56 89 123456789012345678901234567890',
     { compact: false, breakLength: 3 });
   expect = [
-    "'12 45 78 01 34 ' +",
-    "  '67 90 23 56 89 ' +",
-    "  '123456789012345678901234567890'"
-  ].join('\n');
-  assert.strictEqual(out, expect);
-
-  out = util.inspect(
-    '12 45 78 01 34 67 90 23 56 89 1234567890123 0',
-    { compact: false, breakLength: 3 });
-  expect = [
-    "'12 45 78 01 34 ' +",
-    "  '67 90 23 56 89 ' +",
-    "  '1234567890123 0'"
-  ].join('\n');
-  assert.strictEqual(out, expect);
-
-  out = util.inspect(
-    '12 45 78 01 34 67 90 23 56 89 12345678901234567 0',
-    { compact: false, breakLength: 3 });
-  expect = [
-    "'12 45 78 01 34 ' +",
-    "  '67 90 23 56 89 ' +",
-    "  '12345678901234567 ' +",
-    "  '0'"
+    "'12 45 78 01 34 67 90 23 56 89 123456789012345678901234567890'"
   ].join('\n');
   assert.strictEqual(out, expect);
 
@@ -1584,7 +1561,7 @@ util.inspect(process);
 
   o[util.inspect.custom] = () => ({ a: '12 45 78 01 34 67 90 23' });
   out = util.inspect(o, { compact: false, breakLength: 3 });
-  expect = "{\n  a: '12 45 78 01 34 ' +\n    '67 90 23'\n}";
+  expect = "{\n  a: '12 45 78 01 34 67 90 23'\n}";
   assert.strictEqual(out, expect);
 }
 
@@ -1963,7 +1940,7 @@ assert.strictEqual(util.inspect('"\'${a}'), "'\"\\'${a}'");
   [WeakMap, [[[{}, {}]]], '{ <items unknown> }'],
   [BigInt64Array,
    [10],
-   '[\n  0n, 0n, 0n,\n  0n, 0n, 0n,\n  0n, 0n, 0n,\n  0n\n]'],
+   '[\n  0n, 0n, 0n, 0n, 0n,\n  0n, 0n, 0n, 0n, 0n\n]'],
   [Date, ['Sun, 14 Feb 2010 11:48:40 GMT'], '2010-02-14T11:48:40.000Z'],
   [Date, ['invalid_date'], 'Invalid Date']
 ].forEach(([base, input, rawExpected]) => {
@@ -2171,7 +2148,7 @@ assert.strictEqual(
       [ 1, 2, { a: 1, b: 2, c: 3 } ]
     ],
     c: ['foo', 4, 444444],
-    d: Array.from({ length: 100 }).map((e, i) => {
+    d: Array.from({ length: 101 }).map((e, i) => {
       return i % 2 === 0 ? i * i : i;
     }),
     e: Array(6).fill('foobar'),
@@ -2188,16 +2165,13 @@ assert.strictEqual(
     '    b: {',
     '      x: 5,',
     '      c: {',
-    "        x: '10000000000000000 00000000000000000 ' +",
-    "          '10000000000000000 00000000000000000 ' +",
-    "          '10000000000000000 00000000000000000 ' +",
-    "          '10000000000000000 00000000000000000 ' +",
-    "          '10000000000000000 00000000000000000 ' +",
-    "          '10000000000000000 00000000000000000 ' +",
-    "          '10000000000000000 00000000000000000 ' +",
-    "          '10000000000000000 00000000000000000 ' +",
-    "          '10000000000000000 00000000000000000 ' +",
-    "          '10000000000000000 00000000000000000 ',",
+    "        x: '10000000000000000 00000000000000000 10000000000000000 " +
+      '00000000000000000 10000000000000000 00000000000000000 ' +
+      '10000000000000000 00000000000000000 10000000000000000 ' +
+      '00000000000000000 10000000000000000 00000000000000000 ' +
+      '10000000000000000 00000000000000000 10000000000000000 ' +
+      '00000000000000000 10000000000000000 00000000000000000 ' +
+      "10000000000000000 00000000000000000 ',",
     '        d: 2,',
     '        e: 3',
     '      }',
@@ -2206,21 +2180,19 @@ assert.strictEqual(
     '  b: [ 1, 2, [ 1, 2, { a: 1, b: 2, c: 3 } ] ],',
     "  c: [ 'foo', 4, 444444 ],",
     '  d: [',
-    '       0,    1,    4,    3,   16,    5,   36,',
-    '       7,   64,    9,  100,   11,  144,   13,',
-    '     196,   15,  256,   17,  324,   19,  400,',
-    '      21,  484,   23,  576,   25,  676,   27,',
-    '     784,   29,  900,   31, 1024,   33, 1156,',
-    '      35, 1296,   37, 1444,   39, 1600,   41,',
-    '    1764,   43, 1936,   45, 2116,   47, 2304,',
-    '      49, 2500,   51, 2704,   53, 2916,   55,',
-    '    3136,   57, 3364,   59, 3600,   61, 3844,',
-    '      63, 4096,   65, 4356,   67, 4624,   69,',
-    '    4900,   71, 5184,   73, 5476,   75, 5776,',
-    '      77, 6084,   79, 6400,   81, 6724,   83,',
-    '    7056,   85, 7396,   87, 7744,   89, 8100,',
-    '      91, 8464,   93, 8836,   95, 9216,   97,',
-    '    9604,   99',
+    '       0,    1,    4,    3,   16,    5,   36,    7,   64,',
+    '       9,  100,   11,  144,   13,  196,   15,  256,   17,',
+    '     324,   19,  400,   21,  484,   23,  576,   25,  676,',
+    '      27,  784,   29,  900,   31, 1024,   33, 1156,   35,',
+    '    1296,   37, 1444,   39, 1600,   41, 1764,   43, 1936,',
+    '      45, 2116,   47, 2304,   49, 2500,   51, 2704,   53,',
+    '    2916,   55, 3136,   57, 3364,   59, 3600,   61, 3844,',
+    '      63, 4096,   65, 4356,   67, 4624,   69, 4900,   71,',
+    '    5184,   73, 5476,   75, 5776,   77, 6084,   79, 6400,',
+    '      81, 6724,   83, 7056,   85, 7396,   87, 7744,   89,',
+    '    8100,   91, 8464,   93, 8836,   95, 9216,   97, 9604,',
+    '      99,',
+    '    ... 1 more item',
     '  ],',
     '  e: [',
     "    'foobar',",
@@ -2251,10 +2223,8 @@ assert.strictEqual(
     "    'foobar baz'",
     '  ],',
     '  h: [',
-    '    100,   0,   1,',
-    '      2,   3,   4,',
-    '      5,   6,   7,',
-    '      8',
+    '    100, 0, 1, 2, 3,',
+    '      4, 5, 6, 7, 8',
     '  ],',
     '  long: [',
     "    'This text is too long for grouping!',",
@@ -2282,15 +2252,13 @@ assert.strictEqual(
 
   expected = [
     '[',
-    '  1,         1,         1,',
-    '  1,         1,         1,',
-    '  1,         1,         1,',
-    '  1,         1,         1,',
-    '  1,         1,         1,',
-    '  1,         1,         1,',
-    '  1,         1,         1,',
-    '  1,         1,         1,',
-    '  1,         1, 123456789',
+    '  1, 1,         1, 1,',
+    '  1, 1,         1, 1,',
+    '  1, 1,         1, 1,',
+    '  1, 1,         1, 1,',
+    '  1, 1,         1, 1,',
+    '  1, 1,         1, 1,',
+    '  1, 1, 123456789',
     ']'
   ].join('\n');
 
@@ -2320,10 +2288,10 @@ assert.strictEqual(
     '    b: { x: \u001b[33m5\u001b[39m, c: \u001b[36m[Object]\u001b[39m }',
     '  },',
     '  b: [',
-    "    \u001b[32m'foobar'\u001b[39m,    \u001b[32m'baz'\u001b[39m,",
-    "    \u001b[32m'foobar'\u001b[39m,    \u001b[32m'baz'\u001b[39m,",
-    "    \u001b[32m'foobar'\u001b[39m,    \u001b[32m'baz'\u001b[39m,",
-    "    \u001b[32m'foobar'\u001b[39m,    \u001b[32m'baz'\u001b[39m,",
+    "    \u001b[32m'foobar'\u001b[39m, \u001b[32m'baz'\u001b[39m,",
+    "    \u001b[32m'foobar'\u001b[39m, \u001b[32m'baz'\u001b[39m,",
+    "    \u001b[32m'foobar'\u001b[39m, \u001b[32m'baz'\u001b[39m,",
+    "    \u001b[32m'foobar'\u001b[39m, \u001b[32m'baz'\u001b[39m,",
     "    \u001b[32m'foobar'\u001b[39m",
     '  ]',
     '}',
@@ -2336,26 +2304,23 @@ assert.strictEqual(
 
   expected = [
     '[',
-    '   \u001b[33m0\u001b[39m,  \u001b[33m1\u001b[39m,  \u001b[33m2\u001b[39m,',
-    '   \u001b[33m3\u001b[39m,  \u001b[33m4\u001b[39m,  \u001b[33m5\u001b[39m,',
-    '   \u001b[33m6\u001b[39m,  \u001b[33m7\u001b[39m,  \u001b[33m8\u001b[39m,',
-    '   \u001b[33m9\u001b[39m, \u001b[33m10\u001b[39m, \u001b[33m11\u001b[39m,',
-    '  \u001b[33m12\u001b[39m, \u001b[33m13\u001b[39m, \u001b[33m14\u001b[39m,',
-    '  \u001b[33m15\u001b[39m, \u001b[33m16\u001b[39m, \u001b[33m17\u001b[39m,',
-    '  \u001b[33m18\u001b[39m, \u001b[33m19\u001b[39m, \u001b[33m20\u001b[39m,',
-    '  \u001b[33m21\u001b[39m, \u001b[33m22\u001b[39m, \u001b[33m23\u001b[39m,',
-    '  \u001b[33m24\u001b[39m, \u001b[33m25\u001b[39m, \u001b[33m26\u001b[39m,',
-    '  \u001b[33m27\u001b[39m, \u001b[33m28\u001b[39m, \u001b[33m29\u001b[39m,',
-    '  \u001b[33m30\u001b[39m, \u001b[33m31\u001b[39m, \u001b[33m32\u001b[39m,',
-    '  \u001b[33m33\u001b[39m, \u001b[33m34\u001b[39m, \u001b[33m35\u001b[39m,',
-    '  \u001b[33m36\u001b[39m, \u001b[33m37\u001b[39m, \u001b[33m38\u001b[39m,',
-    '  \u001b[33m39\u001b[39m, \u001b[33m40\u001b[39m, \u001b[33m41\u001b[39m,',
-    '  \u001b[33m42\u001b[39m, \u001b[33m43\u001b[39m, \u001b[33m44\u001b[39m,',
-    '  \u001b[33m45\u001b[39m, \u001b[33m46\u001b[39m, \u001b[33m47\u001b[39m,',
-    '  \u001b[33m48\u001b[39m, \u001b[33m49\u001b[39m, \u001b[33m50\u001b[39m,',
-    '  \u001b[33m51\u001b[39m, \u001b[33m52\u001b[39m, \u001b[33m53\u001b[39m,',
-    '  \u001b[33m54\u001b[39m, \u001b[33m55\u001b[39m, \u001b[33m56\u001b[39m,',
-    '  \u001b[33m57\u001b[39m, \u001b[33m58\u001b[39m, \u001b[33m59\u001b[39m',
+    /* eslint-disable max-len */
+    '   \u001b[33m0\u001b[39m,  \u001b[33m1\u001b[39m,  \u001b[33m2\u001b[39m,  \u001b[33m3\u001b[39m,',
+    '   \u001b[33m4\u001b[39m,  \u001b[33m5\u001b[39m,  \u001b[33m6\u001b[39m,  \u001b[33m7\u001b[39m,',
+    '   \u001b[33m8\u001b[39m,  \u001b[33m9\u001b[39m, \u001b[33m10\u001b[39m, \u001b[33m11\u001b[39m,',
+    '  \u001b[33m12\u001b[39m, \u001b[33m13\u001b[39m, \u001b[33m14\u001b[39m, \u001b[33m15\u001b[39m,',
+    '  \u001b[33m16\u001b[39m, \u001b[33m17\u001b[39m, \u001b[33m18\u001b[39m, \u001b[33m19\u001b[39m,',
+    '  \u001b[33m20\u001b[39m, \u001b[33m21\u001b[39m, \u001b[33m22\u001b[39m, \u001b[33m23\u001b[39m,',
+    '  \u001b[33m24\u001b[39m, \u001b[33m25\u001b[39m, \u001b[33m26\u001b[39m, \u001b[33m27\u001b[39m,',
+    '  \u001b[33m28\u001b[39m, \u001b[33m29\u001b[39m, \u001b[33m30\u001b[39m, \u001b[33m31\u001b[39m,',
+    '  \u001b[33m32\u001b[39m, \u001b[33m33\u001b[39m, \u001b[33m34\u001b[39m, \u001b[33m35\u001b[39m,',
+    '  \u001b[33m36\u001b[39m, \u001b[33m37\u001b[39m, \u001b[33m38\u001b[39m, \u001b[33m39\u001b[39m,',
+    '  \u001b[33m40\u001b[39m, \u001b[33m41\u001b[39m, \u001b[33m42\u001b[39m, \u001b[33m43\u001b[39m,',
+    '  \u001b[33m44\u001b[39m, \u001b[33m45\u001b[39m, \u001b[33m46\u001b[39m, \u001b[33m47\u001b[39m,',
+    '  \u001b[33m48\u001b[39m, \u001b[33m49\u001b[39m, \u001b[33m50\u001b[39m, \u001b[33m51\u001b[39m,',
+    '  \u001b[33m52\u001b[39m, \u001b[33m53\u001b[39m, \u001b[33m54\u001b[39m, \u001b[33m55\u001b[39m,',
+    '  \u001b[33m56\u001b[39m, \u001b[33m57\u001b[39m, \u001b[33m58\u001b[39m, \u001b[33m59\u001b[39m',
+    /* eslint-enable max-len */
     ']'
   ].join('\n');
 
@@ -2414,44 +2379,44 @@ assert.strictEqual(
   );
   expected = [
     '[',
-    "          'Object',           'Function',              'Array',",
-    "          'Number',         'parseFloat',           'parseInt',",
-    "        'Infinity',                'NaN',          'undefined',",
-    "         'Boolean',             'String',             'Symbol',",
-    "            'Date',            'Promise',             'RegExp',",
-    "           'Error',          'EvalError',         'RangeError',",
-    "  'ReferenceError',        'SyntaxError',          'TypeError',",
-    "        'URIError',               'JSON',               'Math',",
-    "         'console',               'Intl',        'ArrayBuffer',",
-    "      'Uint8Array',          'Int8Array',        'Uint16Array',",
-    "      'Int16Array',        'Uint32Array',         'Int32Array',",
-    "    'Float32Array',       'Float64Array',  'Uint8ClampedArray',",
-    "  'BigUint64Array',      'BigInt64Array',           'DataView',",
-    "             'Map',             'BigInt',                'Set',",
-    "         'WeakMap',            'WeakSet',              'Proxy',",
-    "         'Reflect',          'decodeURI', 'decodeURIComponent',",
-    "       'encodeURI', 'encodeURIComponent',             'escape',",
-    "        'unescape',               'eval',           'isFinite',",
-    "           'isNaN',  'SharedArrayBuffer',            'Atomics',",
-    "      'globalThis',        'WebAssembly',             'global',",
-    "         'process',             'GLOBAL',               'root',",
-    "          'Buffer',                'URL',    'URLSearchParams',",
-    "     'TextEncoder',        'TextDecoder',      'clearInterval',",
-    "    'clearTimeout',        'setInterval',         'setTimeout',",
-    "  'queueMicrotask',     'clearImmediate',       'setImmediate',",
-    "          'module',            'require',             'assert',",
-    "     'async_hooks',             'buffer',      'child_process',",
-    "         'cluster',             'crypto',              'dgram',",
-    "             'dns',             'domain',             'events',",
-    "              'fs',               'http',              'http2',",
-    "           'https',          'inspector',                'net',",
-    "              'os',               'path',         'perf_hooks',",
-    "        'punycode',        'querystring',           'readline',",
-    "            'repl',             'stream',     'string_decoder',",
-    "             'tls',       'trace_events',                'tty',",
-    "             'url',                 'v8',                 'vm',",
-    "  'worker_threads',               'zlib',                  '_',",
-    "          '_error',               'util'",
+    "  'Object',         'Function',           'Array',",
+    "  'Number',         'parseFloat',         'parseInt',",
+    "  'Infinity',       'NaN',                'undefined',",
+    "  'Boolean',        'String',             'Symbol',",
+    "  'Date',           'Promise',            'RegExp',",
+    "  'Error',          'EvalError',          'RangeError',",
+    "  'ReferenceError', 'SyntaxError',        'TypeError',",
+    "  'URIError',       'JSON',               'Math',",
+    "  'console',        'Intl',               'ArrayBuffer',",
+    "  'Uint8Array',     'Int8Array',          'Uint16Array',",
+    "  'Int16Array',     'Uint32Array',        'Int32Array',",
+    "  'Float32Array',   'Float64Array',       'Uint8ClampedArray',",
+    "  'BigUint64Array', 'BigInt64Array',      'DataView',",
+    "  'Map',            'BigInt',             'Set',",
+    "  'WeakMap',        'WeakSet',            'Proxy',",
+    "  'Reflect',        'decodeURI',          'decodeURIComponent',",
+    "  'encodeURI',      'encodeURIComponent', 'escape',",
+    "  'unescape',       'eval',               'isFinite',",
+    "  'isNaN',          'SharedArrayBuffer',  'Atomics',",
+    "  'globalThis',     'WebAssembly',        'global',",
+    "  'process',        'GLOBAL',             'root',",
+    "  'Buffer',         'URL',                'URLSearchParams',",
+    "  'TextEncoder',    'TextDecoder',        'clearInterval',",
+    "  'clearTimeout',   'setInterval',        'setTimeout',",
+    "  'queueMicrotask', 'clearImmediate',     'setImmediate',",
+    "  'module',         'require',            'assert',",
+    "  'async_hooks',    'buffer',             'child_process',",
+    "  'cluster',        'crypto',             'dgram',",
+    "  'dns',            'domain',             'events',",
+    "  'fs',             'http',               'http2',",
+    "  'https',          'inspector',          'net',",
+    "  'os',             'path',               'perf_hooks',",
+    "  'punycode',       'querystring',        'readline',",
+    "  'repl',           'stream',             'string_decoder',",
+    "  'tls',            'trace_events',       'tty',",
+    "  'url',            'v8',                 'vm',",
+    "  'worker_threads', 'zlib',               '_',",
+    "  '_error',         'util'",
     ']'
   ].join('\n');
 
@@ -2496,4 +2461,16 @@ assert.strictEqual(
   util.inspect(err, { colors: true }).split('\n').forEach((line, i) => {
     assert(i < 2 || line.startsWith('\u001b[90m'));
   });
+}
+
+{
+  // Tracing class respects inspect depth.
+  try {
+    const trace = require('trace_events').createTracing({ categories: ['fo'] });
+    const actual = util.inspect({ trace }, { depth: 0 });
+    assert.strictEqual(actual, '{ trace: [Tracing] }');
+  } catch (err) {
+    if (err.code !== 'ERR_TRACE_EVENTS_UNAVAILABLE')
+      throw err;
+  }
 }

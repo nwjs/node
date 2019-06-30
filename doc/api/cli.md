@@ -218,14 +218,10 @@ or be removed in the future.
 
 To avoid these cases, any builtin function overrides should be defined upfront:
 
-<!-- eslint-disable no-redeclare -->
 ```js
 const o = {};
 // THROWS: Cannot assign read only property 'toString' of object
 o.toString = () => 'string';
-
-// OK
-const o = { toString: () => 'string' };
 
 class X {
   constructor() {
@@ -234,6 +230,11 @@ class X {
 }
 // THROWS: Cannot assign read only property 'toString' of object
 new X();
+```
+
+```js
+// OK
+const o = { toString: () => 'string' };
 
 class X {
   toString = undefined;
@@ -399,6 +400,13 @@ If specifying a host, make sure that either:
 default) is not firewall-protected.**
 
 See the [debugging security implications][] section for more information.
+
+### `--inspect-publish-uid=stderr,http`
+
+Specify ways of the inspector web socket url exposure.
+
+By default inspector websocket url is available in stderr and under `/json/list`
+endpoint on `http://host:port/json/list`.
 
 ### `--loader=file`
 <!-- YAML
@@ -972,14 +980,11 @@ In case an option value happens to contain a space (for example a path listed in
 ```
 
 Node.js options that are allowed are:
-- `--report-directory`
-- `--report-filename`
-- `--report-on-fatalerror`
-- `--report-on-signal`
-- `--report-signal`
-- `--report-uncaught-exception`
+<!-- node-options-node start -->
 - `--enable-fips`
+- `--es-module-specifier-resolution`
 - `--experimental-modules`
+- `--experimental-policy`
 - `--experimental-repl-await`
 - `--experimental-report`
 - `--experimental-vm-modules`
@@ -987,11 +992,14 @@ Node.js options that are allowed are:
 - `--force-fips`
 - `--frozen-intrinsics`
 - `--heapsnapshot-signal`
+- `--http-parser`
 - `--http-server-default-timeout`
 - `--icu-data-dir`
-- `--inspect`
+- `--input-type`
 - `--inspect-brk`
-- `--inspect-port`
+- `--inspect-port`, `--debug-port`
+- `--inspect-publish-uid`
+- `--inspect`
 - `--loader`
 - `--max-http-header-size`
 - `--napi-modules`
@@ -1000,11 +1008,26 @@ Node.js options that are allowed are:
 - `--no-warnings`
 - `--openssl-config`
 - `--pending-deprecation`
+- `--preserve-symlinks-main`
+- `--preserve-symlinks`
+- `--prof-process`
 - `--redirect-warnings`
+- `--report-directory`
+- `--report-filename`
+- `--report-on-fatalerror`
+- `--report-on-signal`
+- `--report-signal`
+- `--report-uncaught-exception`
 - `--require`, `-r`
 - `--throw-deprecation`
 - `--title`
 - `--tls-cipher-list`
+- `--tls-max-v1.2`
+- `--tls-max-v1.3`
+- `--tls-min-v1.0`
+- `--tls-min-v1.1`
+- `--tls-min-v1.2`
+- `--tls-min-v1.3`
 - `--trace-deprecation`
 - `--trace-event-categories`
 - `--trace-event-file-pattern`
@@ -1018,15 +1041,18 @@ Node.js options that are allowed are:
 - `--use-openssl-ca`
 - `--v8-pool-size`
 - `--zero-fill-buffers`
+<!-- node-options-node end -->
 
 V8 options that are allowed are:
+<!-- node-options-v8 start -->
 - `--abort-on-uncaught-exception`
 - `--max-old-space-size`
-- `--perf-basic-prof`
 - `--perf-basic-prof-only-functions`
-- `--perf-prof`
+- `--perf-basic-prof`
 - `--perf-prof-unwinding-info`
+- `--perf-prof`
 - `--stack-trace-limit`
+<!-- node-options-v8 end -->
 
 ### `NODE_PATH=path[:…]`
 <!-- YAML

@@ -299,7 +299,7 @@ class JUnitTestProgressIndicator(ProgressIndicator):
 
 
 class JsonTestProgressIndicator(ProgressIndicator):
-  def __init__(self, json_test_results, arch, mode):
+  def __init__(self, framework_name, json_test_results, arch, mode):
     super(JsonTestProgressIndicator, self).__init__()
     # We want to drop stdout/err for all passed tests on the first try, but we
     # need to get outputs for all runs after the first one. To accommodate that,
@@ -307,6 +307,7 @@ class JsonTestProgressIndicator(ProgressIndicator):
     # keep_output set to True in the RerunProc.
     self._requirement = base.DROP_PASS_STDOUT
 
+    self.framework_name = framework_name
     self.json_test_results = json_test_results
     self.arch = arch
     self.mode = mode
@@ -347,6 +348,8 @@ class JsonTestProgressIndicator(ProgressIndicator):
         "random_seed": test.random_seed,
         "target_name": test.get_shell(),
         "variant": test.variant,
+        "variant_flags": test.variant_flags,
+        "framework_name": self.framework_name,
       })
 
   def finished(self):

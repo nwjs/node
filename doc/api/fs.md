@@ -73,9 +73,9 @@ fs.rename('/tmp/hello', '/tmp/world', (err) => {
 });
 ```
 
-In busy processes, the programmer is _strongly encouraged_ to use the
-asynchronous versions of these calls. The synchronous versions will block
-the entire process until they complete — halting all connections.
+In busy processes, use the asynchronous versions of these calls. The synchronous
+versions will block the entire process until they complete, halting all
+connections.
 
 While it is not recommended, most fs functions allow the callback argument to
 be omitted, in which case a default callback is used that rethrows errors. To
@@ -4020,7 +4020,7 @@ at the current position. See pwrite(2).
 
 It is unsafe to use `filehandle.write()` multiple times on the same file
 without waiting for the `Promise` to be resolved (or rejected). For this
-scenario, [`fs.createWriteStream()`][] is strongly recommended.
+scenario, use [`fs.createWriteStream()`][].
 
 On Linux, positional writes do not work when the file is opened in append mode.
 The kernel ignores the position argument and always appends the data to
@@ -4051,7 +4051,7 @@ will be written at the current position. See pwrite(2).
 
 It is unsafe to use `filehandle.write()` multiple times on the same file
 without waiting for the `Promise` to be resolved (or rejected). For this
-scenario, [`fs.createWriteStream()`][] is strongly recommended.
+scenario, use [`fs.createWriteStream()`][].
 
 On Linux, positional writes do not work when the file is opened in append mode.
 The kernel ignores the position argument and always appends the data to

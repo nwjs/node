@@ -149,7 +149,7 @@ int NodeMainInstance::Run() {
 
   env->set_can_call_into_js(false);
   env->stop_sub_worker_contexts();
-  uv_tty_reset_mode();
+  ResetStdio();
   env->RunCleanup();
   RunAtExit(env.get());
 
@@ -192,34 +192,24 @@ std::unique_ptr<Environment> NodeMainInstance::CreateMainEnvironment(
   std::unique_ptr<Environment> env = std::make_unique<Environment>(
       isolate_data_.get(),
       context,
+      args_,
+      exec_args_,
       static_cast<Environment::Flags>(Environment::kIsMainThread |
                                       Environment::kOwnsProcessState |
                                       Environment::kOwnsInspector));
   env->InitializeLibuv(per_process::v8_is_profiling);
-  env->ProcessCliArgs(args_, exec_args_);
+  env->InitializeDiagnostics();
 
+  // TODO(joyeecheung): when we snapshot the bootstrapped context,
+  // the inspector and diagnostics setup should after after deserialization.
 #if HAVE_INSPECTOR && NODE_USE_V8_PLATFORM
-  CHECK(!env->inspector_agent()->IsListening());
-  // Inspector agent can't fail to start, but if it was configured to listen
-  // right away on the websocket port and fails to bind/etc, this will return
-  // false.
-  env->inspector_agent()->Start(args_.size() > 1 ? args_[1].c_str() : "",
-                                env->options()->debug_options(),
-                                env->inspector_host_port(),
-                                true);
-  if (env->options()->debug_options().inspector_enabled &&
-      !env->inspector_agent()->IsListening()) {
-    *exit_code = 12;  // Signal internal error.
+  *exit_code = env->InitializeInspector(nullptr);
+#endif
+  if (*exit_code != 0) {
     return env;
   }
-#else
-  // inspector_enabled can't be true if !HAVE_INSPECTOR or
-  // !NODE_USE_V8_PLATFORM
-  // - the option parser should not allow that.
-  CHECK(!env->options()->debug_options().inspector_enabled);
-#endif  // HAVE_INSPECTOR && NODE_USE_V8_PLATFORM
 
-  if (RunBootstrapping(env.get()).IsEmpty()) {
+  if (env->RunBootstrapping().IsEmpty()) {
     *exit_code = 1;
   }
 

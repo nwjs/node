@@ -370,22 +370,24 @@
         [ 'node_intermediate_lib_type=="static_library" and node_shared=="false"', {
           'xcode_settings': {
             'OTHER_LDFLAGS': [
-              '-Wl,-force_load,<(PRODUCT_DIR)/<(STATIC_LIB_PREFIX)'
-                  '<(node_core_target_name)<(STATIC_LIB_SUFFIX)',
+              '-Wl,-force_load,<(PRODUCT_DIR)/<(STATIC_LIB_PREFIX)<(node_core_target_name)<(STATIC_LIB_SUFFIX)',
+              '-Wl,-force_load,<(PRODUCT_DIR)/<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)',
             ],
           },
           'msvs_settings': {
             'VCLinkerTool': {
               'AdditionalOptions': [
                 '/WHOLEARCHIVE:<(node_lib_target_name)<(STATIC_LIB_SUFFIX)',
+                '/WHOLEARCHIVE:<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)',
               ],
             },
           },
           'conditions': [
-            ['OS!="aix"', {
+            ['OS != "aix" and OS != "mac"', {
               'ldflags': [
-                '-Wl,--whole-archive,<(obj_dir)/<(STATIC_LIB_PREFIX)'
-                    '<(node_core_target_name)<(STATIC_LIB_SUFFIX)',
+                '-Wl,--whole-archive',
+                '<(obj_dir)/<(STATIC_LIB_PREFIX)<(node_core_target_name)<(STATIC_LIB_SUFFIX)',
+                '<(obj_dir)/tools/v8_gypfiles/<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)',
                 '-Wl,--no-whole-archive',
               ],
             }],
@@ -412,10 +414,12 @@
             'NODE_ARCH="<(target_arch)"',
             'NODE_PLATFORM="<(OS)"',
           ],
-          'conditions': [
-            ['OS=="win"', {
-              'libraries': [ 'Ws2_32' ],
-            }],
+        }],
+        ['OS=="win"', {
+          'libraries': [
+            'Dbghelp.lib',
+            'winmm.lib',
+            'Ws2_32.lib',
           ],
         }],
         ['node_with_ltcg=="true"', {
@@ -1035,7 +1039,7 @@
             {
               'action_name': 'node_dtrace_ustack_constants',
               'inputs': [
-                '<(v8_base)'
+                '<(obj_dir)/tools/v8_gypfiles/<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)'
               ],
               'outputs': [
                 '<(SHARED_INTERMEDIATE_DIR)/v8constants.h'
@@ -1141,7 +1145,6 @@
         'test/cctest/test_linked_binding.cc',
         'test/cctest/test_per_process.cc',
         'test/cctest/test_platform.cc',
-        'test/cctest/test_report_util.cc',
         'test/cctest/test_traced_value.cc',
         'test/cctest/test_util.cc',
         'test/cctest/test_url.cc',
@@ -1179,6 +1182,9 @@
           },
         }],
         [ 'node_report=="true"', {
+          'sources': [
+            'test/cctest/test_report_util.cc',
+          ],
           'defines': [
             'NODE_REPORT',
             'NODE_ARCH="<(target_arch)"',
@@ -1190,8 +1196,16 @@
             }],
           ],
         }],
+        ['OS=="win"', {
+          'libraries': [
+            'Dbghelp.lib',
+            'winmm.lib',
+            'Ws2_32.lib',
+          ],
+        }],
       ],
     }, # cctest
+
     # TODO(joyeecheung): do not depend on node_lib,
     # instead create a smaller static library node_lib_base that does
     # just enough for node_native_module.cc and the cache builder to
@@ -1231,20 +1245,12 @@
       ],
 
       'conditions': [
-        [ 'node_report=="true"', {
-          'conditions': [
-            ['OS=="win"', {
-              'libraries': [
-                'dbghelp.lib',
-                'PsApi.lib',
-                'Ws2_32.lib',
-              ],
-              'dll_files': [
-                'dbghelp.dll',
-                'PsApi.dll',
-                'Ws2_32.dll',
-              ],
-            }],
+        ['OS=="win"', {
+          'libraries': [
+            'dbghelp.lib',
+            'PsApi.lib',
+            'winmm.lib',
+            'Ws2_32.lib',
           ],
         }],
       ],
@@ -1281,11 +1287,11 @@
       ],
 
       'conditions': [
-        [ 'node_report=="true"', {
-          'conditions': [
-            ['OS=="win"', {
-              'libraries': [ 'Ws2_32' ],
-            }],
+        ['OS=="win"', {
+          'libraries': [
+            'Dbghelp.lib',
+            'winmm.lib',
+            'Ws2_32.lib',
           ],
         }],
       ],

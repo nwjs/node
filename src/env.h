@@ -75,6 +75,10 @@ class V8CoverageConnection;
 class V8CpuProfilerConnection;
 class V8HeapProfilerConnection;
 }  // namespace profiler
+
+namespace inspector {
+class ParentInspectorHandle;
+}
 #endif  // HAVE_INSPECTOR
 
 namespace worker {
@@ -154,6 +158,7 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(change_string, "change")                                                   \
   V(channel_string, "channel")                                                 \
   V(chunks_sent_since_last_write_string, "chunksSentSinceLastWrite")           \
+  V(clone_unsupported_type_str, "Cannot transfer object of unsupported type.") \
   V(code_string, "code")                                                       \
   V(commonjs_string, "commonjs")                                               \
   V(config_string, "config")                                                   \
@@ -796,6 +801,19 @@ class Environment : public MemoryRetainer {
   bool IsRootNode() const override { return true; }
   void MemoryInfo(MemoryTracker* tracker) const override;
 
+  void CreateProperties();
+  // Should be called before InitializeInspector()
+  void InitializeDiagnostics();
+#if HAVE_INSPECTOR && NODE_USE_V8_PLATFORM
+  // If the environment is created for a worker, pass parent_handle and
+  // the ownership if transferred into the Environment.
+  int InitializeInspector(inspector::ParentInspectorHandle* parent_handle);
+#endif
+
+  v8::MaybeLocal<v8::Value> BootstrapInternalLoaders();
+  v8::MaybeLocal<v8::Value> BootstrapNode();
+  v8::MaybeLocal<v8::Value> RunBootstrapping();
+
   inline size_t async_callback_scope_depth() const;
   inline void PushAsyncCallbackScope();
   inline void PopAsyncCallbackScope();
@@ -823,14 +841,13 @@ class Environment : public MemoryRetainer {
 
   Environment(IsolateData* isolate_data,
               v8::Local<v8::Context> context,
+              const std::vector<std::string>& args,
+              const std::vector<std::string>& exec_args,
               Flags flags = Flags(),
               uint64_t thread_id = kNoThreadId);
   ~Environment();
 
   void InitializeLibuv(bool start_profiler_idle_notifier);
-  v8::MaybeLocal<v8::Object> ProcessCliArgs(
-      const std::vector<std::string>& args,
-      const std::vector<std::string>& exec_args);
   inline const std::vector<std::string>& exec_argv();
   inline const std::vector<std::string>& argv();
 

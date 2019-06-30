@@ -186,27 +186,30 @@ uint32_t Message::AddWASMModule(WasmModuleObject::TransferrableModule&& mod) {
 
 namespace {
 
-void ThrowDataCloneException(Local<Context> context, Local<String> message) {
+MaybeLocal<Function> GetDOMException(Local<Context> context) {
   Isolate* isolate = context->GetIsolate();
-  Local<Value> argv[] = {
-    message,
-    FIXED_ONE_BYTE_STRING(isolate, "DataCloneError")
-  };
-  Local<Value> exception;
-
   Local<Object> per_context_bindings;
   Local<Value> domexception_ctor_val;
   if (!GetPerContextExports(context).ToLocal(&per_context_bindings) ||
       !per_context_bindings->Get(context,
                                 FIXED_ONE_BYTE_STRING(isolate, "DOMException"))
           .ToLocal(&domexception_ctor_val)) {
-    return;
+    return MaybeLocal<Function>();
   }
-
   CHECK(domexception_ctor_val->IsFunction());
   Local<Function> domexception_ctor = domexception_ctor_val.As<Function>();
-  if (!domexception_ctor->NewInstance(context, arraysize(argv), argv)
-          .ToLocal(&exception)) {
+  return domexception_ctor;
+}
+
+void ThrowDataCloneException(Local<Context> context, Local<String> message) {
+  Isolate* isolate = context->GetIsolate();
+  Local<Value> argv[] = {message,
+                         FIXED_ONE_BYTE_STRING(isolate, "DataCloneError")};
+  Local<Value> exception;
+  Local<Function> domexception_ctor;
+  if (!GetDOMException(context).ToLocal(&domexception_ctor) ||
+      !domexception_ctor->NewInstance(context, arraysize(argv), argv)
+           .ToLocal(&exception)) {
     return;
   }
   isolate->ThrowException(exception);
@@ -229,7 +232,7 @@ class SerializerDelegate : public ValueSerializer::Delegate {
       return WriteMessagePort(Unwrap<MessagePort>(object));
     }
 
-    THROW_ERR_CANNOT_TRANSFER_OBJECT(env_);
+    ThrowDataCloneError(env_->clone_unsupported_type_str());
     return Nothing<bool>();
   }
 
@@ -526,16 +529,11 @@ void MessagePort::Close(v8::Local<v8::Value> close_callback) {
 }
 
 void MessagePort::New(const FunctionCallbackInfo<Value>& args) {
+  // This constructor just throws an error. Unfortunately, we can’t use V8’s
+  // ConstructorBehavior::kThrow, as that also removes the prototype from the
+  // class (i.e. makes it behave like an arrow function).
   Environment* env = Environment::GetCurrent(args);
-  if (!args.IsConstructCall()) {
-    THROW_ERR_CONSTRUCT_CALL_REQUIRED(env);
-    return;
-  }
-
-  Local<Context> context = args.This()->CreationContext();
-  Context::Scope context_scope(context);
-
-  new MessagePort(env, context, args.This());
+  THROW_ERR_CONSTRUCT_CALL_INVALID(env);
 }
 
 MessagePort* MessagePort::New(
@@ -543,16 +541,14 @@ MessagePort* MessagePort::New(
     Local<Context> context,
     std::unique_ptr<MessagePortData> data) {
   Context::Scope context_scope(context);
-  Local<Function> ctor;
-  if (!GetMessagePortConstructor(env, context).ToLocal(&ctor))
-    return nullptr;
+  Local<FunctionTemplate> ctor_templ = GetMessagePortConstructorTemplate(env);
 
   // Construct a new instance, then assign the listener instance and possibly
   // the MessagePortData to it.
   Local<Object> instance;
-  if (!ctor->NewInstance(context).ToLocal(&instance))
+  if (!ctor_templ->InstanceTemplate()->NewInstance(context).ToLocal(&instance))
     return nullptr;
-  MessagePort* port = Unwrap<MessagePort>(instance);
+  MessagePort* port = new MessagePort(env, context, instance);
   CHECK_NOT_NULL(port);
   if (data) {
     port->Detach();
@@ -711,6 +707,15 @@ void MessagePort::PostMessage(const FunctionCallbackInfo<Value>& args) {
     return THROW_ERR_MISSING_ARGS(env, "Not enough arguments to "
                                        "MessagePort.postMessage");
   }
+  if (!args[1]->IsNullOrUndefined() && !args[1]->IsObject()) {
+    // Browsers ignore null or undefined, and otherwise accept an array or an
+    // options object.
+    // TODO(addaleax): Add support for an options object and generic sequence
+    // support.
+    // Refs: https://github.com/nodejs/node/pull/28033#discussion_r289964991
+    return THROW_ERR_INVALID_ARG_TYPE(env,
+        "Optional transferList argument must be an array");
+  }
 
   MessagePort* port = Unwrap<MessagePort>(args.This());
   // Even if the backing MessagePort object has already been deleted, we still
@@ -818,13 +823,12 @@ void MessagePort::Entangle(MessagePort* a, MessagePortData* b) {
   MessagePortData::Entangle(a->data_.get(), b);
 }
 
-MaybeLocal<Function> GetMessagePortConstructor(
-    Environment* env, Local<Context> context) {
+Local<FunctionTemplate> GetMessagePortConstructorTemplate(Environment* env) {
   // Factor generating the MessagePort JS constructor into its own piece
   // of code, because it is needed early on in the child environment setup.
   Local<FunctionTemplate> templ = env->message_port_constructor_template();
   if (!templ.IsEmpty())
-    return templ->GetFunction(context);
+    return templ;
 
   Isolate* isolate = env->isolate();
 
@@ -847,7 +851,7 @@ MaybeLocal<Function> GetMessagePortConstructor(
     env->set_message_event_object_template(e);
   }
 
-  return GetMessagePortConstructor(env, context);
+  return GetMessagePortConstructorTemplate(env);
 }
 
 namespace {
@@ -890,8 +894,8 @@ static void InitMessaging(Local<Object> target,
 
   target->Set(context,
               env->message_port_constructor_string(),
-              GetMessagePortConstructor(env, context).ToLocalChecked())
-                  .Check();
+              GetMessagePortConstructorTemplate(env)
+                  ->GetFunction(context).ToLocalChecked()).Check();
 
   // These are not methods on the MessagePort prototype, because
   // the browser equivalents do not provide them.
@@ -900,6 +904,15 @@ static void InitMessaging(Local<Object> target,
   env->SetMethod(target, "receiveMessageOnPort", MessagePort::ReceiveMessage);
   env->SetMethod(target, "moveMessagePortToContext",
                  MessagePort::MoveToContext);
+
+  {
+    Local<Function> domexception = GetDOMException(context).ToLocalChecked();
+    target
+        ->Set(context,
+              FIXED_ONE_BYTE_STRING(env->isolate(), "DOMException"),
+              domexception)
+        .Check();
+  }
 }
 
 }  // anonymous namespace

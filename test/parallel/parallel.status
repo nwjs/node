@@ -5,20 +5,24 @@ prefix parallel
 # sample-test                        : PASS,FLAKY
 
 [true] # This section applies to all platforms
+# https://github.com/nodejs/node/issues/24593
+test-fs-stat-bigint: PASS,FLAKY
 # https://github.com/nodejs/node/issues/23207
 test-net-connect-options-port: PASS,FLAKY
 # https://github.com/nodejs/node/issues/26401
-test-worker-prof: PASS,FLAKY
-# https://github.com/nodejs/node/issues/27553
-test-tls-enable-trace-cli: PASS,FLAKY
+test-worker-prof: SKIP
 
 [$system==win32]
+# https://github.com/nodejs/node/issues/20750
 test-http2-pipe: PASS,FLAKY
 # https://github.com/nodejs/node/issues/23277
 test-worker-memory: PASS,FLAKY
 # https://github.com/nodejs/node/issues/20750
 test-http2-client-upload: PASS,FLAKY
+# https://github.com/nodejs/node/issues/20750
 test-http2-client-upload-reject: PASS,FLAKY
+# https://github.com/nodejs/node/issues/28106
+test-worker-debug: PASS,FLAKY
 
 [$system==linux]
 

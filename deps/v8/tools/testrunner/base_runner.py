@@ -244,6 +244,11 @@ class BaseTestRunner(object):
     self.mode_options = None
     self.target_os = None
 
+  @property
+  def framework_name(self):
+    """String name of the base-runner subclass, used in test results."""
+    raise NotImplementedError()
+
   def execute(self, sys_args=None):
     if sys_args is None:  # pragma: no cover
       sys_args = sys.argv[1:]
@@ -630,7 +635,8 @@ class BaseTestRunner(object):
       if options.verbose:
         print('>>> Loading test suite: %s' % name)
       suite = testsuite.TestSuite.Load(
-          os.path.join(options.test_root, name), test_config)
+          os.path.join(options.test_root, name), test_config,
+          self.framework_name)
 
       if self._is_testsuite_supported(suite, options):
         tests = suite.load_tests_from_disk(variables)
@@ -778,6 +784,7 @@ class BaseTestRunner(object):
                                                        options.junittestsuite))
     if options.json_test_results:
       procs.append(progress.JsonTestProgressIndicator(
+        self.framework_name,
         options.json_test_results,
         self.build_config.arch,
         self.mode_options.execution_mode))

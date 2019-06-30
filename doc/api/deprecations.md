@@ -3,9 +3,11 @@
 <!--introduced_in=v7.7.0-->
 <!-- type=misc -->
 
-Node.js may deprecate APIs when either: (a) use of the API is considered to be
-unsafe, (b) an improved alternative API is available, or (c) breaking changes to
-the API are expected in a future major release.
+Node.js may deprecate APIs for any of the following reasons:
+
+* Use of the API is unsafe.
+* An improved alternative API is available.
+* Breaking changes to the API are expected in a future major release.
 
 Node.js utilizes three kinds of Deprecations:
 
@@ -134,10 +136,10 @@ changes:
 Type: Runtime (supports [`--pending-deprecation`][])
 
 The `Buffer()` function and `new Buffer()` constructor are deprecated due to
-API usability issues that can potentially lead to accidental security issues.
+API usability issues that can lead to accidental security issues.
 
-As an alternative, use of the following methods of constructing `Buffer` objects
-is strongly recommended:
+As an alternative, use one of the following methods of constructing `Buffer`
+objects:
 
 * [`Buffer.alloc(size[, fill[, encoding]])`][alloc] - Create a `Buffer` with
   *initialized* memory.
@@ -1807,10 +1809,10 @@ changes:
 Type: End-of-Life
 
 Node.js used to support all GCM authentication tag lengths which are accepted by
-OpenSSL when calling [`decipher.setAuthTag()`][]. Beginning with node v11.0.0,
-only authentication tag lengths of 128, 120, 112, 104, 96, 64, and 32 bits are
-allowed. Authentication tags whose length is not included in this list are
-considered invalid in compliance with [NIST SP 800-38D][].
+OpenSSL when calling [`decipher.setAuthTag()`][]. Beginning with Node.js
+v11.0.0, only authentication tag lengths of 128, 120, 112, 104, 96, 64, and 32
+bits are allowed. Authentication tags of other lengths are invalid per
+[NIST SP 800-38D][].
 
 <a id="DEP0091"></a>
 ### DEP0091: crypto.DEFAULT_ENCODING
@@ -2475,6 +2477,20 @@ The legacy HTTP parser, used by default in versions of Node.js prior to 12.0.0,
 is deprecated. This deprecation applies to users of the
 [`--http-parser=legacy`][] command-line flag.
 
+<a id="DEP0132"></a>
+### DEP0132: worker.terminate() with callback
+<!-- YAML
+changes:
+  - version: v12.5.0
+    pr-url: https://github.com/nodejs/node/pull/28021
+    description: Runtime deprecation.
+-->
+
+Type: Runtime
+
+Passing a callback to [`worker.terminate()`][] is deprecated. Use the returned
+`Promise` instead, or a listener to the worker’s `'exit'` event.
+
 [`--http-parser=legacy`]: cli.html#cli_http_parser_library
 [`--pending-deprecation`]: cli.html#cli_pending_deprecation
 [`Buffer.allocUnsafeSlow(size)`]: buffer.html#buffer_class_method_buffer_allocunsafeslow_size
@@ -2567,6 +2583,7 @@ is deprecated. This deprecation applies to users of the
 [`util.types`]: util.html#util_util_types
 [`util`]: util.html
 [`worker.exitedAfterDisconnect`]: cluster.html#cluster_worker_exitedafterdisconnect
+[`worker.terminate()`]: worker_threads.html#worker_threads_worker_terminate
 [`zlib.bytesWritten`]: zlib.html#zlib_zlib_byteswritten
 [Legacy URL API]: url.html#url_legacy_url_api
 [NIST SP 800-38D]: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf

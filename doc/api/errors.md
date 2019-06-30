@@ -671,12 +671,6 @@ An operation outside the bounds of a `Buffer` was attempted.
 An attempt has been made to create a `Buffer` larger than the maximum allowed
 size.
 
-<a id="ERR_CANNOT_TRANSFER_OBJECT"></a>
-### ERR_CANNOT_TRANSFER_OBJECT
-
-The value passed to `postMessage()` contained an object that is not supported
-for transferring.
-
 <a id="ERR_CANNOT_WATCH_SIGINT"></a>
 ### ERR_CANNOT_WATCH_SIGINT
 
@@ -708,6 +702,14 @@ non-writable `stdout` or `stderr` stream.
 ### ERR_CONSTRUCT_CALL_REQUIRED
 
 A constructor for a class was called without `new`.
+
+<a id="ERR_CONSTRUCT_CALL_INVALID"></a>
+### ERR_CONSTRUCT_CALL_INVALID
+<!--
+added: v12.5.0
+-->
+
+A class constructor was called that is not callable.
 
 <a id="ERR_CPU_USAGE"></a>
 ### ERR_CPU_USAGE
@@ -2012,6 +2014,16 @@ A module file could not be resolved while attempting a [`require()`][] or
 
 > Stability: 0 - Deprecated. These error codes are either inconsistent, or have
 > been removed.
+
+<a id="ERR_CANNOT_TRANSFER_OBJECT"></a>
+### ERR_CANNOT_TRANSFER_OBJECT
+<!--
+added: v10.5.0
+removed: v12.5.0
+-->
+
+The value passed to `postMessage()` contained an object that is not supported
+for transferring.
 
 <a id="ERR_CLOSED_MESSAGE_PORT"></a>
 ### ERR_CLOSED_MESSAGE_PORT

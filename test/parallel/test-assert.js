@@ -182,7 +182,27 @@ assert.throws(
 }
 
 // Use a RegExp to validate the error message.
-a.throws(() => thrower(TypeError), /\[object Object\]/);
+{
+  a.throws(() => thrower(TypeError), /\[object Object\]/);
+
+  const symbol = Symbol('foo');
+  a.throws(() => {
+    throw symbol;
+  }, /foo/);
+
+  a.throws(() => {
+    a.throws(() => {
+      throw symbol;
+    }, /abc/);
+  }, {
+    message: 'The input did not match the regular expression /abc/. ' +
+             "Input:\n\n'Symbol(foo)'\n",
+    code: 'ERR_ASSERTION',
+    operator: 'throws',
+    actual: symbol,
+    expected: /abc/
+  });
+}
 
 // Use a fn to validate the error object.
 a.throws(() => thrower(TypeError), (err) => {
@@ -481,12 +501,14 @@ assert.throws(
     '',
     '  [',
     '    [',
-    '...',
+    '      [',
+    '        1,',
     '        2,',
     '+       3',
     "-       '3'",
     '      ]',
     '...',
+    '    4,',
     '    5',
     '  ]'].join('\n');
   assert.throws(
@@ -500,10 +522,12 @@ assert.throws(
     '  [',
     '    1,',
     '...',
+    '    1,',
     '    0,',
     '-   1,',
     '    1,',
     '...',
+    '    1,',
     '    1',
     '  ]'
   ].join('\n');
@@ -520,10 +544,11 @@ assert.throws(
     '  [',
     '    1,',
     '...',
+    '    1,',
     '    0,',
     '+   1,',
     '    1,',
-    '...',
+    '    1,',
     '    1',
     '  ]'
   ].join('\n');
@@ -833,6 +858,13 @@ common.expectsError(
   {
     code: 'ERR_ASSERTION',
     type: assert.AssertionError,
+    message: 'The expression evaluated to a falsy value:\n\n  assert(1 === 2)\n'
+  }
+);
+assert.throws(
+  () => eval('console.log("FOO");\nassert.ok(1 === 2);'),
+  {
+    code: 'ERR_ASSERTION',
     message: 'false == true'
   }
 );

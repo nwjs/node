@@ -2520,9 +2520,9 @@ class V8_EXPORT Value : public Data {
 
   V8_WARN_UNUSED_RESULT MaybeLocal<BigInt> ToBigInt(
       Local<Context> context) const;
-  V8_DEPRECATE_SOON("ToBoolean can never throw. Use Local version.",
-                    V8_WARN_UNUSED_RESULT MaybeLocal<Boolean> ToBoolean(
-                        Local<Context> context) const);
+  V8_DEPRECATED("ToBoolean can never throw. Use Local version.",
+                V8_WARN_UNUSED_RESULT MaybeLocal<Boolean> ToBoolean(
+                    Local<Context> context) const);
   V8_WARN_UNUSED_RESULT MaybeLocal<Number> ToNumber(
       Local<Context> context) const;
   V8_WARN_UNUSED_RESULT MaybeLocal<String> ToString(
@@ -2538,16 +2538,16 @@ class V8_EXPORT Value : public Data {
   V8_WARN_UNUSED_RESULT MaybeLocal<Int32> ToInt32(Local<Context> context) const;
 
   Local<Boolean> ToBoolean(Isolate* isolate) const;
-  V8_DEPRECATE_SOON("Use maybe version",
-                    Local<Number> ToNumber(Isolate* isolate) const);
-  V8_DEPRECATE_SOON("Use maybe version",
-                    Local<String> ToString(Isolate* isolate) const);
-  V8_DEPRECATE_SOON("Use maybe version",
-                    Local<Object> ToObject(Isolate* isolate) const);
-  V8_DEPRECATE_SOON("Use maybe version",
-                    Local<Integer> ToInteger(Isolate* isolate) const);
-  V8_DEPRECATE_SOON("Use maybe version",
-                    Local<Int32> ToInt32(Isolate* isolate) const);
+  V8_DEPRECATED("Use maybe version",
+                Local<Number> ToNumber(Isolate* isolate) const);
+  V8_DEPRECATED("Use maybe version",
+                Local<String> ToString(Isolate* isolate) const);
+  V8_DEPRECATED("Use maybe version",
+                Local<Object> ToObject(Isolate* isolate) const);
+  V8_DEPRECATED("Use maybe version",
+                Local<Integer> ToInteger(Isolate* isolate) const);
+  V8_DEPRECATED("Use maybe version",
+                Local<Int32> ToInt32(Isolate* isolate) const);
 
   /**
    * Attempts to convert a string to an array index.
@@ -2906,7 +2906,7 @@ class V8_EXPORT String : public Name {
       int length = -1);
 
   /** Allocates a new string from UTF-16 data.*/
-  static V8_DEPRECATE_SOON(
+  static V8_DEPRECATED(
       "Use maybe version",
       Local<String> NewFromTwoByte(Isolate* isolate, const uint16_t* data,
                                    NewStringType type = kNormalString,
@@ -2955,7 +2955,7 @@ class V8_EXPORT String : public Name {
    * should the underlying buffer be deallocated or modified except through the
    * destructor of the external string resource.
    */
-  static V8_DEPRECATE_SOON(
+  static V8_DEPRECATED(
       "Use maybe version",
       Local<String> NewExternal(Isolate* isolate,
                                 ExternalOneByteStringResource* resource));
@@ -5224,9 +5224,11 @@ class V8_EXPORT SharedArrayBuffer : public Object {
    * Create a new SharedArrayBuffer over an existing memory block. Propagate
    * flags to indicate whether the underlying buffer can be grown.
    */
-  static Local<SharedArrayBuffer> New(
-      Isolate* isolate, const SharedArrayBuffer::Contents&,
-      ArrayBufferCreationMode mode = ArrayBufferCreationMode::kExternalized);
+  V8_DEPRECATED("Use New method with data, and byte_length instead.",
+                static Local<SharedArrayBuffer> New(
+                    Isolate* isolate, const SharedArrayBuffer::Contents&,
+                    ArrayBufferCreationMode mode =
+                        ArrayBufferCreationMode::kExternalized));
 
   /**
    * Returns true if SharedArrayBuffer is externalized, that is, does not
@@ -5315,11 +5317,10 @@ class V8_EXPORT Date : public Object {
    * This API should not be called more than needed as it will
    * negatively impact the performance of date operations.
    */
-  V8_DEPRECATE_SOON(
-      "Use Isolate::DateTimeConfigurationChangeNotification",
-      static void DateTimeConfigurationChangeNotification(
-          Isolate* isolate,
-          TimeZoneDetection time_zone_detection = TimeZoneDetection::kSkip));
+  V8_DEPRECATED("Use Isolate::DateTimeConfigurationChangeNotification",
+                static void DateTimeConfigurationChangeNotification(
+                    Isolate* isolate, TimeZoneDetection time_zone_detection =
+                                          TimeZoneDetection::kSkip));
 
  private:
   static void CheckCast(Value* obj);
@@ -6681,7 +6682,7 @@ typedef void (*HostInitializeImportMetaObjectCallback)(Local<Context> context,
  * first accessed. The return value will be used as the stack value. If this
  * callback is registed, the |Error.prepareStackTrace| API will be disabled.
  * |sites| is an array of call sites, specified in
- * https://github.com/v8/v8/wiki/Stack-Trace-API
+ * https://v8.dev/docs/stack-trace-api
  */
 typedef MaybeLocal<Value> (*PrepareStackTraceCallback)(Local<Context> context,
                                                        Local<Value> error,
@@ -7165,6 +7166,13 @@ enum JitCodeEventOptions {
  */
 typedef void (*JitCodeEventHandler)(const JitCodeEvent* event);
 
+/**
+ * Callback function passed to SetUnhandledExceptionCallback.
+ */
+#if defined(V8_OS_WIN)
+typedef int (*UnhandledExceptionCallback)(
+    _EXCEPTION_POINTERS* exception_pointers);
+#endif
 
 /**
  * Interface for iterating through all external resources in the heap.
@@ -8379,13 +8387,13 @@ class V8_EXPORT Isolate {
   /**
    * Returns a memory range that can potentially contain jitted code. Code for
    * V8's 'builtins' will not be in this range if embedded builtins is enabled.
-   * Instead, see GetEmbeddedCodeRange.
    *
    * On Win64, embedders are advised to install function table callbacks for
    * these ranges, as default SEH won't be able to unwind through jitted code.
-   *
    * The first page of the code range is reserved for the embedder and is
-   * committed, writable, and executable.
+   * committed, writable, and executable, to be used to store unwind data, as
+   * documented in
+   * https://docs.microsoft.com/en-us/cpp/build/exception-handling-x64.
    *
    * Might be empty on other platforms.
    *
@@ -8597,6 +8605,13 @@ class V8_EXPORT Isolate {
 
 class V8_EXPORT StartupData {
  public:
+  /**
+   * Whether the data created can be rehashed and and the hash seed can be
+   * recomputed when deserialized.
+   * Only valid for StartupData returned by SnapshotCreator::CreateBlob().
+   */
+  bool CanBeRehashed() const;
+
   const char* data;
   int raw_size;
 };
@@ -8784,6 +8799,20 @@ class V8_EXPORT V8 {
    * handler or rely on the embedder's.
    */
   static bool EnableWebAssemblyTrapHandler(bool use_v8_signal_handler);
+
+#if defined(V8_OS_WIN)
+  /**
+   * On Win64, by default V8 does not emit unwinding data for jitted code,
+   * which means the OS cannot walk the stack frames and the system Structured
+   * Exception Handling (SEH) cannot unwind through V8-generated code:
+   * https://code.google.com/p/v8/issues/detail?id=3598.
+   *
+   * This function allows embedders to register a custom exception handler for
+   * exceptions in V8-generated code.
+   */
+  static void SetUnhandledExceptionCallback(
+      UnhandledExceptionCallback unhandled_exception_callback);
+#endif
 
  private:
   V8();

@@ -237,8 +237,36 @@ uint64_t Environment::AllocateThreadId() {
   return next_thread_id++;
 }
 
+void Environment::CreateProperties() {
+  HandleScope handle_scope(isolate_);
+  Local<Context> ctx = context();
+  Local<FunctionTemplate> templ = FunctionTemplate::New(isolate());
+  templ->InstanceTemplate()->SetInternalFieldCount(1);
+  Local<Object> obj = templ->GetFunction(ctx)
+                          .ToLocalChecked()
+                          ->NewInstance(ctx)
+                          .ToLocalChecked();
+  obj->SetAlignedPointerInInternalField(0, this);
+  set_as_callback_data(obj);
+  set_as_callback_data_template(templ);
+
+  // Store primordials setup by the per-context script in the environment.
+  Local<Object> per_context_bindings =
+      GetPerContextExports(ctx).ToLocalChecked();
+  Local<Value> primordials =
+      per_context_bindings->Get(ctx, primordials_string()).ToLocalChecked();
+  CHECK(primordials->IsObject());
+  set_primordials(primordials.As<Object>());
+
+  Local<Object> process_object =
+    node::CreateProcessObject(this, node_is_nwjs).FromMaybe(Local<Object>());
+  set_process_object(process_object);
+}
+
 Environment::Environment(IsolateData* isolate_data,
                          Local<Context> context,
+                         const std::vector<std::string>& args,
+                         const std::vector<std::string>& exec_args,
                          Flags flags,
                          uint64_t thread_id)
     : isolate_(context->GetIsolate()),
@@ -246,6 +274,8 @@ Environment::Environment(IsolateData* isolate_data,
       immediate_info_(context->GetIsolate()),
       tick_info_(context->GetIsolate()),
       timer_base_(uv_now(isolate_data->event_loop())),
+      exec_argv_(exec_args),
+      argv_(args),
       should_abort_on_uncaught_toggle_(isolate_, 1),
       stream_base_state_(isolate_, StreamBase::kNumStreamBaseStateFields),
       flags_(flags),
@@ -256,16 +286,6 @@ Environment::Environment(IsolateData* isolate_data,
   // We'll be creating new objects so make sure we've entered the context.
   HandleScope handle_scope(isolate());
   Context::Scope context_scope(context);
-  {
-    Local<FunctionTemplate> templ = FunctionTemplate::New(isolate());
-    templ->InstanceTemplate()->SetInternalFieldCount(1);
-    Local<Object> obj =
-        templ->GetFunction(context).ToLocalChecked()->NewInstance(
-            context).ToLocalChecked();
-    obj->SetAlignedPointerInInternalField(0, this);
-    set_as_callback_data(obj);
-    set_as_callback_data_template(templ);
-  }
 
   set_env_vars(per_process::system_environment);
 
@@ -310,7 +330,25 @@ Environment::Environment(IsolateData* isolate_data,
   performance_state_->Mark(
       performance::NODE_PERFORMANCE_MILESTONE_V8_START,
       performance::performance_v8_start);
+
+  if (*TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
+          TRACING_CATEGORY_NODE1(environment)) != 0) {
+    auto traced_value = tracing::TracedValue::Create();
+    traced_value->BeginArray("args");
+    for (const std::string& arg : args) traced_value->AppendString(arg);
+    traced_value->EndArray();
+    traced_value->BeginArray("exec_args");
+    for (const std::string& arg : exec_args) traced_value->AppendString(arg);
+    traced_value->EndArray();
+    TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(TRACING_CATEGORY_NODE1(environment),
+                                      "Environment",
+                                      this,
+                                      "args",
+                                      std::move(traced_value));
+  }
+
 #endif
+
   // By default, always abort when --abort-on-uncaught-exception was passed.
   should_abort_on_uncaught_toggle_[0] = 1;
 
@@ -318,11 +356,13 @@ Environment::Environment(IsolateData* isolate_data,
   credentials::SafeGetenv("NODE_DEBUG_NATIVE", &debug_cats, this);
   set_debug_categories(debug_cats, true);
 
-  isolate()->GetHeapProfiler()->AddBuildEmbedderGraphCallback(
-      BuildEmbedderGraph, this);
   if (options_->no_force_async_hooks_checks) {
     async_hooks_.no_force_checks();
   }
+
+  // TODO(joyeecheung): deserialize when the snapshot covers the environment
+  // properties.
+  CreateProperties();
 }
 
 CompileFnEntry::CompileFnEntry(Environment* env, uint32_t id)
@@ -437,37 +477,6 @@ void Environment::ExitEnv() {
   set_can_call_into_js(false);
   thread_stopper()->Stop();
   isolate_->TerminateExecution();
-}
-
-MaybeLocal<Object> Environment::ProcessCliArgs(
-    const std::vector<std::string>& args,
-    const std::vector<std::string>& exec_args) {
-  argv_ = args;
-  exec_argv_ = exec_args;
-
-#if 0
-  if (*TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
-          TRACING_CATEGORY_NODE1(environment)) != 0) {
-    auto traced_value = tracing::TracedValue::Create();
-    traced_value->BeginArray("args");
-    for (const std::string& arg : args) traced_value->AppendString(arg);
-    traced_value->EndArray();
-    traced_value->BeginArray("exec_args");
-    for (const std::string& arg : exec_args) traced_value->AppendString(arg);
-    traced_value->EndArray();
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(TRACING_CATEGORY_NODE1(environment),
-                                      "Environment",
-                                      this,
-                                      "args",
-                                      std::move(traced_value));
-  }
-#endif
-
-  Local<Object> process_object =
-    node::CreateProcessObject(this, args, exec_args, node_is_nwjs)
-          .FromMaybe(Local<Object>());
-  set_process_object(process_object);
-  return process_object;
 }
 
 void Environment::RegisterHandleCleanups() {
@@ -638,6 +647,11 @@ void Environment::RunAndClearNativeImmediates() {
         if (UNLIKELY(try_catch.HasCaught())) {
           if (!try_catch.HasTerminated())
             FatalException(isolate(), try_catch);
+
+          // We are done with the current callback. Increase the counter so that
+          // the steps below make everything *after* the current item part of
+          // the new list.
+          it++;
 
           // Bail out, remove the already executed callbacks from list
           // and set up a new TryCatch for the other pending callbacks.

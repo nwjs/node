@@ -318,13 +318,11 @@ changes:
     description: Symbol.asyncIterator support is no longer experimental.
 -->
 
-> Stability: 2 - Stable
-
 * Returns: {AsyncIterator}
 
 Create an `AsyncIterator` object that iterates through each line in the input
 stream as a string. This method allows asynchronous iteration of
-`readline.Interface` objects through `for`-`await`-`of` loops.
+`readline.Interface` objects through `for await...of` loops.
 
 Errors in the input stream are not forwarded.
 
@@ -332,10 +330,8 @@ If the loop is terminated with `break`, `throw`, or `return`,
 [`rl.close()`][] will be called. In other words, iterating over a
 `readline.Interface` will always consume the input stream fully.
 
-A caveat with using this experimental API is that the performance is
-currently not on par with the traditional `'line'` event API, and thus it is
-not recommended for performance-sensitive applications. We expect this
-situation to improve in the future.
+Performance is not on par with the traditional `'line'` event API. Use `'line'`
+instead for performance-sensitive applications.
 
 ```js
 async function processLineByLine() {
@@ -560,7 +556,7 @@ rl.on('line', (line) => {
 
 A common use case for `readline` is to consume an input file one line at a
 time. The easiest way to do so is leveraging the [`fs.ReadStream`][] API as
-well as a `for`-`await`-`of` loop:
+well as a `for await...of` loop:
 
 ```js
 const fs = require('fs');
@@ -601,7 +597,7 @@ rl.on('line', (line) => {
 });
 ```
 
-Currently, `for`-`await`-`of` loop can be a bit slower. If `async` / `await`
+Currently, `for await...of` loop can be a bit slower. If `async` / `await`
 flow and speed are both essential, a mixed approach can be applied:
 
 ```js

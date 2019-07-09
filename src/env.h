@@ -386,6 +386,8 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(crypto_key_object_constructor, v8::Function)                               \
   V(domain_callback, v8::Function)                                             \
   V(domexception_function, v8::Function)                                       \
+  V(enhance_fatal_stack_after_inspector, v8::Function)                         \
+  V(enhance_fatal_stack_before_inspector, v8::Function)                        \
   V(fs_use_promises_symbol, v8::Symbol)                                        \
   V(host_import_module_dynamically_callback, v8::Function)                     \
   V(host_initialize_import_meta_object_callback, v8::Function)                 \
@@ -850,6 +852,7 @@ class Environment : public MemoryRetainer {
   void InitializeLibuv(bool start_profiler_idle_notifier);
   inline const std::vector<std::string>& exec_argv();
   inline const std::vector<std::string>& argv();
+  const std::string& exec_path() const;
 
   typedef void (*HandleCleanupCb)(Environment* env,
                                   uv_handle_t* handle,
@@ -1241,6 +1244,7 @@ class Environment : public MemoryRetainer {
   std::shared_ptr<HostPort> inspector_host_port_;
   std::vector<std::string> exec_argv_;
   std::vector<std::string> argv_;
+  std::string exec_path_;
 
   uint32_t module_id_counter_ = 0;
   uint32_t script_id_counter_ = 0;

@@ -6,7 +6,7 @@
 
 The `assert` module provides a set of assertion functions for verifying
 invariants. The module provides a recommended [`strict` mode][] and a more
-lenient `legacy` mode.
+lenient legacy mode.
 
 For more information about the used equality comparisons see
 [MDN's guide on equality comparisons and sameness][mdn-equality-guide].
@@ -21,33 +21,26 @@ thrown by the `assert` module will be instances of the `AssertionError` class.
 added: v0.1.21
 -->
 * `options` {Object}
-  * `message` {string} If provided, the error message is going to be set to this
-    value.
-  * `actual` {any} The `actual` property on the error instance is going to
-    contain this value. Internally used for the `actual` error input in case
-    e.g., [`assert.strictEqual()`] is used.
-  * `expected` {any} The `expected` property on the error instance is going to
-    contain this value. Internally used for the `expected` error input in case
-    e.g., [`assert.strictEqual()`] is used.
-  * `operator` {string} The `operator` property on the error instance is going
-    to contain this value. Internally used to indicate what operation was used
-    for comparison (or what assertion function triggered the error).
-  * `stackStartFn` {Function} If provided, the generated stack trace is going to
-    remove all frames up to the provided function.
+  * `message` {string} If provided, the error message is set to this value.
+  * `actual` {any} The `actual` property on the error instance.
+  * `expected` {any} The `expected` property on the error instance.
+  * `operator` {string} The `operator` property on the error instance.
+  * `stackStartFn` {Function} If provided, the generated stack trace omits
+    frames before this function.
 
 A subclass of `Error` that indicates the failure of an assertion.
 
 All instances contain the built-in `Error` properties (`message` and `name`)
 and:
 
-* `actual` {any} Set to the actual value in case e.g.,
-  [`assert.strictEqual()`] is used.
-* `expected` {any} Set to the expected value in case e.g.,
-  [`assert.strictEqual()`] is used.
+* `actual` {any} Set to the `actual` argument for methods such as
+  [`assert.strictEqual()`].
+* `expected` {any} Set to the `expected` value for methods such as
+  [`assert.strictEqual()`].
 * `generatedMessage` {boolean} Indicates if the message was auto-generated
   (`true`) or not.
-* `code` {string} This is always set to the string `ERR_ASSERTION` to indicate
-  that the error is actually an assertion error.
+* `code` {string} Value is always `ERR_ASSERTION` to show that the error is an
+  assertion error.
 * `operator` {string} Set to the passed in operator value.
 
 ```js
@@ -87,14 +80,14 @@ changes:
     description: Added strict mode to the assert module.
 -->
 
-When using the `strict` mode, any `assert` function will use the equality used
-in the strict function mode. So [`assert.deepEqual()`][] will, for example,
-work the same as [`assert.deepStrictEqual()`][].
+In `strict` mode, `assert` functions use the comparison in the corresponding
+strict functions. For example, [`assert.deepEqual()`][] will behave like
+[`assert.deepStrictEqual()`][].
 
-On top of that, error messages which involve objects produce an error diff
-instead of displaying both objects. That is not the case for the legacy mode.
+In `strict` mode, error messages for objects display a diff. In legacy mode,
+error messages for objects display the objects, often truncated.
 
-It can be accessed using:
+To use `strict` mode:
 
 ```js
 const assert = require('assert').strict;
@@ -122,24 +115,27 @@ assert.deepEqual([[[1, 2, 3]], 4, 5], [[[1, 2, '3']], 4, 5]);
 ```
 
 To deactivate the colors, use the `NODE_DISABLE_COLORS` environment variable.
-Please note that this will also deactivate the colors in the REPL.
+This will also deactivate the colors in the REPL.
 
 ## Legacy mode
 
 > Stability: 0 - Deprecated: Use strict mode instead.
 
-When accessing `assert` directly instead of using the `strict` property, the
-[Abstract Equality Comparison][] will be used for any function without "strict"
-in its name, such as [`assert.deepEqual()`][].
+Legacy mode uses the [Abstract Equality Comparison][] in:
 
-It can be accessed using:
+* [`assert.deepEqual()`][]
+* [`assert.equal()`][]
+* [`assert.notDeepEqual()`][]
+* [`assert.notEqual()`][]
+
+To use legacy mode:
 
 ```js
 const assert = require('assert');
 ```
 
-It is recommended to use the [`strict` mode][] instead as the
-[Abstract Equality Comparison][] can often have surprising results. This is
+Whenever possible, use the [`strict` mode][] instead. Otherwise, the
+[Abstract Equality Comparison][] may cause surprising results. This is
 especially true for [`assert.deepEqual()`][], where the comparison rules are
 lax:
 
@@ -1033,7 +1029,7 @@ assert.rejects(
 });
 ```
 
-Note that `error` cannot be a string. If a string is provided as the second
+`error` cannot be a string. If a string is provided as the second
 argument, then `error` is assumed to be omitted and the string will be used for
 `message` instead. This can lead to easy-to-miss mistakes. Please read the
 example in [`assert.throws()`][] carefully if using a string as the second
@@ -1135,7 +1131,7 @@ assert.throws(
       nested: true,
       baz: 'text'
     }
-    // Note that only properties on the validation object will be tested for.
+    // Only properties on the validation object will be tested for.
     // Using nested objects requires all properties to be present. Otherwise
     // the validation is going to fail.
   }
@@ -1221,7 +1217,7 @@ assert.throws(
 );
 ```
 
-Note that `error` cannot be a string. If a string is provided as the second
+`error` cannot be a string. If a string is provided as the second
 argument, then `error` is assumed to be omitted and the string will be used for
 `message` instead. This can lead to easy-to-miss mistakes. Using the same
 message as the thrown error message is going to result in an

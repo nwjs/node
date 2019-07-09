@@ -23,7 +23,7 @@
 #define SRC_NODE_VERSION_H_
 
 #define NODE_MAJOR_VERSION 12
-#define NODE_MINOR_VERSION 5
+#define NODE_MINOR_VERSION 6
 #define NODE_PATCH_VERSION 0
 
 #define NODE_VERSION_IS_LTS 0
@@ -91,7 +91,8 @@
  */
 #define NODE_MODULE_VERSION 72
 
-// the NAPI_VERSION provided by this version of the runtime
+// The NAPI_VERSION provided by this version of the runtime. This is the version
+// which the Node binary being built supports.
 #define NAPI_VERSION  4
 
 #endif  // SRC_NODE_VERSION_H_

@@ -44,6 +44,19 @@ assert.ok(a.AssertionError.prototype instanceof Error,
 assert.throws(() => a(false), a.AssertionError, 'ok(false)');
 assert.throws(() => a.ok(false), a.AssertionError, 'ok(false)');
 
+// Throw message if the message is instanceof Error.
+{
+  let threw = false;
+  try {
+    assert.ok(false, new Error('ok(false)'));
+  } catch (e) {
+    threw = true;
+    assert.ok(e instanceof Error);
+  }
+  assert.ok(threw, 'Error: ok(false)');
+}
+
+
 a(true);
 a('test', 'ok(\'test\')');
 a.ok(true);
@@ -162,6 +175,17 @@ assert.throws(
   {
     code: 'ERR_ASSERTION',
     message: 'Got unwanted exception.\nActual message: "[object Object]"'
+  }
+);
+
+assert.throws(
+  () => a.doesNotThrow(() => thrower(Error), /\[[a-z]{6}\s[A-z]{6}\]/g, 'user message'),
+  {
+    name: 'AssertionError',
+    code: 'ERR_ASSERTION',
+    operator: 'doesNotThrow',
+    message: 'Got unwanted exception: user message\n' +
+             'Actual message: "[object Object]"'
   }
 );
 
@@ -412,11 +436,32 @@ assert.throws(() => { throw new Error(); }, (err) => err instanceof Error);
 // Long values should be truncated for display.
 assert.throws(() => {
   assert.strictEqual('A'.repeat(1000), '');
-}, {
-  code: 'ERR_ASSERTION',
-  message: `${strictEqualMessageStart}+ actual - expected\n\n` +
-           `+ '${'A'.repeat(1000)}'\n- ''`
+}, (err) => {
+  assert.strictEqual(err.code, 'ERR_ASSERTION');
+  assert.strictEqual(err.message,
+                     `${strictEqualMessageStart}+ actual - expected\n\n` +
+                     `+ '${'A'.repeat(1000)}'\n- ''`);
+  assert.strictEqual(err.actual.length, 1000);
+  assert.ok(inspect(err).includes(`actual: '${'A'.repeat(488)}...'`));
+  return true;
 });
+
+// Output that extends beyond 10 lines should also be truncated for display.
+{
+  const multilineString = 'fhqwhgads\n'.repeat(15);
+  assert.throws(() => {
+    assert.strictEqual(multilineString, '');
+  }, (err) => {
+    assert.strictEqual(err.code, 'ERR_ASSERTION');
+    assert.strictEqual(err.message.split('\n').length, 19);
+    assert.strictEqual(err.actual.split('\n').length, 16);
+    assert.ok(inspect(err).includes(
+      "actual: 'fhqwhgads\\n' +\n" +
+      "    'fhqwhgads\\n' +\n".repeat(9) +
+      "    '...'"));
+    return true;
+  });
+}
 
 {
   // Bad args to AssertionError constructor should throw TypeError.

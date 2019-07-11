@@ -211,8 +211,8 @@ PromiseWrap* PromiseWrap::New(Environment* env,
   obj->SetInternalField(PromiseWrap::kIsChainedPromiseField,
                         parent_wrap != nullptr ? v8::True(env->isolate())
                                                : v8::False(env->isolate()));
-  CHECK_NULL(promise->GetAlignedPointerFromInternalField(10));
-  promise->SetInternalField(10, obj);
+  CHECK_NULL(promise->GetAlignedPointerFromInternalField(2));
+  promise->SetInternalField(2, obj);
   return new PromiseWrap(env, obj, silent);
 }
 
@@ -225,7 +225,7 @@ void PromiseWrap::getIsChainedPromise(Local<String> property,
 static PromiseWrap* extractPromiseWrap(Local<Promise> promise) {
   if (!promise->InternalFieldCount())
     return nullptr;
-  Local<Value> resource_object_value = promise->GetInternalField(10);
+  Local<Value> resource_object_value = promise->GetInternalField(2);
   if (resource_object_value->IsObject()) {
     return Unwrap<PromiseWrap>(resource_object_value.As<Object>());
   }

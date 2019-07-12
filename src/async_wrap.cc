@@ -191,7 +191,7 @@ class PromiseWrap : public AsyncWrap {
   SET_SELF_SIZE(PromiseWrap)
 
   static constexpr int kIsChainedPromiseField = 1;
-  static constexpr int kInternalFieldCount = 2;
+  static constexpr int kInternalFieldCount = 3;
 
   static PromiseWrap* New(Environment* env,
                           Local<Promise> promise,
@@ -211,7 +211,7 @@ PromiseWrap* PromiseWrap::New(Environment* env,
   obj->SetInternalField(PromiseWrap::kIsChainedPromiseField,
                         parent_wrap != nullptr ? v8::True(env->isolate())
                                                : v8::False(env->isolate()));
-  CHECK_NULL(promise->GetAlignedPointerFromInternalField(2));
+  CHECK(promise->GetAlignedPointerFromInternalField(2) == nullptr || promise->InternalFieldCount() < 3);
   promise->SetInternalField(2, obj);
   return new PromiseWrap(env, obj, silent);
 }

@@ -211,8 +211,7 @@ PromiseWrap* PromiseWrap::New(Environment* env,
   obj->SetInternalField(PromiseWrap::kIsChainedPromiseField,
                         parent_wrap != nullptr ? v8::True(env->isolate())
                                                : v8::False(env->isolate()));
-  CHECK(promise->GetAlignedPointerFromInternalField(2) == nullptr || promise->InternalFieldCount() < 3);
-  promise->SetInternalField(2, obj);
+  promise->SetPrivate(promise->CreationContext(), env->promise_wrap_private(), obj);
   return new PromiseWrap(env, obj, silent);
 }
 
@@ -223,9 +222,15 @@ void PromiseWrap::getIsChainedPromise(Local<String> property,
 }
 
 static PromiseWrap* extractPromiseWrap(Local<Promise> promise) {
-  if (!promise->InternalFieldCount())
+  v8::Isolate* isolate = promise->GetIsolate();
+
+  Local<Context> context = promise->CreationContext();
+  Environment* env = Environment::GetCurrent(context);
+  if (env == nullptr) return nullptr;
+
+  if (!promise->HasPrivate(promise->CreationContext(), env->promise_wrap_private()).FromJust())
     return nullptr;
-  Local<Value> resource_object_value = promise->GetInternalField(2);
+  Local<Value> resource_object_value = promise->GetPrivate(promise->CreationContext(), env->promise_wrap_private()).ToLocalChecked();
   if (resource_object_value->IsObject()) {
     return Unwrap<PromiseWrap>(resource_object_value.As<Object>());
   }
@@ -328,6 +333,8 @@ static void SetupHooks(const FunctionCallbackInfo<Value>& args) {
         FIXED_ONE_BYTE_STRING(env->isolate(), "isChainedPromise"),
         PromiseWrap::getIsChainedPromise);
     env->set_promise_wrap_template(promise_wrap_template);
+    Local<v8::Private> priv = v8::Private::New(env->isolate());
+    env->set_promise_wrap_private(priv);
   }
 }
 

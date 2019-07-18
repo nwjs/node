@@ -224,7 +224,7 @@
          'action': [
            'install_name_tool',
            '-change',
-           '@executable_path/../Versions/<(version_full)/<(mac_product_name) Framework.framework/<(mac_product_name) Framework',
+           '@executable_path/../Frameworks/<(mac_product_name) Framework.framework/Versions/<(version_full)/<(mac_product_name) Framework',
            '@loader_path/<(mac_product_name) Framework',
            '${BUILT_PRODUCTS_DIR}/${EXECUTABLE_PATH}'
          ],

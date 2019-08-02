@@ -45,7 +45,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.14',
+    'v8_embedder_string': '-node.16',
 
     ##### V8 defaults for Node.js #####
 
@@ -104,23 +104,54 @@
       ['OS == "win"', {
         'os_posix': 0,
         'v8_postmortem_support%': 0,
-        'obj_dir': '<(PRODUCT_DIR)/obj',
-        'v8_base': '<(PRODUCT_DIR)/lib/libv8_snapshot.a',
         'clang_dir': 'third_party/llvm-build/Release+Asserts/',
       }, {
         'os_posix': 1,
         'v8_postmortem_support%': 1,
         'clang_dir': '<!(cd <(DEPTH) && pwd -P)/third_party/llvm-build/Release+Asserts',
       }],
+      ['v8_use_snapshot==1', {
+        'conditions': [
+          ['GENERATOR == "ninja"', {
+            'obj_dir': '<(PRODUCT_DIR)/obj',
+            #'v8_base': '<(PRODUCT_DIR)/obj/tools/v8_gypfiles/libv8_snapshot.a',
+           }, {
+            'obj_dir%': '<(PRODUCT_DIR)/obj.target',
+            #'v8_base': '<(PRODUCT_DIR)/obj.target/tools/v8_gypfiles/libv8_snapshot.a',
+          }],
+          ['OS == "win"', {
+            'obj_dir': '<(PRODUCT_DIR)/obj',
+            #'v8_base': '<(PRODUCT_DIR)/lib/libv8_snapshot.a',
+          }],
+          ['OS == "mac"', {
+            'obj_dir%': '<(PRODUCT_DIR)/obj.target',
+            #'v8_base': '<(PRODUCT_DIR)/libv8_snapshot.a',
+          }],
+        ],
+      }, {
+        'conditions': [
+          ['GENERATOR == "ninja"', {
+            'obj_dir': '<(PRODUCT_DIR)/obj',
+            #'v8_base': '<(PRODUCT_DIR)/obj/tools/v8_gypfiles/libv8_nosnapshot.a',
+           }, {
+            'obj_dir%': '<(PRODUCT_DIR)/obj.target',
+            #'v8_base': '<(PRODUCT_DIR)/obj.target/tools/v8_gypfiles/libv8_nosnapshot.a',
+          }],
+          ['OS == "win"', {
+            'obj_dir': '<(PRODUCT_DIR)/obj',
+            #'v8_base': '<(PRODUCT_DIR)/lib/libv8_nosnapshot.a',
+          }],
+          ['OS == "mac"', {
+            'obj_dir%': '<(PRODUCT_DIR)/obj.target',
+            #'v8_base': '<(PRODUCT_DIR)/libv8_nosnapshot.a',
+          }],
+        ],
+      }],
       ['OS=="linux" and target_arch=="ia32" and <(building_nw)==1', {
         'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_sid_i386-sysroot',
       }],
       ['OS=="linux" and target_arch=="x64" and <(building_nw)==1', {
         'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_sid_amd64-sysroot',
-      }],
-      ['OS == "mac"', {
-        'obj_dir%': '<(PRODUCT_DIR)/obj.target',
-        #'v8_base': '<(PRODUCT_DIR)/libv8_snapshot.a',
       }],
       ['openssl_fips != ""', {
         'openssl_product': '<(STATIC_LIB_PREFIX)crypto<(STATIC_LIB_SUFFIX)',

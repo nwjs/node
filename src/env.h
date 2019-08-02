@@ -55,6 +55,7 @@ namespace node {
 
 namespace contextify {
 class ContextifyScript;
+class CompiledFnEntry;
 }
 
 namespace fs {
@@ -99,6 +100,8 @@ struct PackageConfig {
   const HasMain has_main;
   const std::string main;
   const PackageType type;
+
+  v8::Global<v8::Value> exports;
 };
 }  // namespace loader
 
@@ -155,6 +158,7 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(cached_data_produced_string, "cachedDataProduced")                         \
   V(cached_data_rejected_string, "cachedDataRejected")                         \
   V(cached_data_string, "cachedData")                                          \
+  V(cache_key_string, "cacheKey")                                              \
   V(change_string, "change")                                                   \
   V(channel_string, "channel")                                                 \
   V(chunks_sent_since_last_write_string, "chunksSentSinceLastWrite")           \
@@ -352,6 +356,7 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(as_callback_data_template, v8::FunctionTemplate)                           \
   V(async_wrap_ctor_template, v8::FunctionTemplate)                            \
   V(async_wrap_object_ctor_template, v8::FunctionTemplate)                     \
+  V(compiled_fn_entry_template, v8::ObjectTemplate)                            \
   V(fd_constructor_template, v8::ObjectTemplate)                               \
   V(fdclose_constructor_template, v8::ObjectTemplate)                          \
   V(filehandlereadwrap_template, v8::ObjectTemplate)                           \
@@ -463,6 +468,8 @@ class IsolateData : public MemoryRetainer {
   inline v8::Isolate* isolate() const;
   IsolateData(const IsolateData&) = delete;
   IsolateData& operator=(const IsolateData&) = delete;
+  IsolateData(IsolateData&&) = delete;
+  IsolateData& operator=(IsolateData&&) = delete;
 
  private:
   void DeserializeProperties(const std::vector<size_t>* indexes);
@@ -495,12 +502,6 @@ struct ContextInfo {
   const std::string name;
   std::string origin;
   bool is_default = false;
-};
-
-struct CompileFnEntry {
-  Environment* env;
-  uint32_t id;
-  CompileFnEntry(Environment* env, uint32_t id);
 };
 
 // Listing the AsyncWrap provider types first enables us to cast directly
@@ -553,6 +554,12 @@ class AsyncRequest : public MemoryRetainer {
  public:
   AsyncRequest() = default;
   ~AsyncRequest();
+
+  AsyncRequest(const AsyncRequest&) = delete;
+  AsyncRequest& operator=(const AsyncRequest&) = delete;
+  AsyncRequest(AsyncRequest&&) = delete;
+  AsyncRequest& operator=(AsyncRequest&&) = delete;
+
   void Install(Environment* env, void* data, uv_async_cb target);
   void Uninstall();
   void Stop();
@@ -573,6 +580,13 @@ class AsyncRequest : public MemoryRetainer {
 
 class KVStore {
  public:
+  KVStore() = default;
+  virtual ~KVStore() = default;
+  KVStore(const KVStore&) = delete;
+  KVStore& operator=(const KVStore&) = delete;
+  KVStore(KVStore&&) = delete;
+  KVStore& operator=(KVStore&&) = delete;
+
   virtual v8::Local<v8::String> Get(v8::Isolate* isolate,
                                     v8::Local<v8::String> key) const = 0;
   virtual void Set(v8::Isolate* isolate,
@@ -637,6 +651,9 @@ class AsyncHooks : public MemoryRetainer {
 
   AsyncHooks(const AsyncHooks&) = delete;
   AsyncHooks& operator=(const AsyncHooks&) = delete;
+  AsyncHooks(AsyncHooks&&) = delete;
+  AsyncHooks& operator=(AsyncHooks&&) = delete;
+  ~AsyncHooks() = default;
 
   // Used to set the kDefaultTriggerAsyncId in a scope. This is instead of
   // passing the trigger_async_id along with other constructor arguments.
@@ -650,6 +667,9 @@ class AsyncHooks : public MemoryRetainer {
 
     DefaultTriggerAsyncIdScope(const DefaultTriggerAsyncIdScope&) = delete;
     DefaultTriggerAsyncIdScope& operator=(const DefaultTriggerAsyncIdScope&) =
+        delete;
+    DefaultTriggerAsyncIdScope(DefaultTriggerAsyncIdScope&&) = delete;
+    DefaultTriggerAsyncIdScope& operator=(DefaultTriggerAsyncIdScope&&) =
         delete;
 
    private:
@@ -680,6 +700,8 @@ class AsyncCallbackScope {
   ~AsyncCallbackScope();
   AsyncCallbackScope(const AsyncCallbackScope&) = delete;
   AsyncCallbackScope& operator=(const AsyncCallbackScope&) = delete;
+  AsyncCallbackScope(AsyncCallbackScope&&) = delete;
+  AsyncCallbackScope& operator=(AsyncCallbackScope&&) = delete;
 
  private:
   Environment* env_;
@@ -698,6 +720,9 @@ class ImmediateInfo : public MemoryRetainer {
 
   ImmediateInfo(const ImmediateInfo&) = delete;
   ImmediateInfo& operator=(const ImmediateInfo&) = delete;
+  ImmediateInfo(ImmediateInfo&&) = delete;
+  ImmediateInfo& operator=(ImmediateInfo&&) = delete;
+  ~ImmediateInfo() = default;
 
   SET_MEMORY_INFO_NAME(ImmediateInfo)
   SET_SELF_SIZE(ImmediateInfo)
@@ -724,6 +749,9 @@ class TickInfo : public MemoryRetainer {
 
   TickInfo(const TickInfo&) = delete;
   TickInfo& operator=(const TickInfo&) = delete;
+  TickInfo(TickInfo&&) = delete;
+  TickInfo& operator=(TickInfo&&) = delete;
+  ~TickInfo() = default;
 
  private:
   friend class Environment;  // So we can call the constructor.
@@ -758,6 +786,12 @@ class ShouldNotAbortOnUncaughtScope {
   explicit inline ShouldNotAbortOnUncaughtScope(Environment* env);
   inline void Close();
   inline ~ShouldNotAbortOnUncaughtScope();
+  ShouldNotAbortOnUncaughtScope(const ShouldNotAbortOnUncaughtScope&) = delete;
+  ShouldNotAbortOnUncaughtScope& operator=(
+      const ShouldNotAbortOnUncaughtScope&) = delete;
+  ShouldNotAbortOnUncaughtScope(ShouldNotAbortOnUncaughtScope&&) = delete;
+  ShouldNotAbortOnUncaughtScope& operator=(ShouldNotAbortOnUncaughtScope&&) =
+      delete;
 
  private:
   Environment* env_;
@@ -797,6 +831,8 @@ class Environment : public MemoryRetainer {
  public:
   Environment(const Environment&) = delete;
   Environment& operator=(const Environment&) = delete;
+  Environment(Environment&&) = delete;
+  Environment& operator=(Environment&&) = delete;
 
   SET_MEMORY_INFO_NAME(Environment)
 
@@ -952,8 +988,7 @@ class Environment : public MemoryRetainer {
   std::unordered_map<uint32_t, loader::ModuleWrap*> id_to_module_map;
   std::unordered_map<uint32_t, contextify::ContextifyScript*>
       id_to_script_map;
-  std::unordered_set<CompileFnEntry*> compile_fn_entries;
-  std::unordered_map<uint32_t, v8::Global<v8::Function>> id_to_function_map;
+  std::unordered_map<uint32_t, contextify::CompiledFnEntry*> id_to_function_map;
 
   inline uint32_t get_next_module_id();
   inline uint32_t get_next_script_id();

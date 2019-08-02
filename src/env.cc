@@ -392,11 +392,6 @@ Environment::Environment(IsolateData* isolate_data,
   CreateProperties();
 }
 
-CompileFnEntry::CompileFnEntry(Environment* env, uint32_t id)
-    : env(env), id(id) {
-  env->compile_fn_entries.insert(this);
-}
-
 Environment::~Environment() {
   isolate()->GetHeapProfiler()->RemoveBuildEmbedderGraphCallback(
       BuildEmbedderGraph, this);
@@ -404,12 +399,6 @@ Environment::~Environment() {
   // Make sure there are no re-used libuv wrapper objects.
   // CleanupHandles() should have removed all of them.
   CHECK(file_handle_read_wrap_freelist_.empty());
-
-  // dispose the Persistent references to the compileFunction
-  // wrappers used in the dynamic import callback
-  for (auto& entry : compile_fn_entries) {
-    delete entry;
-  }
 
   HandleScope handle_scope(isolate());
 
@@ -972,8 +961,8 @@ void MemoryTracker::TrackField(const char* edge_name,
   // identified and tracked here (based on their deleters),
   // but we may convert and track other known types here.
   BaseObject* obj = value.GetBaseObject();
-  if (obj != nullptr) {
-    this->TrackField("arg", obj);
+  if (obj != nullptr && obj->IsDoneInitializing()) {
+    TrackField("arg", obj);
   }
   CHECK_EQ(CurrentNode(), n);
   CHECK_NE(n->size_, 0);
@@ -1094,6 +1083,8 @@ void BaseObject::DeleteMe(void* data) {
   BaseObject* self = static_cast<BaseObject*>(data);
   delete self;
 }
+
+bool BaseObject::IsDoneInitializing() const { return true; }
 
 Local<Object> BaseObject::WrappedObject() const {
   return object();

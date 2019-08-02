@@ -20,7 +20,14 @@ const fs = require('fs');
 const inp = fs.createReadStream('input.txt');
 const out = fs.createWriteStream('input.txt.gz');
 
-inp.pipe(gzip).pipe(out);
+inp.pipe(gzip)
+  .on('error', () => {
+    // handle error
+  })
+  .pipe(out)
+  .on('error', () => {
+    // handle error
+  });
 ```
 
 It is also possible to compress or decompress data in a single step:
@@ -258,8 +265,7 @@ All of the constants defined in `zlib.h` are also defined on
 `require('zlib').constants`. In the normal course of operations, it will not be
 necessary to use these constants. They are documented so that their presence is
 not surprising. This section is taken almost directly from the
-[zlib documentation][]. See <https://zlib.net/manual.html#Constants> for more
-details.
+[zlib documentation][].
 
 Previously, the constants were available directly from `require('zlib')`, for
 instance `zlib.Z_NO_FLUSH`. Accessing the constants directly from the module is
@@ -408,8 +414,8 @@ ignored by the decompression classes.
   empty dictionary by default)
 * `info` {boolean} (If `true`, returns an object with `buffer` and `engine`.)
 
-See the description of `deflateInit2` and `inflateInit2` at
-<https://zlib.net/manual.html#Advanced> for more information on these.
+See the [`deflateInit2` and `inflateInit2`][] documentation for more
+information.
 
 ## Class: BrotliOptions
 <!-- YAML
@@ -680,6 +686,7 @@ added: v0.5.8
 * `options` {zlib options}
 
 Creates and returns a new [`Gzip`][] object.
+See [example][zlib.createGzip example].
 
 ## zlib.createInflate([options])
 <!-- YAML
@@ -1039,6 +1046,7 @@ Decompress a chunk of data with [`Unzip`][].
 [`Inflate`]: #zlib_class_zlib_inflate
 [`TypedArray`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray
 [`Unzip`]: #zlib_class_zlib_unzip
+[`deflateInit2` and `inflateInit2`]: https://zlib.net/manual.html#Advanced
 [`stream.Transform`]: stream.html#stream_class_stream_transform
 [`zlib.bytesWritten`]: #zlib_zlib_byteswritten
 [Brotli parameters]: #zlib_brotli_constants
@@ -1046,3 +1054,4 @@ Decompress a chunk of data with [`Unzip`][].
 [RFC 7932]: https://www.rfc-editor.org/rfc/rfc7932.txt
 [pool size]: cli.html#cli_uv_threadpool_size_size
 [zlib documentation]: https://zlib.net/manual.html#Constants
+[zlib.createGzip example]: #zlib_zlib

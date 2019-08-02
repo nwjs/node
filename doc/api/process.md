@@ -36,6 +36,23 @@ termination, such as calling [`process.exit()`][] or uncaught exceptions.
 The `'beforeExit'` should *not* be used as an alternative to the `'exit'` event
 unless the intention is to schedule additional work.
 
+```js
+process.on('beforeExit', (code) => {
+  console.log('Process beforeExit event with code: ', code);
+});
+
+process.on('exit', (code) => {
+  console.log('Process exit event with code: ', code);
+});
+
+console.log('This message is displayed first.');
+
+// Prints:
+// This message is displayed first.
+// Process beforeExit event with code: 0
+// Process exit event with code: 0
+```
+
 ### Event: 'disconnect'
 <!-- YAML
 added: v0.7.7
@@ -1684,6 +1701,8 @@ relied upon to exist.
 added: v11.8.0
 -->
 
+> Stability: 1 - Experimental
+
 * {Object}
 
 `process.report` is an object whose methods are used to generate diagnostic
@@ -1694,6 +1713,8 @@ reports for the current process. Additional documentation is available in the
 <!-- YAML
 added: v11.12.0
 -->
+
+> Stability: 1 - Experimental
 
 * {string}
 
@@ -1710,6 +1731,8 @@ console.log(`Report directory is ${process.report.directory}`);
 added: v11.12.0
 -->
 
+> Stability: 1 - Experimental
+
 * {string}
 
 Filename where the report is written. If set to the empty string, the output
@@ -1725,15 +1748,22 @@ console.log(`Report filename is ${process.report.filename}`);
 added: v11.8.0
 -->
 
-* `err` {Error} A custom error used for reporting the JavaScript stack.
-* Returns: {string}
+> Stability: 1 - Experimental
 
-Returns a JSON-formatted diagnostic report for the running process. The report's
-JavaScript stack trace is taken from `err`, if present.
+* `err` {Error} A custom error used for reporting the JavaScript stack.
+* Returns: {Object}
+
+Returns a JavaScript Object representation of a diagnostic report for the
+running process. The report's JavaScript stack trace is taken from `err`, if
+present.
 
 ```js
 const data = process.report.getReport();
-console.log(data);
+console.log(data.header.nodeJsVersion);
+
+// Similar to process.report.writeReport()
+const fs = require('fs');
+fs.writeFileSync(util.inspect(data), 'my-report.log', 'utf8');
 ```
 
 Additional documentation is available in the [report documentation][].
@@ -1742,6 +1772,8 @@ Additional documentation is available in the [report documentation][].
 <!-- YAML
 added: v11.12.0
 -->
+
+> Stability: 1 - Experimental
 
 * {boolean}
 
@@ -1757,6 +1789,8 @@ console.log(`Report on fatal error: ${process.report.reportOnFatalError}`);
 added: v11.12.0
 -->
 
+> Stability: 1 - Experimental
+
 * {boolean}
 
 If `true`, a diagnostic report is generated when the process receives the
@@ -1771,6 +1805,8 @@ console.log(`Report on signal: ${process.report.reportOnSignal}`);
 added: v11.12.0
 -->
 
+> Stability: 1 - Experimental
+
 * {boolean}
 
 If `true`, a diagnostic report is generated on uncaught exception.
@@ -1783,6 +1819,8 @@ console.log(`Report on exception: ${process.report.reportOnUncaughtException}`);
 <!-- YAML
 added: v11.12.0
 -->
+
+> Stability: 1 - Experimental
 
 * {string}
 
@@ -1797,6 +1835,8 @@ console.log(`Report signal: ${process.report.signal}`);
 <!-- YAML
 added: v11.8.0
 -->
+
+> Stability: 1 - Experimental
 
 * `filename` {string} Name of the file where the report is written. This
   should be a relative path, that will be appended to the directory specified in
@@ -1821,60 +1861,48 @@ Additional documentation is available in the [report documentation][].
 added: v12.6.0
 -->
 
-* Returns: {Object}
-    * `userCPUTime` {integer}
-    * `systemCPUTime` {integer}
-    * `maxRSS` {integer}
-    * `sharedMemorySize` {integer}
-    * `unsharedDataSize` {integer}
-    * `unsharedStackSize` {integer}
-    * `minorPageFault` {integer}
-    * `majorPageFault` {integer}
-    * `swappedOut` {integer}
-    * `fsRead` {integer}
-    * `fsWrite` {integer}
-    * `ipcSent` {integer}
-    * `ipcReceived` {integer}
-    * `signalsCount` {integer}
-    * `voluntaryContextSwitches` {integer}
-    * `involuntaryContextSwitches` {integer}
-
-The `process.resourceUsage()` method returns the resource usage
-for the current process.
-All of these values come from the `uv_getrusage` call which returns
-[this struct][uv_rusage_t], here the mapping between node and libuv:
-- `userCPUTime` maps to `ru_utime` computed in microseconds.
-It is the values as [`process.cpuUsage().user`][process.cpuUsage]
-- `systemCPUTime` maps to `ru_stime` computed in microseconds.
-It is the value as [`process.cpuUsage().system`][process.cpuUsage]
-- `maxRSS` maps to `ru_maxrss` which is the maximum resident set size
-used (in kilobytes).
-- `sharedMemorySize` maps to `ru_ixrss` but is not supported by any platform.
-- `unsharedDataSize` maps to `ru_idrss` but is not supported by any platform.
-- `unsharedStackSize` maps to `ru_isrss` but is not supported by any platform.
-- `minorPageFault` maps to `ru_minflt` which is the number of minor page fault
-for the process, see [this article for more details][wikipedia_minor_fault]
-- `majorPageFault` maps to `ru_majflt` which is the number of major page fault
-for the process, see [this article for more details][wikipedia_major_fault].
-This field is not supported on Windows platforms.
-- `swappedOut` maps to `ru_nswap` which is not supported by any platform.
-- `fsRead` maps to `ru_inblock` which is the number of times the file system
-had to perform input.
-- `fsWrite` maps to `ru_oublock` which is the number of times the file system
-had to perform output.
-- `ipcSent` maps to `ru_msgsnd` but is not supported by any platform.
-- `ipcReceived` maps to `ru_msgrcv` but is not supported by any platform.
-- `signalsCount` maps to `ru_nsignals` but is not supported by any platform.
-- `voluntaryContextSwitches` maps to `ru_nvcsw` which is the number of times
-a CPU context switch resulted due to a process voluntarily giving up the
-processor before its time slice was completed
-(usually to await availability of a resource).
-This field is not supported on Windows platforms.
-- `involuntaryContextSwitches` maps to `ru_nivcsw` which is the number of times
-a CPU context switch resulted due to a higher priority process becoming runnable
- or because the current process exceeded its time slice.
-This field is not supported on Windows platforms.
-
+* Returns: {Object} the resource usage for the current process. All of these
+  values come from the `uv_getrusage` call which returns
+  a [`uv_rusage_t` struct][uv_rusage_t].
+    * `userCPUTime` {integer} maps to `ru_utime` computed in microseconds.
+      It is the same value as [`process.cpuUsage().user`][process.cpuUsage].
+    * `systemCPUTime` {integer} maps to `ru_stime` computed in microseconds.
+      It is the same value as [`process.cpuUsage().system`][process.cpuUsage].
+    * `maxRSS` {integer} maps to `ru_maxrss` which is the maximum resident set
+      size used in kilobytes.
+    * `sharedMemorySize` {integer} maps to `ru_ixrss` but is not supported by
+      any platform.
+    * `unsharedDataSize` {integer} maps to `ru_idrss` but is not supported by
+      any platform.
+    * `unsharedStackSize` {integer} maps to `ru_isrss` but is not supported by
+      any platform.
+    * `minorPageFault` {integer} maps to `ru_minflt` which is the number of
+      minor page faults for the process, see
+      [this article for more details][wikipedia_minor_fault].
+    * `majorPageFault` {integer} maps to `ru_majflt` which is the number of
+      major page faults for the process, see
+      [this article for more details][wikipedia_major_fault]. This field is not
+      supported on Windows.
+    * `swappedOut` {integer} maps to `ru_nswap` but is not supported by any
+      platform.
+    * `fsRead` {integer} maps to `ru_inblock` which is the number of times the
+      file system had to perform input.
+    * `fsWrite` {integer} maps to `ru_oublock` which is the number of times the
+      file system had to perform output.
+    * `ipcSent` {integer} maps to `ru_msgsnd` but is not supported by any
+      platform.
+    * `ipcReceived` {integer} maps to `ru_msgrcv` but is not supported by any
+      platform.
+    * `signalsCount` {integer} maps to `ru_nsignals` but is not supported by any
+      platform.
+    * `voluntaryContextSwitches` {integer} maps to `ru_nvcsw` which is the
+      number of times a CPU context switch resulted due to a process voluntarily
+      giving up the processor before its time slice was completed (usually to
+      await availability of a resource). This field is not supported on Windows.
+    * `involuntaryContextSwitches` {integer} maps to `ru_nivcsw` which is the
+      number of times a CPU context switch resulted due to a higher priority
+      process becoming runnable or because the current process exceeded its
+      time slice. This field is not supported on Windows.
 
 ```js
 console.log(process.resourceUsage());

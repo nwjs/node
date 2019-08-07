@@ -130,7 +130,6 @@ constexpr size_t kFsStatsBufferLength = kFsStatsFieldsNumber * 2;
   V(contextify_context_private_symbol, "node:contextify:context")             \
   V(contextify_global_private_symbol, "node:contextify:global")               \
   V(decorated_private_symbol, "node:decorated")                               \
-  V(napi_env, "node:napi:env")                                                \
   V(napi_wrapper, "node:napi:wrapper")                                        \
   V(sab_lifetimepartner_symbol, "node:sharedArrayBufferLifetimePartner")      \
 
@@ -1005,6 +1004,9 @@ class Environment : public MemoryRetainer {
   inline double* heap_space_statistics_buffer() const;
   inline void set_heap_space_statistics_buffer(double* pointer);
 
+  inline double* heap_code_statistics_buffer() const;
+  inline void set_heap_code_statistics_buffer(double* pointer);
+
   inline char* http_parser_buffer() const;
   inline void set_http_parser_buffer(char* buffer);
   inline bool http_parser_buffer_in_use() const;
@@ -1154,15 +1156,15 @@ class Environment : public MemoryRetainer {
     return current_value;
   }
 
-  typedef void (*native_immediate_callback)(Environment* env, void* data);
-  // cb will be called as cb(env, data) on the next event loop iteration.
-  // obj will be kept alive between now and after the callback has run.
-  inline void SetImmediate(native_immediate_callback cb,
-                           void* data,
-                           v8::Local<v8::Object> obj = v8::Local<v8::Object>());
-  inline void SetUnrefImmediate(native_immediate_callback cb,
-                                void* data,
-                                v8::Local<v8::Object> obj =
+  // cb will be called as cb(env) on the next event loop iteration.
+  // keep_alive will be kept alive between now and after the callback has run.
+  template <typename Fn>
+  inline void SetImmediate(Fn&& cb,
+                           v8::Local<v8::Object> keep_alive =
+                               v8::Local<v8::Object>());
+  template <typename Fn>
+  inline void SetUnrefImmediate(Fn&& cb,
+                                v8::Local<v8::Object> keep_alive =
                                     v8::Local<v8::Object>());
   // This needs to be available for the JS-land setImmediate().
   void ToggleImmediateRef(bool ref);
@@ -1227,9 +1229,9 @@ class Environment : public MemoryRetainer {
 #endif  // HAVE_INSPECTOR
 
  private:
-  inline void CreateImmediate(native_immediate_callback cb,
-                              void* data,
-                              v8::Local<v8::Object> obj,
+  template <typename Fn>
+  inline void CreateImmediate(Fn&& cb,
+                              v8::Local<v8::Object> keep_alive,
                               bool ref);
 
   inline void ThrowError(v8::Local<v8::Value> (*fun)(v8::Local<v8::String>),
@@ -1251,6 +1253,7 @@ class Environment : public MemoryRetainer {
   const uint64_t timer_base_;
   std::shared_ptr<KVStore> env_vars_;
   bool printed_error_ = false;
+  bool trace_sync_io_ = false;
   bool emit_env_nonstring_warning_ = true;
   bool emit_err_name_warning_ = true;
   size_t async_callback_scope_depth_ = 0;
@@ -1327,6 +1330,7 @@ class Environment : public MemoryRetainer {
 
   double* heap_statistics_buffer_ = nullptr;
   double* heap_space_statistics_buffer_ = nullptr;
+  double* heap_code_statistics_buffer_ = nullptr;
 
   char* http_parser_buffer_ = nullptr;
   bool http_parser_buffer_in_use_ = false;
@@ -1352,13 +1356,38 @@ class Environment : public MemoryRetainer {
 
   std::list<ExitCallback> at_exit_functions_;
 
-  struct NativeImmediateCallback {
-    native_immediate_callback cb_;
-    void* data_;
-    v8::Global<v8::Object> keep_alive_;
+  class NativeImmediateCallback {
+   public:
+    explicit inline NativeImmediateCallback(bool refed);
+
+    virtual ~NativeImmediateCallback() = default;
+    virtual void Call(Environment* env) = 0;
+
+    inline bool is_refed() const;
+    inline std::unique_ptr<NativeImmediateCallback> get_next();
+    inline void set_next(std::unique_ptr<NativeImmediateCallback> next);
+
+   private:
     bool refed_;
+    std::unique_ptr<NativeImmediateCallback> next_;
   };
-  std::vector<NativeImmediateCallback> native_immediate_callbacks_;
+
+  template <typename Fn>
+  class NativeImmediateCallbackImpl final : public NativeImmediateCallback {
+   public:
+    NativeImmediateCallbackImpl(Fn&& callback,
+                                v8::Global<v8::Object>&& keep_alive,
+                                bool refed);
+    void Call(Environment* env) override;
+
+   private:
+    Fn callback_;
+    v8::Global<v8::Object> keep_alive_;
+  };
+
+  std::unique_ptr<NativeImmediateCallback> native_immediate_callbacks_head_;
+  NativeImmediateCallback* native_immediate_callbacks_tail_ = nullptr;
+
   void RunAndClearNativeImmediates();
   static void CheckImmediate(uv_check_t* handle);
 

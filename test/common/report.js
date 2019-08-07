@@ -2,9 +2,11 @@
 'use strict';
 const assert = require('assert');
 const fs = require('fs');
+const net = require('net');
 const os = require('os');
 const path = require('path');
 const util = require('util');
+const cpus = os.cpus();
 
 function findReports(pid, dir) {
   // Default filenames are of the form
@@ -72,7 +74,7 @@ function _validateContent(report) {
                         'componentVersions', 'release', 'osName', 'osRelease',
                         'osVersion', 'osMachine', 'cpus', 'host',
                         'glibcVersionRuntime', 'glibcVersionCompiler', 'cwd',
-                        'reportVersion'];
+                        'reportVersion', 'networkInterfaces'];
   checkForUnknownFields(header, headerFields);
   assert.strictEqual(header.reportVersion, 1);  // Increment as needed.
   assert.strictEqual(typeof header.event, 'string');
@@ -98,6 +100,7 @@ function _validateContent(report) {
   assert.strictEqual(typeof header.osVersion, 'string');
   assert.strictEqual(typeof header.osMachine, 'string');
   assert(Array.isArray(header.cpus));
+  assert.strictEqual(header.cpus.length, cpus.length);
   header.cpus.forEach((cpu) => {
     assert.strictEqual(typeof cpu.model, 'string');
     assert.strictEqual(typeof cpu.speed, 'number');
@@ -106,6 +109,31 @@ function _validateContent(report) {
     assert.strictEqual(typeof cpu.sys, 'number');
     assert.strictEqual(typeof cpu.idle, 'number');
     assert.strictEqual(typeof cpu.irq, 'number');
+    assert(cpus.some((c) => {
+      return c.model === cpu.model;
+    }));
+  });
+
+  assert(Array.isArray(header.networkInterfaces));
+  header.networkInterfaces.forEach((iface) => {
+    assert.strictEqual(typeof iface.name, 'string');
+    assert.strictEqual(typeof iface.internal, 'boolean');
+    assert(/^([0-9A-F][0-9A-F]:){5}[0-9A-F]{2}$/i.test(iface.mac));
+
+    if (iface.family === 'IPv4') {
+      assert.strictEqual(net.isIPv4(iface.address), true);
+      assert.strictEqual(net.isIPv4(iface.netmask), true);
+      assert.strictEqual(iface.scopeid, undefined);
+    } else if (iface.family === 'IPv6') {
+      assert.strictEqual(net.isIPv6(iface.address), true);
+      assert.strictEqual(net.isIPv6(iface.netmask), true);
+      assert(Number.isInteger(iface.scopeid));
+    } else {
+      assert.strictEqual(iface.family, 'unknown');
+      assert.strictEqual(iface.address, undefined);
+      assert.strictEqual(iface.netmask, undefined);
+      assert.strictEqual(iface.scopeid, undefined);
+    }
   });
   assert.strictEqual(header.host, os.hostname());
 

@@ -554,10 +554,6 @@
             'cflags': [ '-m64', '-mminimal-toc' ],
             'ldflags': [ '-m64' ],
           }],
-          [ 'target_arch=="s390"', {
-            'cflags': [ '-m31', '-march=z196' ],
-            'ldflags': [ '-m31', '-march=z196' ],
-          }],
           [ 'target_arch=="s390x"', {
             'cflags': [ '-m64', '-march=z196' ],
             'ldflags': [ '-m64', '-march=z196' ],
@@ -660,6 +656,18 @@
       ['OS=="freebsd"', {
         'ldflags': [
           '-Wl,--export-dynamic',
+        ],
+      }],
+      # if node is built as an executable,
+      #      the openssl mechanism for keeping itself "dload"-ed to ensure proper
+      #      atexit cleanup does not apply
+      ['node_shared_openssl!="true" and node_shared!="true"', {
+        'defines': [
+          # `OPENSSL_NO_PINSHARED` prevents openssl from dload
+          #      current node executable,
+          #      see https://github.com/nodejs/node/pull/21848
+          #      or https://github.com/nodejs/node/issues/27925
+          'OPENSSL_NO_PINSHARED'
         ],
       }],
       ['node_shared_openssl!="true"', {

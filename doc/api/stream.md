@@ -380,6 +380,15 @@ the `'drain'` event before destroying the stream.
 Implementors should not override this method,
 but instead implement [`writable._destroy()`][writable-_destroy].
 
+##### writable.destroyed
+<!-- YAML
+added: v8.0.0
+-->
+
+* {boolean}
+
+Is `true` after [`writable.destroy()`][writable-destroy] has been called.
+
 ##### writable.end([chunk][, encoding][, callback])
 <!-- YAML
 added: v0.9.4
@@ -487,7 +496,7 @@ added: v12.6.0
 
 * {boolean}
 
-Is `true` if after the [`'finish'`][] event has been emitted.
+Is set to `true` immediately before the [`'finish'`][] event is emitted.
 
 ##### writable.writableHighWaterMark
 <!-- YAML
@@ -915,6 +924,15 @@ stream will release any internal resources and subsequent calls to `push()`
 will be ignored.
 Implementors should not override this method, but instead implement
 [`readable._destroy()`][readable-_destroy].
+
+##### readable.destroyed
+<!-- YAML
+added: v8.0.0
+-->
+
+* {boolean}
+
+Is `true` after [`readable.destroy()`][readable-destroy] has been called.
 
 ##### readable.isPaused()
 <!-- YAML
@@ -2504,23 +2522,23 @@ readable.on('data', (chunk) => {
 
 #### Piping to Writable Streams from Async Iterators
 
-In the scenario of writing to a writeable stream from an async iterator,
+In the scenario of writing to a writable stream from an async iterator,
 it is important to ensure the correct handling of backpressure and errors.
 
 ```js
 const { once } = require('events');
 
-const writeable = fs.createWriteStream('./file');
+const writable = fs.createWriteStream('./file');
 
 (async function() {
   for await (const chunk of iterator) {
     // Handle backpressure on write().
-    if (!writeable.write(chunk))
-      await once(writeable, 'drain');
+    if (!writable.write(chunk))
+      await once(writable, 'drain');
   }
-  writeable.end();
+  writable.end();
   // Ensure completion without errors.
-  await once(writeable, 'finish');
+  await once(writable, 'finish');
 })();
 ```
 
@@ -2533,13 +2551,13 @@ then piped via `.pipe()`:
 ```js
 const { once } = require('events');
 
-const writeable = fs.createWriteStream('./file');
+const writable = fs.createWriteStream('./file');
 
 (async function() {
   const readable = Readable.from(iterator);
-  readable.pipe(writeable);
+  readable.pipe(writable);
   // Ensure completion without errors.
-  await once(writeable, 'finish');
+  await once(writable, 'finish');
 })();
 ```
 

@@ -36,67 +36,51 @@ class BufferFinalizer : private Finalizer {
  public:
   // node::Buffer::FreeCallback
   static void FinalizeBufferCallback(char* data, void* hint) {
-    BufferFinalizer* finalizer = static_cast<BufferFinalizer*>(hint);
+    std::unique_ptr<BufferFinalizer, Deleter> finalizer{
+        static_cast<BufferFinalizer*>(hint)};
     finalizer->_finalize_data = data;
-    static_cast<node_napi_env>(finalizer->_env)->node_env()
-        ->SetImmediate([](node::Environment* env, void* hint) {
-      BufferFinalizer* finalizer = static_cast<BufferFinalizer*>(hint);
 
-      if (finalizer->_finalize_callback != nullptr) {
-        v8::HandleScope handle_scope(finalizer->_env->isolate);
-        v8::Context::Scope context_scope(finalizer->_env->context());
+    node::Environment* node_env =
+        static_cast<node_napi_env>(finalizer->_env)->node_env();
+    node_env->SetImmediate(
+        [finalizer = std::move(finalizer)](node::Environment* env) {
+      if (finalizer->_finalize_callback == nullptr) return;
 
-        NapiCallIntoModuleThrow(finalizer->_env, [&]() {
-          finalizer->_finalize_callback(
-              finalizer->_env,
-              finalizer->_finalize_data,
-              finalizer->_finalize_hint);
-        });
-      }
+      v8::HandleScope handle_scope(finalizer->_env->isolate);
+      v8::Context::Scope context_scope(finalizer->_env->context());
 
-      Delete(finalizer);
-    }, hint);
+      finalizer->_env->CallIntoModuleThrow([&](napi_env env) {
+        finalizer->_finalize_callback(
+            env,
+            finalizer->_finalize_data,
+            finalizer->_finalize_hint);
+      });
+    });
   }
+
+  struct Deleter {
+    void operator()(BufferFinalizer* finalizer) {
+      Finalizer::Delete(finalizer);
+    }
+  };
 };
 
-static inline napi_env GetEnv(v8::Local<v8::Context> context) {
+static inline napi_env NewEnv(v8::Local<v8::Context> context) {
   node_napi_env result;
 
-  auto isolate = context->GetIsolate();
-  auto global = context->Global();
-
-  // In the case of the string for which we grab the private and the value of
-  // the private on the global object we can call .ToLocalChecked() directly
-  // because we need to stop hard if either of them is empty.
-  //
-  // Re https://github.com/nodejs/node/pull/14217#discussion_r128775149
-  auto value = global->GetPrivate(context, NAPI_PRIVATE_KEY(context, env))
-      .ToLocalChecked();
-
-  if (value->IsExternal()) {
-    result = static_cast<node_napi_env>(value.As<v8::External>()->Value());
-  } else {
-    result = new node_napi_env__(context);
-    auto external = v8::External::New(isolate, result);
-
-    // We must also stop hard if the result of assigning the env to the global
-    // is either nothing or false.
-    CHECK(global->SetPrivate(context, NAPI_PRIVATE_KEY(context, env), external)
-        .FromJust());
-
-    // TODO(addaleax): There was previously code that tried to delete the
-    // napi_env when its v8::Context was garbage collected;
-    // However, as long as N-API addons using this napi_env are in place,
-    // the Context needs to be accessible and alive.
-    // Ideally, we'd want an on-addon-unload hook that takes care of this
-    // once all N-API addons using this napi_env are unloaded.
-    // For now, a per-Environment cleanup hook is the best we can do.
-    result->node_env()->AddCleanupHook(
-        [](void* arg) {
-          static_cast<napi_env>(arg)->Unref();
-        },
-        static_cast<void*>(result));
-  }
+  result = new node_napi_env__(context);
+  // TODO(addaleax): There was previously code that tried to delete the
+  // napi_env when its v8::Context was garbage collected;
+  // However, as long as N-API addons using this napi_env are in place,
+  // the Context needs to be accessible and alive.
+  // Ideally, we'd want an on-addon-unload hook that takes care of this
+  // once all N-API addons using this napi_env are unloaded.
+  // For now, a per-Environment cleanup hook is the best we can do.
+  result->node_env()->AddCleanupHook(
+      [](void* arg) {
+        static_cast<napi_env>(arg)->Unref();
+      },
+      static_cast<void*>(result));
 
   return result;
 }
@@ -325,7 +309,7 @@ class ThreadSafeFunction : public node::AsyncResource {
             v8::Local<v8::Function>::New(env->isolate, ref);
           js_callback = v8impl::JsValueFromV8LocalValue(js_cb);
         }
-        NapiCallIntoModuleThrow(env, [&]() {
+        env->CallIntoModuleThrow([&](napi_env env) {
           call_js_cb(env, js_callback, context, data);
         });
       }
@@ -346,7 +330,7 @@ class ThreadSafeFunction : public node::AsyncResource {
     v8::HandleScope scope(env->isolate);
     if (finalize_cb) {
       CallbackScope cb_scope(this);
-      NapiCallIntoModuleThrow(env, [&]() {
+      env->CallIntoModuleThrow([&](napi_env env) {
         finalize_cb(env, finalize_data, context);
       });
     }
@@ -481,10 +465,10 @@ void napi_module_register_by_symbol(v8::Local<v8::Object> exports,
 
   // Create a new napi_env for this module or reference one if a pre-existing
   // one is found.
-  napi_env env = v8impl::GetEnv(context);
+  napi_env env = v8impl::NewEnv(context);
 
   napi_value _exports;
-  NapiCallIntoModuleThrow(env, [&]() {
+  env->CallIntoModuleThrow([&](napi_env env) {
     _exports = init(env, v8impl::JsValueFromV8LocalValue(exports));
   });
 
@@ -889,15 +873,9 @@ class Work : public node::AsyncResource, public node::ThreadPoolWork {
 
     CallbackScope callback_scope(this);
 
-    // We have to back up the env here because the `NAPI_CALL_INTO_MODULE` macro
-    // makes use of it after the call into the module completes, but the module
-    // may have deallocated **this**, and along with it the place where _env is
-    // stored.
-    napi_env env = _env;
-
-    NapiCallIntoModule(env, [&]() {
-      _complete(_env, ConvertUVErrorCode(status), _data);
-    }, [env](v8::Local<v8::Value> local_err) {
+    _env->CallIntoModule([&](napi_env env) {
+      _complete(env, ConvertUVErrorCode(status), _data);
+    }, [](napi_env env, v8::Local<v8::Value> local_err) {
       // If there was an unhandled exception in the complete callback,
       // report it as a fatal exception. (There is no JavaScript on the
       // callstack that can possibly handle it.)

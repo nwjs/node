@@ -465,7 +465,7 @@ inline void Environment::set_printed_error(bool value) {
 }
 
 inline void Environment::set_trace_sync_io(bool value) {
-  options_->trace_sync_io = value;
+  trace_sync_io_ = value;
 }
 
 inline bool Environment::abort_on_uncaught_exception() const {
@@ -567,6 +567,16 @@ inline double* Environment::heap_space_statistics_buffer() const {
 inline void Environment::set_heap_space_statistics_buffer(double* pointer) {
   CHECK_NULL(heap_space_statistics_buffer_);  // Should be set only once.
   heap_space_statistics_buffer_ = pointer;
+}
+
+inline double* Environment::heap_code_statistics_buffer() const {
+  CHECK_NOT_NULL(heap_code_statistics_buffer_);
+  return heap_code_statistics_buffer_;
+}
+
+inline void Environment::set_heap_code_statistics_buffer(double* pointer) {
+  CHECK_NULL(heap_code_statistics_buffer_);  // Should be set only once.
+  heap_code_statistics_buffer_ = pointer;
 }
 
 inline char* Environment::http_parser_buffer() const {
@@ -743,33 +753,66 @@ inline void IsolateData::set_options(
   options_ = std::move(options);
 }
 
-void Environment::CreateImmediate(native_immediate_callback cb,
-                                  void* data,
-                                  v8::Local<v8::Object> obj,
+template <typename Fn>
+void Environment::CreateImmediate(Fn&& cb,
+                                  v8::Local<v8::Object> keep_alive,
                                   bool ref) {
-  native_immediate_callbacks_.push_back({
-    cb,
-    data,
-    v8::Global<v8::Object>(isolate_, obj),
-    ref
-  });
+  auto callback = std::make_unique<NativeImmediateCallbackImpl<Fn>>(
+      std::move(cb),
+      v8::Global<v8::Object>(isolate(), keep_alive),
+      ref);
+  NativeImmediateCallback* prev_tail = native_immediate_callbacks_tail_;
+
+  native_immediate_callbacks_tail_ = callback.get();
+  if (prev_tail != nullptr)
+    prev_tail->set_next(std::move(callback));
+  else
+    native_immediate_callbacks_head_ = std::move(callback);
+
   immediate_info()->count_inc(1);
 }
 
-void Environment::SetImmediate(native_immediate_callback cb,
-                               void* data,
-                               v8::Local<v8::Object> obj) {
-  CreateImmediate(cb, data, obj, true);
+template <typename Fn>
+void Environment::SetImmediate(Fn&& cb, v8::Local<v8::Object> keep_alive) {
+  CreateImmediate(std::move(cb), keep_alive, true);
 
   if (immediate_info()->ref_count() == 0)
     ToggleImmediateRef(true);
   immediate_info()->ref_count_inc(1);
 }
 
-void Environment::SetUnrefImmediate(native_immediate_callback cb,
-                                    void* data,
-                                    v8::Local<v8::Object> obj) {
-  CreateImmediate(cb, data, obj, false);
+template <typename Fn>
+void Environment::SetUnrefImmediate(Fn&& cb, v8::Local<v8::Object> keep_alive) {
+  CreateImmediate(std::move(cb), keep_alive, false);
+}
+
+Environment::NativeImmediateCallback::NativeImmediateCallback(bool refed)
+  : refed_(refed) {}
+
+bool Environment::NativeImmediateCallback::is_refed() const {
+  return refed_;
+}
+
+std::unique_ptr<Environment::NativeImmediateCallback>
+Environment::NativeImmediateCallback::get_next() {
+  return std::move(next_);
+}
+
+void Environment::NativeImmediateCallback::set_next(
+    std::unique_ptr<NativeImmediateCallback> next) {
+  next_ = std::move(next);
+}
+
+template <typename Fn>
+Environment::NativeImmediateCallbackImpl<Fn>::NativeImmediateCallbackImpl(
+    Fn&& callback, v8::Global<v8::Object>&& keep_alive, bool refed)
+  : NativeImmediateCallback(refed),
+    callback_(std::move(callback)),
+    keep_alive_(std::move(keep_alive)) {}
+
+template <typename Fn>
+void Environment::NativeImmediateCallbackImpl<Fn>::Call(Environment* env) {
+  callback_(env);
 }
 
 inline bool Environment::can_call_into_js() const {

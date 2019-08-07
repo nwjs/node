@@ -279,7 +279,7 @@ std::string GetExecPath(const std::vector<std::string>& argv) {
   uv_fs_t req;
   req.ptr = nullptr;
   if (0 ==
-      uv_fs_realpath(env->event_loop(), &req, exec_path.c_str(), nullptr)) {
+      uv_fs_realpath(nullptr, &req, exec_path.c_str(), nullptr)) {
     CHECK_NOT_NULL(req.ptr);
     exec_path = std::string(static_cast<char*>(req.ptr));
   }
@@ -343,7 +343,7 @@ Environment::Environment(IsolateData* isolate_data,
       [](void* arg) {
         Environment* env = static_cast<Environment*>(arg);
         if (!env->destroy_async_id_list()->empty())
-          AsyncWrap::DestroyAsyncIdsCallback(env, nullptr);
+          AsyncWrap::DestroyAsyncIdsCallback(env);
       },
       this);
 
@@ -421,6 +421,7 @@ Environment::~Environment() {
   delete[] heap_statistics_buffer_;
   delete[] heap_space_statistics_buffer_;
   delete[] http_parser_buffer_;
+  delete[] heap_code_statistics_buffer_;
 
   TRACE_EVENT_NESTABLE_ASYNC_END0(
     TRACING_CATEGORY_NODE1(environment), "Environment", this);
@@ -573,7 +574,7 @@ void Environment::StopProfilerIdleNotifier() {
 }
 
 void Environment::PrintSyncTrace() const {
-  if (!options_->trace_sync_io) return;
+  if (!trace_sync_io_) return;
 
   HandleScope handle_scope(isolate());
 
@@ -648,42 +649,38 @@ void Environment::AtExit(void (*cb)(void* arg), void* arg) {
 void Environment::RunAndClearNativeImmediates() {
   TraceEventScope trace_scope(TRACING_CATEGORY_NODE1(environment),
                               "RunAndClearNativeImmediates", this);
-  size_t count = native_immediate_callbacks_.size();
-  if (count > 0) {
-    size_t ref_count = 0;
-    std::vector<NativeImmediateCallback> list;
-    native_immediate_callbacks_.swap(list);
-    auto drain_list = [&]() {
-      TryCatchScope try_catch(this);
-      for (auto it = list.begin(); it != list.end(); ++it) {
-        DebugSealHandleScope seal_handle_scope(isolate());
-        it->cb_(this, it->data_);
-        if (it->refed_)
-          ref_count++;
-        if (UNLIKELY(try_catch.HasCaught())) {
-          if (!try_catch.HasTerminated())
-            errors::TriggerUncaughtException(isolate(), try_catch);
+  size_t ref_count = 0;
+  size_t count = 0;
+  std::unique_ptr<NativeImmediateCallback> head;
+  head.swap(native_immediate_callbacks_head_);
+  native_immediate_callbacks_tail_ = nullptr;
 
-          // We are done with the current callback. Increase the counter so that
-          // the steps below make everything *after* the current item part of
-          // the new list.
-          it++;
+  auto drain_list = [&]() {
+    TryCatchScope try_catch(this);
+    for (; head; head = head->get_next()) {
+      DebugSealHandleScope seal_handle_scope(isolate());
+      count++;
+      if (head->is_refed())
+        ref_count++;
 
-          // Bail out, remove the already executed callbacks from list
-          // and set up a new TryCatch for the other pending callbacks.
-          std::move_backward(it, list.end(), list.begin() + (list.end() - it));
-          list.resize(list.end() - it);
-          return true;
-        }
+      head->Call(this);
+      if (UNLIKELY(try_catch.HasCaught())) {
+        if (!try_catch.HasTerminated())
+          errors::TriggerUncaughtException(isolate(), try_catch);
+
+        // We are done with the current callback. Move one iteration along,
+        // as if we had completed successfully.
+        head = head->get_next();
+        return true;
       }
-      return false;
-    };
-    while (drain_list()) {}
+    }
+    return false;
+  };
+  while (head && drain_list()) {}
 
-    DCHECK_GE(immediate_info()->count(), count);
-    immediate_info()->count_dec(count);
-    immediate_info()->ref_count_dec(ref_count);
-  }
+  DCHECK_GE(immediate_info()->count(), count);
+  immediate_info()->count_dec(count);
+  immediate_info()->ref_count_dec(ref_count);
 }
 
 

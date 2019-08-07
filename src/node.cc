@@ -268,7 +268,7 @@ int Environment::InitializeInspector(
 
   profiler::StartProfilers(this);
 
-  if (options_->debug_options().break_node_first_line) {
+  if (inspector_agent_->options().break_node_first_line) {
     inspector_agent_->PauseOnNextJavascriptStatement("Break at bootstrap");
   }
 
@@ -754,6 +754,9 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
   // Make sure InitializeNodeWithArgs() is called only once.
   CHECK(!init_called.exchange(true));
 
+  // Initialize node_start_time to get relative uptime.
+  per_process::node_start_time = uv_hrtime();
+
   // Register built-in modules
   binding::RegisterBuiltinModules();
 
@@ -1044,7 +1047,6 @@ void StartupDataHandler::Load(const char* blob_file,
 InitializationResult InitializeOncePerProcess(int argc, char** argv) {
   atexit(ResetStdio);
   PlatformInit();
-  per_process::node_start_time = uv_hrtime();
 
   CHECK_GT(argc, 0);
 

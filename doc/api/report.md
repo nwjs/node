@@ -63,7 +63,7 @@ is provided below for reference.
     "osRelease": "3.10.0-862.el7.x86_64",
     "osVersion": "#1 SMP Wed Mar 21 18:14:51 EDT 2018",
     "osMachine": "x86_64",
-    "osCpus": [
+    "cpus": [
       {
         "model": "Intel(R) Core(TM) i7-6820HQ CPU @ 2.70GHz",
         "speed": 2700,
@@ -81,6 +81,16 @@ is provided below for reference.
         "sys": 50902570,
         "idle": 241732220,
         "irq": 0
+      }
+    ],
+    "networkInterfaces": [
+      {
+        "name": "en0",
+        "internal": false,
+        "mac": "13:10:de:ad:be:ef",
+        "address": "10.0.0.37",
+        "netmask": "255.255.255.0",
+        "family": "IPv4"
       }
     ],
     "host": "test_machine"

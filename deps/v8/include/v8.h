@@ -1940,6 +1940,11 @@ class V8_EXPORT StackFrame {
    * Returns whether or not the associated functions is defined in wasm.
    */
   bool IsWasm() const;
+
+  /**
+   * Returns whether or not the associated function is defined by the user.
+   */
+  bool IsUserJavaScript() const;
 };
 
 
@@ -1958,10 +1963,11 @@ enum StateTag {
 // A RegisterState represents the current state of registers used
 // by the sampling profiler API.
 struct RegisterState {
-  RegisterState() : pc(nullptr), sp(nullptr), fp(nullptr) {}
+  RegisterState() : pc(nullptr), sp(nullptr), fp(nullptr), lr(nullptr) {}
   void* pc;  // Instruction pointer.
   void* sp;  // Stack pointer.
   void* fp;  // Frame pointer.
+  void* lr;  // Link register (or nullptr on platforms without a link register).
 };
 
 // The output structure filled up by GetStackSample API function.
@@ -2127,10 +2133,10 @@ class V8_EXPORT ValueSerializer {
   void WriteDouble(double value);
   void WriteRawBytes(const void* source, size_t length);
 
- private:
   ValueSerializer(const ValueSerializer&) = delete;
   void operator=(const ValueSerializer&) = delete;
 
+ private:
   struct PrivateData;
   PrivateData* private_;
 };
@@ -2229,10 +2235,10 @@ class V8_EXPORT ValueDeserializer {
   V8_WARN_UNUSED_RESULT bool ReadDouble(double* value);
   V8_WARN_UNUSED_RESULT bool ReadRawBytes(size_t length, const void** data);
 
- private:
   ValueDeserializer(const ValueDeserializer&) = delete;
   void operator=(const ValueDeserializer&) = delete;
 
+ private:
   struct PrivateData;
   PrivateData* private_;
 };
@@ -2771,6 +2777,10 @@ class V8_EXPORT String : public Name {
      */
     virtual bool IsCacheable() const { return true; }
 
+    // Disallow copying and assigning.
+    ExternalStringResourceBase(const ExternalStringResourceBase&) = delete;
+    void operator=(const ExternalStringResourceBase&) = delete;
+
    protected:
     ExternalStringResourceBase() = default;
 
@@ -2799,10 +2809,6 @@ class V8_EXPORT String : public Name {
      * Unlocks the string.
      */
     virtual void Unlock() const {}
-
-    // Disallow copying and assigning.
-    ExternalStringResourceBase(const ExternalStringResourceBase&) = delete;
-    void operator=(const ExternalStringResourceBase&) = delete;
 
    private:
     friend class internal::ExternalString;
@@ -3362,8 +3368,8 @@ enum class IntegrityLevel { kFrozen, kSealed };
  */
 class V8_EXPORT Object : public Value {
  public:
-  V8_DEPRECATE_SOON("Use maybe version",
-                    bool Set(Local<Value> key, Local<Value> value));
+  V8_DEPRECATED("Use maybe version",
+                bool Set(Local<Value> key, Local<Value> value));
   /**
    * Set only return Just(true) or Empty(), so if it should never fail, use
    * result.Check().
@@ -3371,8 +3377,8 @@ class V8_EXPORT Object : public Value {
   V8_WARN_UNUSED_RESULT Maybe<bool> Set(Local<Context> context,
                                         Local<Value> key, Local<Value> value);
 
-  V8_DEPRECATE_SOON("Use maybe version",
-                    bool Set(uint32_t index, Local<Value> value));
+  V8_DEPRECATED("Use maybe version",
+                bool Set(uint32_t index, Local<Value> value));
   V8_WARN_UNUSED_RESULT Maybe<bool> Set(Local<Context> context, uint32_t index,
                                         Local<Value> value);
 
@@ -3416,11 +3422,11 @@ class V8_EXPORT Object : public Value {
   V8_WARN_UNUSED_RESULT Maybe<bool> DefineProperty(
       Local<Context> context, Local<Name> key, PropertyDescriptor& descriptor);
 
-  V8_DEPRECATE_SOON("Use maybe version", Local<Value> Get(Local<Value> key));
+  V8_DEPRECATED("Use maybe version", Local<Value> Get(Local<Value> key));
   V8_WARN_UNUSED_RESULT MaybeLocal<Value> Get(Local<Context> context,
                                               Local<Value> key);
 
-  V8_DEPRECATE_SOON("Use maybe version", Local<Value> Get(uint32_t index));
+  V8_DEPRECATED("Use maybe version", Local<Value> Get(uint32_t index));
   V8_WARN_UNUSED_RESULT MaybeLocal<Value> Get(Local<Context> context,
                                               uint32_t index);
 
@@ -6828,8 +6834,6 @@ class V8_EXPORT MicrotaskQueue {
  private:
   friend class internal::MicrotaskQueue;
   MicrotaskQueue() = default;
-  MicrotaskQueue(const MicrotaskQueue&) = delete;
-  MicrotaskQueue& operator=(const MicrotaskQueue&) = delete;
 };
 
 /**
@@ -7220,6 +7224,11 @@ enum class MemoryPressureLevel { kNone, kModerate, kCritical };
  */
 class V8_EXPORT EmbedderHeapTracer {
  public:
+  enum TraceFlags : uint64_t {
+    kNoFlags = 0,
+    kReduceMemory = 1 << 0,
+  };
+
   // Indicator for the stack state of the embedder.
   enum EmbedderStackState {
     kUnknown,
@@ -7234,6 +7243,24 @@ class V8_EXPORT EmbedderHeapTracer {
    public:
     virtual ~TracedGlobalHandleVisitor() = default;
     virtual void VisitTracedGlobalHandle(const TracedGlobal<Value>& value) = 0;
+  };
+
+  /**
+   * Summary of a garbage collection cycle. See |TraceEpilogue| on how the
+   * summary is reported.
+   */
+  struct TraceSummary {
+    /**
+     * Time spent managing the retained memory in milliseconds. This can e.g.
+     * include the time tracing through objects in the embedder.
+     */
+    double time = 0.0;
+
+    /**
+     * Memory retained by the embedder through the |EmbedderHeapTracer|
+     * mechanism in bytes.
+     */
+    size_t allocated_size = 0;
   };
 
   virtual ~EmbedderHeapTracer() = default;
@@ -7258,7 +7285,8 @@ class V8_EXPORT EmbedderHeapTracer {
   /**
    * Called at the beginning of a GC cycle.
    */
-  virtual void TracePrologue() = 0;
+  V8_DEPRECATE_SOON("Use version with flags.", virtual void TracePrologue()) {}
+  virtual void TracePrologue(TraceFlags flags);
 
   /**
    * Called to advance tracing in the embedder.
@@ -7281,9 +7309,12 @@ class V8_EXPORT EmbedderHeapTracer {
   /**
    * Called at the end of a GC cycle.
    *
-   * Note that allocation is *not* allowed within |TraceEpilogue|.
+   * Note that allocation is *not* allowed within |TraceEpilogue|. Can be
+   * overriden to fill a |TraceSummary| that is used by V8 to schedule future
+   * garbage collections.
    */
-  virtual void TraceEpilogue() = 0;
+  virtual void TraceEpilogue() {}
+  virtual void TraceEpilogue(TraceSummary* trace_summary) { TraceEpilogue(); }
 
   /**
    * Called upon entering the final marking pause. No more incremental marking
@@ -7319,6 +7350,14 @@ class V8_EXPORT EmbedderHeapTracer {
    * Should only be used in testing code.
    */
   void GarbageCollectionForTesting(EmbedderStackState stack_state);
+
+  /*
+   * Called by the embedder to signal newly allocated memory. Not bound to
+   * tracing phases. Embedders should trade off when increments are reported as
+   * V8 may consult global heuristics on whether to trigger garbage collection
+   * on this change.
+   */
+  void IncreaseAllocatedSize(size_t bytes);
 
   /*
    * Returns the v8::Isolate this tracer is attached too and |nullptr| if it
@@ -8677,6 +8716,7 @@ class V8_EXPORT V8 {
   /**
    * Sets V8 flags from a string.
    */
+  static void SetFlagsFromString(const char* str);
   static void SetFlagsFromString(const char* str, int length);
 
   /**
@@ -10951,7 +10991,8 @@ int64_t Isolate::AdjustAmountOfExternalAllocatedMemory(
   *external_memory = amount;
 
   int64_t allocation_diff_since_last_mc =
-      *external_memory - *external_memory_at_last_mc;
+      static_cast<int64_t>(static_cast<uint64_t>(*external_memory) -
+                           static_cast<uint64_t>(*external_memory_at_last_mc));
   // Only check memory pressure and potentially trigger GC if the amount of
   // external memory increased.
   if (allocation_diff_since_last_mc > kMemoryReducerActivationLimit) {

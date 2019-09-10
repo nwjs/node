@@ -170,11 +170,15 @@ clean: ## Remove build artifacts.
 	$(RM) -r node_modules
 	@if [ -d deps/icu ]; then echo deleting deps/icu; $(RM) -r deps/icu; fi
 	$(RM) test.tap
-	# Next one is legacy remove this at some point
-	$(RM) -r test/tmp*
-	$(RM) -r test/.tmp*
+	$(MAKE) testclean
 	$(MAKE) test-addons-clean
 	$(MAKE) bench-addons-clean
+
+.PHONY: testclean
+testclean:
+# Next one is legacy remove this at some point
+	$(RM) -r test/tmp*
+	$(RM) -r test/.tmp*
 
 .PHONY: distclean
 distclean:
@@ -294,6 +298,10 @@ jstest: build-addons build-js-native-api-tests build-node-api-tests ## Runs addo
 		$(CI_JS_SUITES) \
 		$(CI_NATIVE_SUITES)
 
+.PHONY: tooltest
+tooltest:
+	@$(PYTHON) test/tools/test-js2c.py
+
 .PHONY: coverage-run-js
 coverage-run-js:
 	$(RM) -r out/$(BUILDTYPE)/.coverage
@@ -311,6 +319,7 @@ test: all ## Runs default tests, linters, and builds docs.
 	$(MAKE) -s build-node-api-tests
 	$(MAKE) -s cctest
 	$(MAKE) -s jstest
+	$(MAKE) -s tooltest
 
 .PHONY: test-only
 test-only: all  ## For a quick test, does not run linter or build docs.
@@ -319,6 +328,7 @@ test-only: all  ## For a quick test, does not run linter or build docs.
 	$(MAKE) build-node-api-tests
 	$(MAKE) cctest
 	$(MAKE) jstest
+	$(MAKE) tooltest
 
 # Used by `make coverage-test`
 test-cov: all
@@ -509,7 +519,7 @@ test-ci-native: | test/addons/.buildstamp test/js-native-api/.buildstamp test/no
 test-ci-js: | clear-stalled
 	$(PYTHON) tools/test.py $(PARALLEL_ARGS) -p tap --logfile test.tap \
 		--mode=$(BUILDTYPE_LOWER) --flaky-tests=$(FLAKY_TESTS) \
-		$(TEST_CI_ARGS) $(CI_JS_SUITES) --skip-tests=sequential/test-benchmark-napi
+		$(TEST_CI_ARGS) $(CI_JS_SUITES)
 	@echo "Clean up any leftover processes, error if found."
 	ps awwx | grep Release/node | grep -v grep | cat
 	@PS_OUT=`ps awwx | grep Release/node | grep -v grep | awk '{print $$1}'`; \

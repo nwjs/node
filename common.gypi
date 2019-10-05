@@ -506,9 +506,15 @@
           # POSIX names
           '_CRT_NONSTDC_NO_DEPRECATE',
           # Make sure the STL doesn't try to use exceptions
-          '_HAS_EXCEPTIONS=0',
+          '_HAS_EXCEPTIONS=1',
           #'BUILDING_V8_SHARED=1',
           'BUILDING_UV_SHARED=1',
+        ],
+        'conditions': [
+          [ 'building_nw==1', {
+            'defines': [ '_LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS', '_LIBCPP_NO_AUTO_LINK' ],
+            'include_dirs': [ '<(DEPTH)/buildtools/third_party/libc++/trunk/include'],
+          }],
         ],
       }],
       [ 'OS in "linux freebsd openbsd solaris aix"', {

@@ -101,6 +101,7 @@ where `3245` is the process id. If it is not run with that
 environment variable set, then it will not print anything.
 
 The `section` supports wildcard also:
+
 ```js
 const util = require('util');
 const debuglog = util.debuglog('foo-bar');
@@ -110,6 +111,7 @@ debuglog('hi there, it\'s foo-bar [%d]', 2333);
 
 if it is run with `NODE_DEBUG=foo*` in the environment, then it will output
 something like:
+
 ```txt
 FOO-BAR 3257: hi there, it's foo-bar [2333]
 ```
@@ -183,6 +185,9 @@ property take precedence over `--trace-deprecation` and
 <!-- YAML
 added: v0.5.3
 changes:
+  - version: v12.11.0
+    pr-url: https://github.com/nodejs/node/pull/29606
+    description: The `%c` specifier is ignored now.
   - version: v11.4.0
     pr-url: https://github.com/nodejs/node/pull/23708
     description: The `%d`, `%f` and `%i` specifiers now support Symbols
@@ -238,6 +243,8 @@ corresponding argument. Supported specifiers are:
 * `%O` - `Object`. A string representation of an object with generic JavaScript
   object formatting. Similar to `util.inspect()` without options. This will show
   the full object not including non-enumerable properties and proxies.
+* `%c` - `CSS`. This specifier is currently ignored, and will skip any CSS
+  passed in.
 * `%%` - single percent sign (`'%'`). This does not consume an argument.
 * Returns: {string} The formatted string
 
@@ -513,6 +520,24 @@ util.inspect(new Bar()); // 'Bar {}'
 util.inspect(baz);       // '[foo] {}'
 ```
 
+Circular references are marked as `'[Circular]'`:
+
+```js
+const { inspect } = require('util');
+
+const obj = {};
+obj.a = [obj];
+obj.b = {};
+obj.b.inner = obj.b;
+obj.b.obj = obj;
+
+console.log(inspect(obj));
+// {
+//   a: [ [Circular] ],
+//   b: { inner: [Circular], obj: [Circular] }
+// }
+```
+
 The following example inspects all properties of the `util` object:
 
 ```js
@@ -535,8 +560,6 @@ const o = {
   b: new Map([['za', 1], ['zb', 'test']])
 };
 console.log(util.inspect(o, { compact: true, depth: 5, breakLength: 80 }));
-
-// This will print
 
 // { a:
 //   [ 1,
@@ -870,6 +893,7 @@ doSomething[util.promisify.custom] = (foo) => {
   });
 };
 ```
+
 If `promisify.custom` is defined but is not a function, `promisify()` will
 throw an error.
 
@@ -1053,6 +1077,24 @@ The `TextEncoder` class is also available on the global object.
 
 UTF-8 encodes the `input` string and returns a `Uint8Array` containing the
 encoded bytes.
+
+### textEncoder.encodeInto(src, dest)
+
+* `src` {string} The text to encode.
+* `dest` {Uint8Array} The array to hold the encode result.
+* Returns: {Object}
+  * `read` {number} The read Unicode code units of src.
+  * `written` {number} The written UTF-8 bytes of dest.
+
+UTF-8 encodes the `src` string to the `dest` Uint8Array and returns an object
+containing the read Unicode code units and written UTF-8 bytes.
+
+```js
+const encoder = new TextEncoder();
+const src = 'this is some data';
+const dest = new Uint8Array(10);
+const { read, written } = encoder.encodeInto(src, dest);
+```
 
 ### textEncoder.encoding
 
@@ -1723,6 +1765,7 @@ applications and modules should be updated to find alternative approaches.
 added: v0.7.5
 deprecated: v6.0.0
 -->
+
 * `target` {Object}
 * `source` {Object}
 

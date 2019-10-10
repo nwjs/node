@@ -295,6 +295,8 @@ agent. Do not modify.
 added: v0.1.17
 -->
 
+* Extends: {Stream}
+
 This object is created internally and returned from [`http.request()`][]. It
 represents an _in-progress_ request whose header has already been queued. The
 header is still mutable using the [`setHeader(name, value)`][],
@@ -324,9 +326,6 @@ Unlike the `request` object, if the response closes prematurely, the
 
 Node.js does not check whether Content-Length and the length of the
 body which has been transmitted are equal or not.
-
-The request inherits from [Stream][], and additionally implements the
-following:
 
 ### Event: 'abort'
 <!-- YAML
@@ -819,8 +818,7 @@ nothing and waits for more input.
 added: v0.1.17
 -->
 
-This class inherits from [`net.Server`][] and has the following additional
-events:
+* Extends: {net.Server}
 
 ### Event: 'checkContinue'
 <!-- YAML
@@ -911,9 +909,9 @@ ensure the response is a properly formatted HTTP response message.
 
 `err` is an instance of `Error` with two extra columns:
 
-+ `bytesParsed`: the bytes count of request packet that Node.js may have parsed
+* `bytesParsed`: the bytes count of request packet that Node.js may have parsed
   correctly;
-+ `rawPacket`: the raw packet of current request.
+* `rawPacket`: the raw packet of current request.
 
 ### Event: 'close'
 <!-- YAML
@@ -1110,11 +1108,10 @@ affects new connections to the server, not any existing connections.
 added: v0.1.17
 -->
 
+* Extends: {Stream}
+
 This object is created internally by an HTTP server — not by the user. It is
 passed as the second parameter to the [`'request'`][] event.
-
-The response inherits from [Stream][], and additionally implements the
-following:
 
 ### Event: 'close'
 <!-- YAML
@@ -1170,7 +1167,7 @@ added: v0.3.0
 
 See [`response.socket`][].
 
-### response.end([data][, encoding][, callback])
+### response.end([data[, encoding]][, callback])
 <!-- YAML
 added: v0.1.90
 changes:
@@ -1608,13 +1605,12 @@ the request body should be sent.
 added: v0.1.17
 -->
 
+* Extends: {stream.Readable}
+
 An `IncomingMessage` object is created by [`http.Server`][] or
 [`http.ClientRequest`][] and passed as the first argument to the [`'request'`][]
 and [`'response'`][] event respectively. It may be used to access response
 status, headers and data.
-
-It implements the [Readable Stream][] interface, as well as the
-following additional events, methods, and properties.
 
 ### Event: 'aborted'
 <!-- YAML
@@ -1774,7 +1770,7 @@ added: v0.11.6
 The raw request/response trailer keys and values exactly as they were
 received. Only populated at the `'end'` event.
 
-### message.setTimeout(msecs, callback)
+### message.setTimeout(msecs[, callback])
 <!-- YAML
 added: v0.5.9
 -->
@@ -1857,7 +1853,7 @@ Then `request.url` will be:
 To parse the url into its parts `require('url').parse(request.url)`
 can be used:
 
-```txt
+```console
 $ node
 > require('url').parse('/status?name=ryan')
 Url {
@@ -1879,7 +1875,7 @@ To extract the parameters from the query string, the
 `require('querystring').parse` function can be used, or
 `true` can be passed as the second argument to `require('url').parse`:
 
-```txt
+```console
 $ node
 > require('url').parse('/status?name=ryan', true)
 Url {
@@ -1925,6 +1921,7 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/15752
     description: The `options` argument is supported now.
 -->
+
 * `options` {Object}
   * `IncomingMessage` {http.IncomingMessage} Specifies the `IncomingMessage`
     class to be used. Useful for extending the original `IncomingMessage`.
@@ -2273,6 +2270,4 @@ not abort the request or do anything besides add a `'timeout'` event.
 [`socket.setTimeout()`]: net.html#net_socket_settimeout_timeout_callback
 [`socket.unref()`]: net.html#net_socket_unref
 [`url.parse()`]: url.html#url_url_parse_urlstring_parsequerystring_slashesdenotehost
-[Readable Stream]: stream.html#stream_class_stream_readable
-[Stream]: stream.html#stream_stream
 [`HPE_HEADER_OVERFLOW`]: errors.html#errors_hpe_header_overflow

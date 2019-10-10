@@ -228,6 +228,7 @@ The `'removeListener'` event is emitted *after* the `listener` is removed.
 added: v0.9.12
 deprecated: v4.0.0
 -->
+
 * `emitter` {EventEmitter} The emitter to query
 * `eventName` {string|symbol} The event name
 
@@ -288,6 +289,7 @@ Its `name` property is set to `'MaxListenersExceededWarning'`.
 <!-- YAML
 added: v0.1.26
 -->
+
 * `eventName` {string|symbol}
 * `listener` {Function}
 
@@ -297,8 +299,9 @@ Alias for `emitter.on(eventName, listener)`.
 <!-- YAML
 added: v0.1.26
 -->
+
 * `eventName` {string|symbol}
-- `...args` {any}
+* `...args` {any}
 * Returns: {boolean}
 
 Synchronously calls each of the listeners registered for the event named
@@ -306,7 +309,6 @@ Synchronously calls each of the listeners registered for the event named
 to each.
 
 Returns `true` if the event had listeners, `false` otherwise.
-
 
 ```js
 const EventEmitter = require('events');
@@ -394,6 +396,7 @@ changes:
     description: For listeners attached using `.once()` this returns the
                  original listeners instead of wrapper functions now.
 -->
+
 * `eventName` {string|symbol}
 * Returns: {Function[]}
 
@@ -537,6 +540,7 @@ Returns a reference to the `EventEmitter`, so that calls can be chained.
 <!-- YAML
 added: v0.1.26
 -->
+
 * `eventName` {string|symbol}
 * Returns: {EventEmitter}
 
@@ -552,6 +556,7 @@ Returns a reference to the `EventEmitter`, so that calls can be chained.
 <!-- YAML
 added: v0.1.26
 -->
+
 * `eventName` {string|symbol}
 * `listener` {Function}
 * Returns: {EventEmitter}
@@ -641,6 +646,7 @@ Returns a reference to the `EventEmitter`, so that calls can be chained.
 <!-- YAML
 added: v0.3.5
 -->
+
 * `n` {integer}
 * Returns: {EventEmitter}
 
@@ -657,6 +663,7 @@ Returns a reference to the `EventEmitter`, so that calls can be chained.
 <!-- YAML
 added: v9.4.0
 -->
+
 * `eventName` {string|symbol}
 * Returns: {Function[]}
 
@@ -691,14 +698,19 @@ emitter.emit('log');
 <!-- YAML
 added: v11.13.0
 -->
+
 * `emitter` {EventEmitter}
 * `name` {string}
 * Returns: {Promise}
 
-Creates a `Promise` that is resolved when the `EventEmitter` emits the given
+Creates a `Promise` that is fulfilled when the `EventEmitter` emits the given
 event or that is rejected when the `EventEmitter` emits `'error'`.
 The `Promise` will resolve with an array of all the arguments emitted to the
 given event.
+
+This method is intentionally generic and works with the web platform
+[EventTarget][WHATWG-EventTarget] interface, which has no special
+`'error'` event semantics and does not listen to the `'error'` event.
 
 ```js
 const { once, EventEmitter } = require('events');
@@ -728,6 +740,7 @@ async function run() {
 run();
 ```
 
+[WHATWG-EventTarget]: https://dom.spec.whatwg.org/#interface-eventtarget
 [`--trace-warnings`]: cli.html#cli_trace_warnings
 [`EventEmitter.defaultMaxListeners`]: #events_eventemitter_defaultmaxlisteners
 [`domain`]: domain.html

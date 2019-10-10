@@ -299,6 +299,7 @@ obs.observe({ entryTypes: ['mark'], buffered: true });
 
 performance.mark('test');
 ```
+
 Because `PerformanceObserver` instances introduce their own additional
 performance overhead, instances should not be left subscribed to notifications
 indefinitely. Users should disconnect observers as soon as they are no
@@ -319,6 +320,7 @@ Disconnects the `PerformanceObserver` instance from all notifications.
 <!-- YAML
 added: v8.5.0
 -->
+
 * `options` {Object}
   * `entryTypes` {string[]} An array of strings identifying the types of
     `PerformanceEntry` instances the observer is interested in. If not

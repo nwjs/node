@@ -316,11 +316,12 @@ the default configuration. If these clients _must_ be supported, the
 on the format, see the OpenSSL [cipher list format][] documentation.
 
 There are only 5 TLSv1.3 cipher suites:
-- `'TLS_AES_256_GCM_SHA384'`
-- `'TLS_CHACHA20_POLY1305_SHA256'`
-- `'TLS_AES_128_GCM_SHA256'`
-- `'TLS_AES_128_CCM_SHA256'`
-- `'TLS_AES_128_CCM_8_SHA256'`
+
+* `'TLS_AES_256_GCM_SHA384'`
+* `'TLS_CHACHA20_POLY1305_SHA256'`
+* `'TLS_AES_128_GCM_SHA256'`
+* `'TLS_AES_128_CCM_SHA256'`
+* `'TLS_AES_128_CCM_8_SHA256'`
 
 The first 3 are enabled by default. The last 2 `CCM`-based suites are supported
 by TLSv1.3 because they may be more performant on constrained systems, but they
@@ -331,8 +332,9 @@ are not enabled by default since they offer less security.
 added: v0.3.2
 -->
 
-The `tls.Server` class is a subclass of `net.Server` that accepts encrypted
-connections using TLS or SSL.
+* Extends: {net.Server}
+
+Accepts encrypted connections using TLS or SSL.
 
 ### Event: 'keylog'
 <!-- YAML
@@ -601,8 +603,10 @@ See [Session Resumption][] for more information.
 added: v0.11.4
 -->
 
-The `tls.TLSSocket` is a subclass of [`net.Socket`][] that performs transparent
-encryption of written data and all required TLS negotiation.
+* Extends: {net.Socket}
+
+Performs transparent encryption of written data and all required TLS
+negotiation.
 
 Instances of `tls.TLSSocket` implement the duplex [Stream][] interface.
 
@@ -835,7 +839,7 @@ Returns an object containing information on the negotiated cipher suite.
 For example: `{ name: 'AES256-SHA', version: 'TLSv1.2' }`.
 
 See
-[OpenSSL](https://www.openssl.org/docs/man1.1.1/man3/SSL_CIPHER_get_name.html)
+[SSL_CIPHER_get_name](https://www.openssl.org/docs/man1.1.1/man3/SSL_CIPHER_get_name.html)
 for more information.
 
 ### tlsSocket.getEphemeralKeyInfo()
@@ -928,6 +932,7 @@ The certificate may contain information about the public key, depending on
 the key type.
 
 For RSA keys, the following properties may be defined:
+
 * `bits` {number} The RSA bit size. Example: `1024`.
 * `exponent` {string} The RSA exponent, as a string in hexadecimal number
   notation. Example: `'0x010001'`.
@@ -936,6 +941,7 @@ For RSA keys, the following properties may be defined:
 * `pubkey` {Buffer} The public key.
 
 For EC keys, the following properties may be defined:
+
 * `pubkey` {Buffer} The public key.
 * `bits` {number} The key size in bits. Example: `256`.
 * `asn1Curve` {string} (Optional) The ASN.1 name of the OID of the elliptic
@@ -947,6 +953,7 @@ For EC keys, the following properties may be defined:
   `'P-256'`.
 
 Example certificate:
+
 ```text
 { subject:
    { OU: [ 'Domain Control Validated', 'PositiveSSL Wildcard' ],
@@ -1029,6 +1036,18 @@ See [Session Resumption][] for more information.
 
 Note: `getSession()` works only for TLSv1.2 and below. For TLSv1.3, applications
 must use the [`'session'`][] event (it also works for TLSv1.2 and below).
+
+### tlsSocket.getSharedSigalgs()
+<!-- YAML
+added: v12.11.0
+-->
+
+* Returns: {Array} List of signature algorithms shared between the server and
+the client in the order of decreasing preference.
+
+See
+[SSL_get_shared_sigalgs](https://www.openssl.org/docs/man1.1.1/man3/SSL_get_shared_sigalgs.html)
+for more information.
 
 ### tlsSocket.getTLSTicket()
 <!-- YAML
@@ -1339,6 +1358,10 @@ argument.
 <!-- YAML
 added: v0.11.13
 changes:
+  - version: v12.11.0
+    pr-url: https://github.com/nodejs/node/pull/29598
+    description: Added `sigalgs` option to override supported signature
+                 algorithms.
   - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/26209
     description: TLSv1.3 support added.
@@ -1399,6 +1422,12 @@ changes:
     order as their private keys in `key`. If the intermediate certificates are
     not provided, the peer will not be able to validate the certificate, and the
     handshake will fail.
+  * `sigalgs` {string} Colon-separated list of supported signature algorithms.
+    The list can contain digest algorithms (`SHA256`, `MD5` etc.), public key
+    algorithms (`RSA-PSS`, `ECDSA` etc.), combination of both (e.g
+    'RSA+SHA384') or TLS v1.3 scheme names (e.g. `rsa_pss_pss_sha512`).
+    See [OpenSSL man pages](https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set1_sigalgs_list.html)
+    for more info.
   * `ciphers` {string} Cipher suite specification, replacing the default. For
     more information, see [modifying the default cipher suite][]. Permitted
     ciphers can be obtained via [`tls.getCiphers()`][]. Cipher names must be
@@ -1428,10 +1457,11 @@ changes:
     PEM allows the option of private keys being encrypted. Encrypted keys will
     be decrypted with `options.passphrase`. Multiple keys using different
     algorithms can be provided either as an array of unencrypted key strings or
-    buffers, or an array of objects in the form `{pem: <string|buffer>[,
-    passphrase: <string>]}`. The object form can only occur in an array.
-    `object.passphrase` is optional. Encrypted keys will be decrypted with
-    `object.passphrase` if provided, or `options.passphrase` if it is not.
+    buffers, or an array of objects in the form
+    `{pem: <string|buffer>[, passphrase: <string>]}`. The object form can only
+    occur in an array. `object.passphrase` is optional. Encrypted keys will be
+    decrypted with `object.passphrase` if provided, or `options.passphrase` if
+    it is not.
   * `maxVersion` {string} Optionally set the maximum TLS version to allow. One
     of `TLSv1.3`, `TLSv1.2'`, `'TLSv1.1'`, or `'TLSv1'`. Cannot be specified
     along with the `secureProtocol` option, use one or the other.
@@ -1641,7 +1671,6 @@ added: v11.4.0
   the default to `'TLSv1.3'`. If multiple of the options are provided, the
   highest maximum is used.
 
-
 ## tls.DEFAULT_MIN_VERSION
 <!-- YAML
 added: v11.4.0
@@ -1655,7 +1684,6 @@ added: v11.4.0
   the default to `'TLSv1.1'`. Using `--tls-min-v1.3` sets the default to
   `'TLSv1.3'`. If multiple of the options are provided, the lowest minimum is
   used.
-
 
 ## Deprecated APIs
 

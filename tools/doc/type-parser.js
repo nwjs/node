@@ -64,6 +64,8 @@ const customTypesMap = {
 
   'Domain': 'domain.html#domain_class_domain',
 
+  'errors.Error': 'errors.html#errors_class_error',
+
   'import.meta': 'esm.html#esm_import_meta',
 
   'EventEmitter': 'events.html#events_class_eventemitter',
@@ -121,6 +123,7 @@ const customTypesMap = {
   'Stream': 'stream.html#stream_stream',
   'stream.Duplex': 'stream.html#stream_class_stream_duplex',
   'stream.Readable': 'stream.html#stream_class_stream_readable',
+  'stream.Transform': 'stream.html#stream_class_stream_transform',
   'stream.Writable': 'stream.html#stream_class_stream_writable',
 
   'Immediate': 'timers.html#timers_class_immediate',

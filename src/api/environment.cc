@@ -355,6 +355,48 @@ Local<Context> NewContext(Isolate* isolate,
                           Local<ObjectTemplate> object_template, bool create) {
   auto context = create ? Context::New(isolate, nullptr, object_template) : isolate->GetEnteredContext();
   if (context.IsEmpty()) return context;
+
+  if (!InitializeContext(context)) {
+    return Local<Context>();
+  }
+
+  InitializeContextRuntime(context);
+
+  return context;
+}
+
+// This runs at runtime, regardless of whether the context
+// is created from a snapshot.
+void InitializeContextRuntime(Local<Context> context) {
+  Isolate* isolate = context->GetIsolate();
+  HandleScope handle_scope(isolate);
+
+  // Delete `Intl.v8BreakIterator`
+  // https://github.com/nodejs/node/issues/14909
+  Local<String> intl_string = FIXED_ONE_BYTE_STRING(isolate, "Intl");
+  Local<String> break_iter_string =
+    FIXED_ONE_BYTE_STRING(isolate, "v8BreakIterator");
+  Local<Value> intl_v;
+  if (context->Global()->Get(context, intl_string).ToLocal(&intl_v) &&
+      intl_v->IsObject()) {
+    Local<Object> intl = intl_v.As<Object>();
+    intl->Delete(context, break_iter_string).FromJust();
+  }
+
+  // Delete `Atomics.wake`
+  // https://github.com/nodejs/node/issues/21219
+  Local<String> atomics_string = FIXED_ONE_BYTE_STRING(isolate, "Atomics");
+  Local<String> wake_string = FIXED_ONE_BYTE_STRING(isolate, "wake");
+  Local<Value> atomics_v;
+  if (context->Global()->Get(context, atomics_string).ToLocal(&atomics_v) &&
+      atomics_v->IsObject()) {
+    Local<Object> atomics = atomics_v.As<Object>();
+    atomics->Delete(context, wake_string).FromJust();
+  }
+}
+
+bool InitializeContext(Local<Context> context) {
+  Isolate* isolate = context->GetIsolate();
   HandleScope handle_scope(isolate);
 
   context->SetEmbedderData(ContextEmbedderIndex::kAllowWasmCodeGeneration,
@@ -375,11 +417,10 @@ Local<Context> NewContext(Isolate* isolate,
     if (!primordials->SetPrototype(context, Null(isolate)).FromJust() ||
         !GetPerContextExports(context).ToLocal(&exports) ||
         !exports->Set(context, primordials_string, primordials).FromJust()) {
-      return Local<Context>();
+      return false;
     }
 
     static const char* context_files[] = {"internal/per_context/primordials",
-                                          "internal/per_context/setup",
                                           "internal/per_context/domexception",
                                           nullptr};
 
@@ -391,7 +432,7 @@ Local<Context> NewContext(Isolate* isolate,
           native_module::NativeModuleEnv::LookupAndCompile(
               context, *module, &parameters, nullptr);
       if (maybe_fn.IsEmpty()) {
-        return Local<Context>();
+        return false;
       }
       Local<Function> fn = maybe_fn.ToLocalChecked();
       MaybeLocal<Value> result =
@@ -400,12 +441,12 @@ Local<Context> NewContext(Isolate* isolate,
       // Execution failed during context creation.
       // TODO(joyeecheung): deprecate this signature and return a MaybeLocal.
       if (result.IsEmpty()) {
-        return Local<Context>();
+        return false;
       }
     }
   }
 
-  return context;
+  return true;
 }
 
 uv_loop_t* GetCurrentEventLoop(Isolate* isolate) {

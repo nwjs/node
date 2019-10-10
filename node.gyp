@@ -52,7 +52,6 @@
       'lib/internal/bootstrap/node.js',
       'lib/internal/bootstrap/pre_execution.js',
       'lib/internal/per_context/primordials.js',
-      'lib/internal/per_context/setup.js',
       'lib/internal/per_context/domexception.js',
       'lib/async_hooks.js',
       'lib/assert.js',
@@ -147,6 +146,7 @@
       'lib/internal/freeze_intrinsics.js',
       'lib/internal/fs/promises.js',
       'lib/internal/fs/read_file_context.js',
+      'lib/internal/fs/rimraf.js',
       'lib/internal/fs/streams.js',
       'lib/internal/fs/sync_write_stream.js',
       'lib/internal/fs/utils.js',
@@ -198,6 +198,7 @@
       'lib/internal/repl/history.js',
       'lib/internal/repl/utils.js',
       'lib/internal/socket_list.js',
+      'lib/internal/source_map.js',
       'lib/internal/test/binding.js',
       'lib/internal/timers.js',
       'lib/internal/tls.js',
@@ -866,7 +867,7 @@
             }],
           ],
         }],
-        [ 'node_use_large_pages=="true" and OS in "linux freebsd"', {
+        [ 'node_use_large_pages=="true" and OS in "linux freebsd mac"', {
           'defines': [ 'NODE_ENABLE_LARGE_CODE_PAGES=1' ],
           # The current implementation of Large Pages is under Linux.
           # Other implementations are possible but not currently supported.

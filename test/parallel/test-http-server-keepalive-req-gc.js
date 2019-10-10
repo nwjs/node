@@ -5,18 +5,13 @@ const onGC = require('../common/ongc');
 const { createServer } = require('http');
 const { connect } = require('net');
 
-if (common.isWindows) {
-  // TODO(addaleax): Investigate why and remove the skip.
-  common.skip('This test is flaky on Windows.');
-}
-
 // Make sure that for HTTP keepalive requests, the req object can be
 // garbage collected once the request is finished.
 // Refs: https://github.com/nodejs/node/issues/9668
 
 let client;
 const server = createServer(common.mustCall((req, res) => {
-  onGC(req, { ongc: common.mustCall() });
+  onGC(req, { ongc: common.mustCall(() => { server.close(); }) });
   req.resume();
   req.on('end', common.mustCall(() => {
     setImmediate(() => {
@@ -26,8 +21,6 @@ const server = createServer(common.mustCall((req, res) => {
   }));
   res.end('hello world');
 }));
-
-server.unref();
 
 server.listen(0, common.mustCall(() => {
   client = connect(server.address().port);

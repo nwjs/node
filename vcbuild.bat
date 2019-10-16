@@ -152,10 +152,6 @@ goto next-arg
 
 :args-done
 
-if "%*"=="lint" (
-  goto lint-cpp
-)
-
 if defined build_release (
   set config=Release
   set package=1
@@ -177,6 +173,9 @@ set "node_gyp_exe="%node_exe%" deps\npm\node_modules\node-gyp\bin\node-gyp"
 set "npm_exe="%~dp0%node_exe%" %~dp0deps\npm\bin\npm-cli.js"
 if "%target_env%"=="vs2017" set "node_gyp_exe=%node_gyp_exe% --msvs_version=2017"
 if "%target_env%"=="vs2019" set "node_gyp_exe=%node_gyp_exe% --msvs_version=2019"
+
+:: skip building if the only argument received was lint
+if "%*"=="lint" if exist "%node_exe%" goto lint-cpp
 
 if "%config%"=="Debug"      set configure_flags=%configure_flags% --debug
 if defined nosnapshot       set configure_flags=%configure_flags% --without-snapshot
@@ -641,7 +640,7 @@ if not defined lint_cpp goto lint-js
 if defined NODEJS_MAKE goto run-make-lint
 where make > NUL 2>&1 && make -v | findstr /C:"GNU Make" 1> NUL
 if "%ERRORLEVEL%"=="0" set "NODEJS_MAKE=make PYTHON=python" & goto run-make-lint
-where wsl > NUL 2>1
+where wsl > NUL 2>&1
 if "%ERRORLEVEL%"=="0" set "NODEJS_MAKE=wsl make" & goto run-make-lint
 echo Could not find GNU Make, needed for linting C/C++
 goto lint-js
@@ -689,6 +688,9 @@ goto exit
 
 :create-msvs-files-failed
 echo Failed to create vc project files.
+if %VCBUILD_PYTHON_VERSION%==3 (
+  echo Python 3 is not yet fully supported, to avoid issues Python 2 should be installed.
+)
 del .used_configure_flags
 goto exit
 

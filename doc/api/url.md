@@ -21,10 +21,6 @@ The `url` module provides two APIs for working with URLs: a legacy API that is
 Node.js specific, and a newer API that implements the same
 [WHATWG URL Standard][] used by web browsers.
 
-While the Legacy API has not been deprecated, it is maintained solely for
-backwards compatibility with existing applications. New application code
-should use the WHATWG API.
-
 A comparison between the WHATWG and Legacy APIs is provided below. Above the URL
 `'http://user:pass@sub.example.com:8080/p/a/t/h?query=string#hash'`, properties
 of an object returned by the legacy `url.parse()` are shown. Below it are
@@ -316,7 +312,7 @@ The port value can be an empty string in which case the port depends on
 the protocol/scheme:
 
 | protocol | port |
-| :------- | :--- |
+| -------- | ---- |
 | "ftp"    | 21   |
 | "file"   |      |
 | "gopher" | 70   |
@@ -1143,9 +1139,9 @@ The formatting process operates as follows:
   colon (`:`) character, the literal string `:` will be appended to `result`.
 * If either of the following conditions is true, then the literal string `//`
   will be appended to `result`:
-    * `urlObject.slashes` property is true;
-    * `urlObject.protocol` begins with `http`, `https`, `ftp`, `gopher`, or
-      `file`;
+  * `urlObject.slashes` property is true;
+  * `urlObject.protocol` begins with `http`, `https`, `ftp`, `gopher`, or
+    `file`;
 * If the value of the `urlObject.auth` property is truthy, and either
   `urlObject.host` or `urlObject.hostname` are not `undefined`, the value of
   `urlObject.auth` will be coerced into a string and appended to `result`

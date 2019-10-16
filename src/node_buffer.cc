@@ -44,15 +44,6 @@
       return node::THROW_ERR_OUT_OF_RANGE(env, "Index out of range");       \
   } while (0)                                                               \
 
-#define SLICE_START_END(env, start_arg, end_arg, end_max)                   \
-  size_t start = 0;                                                         \
-  size_t end = 0;                                                           \
-  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(env, start_arg, 0, &start));      \
-  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(env, end_arg, end_max, &end));    \
-  if (end < start) end = start;                                             \
-  THROW_AND_RETURN_IF_OOB(Just(end <= end_max));                            \
-  size_t length = end - start;
-
 namespace node {
 namespace Buffer {
 
@@ -63,6 +54,7 @@ using v8::Context;
 using v8::EscapableHandleScope;
 using v8::FunctionCallbackInfo;
 using v8::Global;
+using v8::Int32;
 using v8::Integer;
 using v8::Isolate;
 using v8::Just;
@@ -457,11 +449,9 @@ namespace {
 
 void CreateFromString(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[0]->IsString());
-  CHECK(args[1]->IsString());
+  CHECK(args[1]->IsInt32());
 
-  enum encoding enc = ParseEncoding(args.GetIsolate(),
-                                    args[1].As<String>(),
-                                    UTF8);
+  enum encoding enc = static_cast<enum encoding>(args[1].As<Int32>()->Value());
   Local<Object> buf;
   if (New(args.GetIsolate(), args[0].As<String>(), enc).ToLocal(&buf))
     args.GetReturnValue().Set(buf);
@@ -479,7 +469,13 @@ void StringSlice(const FunctionCallbackInfo<Value>& args) {
   if (buffer.length() == 0)
     return args.GetReturnValue().SetEmptyString();
 
-  SLICE_START_END(env, args[0], args[1], buffer.length())
+  size_t start = 0;
+  size_t end = 0;
+  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(env, args[0], 0, &start));
+  THROW_AND_RETURN_IF_OOB(ParseArrayIndex(env, args[1], buffer.length(), &end));
+  if (end < start) end = start;
+  THROW_AND_RETURN_IF_OOB(Just(end <= buffer.length()));
+  size_t length = end - start;
 
   Local<Value> error;
   MaybeLocal<Value> ret =
@@ -797,9 +793,10 @@ void IndexOfString(const FunctionCallbackInfo<Value>& args) {
 
   CHECK(args[1]->IsString());
   CHECK(args[2]->IsNumber());
+  CHECK(args[3]->IsInt32());
   CHECK(args[4]->IsBoolean());
 
-  enum encoding enc = ParseEncoding(isolate, args[3], UTF8);
+  enum encoding enc = static_cast<enum encoding>(args[3].As<Int32>()->Value());
 
   THROW_AND_RETURN_UNLESS_BUFFER(env, args[0]);
   ArrayBufferViewContents<char> buffer(args[0]);
@@ -911,11 +908,10 @@ void IndexOfString(const FunctionCallbackInfo<Value>& args) {
 void IndexOfBuffer(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[1]->IsObject());
   CHECK(args[2]->IsNumber());
+  CHECK(args[3]->IsInt32());
   CHECK(args[4]->IsBoolean());
 
-  enum encoding enc = ParseEncoding(args.GetIsolate(),
-                                    args[3],
-                                    UTF8);
+  enum encoding enc = static_cast<enum encoding>(args[3].As<Int32>()->Value());
 
   THROW_AND_RETURN_UNLESS_BUFFER(Environment::GetCurrent(args), args[0]);
   THROW_AND_RETURN_UNLESS_BUFFER(Environment::GetCurrent(args), args[1]);
@@ -1062,6 +1058,40 @@ static void EncodeUtf8String(const FunctionCallbackInfo<Value>& args) {
 }
 
 
+static void EncodeInto(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+  Isolate* isolate = env->isolate();
+  CHECK_GE(args.Length(), 3);
+  CHECK(args[0]->IsString());
+  CHECK(args[1]->IsUint8Array());
+  CHECK(args[2]->IsUint32Array());
+
+  Local<String> source = args[0].As<String>();
+
+  Local<Uint8Array> dest = args[1].As<Uint8Array>();
+  Local<ArrayBuffer> buf = dest->Buffer();
+  char* write_result =
+      static_cast<char*>(buf->GetContents().Data()) + dest->ByteOffset();
+  size_t dest_length = dest->ByteLength();
+
+  // results = [ read, written ]
+  Local<Uint32Array> result_arr = args[2].As<Uint32Array>();
+  uint32_t* results = reinterpret_cast<uint32_t*>(
+      static_cast<char*>(result_arr->Buffer()->GetContents().Data()) +
+      result_arr->ByteOffset());
+
+  int nchars;
+  int written = source->WriteUtf8(
+      isolate,
+      write_result,
+      dest_length,
+      &nchars,
+      String::NO_NULL_TERMINATION | String::REPLACE_INVALID_UTF8);
+  results[0] = nchars;
+  results[1] = written;
+}
+
+
 void SetBufferPrototype(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
 
@@ -1093,6 +1123,7 @@ void Initialize(Local<Object> target,
   env->SetMethod(target, "swap32", Swap32);
   env->SetMethod(target, "swap64", Swap64);
 
+  env->SetMethod(target, "encodeInto", EncodeInto);
   env->SetMethodNoSideEffect(target, "encodeUtf8String", EncodeUtf8String);
 
   target->Set(env->context(),

@@ -5,7 +5,8 @@
 > Stability: 2 - Stable
 
 The `readline` module provides an interface for reading data from a [Readable][]
-stream (such as [`process.stdin`]) one line at a time. It can be accessed using:
+stream (such as [`process.stdin`][]) one line at a time. It can be accessed
+using:
 
 ```js
 const readline = require('readline');
@@ -37,6 +38,8 @@ received on the `input` stream.
 <!-- YAML
 added: v0.1.104
 -->
+
+* Extends: {EventEmitter}
 
 Instances of the `readline.Interface` class are constructed using the
 `readline.createInterface()` method. Every instance is associated with a

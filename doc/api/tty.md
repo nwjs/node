@@ -35,10 +35,11 @@ classes.
 added: v0.5.8
 -->
 
-The `tty.ReadStream` class is a subclass of [`net.Socket`][] that represents the
-readable side of a TTY. In normal circumstances [`process.stdin`][] will be the
-only `tty.ReadStream` instance in a Node.js process and there should be no
-reason to create additional instances.
+* Extends: {net.Socket}
+
+Represents the readable side of a TTY. In normal circumstances
+[`process.stdin`][] will be the only `tty.ReadStream` instance in a Node.js
+process and there should be no reason to create additional instances.
 
 ### readStream.isRaw
 <!-- YAML
@@ -78,10 +79,12 @@ terminal is disabled, including echoing input characters.
 added: v0.5.8
 -->
 
-The `tty.WriteStream` class is a subclass of [`net.Socket`][] that represents
-the writable side of a TTY. In normal circumstances, [`process.stdout`][] and
-[`process.stderr`][] will be the only `tty.WriteStream` instances created for a
-Node.js process and there should be no reason to create additional instances.
+* Extends: {net.Socket}
+
+Represents the writable side of a TTY. In normal circumstances,
+[`process.stdout`][] and [`process.stderr`][] will be the only
+`tty.WriteStream` instances created for a Node.js process and there
+should be no reason to create additional instances.
 
 ### Event: 'resize'
 <!-- YAML
@@ -175,6 +178,7 @@ added: v9.9.0
 * Returns: {number}
 
 Returns:
+
 * `1` for 2,
 * `4` for 16,
 * `8` for 256,
@@ -202,6 +206,7 @@ Disabling color support is also possible by using the `NO_COLOR` and
 <!-- YAML
 added: v0.7.7
 -->
+
 * Returns: {number[]}
 
 `writeStream.getWindowSize()` returns the size of the [TTY](tty.html)
@@ -284,7 +289,6 @@ The `tty.isatty()` method returns `true` if the given `fd` is associated with
 a TTY and `false` if it is not, including whenever `fd` is not a non-negative
 integer.
 
-[`net.Socket`]: net.html#net_class_net_socket
 [`process.stderr`]: process.html#process_process_stderr
 [`process.stdin`]: process.html#process_process_stdin
 [`process.stdout`]: process.html#process_process_stdout

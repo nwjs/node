@@ -52,7 +52,6 @@
       'lib/internal/bootstrap/node.js',
       'lib/internal/bootstrap/pre_execution.js',
       'lib/internal/per_context/primordials.js',
-      'lib/internal/per_context/setup.js',
       'lib/internal/per_context/domexception.js',
       'lib/async_hooks.js',
       'lib/assert.js',
@@ -145,8 +144,10 @@
       'lib/internal/fixed_queue.js',
       'lib/internal/freelist.js',
       'lib/internal/freeze_intrinsics.js',
+      'lib/internal/fs/dir.js',
       'lib/internal/fs/promises.js',
       'lib/internal/fs/read_file_context.js',
+      'lib/internal/fs/rimraf.js',
       'lib/internal/fs/streams.js',
       'lib/internal/fs/sync_write_stream.js',
       'lib/internal/fs/utils.js',
@@ -198,6 +199,8 @@
       'lib/internal/repl/history.js',
       'lib/internal/repl/utils.js',
       'lib/internal/socket_list.js',
+      'lib/internal/source_map/source_map.js',
+      'lib/internal/source_map/source_map_cache.js',
       'lib/internal/test/binding.js',
       'lib/internal/timers.js',
       'lib/internal/tls.js',
@@ -572,6 +575,7 @@
         'src/node_constants.cc',
         'src/node_contextify.cc',
         'src/node_credentials.cc',
+        'src/node_dir.cc',
         'src/node_domain.cc',
         'src/node_env_var.cc',
         'src/node_errors.cc',
@@ -654,6 +658,7 @@
         'src/node_constants.h',
         'src/node_context_data.h',
         'src/node_contextify.h',
+        'src/node_dir.h',
         'src/node_errors.h',
         'src/node_file.h',
         'src/node_http_parser_impl.h',
@@ -866,7 +871,7 @@
             }],
           ],
         }],
-        [ 'node_use_large_pages=="true" and OS in "linux freebsd"', {
+        [ 'node_use_large_pages=="true" and OS in "linux freebsd mac"', {
           'defines': [ 'NODE_ENABLE_LARGE_CODE_PAGES=1' ],
           # The current implementation of Large Pages is under Linux.
           # Other implementations are possible but not currently supported.

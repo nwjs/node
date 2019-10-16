@@ -28,7 +28,11 @@ release.
 </tr>
 <tr>
     <td valign="top">
-<b><a href="doc/changelogs/CHANGELOG_V12.md#12.9.1">12.9.1</a></b><br/>
+<b><a href="doc/changelogs/CHANGELOG_V12.md#12.12.0">12.12.0</a></b><br/>
+<a href="doc/changelogs/CHANGELOG_V12.md#12.11.1">12.11.1</a><br/>
+<a href="doc/changelogs/CHANGELOG_V12.md#12.11.0">12.11.0</a><br/>
+<a href="doc/changelogs/CHANGELOG_V12.md#12.10.0">12.10.0</a><br/>
+<a href="doc/changelogs/CHANGELOG_V12.md#12.9.1">12.9.1</a><br/>
 <a href="doc/changelogs/CHANGELOG_V12.md#12.9.0">12.9.0</a><br/>
 <a href="doc/changelogs/CHANGELOG_V12.md#12.8.1">12.8.1</a><br/>
 <a href="doc/changelogs/CHANGELOG_V12.md#12.8.0">12.8.0</a><br/>
@@ -105,7 +109,7 @@ release.
 </tr>
 </table>
 
-### Notes
+## Notes
 
 * The [Node.js Long Term Support plan](https://github.com/nodejs/Release) covers
   LTS releases.

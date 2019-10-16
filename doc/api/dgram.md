@@ -35,8 +35,9 @@ server.bind(41234);
 added: v0.1.99
 -->
 
-The `dgram.Socket` object is an [`EventEmitter`][] that encapsulates the
-datagram functionality.
+* Extends: {EventEmitter}
+
+Encapsulates the datagram functionality.
 
 New instances of `dgram.Socket` are created using [`dgram.createSocket()`][].
 The `new` keyword is not to be used to create `dgram.Socket` instances.
@@ -82,6 +83,7 @@ added: v0.1.99
 
 The `'message'` event is emitted when a new datagram is available on a socket.
 The event handler function is passed two arguments: `msg` and `rinfo`.
+
 * `msg` {Buffer} The message.
 * `rinfo` {Object} Remote address information.
   * `address` {string} The sender address.
@@ -135,6 +137,11 @@ properties.
 ### socket.bind([port][, address][, callback])
 <!-- YAML
 added: v0.1.99
+changes:
+  - version: v0.10
+    description: The method was changed to an asynchronous execution model.
+                 Legacy code would need to be changed to pass a callback
+                 function to the method call.
 -->
 
 * `port` {integer}
@@ -214,7 +221,7 @@ Specifying both a `'listening'` event listener and passing a
 useful.
 
 The `options` object may contain an additional `exclusive` property that is
-used when using `dgram.Socket` objects with the [`cluster`] module. When
+used when using `dgram.Socket` objects with the [`cluster`][] module. When
 `exclusive` is set to `false` (the default), cluster workers will use the same
 underlying socket handle allowing connection handling duties to be shared.
 When `exclusive` is `true`, however, the handle is not shared and attempted
@@ -240,6 +247,7 @@ socket.bind({
 <!-- YAML
 added: v0.1.99
 -->
+
 * `callback` {Function} Called when the socket has been closed.
 
 Close the underlying socket and stop listening for data on it. If a callback is
@@ -307,6 +315,8 @@ added: v8.7.0
 <!-- YAML
 added: v0.9.1
 -->
+
+* Returns: {dgram.Socket}
 
 By default, binding a socket will cause it to block the Node.js process from
 exiting as long as the socket is open. The `socket.unref()` method can be used
@@ -441,18 +451,18 @@ client.connect(41234, 'localhost', (err) => {
 });
 ```
 
-**A Note about UDP datagram size**
+#### Note about UDP datagram size
 
 The maximum size of an `IPv4/v6` datagram depends on the `MTU`
 (_Maximum Transmission Unit_) and on the `Payload Length` field size.
 
-- The `Payload Length` field is `16 bits` wide, which means that a normal
+* The `Payload Length` field is `16 bits` wide, which means that a normal
   payload exceed 64K octets _including_ the internet header and data
   (65,507 bytes = 65,535 − 8 bytes UDP header − 20 bytes IP header);
   this is generally true for loopback interfaces, but such long datagram
   messages are impractical for most hosts and networks.
 
-- The `MTU` is the largest size a given link layer technology can support for
+* The `MTU` is the largest size a given link layer technology can support for
   datagram messages. For any link, `IPv4` mandates a minimum `MTU` of `68`
   octets, while the recommended `MTU` for IPv4 is `576` (typically recommended
   as the `MTU` for dial-up type applications), whether they arrive whole or in
@@ -528,6 +538,7 @@ socket.bind(1234, () => {
 
 #### Example: IPv4 Outgoing Multicast Interface
 All systems use an IP of the host on the desired physical interface:
+
 ```js
 const socket = dgram.createSocket('udp4');
 
@@ -622,6 +633,8 @@ The default on most systems is 64 but can vary.
 added: v0.9.1
 -->
 
+* Returns: {dgram.Socket}
+
 By default, binding a socket will cause it to block the Node.js process from
 exiting as long as the socket is open. The `socket.unref()` method can be used
 to exclude the socket from the reference counting that keeps the Node.js
@@ -632,27 +645,6 @@ Calling `socket.unref()` multiple times will have no addition effect.
 
 The `socket.unref()` method returns a reference to the socket so calls can be
 chained.
-
-### Change to asynchronous `socket.bind()` behavior
-
-As of Node.js v0.10, [`dgram.Socket#bind()`][] changed to an asynchronous
-execution model. Legacy code would use synchronous behavior:
-
-```js
-const s = dgram.createSocket('udp4');
-s.bind(1234);
-s.addMembership('224.0.0.114');
-```
-
-Such legacy code would need to be changed to pass a callback function to the
-[`dgram.Socket#bind()`][] function:
-
-```js
-const s = dgram.createSocket('udp4');
-s.bind(1234, () => {
-  s.addMembership('224.0.0.114');
-});
-```
 
 ## `dgram` module functions
 
@@ -704,9 +696,7 @@ added: v0.1.99
 * `callback` {Function} - Attached as a listener to `'message'` events.
 * Returns: {dgram.Socket}
 
-Creates a `dgram.Socket` object of the specified `type`. The `type` argument
-can be either `'udp4'` or `'udp6'`. An optional `callback` function can be
-passed which is added as a listener for `'message'` events.
+Creates a `dgram.Socket` object of the specified `type`.
 
 Once the socket is created, calling [`socket.bind()`][] will instruct the
 socket to begin listening for datagram messages. When `address` and `port` are
@@ -716,15 +706,13 @@ and `udp6` sockets). The bound address and port can be retrieved using
 [`socket.address().address`][] and [`socket.address().port`][].
 
 [`'close'`]: #dgram_event_close
-[`Error`]: errors.html#errors_class_error
 [`ERR_SOCKET_DGRAM_IS_CONNECTED`]: errors.html#errors_err_socket_dgram_is_connected
 [`ERR_SOCKET_DGRAM_NOT_CONNECTED`]: errors.html#errors_err_socket_dgram_not_connected
-[`EventEmitter`]: events.html
+[`Error`]: errors.html#errors_class_error
 [`System Error`]: errors.html#errors_class_systemerror
 [`close()`]: #dgram_socket_close_callback
 [`cluster`]: cluster.html
 [`connect()`]: #dgram_socket_connect_port_address_callback
-[`dgram.Socket#bind()`]: #dgram_socket_bind_options_callback
 [`dgram.createSocket()`]: #dgram_dgram_createsocket_options_callback
 [`dns.lookup()`]: dns.html#dns_dns_lookup_hostname_options_callback
 [`socket.address().address`]: #dgram_socket_address

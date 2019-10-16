@@ -64,6 +64,8 @@ An exception will be thrown if there is no active inspector.
 
 ## Class: inspector.Session
 
+* Extends: {EventEmitter}
+
 The `inspector.Session` is used for dispatching messages to the V8 inspector
 back-end and receiving message responses and notifications.
 
@@ -75,8 +77,6 @@ added: v8.0.0
 Create a new instance of the `inspector.Session` class. The inspector session
 needs to be connected through [`session.connect()`][] before the messages
 can be dispatched to the inspector backend.
-
-`inspector.Session` is an [`EventEmitter`][] with the following events:
 
 ### Event: 'inspectorNotification'
 <!-- YAML
@@ -121,9 +121,15 @@ session.on('Debugger.paused', ({ params }) => {
 added: v8.0.0
 -->
 
-Connects a session to the inspector back-end. An exception will be thrown
-if there is already a connected session established either through the API or by
-a front-end connected to the Inspector WebSocket port.
+Connects a session to the inspector back-end.
+
+### session.connectToMainThread()
+<!-- YAML
+added: v12.11.0
+-->
+
+Connects a session to the main thread inspector back-end. An exception will
+be thrown if this API was not called on a Worker thread.
 
 ### session.disconnect()
 <!-- YAML
@@ -131,7 +137,7 @@ added: v8.0.0
 -->
 
 Immediately close the session. All pending message callbacks will be called
-with an error. [`session.connect()`] will need to be called to be able to send
+with an error. [`session.connect()`][] will need to be called to be able to send
 messages again. Reconnected session will lose all inspector state, such as
 enabled agents or configured breakpoints.
 
@@ -210,14 +216,13 @@ session.on('HeapProfiler.addHeapSnapshotChunk', (m) => {
 });
 
 session.post('HeapProfiler.takeHeapSnapshot', null, (err, r) => {
-  console.log('Runtime.takeHeapSnapshot done:', err, r);
+  console.log('HeapProfiler.takeHeapSnapshot done:', err, r);
   session.disconnect();
   fs.closeSync(fd);
 });
 ```
 
 [`'Debugger.paused'`]: https://chromedevtools.github.io/devtools-protocol/v8/Debugger#event-paused
-[`EventEmitter`]: events.html#events_class_eventemitter
 [`session.connect()`]: #inspector_session_connect
 [CPU Profiler]: https://chromedevtools.github.io/devtools-protocol/v8/Profiler
 [Chrome DevTools Protocol Viewer]: https://chromedevtools.github.io/devtools-protocol/v8/

@@ -52,6 +52,7 @@ const customTypesMap = {
   'Cipher': 'crypto.html#crypto_class_cipher',
   'Decipher': 'crypto.html#crypto_class_decipher',
   'DiffieHellman': 'crypto.html#crypto_class_diffiehellman',
+  'DiffieHellmanGroup': 'crypto.html#crypto_class_diffiehellmangroup',
   'ECDH': 'crypto.html#crypto_class_ecdh',
   'Hash': 'crypto.html#crypto_class_hash',
   'Hmac': 'crypto.html#crypto_class_hmac',
@@ -64,11 +65,14 @@ const customTypesMap = {
 
   'Domain': 'domain.html#domain_class_domain',
 
+  'errors.Error': 'errors.html#errors_class_error',
+
   'import.meta': 'esm.html#esm_import_meta',
 
   'EventEmitter': 'events.html#events_class_eventemitter',
 
   'FileHandle': 'fs.html#fs_class_filehandle',
+  'fs.Dir': 'fs.html#fs_class_fs_dir',
   'fs.Dirent': 'fs.html#fs_class_fs_dirent',
   'fs.FSWatcher': 'fs.html#fs_class_fs_fswatcher',
   'fs.ReadStream': 'fs.html#fs_class_fs_readstream',
@@ -121,6 +125,7 @@ const customTypesMap = {
   'Stream': 'stream.html#stream_stream',
   'stream.Duplex': 'stream.html#stream_class_stream_duplex',
   'stream.Readable': 'stream.html#stream_class_stream_readable',
+  'stream.Transform': 'stream.html#stream_class_stream_transform',
   'stream.Writable': 'stream.html#stream_class_stream_writable',
 
   'Immediate': 'timers.html#timers_class_immediate',

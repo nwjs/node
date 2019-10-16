@@ -217,8 +217,8 @@ speed, at the cost of memory usage.
 There are equivalents to the zlib options for Brotli-based streams, although
 these options have different ranges than the zlib ones:
 
-- zlib’s `level` option matches Brotli’s `BROTLI_PARAM_QUALITY` option.
-- zlib’s `windowBits` option matches Brotli’s `BROTLI_PARAM_LGWIN` option.
+* zlib’s `level` option matches Brotli’s `BROTLI_PARAM_QUALITY` option.
+* zlib’s `windowBits` option matches Brotli’s `BROTLI_PARAM_LGWIN` option.
 
 See [below][Brotli parameters] for more details on Brotli-specific options.
 
@@ -230,6 +230,7 @@ quality, but can be useful when data needs to be available as soon as possible.
 
 In the following example, `flush()` is used to write a compressed partial
 HTTP response to the client:
+
 ```js
 const zlib = require('zlib');
 const http = require('http');
@@ -731,6 +732,7 @@ without a callback.
 <!-- YAML
 added: v11.7.0
 -->
+
 * `buffer` {Buffer|TypedArray|DataView|ArrayBuffer|string}
 * `options` {brotli options}
 * `callback` {Function}
@@ -739,6 +741,7 @@ added: v11.7.0
 <!-- YAML
 added: v11.7.0
 -->
+
 * `buffer` {Buffer|TypedArray|DataView|ArrayBuffer|string}
 * `options` {brotli options}
 
@@ -748,6 +751,7 @@ Compress a chunk of data with [`BrotliCompress`][].
 <!-- YAML
 added: v11.7.0
 -->
+
 * `buffer` {Buffer|TypedArray|DataView|ArrayBuffer|string}
 * `options` {brotli options}
 * `callback` {Function}
@@ -756,6 +760,7 @@ added: v11.7.0
 <!-- YAML
 added: v11.7.0
 -->
+
 * `buffer` {Buffer|TypedArray|DataView|ArrayBuffer|string}
 * `options` {brotli options}
 
@@ -775,6 +780,7 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/12001
     description: The `buffer` parameter can be an `Uint8Array` now.
 -->
+
 * `buffer` {Buffer|TypedArray|DataView|ArrayBuffer|string}
 * `options` {zlib options}
 * `callback` {Function}

@@ -42,6 +42,7 @@ void PrintErrorString(const char* format, ...);
   V(ERR_CONSTRUCT_CALL_REQUIRED, TypeError)                                  \
   V(ERR_CONSTRUCT_CALL_INVALID, TypeError)                                   \
   V(ERR_INVALID_ARG_VALUE, TypeError)                                        \
+  V(ERR_OSSL_EVP_INVALID_DIGEST, Error)                                      \
   V(ERR_INVALID_ARG_TYPE, TypeError)                                         \
   V(ERR_INVALID_MODULE_SPECIFIER, TypeError)                                 \
   V(ERR_INVALID_PACKAGE_CONFIG, SyntaxError)                                 \
@@ -51,6 +52,7 @@ void PrintErrorString(const char* format, ...);
   V(ERR_MISSING_MESSAGE_PORT_IN_TRANSFER_LIST, TypeError)                    \
   V(ERR_MISSING_PASSPHRASE, TypeError)                                       \
   V(ERR_MISSING_PLATFORM_FOR_WORKER, Error)                                  \
+  V(ERR_NON_CONTEXT_AWARE_DISABLED, Error)                                   \
   V(ERR_MODULE_NOT_FOUND, Error)                                             \
   V(ERR_OUT_OF_RANGE, RangeError)                                            \
   V(ERR_SCRIPT_EXECUTION_INTERRUPTED, Error)                                 \
@@ -89,11 +91,14 @@ void PrintErrorString(const char* format, ...);
   V(ERR_CONSTRUCT_CALL_REQUIRED, "Cannot call constructor without `new`")    \
   V(ERR_INVALID_TRANSFER_OBJECT, "Found invalid object in transferList")     \
   V(ERR_MEMORY_ALLOCATION_FAILED, "Failed to allocate memory")               \
+  V(ERR_OSSL_EVP_INVALID_DIGEST, "Invalid digest used")                      \
   V(ERR_MISSING_MESSAGE_PORT_IN_TRANSFER_LIST,                               \
     "MessagePort was found in message but not listed in transferList")       \
   V(ERR_MISSING_PLATFORM_FOR_WORKER,                                         \
     "The V8 platform used by this instance of Node does not support "        \
     "creating Workers")                                                      \
+  V(ERR_NON_CONTEXT_AWARE_DISABLED,                                          \
+    "Loading non context-aware native modules has been disabled")            \
   V(ERR_SCRIPT_EXECUTION_INTERRUPTED,                                        \
     "Script execution was interrupted by `SIGINT`")                          \
   V(ERR_TRANSFERRING_EXTERNALIZED_SHAREDARRAYBUFFER,                         \

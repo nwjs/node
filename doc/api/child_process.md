@@ -43,19 +43,19 @@ and asynchronous alternatives to [`child_process.spawn()`][] and
 [`child_process.spawnSync()`][]. Each of these alternatives are implemented on
 top of [`child_process.spawn()`][] or [`child_process.spawnSync()`][].
 
-  * [`child_process.exec()`][]: spawns a shell and runs a command within that
-    shell, passing the `stdout` and `stderr` to a callback function when
-    complete.
-  * [`child_process.execFile()`][]: similar to [`child_process.exec()`][] except
-    that it spawns the command directly without first spawning a shell by
-    default.
-  * [`child_process.fork()`][]: spawns a new Node.js process and invokes a
-    specified module with an IPC communication channel established that allows
-    sending messages between parent and child.
-  * [`child_process.execSync()`][]: a synchronous version of
-    [`child_process.exec()`][] that will block the Node.js event loop.
-  * [`child_process.execFileSync()`][]: a synchronous version of
-    [`child_process.execFile()`][] that will block the Node.js event loop.
+* [`child_process.exec()`][]: spawns a shell and runs a command within that
+  shell, passing the `stdout` and `stderr` to a callback function when
+  complete.
+* [`child_process.execFile()`][]: similar to [`child_process.exec()`][] except
+  that it spawns the command directly without first spawning a shell by
+  default.
+* [`child_process.fork()`][]: spawns a new Node.js process and invokes a
+  specified module with an IPC communication channel established that allows
+  sending messages between parent and child.
+* [`child_process.execSync()`][]: a synchronous version of
+  [`child_process.exec()`][] that will block the Node.js event loop.
+* [`child_process.execFileSync()`][]: a synchronous version of
+  [`child_process.execFile()`][] that will block the Node.js event loop.
 
 For certain use cases, such as automating shell scripts, the
 [synchronous counterparts][] may be more convenient. In many cases, however,
@@ -112,7 +112,7 @@ bat.on('exit', (code) => {
 
 ```js
 // OR...
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 exec('my.bat', (err, stdout, stderr) => {
   if (err) {
     console.error(err);
@@ -168,6 +168,7 @@ generated output. The `command` string passed to the exec function is processed
 directly by the shell and special characters (vary based on
 [shell](https://en.wikipedia.org/wiki/List_of_command-line_interpreters))
 need to be dealt with accordingly:
+
 ```js
 exec('"/path/to/test file/test.sh" arg1 arg2');
 // Double quotes are used so that the space in the path is not interpreted as
@@ -894,8 +895,9 @@ arbitrary command execution.**
 added: v2.2.0
 -->
 
-Instances of the `ChildProcess` class are [`EventEmitters`][`EventEmitter`] that
-represent spawned child processes.
+* Extends: {EventEmitter}
+
+Instances of the `ChildProcess` represent spawned child processes.
 
 Instances of `ChildProcess` are not intended to be created directly. Rather,
 use the [`child_process.spawn()`][], [`child_process.exec()`][],

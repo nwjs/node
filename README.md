@@ -16,7 +16,6 @@ The Node.js project uses an [open governance model](./GOVERNANCE.md). The
 
 **This project is bound by a [Code of Conduct][].**
 
-
 # Table of Contents
 
 * [Support](#support)
@@ -89,7 +88,6 @@ Version-specific documentation is available in each release directory in the
 _docs_ subdirectory. Version-specific documentation is also at
 <https://nodejs.org/download/docs/>.
 
-
 ### Verifying Binaries
 
 Download directories contain a `SHASUMS256.txt` file with SHA checksums for the
@@ -156,6 +154,8 @@ For information about the governance of the Node.js project, see
 **Anna Henningsen** &lt;anna@addaleax.net&gt; (she/her)
 * [apapirovski](https://github.com/apapirovski) -
 **Anatoli Papirovski** &lt;apapirovski@mac.com&gt; (he/him)
+* [BethGriggs](https://github.com/BethGriggs) -
+**Beth Griggs** &lt;Bethany.Griggs@uk.ibm.com&gt; (she/her)
 * [ChALkeR](https://github.com/ChALkeR) -
 **Сковорода Никита Андреевич** &lt;chalkerx@gmail.com&gt; (he/him)
 * [cjihrig](https://github.com/cjihrig) -
@@ -186,6 +186,8 @@ For information about the governance of the Node.js project, see
 **Michaël Zasso** &lt;targos@protonmail.com&gt; (he/him)
 * [thefourtheye](https://github.com/thefourtheye) -
 **Sakthipriyan Vairamani** &lt;thechargingvolcano@gmail.com&gt; (he/him)
+* [tniessen](https://github.com/tniessen) -
+**Tobias Nießen** &lt;tniessen@tnie.de&gt;
 * [Trott](https://github.com/Trott) -
 **Rich Trott** &lt;rtrott@gmail.com&gt; (he/him)
 
@@ -278,6 +280,8 @@ For information about the governance of the Node.js project, see
 **David Cai** &lt;davidcai1993@yahoo.com&gt; (he/him)
 * [davisjam](https://github.com/davisjam) -
 **Jamie Davis** &lt;davisjam@vt.edu&gt; (he/him)
+* [devnexen](https://github.com/devnexen) -
+**David Carlier** &lt;devnexen@gmail.com&gt;
 * [devsnek](https://github.com/devsnek) -
 **Gus Caplan** &lt;me@gus.host&gt; (he/him)
 * [digitalinfinity](https://github.com/digitalinfinity) -

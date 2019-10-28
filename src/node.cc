@@ -1293,7 +1293,7 @@ NODE_EXTERN void g_set_blob_path(const char* path) {
 NODE_EXTERN void g_msg_pump_nest_enter(msg_pump_context_t* ctx) {
   ctx->loop = uv_loop_new();
 
-  ctx->wakeup_events->push_back((uv_async_t*)ctx->wakeup_event);
+  //ctx->wakeup_events->push_back((uv_async_t*)ctx->wakeup_event);
   ctx->wakeup_event = new uv_async_t;
   uv_async_init((uv_loop_t*)ctx->loop, (uv_async_t*)ctx->wakeup_event, wakeup_callback);
 }
@@ -1359,8 +1359,8 @@ NODE_EXTERN void g_msg_pump_nest_leave(msg_pump_context_t* ctx) {
   free((uv_loop_t*)ctx->loop);
   ctx->loop = nullptr;
     // // Restore previous async handle.
-  ctx->wakeup_event = ctx->wakeup_events->back();
-  ctx->wakeup_events->pop_back();
+  //ctx->wakeup_event = ctx->wakeup_events->back();
+  //ctx->wakeup_events->pop_back();
 }
 
 NODE_EXTERN uv_loop_t* g_uv_default_loop() {

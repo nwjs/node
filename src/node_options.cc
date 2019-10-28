@@ -160,10 +160,6 @@ void EnvironmentOptions::CheckOptions(std::vector<std::string>* errors) {
     errors->push_back("either --check or --eval can be used, not both");
   }
 
-  if (http_parser != "legacy" && http_parser != "llhttp") {
-    errors->push_back("invalid value for --http-parser");
-  }
-
   if (!unhandled_rejections.empty() &&
       unhandled_rejections != "strict" &&
       unhandled_rejections != "warn" &&
@@ -321,10 +317,6 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             "experimental Source Map V3 support",
             &EnvironmentOptions::enable_source_maps,
             kAllowedInEnvironment);
-  AddOption("--experimental-exports",
-            "experimental support for exports in package.json",
-            &EnvironmentOptions::experimental_exports,
-            kAllowedInEnvironment);
   AddOption("--experimental-json-modules",
             "experimental JSON interop support for the ES Module loader",
             &EnvironmentOptions::experimental_json_modules,
@@ -339,7 +331,6 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             "experimental ES Module support and caching modules",
             &EnvironmentOptions::experimental_modules,
             kAllowedInEnvironment);
-  Implies("--experimental-modules", "--experimental-exports");
   AddOption("--experimental-wasm-modules",
             "experimental ES Module support for webassembly modules",
             &EnvironmentOptions::experimental_wasm_modules,
@@ -382,16 +373,7 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             "Generate heap snapshot on specified signal",
             &EnvironmentOptions::heap_snapshot_signal,
             kAllowedInEnvironment);
-  AddOption("--http-parser",
-            "Select which HTTP parser to use; either 'legacy' or 'llhttp' "
-            "(default: llhttp).",
-            &EnvironmentOptions::http_parser,
-            kAllowedInEnvironment);
-  AddOption("--http-server-default-timeout",
-            "Default http server socket timeout in ms "
-            "(default: 120000)",
-            &EnvironmentOptions::http_server_default_timeout,
-            kAllowedInEnvironment);
+  AddOption("--http-parser", "", NoOp{}, kAllowedInEnvironment);
   AddOption("--input-type",
             "set module type for string input",
             &EnvironmentOptions::module_type,

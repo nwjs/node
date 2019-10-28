@@ -27,7 +27,7 @@ internationalization functionality.
 
 ```shell
 ./configure \
-    --with-intl=small-icu \
+    --with-intl=full-icu \
     --with-icu-source=http://download.icu-project.org/files/icu4c/58.1/icu4c-58_1-src.tgz
 make
 ```
@@ -54,7 +54,7 @@ Also running
 new Intl.DateTimeFormat('es', {month: 'long'}).format(new Date(9E8));
 ```
 
-…Should return `January` not `enero`.
+…Should return `enero` not `January`.
 
 * Now, copy `deps/icu` over to `deps/icu-small`
 
@@ -94,12 +94,12 @@ tools/license-builder.sh
 
 * Update the URL and hash for the full ICU file in `tools/icu/current_ver.dep`.
 It should match the ICU URL used in the first step.  When this is done, the
-following should build with full ICU.
+following should build with small ICU.
 
 ```shell
 # clean up
 rm -rf out deps/icu deps/icu4c*
-./configure --with-intl=full-icu --download=all
+./configure --with-intl=small-icu --download=all
 make
 make test-ci
 ```
@@ -128,9 +128,9 @@ ICU in the future. As of this writing, however, the tools are separate
 entities within Node.js, although theyare being scrutinized by interested
 members of the ICU-TC. The “upstream” ICU bugs are given below.
 
-   * [#10919](http://bugs.icu-project.org/trac/ticket/10919)
-     (experimental branch - may copy any source patches here)
-   * [#10922](http://bugs.icu-project.org/trac/ticket/10922)
-     (data packaging improvements)
-   * [#10923](http://bugs.icu-project.org/trac/ticket/10923)
-     (rewrite data building in python)
+* [#10919](http://bugs.icu-project.org/trac/ticket/10919)
+  (experimental branch - may copy any source patches here)
+* [#10922](http://bugs.icu-project.org/trac/ticket/10922)
+  (data packaging improvements)
+* [#10923](http://bugs.icu-project.org/trac/ticket/10923)
+  (rewrite data building in python)

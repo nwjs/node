@@ -45,7 +45,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.12',
+    'v8_embedder_string': '-node.14',
 
     ##### V8 defaults for Node.js #####
 
@@ -95,12 +95,6 @@
     'building_nw%' : '<(building_nw)',
 
     'conditions': [
-      ['target_arch=="arm64"', {
-        # Disabled pending https://github.com/nodejs/node/issues/23913.
-        'openssl_no_asm%': 1,
-      }, {
-        'openssl_no_asm%': 0,
-      }],
       ['OS == "win"', {
         'os_posix': 0,
         'v8_postmortem_support%': 0,

@@ -2,9 +2,10 @@
 
 Select a Node.js version below to view the changelog history:
 
-* [Node.js 12](doc/changelogs/CHANGELOG_V12.md) - **Current**
+* [Node.js 13](doc/changelogs/CHANGELOG_V13.md) - **Current**
+* [Node.js 12](doc/changelogs/CHANGELOG_V12.md) - **Long Term Support**
 * [Node.js 11](doc/changelogs/CHANGELOG_V11.md) - End-of-Life
-* [Node.js 10](doc/changelogs/CHANGELOG_V10.md) — **Long Term Support**
+* [Node.js 10](doc/changelogs/CHANGELOG_V10.md) — Long Term Support
 * [Node.js 9](doc/changelogs/CHANGELOG_V9.md) — End-of-Life
 * [Node.js 8](doc/changelogs/CHANGELOG_V8.md) — Long Term Support
 * [Node.js 7](doc/changelogs/CHANGELOG_V7.md) — End-of-Life
@@ -22,11 +23,16 @@ release.
 <!--lint disable maximum-line-length-->
 <table>
 <tr>
-  <th title="Current"><a href="doc/changelogs/CHANGELOG_V12.md">12</a><sup>Current</sup></th>
+  <th title="Current"><a href="doc/changelogs/CHANGELOG_V13.md">13</a><sup>Current</sup></th>
+  <th title="LTS Until 2022-04"><a href="doc/changelogs/CHANGELOG_V12.md">12</a><sup>LTS</sup></th>
   <th title="LTS Until 2021-04"><a href="doc/changelogs/CHANGELOG_V10.md">10</a><sup>LTS</sup></th>
   <th title="LTS Until 2019-12"><a href="doc/changelogs/CHANGELOG_V8.md">8</a><sup>LTS</sup></th>
 </tr>
 <tr>
+    <td valign="top">
+<b><a href="doc/changelogs/CHANGELOG_V13.md#13.0.1">13.0.1</a></b><br/>
+<a href="doc/changelogs/CHANGELOG_V13.md#13.0.0">13.0.0</a><br/>
+    </td>
     <td valign="top">
 <b><a href="doc/changelogs/CHANGELOG_V12.md#12.12.0">12.12.0</a></b><br/>
 <a href="doc/changelogs/CHANGELOG_V12.md#12.11.1">12.11.1</a><br/>
@@ -47,7 +53,11 @@ release.
 <a href="doc/changelogs/CHANGELOG_V12.md#12.0.0">12.0.0</a><br/>
     </td>
     <td valign="top">
-<b><a href="doc/changelogs/CHANGELOG_V10.md#10.15.3">10.15.3</a></b><br/>
+<b><a href="doc/changelogs/CHANGELOG_V10.md#10.16.3">10.16.3</a></b><br/>
+<a href="doc/changelogs/CHANGELOG_V10.md#10.16.2">10.16.2</a><br/>
+<a href="doc/changelogs/CHANGELOG_V10.md#10.16.1">10.16.1</a><br/>
+<a href="doc/changelogs/CHANGELOG_V10.md#10.16.0">10.16.0</a><br/>
+<a href="doc/changelogs/CHANGELOG_V10.md#10.15.3">10.15.3</a><br/>
 <a href="doc/changelogs/CHANGELOG_V10.md#10.15.2">10.15.2</a><br/>
 <a href="doc/changelogs/CHANGELOG_V10.md#10.15.1">10.15.1</a><br/>
 <a href="doc/changelogs/CHANGELOG_V10.md#10.15.0">10.15.0</a><br/>
@@ -72,7 +82,9 @@ release.
 <a href="doc/changelogs/CHANGELOG_V10.md#10.0.0">10.0.0</a><br/>
     </td>
     <td valign="top">
-<b><a href="doc/changelogs/CHANGELOG_V8.md#8.16.0">8.16.0</a></b><br/>
+<b><a href="doc/changelogs/CHANGELOG_V8.md#8.16.2">8.16.2</a></b><br/>
+<a href="doc/changelogs/CHANGELOG_V8.md#8.16.1">8.16.1</a><br/>
+<a href="doc/changelogs/CHANGELOG_V8.md#8.16.0">8.16.0</a><br/>
 <a href="doc/changelogs/CHANGELOG_V8.md#8.15.1">8.15.1</a><br/>
 <a href="doc/changelogs/CHANGELOG_V8.md#8.15.0">8.15.0</a><br/>
 <a href="doc/changelogs/CHANGELOG_V8.md#8.14.1">8.14.1</a><br/>

@@ -66,6 +66,12 @@
 
 #include <memory>
 
+// We cannot use __POSIX__ in this header because that's only defined when
+// building Node.js.
+#ifndef _WIN32
+#include <signal.h>
+#endif  // _WIN32
+
 #define NODE_MAKE_VERSION(major, minor, patch)                                \
   ((major) * 0x1000 + (minor) * 0x100 + (patch))
 
@@ -254,7 +260,11 @@ class NODE_EXTERN MultiIsolatePlatform : public v8::Platform {
   // flushing.
   virtual bool FlushForegroundTasks(v8::Isolate* isolate) = 0;
   virtual void DrainTasks(v8::Isolate* isolate) = 0;
-  virtual void CancelPendingDelayedTasks(v8::Isolate* isolate) = 0;
+
+  // TODO(addaleax): Remove this, it is unnecessary.
+  // This would currently be called before `UnregisterIsolate()` but will be
+  // folded into it in the future.
+  virtual void CancelPendingDelayedTasks(v8::Isolate* isolate);
 
   // This needs to be called between the calls to `Isolate::Allocate()` and
   // `Isolate::Initialize()`, so that initialization can already start
@@ -264,7 +274,8 @@ class NODE_EXTERN MultiIsolatePlatform : public v8::Platform {
   virtual void RegisterIsolate(v8::Isolate* isolate,
                                struct uv_loop_s* loop) = 0;
   // This needs to be called right before calling `Isolate::Dispose()`.
-  // This function may only be called once per `Isolate`.
+  // This function may only be called once per `Isolate`, and discard any
+  // pending delayed tasks scheduled for that isolate.
   virtual void UnregisterIsolate(v8::Isolate* isolate) = 0;
   // The platform should call the passed function once all state associated
   // with the given isolate has been cleaned up. This can, but does not have to,
@@ -821,6 +832,21 @@ class NODE_EXTERN AsyncResource {
   v8::Persistent<v8::Object> resource_;
   async_context async_context_;
 };
+
+#ifndef _WIN32
+// Register a signal handler without interrupting any handlers that node
+// itself needs. This does override handlers registered through
+// process.on('SIG...', function() { ... }). The `reset_handler` flag indicates
+// whether the signal handler for the given signal should be reset to its
+// default value before executing the handler (i.e. it works like SA_RESETHAND).
+// The `reset_handler` flag is invalid when `signal` is SIGSEGV.
+NODE_EXTERN
+void RegisterSignalHandler(int signal,
+                           void (*handler)(int signal,
+                                           siginfo_t* info,
+                                           void* ucontext),
+                           bool reset_handler = false);
+#endif  // _WIN32
 
 }  // namespace node
 

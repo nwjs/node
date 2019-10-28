@@ -287,7 +287,7 @@ enum http_known_headers {
   V(UNPROCESSABLE_ENTITY, 422)                                                \
   V(LOCKED, 423)                                                              \
   V(FAILED_DEPENDENCY, 424)                                                   \
-  V(UNORDERED_COLLECTION, 425)                                                \
+  V(TOO_EARLY, 425)                                                           \
   V(UPGRADE_REQUIRED, 426)                                                    \
   V(PRECONDITION_REQUIRED, 428)                                               \
   V(TOO_MANY_REQUESTS, 429)                                                   \
@@ -322,11 +322,9 @@ enum padding_strategy_type {
   PADDING_STRATEGY_ALIGNED,
   // Padding will ensure all data frames are maxFrameSize
   PADDING_STRATEGY_MAX,
-  // Padding will be determined via a JS callback. Note that this can be
-  // expensive because the callback is called once for every DATA and
-  // HEADERS frame. For performance reasons, this strategy should be
-  // avoided.
-  PADDING_STRATEGY_CALLBACK
+  // Removed and turned into an alias because it is unreasonably expensive for
+  // very little benefit.
+  PADDING_STRATEGY_CALLBACK = PADDING_STRATEGY_ALIGNED
 };
 
 enum session_state_flags {
@@ -878,8 +876,6 @@ class Http2Session : public AsyncWrap, public StreamListener {
                                 size_t maxPayloadLen);
   ssize_t OnMaxFrameSizePadding(size_t frameLength,
                                 size_t maxPayloadLen);
-  ssize_t OnCallbackPadding(size_t frameLength,
-                            size_t maxPayloadLen);
 
   // Frame Handler
   int HandleDataFrame(const nghttp2_frame* frame);

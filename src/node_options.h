@@ -101,7 +101,6 @@ class EnvironmentOptions : public Options {
  public:
   bool abort_on_uncaught_exception = false;
   bool enable_source_maps = false;
-  bool experimental_exports = false;
   bool experimental_json_modules = false;
   bool experimental_modules = false;
   std::string es_module_specifier_resolution;
@@ -115,8 +114,6 @@ class EnvironmentOptions : public Options {
   bool expose_internals = false;
   bool frozen_intrinsics = false;
   std::string heap_snapshot_signal;
-  std::string http_parser = "llhttp";
-  uint64_t http_server_default_timeout = 120000;
   bool no_deprecation = false;
   bool no_force_async_hooks_checks = false;
   bool no_warnings = false;

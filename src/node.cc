@@ -79,6 +79,17 @@
 #include "node_report.h"
 #endif
 
+#if defined(__APPLE__) || defined(__linux__)
+#define NODE_USE_V8_WASM_TRAP_HANDLER 1
+#else
+#define NODE_USE_V8_WASM_TRAP_HANDLER 0
+#endif
+
+#if NODE_USE_V8_WASM_TRAP_HANDLER
+#include <atomic>
+#include "v8-wasm-trap-handler-posix.h"
+#endif  // NODE_USE_V8_WASM_TRAP_HANDLER
+
 // ========== global C headers ==========
 
 #include <fcntl.h>  // _O_RDWR
@@ -197,17 +208,12 @@ void WaitForInspectorDisconnect(Environment* env) {
 #endif
 }
 
-void SignalExit(int signo) {
+#ifdef __POSIX__
+void SignalExit(int signo, siginfo_t* info, void* ucontext) {
   ResetStdio();
-#ifdef __FreeBSD__
-  // FreeBSD has a nasty bug, see RegisterSignalHandler for details
-  struct sigaction sa;
-  memset(&sa, 0, sizeof(sa));
-  sa.sa_handler = SIG_DFL;
-  CHECK_EQ(sigaction(signo, &sa, nullptr), 0);
-#endif
   raise(signo);
 }
+#endif  // __POSIX__
 
 MaybeLocal<Value> ExecuteBootstrapper(Environment* env,
                                       const char* id,
@@ -240,7 +246,7 @@ MaybeLocal<Value> ExecuteBootstrapper(Environment* env,
   return scope.EscapeMaybe(result);
 }
 
-#if HAVE_INSPECTOR && NODE_USE_V8_PLATFORM
+#if HAVE_INSPECTOR
 int Environment::InitializeInspector(
     inspector::ParentInspectorHandle* parent_handle) {
   std::string inspector_path;
@@ -485,20 +491,48 @@ void LoadEnvironment(Environment* env) {
   USE(StartMainThreadExecution(env));
 }
 
+#ifdef __POSIX__
+typedef void (*sigaction_cb)(int signo, siginfo_t* info, void* ucontext);
+#endif
+#if NODE_USE_V8_WASM_TRAP_HANDLER
+static std::atomic<sigaction_cb> previous_sigsegv_action;
+
+void TrapWebAssemblyOrContinue(int signo, siginfo_t* info, void* ucontext) {
+  if (!v8::TryHandleWebAssemblyTrapPosix(signo, info, ucontext)) {
+    sigaction_cb prev = previous_sigsegv_action.load();
+    if (prev != nullptr) {
+      prev(signo, info, ucontext);
+    } else {
+      // Reset to the default signal handler, i.e. cause a hard crash.
+      struct sigaction sa;
+      memset(&sa, 0, sizeof(sa));
+      sa.sa_handler = SIG_DFL;
+      CHECK_EQ(sigaction(signo, &sa, nullptr), 0);
+
+      ResetStdio();
+      raise(signo);
+    }
+  }
+}
+#endif  // NODE_USE_V8_WASM_TRAP_HANDLER
 
 #ifdef __POSIX__
 void RegisterSignalHandler(int signal,
-                           void (*handler)(int signal),
+                           sigaction_cb handler,
                            bool reset_handler) {
+  CHECK_NOT_NULL(handler);
+#if NODE_USE_V8_WASM_TRAP_HANDLER
+  if (signal == SIGSEGV) {
+    CHECK(previous_sigsegv_action.is_lock_free());
+    CHECK(!reset_handler);
+    previous_sigsegv_action.store(handler);
+    return;
+  }
+#endif  // NODE_USE_V8_WASM_TRAP_HANDLER
   struct sigaction sa;
   memset(&sa, 0, sizeof(sa));
-  sa.sa_handler = handler;
-#ifndef __FreeBSD__
-  // FreeBSD has a nasty bug with SA_RESETHAND reseting the SA_SIGINFO, that is
-  // in turn set for a libthr wrapper. This leads to a crash.
-  // Work around the issue by manually setting SIG_DFL in the signal handler
+  sa.sa_sigaction = handler;
   sa.sa_flags = reset_handler ? SA_RESETHAND : 0;
-#endif
   sigfillset(&sa.sa_mask);
   CHECK_EQ(sigaction(signal, &sa, nullptr), 0);
 }
@@ -582,6 +616,20 @@ inline void PlatformInit() {
 
   RegisterSignalHandler(SIGINT, SignalExit, true);
   RegisterSignalHandler(SIGTERM, SignalExit, true);
+
+#if NODE_USE_V8_WASM_TRAP_HANDLER
+  // Tell V8 to disable emitting WebAssembly
+  // memory bounds checks. This means that we have
+  // to catch the SIGSEGV in TrapWebAssemblyOrContinue
+  // and pass the signal context to V8.
+  {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = TrapWebAssemblyOrContinue;
+    CHECK_EQ(sigaction(SIGSEGV, &sa, nullptr), 0);
+  }
+  V8::EnableWebAssemblyTrapHandler(false);
+#endif  // NODE_USE_V8_WASM_TRAP_HANDLER
 
   // Raise the open file descriptor limit.
   struct rlimit lim;
@@ -807,13 +855,6 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
                             &default_env_options->redirect_warnings);
   }
 
-#if HAVE_OPENSSL
-  std::string* openssl_config = &per_process::cli_options->openssl_config;
-  if (openssl_config->empty()) {
-    credentials::SafeGetenv("OPENSSL_CONF", openssl_config);
-  }
-#endif
-
 #if !defined(NODE_WITHOUT_NODE_OPTIONS)
   std::string node_options;
 
@@ -919,7 +960,8 @@ void Init(int* argc,
   }
 
   if (per_process::cli_options->print_v8_help) {
-    V8::SetFlagsFromString("--help", 6);  // Doesn't return.
+    // Doesn't return.
+    V8::SetFlagsFromString("--help", static_cast<size_t>(6));
     UNREACHABLE();
   }
 
@@ -1085,7 +1127,8 @@ InitializationResult InitializeOncePerProcess(int argc, char** argv) {
   }
 
   if (per_process::cli_options->print_v8_help) {
-    V8::SetFlagsFromString("--help", 6);  // Doesn't return.
+    // Doesn't return.
+    V8::SetFlagsFromString("--help", static_cast<size_t>(6));
     UNREACHABLE();
   }
 

@@ -52,7 +52,7 @@ NPM ?= ./deps/npm/bin/npm-cli.js
 
 # Flags for packaging.
 BUILD_DOWNLOAD_FLAGS ?= --download=all
-BUILD_INTL_FLAGS ?= --with-intl=small-icu
+BUILD_INTL_FLAGS ?= --with-intl=full-icu
 BUILD_RELEASE_FLAGS ?= $(BUILD_DOWNLOAD_FLAGS) $(BUILD_INTL_FLAGS)
 
 # Default to quiet/pretty builds.
@@ -141,7 +141,7 @@ test-code-cache: with-code-cache
 	echo "'test-code-cache' target is a noop"
 
 out/Makefile: config.gypi common.gypi node.gyp \
-	deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp \
+	deps/uv/uv.gyp deps/llhttp/llhttp.gyp deps/zlib/zlib.gyp \
 	tools/v8_gypfiles/toolchain.gypi tools/v8_gypfiles/features.gypi \
 	tools/v8_gypfiles/inspector.gypi tools/v8_gypfiles/v8.gyp
 	$(PYTHON) tools/gyp_node.py -f make
@@ -347,24 +347,6 @@ test-valgrind: all
 test-check-deopts: all
 	$(PYTHON) tools/test.py $(PARALLEL_ARGS) --mode=$(BUILDTYPE_LOWER) --check-deopts parallel sequential
 
-benchmark/napi/function_call/build/$(BUILDTYPE)/binding.node: \
-		benchmark/napi/function_call/napi_binding.c \
-		benchmark/napi/function_call/binding.cc \
-		benchmark/napi/function_call/binding.gyp | all
-	$(NODE) deps/npm/node_modules/node-gyp/bin/node-gyp rebuild \
-		--python="$(PYTHON)" \
-		--directory="$(shell pwd)/benchmark/napi/function_call" \
-		--nodedir="$(shell pwd)"
-
-benchmark/napi/function_args/build/$(BUILDTYPE)/binding.node: \
-		benchmark/napi/function_args/napi_binding.c \
-		benchmark/napi/function_args/binding.cc \
-		benchmark/napi/function_args/binding.gyp | all
-	$(NODE) deps/npm/node_modules/node-gyp/bin/node-gyp rebuild \
-		--python="$(PYTHON)" \
-		--directory="$(shell pwd)/benchmark/napi/function_args" \
-		--nodedir="$(shell pwd)"
-
 DOCBUILDSTAMP_PREREQS = tools/doc/addon-verify.js doc/api/addons.md
 
 ifeq ($(OSTYPE),aix)
@@ -469,6 +451,17 @@ test/node-api/.buildstamp: $(ADDONS_PREREQS) \
 # Just goes to show that recursive make really is harmful...
 # TODO(bnoordhuis) Force rebuild after gyp or node-gyp update.
 build-node-api-tests: | $(NODE_EXE) test/node-api/.buildstamp
+
+BENCHMARK_NAPI_BINDING_GYPS := $(wildcard benchmark/napi/*/binding.gyp)
+
+BENCHMARK_NAPI_BINDING_SOURCES := \
+	$(wildcard benchmark/napi/*/*.c) \
+	$(wildcard benchmark/napi/*/*.cc) \
+	$(wildcard benchmark/napi/*/*.h)
+
+benchmark/napi/.buildstamp: $(ADDONS_PREREQS) \
+	$(BENCHMARK_NAPI_BINDING_GYPS) $(BENCHMARK_NAPI_BINDING_SOURCES)
+	@$(call run_build_addons,"$$PWD/benchmark/napi",$@)
 
 .PHONY: clear-stalled
 clear-stalled:
@@ -599,11 +592,10 @@ test-hash-seed: all
 	$(NODE) test/pummel/test-hash-seed.js
 
 .PHONY: test-doc
-test-doc: doc-only ## Builds, lints, and verifies the docs.
+test-doc: doc-only lint ## Builds, lints, and verifies the docs.
 	@if [ "$(shell $(node_use_openssl))" != "true" ]; then \
 		echo "Skipping test-doc (no crypto)"; \
 	else \
-		$(MAKE) lint; \
 		$(PYTHON) tools/test.py $(PARALLEL_ARGS) doctool; \
 	fi
 
@@ -1163,13 +1155,12 @@ bench: bench-addons-build
 
 # Build required addons for benchmark before running it.
 .PHONY: bench-addons-build
-bench-addons-build: benchmark/napi/function_call/build/$(BUILDTYPE)/binding.node \
-	benchmark/napi/function_args/build/$(BUILDTYPE)/binding.node
+bench-addons-build: | $(NODE_EXE) benchmark/napi/.buildstamp
 
 .PHONY: bench-addons-clean
 bench-addons-clean:
-	$(RM) -r benchmark/napi/function_call/build
-	$(RM) -r benchmark/napi/function_args/build
+	$(RM) -r benchmark/napi/*/build
+	$(RM) benchmark/napi/.buildstamp
 
 .PHONY: lint-md-rollup
 lint-md-rollup:

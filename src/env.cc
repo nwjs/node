@@ -29,6 +29,7 @@ using v8::ArrayBuffer;
 using v8::Boolean;
 using v8::Context;
 using v8::EmbedderGraph;
+using v8::FinalizationGroup;
 using v8::Function;
 using v8::FunctionTemplate;
 using v8::HandleScope;
@@ -1058,6 +1059,21 @@ void Environment::AddArrayBufferAllocatorToKeepAliveUntilIsolateDispose(
   keep_alive_allocators_->insert(allocator);
 }
 
+bool Environment::RunWeakRefCleanup() {
+  isolate()->ClearKeptObjects();
+
+  while (!cleanup_finalization_groups_.empty()) {
+    Local<FinalizationGroup> fg =
+        cleanup_finalization_groups_.front().Get(isolate());
+    cleanup_finalization_groups_.pop_front();
+    if (!FinalizationGroup::Cleanup(fg).FromMaybe(false)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 void AsyncRequest::Install(Environment* env, void* data, uv_async_cb target) {
   CHECK_NULL(async_);
   env_ = env;
@@ -1106,6 +1122,9 @@ bool Environment::KickNextTick() {
   TickInfo* info = tick_info();
 
   if (!can_call_into_js()) return true;
+
+  OnScopeLeave weakref_cleanup([&]() { RunWeakRefCleanup(); });
+
   if (info->has_tick_scheduled() == 0) {
     //isolate()->RunMicrotasks();
     v8::MicrotasksScope::PerformCheckpoint(isolate());

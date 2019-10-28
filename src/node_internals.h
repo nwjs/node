@@ -94,11 +94,8 @@ void PrintCaughtException(v8::Isolate* isolate,
 
 void WaitForInspectorDisconnect(Environment* env);
 void ResetStdio();  // Safe to call more than once and from signal handlers.
-void SignalExit(int signo);
 #ifdef __POSIX__
-void RegisterSignalHandler(int signal,
-                           void (*handler)(int signal),
-                           bool reset_handler = false);
+void SignalExit(int signal, siginfo_t* info, void* ucontext);
 #endif
 
 std::string GetHumanReadableProcessName();

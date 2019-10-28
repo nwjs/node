@@ -8,7 +8,7 @@
 #include "util-inl.h"
 #include "async_wrap-inl.h"
 
-#if NODE_USE_V8_PLATFORM && HAVE_INSPECTOR
+#if HAVE_INSPECTOR
 #include "inspector/worker_inspector.h"  // ParentInspectorHandle
 #endif
 
@@ -18,10 +18,8 @@
 
 using node::options_parser::kDisallowedInEnvironment;
 using v8::Array;
-using v8::ArrayBuffer;
 using v8::Boolean;
 using v8::Context;
-using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
 using v8::HandleScope;
@@ -41,7 +39,7 @@ namespace worker {
 
 namespace {
 
-#if NODE_USE_V8_PLATFORM && HAVE_INSPECTOR
+#if HAVE_INSPECTOR
 void WaitForWorkerInspectorToStop(Environment* child) {
   child->inspector_agent()->WaitForDisconnect();
   child->inspector_agent()->Stop();
@@ -84,7 +82,7 @@ Worker::Worker(Environment* env,
                 Number::New(env->isolate(), static_cast<double>(thread_id_)))
       .Check();
 
-#if NODE_USE_V8_PLATFORM && HAVE_INSPECTOR
+#if HAVE_INSPECTOR
   inspector_parent_handle_ =
       env->inspector_agent()->GetParentHandle(thread_id_, url);
 #endif
@@ -150,8 +148,6 @@ class WorkerThreadData {
       w_->isolate_ = nullptr;
     }
 
-    w_->platform_->CancelPendingDelayedTasks(isolate);
-
     bool platform_finished = false;
 
     isolate_data_.reset();
@@ -195,7 +191,7 @@ void Worker::Run() {
     Locker locker(isolate_);
     Isolate::Scope isolate_scope(isolate_);
     SealHandleScope outer_seal(isolate_);
-#if NODE_USE_V8_PLATFORM && HAVE_INSPECTOR
+#if HAVE_INSPECTOR
     bool inspector_started = false;
 #endif
 
@@ -227,7 +223,7 @@ void Worker::Run() {
         env_->stop_sub_worker_contexts();
         env_->RunCleanup();
         RunAtExit(env_.get());
-#if NODE_USE_V8_PLATFORM && HAVE_INSPECTOR
+#if HAVE_INSPECTOR
         if (inspector_started)
           WaitForWorkerInspectorToStop(env_.get());
 #endif
@@ -272,7 +268,7 @@ void Worker::Run() {
       if (is_stopped()) return;
       {
         env_->InitializeDiagnostics();
-#if NODE_USE_V8_PLATFORM && HAVE_INSPECTOR
+#if HAVE_INSPECTOR
         env_->InitializeInspector(inspector_parent_handle_.release());
         inspector_started = true;
 #endif

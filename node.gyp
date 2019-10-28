@@ -1,7 +1,6 @@
 {
   'variables': {
     'v8_use_siphash%': 0,
-    'v8_use_snapshot%': 0,
     'icu_gyp_path%': '../icu/icu.gyp',
     'coverage': 'false',
     'node_report': 'false',
@@ -199,6 +198,7 @@
       'lib/internal/repl/history.js',
       'lib/internal/repl/utils.js',
       'lib/internal/socket_list.js',
+      'lib/internal/source_map/prepare_stack_trace.js',
       'lib/internal/source_map/source_map.js',
       'lib/internal/source_map/source_map_cache.js',
       'lib/internal/test/binding.js',
@@ -220,7 +220,7 @@
       'lib/internal/v8_prof_processor.js',
       'lib/internal/validators.js',
       'lib/internal/stream_base_commons.js',
-      'lib/internal/vm/source_text_module.js',
+      'lib/internal/vm/module.js',
       'lib/internal/worker.js',
       'lib/internal/worker/io.js',
       'lib/internal/streams/lazy_transform.js',
@@ -313,7 +313,7 @@
           '-Wl,-bnoerrmsg',
         ],
       }],
-      ['(OS=="linux") and llvm_version!=0', {
+      ['OS in ("linux") and llvm_version != "0.0"', {
         'libraries': ['-latomic'],
       }],
     ],
@@ -580,8 +580,7 @@
         'src/node_env_var.cc',
         'src/node_errors.cc',
         'src/node_file.cc',
-        'src/node_http_parser_llhttp.cc',
-        'src/node_http_parser_traditional.cc',
+        'src/node_http_parser.cc',
         'src/node_http2.cc',
         'src/node_i18n.cc',
         'src/node_main_instance.cc',
@@ -645,7 +644,6 @@
         'src/handle_wrap.h',
         'src/histogram.h',
         'src/histogram-inl.h',
-        'src/http_parser_adaptor.h',
         'src/js_stream.h',
         'src/memory_tracker.h',
         'src/memory_tracker-inl.h',
@@ -661,7 +659,6 @@
         'src/node_dir.h',
         'src/node_errors.h',
         'src/node_file.h',
-        'src/node_http_parser_impl.h',
         'src/node_http2.h',
         'src/node_http2_state.h',
         'src/node_i18n.h',
@@ -713,7 +710,6 @@
         'src/util.h',
         'src/util-inl.h',
         # Dependency headers
-        'deps/http_parser/http_parser.h',
         #'deps/v8/include/v8.h',
         # javascript files to make for an even more pleasant IDE experience
         '<@(library_files)',

@@ -202,7 +202,7 @@ NODE_MODULES_PATHS(START)
 5. return DIRS
 ```
 
-If `--experimental-exports` is enabled, Node.js allows packages loaded via
+Node.js allows packages loaded via
 `LOAD_NODE_MODULES` to explicitly declare which file paths to expose and how
 they should be interpreted. This expands on the control packages already had
 using the `main` field.
@@ -695,7 +695,7 @@ Module {
      '/node_modules' ] }
 ```
 
-#### require.resolve(request[, options])
+#### require.resolve(request\[, options\])
 <!-- YAML
 added: v0.3.0
 changes:

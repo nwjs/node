@@ -2,6 +2,8 @@
 #include "node_errors.h"
 #include "node_process.h"
 
+#include <time.h>  // tzset(), _tzset()
+
 namespace node {
 using v8::Array;
 using v8::Boolean;
@@ -57,6 +59,19 @@ Mutex env_var_mutex;
 std::shared_ptr<KVStore> system_environment = std::make_shared<RealEnvStore>();
 }  // namespace per_process
 
+template <typename T>
+void DateTimeConfigurationChangeNotification(Isolate* isolate, const T& key) {
+  if (key.length() == 2 && key[0] == 'T' && key[1] == 'Z') {
+#ifdef __POSIX__
+    tzset();
+#else
+    _tzset();
+#endif
+    auto constexpr time_zone_detection = Isolate::TimeZoneDetection::kRedetect;
+    isolate->DateTimeConfigurationChangeNotification(time_zone_detection);
+  }
+}
+
 MaybeLocal<String> RealEnvStore::Get(Isolate* isolate,
                                      Local<String> property) const {
   Mutex::ScopedLock lock(per_process::env_var_mutex);
@@ -94,6 +109,7 @@ void RealEnvStore::Set(Isolate* isolate,
   if (key[0] == L'=') return;
 #endif
   uv_os_setenv(*key, *val);
+  DateTimeConfigurationChangeNotification(isolate, key);
 }
 
 int32_t RealEnvStore::Query(Isolate* isolate, Local<String> property) const {
@@ -125,6 +141,7 @@ void RealEnvStore::Delete(Isolate* isolate, Local<String> property) {
 
   node::Utf8Value key(isolate, property);
   uv_os_unsetenv(*key);
+  DateTimeConfigurationChangeNotification(isolate, key);
 }
 
 Local<Array> RealEnvStore::Enumerate(Isolate* isolate) const {

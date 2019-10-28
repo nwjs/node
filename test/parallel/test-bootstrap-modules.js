@@ -1,4 +1,3 @@
-// Flags: --expose-internals
 'use strict';
 
 // This list must be computed before we require any modules to
@@ -93,7 +92,6 @@ if (common.isMainThread) {
   expectedModules.add('NativeModule internal/streams/state');
   expectedModules.add('NativeModule internal/worker');
   expectedModules.add('NativeModule internal/worker/io');
-  expectedModules.add('NativeModule module');
   expectedModules.add('NativeModule stream');
   expectedModules.add('NativeModule worker_threads');
 }

@@ -45,6 +45,7 @@ import multiprocessing
 import errno
 import copy
 
+from io import open
 from os.path import join, dirname, abspath, basename, isdir, exists
 from datetime import datetime
 try:
@@ -77,6 +78,7 @@ class ProgressIndicator(object):
 
   def __init__(self, cases, flaky_tests_mode):
     self.cases = cases
+    self.serial_id = 0
     self.flaky_tests_mode = flaky_tests_mode
     self.parallel_queue = Queue(len(cases))
     self.sequential_queue = Queue(len(cases))
@@ -146,6 +148,8 @@ class ProgressIndicator(object):
       case = test
       case.thread_id = thread_id
       self.lock.acquire()
+      case.serial_id = self.serial_id
+      self.serial_id += 1
       self.AboutToRun(case)
       self.lock.release()
       try:
@@ -504,6 +508,7 @@ class TestCase(object):
     self.mode = mode
     self.parallel = False
     self.disable_core_files = False
+    self.serial_id = 0
     self.thread_id = 0
 
   def IsNegative(self):
@@ -535,6 +540,7 @@ class TestCase(object):
   def Run(self):
     try:
       result = self.RunCommand(self.GetCommand(), {
+        "TEST_SERIAL_ID": "%d" % self.serial_id,
         "TEST_THREAD_ID": "%d" % self.thread_id,
         "TEST_PARALLEL" : "%d" % self.parallel
       })
@@ -700,6 +706,10 @@ def Execute(args, context, timeout=None, env=None, disable_core_files=False, std
   if "NODE_PATH" in env_copy:
     del env_copy["NODE_PATH"]
 
+  # Remove NODE_REPL_EXTERNAL_MODULE
+  if "NODE_REPL_EXTERNAL_MODULE" in env_copy:
+    del env_copy["NODE_REPL_EXTERNAL_MODULE"]
+
   # Extend environment
   for key, value in env.items():
     env_copy[key] = value
@@ -724,8 +734,8 @@ def Execute(args, context, timeout=None, env=None, disable_core_files=False, std
   )
   os.close(fd_out)
   os.close(fd_err)
-  output = open(outname).read()
-  errors = open(errname).read()
+  output = open(outname, encoding='utf8').read()
+  errors = open(errname, encoding='utf8').read()
   CheckedUnlink(outname)
   CheckedUnlink(errname)
 

@@ -119,7 +119,7 @@ FOO-BAR 3257: hi there, it's foo-bar [2333]
 Multiple comma-separated `section` names may be specified in the `NODE_DEBUG`
 environment variable: `NODE_DEBUG=fs,net,tls`.
 
-## util.deprecate(fn, msg[, code])
+## util.deprecate(fn, msg\[, code\])
 <!-- YAML
 added: v0.8.0
 changes:
@@ -181,7 +181,7 @@ The `--throw-deprecation` command line flag and `process.throwDeprecation`
 property take precedence over `--trace-deprecation` and
 `process.traceDeprecation`.
 
-## util.format(format[, ...args])
+## util.format(format\[, ...args\])
 <!-- YAML
 added: v0.5.3
 changes:
@@ -287,7 +287,7 @@ util.format('%% %s');
 Some input values can have a significant performance overhead that can block the
 event loop. Use this function with care and never in a hot code path.
 
-## util.formatWithOptions(inspectOptions, format[, ...args])
+## util.formatWithOptions(inspectOptions, format\[, ...args\])
 <!-- YAML
 added: v10.0.0
 -->
@@ -393,11 +393,14 @@ stream.on('data', (data) => {
 stream.write('With ES6');
 ```
 
-## util.inspect(object[, options])
-## util.inspect(object[, showHidden[, depth[, colors]]])
+## util.inspect(object\[, options\])
+## util.inspect(object\[, showHidden\[, depth\[, colors\]\]\])
 <!-- YAML
 added: v0.3.0
 changes:
+  - version: v13.0.0
+    pr-url: https://github.com/nodejs/node/pull/27685
+    description: Circular references now include a marker to the reference.
   - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/27109
     description: The `compact` options default is changed to `3` and the
@@ -520,7 +523,7 @@ util.inspect(new Bar()); // 'Bar {}'
 util.inspect(baz);       // '[foo] {}'
 ```
 
-Circular references are marked as `'[Circular]'`:
+Circular references point to their anchor by using a reference index:
 
 ```js
 const { inspect } = require('util');
@@ -532,9 +535,9 @@ obj.b.inner = obj.b;
 obj.b.obj = obj;
 
 console.log(inspect(obj));
-// {
-//   a: [ [Circular] ],
-//   b: { inner: [Circular], obj: [Circular] }
+// <ref *1> {
+//   a: [ [Circular *1] ],
+//   b: <ref *2> { inner: [Circular *2], obj: [Circular *1] }
 // }
 ```
 
@@ -929,26 +932,9 @@ Per the [WHATWG Encoding Standard][], the encodings supported by the
 one or more aliases may be used.
 
 Different Node.js build configurations support different sets of encodings.
-While a very basic set of encodings is supported even on Node.js builds without
-ICU enabled, support for some encodings is provided only when Node.js is built
-with ICU and using the full ICU data (see [Internationalization][]).
+(see [Internationalization][])
 
-#### Encodings Supported Without ICU
-
-| Encoding     | Aliases                           |
-| -----------  | --------------------------------- |
-| `'utf-8'`    | `'unicode-1-1-utf-8'`, `'utf8'`   |
-| `'utf-16le'` | `'utf-16'`                        |
-
-#### Encodings Supported by Default (With ICU)
-
-| Encoding     | Aliases                           |
-| -----------  | --------------------------------- |
-| `'utf-8'`    | `'unicode-1-1-utf-8'`, `'utf8'`   |
-| `'utf-16le'` | `'utf-16'`                        |
-| `'utf-16be'` |                                   |
-
-#### Encodings Requiring Full ICU Data
+#### Encodings Supported by Default (With Full ICU Data)
 
 | Encoding           | Aliases                          |
 | -----------------  | -------------------------------- |
@@ -987,10 +973,25 @@ with ICU and using the full ICU data (see [Internationalization][]).
 | `'shift_jis'`      | `'csshiftjis'`, `'ms932'`, `'ms_kanji'`, `'shift-jis'`, `'sjis'`, `'windows-31j'`, `'x-sjis'` |
 | `'euc-kr'`         | `'cseuckr'`, `'csksc56011987'`, `'iso-ir-149'`, `'korean'`, `'ks_c_5601-1987'`, `'ks_c_5601-1989'`, `'ksc5601'`, `'ksc_5601'`, `'windows-949'` |
 
+#### Encodings Supported when Node.js is built with the `small-icu` option
+
+| Encoding     | Aliases                           |
+| -----------  | --------------------------------- |
+| `'utf-8'`    | `'unicode-1-1-utf-8'`, `'utf8'`   |
+| `'utf-16le'` | `'utf-16'`                        |
+| `'utf-16be'` |                                   |
+
+#### Encodings Supported when ICU is disabled
+
+| Encoding     | Aliases                           |
+| -----------  | --------------------------------- |
+| `'utf-8'`    | `'unicode-1-1-utf-8'`, `'utf8'`   |
+| `'utf-16le'` | `'utf-16'`                        |
+
 The `'iso-8859-16'` encoding listed in the [WHATWG Encoding Standard][]
 is not supported.
 
-### new TextDecoder([encoding[, options]])
+### new TextDecoder(\[encoding\[, options\]\])
 <!-- YAML
 added: v8.3.0
 changes:
@@ -1002,9 +1003,9 @@ changes:
 * `encoding` {string} Identifies the `encoding` that this `TextDecoder` instance
   supports. **Default:** `'utf-8'`.
 * `options` {Object}
-  * `fatal` {boolean} `true` if decoding failures are fatal. This option is only
-    supported when ICU is enabled (see [Internationalization][]). **Default:**
-    `false`.
+  * `fatal` {boolean} `true` if decoding failures are fatal.
+    This option is not supported when ICU is disabled
+    (see [Internationalization][]). **Default:** `false`.
   * `ignoreBOM` {boolean} When `true`, the `TextDecoder` will include the byte
      order mark in the decoded result. When `false`, the byte order mark will
      be removed from the output. This option is only used when `encoding` is
@@ -1015,7 +1016,7 @@ supported encodings or an alias.
 
 The `TextDecoder` class is also available on the global object.
 
-### textDecoder.decode([input[, options]])
+### textDecoder.decode(\[input\[, options\]\])
 
 * `input` {ArrayBuffer|DataView|TypedArray} An `ArrayBuffer`, `DataView` or
   `TypedArray` instance containing the encoded data.
@@ -1070,7 +1071,7 @@ const uint8array = encoder.encode('this is some data');
 
 The `TextEncoder` class is also available on the global object.
 
-### textEncoder.encode([input])
+### textEncoder.encode(\[input\])
 
 * `input` {string} The text to encode. **Default:** an empty string.
 * Returns: {Uint8Array}
@@ -1766,7 +1767,7 @@ added: v0.7.5
 deprecated: v6.0.0
 -->
 
-> Stability: 0 - Deprecated: Use [`Object.assign()`] instead.
+> Stability: 0 - Deprecated: Use [`Object.assign()`][] instead.
 
 * `target` {Object}
 * `source` {Object}

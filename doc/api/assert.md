@@ -142,7 +142,7 @@ lax:
 assert.deepEqual(/a/gi, new Date());
 ```
 
-## assert(value[, message])
+## assert(value\[, message\])
 <!-- YAML
 added: v0.5.9
 -->
@@ -152,7 +152,7 @@ added: v0.5.9
 
 An alias of [`assert.ok()`][].
 
-## assert.deepEqual(actual, expected[, message])
+## assert.deepEqual(actual, expected\[, message\])
 <!-- YAML
 added: v0.1.21
 changes:
@@ -214,8 +214,9 @@ are also recursively evaluated by the following rules.
 * [`Symbol`][] properties are not compared.
 * [`WeakMap`][] and [`WeakSet`][] comparison does not rely on their values.
 
-The following example does not throw an `AssertionError` because the primitives
-are considered equal by the [Abstract Equality Comparison][] ( `==` ).
+The following example does not throw an [`AssertionError`][] because the
+primitives are considered equal by the [Abstract Equality Comparison][]
+( `==` ).
 
 ```js
 // WARNING: This does not throw an AssertionError!
@@ -260,13 +261,13 @@ assert.deepEqual(obj1, obj4);
 // AssertionError: { a: { b: 1 } } deepEqual {}
 ```
 
-If the values are not equal, an `AssertionError` is thrown with a `message`
+If the values are not equal, an [`AssertionError`][] is thrown with a `message`
 property set equal to the value of the `message` parameter. If the `message`
 parameter is undefined, a default error message is assigned. If the `message`
 parameter is an instance of an [`Error`][] then it will be thrown instead of the
-`AssertionError`.
+[`AssertionError`][].
 
-## assert.deepStrictEqual(actual, expected[, message])
+## assert.deepStrictEqual(actual, expected\[, message\])
 <!-- YAML
 added: v1.2.0
 changes:
@@ -414,13 +415,13 @@ assert.deepStrictEqual(weakMap1, weakMap3);
 //   }
 ```
 
-If the values are not equal, an `AssertionError` is thrown with a `message`
+If the values are not equal, an [`AssertionError`][] is thrown with a `message`
 property set equal to the value of the `message` parameter. If the `message`
 parameter is undefined, a default error message is assigned. If the `message`
 parameter is an instance of an [`Error`][] then it will be thrown instead of the
 `AssertionError`.
 
-## assert.doesNotReject(asyncFn[, error][, message])
+## assert.doesNotReject(asyncFn\[, error\]\[, message\])
 <!-- YAML
 added: v10.0.0
 -->
@@ -470,7 +471,7 @@ assert.doesNotReject(Promise.reject(new TypeError('Wrong value')))
   });
 ```
 
-## assert.doesNotThrow(fn[, error][, message])
+## assert.doesNotThrow(fn\[, error\]\[, message\])
 <!-- YAML
 added: v0.1.21
 changes:
@@ -497,9 +498,9 @@ When `assert.doesNotThrow()` is called, it will immediately call the `fn`
 function.
 
 If an error is thrown and it is the same type as that specified by the `error`
-parameter, then an `AssertionError` is thrown. If the error is of a different
-type, or if the `error` parameter is undefined, the error is propagated back
-to the caller.
+parameter, then an [`AssertionError`][] is thrown. If the error is of a
+different type, or if the `error` parameter is undefined, the error is
+propagated back to the caller.
 
 If specified, `error` can be a [`Class`][], [`RegExp`][] or a validation
 function. See [`assert.throws()`][] for more details.
@@ -517,7 +518,7 @@ assert.doesNotThrow(
 );
 ```
 
-However, the following will result in an `AssertionError` with the message
+However, the following will result in an [`AssertionError`][] with the message
 'Got unwanted exception...':
 
 <!-- eslint-disable no-restricted-syntax -->
@@ -530,8 +531,8 @@ assert.doesNotThrow(
 );
 ```
 
-If an `AssertionError` is thrown and a value is provided for the `message`
-parameter, the value of `message` will be appended to the `AssertionError`
+If an [`AssertionError`][] is thrown and a value is provided for the `message`
+parameter, the value of `message` will be appended to the [`AssertionError`][]
 message:
 
 <!-- eslint-disable no-restricted-syntax -->
@@ -546,7 +547,7 @@ assert.doesNotThrow(
 // Throws: AssertionError: Got unwanted exception: Whoops
 ```
 
-## assert.equal(actual, expected[, message])
+## assert.equal(actual, expected\[, message\])
 <!-- YAML
 added: v0.1.21
 -->
@@ -580,22 +581,22 @@ assert.equal({ a: { b: 1 } }, { a: { b: 1 } });
 // AssertionError: { a: { b: 1 } } == { a: { b: 1 } }
 ```
 
-If the values are not equal, an `AssertionError` is thrown with a `message`
+If the values are not equal, an [`AssertionError`][] is thrown with a `message`
 property set equal to the value of the `message` parameter. If the `message`
 parameter is undefined, a default error message is assigned. If the `message`
 parameter is an instance of an [`Error`][] then it will be thrown instead of the
 `AssertionError`.
 
-## assert.fail([message])
+## assert.fail(\[message\])
 <!-- YAML
 added: v0.1.21
 -->
 
 * `message` {string|Error} **Default:** `'Failed'`
 
-Throws an `AssertionError` with the provided error message or a default error
-message. If the `message` parameter is an instance of an [`Error`][] then it
-will be thrown instead of the `AssertionError`.
+Throws an [`AssertionError`][] with the provided error message or a default
+error message. If the `message` parameter is an instance of an [`Error`][] then
+it will be thrown instead of the [`AssertionError`][].
 
 ```js
 const assert = require('assert').strict;
@@ -613,7 +614,7 @@ assert.fail(new TypeError('need array'));
 Using `assert.fail()` with more than two arguments is possible but deprecated.
 See below for further details.
 
-## assert.fail(actual, expected[, message[, operator[, stackStartFn]]])
+## assert.fail(actual, expected\[, message\[, operator\[, stackStartFn\]\]\])
 <!-- YAML
 added: v0.1.21
 changes:
@@ -683,7 +684,7 @@ changes:
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/18247
     description: Instead of throwing the original error it is now wrapped into
-                 an `AssertionError` that contains the full stack trace.
+                 an [`AssertionError`][] that contains the full stack trace.
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/18247
     description: Value may now only be `undefined` or `null`. Before all falsy
@@ -723,7 +724,7 @@ let err;
 //     at errorFrame
 ```
 
-## assert.notDeepEqual(actual, expected[, message])
+## assert.notDeepEqual(actual, expected\[, message\])
 <!-- YAML
 added: v0.1.21
 changes:
@@ -791,13 +792,13 @@ assert.notDeepEqual(obj1, obj4);
 // OK
 ```
 
-If the values are deeply equal, an `AssertionError` is thrown with a `message`
-property set equal to the value of the `message` parameter. If the `message`
-parameter is undefined, a default error message is assigned. If the `message`
-parameter is an instance of an [`Error`][] then it will be thrown instead of the
-`AssertionError`.
+If the values are deeply equal, an [`AssertionError`][] is thrown with a
+`message` property set equal to the value of the `message` parameter. If the
+`message` parameter is undefined, a default error message is assigned. If the
+`message` parameter is an instance of an [`Error`][] then it will be thrown
+instead of the `AssertionError`.
 
-## assert.notDeepStrictEqual(actual, expected[, message])
+## assert.notDeepStrictEqual(actual, expected\[, message\])
 <!-- YAML
 added: v1.2.0
 changes:
@@ -839,13 +840,13 @@ assert.notDeepStrictEqual({ a: 1 }, { a: '1' });
 // OK
 ```
 
-If the values are deeply and strictly equal, an `AssertionError` is thrown with
-a `message` property set equal to the value of the `message` parameter. If the
-`message` parameter is undefined, a default error message is assigned. If the
-`message` parameter is an instance of an [`Error`][] then it will be thrown
-instead of the `AssertionError`.
+If the values are deeply and strictly equal, an [`AssertionError`][] is thrown
+with a `message` property set equal to the value of the `message` parameter. If
+the `message` parameter is undefined, a default error message is assigned. If
+the `message` parameter is an instance of an [`Error`][] then it will be thrown
+instead of the [`AssertionError`][].
 
-## assert.notEqual(actual, expected[, message])
+## assert.notEqual(actual, expected\[, message\])
 <!-- YAML
 added: v0.1.21
 -->
@@ -878,13 +879,13 @@ assert.notEqual(1, '1');
 // AssertionError: 1 != '1'
 ```
 
-If the values are equal, an `AssertionError` is thrown with a `message` property
-set equal to the value of the `message` parameter. If the `message` parameter is
-undefined, a default error message is assigned. If the `message` parameter is an
-instance of an [`Error`][] then it will be thrown instead of the
+If the values are equal, an [`AssertionError`][] is thrown with a `message`
+property set equal to the value of the `message` parameter. If the `message`
+parameter is undefined, a default error message is assigned. If the `message`
+parameter is an instance of an [`Error`][] then it will be thrown instead of the
 `AssertionError`.
 
-## assert.notStrictEqual(actual, expected[, message])
+## assert.notStrictEqual(actual, expected\[, message\])
 <!-- YAML
 added: v0.1.21
 changes:
@@ -915,13 +916,13 @@ assert.notStrictEqual(1, '1');
 // OK
 ```
 
-If the values are strictly equal, an `AssertionError` is thrown with a `message`
-property set equal to the value of the `message` parameter. If the `message`
-parameter is undefined, a default error message is assigned. If the `message`
-parameter is an instance of an [`Error`][] then it will be thrown instead of the
-`AssertionError`.
+If the values are strictly equal, an [`AssertionError`][] is thrown with a
+`message` property set equal to the value of the `message` parameter. If the
+`message` parameter is undefined, a default error message is assigned. If the
+`message` parameter is an instance of an [`Error`][] then it will be thrown
+instead of the `AssertionError`.
 
-## assert.ok(value[, message])
+## assert.ok(value\[, message\])
 <!-- YAML
 added: v0.1.21
 changes:
@@ -937,7 +938,7 @@ changes:
 Tests if `value` is truthy. It is equivalent to
 `assert.equal(!!value, true, message)`.
 
-If `value` is not truthy, an `AssertionError` is thrown with a `message`
+If `value` is not truthy, an [`AssertionError`][] is thrown with a `message`
 property set equal to the value of the `message` parameter. If the `message`
 parameter is `undefined`, a default error message is assigned. If the `message`
 parameter is an instance of an [`Error`][] then it will be thrown instead of the
@@ -989,7 +990,7 @@ assert(0);
 //   assert(0)
 ```
 
-## assert.rejects(asyncFn[, error][, message])
+## assert.rejects(asyncFn\[, error\]\[, message\])
 <!-- YAML
 added: v10.0.0
 -->
@@ -1016,8 +1017,8 @@ an object where each property will be tested for, or an instance of error where
 each property will be tested for including the non-enumerable `message` and
 `name` properties.
 
-If specified, `message` will be the message provided by the `AssertionError` if
-the `asyncFn` fails to reject.
+If specified, `message` will be the message provided by the [`AssertionError`][]
+if the `asyncFn` fails to reject.
 
 ```js
 (async () => {
@@ -1048,7 +1049,7 @@ argument, then `error` is assumed to be omitted and the string will be used for
 example in [`assert.throws()`][] carefully if using a string as the second
 argument gets considered.
 
-## assert.strictEqual(actual, expected[, message])
+## assert.strictEqual(actual, expected\[, message\])
 <!-- YAML
 added: v0.1.21
 changes:
@@ -1092,13 +1093,13 @@ assert.strictEqual(1, '1', new TypeError('Inputs are not identical'));
 // TypeError: Inputs are not identical
 ```
 
-If the values are not strictly equal, an `AssertionError` is thrown with a
+If the values are not strictly equal, an [`AssertionError`][] is thrown with a
 `message` property set equal to the value of the `message` parameter. If the
 `message` parameter is undefined, a default error message is assigned. If the
 `message` parameter is an instance of an [`Error`][] then it will be thrown
-instead of the `AssertionError`.
+instead of the [`AssertionError`][].
 
-## assert.throws(fn[, error][, message])
+## assert.throws(fn\[, error\]\[, message\])
 <!-- YAML
 added: v0.1.21
 changes:
@@ -1188,10 +1189,15 @@ assert.throws(
 assert.throws(
   () => {
     const otherErr = new Error('Not found');
-    otherErr.code = 404;
+    // Copy all enumerable properties from `err` to `otherErr`.
+    for (const [key, value] of Object.entries(err)) {
+      otherErr[key] = value;
+    }
     throw otherErr;
   },
-  err // This tests for `message`, `name` and `code`.
+  // The error's `message` and `name` properties will also be checked when using
+  // an error as validation object.
+  err
 );
 ```
 
@@ -1222,6 +1228,9 @@ assert.throws(
 
 Custom error validation:
 
+The function must return `true` to indicate all internal validations passed.
+It will otherwise fail with an [`AssertionError`][].
+
 ```js
 assert.throws(
   () => {
@@ -1231,9 +1240,10 @@ assert.throws(
     assert(err instanceof Error);
     assert(/value/.test(err));
     // Returning anything from validation functions besides `true` is not
-    // recommended. Doing so results in the caught error being thrown again.
-    // That is usually not the desired outcome. Throw an error about the
-    // specific validation that failed instead (as done in this example).
+    // recommended. By doing that, it's not clear what part of the validation
+    // failed. Instead, throw an error about the specific validation that failed
+    // (as done in this example) and add as much helpful debugging information
+    // to that error as possible.
     return true;
   },
   'unexpected error'
@@ -1275,16 +1285,15 @@ assert.throws(notThrowing, 'Second');
 // It does not throw because the error messages match.
 assert.throws(throwingSecond, /Second$/);
 
-// If the error message does not match, the error from within the function is
-// not caught.
+// If the error message does not match, an AssertionError is thrown.
 assert.throws(throwingFirst, /Second$/);
-// Error: First
-//     at throwingFirst (repl:2:9)
+// AssertionError [ERR_ASSERTION]
 ```
 
 Due to the confusing notation, it is recommended not to use a string as the
 second argument. This might lead to difficult-to-spot errors.
 
+[`AssertionError`]: #assert_class_assert_assertionerror
 [`Class`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes
 [`ERR_INVALID_RETURN_VALUE`]: errors.html#errors_err_invalid_return_value
 [`Error.captureStackTrace`]: errors.html#errors_error_capturestacktrace_targetobject_constructoropt

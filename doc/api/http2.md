@@ -329,7 +329,7 @@ socket, `h2c` if the `Http2Session` is not connected to a `TLSSocket`, or
 will return the value of the connected `TLSSocket`'s own `alpnProtocol`
 property.
 
-#### http2session.close([callback])
+#### http2session.close(\[callback\])
 <!-- YAML
 added: v9.4.0
 -->
@@ -365,7 +365,7 @@ Will be `true` if this `Http2Session` instance is still connecting, will be set
 to `false` before emitting `connect` event and/or calling the `http2.connect`
 callback.
 
-#### http2session.destroy([error][, code])
+#### http2session.destroy(\[error\]\[, code\])
 <!-- YAML
 added: v8.4.0
 -->
@@ -408,7 +408,7 @@ connected, `true` if the `Http2Session` is connected with a `TLSSocket`,
 and `false` if the `Http2Session` is connected to any other kind of socket
 or stream.
 
-#### http2session.goaway([code[, lastStreamID[, opaqueData]]])
+#### http2session.goaway(\[code\[, lastStreamID\[, opaqueData\]\]\])
 <!-- YAML
 added: v9.4.0
 -->
@@ -456,7 +456,7 @@ a sent `SETTINGS` frame. Will be `true` after calling the
 `http2session.settings()` method. Will be `false` once all sent `SETTINGS`
 frames have been acknowledged.
 
-#### http2session.ping([payload, ]callback)
+#### http2session.ping(\[payload, \]callback)
 <!-- YAML
 added: v8.9.3
 -->
@@ -572,7 +572,7 @@ Provides miscellaneous information about the current state of the
 
 An object describing the current status of this `Http2Session`.
 
-#### http2session.settings([settings][, callback])
+#### http2session.settings(\[settings\]\[, callback\])
 <!-- YAML
 added: v8.4.0
 -->
@@ -795,7 +795,7 @@ client.on('origin', (origins) => {
 
 The `'origin'` event is only emitted when using a secure TLS connection.
 
-#### clienthttp2session.request(headers[, options])
+#### clienthttp2session.request(headers\[, options\])
 <!-- YAML
 added: v8.4.0
 -->
@@ -1032,7 +1032,7 @@ added: v11.2.0
 This property shows the number of characters currently buffered to be written.
 See [`net.Socket.bufferSize`][] for details.
 
-#### http2stream.close(code[, callback])
+#### http2stream.close(code\[, callback\])
 <!-- YAML
 added: v8.4.0
 -->
@@ -1195,8 +1195,8 @@ Provides miscellaneous information about the current state of the
     for this `Http2Stream` without receiving a `WINDOW_UPDATE`.
   * `state` {number} A flag indicating the low-level current state of the
     `Http2Stream` as determined by `nghttp2`.
-  * `localClose` {number} `true` if this `Http2Stream` has been closed locally.
-  * `remoteClose` {number} `true` if this `Http2Stream` has been closed
+  * `localClose` {number} `1` if this `Http2Stream` has been closed locally.
+  * `remoteClose` {number} `1` if this `Http2Stream` has been closed
     remotely.
   * `sumDependencyWeight` {number} The sum weight of all `Http2Stream`
     instances that depend on this `Http2Stream` as specified using
@@ -1347,7 +1347,7 @@ client's most recent `SETTINGS` frame. Will be `true` if the remote peer
 accepts push streams, `false` otherwise. Settings are the same for every
 `Http2Stream` in the same `Http2Session`.
 
-#### http2stream.pushStream(headers[, options], callback)
+#### http2stream.pushStream(headers\[, options\], callback)
 <!-- YAML
 added: v8.4.0
 -->
@@ -1392,7 +1392,7 @@ a `weight` value to `http2stream.priority` with the `silent` option set to
 Calling `http2stream.pushStream()` from within a pushed stream is not permitted
 and will throw an error.
 
-#### http2stream.respond([headers[, options]])
+#### http2stream.respond(\[headers\[, options\]\])
 <!-- YAML
 added: v8.4.0
 -->
@@ -1435,7 +1435,7 @@ server.on('stream', (stream) => {
 });
 ```
 
-#### http2stream.respondWithFD(fd[, headers[, options]])
+#### http2stream.respondWithFD(fd\[, headers\[, options\]\])
 <!-- YAML
 added: v8.4.0
 changes:
@@ -1533,7 +1533,7 @@ server.on('stream', (stream) => {
 });
 ```
 
-#### http2stream.respondWithFile(path[, headers[, options]])
+#### http2stream.respondWithFile(path\[, headers\[, options\]\])
 <!-- YAML
 added: v8.4.0
 changes:
@@ -1741,16 +1741,17 @@ server.on('stream', (stream, headers, flags) => {
 #### Event: 'timeout'
 <!-- YAML
 added: v8.4.0
+changes:
+  - version: v13.0.0
+    pr-url: https://github.com/nodejs/node/pull/27558
+    description: The default timeout changed from 120s to 0 (no timeout).
 -->
 
 The `'timeout'` event is emitted when there is no activity on the Server for
 a given number of milliseconds set using `http2server.setTimeout()`.
-**Default:** 2 minutes.
+**Default:** 0 (no timeout)
 
-To change the default timeout use the [`--http-server-default-timeout`][]
-flag.
-
-#### server.close([callback])
+#### server.close(\[callback\])
 <!-- YAML
 added: v8.4.0
 -->
@@ -1766,12 +1767,16 @@ If `callback` is provided, it is not invoked until all active sessions have been
 closed, although the server has already stopped allowing new sessions. See
 [`net.Server.close()`][] for more details.
 
-#### server.setTimeout([msecs][, callback])
+#### server.setTimeout(\[msecs\]\[, callback\])
 <!-- YAML
 added: v8.4.0
+changes:
+  - version: v13.0.0
+    pr-url: https://github.com/nodejs/node/pull/27558
+    description: The default timeout changed from 120s to 0 (no timeout).
 -->
 
-* `msecs` {number} **Default:** `120000` (2 minutes)
+* `msecs` {number} **Default:** 0 (no timeout)
 * `callback` {Function}
 * Returns: {Http2Server}
 
@@ -1783,9 +1788,6 @@ The given callback is registered as a listener on the `'timeout'` event.
 
 In case of no callback function were assigned, a new `ERR_INVALID_CALLBACK`
 error will be thrown.
-
-To change the default timeout use the [`--http-server-default-timeout`][]
-flag.
 
 ### Class: Http2SecureServer
 <!-- YAML
@@ -1899,7 +1901,7 @@ negotiate an allowed protocol (i.e. HTTP/2 or HTTP/1.1). The event handler
 receives the socket for handling. If no listener is registered for this event,
 the connection is terminated. See the [Compatibility API][].
 
-#### server.close([callback])
+#### server.close(\[callback\])
 <!-- YAML
 added: v8.4.0
 -->
@@ -1915,7 +1917,7 @@ If `callback` is provided, it is not invoked until all active sessions have been
 closed, although the server has already stopped allowing new sessions. See
 [`tls.Server.close()`][] for more details.
 
-#### server.setTimeout([msecs][, callback])
+#### server.setTimeout(\[msecs\]\[, callback\])
 <!-- YAML
 added: v8.4.0
 -->
@@ -1933,10 +1935,15 @@ The given callback is registered as a listener on the `'timeout'` event.
 In case of no callback function were assigned, a new `ERR_INVALID_CALLBACK`
 error will be thrown.
 
-### http2.createServer(options[, onRequestHandler])
+### http2.createServer(options\[, onRequestHandler\])
 <!-- YAML
 added: v8.4.0
 changes:
+  - version: v13.0.0
+    pr-url: https://github.com/nodejs/node/pull/29144
+    description: The `PADDING_STRATEGY_CALLBACK` has been made equivalent to
+                 providing `PADDING_STRATEGY_ALIGNED` and `selectPadding`
+                 has been removed.
   - version: v12.4.0
     pr-url: https://github.com/nodejs/node/pull/27782
     description: The `options` parameter now supports `net.createServer()`
@@ -1983,9 +1990,6 @@ changes:
     * `http2.constants.PADDING_STRATEGY_MAX` - Specifies that the maximum
       amount of padding, as determined by the internal implementation, is to
       be applied.
-    * `http2.constants.PADDING_STRATEGY_CALLBACK` - Specifies that the user
-      provided `options.selectPadding()` callback is to be used to determine
-      the amount of padding.
     * `http2.constants.PADDING_STRATEGY_ALIGNED` - Will *attempt* to apply
       enough padding to ensure that the total frame length, including the
       9-byte header, is a multiple of 8. For each frame, however, there is a
@@ -1997,9 +2001,6 @@ changes:
     streams for the remote peer as if a `SETTINGS` frame had been received. Will
     be overridden if the remote peer sets its own value for
     `maxConcurrentStreams`. **Default:** `100`.
-  * `selectPadding` {Function} When `options.paddingStrategy` is equal to
-    `http2.constants.PADDING_STRATEGY_CALLBACK`, provides the callback function
-    used to determine the padding. See [Using `options.selectPadding()`][].
   * `settings` {HTTP/2 Settings Object} The initial settings to send to the
     remote peer upon connection.
   * `Http1IncomingMessage` {http.IncomingMessage} Specifies the
@@ -2048,10 +2049,15 @@ server.on('stream', (stream, headers) => {
 server.listen(80);
 ```
 
-### http2.createSecureServer(options[, onRequestHandler])
+### http2.createSecureServer(options\[, onRequestHandler\])
 <!-- YAML
 added: v8.4.0
 changes:
+  - version: v13.0.0
+    pr-url: https://github.com/nodejs/node/pull/29144
+    description: The `PADDING_STRATEGY_CALLBACK` has been made equivalent to
+                 providing `PADDING_STRATEGY_ALIGNED` and `selectPadding`
+                 has been removed.
   - version: v10.12.0
     pr-url: https://github.com/nodejs/node/pull/22956
     description: Added the `origins` option to automatically send an `ORIGIN`
@@ -2098,9 +2104,6 @@ changes:
     * `http2.constants.PADDING_STRATEGY_MAX` - Specifies that the maximum
       amount of padding, as determined by the internal implementation, is to
       be applied.
-    * `http2.constants.PADDING_STRATEGY_CALLBACK` - Specifies that the user
-      provided `options.selectPadding()` callback is to be used to determine
-      the amount of padding.
     * `http2.constants.PADDING_STRATEGY_ALIGNED` - Will *attempt* to apply
       enough padding to ensure that the total frame length, including the
       9-byte header, is a multiple of 8. For each frame, however, there is a
@@ -2112,9 +2115,6 @@ changes:
     streams for the remote peer as if a `SETTINGS` frame had been received. Will
     be overridden if the remote peer sets its own value for
     `maxConcurrentStreams`. **Default:** `100`.
-  * `selectPadding` {Function} When `options.paddingStrategy` is equal to
-    `http2.constants.PADDING_STRATEGY_CALLBACK`, provides the callback function
-    used to determine the padding. See [Using `options.selectPadding()`][].
   * `settings` {HTTP/2 Settings Object} The initial settings to send to the
     remote peer upon connection.
   * ...: Any [`tls.createServer()`][] options can be provided. For
@@ -2150,10 +2150,15 @@ server.on('stream', (stream, headers) => {
 server.listen(80);
 ```
 
-### http2.connect(authority[, options][, listener])
+### http2.connect(authority\[, options\]\[, listener\])
 <!-- YAML
 added: v8.4.0
 changes:
+  - version: v13.0.0
+    pr-url: https://github.com/nodejs/node/pull/29144
+    description: The `PADDING_STRATEGY_CALLBACK` has been made equivalent to
+                 providing `PADDING_STRATEGY_ALIGNED` and `selectPadding`
+                 has been removed.
   - version: v8.9.3
     pr-url: https://github.com/nodejs/node/pull/17105
     description: Added the `maxOutstandingPings` option with a default limit of
@@ -2199,9 +2204,6 @@ changes:
     * `http2.constants.PADDING_STRATEGY_MAX` - Specifies that the maximum
       amount of padding, as determined by the internal implementation, is to
       be applied.
-    * `http2.constants.PADDING_STRATEGY_CALLBACK` - Specifies that the user
-      provided `options.selectPadding()` callback is to be used to determine
-      the amount of padding.
     * `http2.constants.PADDING_STRATEGY_ALIGNED` - Will *attempt* to apply
       enough padding to ensure that the total frame length, including the
       9-byte header, is a multiple of 8. For each frame, however, there is a
@@ -2213,9 +2215,6 @@ changes:
     streams for the remote peer as if a `SETTINGS` frame had been received. Will
     be overridden if the remote peer sets its own value for
     `maxConcurrentStreams`. **Default:** `100`.
-  * `selectPadding` {Function} When `options.paddingStrategy` is equal to
-    `http2.constants.PADDING_STRATEGY_CALLBACK`, provides the callback function
-    used to determine the padding. See [Using `options.selectPadding()`][].
   * `settings` {HTTP/2 Settings Object} The initial settings to send to the
     remote peer upon connection.
   * `createConnection` {Function} An optional callback that receives the `URL`
@@ -2276,7 +2275,7 @@ Returns an object containing the default settings for an `Http2Session`
 instance. This method returns a new object instance every time it is called
 so instances returned may be safely modified for use.
 
-### http2.getPackedSettings([settings])
+### http2.getPackedSettings(\[settings\])
 <!-- YAML
 added: v8.4.0
 -->
@@ -2401,30 +2400,6 @@ properties.
   has been enabled for a given `Http2Session`, it cannot be disabled.
 
 All additional properties on the settings object are ignored.
-
-### Using `options.selectPadding()`
-
-When `options.paddingStrategy` is equal to
-`http2.constants.PADDING_STRATEGY_CALLBACK`, the HTTP/2 implementation will
-consult the `options.selectPadding()` callback function, if provided, to
-determine the specific amount of padding to use per `HEADERS` and `DATA` frame.
-
-The `options.selectPadding()` function receives two numeric arguments,
-`frameLen` and `maxFrameLen` and must return a number `N` such that
-`frameLen <= N <= maxFrameLen`.
-
-```js
-const http2 = require('http2');
-const server = http2.createServer({
-  paddingStrategy: http2.constants.PADDING_STRATEGY_CALLBACK,
-  selectPadding(frameLen, maxFrameLen) {
-    return maxFrameLen;
-  }
-});
-```
-
-The `options.selectPadding()` function is invoked once for *every* `HEADERS` and
-`DATA` frame. This has a definite noticeable impact on performance.
 
 ### Error Handling
 
@@ -2725,7 +2700,19 @@ added: v12.10.0
 The `request.complete` property will be `true` if the request has
 been completed, aborted, or destroyed.
 
-#### request.destroy([error])
+#### request.connection
+<!-- YAML
+added: v8.4.0
+deprecated: v13.0.0
+-->
+
+> Stability: 0 - Deprecated. Use [`request.socket`][].
+
+* {net.Socket|tls.TLSSocket}
+
+See [`request.socket`][].
+
+#### request.destroy(\[error\])
 <!-- YAML
 added: v8.4.0
 -->
@@ -3017,13 +3004,16 @@ will result in a [`TypeError`][] being thrown.
 #### response.connection
 <!-- YAML
 added: v8.4.0
+deprecated: v13.0.0
 -->
+
+> Stability: 0 - Deprecated. Use [`response.socket`][].
 
 * {net.Socket|tls.TLSSocket}
 
 See [`response.socket`][].
 
-#### response.end([data[, encoding]][, callback])
+#### response.end(\[data\[, encoding\]\]\[, callback\])
 <!-- YAML
 added: v8.4.0
 changes:
@@ -3205,7 +3195,7 @@ const server = http2.createServer((req, res) => {
 });
 ```
 
-#### response.setTimeout(msecs[, callback])
+#### response.setTimeout(msecs\[, callback\])
 <!-- YAML
 added: v8.4.0
 -->
@@ -3304,7 +3294,7 @@ Is `true` after [`response.end()`][] has been called. This property
 does not indicate whether the data has been flushed, for this use
 [`writable.writableFinished`][] instead.
 
-#### response.write(chunk[, encoding][, callback])
+#### response.write(chunk\[, encoding\]\[, callback\])
 <!-- YAML
 added: v8.4.0
 -->
@@ -3351,7 +3341,7 @@ Sends a status `100 Continue` to the client, indicating that the request body
 should be sent. See the [`'checkContinue'`][] event on `Http2Server` and
 `Http2SecureServer`.
 
-#### response.writeHead(statusCode[, statusMessage][, headers])
+#### response.writeHead(statusCode\[, statusMessage\]\[, headers\])
 <!-- YAML
 added: v8.4.0
 changes:
@@ -3491,7 +3481,6 @@ following additional properties:
 * `type` {string} Either `'server'` or `'client'` to identify the type of
   `Http2Session`.
 
-[`--http-server-default-timeout`]: cli.html#cli_http_server_default_timeout_milliseconds
 [ALPN Protocol ID]: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids
 [ALPN negotiation]: #http2_alpn_negotiation
 [Compatibility API]: #http2_compatibility_api
@@ -3505,7 +3494,6 @@ following additional properties:
 [RFC 7838]: https://tools.ietf.org/html/rfc7838
 [RFC 8336]: https://tools.ietf.org/html/rfc8336
 [RFC 8441]: https://tools.ietf.org/html/rfc8441
-[Using `options.selectPadding()`]: #http2_using_options_selectpadding
 [`'checkContinue'`]: #http2_event_checkcontinue
 [`'connect'`]: #http2_event_connect
 [`'request'`]: #http2_event_request
@@ -3531,6 +3519,7 @@ following additional properties:
 [`net.Socket.prototype.unref()`]: net.html#net_socket_unref
 [`net.Socket`]: net.html#net_class_net_socket
 [`net.connect()`]: net.html#net_net_connect
+[`request.socket`]: #http2_request_socket
 [`request.socket.getPeerCertificate()`]: tls.html#tls_tlssocket_getpeercertificate_detailed
 [`response.end()`]: #http2_response_end_data_encoding_callback
 [`response.setHeader()`]: #http2_response_setheader_name_value

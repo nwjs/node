@@ -166,7 +166,7 @@ consts_misc = [
     { 'name': 'bit_field3_number_of_own_descriptors_shift',
         'value': 'Map::NumberOfOwnDescriptorsBits::kShift' },
     { 'name': 'class_Map__instance_descriptors_offset',
-       'value': 'Map::kInstanceDescriptorsOffset' },
+        'value': 'Map::kInstanceDescriptorsOffset' },
 
     { 'name': 'off_fp_context_or_frame_type',
         'value': 'CommonFrameConstants::kContextOrFrameTypeOffset'},
@@ -259,6 +259,8 @@ extras_accessors = [
     'JSArrayBuffer, byte_length, size_t, kByteLengthOffset',
     'JSArrayBufferView, byte_length, size_t, kByteLengthOffset',
     'JSArrayBufferView, byte_offset, size_t, kByteOffsetOffset',
+    'JSDate, value, Object, kValueOffset',
+    'JSRegExp, source, Object, kSourceOffset',
     'JSTypedArray, external_pointer, uintptr_t, kExternalPointerOffset',
     'JSTypedArray, length, Object, kLengthOffset',
     'Map, instance_size_in_words, char, kInstanceSizeInWordsOffset',

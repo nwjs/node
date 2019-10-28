@@ -4469,8 +4469,9 @@ void CipherBase::Update(const FunctionCallbackInfo<Value>& args) {
   // Only copy the data if we have to, because it's a string
   if (args[0]->IsString()) {
     StringBytes::InlineDecoder decoder;
-    if (!decoder.Decode(env, args[0].As<String>(), args[1], UTF8)
-             .FromMaybe(false))
+    enum encoding enc = ParseEncoding(env->isolate(), args[1], UTF8);
+
+    if (decoder.Decode(env, args[0].As<String>(), enc).IsNothing())
       return;
     r = cipher->Update(decoder.out(), decoder.size(), &out);
   } else {
@@ -4653,8 +4654,9 @@ void Hmac::HmacUpdate(const FunctionCallbackInfo<Value>& args) {
   bool r = false;
   if (args[0]->IsString()) {
     StringBytes::InlineDecoder decoder;
-    if (decoder.Decode(env, args[0].As<String>(), args[1], UTF8)
-            .FromMaybe(false)) {
+    enum encoding enc = ParseEncoding(env->isolate(), args[1], UTF8);
+
+    if (!decoder.Decode(env, args[0].As<String>(), enc).IsNothing()) {
       r = hmac->HmacUpdate(decoder.out(), decoder.size());
     }
   } else {
@@ -4777,8 +4779,9 @@ void Hash::HashUpdate(const FunctionCallbackInfo<Value>& args) {
   bool r = true;
   if (args[0]->IsString()) {
     StringBytes::InlineDecoder decoder;
-    if (!decoder.Decode(env, args[0].As<String>(), args[1], UTF8)
-             .FromMaybe(false)) {
+    enum encoding enc = ParseEncoding(env->isolate(), args[1], UTF8);
+
+    if (decoder.Decode(env, args[0].As<String>(), enc).IsNothing()) {
       args.GetReturnValue().Set(false);
       return;
     }
@@ -6961,30 +6964,19 @@ void TimingSafeEqual(const FunctionCallbackInfo<Value>& args) {
 }
 
 void InitCryptoOnce() {
-  SSL_load_error_strings();
-  OPENSSL_no_config();
+#ifndef OPENSSL_IS_BORINGSSL
+  OPENSSL_INIT_SETTINGS* settings = OPENSSL_INIT_new();
 
   // --openssl-config=...
   if (!per_process::cli_options->openssl_config.empty()) {
-    OPENSSL_load_builtin_modules();
-#ifndef OPENSSL_NO_ENGINE
-    ENGINE_load_builtin_engines();
-#endif
-    ERR_clear_error();
-    CONF_modules_load_file(per_process::cli_options->openssl_config.c_str(),
-                           nullptr,
-                           CONF_MFLAGS_DEFAULT_SECTION);
-    int err = ERR_get_error();
-    if (0 != err) {
-      fprintf(stderr,
-              "openssl config failed: %s\n",
-              ERR_error_string(err, nullptr));
-      CHECK_NE(err, 0);
-    }
+    const char* conf = per_process::cli_options->openssl_config.c_str();
+    OPENSSL_INIT_set_config_filename(settings, conf);
   }
 
-  SSL_library_init();
-  OpenSSL_add_all_algorithms();
+  OPENSSL_init_ssl(0, settings);
+  OPENSSL_INIT_free(settings);
+  settings = nullptr;
+#endif
 
 #ifdef NODE_FIPS_MODE
   /* Override FIPS settings in cnf file, if needed. */

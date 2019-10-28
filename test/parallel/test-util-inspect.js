@@ -35,19 +35,19 @@ assert.strictEqual(util.inspect(false), 'false');
 assert.strictEqual(util.inspect(''), "''");
 assert.strictEqual(util.inspect('hello'), "'hello'");
 assert.strictEqual(util.inspect(function abc() {}), '[Function: abc]');
-assert.strictEqual(util.inspect(() => {}), '[Function]');
+assert.strictEqual(util.inspect(() => {}), '[Function (anonymous)]');
 assert.strictEqual(
   util.inspect(async function() {}),
-  '[AsyncFunction]'
+  '[AsyncFunction (anonymous)]'
 );
-assert.strictEqual(util.inspect(async () => {}), '[AsyncFunction]');
+assert.strictEqual(util.inspect(async () => {}), '[AsyncFunction (anonymous)]');
 
 // Special function inspection.
 {
   const fn = (() => function*() {})();
   assert.strictEqual(
     util.inspect(fn),
-    '[GeneratorFunction]'
+    '[GeneratorFunction (anonymous)]'
   );
   assert.strictEqual(
     util.inspect(async function* abc() {}),
@@ -56,7 +56,7 @@ assert.strictEqual(util.inspect(async () => {}), '[AsyncFunction]');
   Object.setPrototypeOf(fn, Object.getPrototypeOf(async () => {}));
   assert.strictEqual(
     util.inspect(fn),
-    '[GeneratorFunction] AsyncFunction'
+    '[GeneratorFunction (anonymous)] AsyncFunction'
   );
   Object.defineProperty(fn, 'name', { value: 5, configurable: true });
   assert.strictEqual(
@@ -352,7 +352,7 @@ assert.strictEqual(
 
   const value = {};
   value.a = value;
-  assert.strictEqual(util.inspect(value), '{ a: [Circular] }');
+  assert.strictEqual(util.inspect(value), '<ref *1> { a: [Circular *1] }');
   const getterFn = {
     get one() {
       return null;
@@ -477,7 +477,7 @@ assert.strictEqual(
   value.aprop = 42;
   assert.strictEqual(
     util.inspect(value),
-    '[Function] { aprop: 42 }'
+    '[Function (anonymous)] { aprop: 42 }'
   );
 }
 
@@ -1031,7 +1031,7 @@ if (typeof Symbol !== 'undefined') {
 {
   const set = new Set();
   set.add(set);
-  assert.strictEqual(util.inspect(set), 'Set { [Circular] }');
+  assert.strictEqual(util.inspect(set), '<ref *1> Set { [Circular *1] }');
 }
 
 // Test Map.
@@ -1049,15 +1049,15 @@ if (typeof Symbol !== 'undefined') {
 {
   const map = new Map();
   map.set(map, 'map');
-  assert.strictEqual(inspect(map), "Map { [Circular] => 'map' }");
+  assert.strictEqual(inspect(map), "<ref *1> Map { [Circular *1] => 'map' }");
   map.set(map, map);
   assert.strictEqual(
     inspect(map),
-    'Map { [Circular] => [Circular] }'
+    '<ref *1> Map { [Circular *1] => [Circular *1] }'
   );
   map.delete(map);
   map.set('map', map);
-  assert.strictEqual(inspect(map), "Map { 'map' => [Circular] }");
+  assert.strictEqual(inspect(map), "<ref *1> Map { 'map' => [Circular *1] }");
 }
 
 // Test multiple circular references.
@@ -1070,7 +1070,10 @@ if (typeof Symbol !== 'undefined') {
 
   assert.strictEqual(
     inspect(obj),
-    '{ a: [ [Circular] ], b: { inner: [Circular], obj: [Circular] } }'
+    '<ref *1> {\n' +
+    '  a: [ [Circular *1] ],\n' +
+    '  b: <ref *2> { inner: [Circular *2], obj: [Circular *1] }\n' +
+    '}'
   );
 }
 
@@ -1269,9 +1272,9 @@ if (typeof Symbol !== 'undefined') {
   arr[0][0][0] = { a: 2 };
   assert.strictEqual(util.inspect(arr), '[ [ [ [Object] ] ] ]');
   arr[0][0][0] = arr;
-  assert.strictEqual(util.inspect(arr), '[ [ [ [Circular] ] ] ]');
+  assert.strictEqual(util.inspect(arr), '<ref *1> [ [ [ [Circular *1] ] ] ]');
   arr[0][0][0] = arr[0][0];
-  assert.strictEqual(util.inspect(arr), '[ [ [ [Circular] ] ] ]');
+  assert.strictEqual(util.inspect(arr), '[ [ <ref *1> [ [Circular *1] ] ] ]');
 }
 
 // Corner cases.
@@ -1560,7 +1563,7 @@ util.inspect(process);
   out = util.inspect(o, { compact: false, breakLength: 3 });
   expect = [
     '{',
-    '  a: [Function],',
+    '  a: [Function (anonymous)],',
     '  b: [Number: 3]',
     '}'
   ].join('\n');
@@ -1569,7 +1572,7 @@ util.inspect(process);
   out = util.inspect(o, { compact: false, breakLength: 3, showHidden: true });
   expect = [
     '{',
-    '  a: [Function] {',
+    '  a: [Function (anonymous)] {',
     '    [length]: 0,',
     "    [name]: ''",
     '  },',
@@ -1638,7 +1641,7 @@ util.inspect(process);
     '      2,',
     '      [length]: 2',
     '    ]',
-    '  } => [Map Iterator] {',
+    '  } => <ref *1> [Map Iterator] {',
     '    Uint8Array [',
     '      [BYTES_PER_ELEMENT]: 1,',
     '      [length]: 0,',
@@ -1649,7 +1652,7 @@ util.inspect(process);
     '        foo: true',
     '      }',
     '    ],',
-    '    [Circular]',
+    '    [Circular *1]',
     '  },',
     '  [size]: 2',
     '}'
@@ -1677,7 +1680,7 @@ util.inspect(process);
     '    [byteOffset]: 0,',
     '    [buffer]: ArrayBuffer { byteLength: 0, foo: true }',
     '  ],',
-    '  [Set Iterator] { [ 1, 2, [length]: 2 ] } => [Map Iterator] {',
+    '  [Set Iterator] { [ 1, 2, [length]: 2 ] } => <ref *1> [Map Iterator] {',
     '    Uint8Array [',
     '      [BYTES_PER_ELEMENT]: 1,',
     '      [length]: 0,',
@@ -1685,7 +1688,7 @@ util.inspect(process);
     '      [byteOffset]: 0,',
     '      [buffer]: ArrayBuffer { byteLength: 0, foo: true }',
     '    ],',
-    '    [Circular]',
+    '    [Circular *1]',
     '  },',
     '  [size]: 2',
     '}'
@@ -1717,7 +1720,7 @@ util.inspect(process);
     '  [Set Iterator] {',
     '    [ 1,',
     '      2,',
-    '      [length]: 2 ] } => [Map Iterator] {',
+    '      [length]: 2 ] } => <ref *1> [Map Iterator] {',
     '    Uint8Array [',
     '      [BYTES_PER_ELEMENT]: 1,',
     '      [length]: 0,',
@@ -1726,7 +1729,7 @@ util.inspect(process);
     '      [buffer]: ArrayBuffer {',
     '        byteLength: 0,',
     '        foo: true } ],',
-    '    [Circular] },',
+    '    [Circular *1] },',
     '  [size]: 2 }'
   ].join('\n');
 
@@ -1886,8 +1889,8 @@ assert.strictEqual(util.inspect('"\'${a}'), "'\"\\'${a}'");
   [new Number(55), '[Number: 55]'],
   [Object(BigInt(55)), '[BigInt: 55n]'],
   [Object(Symbol('foo')), '[Symbol: Symbol(foo)]'],
-  [function() {}, '[Function]'],
-  [() => {}, '[Function]'],
+  [function() {}, '[Function (anonymous)]'],
+  [() => {}, '[Function (anonymous)]'],
   [[1, 2], '[ 1, 2 ]'],
   [[, , 5, , , , ], '[ <2 empty items>, 5, <3 empty items> ]'],
   [{ a: 5 }, '{ a: 5 }'],
@@ -2078,11 +2081,11 @@ assert.strictEqual(
   Object.setPrototypeOf(obj, value);
   assert.strictEqual(
     util.inspect(obj),
-    'Object <[Function (null prototype)]> { a: true }'
+    'Object <[Function (null prototype) (anonymous)]> { a: true }'
   );
   assert.strictEqual(
     util.inspect(obj, { colors: true }),
-    'Object <\u001b[36m[Function (null prototype)]\u001b[39m> ' +
+    'Object <\u001b[36m[Function (null prototype) (anonymous)]\u001b[39m> ' +
       '{ a: \u001b[33mtrue\u001b[39m }'
   );
 

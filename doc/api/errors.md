@@ -201,7 +201,7 @@ are dependent on [V8's stack trace API][]. Stack traces extend only to either
 (a) the beginning of *synchronous code execution*, or (b) the number of frames
 given by the property `Error.stackTraceLimit`, whichever is smaller.
 
-### Error.captureStackTrace(targetObject[, constructorOpt])
+### Error.captureStackTrace(targetObject\[, constructorOpt\])
 
 * `targetObject` {Object}
 * `constructorOpt` {Function}
@@ -428,7 +428,7 @@ attempts to read a file that does not exist.
 * `code` {string} The string error code
 * `dest` {string} If present, the file path destination when reporting a file
   system error
-* `errno` {number|string} The system-provided error number
+* `errno` {number} The system-provided error number
 * `info` {Object} If present, extra details about the error condition
 * `message` {string} A system-provided human-readable description of the error
 * `path` {string} If present, the file path when reporting a file system error
@@ -457,13 +457,15 @@ system error.
 
 ### error.errno
 
-* {string|number}
+* {number}
 
-The `error.errno` property is a number or a string. If it is a number, it is a
-negative value which corresponds to the error code defined in
-[`libuv Error handling`][]. See the libuv `errno.h` header file
-(`deps/uv/include/uv/errno.h` in the Node.js source tree) for details. In case
-of a string, it is the same as `error.code`.
+The `error.errno` property is a negative number which corresponds
+to the error code defined in [`libuv Error handling`][].
+
+On Windows the error number provided by the system will be normalized by libuv.
+
+To get the string representation of the error code, use
+[`util.getSystemErrorName(error.errno)`][].
 
 ### error.info
 
@@ -1720,6 +1722,12 @@ An attempt was made to call [`stream.pipe()`][] on a [`Writable`][] stream.
 A stream method was called that cannot complete because the stream was
 destroyed using `stream.destroy()`.
 
+<a id="ERR_STREAM_ALREADY_FINISHED"></a>
+### ERR_STREAM_ALREADY_FINISHED
+
+A stream method was called that cannot complete because the stream was
+finished.
+
 <a id="ERR_STREAM_NULL_VALUES"></a>
 ### ERR_STREAM_NULL_VALUES
 
@@ -1976,7 +1984,7 @@ The linker function returned a module for which linking has failed.
 <a id="ERR_VM_MODULE_NOT_MODULE"></a>
 ### ERR_VM_MODULE_NOT_MODULE
 
-The fulfilled value of a linking promise is not a `vm.SourceTextModule` object.
+The fulfilled value of a linking promise is not a `vm.Module` object.
 
 <a id="ERR_VM_MODULE_STATUS"></a>
 ### ERR_VM_MODULE_STATUS
@@ -2414,6 +2422,7 @@ such as `process.stdout.on('data')`.
 [`stream.write()`]: stream.html#stream_writable_write_chunk_encoding_callback
 [`subprocess.kill()`]: child_process.html#child_process_subprocess_kill_signal
 [`subprocess.send()`]: child_process.html#child_process_subprocess_send_message_sendhandle_options_callback
+[`util.getSystemErrorName(error.errno)`]: util.html#util_util_getsystemerrorname_err
 [`zlib`]: zlib.html
 [ES Module]: esm.html
 [ICU]: intl.html#intl_internationalization_support

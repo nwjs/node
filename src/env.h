@@ -431,7 +431,6 @@ constexpr size_t kFsStatsBufferLength =
   V(http2session_on_origin_function, v8::Function)                             \
   V(http2session_on_ping_function, v8::Function)                               \
   V(http2session_on_priority_function, v8::Function)                           \
-  V(http2session_on_select_padding_function, v8::Function)                     \
   V(http2session_on_settings_function, v8::Function)                           \
   V(http2session_on_stream_close_function, v8::Function)                       \
   V(http2session_on_stream_trailers_function, v8::Function)                    \
@@ -870,7 +869,7 @@ class Environment : public MemoryRetainer {
   void CreateProperties();
   // Should be called before InitializeInspector()
   void InitializeDiagnostics();
-#if HAVE_INSPECTOR && NODE_USE_V8_PLATFORM
+#if HAVE_INSPECTOR
   // If the environment is created for a worker, pass parent_handle and
   // the ownership if transferred into the Environment.
   int InitializeInspector(inspector::ParentInspectorHandle* parent_handle);
@@ -1133,6 +1132,9 @@ class Environment : public MemoryRetainer {
   void AtExit(void (*cb)(void* arg), void* arg);
   void RunAtExitCallbacks();
 
+  void RegisterFinalizationGroupForCleanup(v8::Local<v8::FinalizationGroup> fg);
+  bool RunWeakRefCleanup();
+
   // Strings and private symbols are shared across shared contexts
   // The getters simply proxy to the per-isolate primitive.
 #define VP(PropertyName, StringValue) V(v8::Private, PropertyName)
@@ -1338,6 +1340,8 @@ class Environment : public MemoryRetainer {
   Flags flags_;
   uint64_t thread_id_;
   std::unordered_set<worker::Worker*> sub_worker_contexts_;
+
+  std::deque<v8::Global<v8::FinalizationGroup>> cleanup_finalization_groups_;
 
   static void* const kNodeContextTagPtr;
   static int const kNodeContextTag;

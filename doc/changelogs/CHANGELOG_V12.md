@@ -31,6 +31,7 @@
 </table>
 
 * Other Versions
+  * [13.x](CHANGELOG_V13.md)
   * [11.x](CHANGELOG_V11.md)
   * [10.x](CHANGELOG_V10.md)
   * [9.x](CHANGELOG_V9.md)
@@ -58,7 +59,7 @@
 * **fs**:
   * Introduce `opendir()` and `fs.Dir` to iterate through directories [#29349](https://github.com/nodejs/node/pull/29349)
 * **process**:
-  * Add source-map support to stack traces by using `--source-map-support`[#29564](https://github.com/nodejs/node/pull/29564)
+  * Add source-map support to stack traces by using `--enable-source-maps`[#29564](https://github.com/nodejs/node/pull/29564)
 * **tls**:
   * Honor `pauseOnConnect` option [#29635](https://github.com/nodejs/node/pull/29635)
   * Add option for private keys for OpenSSL engines [#28973](https://github.com/nodejs/node/pull/28973)

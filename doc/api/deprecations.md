@@ -2003,7 +2003,7 @@ to be verified, no matter if it is set to true or not. Skipping the verification
 could lead to hard to find errors and crashes.
 
 <a id="DEP0103"></a>
-### DEP0103: process.binding('util').is[...] typechecks
+### DEP0103: process.binding('util').is\[...\] typechecks
 <!-- YAML
 changes:
   - version: v10.9.0
@@ -2441,12 +2441,15 @@ Node.js versions.
 ### DEP0129: ChildProcess._channel
 <!-- YAML
 changes:
+  - version: v13.0.0
+    pr-url: https://github.com/nodejs/node/pull/27949
+    description: Runtime deprecation.
   - version: v11.14.0
     pr-url: https://github.com/nodejs/node/pull/26982
     description: Documentation-only.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 The `_channel` property of child process objects returned by `spawn()` and
 similar functions is not intended for public use. Use `ChildProcess.channel`
@@ -2456,29 +2459,37 @@ instead.
 ### DEP0130: Module.createRequireFromPath()
 <!-- YAML
 changes:
+  - version: v13.0.0
+    pr-url: https://github.com/nodejs/node/pull/27951
+    description: Runtime deprecation.
   - version: v12.2.0
     pr-url: https://github.com/nodejs/node/pull/27405
     description: Documentation-only.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
-Module.createRequireFromPath() is deprecated. Please use [`module.createRequire()`][] instead.
+Module.createRequireFromPath() is deprecated. Please use
+[`module.createRequire()`][] instead.
 
 <a id="DEP0131"></a>
 ### DEP0131: Legacy HTTP parser
 <!-- YAML
 changes:
+  - version: v13.0.0
+    pr-url: https://github.com/nodejs/node/pull/29589
+    description: This feature has been removed.
   - version: v12.3.0
     pr-url: https://github.com/nodejs/node/pull/27498
     description: Documentation-only.
 -->
 
-Type: Documentation-only
+Type: End-of-Life
 
 The legacy HTTP parser, used by default in versions of Node.js prior to 12.0.0,
-is deprecated. This deprecation applies to users of the
-[`--http-parser=legacy`][] command-line flag.
+is deprecated and has been removed in v13.0.0. Prior to v13.0.0, the
+`--http-parser=legacy` command-line flag could be used to revert to using the
+legacy parser.
 
 <a id="DEP0132"></a>
 ### DEP0132: worker.terminate() with callback
@@ -2521,7 +2532,22 @@ Type: Documentation-only (supports [`--pending-deprecation`][])
 The `process._tickCallback` property was never documented as
 an officially supported API.
 
-[`--http-parser=legacy`]: cli.html#cli_http_parser_library
+<a id="DEP0135"></a>
+### DEP0135: `WriteStream.open()` and `ReadStream.open()` are internal
+<!-- YAML
+changes:
+  - version: v13.0.0
+    pr-url: https://github.com/nodejs/node/pull/29061
+    description: Runtime deprecation.
+-->
+
+Type: Runtime
+
+[`WriteStream.open()`][] and [`ReadStream.open()`][] are undocumented internal
+APIs that do not make sense to use in userland. File streams should always be
+opened through their corresponding factory methods [`fs.createWriteStream()`][]
+and [`fs.createReadStream()`][]) or by passing a file descriptor in options.
+
 [`--pending-deprecation`]: cli.html#cli_pending_deprecation
 [`--throw-deprecation`]: cli.html#cli_throw_deprecation
 [`Buffer.allocUnsafeSlow(size)`]: buffer.html#buffer_class_method_buffer_allocunsafeslow_size
@@ -2532,10 +2558,12 @@ an officially supported API.
 [`Decipher`]: crypto.html#crypto_class_decipher
 [`EventEmitter.listenerCount(emitter, eventName)`]: events.html#events_eventemitter_listenercount_emitter_eventname
 [`REPLServer.clearBufferedCommand()`]: repl.html#repl_replserver_clearbufferedcommand
+[`ReadStream.open()`]: fs.html#fs_class_fs_readstream
 [`Server.connections`]: net.html#net_server_connections
 [`Server.getConnections()`]: net.html#net_server_getconnections_callback
 [`Server.listen({fd: <number>})`]: net.html#net_server_listen_handle_backlog_callback
 [`SlowBuffer`]: buffer.html#buffer_class_slowbuffer
+[`WriteStream.open()`]: fs.html#fs_class_fs_writestream
 [`assert`]: assert.html
 [`asyncResource.runInAsyncScope()`]: async_hooks.html#async_hooks_asyncresource_runinasyncscope_fn_thisarg_args
 [`child_process`]: child_process.html
@@ -2558,6 +2586,8 @@ an officially supported API.
 [`ecdh.setPublicKey()`]: crypto.html#crypto_ecdh_setpublickey_publickey_encoding
 [`emitter.listenerCount(eventName)`]: events.html#events_emitter_listenercount_eventname
 [`fs.access()`]: fs.html#fs_fs_access_path_mode_callback
+[`fs.createReadStream()`]: fs.html#fs_fs_createreadstream_path_options
+[`fs.createWriteStream()`]: fs.html#fs_fs_createwritestream_path_options
 [`fs.exists(path, callback)`]: fs.html#fs_fs_exists_path_callback
 [`fs.lchmod(path, mode, callback)`]: fs.html#fs_fs_lchmod_path_mode_callback
 [`fs.lchmodSync(path, mode)`]: fs.html#fs_fs_lchmodsync_path_mode
@@ -2576,6 +2606,10 @@ an officially supported API.
 [`process.env`]: process.html#process_process_env
 [`punycode`]: punycode.html
 [`require.extensions`]: modules.html#modules_require_extensions
+[`request.socket`]: http.html#http_request_socket
+[`request.connection`]: http.html#http_request_connection
+[`response.socket`]: http.html#http_response_socket
+[`response.connection`]: http.html#http_response_connection
 [`script.createCachedData()`]: vm.html#vm_script_createcacheddata
 [`setInterval()`]: timers.html#timers_setinterval_callback_delay_args
 [`setTimeout()`]: timers.html#timers_settimeout_callback_delay_args

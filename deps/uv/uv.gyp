@@ -236,7 +236,7 @@
           ]
         }],
         [ 'OS=="linux"', {
-          'defines': [ '_GNU_SOURCE' ],
+          'defines': [ '_FILE_OFFSET_BITS=64' ],
           'sources': [
             'src/unix/linux-core.c',
             'src/unix/linux-inotify.c',

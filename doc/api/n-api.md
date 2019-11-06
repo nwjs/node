@@ -14,11 +14,10 @@ changes in the underlying JavaScript engine and allow modules
 compiled for one major version to run on later major versions of Node.js without
 recompilation. The [ABI Stability][] guide provides a more in-depth explanation.
 
-Addons are built/packaged with the same approach/tools
-outlined in the section titled [C++ Addons](addons.html).
-The only difference is the set of APIs that are used by the native code.
-Instead of using the V8 or [Native Abstractions for Node.js][] APIs,
-the functions available in the N-API are used.
+Addons are built/packaged with the same approach/tools outlined in the section
+titled [C++ Addons][]. The only difference is the set of APIs that are used by
+the native code. Instead of using the V8 or [Native Abstractions for Node.js][]
+APIs, the functions available in the N-API are used.
 
 APIs exposed by N-API are generally used to create and manipulate
 JavaScript values. Concepts and operations generally map to ideas specified
@@ -76,8 +75,7 @@ if (status != napi_ok) {
 The end result is that the addon only uses the exported C APIs. As a result,
 it still gets the benefits of the ABI stability provided by the C API.
 
-When using `node-addon-api` instead of the C APIs, start with the API
-[docs](https://github.com/nodejs/node-addon-api#api-documentation)
+When using `node-addon-api` instead of the C APIs, start with the API [docs][]
 for `node-addon-api`.
 
 ## Implications of ABI Stability
@@ -118,11 +116,95 @@ must make use exclusively of N-API by restricting itself to using
 and by checking, for all external libraries that it uses, that the external
 library makes ABI stability guarantees similar to N-API.
 
+## Building
+
+Unlike modules written in JavaScript, developing and deploying Node.js
+native addons using N-API requires an additional set of tools. Besides the
+basic tools required to develop for Node.js, the native addon developer
+requires a toolchain that can compile C and C++ code into a binary. In
+addition, depending upon how the native addon is deployed, the *user* of
+the native addon will also need to have a C/C++ toolchain installed.
+
+For Linux developers, the necessary C/C++ toolchain packages are readily
+available. [GCC][] is widely used in the Node.js community to build and
+test across a variety of plarforms. For many developers, the [LLVM][]
+compiler infrastructure is also a good choice.
+
+For Mac developers, [Xcode][] offers all the required compiler tools.
+However, it is not necessary to install the entire Xcode IDE. The following
+command installs the necessary toolchain:
+
+```bash
+xcode-select --install
+```
+
+For Windows developers, [Visual Studio][] offers all the required compiler
+tools. However, it is not necessary to install the entire Visual Studio
+IDE. The following command installs the necessary toolchain:
+
+```bash
+npm install --global --production windows-build-tools
+```
+
+The sections below describe the additional tools available for developing
+and deploying Node.js native addons.
+
+### Build tools
+
+Both the tools listed here require that *users* of the native
+addon have a C/C++ toolchain installed in order to successfully install
+the native addon.
+
+#### node-gyp
+
+[node-gyp][] is a build system based on Google's [GYP][] tool and comes
+bundled with npm. GYP, and therefore node-gyp, requires that Python be
+installed.
+
+Historically, node-gyp has been the tool of choice for building native
+addons. It has widespread adoption and documentation. However, some
+developers have run into limitations in node-gyp.
+
+#### CMake.js
+
+[CMake.js][] is an alternative build system based on [CMake][].
+
+CMake.js is a good choice for projects that already use CMake or for
+developers affected by limitations in node-gyp.
+
+### Uploading precompiled binaries
+
+The three tools listed here permit native addon developers and maintainers
+to create and upload binaries to public or private servers. These tools are
+typically integrated with CI/CD build systems like [Travis CI][] and
+[AppVeyor][] to build and upload binaries for a variety of platforms and
+architectures. These binaries are then available for download by users who
+do not need to have a C/C++ toolchain installed.
+
+#### node-pre-gyp
+
+[node-pre-gyp][] is a tool based on node-gyp that adds the ability to
+upload binaries to a server of the developer's choice. node-pre-gyp has
+particularly good support for uploading binaries to Amazon S3.
+
+#### prebuild
+
+[prebuild][] is a tool that supports builds using either node-gyp or
+CMake.js. Unlike node-pre-gyp which supports a variety of servers, prebuild
+uploads binaries only to [GitHub releases][]. prebuild is a good choice for
+GitHub projects using CMake.js.
+
+#### prebuildify
+
+[prebuildify][] is tool based on node-gyp. The advantage of prebuildify is
+that the built binaries are bundled with the native module when it's
+uploaded to npm. The binaries are downloaded from npm and are immediately
+available to the module user when the native module is installed.
+
 ## Usage
 
-In order to use the N-API functions, include the file
-[`node_api.h`](https://github.com/nodejs/node/blob/master/src/node_api.h)
-which is located in the src directory in the node development tree:
+In order to use the N-API functions, include the file [`node_api.h`][] which is
+located in the src directory in the node development tree:
 
 ```C
 #include <node_api.h>
@@ -728,11 +810,11 @@ When an exception is pending one of two approaches can be employed.
 
 The first approach is to do any appropriate cleanup and then return so that
 execution will return to JavaScript. As part of the transition back to
-JavaScript the exception will be thrown at the point in the JavaScript
+JavaScript, the exception will be thrown at the point in the JavaScript
 code where the native method was invoked. The behavior of most N-API calls
 is unspecified while an exception is pending, and many will simply return
-`napi_pending_exception`, so it is important to do as little as possible
-and then return to JavaScript where the exception can be handled.
+`napi_pending_exception`, so do as little as possible and then return to
+JavaScript where the exception can be handled.
 
 The second approach is to try to handle the exception. There will be cases
 where the native code can catch the exception, take the appropriate action,
@@ -1664,9 +1746,8 @@ Returns `napi_ok` if the API succeeded.
 This API returns an N-API value corresponding to a JavaScript `Array` type.
 The `Array`'s length property is set to the passed-in length parameter.
 However, the underlying buffer is not guaranteed to be pre-allocated by the VM
-when the array is created - that behavior is left to the underlying VM
-implementation.
-If the buffer must be a contiguous block of memory that can be
+when the array is created. That behavior is left to the underlying VM
+implementation. If the buffer must be a contiguous block of memory that can be
 directly read and/or written via C, consider using
 [`napi_create_external_arraybuffer`][].
 
@@ -2387,18 +2468,18 @@ napi_status napi_get_typedarray_info(napi_env env,
 
 * `[in] env`: The environment that the API is invoked under.
 * `[in] typedarray`: `napi_value` representing the `TypedArray` whose
-properties to query.
+  properties to query.
 * `[out] type`: Scalar datatype of the elements within the `TypedArray`.
 * `[out] length`: The number of elements in the `TypedArray`.
 * `[out] data`: The data buffer underlying the `TypedArray` adjusted by
-the `byte_offset` value so that it points to the first element in the
-`TypedArray`.
+  the `byte_offset` value so that it points to the first element in the
+  `TypedArray`.
 * `[out] arraybuffer`: The `ArrayBuffer` underlying the `TypedArray`.
 * `[out] byte_offset`: The byte offset within the underlying native array
-at which the first element of the arrays is located. The value for the data
-parameter has already been adjusted so that data points to the first element
-in the array. Therefore, the first byte of the native array would be at
-data - `byte_offset`.
+  at which the first element of the arrays is located. The value for the data
+  parameter has already been adjusted so that data points to the first element
+  in the array. Therefore, the first byte of the native array would be at
+  `data - byte_offset`.
 
 Returns `napi_ok` if the API succeeded.
 
@@ -2849,7 +2930,7 @@ Returns `napi_ok` if the API succeeded.
 
 This API returns the Undefined object.
 
-## Working with JavaScript Values - Abstract Operations
+## Working with JavaScript Values and Abstract Operations
 
 N-API exposes a set of APIs to perform some abstract operations on JavaScript
 values. Some of these operations are documented under [Section 7][]
@@ -3336,17 +3417,15 @@ attributes listed in [Section 6.1.7.1][]
 of the [ECMAScript Language Specification][].
 They can be one or more of the following bitflags:
 
-* `napi_default` - Used to indicate that no explicit attributes are set on the
-given property. By default, a property is read only, not enumerable and not
-configurable.
-* `napi_writable` - Used to indicate that a given property is writable.
-* `napi_enumerable` - Used to indicate that a given property is enumerable.
-* `napi_configurable` - Used to indicate that a given property is configurable,
-as defined in [Section 6.1.7.1][] of the [ECMAScript Language Specification][].
-* `napi_static` - Used to indicate that the property will be defined as
-a static property on a class as opposed to an instance property, which is the
-default. This is used only by [`napi_define_class`][]. It is ignored by
-`napi_define_properties`.
+* `napi_default`: No explicit attributes are set on the property. By default, a
+  property is read only, not enumerable and not configurable.
+* `napi_writable`: The property is writable.
+* `napi_enumerable`: The property is enumerable.
+* `napi_configurable`: The property is configurable as defined in
+  [Section 6.1.7.1][] of the [ECMAScript Language Specification][].
+* `napi_static`: The property will be defined as a static property on a class as
+  opposed to an instance property, which is the default. This is used only by
+  [`napi_define_class`][]. It is ignored by `napi_define_properties`.
 
 #### napi_property_descriptor
 
@@ -4265,8 +4344,7 @@ required in order to enable correct disposal of the reference.
 Addon modules often need to leverage async helpers from libuv as part of their
 implementation. This allows them to schedule work to be executed asynchronously
 so that their methods can return in advance of the work being completed. This
-is important in order to allow them to avoid blocking overall execution
-of the Node.js application.
+allows them to avoid blocking overall execution of the Node.js application.
 
 N-API provides an ABI-stable interface for these
 supporting functions which covers the most common asynchronous use cases.
@@ -4800,7 +4878,7 @@ napi_status napi_is_promise(napi_env env,
 * `[in] env`: The environment that the API is invoked under.
 * `[in] promise`: The promise to examine
 * `[out] is_promise`: Flag indicating whether `promise` is a native promise
-object - that is, a promise object created by the underlying engine.
+  object (that is, a promise object created by the underlying engine).
 
 ## Script execution
 
@@ -4869,9 +4947,9 @@ Upon creation of a `napi_threadsafe_function` a `napi_finalize` callback can be
 provided. This callback will be invoked on the main thread when the thread-safe
 function is about to be destroyed. It receives the context and the finalize data
 given during construction, and provides an opportunity for cleaning up after the
-threads e.g. by calling `uv_thread_join()`. **It is important that, aside from
-the main loop thread, there be no threads left using the thread-safe function
-after the finalize callback completes.**
+threads e.g. by calling `uv_thread_join()`. **Aside from the main loop thread,
+no threads should be using the thread-safe function after the finalize callback
+completes.**
 
 The `context` given during the call to `napi_create_threadsafe_function()` can
 be retrieved from any thread with a call to
@@ -4916,13 +4994,13 @@ existing thread will stop making use of the thread-safe function.
 the object has called `napi_release_threadsafe_function()` or has received a
 return status of `napi_closing` in response to a call to
 `napi_call_threadsafe_function`. The queue is emptied before the
-`napi_threadsafe_function` is destroyed. It is important that
-`napi_release_threadsafe_function()` be the last API call made in conjunction
-with a given `napi_threadsafe_function`, because after the call completes, there
-is no guarantee that the `napi_threadsafe_function` is still allocated. For the
-same reason it is also important that no more use be made of a thread-safe
-function after receiving a return value of `napi_closing` in response to a call
-to `napi_call_threadsafe_function`. Data associated with the
+`napi_threadsafe_function` is destroyed. `napi_release_threadsafe_function()`
+should be the last API call made in conjunction with a given
+`napi_threadsafe_function`, because after the call completes, there is no
+guarantee that the `napi_threadsafe_function` is still allocated. For the same
+reason, do not make use of a thread-safe function
+after receiving a return value of `napi_closing` in response to a call to
+`napi_call_threadsafe_function`. Data associated with the
 `napi_threadsafe_function` can be freed in its `napi_finalize` callback which
 was passed to `napi_create_threadsafe_function()`.
 
@@ -5138,40 +5216,51 @@ idempotent.
 This API may only be called from the main thread.
 
 [ABI Stability]: https://nodejs.org/en/docs/guides/abi-stability/
+[AppVeyor]: https://www.appveyor.com
+[C++ Addons]: addons.html
+[CMake.js]: https://github.com/cmake-js/cmake-js
+[CMake]: https://cmake.org
 [ECMAScript Language Specification]: https://tc39.github.io/ecma262/
 [Error Handling]: #n_api_error_handling
+[GCC]: https://gcc.gnu.org
+[GYP]: https://gyp.gsrc.io
+[GitHub releases]: https://help.github.com/en/github/administering-a-repository/about-releases
+[LLVM]: https://llvm.org
 [Native Abstractions for Node.js]: https://github.com/nodejs/nan
 [Object Lifetime Management]: #n_api_object_lifetime_management
 [Object Wrap]: #n_api_object_wrap
-[Section 6]: https://tc39.github.io/ecma262/#sec-ecmascript-data-types-and-values
-[Section 6.1]: https://tc39.github.io/ecma262/#sec-ecmascript-language-types
-[Section 6.1.4]: https://tc39.github.io/ecma262/#sec-ecmascript-language-types-string-type
-[Section 6.1.6]: https://tc39.github.io/ecma262/#sec-ecmascript-language-types-number-type
-[Section 6.1.7]: https://tc39.github.io/ecma262/#sec-object-type
-[Section 6.1.7.1]: https://tc39.github.io/ecma262/#table-2
-[Section 7]: https://tc39.github.io/ecma262/#sec-abstract-operations
-[Section 7.1.2]: https://tc39.github.io/ecma262/#sec-toboolean
-[Section 7.1.3]: https://tc39.github.io/ecma262/#sec-tonumber
-[Section 7.1.13]: https://tc39.github.io/ecma262/#sec-toobject
-[Section 7.2.2]: https://tc39.github.io/ecma262/#sec-isarray
-[Section 7.2.14]: https://tc39.github.io/ecma262/#sec-strict-equality-comparison
-[Section 8.7]: https://tc39.es/ecma262/#sec-agents
-[Section 9.1.6]: https://tc39.github.io/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-defineownproperty-p-desc
-[Section 12.5.5]: https://tc39.github.io/ecma262/#sec-typeof-operator
 [Section 12.10.4]: https://tc39.github.io/ecma262/#sec-instanceofoperator
+[Section 12.5.5]: https://tc39.github.io/ecma262/#sec-typeof-operator
 [Section 19.2]: https://tc39.github.io/ecma262/#sec-function-objects
 [Section 19.4]: https://tc39.github.io/ecma262/#sec-symbol-objects
 [Section 20.3]: https://tc39.github.io/ecma262/#sec-date-objects
-[Section 22.1]: https://tc39.github.io/ecma262/#sec-array-objects
 [Section 22.1.4.1]: https://tc39.github.io/ecma262/#sec-properties-of-array-instances-length
+[Section 22.1]: https://tc39.github.io/ecma262/#sec-array-objects
 [Section 22.2]: https://tc39.github.io/ecma262/#sec-typedarray-objects
-[Section 24.1]: https://tc39.github.io/ecma262/#sec-arraybuffer-objects
 [Section 24.1.1.3]: https://tc39.es/ecma262/#sec-detacharraybuffer
+[Section 24.1]: https://tc39.github.io/ecma262/#sec-arraybuffer-objects
 [Section 24.3]: https://tc39.github.io/ecma262/#sec-dataview-objects
 [Section 25.4]: https://tc39.github.io/ecma262/#sec-promise-objects
-[`Number.MIN_SAFE_INTEGER`]: https://tc39.github.io/ecma262/#sec-number.min_safe_integer
-[`Number.MAX_SAFE_INTEGER`]: https://tc39.github.io/ecma262/#sec-number.max_safe_integer
+[Section 6.1.4]: https://tc39.github.io/ecma262/#sec-ecmascript-language-types-string-type
+[Section 6.1.6]: https://tc39.github.io/ecma262/#sec-ecmascript-language-types-number-type
+[Section 6.1.7.1]: https://tc39.github.io/ecma262/#table-2
+[Section 6.1.7]: https://tc39.github.io/ecma262/#sec-object-type
+[Section 6.1]: https://tc39.github.io/ecma262/#sec-ecmascript-language-types
+[Section 6]: https://tc39.github.io/ecma262/#sec-ecmascript-data-types-and-values
+[Section 7.1.13]: https://tc39.github.io/ecma262/#sec-toobject
+[Section 7.1.2]: https://tc39.github.io/ecma262/#sec-toboolean
+[Section 7.1.3]: https://tc39.github.io/ecma262/#sec-tonumber
+[Section 7.2.14]: https://tc39.github.io/ecma262/#sec-strict-equality-comparison
+[Section 7.2.2]: https://tc39.github.io/ecma262/#sec-isarray
+[Section 7]: https://tc39.github.io/ecma262/#sec-abstract-operations
+[Section 8.7]: https://tc39.es/ecma262/#sec-agents
+[Section 9.1.6]: https://tc39.github.io/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-defineownproperty-p-desc
+[Travis CI]: https://travis-ci.org
+[Visual Studio]: https://visualstudio.microsoft.com
 [Working with JavaScript Properties]: #n_api_working_with_javascript_properties
+[Xcode]: https://developer.apple.com/xcode/
+[`Number.MAX_SAFE_INTEGER`]: https://tc39.github.io/ecma262/#sec-number.max_safe_integer
+[`Number.MIN_SAFE_INTEGER`]: https://tc39.github.io/ecma262/#sec-number.min_safe_integer
 [`init` hooks]: async_hooks.html#async_hooks_init_asyncid_type_triggerasyncid_resource
 [`napi_add_finalizer`]: #n_api_napi_add_finalizer
 [`napi_async_init`]: #n_api_napi_async_init
@@ -5215,10 +5304,16 @@ This API may only be called from the main thread.
 [`napi_throw`]: #n_api_napi_throw
 [`napi_unwrap`]: #n_api_napi_unwrap
 [`napi_wrap`]: #n_api_napi_wrap
+[`node_api.h`]: https://github.com/nodejs/node/blob/master/src/node_api.h
 [`process.release`]: process.html#process_process_release
 [`uv_ref`]: http://docs.libuv.org/en/v1.x/handle.html#c.uv_ref
 [`uv_unref`]: http://docs.libuv.org/en/v1.x/handle.html#c.uv_unref
 [async_hooks `type`]: async_hooks.html#async_hooks_type
 [context-aware addons]: addons.html#addons_context_aware_addons
+[docs]: https://github.com/nodejs/node-addon-api#api-documentation
 [node-addon-api]: https://github.com/nodejs/node-addon-api
+[node-gyp]: https://github.com/nodejs/node-gyp
+[node-pre-gyp]: https://github.com/mapbox/node-pre-gyp
+[prebuild]: https://github.com/prebuild/prebuild
+[prebuildify]: https://github.com/prebuild/prebuildify
 [worker threads]: https://nodejs.org/api/worker_threads.html

@@ -83,9 +83,9 @@ by checking `require.main.filename`.
 <!-- type=misc -->
 
 The semantics of Node.js's `require()` function were designed to be general
-enough to support a number of reasonable directory structures. Package manager
-programs such as `dpkg`, `rpm`, and `npm` will hopefully find it possible to
-build native packages from Node.js modules without modification.
+enough to support reasonable directory structures. Package manager programs
+such as `dpkg`, `rpm`, and `npm` will hopefully find it possible to build
+native packages from Node.js modules without modification.
 
 Below we give a suggested directory structure that could work:
 
@@ -103,13 +103,13 @@ resolves symlinks), and then looks for their dependencies in the `node_modules`
 folders as described [here](#modules_loading_from_node_modules_folders), this
 situation is very simple to resolve with the following architecture:
 
-* `/usr/lib/node/foo/1.2.3/` - Contents of the `foo` package, version 1.2.3.
-* `/usr/lib/node/bar/4.3.2/` - Contents of the `bar` package that `foo`
-  depends on.
-* `/usr/lib/node/foo/1.2.3/node_modules/bar` - Symbolic link to
+* `/usr/lib/node/foo/1.2.3/`: Contents of the `foo` package, version 1.2.3.
+* `/usr/lib/node/bar/4.3.2/`: Contents of the `bar` package that `foo` depends
+  on.
+* `/usr/lib/node/foo/1.2.3/node_modules/bar`: Symbolic link to
   `/usr/lib/node/bar/4.3.2/`.
-* `/usr/lib/node/bar/4.3.2/node_modules/*` - Symbolic links to the packages
-  that `bar` depends on.
+* `/usr/lib/node/bar/4.3.2/node_modules/*`: Symbolic links to the packages that
+  `bar` depends on.
 
 Thus, even if a cycle is encountered, or if there are dependency
 conflicts, every module will be able to get a version of its dependency
@@ -159,8 +159,10 @@ require(X) from module at path Y
 3. If X begins with './' or '/' or '../'
    a. LOAD_AS_FILE(Y + X)
    b. LOAD_AS_DIRECTORY(Y + X)
+   c. THROW "not found"
 4. LOAD_NODE_MODULES(X, dirname(Y))
-5. THROW "not found"
+5. LOAD_SELF_REFERENCE(X, dirname(Y))
+6. THROW "not found"
 
 LOAD_AS_FILE(X)
 1. If X is a file, load X as JavaScript text.  STOP
@@ -200,6 +202,13 @@ NODE_MODULES_PATHS(START)
    c. DIRS = DIRS + DIR
    d. let I = I - 1
 5. return DIRS
+
+LOAD_SELF_REFERENCE(X, START)
+1. Find the closest package scope to START.
+2. If no scope was found, throw "not found".
+3. If the name in `package.json` isn't a prefix of X, throw "not found".
+4. Otherwise, resolve the remainder of X relative to this package as if it
+   was loaded via `LOAD_NODE_MODULES` with a name in `package.json`.
 ```
 
 Node.js allows packages loaded via
@@ -214,8 +223,8 @@ LOAD_NODE_MODULES(X, START)
 1. let DIRS = NODE_MODULES_PATHS(START)
 2. for each DIR in DIRS:
    a. let FILE_PATH = RESOLVE_BARE_SPECIFIER(DIR, X)
-   a. LOAD_AS_FILE(FILE_PATH)
-   b. LOAD_AS_DIRECTORY(FILE_PATH)
+   b. LOAD_AS_FILE(FILE_PATH)
+   c. LOAD_AS_DIRECTORY(FILE_PATH)
 
 RESOLVE_BARE_SPECIFIER(DIR, X)
 1. Try to interpret X as a combination of name and subpath where the name

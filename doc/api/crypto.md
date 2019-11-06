@@ -1041,6 +1041,41 @@ console.log(hash.digest('hex'));
 //   6a2da20943931e9834fc12cfe5bb47bbd9ae43489a30726962b576f4e3993e50
 ```
 
+### hash.copy(\[options\])
+<!-- YAML
+added: v13.1.0
+-->
+
+* `options` {Object} [`stream.transform` options][]
+* Returns: {Hash}
+
+Creates a new `Hash` object that contains a deep copy of the internal state
+of the current `Hash` object.
+
+The optional `options` argument controls stream behavior. For XOF hash
+functions such as `'shake256'`, the `outputLength` option can be used to
+specify the desired output length in bytes.
+
+An error is thrown when an attempt is made to copy the `Hash` object after
+its [`hash.digest()`][] method has been called.
+
+```js
+// Calculate a rolling hash.
+const crypto = require('crypto');
+const hash = crypto.createHash('sha256');
+
+hash.update('one');
+console.log(hash.copy().digest('hex'));
+
+hash.update('two');
+console.log(hash.copy().digest('hex'));
+
+hash.update('three');
+console.log(hash.copy().digest('hex'));
+
+// Etc.
+```
+
 ### hash.digest(\[encoding\])
 <!-- YAML
 added: v0.1.92
@@ -1382,7 +1417,7 @@ If `privateKey` is not a [`KeyObject`][], this function behaves as if
 `privateKey` had been passed to [`crypto.createPrivateKey()`][]. If it is an
 object, the following additional properties can be passed:
 
-* `padding`: {integer} - Optional padding value for RSA, one of the following:
+* `padding` {integer} Optional padding value for RSA, one of the following:
   * `crypto.constants.RSA_PKCS1_PADDING` (default)
   * `crypto.constants.RSA_PKCS1_PSS_PADDING`
 
@@ -1390,7 +1425,7 @@ object, the following additional properties can be passed:
   used to sign the message as specified in section 3.1 of [RFC 4055][], unless
   an MGF1 hash function has been specified as part of the key in compliance with
   section 3.3 of [RFC 4055][].
-* `saltLength`: {integer} - salt length for when padding is
+* `saltLength` {integer} Salt length for when padding is
   `RSA_PKCS1_PSS_PADDING`. The special value
   `crypto.constants.RSA_PSS_SALTLEN_DIGEST` sets the salt length to the digest
   size, `crypto.constants.RSA_PSS_SALTLEN_MAX_SIGN` (default) sets it to the
@@ -1491,7 +1526,7 @@ If `object` is not a [`KeyObject`][], this function behaves as if
 `object` had been passed to [`crypto.createPublicKey()`][]. If it is an
 object, the following additional properties can be passed:
 
-* `padding`: {integer} - Optional padding value for RSA, one of the following:
+* `padding` {integer} Optional padding value for RSA, one of the following:
   * `crypto.constants.RSA_PKCS1_PADDING` (default)
   * `crypto.constants.RSA_PKCS1_PSS_PADDING`
 
@@ -1499,7 +1534,7 @@ object, the following additional properties can be passed:
   used to verify the message as specified in section 3.1 of [RFC 4055][], unless
   an MGF1 hash function has been specified as part of the key in compliance with
   section 3.3 of [RFC 4055][].
-* `saltLength`: {integer} - salt length for when padding is
+* `saltLength` {integer} Salt length for when padding is
   `RSA_PKCS1_PSS_PADDING`. The special value
   `crypto.constants.RSA_PSS_SALTLEN_DIGEST` sets the salt length to the digest
   size, `crypto.constants.RSA_PSS_SALTLEN_AUTO` (default) causes it to be
@@ -1672,8 +1707,8 @@ Initialization vectors should be unpredictable and unique; ideally, they will be
 cryptographically random. They do not have to be secret: IVs are typically just
 added to ciphertext messages unencrypted. It may sound contradictory that
 something has to be unpredictable and unique, but does not have to be secret;
-it is important to remember that an attacker must not be able to predict ahead
-of time what a given IV will be.
+remember that an attacker must not be able to predict ahead of time what a
+given IV will be.
 
 ### crypto.createDecipher(algorithm, password\[, options\])
 <!-- YAML
@@ -1766,8 +1801,8 @@ Initialization vectors should be unpredictable and unique; ideally, they will be
 cryptographically random. They do not have to be secret: IVs are typically just
 added to ciphertext messages unencrypted. It may sound contradictory that
 something has to be unpredictable and unique, but does not have to be secret;
-it is important to remember that an attacker must not be able to predict ahead
-of time what a given IV will be.
+remember that an attacker must not be able to predict ahead of time what a given
+IV will be.
 
 ### crypto.createDiffieHellman(prime\[, primeEncoding\]\[, generator\]\[, generatorEncoding\])
 <!-- YAML
@@ -2856,13 +2891,13 @@ If `key` is not a [`KeyObject`][], this function behaves as if `key` had been
 passed to [`crypto.createPrivateKey()`][]. If it is an object, the following
 additional properties can be passed:
 
-* `padding`: {integer} - Optional padding value for RSA, one of the following:
+* `padding` {integer} Optional padding value for RSA, one of the following:
   * `crypto.constants.RSA_PKCS1_PADDING` (default)
   * `crypto.constants.RSA_PKCS1_PSS_PADDING`
 
   `RSA_PKCS1_PSS_PADDING` will use MGF1 with the same hash function
   used to sign the message as specified in section 3.1 of [RFC 4055][].
-* `saltLength`: {integer} - salt length for when padding is
+* `saltLength` {integer} Salt length for when padding is
   `RSA_PKCS1_PSS_PADDING`. The special value
   `crypto.constants.RSA_PSS_SALTLEN_DIGEST` sets the salt length to the digest
   size, `crypto.constants.RSA_PSS_SALTLEN_MAX_SIGN` (default) sets it to the
@@ -2909,13 +2944,13 @@ If `key` is not a [`KeyObject`][], this function behaves as if `key` had been
 passed to [`crypto.createPublicKey()`][]. If it is an object, the following
 additional properties can be passed:
 
-* `padding`: {integer} - Optional padding value for RSA, one of the following:
+* `padding` {integer} Optional padding value for RSA, one of the following:
   * `crypto.constants.RSA_PKCS1_PADDING` (default)
   * `crypto.constants.RSA_PKCS1_PSS_PADDING`
 
   `RSA_PKCS1_PSS_PADDING` will use MGF1 with the same hash function
   used to sign the message as specified in section 3.1 of [RFC 4055][].
-* `saltLength`: {integer} - salt length for when padding is
+* `saltLength` {integer} Salt length for when padding is
   `RSA_PKCS1_PSS_PADDING`. The special value
   `crypto.constants.RSA_PSS_SALTLEN_DIGEST` sets the salt length to the digest
   size, `crypto.constants.RSA_PSS_SALTLEN_MAX_SIGN` (default) sets it to the

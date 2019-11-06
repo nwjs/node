@@ -103,6 +103,7 @@ class EnvironmentOptions : public Options {
   bool enable_source_maps = false;
   bool experimental_json_modules = false;
   bool experimental_modules = false;
+  bool experimental_resolve_self = false;
   std::string es_module_specifier_resolution;
   bool experimental_wasm_modules = false;
   std::string module_type;
@@ -140,6 +141,7 @@ class EnvironmentOptions : public Options {
   bool trace_deprecation = false;
   bool trace_sync_io = false;
   bool trace_tls = false;
+  bool trace_uncaught = false;
   bool trace_warnings = false;
   std::string unhandled_rejections;
   std::string userland_loader;

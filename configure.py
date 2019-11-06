@@ -12,6 +12,7 @@ import shlex
 import subprocess
 import shutil
 import bz2
+import io
 
 from distutils.spawn import find_executable as which
 from distutils.version import StrictVersion
@@ -297,23 +298,23 @@ shared_optgroup.add_option('--shared-zlib-libpath',
 
 shared_optgroup.add_option('--shared-cares',
     action='store_true',
-    dest='shared_libcares',
+    dest='shared_cares',
     help='link to a shared cares DLL instead of static linking')
 
 shared_optgroup.add_option('--shared-cares-includes',
     action='store',
-    dest='shared_libcares_includes',
+    dest='shared_cares_includes',
     help='directory containing cares header files')
 
 shared_optgroup.add_option('--shared-cares-libname',
     action='store',
-    dest='shared_libcares_libname',
+    dest='shared_cares_libname',
     default='cares',
     help='alternative lib name to link to [default: %default]')
 
 shared_optgroup.add_option('--shared-cares-libpath',
     action='store',
-    dest='shared_libcares_libpath',
+    dest='shared_cares_libpath',
     help='a directory to search for the shared cares DLL')
 
 parser.add_option_group(shared_optgroup)
@@ -1137,12 +1138,13 @@ def configure_napi(output):
   version = getnapibuildversion.get_napi_version()
   output['variables']['napi_build_version'] = version
 
-def configure_library(lib, output):
+def configure_library(lib, output, pkgname=None):
   shared_lib = 'shared_' + lib
   output['variables']['node_' + shared_lib] = b(getattr(options, shared_lib))
 
   if getattr(options, shared_lib):
-    (pkg_libs, pkg_cflags, pkg_libpath, pkg_modversion) = pkg_config(lib)
+    (pkg_libs, pkg_cflags, pkg_libpath, pkg_modversion) = (
+        pkg_config(pkgname or lib))
 
     if options.__dict__[shared_lib + '_includes']:
       output['include_dirs'] += [options.__dict__[shared_lib + '_includes']]
@@ -1497,10 +1499,11 @@ def configure_intl(o):
   icu_ver_major = None
   matchVerExp = r'^\s*#define\s+U_ICU_VERSION_SHORT\s+"([^"]*)".*'
   match_version = re.compile(matchVerExp)
-  for line in open(uvernum_h).readlines():
-    m = match_version.match(line)
-    if m:
-      icu_ver_major = m.group(1)
+  with io.open(uvernum_h, encoding='utf8') as in_file:
+    for line in in_file:
+      m = match_version.match(line)
+      if m:
+        icu_ver_major = str(m.group(1))
   if not icu_ver_major:
     error('Could not read U_ICU_VERSION_SHORT version from %s' % uvernum_h)
   elif int(icu_ver_major) < icu_versions['minimum_icu']:
@@ -1652,11 +1655,8 @@ configure_napi(output)
 configure_library('zlib', output)
 configure_library('http_parser', output)
 configure_library('libuv', output)
-configure_library('libcares', output)
-configure_library('nghttp2', output)
-# stay backwards compatible with shared cares builds
-output['variables']['node_shared_cares'] = \
-    output['variables'].pop('node_shared_libcares')
+configure_library('cares', output, pkgname='libcares')
+configure_library('nghttp2', output, pkgname='libnghttp2')
 configure_v8(output)
 configure_openssl(output)
 configure_intl(output)

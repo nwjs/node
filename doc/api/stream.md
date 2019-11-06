@@ -33,13 +33,13 @@ second section explains how to create new types of streams.
 
 There are four fundamental stream types within Node.js:
 
-* [`Writable`][] - streams to which data can be written (for example,
+* [`Writable`][]: streams to which data can be written (for example,
   [`fs.createWriteStream()`][]).
-* [`Readable`][] - streams from which data can be read (for example,
+* [`Readable`][]: streams from which data can be read (for example,
   [`fs.createReadStream()`][]).
-* [`Duplex`][] - streams that are both `Readable` and `Writable` (for example,
+* [`Duplex`][]: streams that are both `Readable` and `Writable` (for example,
   [`net.Socket`][]).
-* [`Transform`][] - `Duplex` streams that can modify or transform the data as it
+* [`Transform`][]: `Duplex` streams that can modify or transform the data as it
   is written and read (for example, [`zlib.createDeflate()`][]).
 
 Additionally, this module includes the utility functions
@@ -100,7 +100,7 @@ maintaining an appropriate and efficient flow of data. For example,
 [`net.Socket`][] instances are [`Duplex`][] streams whose `Readable` side allows
 consumption of data received *from* the socket and whose `Writable` side allows
 writing data *to* the socket. Because data may be written to the socket at a
-faster or slower rate than data is received, it is important for each side to
+faster or slower rate than data is received, each side should
 operate (and buffer) independently of the other.
 
 ## API for Stream Consumers
@@ -1534,7 +1534,7 @@ If this is unwanted behavior then the returned cleanup function needs to be
 invoked in the callback:
 
 ```js
-const cleanup = finished(...streams, (err) => {
+const cleanup = finished(rs, (err) => {
   cleanup();
   // ...
 });
@@ -1658,11 +1658,11 @@ class MyWritable extends Writable {
 }
 ```
 
-When extending streams, it is important to keep in mind what options the user
+When extending streams, keep in mind what options the user
 can and should provide before forwarding these to the base constructor. For
-example, if the implementation makes assumptions in regard to e.g. the
-`autoDestroy` and `emitClose` options, it becomes important to not allow the
-user to override these. It is therefore recommended to be explicit about what
+example, if the implementation makes assumptions in regard to the
+`autoDestroy` and `emitClose` options, do not allow the
+user to override these. Be explicit about what
 options are forwarded instead of implicitly forwarding all options.
 
 The new stream class must then implement one or more specific methods, depending
@@ -2508,7 +2508,7 @@ user programs.
   [`stream.write()`][stream-write].
 * `encoding` {string} If the chunk is a string, then this is the
   encoding type. If chunk is a buffer, then this is the special
-  value - `'buffer'`, ignore it in this case.
+  value `'buffer'`. Ignore it in that case.
 * `callback` {Function} A callback function (optionally with an error
   argument and data) to be called after the supplied `chunk` has been
   processed.
@@ -2609,8 +2609,8 @@ readable.on('data', (chunk) => {
 
 #### Piping to Writable Streams from Async Iterators
 
-In the scenario of writing to a writable stream from an async iterator,
-it is important to ensure the correct handling of backpressure and errors.
+In the scenario of writing to a writable stream from an async iterator, ensure
+the correct handling of backpressure and errors.
 
 ```js
 const { once } = require('events');

@@ -123,6 +123,21 @@ if (cluster.isMaster) {
 }
 ```
 
+### socket.addSourceSpecificMembership(sourceAddress, groupAddress\[, multicastInterface\])
+<!-- YAML
+added: v13.1.0
+-->
+* `sourceAddress` {string}
+* `groupAddress` {string}
+* `multicastInterface` {string}
+
+Tells the kernel to join a source-specific multicast channel at the given
+`sourceAddress` and `groupAddress`, using the `multicastInterface` with the
+`IP_ADD_SOURCE_MEMBERSHIP` socket option. If the `multicastInterface` argument
+is not specified, the operating system will choose one interface and will add
+membership to it. To add membership to every available interface, call
+`socket.addSourceSpecificMembership()` multiple times, once per interface.
+
 ### socket.address()
 <!-- YAML
 added: v0.1.99
@@ -297,6 +312,24 @@ never have reason to call this.
 If `multicastInterface` is not specified, the operating system will attempt to
 drop membership on all valid interfaces.
 
+### socket.dropSourceSpecificMembership(sourceAddress, groupAddress\[, multicastInterface\])
+<!-- YAML
+added: v13.1.0
+-->
+
+* `sourceAddress` {string}
+* `groupAddress` {string}
+* `multicastInterface` {string}
+
+Instructs the kernel to leave a source-specific multicast channel at the given
+`sourceAddress` and `groupAddress` using the `IP_DROP_SOURCE_MEMBERSHIP`
+socket option. This method is automatically called by the kernel when the
+socket is closed or the process terminates, so most apps will never have
+reason to call this.
+
+If `multicastInterface` is not specified, the operating system will attempt to
+drop membership on all valid interfaces.
+
 ### socket.getRecvBufferSize()
 <!-- YAML
 added: v8.7.0
@@ -433,7 +466,7 @@ client.send([buf1, buf2], 41234, (err) => {
 ```
 
 Sending multiple buffers might be faster or slower depending on the
-application and operating system. It is important to run benchmarks to
+application and operating system. Run benchmarks to
 determine the optimal strategy on a case-by-case basis. Generally speaking,
 however, sending multiple buffers is faster.
 
@@ -589,8 +622,7 @@ packet is allowed to travel through, specifically for multicast traffic. Each
 router or gateway that forwards a packet decrements the TTL. If the TTL is
 decremented to 0 by a router, it will not be forwarded.
 
-The argument passed to `socket.setMulticastTTL()` is a number of hops
-between 0 and 255. The default on most systems is `1` but can vary.
+The `ttl` argument may be between 0 and 255. The default on most systems is `1`.
 
 ### socket.setRecvBufferSize(size)
 <!-- YAML
@@ -625,8 +657,8 @@ travel through. Each router or gateway that forwards a packet decrements the
 TTL. If the TTL is decremented to 0 by a router, it will not be forwarded.
 Changing TTL values is typically done for network probes or when multicasting.
 
-The argument to `socket.setTTL()` is a number of hops between 1 and 255.
-The default on most systems is 64 but can vary.
+The `ttl` argument may be between between 1 and 255. The default on most systems
+is 64.
 
 ### socket.unref()
 <!-- YAML
@@ -673,8 +705,8 @@ changes:
   * `ipv6Only` {boolean} Setting `ipv6Only` to `true` will
     disable dual-stack support, i.e., binding to address `::` won't make
     `0.0.0.0` be bound. **Default:** `false`.
-  * `recvBufferSize` {number} - Sets the `SO_RCVBUF` socket value.
-  * `sendBufferSize` {number} - Sets the `SO_SNDBUF` socket value.
+  * `recvBufferSize` {number} Sets the `SO_RCVBUF` socket value.
+  * `sendBufferSize` {number} Sets the `SO_SNDBUF` socket value.
   * `lookup` {Function} Custom lookup function. **Default:** [`dns.lookup()`][].
 * `callback` {Function} Attached as a listener for `'message'` events. Optional.
 * Returns: {dgram.Socket}
@@ -692,8 +724,8 @@ and port can be retrieved using [`socket.address().address`][] and
 added: v0.1.99
 -->
 
-* `type` {string} - Either `'udp4'` or `'udp6'`.
-* `callback` {Function} - Attached as a listener to `'message'` events.
+* `type` {string} Either `'udp4'` or `'udp6'`.
+* `callback` {Function} Attached as a listener to `'message'` events.
 * Returns: {dgram.Socket}
 
 Creates a `dgram.Socket` object of the specified `type`.

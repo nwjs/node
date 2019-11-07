@@ -505,7 +505,11 @@
           'BUILDING_UV_SHARED=1',
         ],
         'conditions': [
-          [ 'building_nw==1', {
+          [ 'building_nw==1 and component=="shared_library"', {
+            'defines': [ '_LIBCPP_NO_AUTO_LINK' ],
+            'include_dirs': [ '<(DEPTH)/buildtools/third_party/libc++/trunk/include'],
+          }],
+          [ 'building_nw==1 and component!="shared_library"', {
             'defines': [ '_LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS', '_LIBCPP_NO_AUTO_LINK' ],
             'include_dirs': [ '<(DEPTH)/buildtools/third_party/libc++/trunk/include'],
           }],

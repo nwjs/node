@@ -11,8 +11,7 @@ provide an interface between JavaScript running in Node.js and C/C++ libraries.
 There are three options for implementing Addons: N-API, nan, or direct
 use of internal V8, libuv and Node.js libraries. Unless you need direct
 access to functionality which is not exposed by N-API, use N-API.
-Refer to the section [C/C++ Addons - N-API](n-api.html)
-for more information on N-API.
+Refer to [C/C++ Addons with N-API](n-api.html) for more information on N-API.
 
 When not using N-API, implementing Addons is complicated,
 involving knowledge of several components and APIs:
@@ -35,16 +34,14 @@ involving knowledge of several components and APIs:
   off-loading work via libuv to non-blocking system operations, worker threads
   or a custom use of libuv's threads.
 
-* Internal Node.js libraries. Node.js itself exports a number of C++ APIs
-  that Addons can use &mdash; the most important of which is the
-  `node::ObjectWrap` class.
+* Internal Node.js libraries. Node.js itself exports C++ APIs that Addons can
+  use, the most important of which is the `node::ObjectWrap` class.
 
-* Node.js includes a number of other statically linked libraries including
-  OpenSSL. These other libraries are located in the `deps/` directory in the
-  Node.js source tree. Only the libuv, OpenSSL, V8 and zlib symbols are
-  purposefully re-exported by Node.js and may be used to various extents by
-  Addons.
-  See [Linking to Node.js' own dependencies][] for additional information.
+* Node.js includes other statically linked libraries including OpenSSL. These
+  other libraries are located in the `deps/` directory in the Node.js source
+  tree. Only the libuv, OpenSSL, V8 and zlib symbols are purposefully
+  re-exported by Node.js and may be used to various extents by Addons. See
+  [Linking to Node.js' own dependencies][] for additional information.
 
 All of the following examples are available for [download][] and may
 be used as the starting-point for an Addon.
@@ -332,12 +329,12 @@ try {
 
 ### Linking to Node.js' own dependencies
 
-Node.js uses a number of statically linked libraries such as V8, libuv and
-OpenSSL. All Addons are required to link to V8 and may link to any of the
-other dependencies as well. Typically, this is as simple as including
-the appropriate `#include <...>` statements (e.g. `#include <v8.h>`) and
-`node-gyp` will locate the appropriate headers automatically. However, there
-are a few caveats to be aware of:
+Node.js uses statically linked libraries such as V8, libuv and OpenSSL. All
+Addons are required to link to V8 and may link to any of the other dependencies
+as well. Typically, this is as simple as including the appropriate
+`#include <...>` statements (e.g. `#include <v8.h>`) and `node-gyp` will locate
+the appropriate headers automatically. However, there are a few caveats to be
+aware of:
 
 * When `node-gyp` runs, it will detect the specific release version of Node.js
 and download either the full source tarball or just the headers. If the full
@@ -367,13 +364,12 @@ and load it instead.
 ## Native Abstractions for Node.js
 
 Each of the examples illustrated in this document make direct use of the
-Node.js and V8 APIs for implementing Addons. It is important to understand
-that the V8 API can, and has, changed dramatically from one V8 release to the
-next (and one major Node.js release to the next). With each change, Addons may
-need to be updated and recompiled in order to continue functioning. The Node.js
-release schedule is designed to minimize the frequency and impact of such
-changes but there is little that Node.js can do currently to ensure stability
-of the V8 APIs.
+Node.js and V8 APIs for implementing Addons. The V8 API can, and has, changed
+dramatically from one V8 release to the next (and one major Node.js release to
+the next). With each change, Addons may need to be updated and recompiled in
+order to continue functioning. The Node.js release schedule is designed to
+minimize the frequency and impact of such changes but there is little that
+Node.js can do currently to ensure stability of the V8 APIs.
 
 The [Native Abstractions for Node.js][] (or `nan`) provide a set of tools that
 Addon developers are recommended to use to keep compatibility between past and
@@ -435,8 +431,8 @@ NAPI_MODULE(NODE_GYP_MODULE_NAME, init)
 }  // namespace demo
 ```
 
-The functions available and how to use them are documented in the
-section titled [C/C++ Addons - N-API](n-api.html).
+The functions available and how to use them are documented in
+[C/C++ Addons with N-API](n-api.html).
 
 ## Addon examples
 

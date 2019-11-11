@@ -100,6 +100,11 @@ The default is
 File name of the V8 CPU profile generated with
 .Fl -cpu-prof
 .
+.It Fl -disallow-code-generation-from-strings
+Make built-in language features like `eval` and `new Function` that generate
+code from strings throw an exception instead. This does not affect the Node.js
+`vm` module.
+.
 .It Fl -enable-fips
 Enable FIPS-compliant crypto at startup.
 Requires Node.js to be built with
@@ -336,6 +341,18 @@ Print a stack trace whenever synchronous I/O is detected after the first turn of
 .
 .It Fl -trace-tls
 Prints TLS packet trace information to stderr.
+.
+.It Fl -trace-uncaught
+Print stack traces for uncaught exceptions; usually, the stack trace associated
+with the creation of an
+.Sy Error
+is printed, whereas this makes Node.js also
+print the stack trace associated with throwing the value (which does not need
+to be an
+.Sy Error
+instance).
+.Pp
+Enabling this option may affect garbage collection behavior negatively.
 .
 .It Fl -trace-warnings
 Print stack traces for process warnings (including deprecations).

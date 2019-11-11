@@ -227,6 +227,7 @@
       'lib/internal/streams/async_iterator.js',
       'lib/internal/streams/buffer_list.js',
       'lib/internal/streams/duplexpair.js',
+      'lib/internal/streams/from.js',
       'lib/internal/streams/legacy.js',
       'lib/internal/streams/destroy.js',
       'lib/internal/streams/state.js',
@@ -728,6 +729,7 @@
         # Warn when using deprecated V8 APIs.
         'V8_DEPRECATION_WARNINGS=1',
         'BUILDING_NW_NODE=1',
+        '_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH',
         'V8_SHARED',
         'USING_V8_SHARED',
         'V8_USE_EXTERNAL_STARTUP_DATA',
@@ -767,8 +769,12 @@
                 'src/res/node-nw.rc',
               ],
             }],
+            [ 'component == "shared_library"', {
+              'libraries': [ '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/nw.dll.lib', '<(PRODUCT_DIR)/../nw/libc++.dll.lib'],
+            }, {
+              'libraries': [ '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/nw.dll.lib', '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libcpp.lib'],
+            }],
           ],
-          'libraries': [ '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/nw.dll.lib', '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libcpp.lib'],
         }],
         [ 'node_use_etw=="true"', {
           'defines': [ 'HAVE_ETW=1' ],

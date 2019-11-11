@@ -285,6 +285,8 @@ int Environment::InitializeInspector(
 void Environment::InitializeDiagnostics() {
   isolate_->GetHeapProfiler()->AddBuildEmbedderGraphCallback(
       Environment::BuildEmbedderGraph, this);
+  if (options_->trace_uncaught)
+    isolate_->SetCaptureStackTraceForUncaughtExceptions(true);
 
 #if defined HAVE_DTRACE || defined HAVE_ETW
   InitDTrace(this);
@@ -1396,13 +1398,15 @@ NODE_EXTERN void g_msg_pump_ctor(uv_async_t** wakeup_event, int worker_support) 
 NODE_EXTERN void g_msg_pump_dtor(uv_async_t** wakeup_event) {
   node::thread_ctx_st* tls_ctx = nullptr;
   tls_ctx = (node::thread_ctx_st*)uv_key_get(&node::thread_ctx_key);
-  tls_ctx->close_async_handle_done = 0;
+  if (tls_ctx)
+    tls_ctx->close_async_handle_done = 0;
   uv_close(reinterpret_cast<uv_handle_t*>(*wakeup_event), close_async_cb);
-  while (!tls_ctx->close_async_handle_done)
+  while (tls_ctx && !tls_ctx->close_async_handle_done)
     uv_run(uv_default_loop(), UV_RUN_NOWAIT);
   uv_loop_close(uv_default_loop());
   *wakeup_event = nullptr;
-  free(tls_ctx);
+  if (tls_ctx)
+    free(tls_ctx);
   uv_key_set(&node::thread_ctx_key, NULL);
 }
 

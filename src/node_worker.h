@@ -12,6 +12,13 @@ namespace worker {
 
 class WorkerThreadData;
 
+enum ResourceLimits {
+  kMaxYoungGenerationSizeMb,
+  kMaxOldGenerationSizeMb,
+  kCodeRangeSizeMb,
+  kTotalResourceLimitCount
+};
+
 // A worker thread, as represented in its parent thread.
 class Worker : public AsyncWrap {
  public:
@@ -41,7 +48,6 @@ class Worker : public AsyncWrap {
   SET_SELF_SIZE(Worker)
 
   bool is_stopped() const;
-  std::shared_ptr<ArrayBufferAllocator> array_buffer_allocator();
 
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void CloneParentEnvVars(
@@ -51,16 +57,20 @@ class Worker : public AsyncWrap {
   static void StopThread(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Ref(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Unref(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetResourceLimits(
+      const v8::FunctionCallbackInfo<v8::Value>& args);
+  v8::Local<v8::Float64Array> GetResourceLimits(v8::Isolate* isolate) const;
 
  private:
   void CreateEnvMessagePort(Environment* env);
+  static size_t NearHeapLimit(void* data, size_t current_heap_limit,
+                              size_t initial_heap_limit);
 
   std::shared_ptr<PerIsolateOptions> per_isolate_opts_;
   std::vector<std::string> exec_argv_;
   std::vector<std::string> argv_;
 
   MultiIsolatePlatform* platform_;
-  std::shared_ptr<ArrayBufferAllocator> array_buffer_allocator_;
   v8::Isolate* isolate_ = nullptr;
   bool start_profiler_idle_notifier_;
   uv_thread_t tid_;
@@ -73,9 +83,14 @@ class Worker : public AsyncWrap {
   mutable Mutex mutex_;
 
   bool thread_joined_ = true;
+  const char* custom_error_ = nullptr;
   int exit_code_ = 0;
   uint64_t thread_id_ = -1;
   uintptr_t stack_base_ = 0;
+
+  // Custom resource constraints:
+  double resource_limits_[kTotalResourceLimitCount];
+  void UpdateResourceConstraints(v8::ResourceConstraints* constraints);
 
   // Full size of the thread's stack.
   static constexpr size_t kStackSize = 4 * 1024 * 1024;

@@ -113,10 +113,6 @@ void PerIsolateOptions::CheckOptions(std::vector<std::string>* errors) {
 }
 
 void EnvironmentOptions::CheckOptions(std::vector<std::string>* errors) {
-  if (!userland_loader.empty() && !experimental_modules) {
-    errors->push_back("--experimental-loader requires "
-                      "--experimental-modules be enabled");
-  }
   if (has_policy_integrity_string && experimental_policy.empty()) {
     errors->push_back("--policy-integrity requires "
                       "--experimental-policy be enabled");
@@ -126,30 +122,12 @@ void EnvironmentOptions::CheckOptions(std::vector<std::string>* errors) {
   }
 
   if (!module_type.empty()) {
-    if (!experimental_modules) {
-      errors->push_back("--input-type requires "
-                        "--experimental-modules to be enabled");
-    }
     if (module_type != "commonjs" && module_type != "module") {
       errors->push_back("--input-type must be \"module\" or \"commonjs\"");
     }
   }
 
-  if (experimental_json_modules && !experimental_modules) {
-    errors->push_back("--experimental-json-modules requires "
-                      "--experimental-modules be enabled");
-  }
-
-  if (experimental_wasm_modules && !experimental_modules) {
-    errors->push_back("--experimental-wasm-modules requires "
-                      "--experimental-modules be enabled");
-  }
-
   if (!es_module_specifier_resolution.empty()) {
-    if (!experimental_modules) {
-      errors->push_back("--es-module-specifier-resolution requires "
-                        "--experimental-modules be enabled");
-    }
     if (es_module_specifier_resolution != "node" &&
         es_module_specifier_resolution != "explicit") {
       errors->push_back("invalid value for --es-module-specifier-resolution");
@@ -322,14 +300,15 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             &EnvironmentOptions::experimental_json_modules,
             kAllowedInEnvironment);
   AddOption("--experimental-loader",
-            "(with --experimental-modules) use the specified file as a "
-            "custom loader",
+            "use the specified module as a custom loader",
             &EnvironmentOptions::userland_loader,
             kAllowedInEnvironment);
   AddAlias("--loader", "--experimental-loader");
-  AddOption("--experimental-modules",
-            "experimental ES Module support and caching modules",
-            &EnvironmentOptions::experimental_modules,
+  AddAlias("--experimental-modules", { "--experimental-conditional-exports",
+                                       "--experimental-resolve-self" });
+  AddOption("--experimental-conditional-exports",
+            "experimental support for conditional exports targets",
+            &EnvironmentOptions::experimental_conditional_exports,
             kAllowedInEnvironment);
   AddOption("--experimental-resolve-self",
             "experimental support for require/import of the current package",
@@ -526,6 +505,10 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
   AddAlias("-i", "--interactive");
 
   AddOption("--napi-modules", "", NoOp{}, kAllowedInEnvironment);
+
+  AddOption("--tls-keylog",
+            "log TLS decryption keys to named file for traffic analysis",
+            &EnvironmentOptions::tls_keylog, kAllowedInEnvironment);
 
   AddOption("--tls-min-v1.0",
             "set default TLS minimum to TLSv1.0 (default: TLSv1.2)",
@@ -809,7 +792,7 @@ void GetOptions(const FunctionCallbackInfo<Value>& args) {
   per_process::cli_options->per_isolate = env->isolate_data()->options();
   auto original_per_env = per_process::cli_options->per_isolate->per_env;
   per_process::cli_options->per_isolate->per_env = env->options();
-  OnScopeLeave on_scope_leave([&]() {
+  auto on_scope_leave = OnScopeLeave([&]() {
     per_process::cli_options->per_isolate->per_env = original_per_env;
     per_process::cli_options->per_isolate = original_per_isolate;
   });

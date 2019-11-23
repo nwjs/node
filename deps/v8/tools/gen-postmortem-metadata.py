@@ -276,6 +276,7 @@ extras_accessors = [
     'ExternalString, resource, Object, kResourceOffset',
     'SeqOneByteString, chars, char, kHeaderSize',
     'SeqTwoByteString, chars, char, kHeaderSize',
+    'UncompiledData, inferred_name, String, kInferredNameOffset',
     'UncompiledData, start_position, int32_t, kStartPositionOffset',
     'UncompiledData, end_position, int32_t, kEndPositionOffset',
     'SharedFunctionInfo, raw_function_token_offset, int16_t, kFunctionTokenOffsetOffset',
@@ -286,6 +287,7 @@ extras_accessors = [
     'Code, instruction_start, uintptr_t, kHeaderSize',
     'Code, instruction_size, int, kInstructionSizeOffset',
     'String, length, int32_t, kLengthOffset',
+    'DescriptorArray, header_size, uintptr_t, kHeaderSize',
 ];
 
 #
@@ -296,7 +298,8 @@ extras_accessors = [
 expected_classes = [
     'ConsString', 'FixedArray', 'HeapNumber', 'JSArray', 'JSFunction',
     'JSObject', 'JSRegExp', 'JSPrimitiveWrapper', 'Map', 'Oddball', 'Script',
-    'SeqOneByteString', 'SharedFunctionInfo', 'ScopeInfo', 'JSPromise'
+    'SeqOneByteString', 'SharedFunctionInfo', 'ScopeInfo', 'JSPromise',
+    'DescriptorArray'
 ];
 
 
@@ -385,8 +388,10 @@ def load_objects():
 def load_objects_from_file(objfilename, checktypes):
         objfile = io.open(objfilename, 'r', encoding='utf-8');
         in_insttype = False;
+        in_torque_insttype = False
 
         typestr = '';
+        torque_typestr = ''
         uncommented_file = ''
 
         #
@@ -400,15 +405,27 @@ def load_objects_from_file(objfilename, checktypes):
                         in_insttype = True;
                         continue;
 
+                if (line.startswith('#define TORQUE_ASSIGNED_INSTANCE_TYPE_LIST')):
+                        in_torque_insttype = True
+                        continue
+
                 if (in_insttype and line.startswith('};')):
                         in_insttype = False;
                         continue;
+
+                if (in_torque_insttype and (not line or line.isspace())):
+                          in_torque_insttype = False
+                          continue
 
                 line = re.sub('//.*', '', line.strip());
 
                 if (in_insttype):
                         typestr += line;
                         continue;
+
+                if (in_torque_insttype):
+                        torque_typestr += line
+                        continue
 
                 uncommented_file += '\n' + line
 
@@ -437,6 +454,9 @@ def load_objects_from_file(objfilename, checktypes):
         entries = typestr.split(',');
         for entry in entries:
                 types[re.sub('\s*=.*', '', entry).lstrip()] = True;
+        entries = torque_typestr.split('\\')
+        for entry in entries:
+                types[re.sub(r' *V\(|\) *', '', entry)] = True
 
         #
         # Infer class names for each type based on a systematic transformation.
@@ -446,10 +466,7 @@ def load_objects_from_file(objfilename, checktypes):
         # way around.
         #
         for type in types:
-                #
-                # REGEXP behaves like REG_EXP, as in JS_REGEXP_TYPE => JSRegExp.
-                #
-                usetype = re.sub('_REGEXP_', '_REG_EXP_', type);
+                usetype = type
 
                 #
                 # Remove the "_TYPE" suffix and then convert to camel case,

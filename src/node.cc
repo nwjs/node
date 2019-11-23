@@ -134,8 +134,6 @@ NODE_EXTERN void* g_get_node_env();
 namespace node {
 
 using native_module::NativeModuleEnv;
-using options_parser::kAllowedInEnvironment;
-using options_parser::kDisallowedInEnvironment;
 
 using v8::Boolean;
 using v8::EscapableHandleScope;
@@ -183,32 +181,6 @@ struct V8Platform v8_platform;
 }  // namespace per_process
 
 #ifdef __POSIX__
-static const unsigned kMaxSignal = 32;
-#endif
-
-void WaitForInspectorDisconnect(Environment* env) {
-#if HAVE_INSPECTOR
-  profiler::EndStartedProfilers(env);
-
-  if (env->inspector_agent()->IsActive()) {
-    // Restore signal dispositions, the app is done and is no longer
-    // capable of handling signals.
-#if defined(__POSIX__) && !defined(NODE_SHARED_MODE)
-    struct sigaction act;
-    memset(&act, 0, sizeof(act));
-    for (unsigned nr = 1; nr < kMaxSignal; nr += 1) {
-      if (nr == SIGKILL || nr == SIGSTOP || nr == SIGPROF)
-        continue;
-      act.sa_handler = (nr == SIGPIPE) ? SIG_IGN : SIG_DFL;
-      CHECK_EQ(0, sigaction(nr, &act, nullptr));
-    }
-#endif
-    env->inspector_agent()->WaitForDisconnect();
-  }
-#endif
-}
-
-#ifdef __POSIX__
 void SignalExit(int signo, siginfo_t* info, void* ucontext) {
   ResetStdio();
   raise(signo);
@@ -248,13 +220,12 @@ MaybeLocal<Value> ExecuteBootstrapper(Environment* env,
 
 #if HAVE_INSPECTOR
 int Environment::InitializeInspector(
-    inspector::ParentInspectorHandle* parent_handle) {
+    std::unique_ptr<inspector::ParentInspectorHandle> parent_handle) {
   std::string inspector_path;
-  if (parent_handle != nullptr) {
+  if (parent_handle) {
     DCHECK(!is_main_thread());
     inspector_path = parent_handle->url();
-    inspector_agent_->SetParentHandle(
-        std::unique_ptr<inspector::ParentInspectorHandle>(parent_handle));
+    inspector_agent_->SetParentHandle(std::move(parent_handle));
   } else {
     inspector_path = argv_.size() > 1 ? argv_[1].c_str() : "";
   }
@@ -391,7 +362,8 @@ MaybeLocal<Value> Environment::RunBootstrapping() {
 
   // Make sure that no request or handle is created during bootstrap -
   // if necessary those should be done in pre-execution.
-  // TODO(joyeecheung): print handles/requests before aborting
+  // Usually, doing so would trigger the checks present in the ReqWrap and
+  // HandleWrap classes, so this is only a consistency check.
   CHECK(req_wrap_queue()->IsEmpty());
   CHECK(handle_wrap_queue()->IsEmpty());
 
@@ -426,13 +398,8 @@ MaybeLocal<Value> StartExecution(Environment* env, const char* main_script_id) {
           ->GetFunction(env->context())
           .ToLocalChecked()};
 
-  Local<Value> result;
-  if (!ExecuteBootstrapper(env, main_script_id, &parameters, &arguments)
-           .ToLocal(&result) ||
-      !task_queue::RunNextTicksNative(env)) {
-    return MaybeLocal<Value>();
-  }
-  return scope.Escape(result);
+  return scope.EscapeMaybe(
+      ExecuteBootstrapper(env, main_script_id, &parameters, &arguments));
 }
 
 MaybeLocal<Value> StartMainThreadExecution(Environment* env) {
@@ -579,6 +546,7 @@ inline void PlatformInit() {
   CHECK_EQ(err, 0);
 #endif  // HAVE_INSPECTOR
 
+  // TODO(addaleax): NODE_SHARED_MODE does not really make sense here.
 #ifndef NODE_SHARED_MODE
   // Restore signal dispositions, the parent process may have changed them.
   struct sigaction act;
@@ -729,7 +697,7 @@ void ResetStdio() {
 int ProcessGlobalArgs(std::vector<std::string>* args,
                       std::vector<std::string>* exec_args,
                       std::vector<std::string>* errors,
-                      bool is_env) {
+                      OptionEnvvarSettings settings) {
   // Parse a few arguments which are specific to Node.
   std::vector<std::string> v8_args;
 
@@ -739,7 +707,7 @@ int ProcessGlobalArgs(std::vector<std::string>* args,
       exec_args,
       &v8_args,
       per_process::cli_options.get(),
-      is_env ? kAllowedInEnvironment : kDisallowedInEnvironment,
+      settings,
       errors);
 
   if (!errors->empty()) return 9;
@@ -903,12 +871,18 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
       return 9;
     }
 
-    const int exit_code = ProcessGlobalArgs(&env_argv, nullptr, errors, true);
+    const int exit_code = ProcessGlobalArgs(&env_argv,
+                                            nullptr,
+                                            errors,
+                                            kAllowedInEnvironment);
     if (exit_code != 0) return exit_code;
   }
 #endif
 
-  const int exit_code = ProcessGlobalArgs(argv, exec_argv, errors, false);
+  const int exit_code = ProcessGlobalArgs(argv,
+                                          exec_argv,
+                                          errors,
+                                          kDisallowedInEnvironment);
   if (exit_code != 0) return exit_code;
 
   // Set the process.title immediately after processing argv if --title is set.
@@ -1417,9 +1391,9 @@ NODE_EXTERN bool g_is_node_initialized() {
 NODE_EXTERN void g_call_tick_callback(node::Environment* env) {
   v8::HandleScope scope(env->isolate());
   v8::Context::Scope context_scope(env->context());
-  node::AsyncCallbackScope callback_scope(env);
-
+  env->PushAsyncCallbackScope();
   env->KickNextTick();
+  env->PopAsyncCallbackScope();
 }
 
 // copied beginning of Start() until v8::Initialize()
@@ -1533,10 +1507,13 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
   StartInspector(tls_ctx->env, path, node::debug_options);
 #endif
   {
-    node::AsyncCallbackScope callback_scope(tls_ctx->env);
-    tls_ctx->env->async_hooks()->push_async_ids(1, 0);
+    node::InternalCallbackScope callback_scope(
+          tls_ctx->env,
+          v8::Local<v8::Object>(),
+          { 1, 0 },
+          node::InternalCallbackScope::kAllowEmptyResource |
+          node::InternalCallbackScope::kSkipAsyncHooks);
     node::LoadEnvironment(tls_ctx->env);
-    tls_ctx->env->async_hooks()->pop_async_id(1);
   }
 }
 

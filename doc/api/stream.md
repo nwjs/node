@@ -505,6 +505,16 @@ Is `true` after [`writable.end()`][] has been called. This property
 does not indicate whether the data has been flushed, for this use
 [`writable.writableFinished`][] instead.
 
+##### writable.writableCorked
+<!-- YAML
+added: v13.2.0
+-->
+
+* {integer}
+
+Number of times [`writable.uncork()`][stream-uncork] needs to be
+called in order to fully uncork the stream.
+
 ##### writable.writableFinished
 <!-- YAML
 added: v12.6.0
@@ -1083,6 +1093,8 @@ buffer will be returned.
 
 If the `size` argument is not specified, all of the data contained in the
 internal buffer will be returned.
+
+The `size` argument must be less than or equal to 1 GB.
 
 The `readable.read()` method should only be called on `Readable` streams
 operating in paused mode. In flowing mode, `readable.read()` is called
@@ -2838,6 +2850,7 @@ contain multi-byte characters.
 [stream-push]: #stream_readable_push_chunk_encoding
 [stream-read]: #stream_readable_read_size
 [stream-resume]: #stream_readable_resume
+[stream-uncork]: #stream_writable_uncork
 [stream-write]: #stream_writable_write_chunk_encoding_callback
 [Stream Three States]: #stream_three_states
 [writable-_destroy]: #stream_writable_destroy_err_callback

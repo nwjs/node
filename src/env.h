@@ -151,12 +151,12 @@ constexpr size_t kFsStatsBufferLength =
 // "node:" prefix to avoid name clashes with third-party code.
 #define PER_ISOLATE_PRIVATE_SYMBOL_PROPERTIES(V)                              \
   V(alpn_buffer_private_symbol, "node:alpnBuffer")                            \
+  V(arraybuffer_untransferable_private_symbol, "node:untransferableBuffer")   \
   V(arrow_message_private_symbol, "node:arrowMessage")                        \
   V(contextify_context_private_symbol, "node:contextify:context")             \
   V(contextify_global_private_symbol, "node:contextify:global")               \
   V(decorated_private_symbol, "node:decorated")                               \
   V(napi_wrapper, "node:napi:wrapper")                                        \
-  V(sab_lifetimepartner_symbol, "node:sharedArrayBufferLifetimePartner")      \
 
 // Symbols are per-isolate primitives but Environment proxies them
 // for the sake of convenience.
@@ -201,6 +201,7 @@ constexpr size_t kFsStatsBufferLength =
   V(crypto_rsa_pss_string, "rsa-pss")                                          \
   V(cwd_string, "cwd")                                                         \
   V(data_string, "data")                                                       \
+  V(default_string, "default")                                                 \
   V(dest_string, "dest")                                                       \
   V(destroyed_string, "destroyed")                                             \
   V(detached_string, "detached")                                               \
@@ -215,8 +216,10 @@ constexpr size_t kFsStatsBufferLength =
   V(dns_srv_string, "SRV")                                                     \
   V(dns_txt_string, "TXT")                                                     \
   V(done_string, "done")                                                       \
+  V(dot_string, ".")                                                           \
   V(duration_string, "duration")                                               \
   V(emit_warning_string, "emitWarning")                                        \
+  V(empty_object_string, "{}")                                                 \
   V(encoding_string, "encoding")                                               \
   V(entries_string, "entries")                                                 \
   V(entry_type_string, "entryType")                                            \
@@ -278,6 +281,7 @@ constexpr size_t kFsStatsBufferLength =
   V(netmask_string, "netmask")                                                 \
   V(next_string, "next")                                                       \
   V(nistcurve_string, "nistCurve")                                             \
+  V(node_string, "node")                                                       \
   V(nsname_string, "nsname")                                                   \
   V(ocsp_request_string, "OCSPRequest")                                        \
   V(oncertcb_string, "oncertcb")                                               \
@@ -722,20 +726,6 @@ class AsyncHooks : public MemoryRetainer {
   void grow_async_ids_stack();
 };
 
-class AsyncCallbackScope {
- public:
-  AsyncCallbackScope() = delete;
-  explicit AsyncCallbackScope(Environment* env);
-  ~AsyncCallbackScope();
-  AsyncCallbackScope(const AsyncCallbackScope&) = delete;
-  AsyncCallbackScope& operator=(const AsyncCallbackScope&) = delete;
-  AsyncCallbackScope(AsyncCallbackScope&&) = delete;
-  AsyncCallbackScope& operator=(AsyncCallbackScope&&) = delete;
-
- private:
-  Environment* env_;
-};
-
 class ImmediateInfo : public MemoryRetainer {
  public:
   inline AliasedUint32Array& fields();
@@ -875,7 +865,8 @@ class Environment : public MemoryRetainer {
 #if HAVE_INSPECTOR
   // If the environment is created for a worker, pass parent_handle and
   // the ownership if transferred into the Environment.
-  int InitializeInspector(inspector::ParentInspectorHandle* parent_handle);
+  int InitializeInspector(
+      std::unique_ptr<inspector::ParentInspectorHandle> parent_handle);
 #endif
 
   v8::MaybeLocal<v8::Value> BootstrapInternalLoaders();
@@ -1085,11 +1076,15 @@ class Environment : public MemoryRetainer {
   inline bool owns_inspector() const;
   inline uint64_t thread_id() const;
   inline worker::Worker* worker_context() const;
+  Environment* worker_parent_env() const;
   inline void set_worker_context(worker::Worker* context);
   inline void add_sub_worker_context(worker::Worker* context);
   inline void remove_sub_worker_context(worker::Worker* context);
   void stop_sub_worker_contexts();
   inline bool is_stopping() const;
+  inline std::list<node_module>* extra_linked_bindings();
+  inline node_module* extra_linked_bindings_head();
+  inline const Mutex& extra_linked_bindings_mutex() const;
 
   inline void ThrowError(const char* errmsg);
   inline void ThrowTypeError(const char* errmsg);
@@ -1192,13 +1187,9 @@ class Environment : public MemoryRetainer {
   // cb will be called as cb(env) on the next event loop iteration.
   // keep_alive will be kept alive between now and after the callback has run.
   template <typename Fn>
-  inline void SetImmediate(Fn&& cb,
-                           v8::Local<v8::Object> keep_alive =
-                               v8::Local<v8::Object>());
+  inline void SetImmediate(Fn&& cb);
   template <typename Fn>
-  inline void SetUnrefImmediate(Fn&& cb,
-                                v8::Local<v8::Object> keep_alive =
-                                    v8::Local<v8::Object>());
+  inline void SetUnrefImmediate(Fn&& cb);
   // This needs to be available for the JS-land setImmediate().
   void ToggleImmediateRef(bool ref);
 
@@ -1224,6 +1215,12 @@ class Environment : public MemoryRetainer {
   inline std::shared_ptr<HostPort> inspector_host_port();
 
   inline AsyncRequest* thread_stopper() { return &thread_stopper_; }
+
+  // The BaseObject count is a debugging helper that makes sure that there are
+  // no memory leaks caused by BaseObjects staying alive longer than expected
+  // (in particular, no circular BaseObjectPtr references).
+  inline void modify_base_object_count(int64_t delta);
+  inline int64_t base_object_count() const;
 
 #if HAVE_INSPECTOR
   void set_coverage_connection(
@@ -1261,15 +1258,9 @@ class Environment : public MemoryRetainer {
 
 #endif  // HAVE_INSPECTOR
 
-  // Only available if a MultiIsolatePlatform is in use.
-  void AddArrayBufferAllocatorToKeepAliveUntilIsolateDispose(
-      std::shared_ptr<v8::ArrayBuffer::Allocator>);
-
  private:
   template <typename Fn>
-  inline void CreateImmediate(Fn&& cb,
-                              v8::Local<v8::Object> keep_alive,
-                              bool ref);
+  inline void CreateImmediate(Fn&& cb, bool ref);
 
   inline void ThrowError(v8::Local<v8::Value> (*fun)(v8::Local<v8::String>),
                          const char* errmsg);
@@ -1385,6 +1376,9 @@ class Environment : public MemoryRetainer {
 
   worker::Worker* worker_context_ = nullptr;
 
+  std::list<node_module> extra_linked_bindings_;
+  Mutex extra_linked_bindings_mutex_;
+
   static void RunTimers(uv_timer_t* handle);
 
   struct ExitCallback {
@@ -1414,14 +1408,11 @@ class Environment : public MemoryRetainer {
   template <typename Fn>
   class NativeImmediateCallbackImpl final : public NativeImmediateCallback {
    public:
-    NativeImmediateCallbackImpl(Fn&& callback,
-                                v8::Global<v8::Object>&& keep_alive,
-                                bool refed);
+    NativeImmediateCallbackImpl(Fn&& callback, bool refed);
     void Call(Environment* env) override;
 
    private:
     Fn callback_;
-    v8::Global<v8::Object> keep_alive_;
   };
 
   std::unique_ptr<NativeImmediateCallback> native_immediate_callbacks_head_;
@@ -1437,13 +1428,11 @@ class Environment : public MemoryRetainer {
   uint64_t cleanup_hook_counter_ = 0;
   bool started_cleanup_ = false;
 
+  int64_t base_object_count_ = 0;
+
   // A custom async abstraction (a pair of async handle and a state variable)
   // Used by embedders to shutdown running Node instance.
   AsyncRequest thread_stopper_;
-
-  typedef std::unordered_set<std::shared_ptr<v8::ArrayBuffer::Allocator>>
-      ArrayBufferAllocatorList;
-  ArrayBufferAllocatorList* keep_alive_allocators_ = nullptr;
 
   template <typename T>
   void ForEachBaseObject(T&& iterator);

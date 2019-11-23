@@ -211,14 +211,6 @@ Environment* Environment::ForAsyncHooks(AsyncHooks* hooks) {
   return ContainerOf(&Environment::async_hooks_, hooks);
 }
 
-inline AsyncCallbackScope::AsyncCallbackScope(Environment* env) : env_(env) {
-  env_->PushAsyncCallbackScope();
-}
-
-inline AsyncCallbackScope::~AsyncCallbackScope() {
-  env_->PopAsyncCallbackScope();
-}
-
 inline size_t Environment::async_callback_scope_depth() const {
   return async_callback_scope_depth_;
 }
@@ -754,13 +746,9 @@ inline void IsolateData::set_options(
 }
 
 template <typename Fn>
-void Environment::CreateImmediate(Fn&& cb,
-                                  v8::Local<v8::Object> keep_alive,
-                                  bool ref) {
+void Environment::CreateImmediate(Fn&& cb, bool ref) {
   auto callback = std::make_unique<NativeImmediateCallbackImpl<Fn>>(
-      std::move(cb),
-      v8::Global<v8::Object>(isolate(), keep_alive),
-      ref);
+      std::move(cb), ref);
   NativeImmediateCallback* prev_tail = native_immediate_callbacks_tail_;
 
   native_immediate_callbacks_tail_ = callback.get();
@@ -773,8 +761,8 @@ void Environment::CreateImmediate(Fn&& cb,
 }
 
 template <typename Fn>
-void Environment::SetImmediate(Fn&& cb, v8::Local<v8::Object> keep_alive) {
-  CreateImmediate(std::move(cb), keep_alive, true);
+void Environment::SetImmediate(Fn&& cb) {
+  CreateImmediate(std::move(cb), true);
 
   if (immediate_info()->ref_count() == 0)
     ToggleImmediateRef(true);
@@ -782,8 +770,8 @@ void Environment::SetImmediate(Fn&& cb, v8::Local<v8::Object> keep_alive) {
 }
 
 template <typename Fn>
-void Environment::SetUnrefImmediate(Fn&& cb, v8::Local<v8::Object> keep_alive) {
-  CreateImmediate(std::move(cb), keep_alive, false);
+void Environment::SetUnrefImmediate(Fn&& cb) {
+  CreateImmediate(std::move(cb), false);
 }
 
 Environment::NativeImmediateCallback::NativeImmediateCallback(bool refed)
@@ -805,10 +793,9 @@ void Environment::NativeImmediateCallback::set_next(
 
 template <typename Fn>
 Environment::NativeImmediateCallbackImpl<Fn>::NativeImmediateCallbackImpl(
-    Fn&& callback, v8::Global<v8::Object>&& keep_alive, bool refed)
+    Fn&& callback, bool refed)
   : NativeImmediateCallback(refed),
-    callback_(std::move(callback)),
-    keep_alive_(std::move(keep_alive)) {}
+    callback_(std::move(callback)) {}
 
 template <typename Fn>
 void Environment::NativeImmediateCallbackImpl<Fn>::Call(Environment* env) {
@@ -874,6 +861,19 @@ inline void Environment::remove_sub_worker_context(worker::Worker* context) {
 
 inline bool Environment::is_stopping() const {
   return thread_stopper_.is_stopped();
+}
+
+inline std::list<node_module>* Environment::extra_linked_bindings() {
+  return &extra_linked_bindings_;
+}
+
+inline node_module* Environment::extra_linked_bindings_head() {
+  return extra_linked_bindings_.size() > 0 ?
+      &extra_linked_bindings_.front() : nullptr;
+}
+
+inline const Mutex& Environment::extra_linked_bindings_mutex() const {
+  return extra_linked_bindings_mutex_;
 }
 
 inline performance::performance_state* Environment::performance_state() {
@@ -1144,6 +1144,14 @@ void Environment::ForEachBaseObject(T&& iterator) {
     if (obj != nullptr)
       iterator(obj);
   }
+}
+
+void Environment::modify_base_object_count(int64_t delta) {
+  base_object_count_ += delta;
+}
+
+int64_t Environment::base_object_count() const {
+  return base_object_count_;
 }
 
 bool AsyncRequest::is_stopped() const {

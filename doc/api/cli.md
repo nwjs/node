@@ -161,14 +161,23 @@ Currently, overriding `Error.prepareStackTrace` is ignored when the
 added: v12.0.0
 -->
 
-To be used in conjunction with `--experimental-modules`. Sets the resolution
-algorithm for resolving specifiers. Valid options are `explicit` and `node`.
+Sets the resolution algorithm for resolving ES module specifiers. Valid options
+are `explicit` and `node`.
 
 The default is `explicit`, which requires providing the full path to a
 module. The `node` mode will enable support for optional file extensions and
 the ability to import a directory that has an index file.
 
-Please see [customizing esm specifier resolution][] for example usage.
+Please see [customizing ESM specifier resolution][] for example usage.
+
+### `--experimental-conditional-exports`
+<!-- YAML
+added: v13.2.0
+-->
+
+Enable experimental support for the `"require"` and `"node"` conditional
+package export resolutions.
+See [Conditional Exports][] for more information.
 
 ### `--experimental-json-modules`
 <!-- YAML
@@ -182,7 +191,8 @@ Enable experimental JSON support for the ES Module loader.
 added: v8.5.0
 -->
 
-Enable experimental ES module support and caching modules.
+Enable latest experimental modules features (currently
+`--experimental-conditional-exports` and `--experimental-self-resolve`).
 
 ### `--experimental-policy`
 <!-- YAML
@@ -333,9 +343,8 @@ Specify ICU data load path. (Overrides `NODE_ICU_DATA`.)
 added: v12.0.0
 -->
 
-Used with `--experimental-modules`, this configures Node.js to interpret string
-input as CommonJS or as an ES module. String input is input via `--eval`,
-`--print`, or `STDIN`.
+This configures Node.js to interpret string input as CommonJS or as an ES
+module. String input is input via `--eval`, `--print`, or `STDIN`.
 
 Valid values are `"commonjs"` and `"module"`. The default is `"commonjs"`.
 
@@ -400,7 +409,7 @@ endpoint on `http://host:port/json/list`.
 added: v9.0.0
 -->
 
-Specify the `module` of a custom [experimental ECMAScript Module][] loader.
+Specify the `module` of a custom [experimental ECMAScript Module loader][].
 `module` may be either a path to a file, or an ECMAScript Module name.
 
 ### `--max-http-header-size=size`
@@ -669,6 +678,15 @@ added: v4.0.0
 
 Specify an alternative default TLS cipher list. Requires Node.js to be built
 with crypto support (default).
+
+### `--tls-keylog=file`
+<!-- YAML
+added: v13.2.0
+-->
+
+Log TLS key material to a file. The key material is in NSS `SSLKEYLOGFILE`
+format and can be used by software (such as Wireshark) to decrypt the TLS
+traffic.
 
 ### `--tls-max-v1.2`
 <!-- YAML
@@ -1021,6 +1039,7 @@ Node.js options that are allowed are:
 * `--enable-fips`
 * `--enable-source-maps`
 * `--es-module-specifier-resolution`
+* `--experimental-conditional-exports`
 * `--experimental-json-modules`
 * `--experimental-loader`
 * `--experimental-modules`
@@ -1063,6 +1082,7 @@ Node.js options that are allowed are:
 * `--throw-deprecation`
 * `--title`
 * `--tls-cipher-list`
+* `--tls-keylog`
 * `--tls-max-v1.2`
 * `--tls-max-v1.3`
 * `--tls-min-v1.0`
@@ -1311,16 +1331,17 @@ greater than `4` (its current default value). For more information, see the
 [`tls.DEFAULT_MIN_VERSION`]: tls.html#tls_tls_default_min_version
 [`unhandledRejection`]: process.html#process_event_unhandledrejection
 [Chrome DevTools Protocol]: https://chromedevtools.github.io/devtools-protocol/
+[Conditional Exports]: esm.html#esm_conditional_exports
 [REPL]: repl.html
 [ScriptCoverage]: https://chromedevtools.github.io/devtools-protocol/tot/Profiler#type-ScriptCoverage
 [Source Map]: https://sourcemaps.info/spec.html
 [Subresource Integrity]: https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity
 [V8 JavaScript code coverage]: https://v8project.blogspot.com/2017/12/javascript-code-coverage.html
-[customizing esm specifier resolution]: esm.html#esm_customizing_esm_specifier_resolution_algorithm
+[context-aware]: addons.html#addons_context_aware_addons
+[customizing ESM specifier resolution]: esm.html#esm_customizing_esm_specifier_resolution_algorithm
 [debugger]: debugger.html
 [debugging security implications]: https://nodejs.org/en/docs/guides/debugging-getting-started/#security-implications
 [emit_warning]: process.html#process_process_emitwarning_warning_type_code_ctor
-[experimental ECMAScript Module]: esm.html#esm_resolve_hook
+[experimental ECMAScript Module loader]: esm.html#esm_resolve_hook
 [libuv threadpool documentation]: http://docs.libuv.org/en/latest/threadpool.html
 [remote code execution]: https://www.owasp.org/index.php/Code_Injection
-[context-aware]: addons.html#addons_context_aware_addons

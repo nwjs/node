@@ -157,7 +157,7 @@ added: v0.11.4
 * `options` {Object} Options containing connection details. Check
   [`net.createConnection()`][] for the format of the options
 * `callback` {Function} Callback function that receives the created socket
-* Returns: {net.Socket}
+* Returns: {stream.Duplex}
 
 Produces a socket/stream to be used for HTTP requests.
 
@@ -167,6 +167,10 @@ custom agents may override this method in case greater flexibility is desired.
 A socket/stream can be supplied in one of two ways: by returning the
 socket/stream from this function, or by passing the socket/stream to `callback`.
 
+This method is guaranteed to return an instance of the {net.Socket} class,
+a subclass of {stream.Duplex}, unless the user specifies a socket
+type other than {net.Socket}.
+
 `callback` has a signature of `(err, stream)`.
 
 ### agent.keepSocketAlive(socket)
@@ -174,7 +178,7 @@ socket/stream from this function, or by passing the socket/stream to `callback`.
 added: v8.1.0
 -->
 
-* `socket` {net.Socket}
+* `socket` {stream.Duplex}
 
 Called when `socket` is detached from a request and could be persisted by the
 `Agent`. Default behavior is to:
@@ -189,12 +193,15 @@ This method can be overridden by a particular `Agent` subclass. If this
 method returns a falsy value, the socket will be destroyed instead of persisting
 it for use with the next request.
 
+The `socket` argument can be an instance of {net.Socket}, a subclass of
+{stream.Duplex}.
+
 ### agent.reuseSocket(socket, request)
 <!-- YAML
 added: v8.1.0
 -->
 
-* `socket` {net.Socket}
+* `socket` {stream.Duplex}
 * `request` {http.ClientRequest}
 
 Called when `socket` is attached to `request` after being persisted because of
@@ -205,6 +212,9 @@ socket.ref();
 ```
 
 This method can be overridden by a particular `Agent` subclass.
+
+The `socket` argument can be an instance of {net.Socket}, a subclass of
+{stream.Duplex}.
 
 ### agent.destroy()
 <!-- YAML
@@ -341,12 +351,16 @@ added: v0.7.0
 -->
 
 * `response` {http.IncomingMessage}
-* `socket` {net.Socket}
+* `socket` {stream.Duplex}
 * `head` {Buffer}
 
 Emitted each time a server responds to a request with a `CONNECT` method. If
 this event is not being listened for, clients receiving a `CONNECT` method will
 have their connections closed.
+
+This event is guaranteed to be passed an instance of the {net.Socket} class,
+a subclass of {stream.Duplex}, unless the user specifies a socket
+type other than {net.Socket}.
 
 A client and server pair demonstrating how to listen for the `'connect'` event:
 
@@ -471,9 +485,11 @@ once.
 added: v0.5.3
 -->
 
-* `socket` {net.Socket}
+* `socket` {stream.Duplex}
 
-Emitted after a socket is assigned to this request.
+This event is guaranteed to be passed an instance of the {net.Socket} class,
+a subclass of {stream.Duplex}, unless the user specifies a socket
+type other than {net.Socket}.
 
 ### Event: 'timeout'
 <!-- YAML
@@ -491,13 +507,17 @@ added: v0.1.94
 -->
 
 * `response` {http.IncomingMessage}
-* `socket` {net.Socket}
+* `socket` {stream.Duplex}
 * `head` {Buffer}
 
 Emitted each time a server responds to a request with an upgrade. If this
 event is not being listened for and the response status code is 101 Switching
 Protocols, clients receiving an upgrade header will have their connections
 closed.
+
+This event is guaranteed to be passed an instance of the {net.Socket} class,
+a subclass of {stream.Duplex}, unless the user specifies a socket
+type other than {net.Socket}.
 
 A client server pair demonstrating how to listen for the `'upgrade'` event.
 
@@ -572,7 +592,7 @@ deprecated: v13.0.0
 
 > Stability: 0 - Deprecated. Use [`request.socket`][].
 
-* {net.Socket}
+* {stream.Duplex}
 
 See [`request.socket`][].
 
@@ -800,7 +820,7 @@ Once a socket is assigned to this request and is connected
 added: v0.3.0
 -->
 
-* {net.Socket}
+* {stream.Duplex}
 
 Reference to the underlying socket. Usually users will not want to access
 this property. In particular, the socket will not emit `'readable'` events
@@ -821,6 +841,10 @@ req.once('response', (res) => {
   // Consume response object
 });
 ```
+
+This property is guaranteed to be an instance of the {net.Socket} class,
+a subclass of {stream.Duplex}, unless the user specified a socket
+type other than {net.Socket}.
 
 ### request.writableEnded
 <!-- YAML
@@ -935,12 +959,16 @@ changes:
 -->
 
 * `exception` {Error}
-* `socket` {net.Socket}
+* `socket` {stream.Duplex}
 
 If a client connection emits an `'error'` event, it will be forwarded here.
 Listener of this event is responsible for closing/destroying the underlying
 socket. For example, one may wish to more gracefully close the socket with a
 custom HTTP response instead of abruptly severing the connection.
+
+This event is guaranteed to be passed an instance of the {net.Socket} class,
+a subclass of {stream.Duplex}, unless the user specifies a socket
+type other than {net.Socket}.
 
 Default behavior is to try close the socket with a HTTP '400 Bad Request',
 or a HTTP '431 Request Header Fields Too Large' in the case of a
@@ -986,12 +1014,16 @@ added: v0.7.0
 
 * `request` {http.IncomingMessage} Arguments for the HTTP request, as it is in
   the [`'request'`][] event
-* `socket` {net.Socket} Network socket between the server and client
+* `socket` {stream.Duplex} Network socket between the server and client
 * `head` {Buffer} The first packet of the tunneling stream (may be empty)
 
 Emitted each time a client requests an HTTP `CONNECT` method. If this event is
 not listened for, then clients requesting a `CONNECT` method will have their
 connections closed.
+
+This event is guaranteed to be passed an instance of the {net.Socket} class,
+a subclass of {stream.Duplex}, unless the user specifies a socket
+type other than {net.Socket}.
 
 After this event is emitted, the request's socket will not have a `'data'`
 event listener, meaning it will need to be bound in order to handle data
@@ -1002,7 +1034,7 @@ sent to the server on that socket.
 added: v0.1.0
 -->
 
-* `socket` {net.Socket}
+* `socket` {stream.Duplex}
 
 This event is emitted when a new TCP stream is established. `socket` is
 typically an object of type [`net.Socket`][]. Usually users will not want to
@@ -1016,6 +1048,10 @@ into the HTTP server. In that case, any [`Duplex`][] stream can be passed.
 If `socket.setTimeout()` is called here, the timeout will be replaced with
 `server.keepAliveTimeout` when the socket has served a request (if
 `server.keepAliveTimeout` is non-zero).
+
+This event is guaranteed to be passed an instance of the {net.Socket} class,
+a subclass of {stream.Duplex}, unless the user specifies a socket
+type other than {net.Socket}.
 
 ### Event: 'request'
 <!-- YAML
@@ -1040,7 +1076,7 @@ changes:
 
 * `request` {http.IncomingMessage} Arguments for the HTTP request, as it is in
   the [`'request'`][] event
-* `socket` {net.Socket} Network socket between the server and client
+* `socket` {stream.Duplex} Network socket between the server and client
 * `head` {Buffer} The first packet of the upgraded stream (may be empty)
 
 Emitted each time a client requests an HTTP upgrade. Listening to this event
@@ -1049,6 +1085,10 @@ is optional and clients cannot insist on a protocol change.
 After this event is emitted, the request's socket will not have a `'data'`
 event listener, meaning it will need to be bound in order to handle data
 sent to the server on that socket.
+
+This event is guaranteed to be passed an instance of the {net.Socket} class,
+a subclass of {stream.Duplex}, unless the user specifies a socket
+type other than {net.Socket}.
 
 ### server.close(\[callback\])
 <!-- YAML
@@ -1227,9 +1267,16 @@ deprecated: v13.0.0
 
 > Stability: 0 - Deprecated. Use [`response.socket`][].
 
-* {net.Socket}
+* {stream.Duplex}
 
 See [`response.socket`][].
+
+### response.cork()
+<!-- YAML
+added: v13.2.0
+-->
+
+See [`writable.cork()`][].
 
 ### response.end(\[data\[, encoding\]\]\[, callback\])
 <!-- YAML
@@ -1462,7 +1509,7 @@ timed out sockets must be handled explicitly.
 added: v0.3.0
 -->
 
-* {net.Socket}
+* {stream.Duplex}
 
 Reference to the underlying socket. Usually users will not want to access
 this property. In particular, the socket will not emit `'readable'` events
@@ -1478,6 +1525,10 @@ const server = http.createServer((req, res) => {
   res.end(`Your IP address is ${ip} and your source port is ${port}.`);
 }).listen(3000);
 ```
+
+This property is guaranteed to be an instance of the {net.Socket} class,
+a subclass of {stream.Duplex}, unless the user specified a socket
+type other than {net.Socket}.
 
 ### response.statusCode
 <!-- YAML
@@ -1515,6 +1566,13 @@ response.statusMessage = 'Not found';
 
 After response header was sent to the client, this property indicates the
 status message which was sent out.
+
+### response.uncork()
+<!-- YAML
+added: v13.2.0
+-->
+
+See [`writable.uncork()`][].
 
 ### response.writableEnded
 <!-- YAML
@@ -1854,12 +1912,16 @@ Calls `message.connection.setTimeout(msecs, callback)`.
 added: v0.3.0
 -->
 
-* {net.Socket}
+* {stream.Duplex}
 
 The [`net.Socket`][] object associated with the connection.
 
 With HTTPS support, use [`request.socket.getPeerCertificate()`][] to obtain the
 client's authentication details.
+
+This property is guaranteed to be an instance of the {net.Socket} class,
+a subclass of {stream.Duplex}, unless the user specified a socket
+type other than {net.Socket}.
 
 ### message.statusCode
 <!-- YAML
@@ -2133,6 +2195,7 @@ changes:
   * `hostname` {string} Alias for `host`. To support [`url.parse()`][],
     `hostname` will be used if both `host` and `hostname` are specified.
   * `localAddress` {string} Local interface to bind for network connections.
+  * `lookup` {Function} Custom lookup function. **Default:** [`dns.lookup()`][].
   * `method` {string} A string specifying the HTTP request method. **Default:**
     `'GET'`.
   * `path` {string} Request path. Should include query string if any.
@@ -2312,6 +2375,7 @@ not abort the request or do anything besides add a `'timeout'` event.
 [`agent.createConnection()`]: #http_agent_createconnection_options_callback
 [`agent.getName()`]: #http_agent_getname_options
 [`destroy()`]: #http_agent_destroy
+[`dns.lookup()`]: dns.html#dns_dns_lookup_hostname_options_callback
 [`'finish'`]: #http_event_finish
 [`getHeader(name)`]: #http_request_getheader_name
 [`http.Agent`]: #http_class_http_agent
@@ -2356,3 +2420,5 @@ not abort the request or do anything besides add a `'timeout'` event.
 [`socket.unref()`]: net.html#net_socket_unref
 [`url.parse()`]: url.html#url_url_parse_urlstring_parsequerystring_slashesdenotehost
 [`HPE_HEADER_OVERFLOW`]: errors.html#errors_hpe_header_overflow
+[`writable.cork()`]: stream.html#stream_writable_cork
+[`writable.uncork()`]: stream.html#stream_writable_uncork

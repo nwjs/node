@@ -192,16 +192,13 @@ bool HasInstance(Local<Object> obj) {
 char* Data(Local<Value> val) {
   CHECK(val->IsArrayBufferView());
   Local<ArrayBufferView> ui = val.As<ArrayBufferView>();
-  ArrayBuffer::Contents ab_c = ui->Buffer()->GetContents();
-  return static_cast<char*>(ab_c.Data()) + ui->ByteOffset();
+  return static_cast<char*>(ui->Buffer()->GetBackingStore()->Data()) +
+      ui->ByteOffset();
 }
 
 
 char* Data(Local<Object> obj) {
-  CHECK(obj->IsArrayBufferView());
-  Local<ArrayBufferView> ui = obj.As<ArrayBufferView>();
-  ArrayBuffer::Contents ab_c = ui->Buffer()->GetContents();
-  return static_cast<char*>(ab_c.Data()) + ui->ByteOffset();
+  return Data(obj.As<Value>());
 }
 
 
@@ -219,10 +216,10 @@ size_t Length(Local<Object> obj) {
 }
 
 
-inline MaybeLocal<Uint8Array> New(Environment* env,
-                                  Local<ArrayBuffer> ab,
-                                  size_t byte_offset,
-                                  size_t length) {
+MaybeLocal<Uint8Array> New(Environment* env,
+                           Local<ArrayBuffer> ab,
+                           size_t byte_offset,
+                           size_t length) {
   CHECK(!env->buffer_prototype_object().IsEmpty());
   Local<Uint8Array> ui = Uint8Array::New(ab, byte_offset, length);
   Maybe<bool> mb =
@@ -230,6 +227,18 @@ inline MaybeLocal<Uint8Array> New(Environment* env,
   if (mb.IsNothing())
     return MaybeLocal<Uint8Array>();
   return ui;
+}
+
+MaybeLocal<Uint8Array> New(Isolate* isolate,
+                           Local<ArrayBuffer> ab,
+                           size_t byte_offset,
+                           size_t length) {
+  Environment* env = Environment::GetCurrent(isolate);
+  if (env == nullptr) {
+    THROW_ERR_BUFFER_CONTEXT_NOT_AVAILABLE(isolate);
+    return MaybeLocal<Uint8Array>();
+  }
+  return New(env, ab, byte_offset, length);
 }
 
 
@@ -353,10 +362,8 @@ MaybeLocal<Object> New(Isolate* isolate,
     THROW_ERR_BUFFER_CONTEXT_NOT_AVAILABLE(isolate);
     return MaybeLocal<Object>();
   }
-  Local<Object> obj;
-  if (Buffer::New(env, data, length, callback, hint).ToLocal(&obj))
-    return handle_scope.Escape(obj);
-  return Local<Object>();
+  return handle_scope.EscapeMaybe(
+      Buffer::New(env, data, length, callback, hint));
 }
 
 
@@ -374,6 +381,12 @@ MaybeLocal<Object> New(Environment* env,
   }
 
   Local<ArrayBuffer> ab = ArrayBuffer::New(env->isolate(), data, length);
+  if (ab->SetPrivate(env->context(),
+                     env->arraybuffer_untransferable_private_symbol(),
+                     True(env->isolate())).IsNothing()) {
+    callback(data, hint);
+    return Local<Object>();
+  }
   MaybeLocal<Uint8Array> ui = Buffer::New(env, ab, 0, length);
 
   CallbackInfo::New(env->isolate(), ab, callback, data, hint);
@@ -1071,13 +1084,13 @@ static void EncodeInto(const FunctionCallbackInfo<Value>& args) {
   Local<Uint8Array> dest = args[1].As<Uint8Array>();
   Local<ArrayBuffer> buf = dest->Buffer();
   char* write_result =
-      static_cast<char*>(buf->GetContents().Data()) + dest->ByteOffset();
+      static_cast<char*>(buf->GetBackingStore()->Data()) + dest->ByteOffset();
   size_t dest_length = dest->ByteLength();
 
   // results = [ read, written ]
   Local<Uint32Array> result_arr = args[2].As<Uint32Array>();
   uint32_t* results = reinterpret_cast<uint32_t*>(
-      static_cast<char*>(result_arr->Buffer()->GetContents().Data()) +
+      static_cast<char*>(result_arr->Buffer()->GetBackingStore()->Data()) +
       result_arr->ByteOffset());
 
   int nchars;

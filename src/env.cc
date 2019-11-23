@@ -438,6 +438,8 @@ Environment::~Environment() {
       addon.Close();
     }
   }
+
+  CHECK_EQ(base_object_count(), 0);
 }
 
 void Environment::InitializeLibuv(bool start_profiler_idle_notifier) {
@@ -644,7 +646,7 @@ void Environment::RunAtExitCallbacks() {
 }
 
 void Environment::AtExit(void (*cb)(void* arg), void* arg) {
-  at_exit_functions_.push_back(ExitCallback{cb, arg});
+  at_exit_functions_.push_front(ExitCallback{cb, arg});
 }
 
 void Environment::RunAndClearNativeImmediates() {
@@ -942,9 +944,10 @@ void Environment::stop_sub_worker_contexts() {
   }
 }
 
-#if HAVE_INSPECTOR
-
-#endif  // HAVE_INSPECTOR
+Environment* Environment::worker_parent_env() const {
+  if (worker_context_ == nullptr) return nullptr;
+  return worker_context_->env();
+}
 
 void MemoryTracker::TrackField(const char* edge_name,
                                const CleanupHookCallback& value,
@@ -1044,21 +1047,6 @@ char* Environment::Reallocate(char* data, size_t old_size, size_t size) {
   return new_data;
 }
 
-void Environment::AddArrayBufferAllocatorToKeepAliveUntilIsolateDispose(
-    std::shared_ptr<v8::ArrayBuffer::Allocator> allocator) {
-  if (keep_alive_allocators_ == nullptr) {
-    MultiIsolatePlatform* platform = isolate_data()->platform();
-    CHECK_NOT_NULL(platform);
-
-    keep_alive_allocators_ = new ArrayBufferAllocatorList();
-    platform->AddIsolateFinishedCallback(isolate(), [](void* data) {
-      delete static_cast<ArrayBufferAllocatorList*>(data);
-    }, static_cast<void*>(keep_alive_allocators_));
-  }
-
-  keep_alive_allocators_->insert(allocator);
-}
-
 bool Environment::RunWeakRefCleanup() {
   isolate()->ClearKeptObjects();
 
@@ -1109,6 +1097,10 @@ AsyncRequest::~AsyncRequest() {
 // Not really any better place than env.cc at this moment.
 void BaseObject::DeleteMe(void* data) {
   BaseObject* self = static_cast<BaseObject*>(data);
+  if (self->has_pointer_data() &&
+      self->pointer_data()->strong_ptr_count > 0) {
+    return self->Detach();
+  }
   delete self;
 }
 
@@ -1123,7 +1115,7 @@ bool Environment::KickNextTick() {
 
   if (!can_call_into_js()) return true;
 
-  OnScopeLeave weakref_cleanup([&]() { RunWeakRefCleanup(); });
+  auto weakref_cleanup = OnScopeLeave([&]() { RunWeakRefCleanup(); });
 
   if (info->has_tick_scheduled() == 0) {
     //isolate()->RunMicrotasks();

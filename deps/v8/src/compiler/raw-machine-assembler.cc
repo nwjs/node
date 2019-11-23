@@ -690,15 +690,14 @@ Node* RawMachineAssembler::CallNWithFrameState(CallDescriptor* call_descriptor,
   return AddNode(common()->Call(call_descriptor), input_count, inputs);
 }
 
-Node* RawMachineAssembler::TailCallN(CallDescriptor* call_descriptor,
-                                     int input_count, Node* const* inputs) {
+void RawMachineAssembler::TailCallN(CallDescriptor* call_descriptor,
+                                    int input_count, Node* const* inputs) {
   // +1 is for target.
   DCHECK_EQ(input_count, call_descriptor->ParameterCount() + 1);
   Node* tail_call =
       MakeNode(common()->TailCall(call_descriptor), input_count, inputs);
   schedule()->AddTailCall(CurrentBlock(), tail_call);
   current_block_ = nullptr;
-  return tail_call;
 }
 
 namespace {
@@ -706,7 +705,8 @@ namespace {
 Node* CallCFunctionImpl(
     RawMachineAssembler* rasm, Node* function, MachineType return_type,
     std::initializer_list<RawMachineAssembler::CFunctionArg> args,
-    bool caller_saved_regs, SaveFPRegsMode mode) {
+    bool caller_saved_regs, SaveFPRegsMode mode,
+    bool has_function_descriptor = kHasFunctionDescriptor) {
   static constexpr std::size_t kNumCArgs = 10;
 
   MachineSignature::Builder builder(rasm->zone(), 1, args.size());
@@ -719,6 +719,8 @@ Node* CallCFunctionImpl(
                         : CallDescriptor::kNoFlags);
 
   if (caller_saved_regs) call_descriptor->set_save_fp_mode(mode);
+
+  call_descriptor->set_has_function_descriptor(has_function_descriptor);
 
   base::SmallVector<Node*, kNumCArgs> nodes(args.size() + 1);
   nodes[0] = function;
@@ -738,6 +740,13 @@ Node* RawMachineAssembler::CallCFunction(
     std::initializer_list<RawMachineAssembler::CFunctionArg> args) {
   return CallCFunctionImpl(this, function, return_type, args, false,
                            kDontSaveFPRegs);
+}
+
+Node* RawMachineAssembler::CallCFunctionWithoutFunctionDescriptor(
+    Node* function, MachineType return_type,
+    std::initializer_list<RawMachineAssembler::CFunctionArg> args) {
+  return CallCFunctionImpl(this, function, return_type, args, false,
+                           kDontSaveFPRegs, kNoFunctionDescriptor);
 }
 
 Node* RawMachineAssembler::CallCFunctionWithCallerSavedRegisters(

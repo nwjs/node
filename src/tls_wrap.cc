@@ -316,9 +316,10 @@ void TLSWrap::EncOut() {
         // its not clear if it is always correct. Not calling Done() could block
         // data flow, so for now continue to call Done(), just do it in the next
         // tick.
-        env()->SetImmediate([this](Environment* env) {
+        BaseObjectPtr<TLSWrap> strong_ref{this};
+        env()->SetImmediate([this, strong_ref](Environment* env) {
           InvokeQueued(0);
-        }, object());
+        });
       }
     }
     return;
@@ -349,9 +350,10 @@ void TLSWrap::EncOut() {
     HandleScope handle_scope(env()->isolate());
 
     // Simulate asynchronous finishing, TLS cannot handle this at the moment.
-    env()->SetImmediate([this](Environment* env) {
+    BaseObjectPtr<TLSWrap> strong_ref{this};
+    env()->SetImmediate([this, strong_ref](Environment* env) {
       OnStreamAfterWrite(nullptr, 0);
-    }, object());
+    });
   }
 }
 
@@ -718,9 +720,10 @@ int TLSWrap::DoWrite(WriteWrap* w,
       StreamWriteResult res =
           underlying_stream()->Write(bufs, count, send_handle);
       if (!res.async) {
-        env()->SetImmediate([this](Environment* env) {
+        BaseObjectPtr<TLSWrap> strong_ref{this};
+        env()->SetImmediate([this, strong_ref](Environment* env) {
           OnStreamAfterWrite(current_empty_write_, 0);
-        }, object());
+        });
       }
       return 0;
     }
@@ -1141,12 +1144,11 @@ void TLSWrap::Initialize(Local<Object> target,
   env->SetProtoMethod(t, "getServername", GetServername);
   env->SetProtoMethod(t, "setServername", SetServername);
 
-  env->set_tls_wrap_constructor_function(
-      t->GetFunction(env->context()).ToLocalChecked());
+  Local<Function> fn = t->GetFunction(env->context()).ToLocalChecked();
 
-  target->Set(env->context(),
-              tlsWrapString,
-              t->GetFunction(env->context()).ToLocalChecked()).Check();
+  env->set_tls_wrap_constructor_function(fn);
+
+  target->Set(env->context(), tlsWrapString, fn).Check();
 }
 
 }  // namespace node

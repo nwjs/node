@@ -66,7 +66,6 @@ function nextdir() {
   const coverageDirectory = nextdir();
   const output = spawnSync(process.execPath, [
     '--no-warnings',
-    '--experimental-modules',
     require.resolve('../fixtures/source-map/esm-basic.mjs')
   ], { env: { ...process.env, NODE_V8_COVERAGE: coverageDirectory } });
   assert.strictEqual(output.stderr.toString(), '');
@@ -114,6 +113,38 @@ function nextdir() {
       `file://${require.resolve('../fixtures/source-map/inline-base64')}`),
     dirname(sourceMap.data.sources[0])
   );
+}
+
+// base64 encoding error does not crash application.
+{
+  const coverageDirectory = nextdir();
+  const output = spawnSync(process.execPath, [
+    require.resolve('../fixtures/source-map/inline-base64-type-error.js')
+  ], { env: { ...process.env, NODE_V8_COVERAGE: coverageDirectory } });
+  assert.strictEqual(output.status, 0);
+  assert.strictEqual(output.stderr.toString(), '');
+  const sourceMap = getSourceMapFromCache(
+    'inline-base64-type-error.js',
+    coverageDirectory
+  );
+
+  assert.strictEqual(sourceMap.data, null);
+}
+
+// JSON error does not crash application.
+{
+  const coverageDirectory = nextdir();
+  const output = spawnSync(process.execPath, [
+    require.resolve('../fixtures/source-map/inline-base64-json-error.js')
+  ], { env: { ...process.env, NODE_V8_COVERAGE: coverageDirectory } });
+  assert.strictEqual(output.status, 0);
+  assert.strictEqual(output.stderr.toString(), '');
+  const sourceMap = getSourceMapFromCache(
+    'inline-base64-json-error.js',
+    coverageDirectory
+  );
+
+  assert.strictEqual(sourceMap.data, null);
 }
 
 // Does not apply source-map to stack trace if --experimental-modules
@@ -185,7 +216,6 @@ function nextdir() {
 {
   const output = spawnSync(process.execPath, [
     '--enable-source-maps',
-    '--experimental-modules',
     require.resolve('../fixtures/source-map/babel-esm.mjs')
   ]);
   assert.ok(

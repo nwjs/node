@@ -38,22 +38,25 @@ CallbackScope::~CallbackScope() {
   delete private_;
 }
 
-InternalCallbackScope::InternalCallbackScope(AsyncWrap* async_wrap)
+InternalCallbackScope::InternalCallbackScope(AsyncWrap* async_wrap, int flags)
     : InternalCallbackScope(async_wrap->env(),
                             async_wrap->object(),
                             { async_wrap->get_async_id(),
-                              async_wrap->get_trigger_async_id() }) {}
+                              async_wrap->get_trigger_async_id() },
+                            flags) {}
 
 InternalCallbackScope::InternalCallbackScope(Environment* env,
                                              Local<Object> object,
                                              const async_context& asyncContext,
-                                             ResourceExpectation expect)
+                                             int flags)
   : env_(env),
     async_context_(asyncContext),
     object_(object),
-    callback_scope_(env) {
-  CHECK_IMPLIES(expect == kRequireResource, !object.IsEmpty());
+    skip_hooks_(flags & kSkipAsyncHooks),
+    skip_task_queues_(flags & kSkipTaskQueues) {
+  CHECK_IMPLIES(!(flags & kAllowEmptyResource), !object.IsEmpty());
   CHECK_NOT_NULL(env);
+  env->PushAsyncCallbackScope();
 
   if (!env->can_call_into_js()) {
     failed_ = true;
@@ -64,7 +67,7 @@ InternalCallbackScope::InternalCallbackScope(Environment* env,
   // If you hit this assertion, you forgot to enter the v8::Context first.
   CHECK_EQ(Environment::GetCurrent(env->isolate()), env);
 
-  if (asyncContext.async_id != 0) {
+  if (asyncContext.async_id != 0 && !skip_hooks_) {
     // No need to check a return value because the application will exit if
     // an exception occurs.
     AsyncWrap::EmitBefore(env, asyncContext.async_id);
@@ -77,6 +80,7 @@ InternalCallbackScope::InternalCallbackScope(Environment* env,
 
 InternalCallbackScope::~InternalCallbackScope() {
   Close();
+  env_->PopAsyncCallbackScope();
 }
 
 void InternalCallbackScope::Close() {
@@ -93,11 +97,11 @@ void InternalCallbackScope::Close() {
 
   if (failed_) return;
 
-  if (async_context_.async_id != 0) {
+  if (async_context_.async_id != 0 && !skip_hooks_) {
     AsyncWrap::EmitAfter(env_, async_context_.async_id);
   }
 
-  if (env_->async_callback_scope_depth() > 1) {
+  if (env_->async_callback_scope_depth() > 1 || skip_task_queues_) {
     return;
   }
 

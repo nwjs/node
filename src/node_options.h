@@ -101,8 +101,8 @@ class EnvironmentOptions : public Options {
  public:
   bool abort_on_uncaught_exception = false;
   bool enable_source_maps = false;
+  bool experimental_conditional_exports = false;
   bool experimental_json_modules = false;
-  bool experimental_modules = false;
   bool experimental_resolve_self = false;
   std::string es_module_specifier_resolution;
   bool experimental_wasm_modules = false;
@@ -161,6 +161,7 @@ class EnvironmentOptions : public Options {
   bool tls_min_v1_3 = false;
   bool tls_max_v1_2 = false;
   bool tls_max_v1_3 = false;
+  std::string tls_keylog;
 
   std::vector<std::string> preload_modules;
 
@@ -246,11 +247,6 @@ namespace options_parser {
 HostPort SplitHostPort(const std::string& arg,
     std::vector<std::string>* errors);
 void GetOptions(const v8::FunctionCallbackInfo<v8::Value>& args);
-
-enum OptionEnvvarSettings {
-  kAllowedInEnvironment,
-  kDisallowedInEnvironment
-};
 
 enum OptionType {
   kNoOp,

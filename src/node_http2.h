@@ -673,15 +673,27 @@ class Http2Stream::Provider::Stream : public Http2Stream::Provider {
                         void* user_data);
 };
 
+typedef struct {
+  uint8_t bitfield;
+  uint8_t priority_listener_count;
+  uint8_t frame_error_listener_count;
+  uint32_t max_invalid_frames = 1000;
+  uint32_t max_rejected_streams = 100;
+} SessionJSFields;
+
 // Indices for js_fields_, which serves as a way to communicate data with JS
 // land fast. In particular, we store information about the number/presence
 // of certain event listeners in JS, and skip calls from C++ into JS if they
 // are missing.
 enum SessionUint8Fields {
-  kBitfield,  // See below
-  kSessionPriorityListenerCount,
-  kSessionFrameErrorListenerCount,
-  kSessionUint8FieldCount
+  kBitfield = offsetof(SessionJSFields, bitfield),  // See below
+  kSessionPriorityListenerCount =
+      offsetof(SessionJSFields, priority_listener_count),
+  kSessionFrameErrorListenerCount =
+      offsetof(SessionJSFields, frame_error_listener_count),
+  kSessionMaxInvalidFrames = offsetof(SessionJSFields, max_invalid_frames),
+  kSessionMaxRejectedStreams = offsetof(SessionJSFields, max_rejected_streams),
+  kSessionUint8FieldCount = sizeof(SessionJSFields)
 };
 
 enum SessionBitfieldFlags {
@@ -968,7 +980,7 @@ class Http2Session : public AsyncWrap, public StreamListener {
   nghttp2_session* session_;
 
   // JS-accessible numeric fields, as indexed by SessionUint8Fields.
-  uint8_t js_fields_[kSessionUint8FieldCount] = {};
+  SessionJSFields js_fields_ = {};
 
   // The session type: client or server
   nghttp2_session_type session_type_;
@@ -1014,9 +1026,9 @@ class Http2Session : public AsyncWrap, public StreamListener {
   // limit will result in the session being destroyed, as an indication of a
   // misbehaving peer. This counter is reset once new streams are being
   // accepted again.
-  int32_t rejected_stream_count_ = 0;
+  uint32_t rejected_stream_count_ = 0;
   // Also use the invalid frame count as a measure for rejecting input frames.
-  int32_t invalid_frame_count_ = 0;
+  uint32_t invalid_frame_count_ = 0;
 
   void PushOutgoingBuffer(nghttp2_stream_write&& write);
   void CopyDataIntoOutgoing(const uint8_t* src, size_t src_length);

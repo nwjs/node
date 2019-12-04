@@ -157,12 +157,12 @@ console.log(receiveMessageOnPort(port2));
 When this function is used, no `'message'` event will be emitted and the
 `onmessage` listener will not be invoked.
 
-### worker.resourceLimits
+## worker.resourceLimits
 <!-- YAML
 added: v13.2.0
 -->
 
-* {Object|undefined}
+* {Object}
   * `maxYoungGenerationSizeMb` {number}
   * `maxOldGenerationSizeMb` {number}
   * `codeRangeSizeMb` {number}

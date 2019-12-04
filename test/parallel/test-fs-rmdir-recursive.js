@@ -155,13 +155,13 @@ function removeAsync(dir) {
 // Test input validation.
 {
   const defaults = {
-    emfileWait: 1000,
-    maxBusyTries: 3,
+    retryDelay: 100,
+    maxRetries: 0,
     recursive: false
   };
   const modified = {
-    emfileWait: 953,
-    maxBusyTries: 5,
+    retryDelay: 953,
+    maxRetries: 5,
     recursive: true
   };
 
@@ -169,10 +169,10 @@ function removeAsync(dir) {
   assert.deepStrictEqual(validateRmdirOptions({}), defaults);
   assert.deepStrictEqual(validateRmdirOptions(modified), modified);
   assert.deepStrictEqual(validateRmdirOptions({
-    maxBusyTries: 99
+    maxRetries: 99
   }), {
-    emfileWait: 1000,
-    maxBusyTries: 99,
+    retryDelay: 100,
+    maxRetries: 99,
     recursive: false
   });
 
@@ -197,18 +197,18 @@ function removeAsync(dir) {
   });
 
   common.expectsError(() => {
-    validateRmdirOptions({ emfileWait: -1 });
+    validateRmdirOptions({ retryDelay: -1 });
   }, {
     code: 'ERR_OUT_OF_RANGE',
     type: RangeError,
-    message: /^The value of "emfileWait" is out of range\./
+    message: /^The value of "retryDelay" is out of range\./
   });
 
   common.expectsError(() => {
-    validateRmdirOptions({ maxBusyTries: -1 });
+    validateRmdirOptions({ maxRetries: -1 });
   }, {
     code: 'ERR_OUT_OF_RANGE',
     type: RangeError,
-    message: /^The value of "maxBusyTries" is out of range\./
+    message: /^The value of "maxRetries" is out of range\./
   });
 }

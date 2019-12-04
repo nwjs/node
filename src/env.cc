@@ -7,11 +7,11 @@
 #include "node_errors.h"
 #include "node_file.h"
 #include "node_internals.h"
-#include "node_native_module.h"
 #include "node_options-inl.h"
 #include "node_process.h"
 #include "node_v8_platform-inl.h"
 #include "node_worker.h"
+#include "req_wrap-inl.h"
 #include "tracing/agent.h"
 #include "tracing/traced_value.h"
 #include "util-inl.h"
@@ -36,6 +36,7 @@ using v8::HandleScope;
 using v8::Integer;
 using v8::Isolate;
 using v8::Local;
+using v8::MaybeLocal;
 using v8::NewStringType;
 using v8::Number;
 using v8::Object;
@@ -467,8 +468,17 @@ void Environment::InitializeLibuv(bool start_profiler_idle_notifier) {
   // will be recorded with state=IDLE.
   uv_prepare_init(event_loop(), &idle_prepare_handle_);
   uv_check_init(event_loop(), &idle_check_handle_);
+  uv_async_init(
+      event_loop(),
+      &cleanup_finalization_groups_async_,
+      [](uv_async_t* async) {
+        Environment* env = ContainerOf(
+            &Environment::cleanup_finalization_groups_async_, async);
+        env->CleanupFinalizationGroups();
+      });
   uv_unref(reinterpret_cast<uv_handle_t*>(&idle_prepare_handle_));
   uv_unref(reinterpret_cast<uv_handle_t*>(&idle_check_handle_));
+  uv_unref(reinterpret_cast<uv_handle_t*>(&cleanup_finalization_groups_async_));
 
   thread_stopper()->Install(
     this, static_cast<void*>(this), [](uv_async_t* handle) {
@@ -531,9 +541,18 @@ void Environment::RegisterHandleCleanups() {
       reinterpret_cast<uv_handle_t*>(&idle_check_handle_),
       close_and_finish,
       nullptr);
+  RegisterHandleCleanup(
+      reinterpret_cast<uv_handle_t*>(&cleanup_finalization_groups_async_),
+      close_and_finish,
+      nullptr);
 }
 
 void Environment::CleanupHandles() {
+  Isolate::DisallowJavascriptExecutionScope disallow_js(isolate(),
+      Isolate::DisallowJavascriptExecutionScope::THROW_ON_FAILURE);
+
+  RunAndClearNativeImmediates(true /* skip SetUnrefImmediate()s */);
+
   for (ReqWrapBase* request : req_wrap_queue_)
     request->Cancel();
 
@@ -649,7 +668,7 @@ void Environment::AtExit(void (*cb)(void* arg), void* arg) {
   at_exit_functions_.push_front(ExitCallback{cb, arg});
 }
 
-void Environment::RunAndClearNativeImmediates() {
+void Environment::RunAndClearNativeImmediates(bool only_refed) {
   TraceEventScope trace_scope(TRACING_CATEGORY_NODE1(environment),
                               "RunAndClearNativeImmediates", this);
   size_t ref_count = 0;
@@ -666,9 +685,11 @@ void Environment::RunAndClearNativeImmediates() {
       if (head->is_refed())
         ref_count++;
 
-      head->Call(this);
+      if (head->is_refed() || !only_refed)
+        head->Call(this);
+
       if (UNLIKELY(try_catch.HasCaught())) {
-        if (!try_catch.HasTerminated())
+        if (!try_catch.HasTerminated() && can_call_into_js())
           errors::TriggerUncaughtException(isolate(), try_catch);
 
         // We are done with the current callback. Move one iteration along,
@@ -1047,19 +1068,27 @@ char* Environment::Reallocate(char* data, size_t old_size, size_t size) {
   return new_data;
 }
 
-bool Environment::RunWeakRefCleanup() {
+void Environment::RunWeakRefCleanup() {
   isolate()->ClearKeptObjects();
+}
 
-  while (!cleanup_finalization_groups_.empty()) {
+void Environment::CleanupFinalizationGroups() {
+  HandleScope handle_scope(isolate());
+  Context::Scope context_scope(context());
+  TryCatchScope try_catch(this);
+
+  while (!cleanup_finalization_groups_.empty() && can_call_into_js()) {
     Local<FinalizationGroup> fg =
         cleanup_finalization_groups_.front().Get(isolate());
     cleanup_finalization_groups_.pop_front();
     if (!FinalizationGroup::Cleanup(fg).FromMaybe(false)) {
-      return false;
+      if (try_catch.HasCaught() && !try_catch.HasTerminated())
+        errors::TriggerUncaughtException(isolate(), try_catch);
+      // Re-schedule the execution of the remainder of the queue.
+      uv_async_send(&cleanup_finalization_groups_async_);
+      return;
     }
   }
-
-  return true;
 }
 
 void AsyncRequest::Install(Environment* env, void* data, uv_async_cb target) {

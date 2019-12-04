@@ -347,6 +347,10 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             &EnvironmentOptions::experimental_report,
             kAllowedInEnvironment);
 #endif  // NODE_REPORT
+  AddOption("--experimental-wasi-unstable-preview0",
+            "experimental WASI support",
+            &EnvironmentOptions::experimental_wasi,
+            kAllowedInEnvironment);
   AddOption("--expose-internals", "", &EnvironmentOptions::expose_internals);
   AddOption("--frozen-intrinsics",
             "experimental frozen intrinsics support",
@@ -436,6 +440,10 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             "profile generated with --heap-prof. (default: 512 * 1024)",
             &EnvironmentOptions::heap_prof_interval);
 #endif  // HAVE_INSPECTOR
+  AddOption("--max-http-header-size",
+            "set the maximum size of HTTP headers (default: 8192 (8KB))",
+            &EnvironmentOptions::max_http_header_size,
+            kAllowedInEnvironment);
   AddOption("--redirect-warnings",
             "write warnings to file instead of stderr",
             &EnvironmentOptions::redirect_warnings,
@@ -628,10 +636,6 @@ PerProcessOptionsParser::PerProcessOptionsParser(
             kAllowedInEnvironment);
   AddAlias("--trace-events-enabled", {
     "--trace-event-categories", "v8,node,node.async_hooks" });
-  AddOption("--max-http-header-size",
-            "set the maximum size of HTTP headers (default: 8KB)",
-            &PerProcessOptions::max_http_header_size,
-            kAllowedInEnvironment);
   AddOption("--v8-pool-size",
             "set V8's thread pool size",
             &PerProcessOptions::v8_thread_pool_size,

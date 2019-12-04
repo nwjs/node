@@ -455,6 +455,11 @@ parser.add_option('--without-node-snapshot',
     dest='without_node_snapshot',
     help='Turn off V8 snapshot integration. Currently experimental.')
 
+parser.add_option('--without-node-code-cache',
+    action='store_true',
+    dest='without_node_code_cache',
+    help='Turn off V8 Code cache integration.')
+
 intl_optgroup.add_option('--download',
     action='store',
     dest='download_list',
@@ -976,9 +981,17 @@ def configure_node(o):
   o['variables']['want_separate_host_toolset'] = int(cross_compiling)
 
   if not options.without_node_snapshot:
-    o['variables']['node_use_node_snapshot'] = b(not cross_compiling)
+    o['variables']['node_use_node_snapshot'] = b(
+      not cross_compiling and not options.shared)
   else:
     o['variables']['node_use_node_snapshot'] = 'false'
+
+  if not options.without_node_code_cache:
+    # TODO(refack): fix this when implementing embedded code-cache when cross-compiling.
+    o['variables']['node_use_node_code_cache'] = b(
+      not cross_compiling and not options.shared)
+  else:
+    o['variables']['node_use_node_code_cache'] = 'false'
 
   if target_arch == 'arm':
     configure_arm(o)
@@ -1100,9 +1113,7 @@ def configure_node(o):
     o['variables']['debug_nghttp2'] = 'false'
 
   o['variables']['node_no_browser_globals'] = b(options.no_browser_globals)
-  # TODO(refack): fix this when implementing embedded code-cache when cross-compiling.
-  if o['variables']['want_separate_host_toolset'] == 0:
-    o['variables']['node_code_cache'] = 'yes' # For testing
+
   o['variables']['node_shared'] = b(options.shared)
   node_module_version = getmoduleversion.get_version()
 

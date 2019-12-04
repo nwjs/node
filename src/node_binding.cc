@@ -1,3 +1,4 @@
+#include "uv.h"
 #include "node_binding.h"
 #include "node_errors.h"
 #include <atomic>
@@ -85,6 +86,7 @@
   V(util)                                                                      \
   V(uv)                                                                        \
   V(v8)                                                                        \
+  V(wasi)                                                                      \
   V(worker)                                                                    \
   V(zlib)
 

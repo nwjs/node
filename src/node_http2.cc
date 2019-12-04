@@ -647,7 +647,9 @@ Http2Session::Http2Session(Environment* env,
   {
     // Make the js_fields_ property accessible to JS land.
     Local<ArrayBuffer> ab =
-        ArrayBuffer::New(env->isolate(), js_fields_, kSessionUint8FieldCount);
+        ArrayBuffer::New(env->isolate(),
+                         reinterpret_cast<uint8_t*>(&js_fields_),
+                         kSessionUint8FieldCount);
     Local<Uint8Array> uint8_arr =
         Uint8Array::New(ab, 0, kSessionUint8FieldCount);
     USE(wrap->Set(env->context(), env->fields_string(), uint8_arr));
@@ -922,7 +924,8 @@ int Http2Session::OnBeginHeadersCallback(nghttp2_session* handle,
     if (UNLIKELY(!session->CanAddStream() ||
                  Http2Stream::New(session, id, frame->headers.cat) ==
                      nullptr)) {
-      if (session->rejected_stream_count_++ > 100)
+      if (session->rejected_stream_count_++ >
+          session->js_fields_.max_rejected_streams)
         return NGHTTP2_ERR_CALLBACK_FAILURE;
       // Too many concurrent streams being opened
       nghttp2_submit_rst_stream(**session, NGHTTP2_FLAG_NONE, id,
@@ -1013,8 +1016,12 @@ int Http2Session::OnInvalidFrame(nghttp2_session* handle,
                                  void* user_data) {
   Http2Session* session = static_cast<Http2Session*>(user_data);
 
-  Debug(session, "invalid frame received, code: %d", lib_error_code);
-  if (session->invalid_frame_count_++ > 1000)
+  Debug(session,
+        "invalid frame received (%u/%u), code: %d",
+        session->invalid_frame_count_,
+        session->js_fields_.max_invalid_frames,
+        lib_error_code);
+  if (session->invalid_frame_count_++ > session->js_fields_.max_invalid_frames)
     return 1;
 
   // If the error is fatal or if error code is ERR_STREAM_CLOSED... emit error
@@ -1050,7 +1057,7 @@ int Http2Session::OnFrameNotSent(nghttp2_session* handle,
   if (error_code == NGHTTP2_ERR_SESSION_CLOSING ||
       error_code == NGHTTP2_ERR_STREAM_CLOSED ||
       error_code == NGHTTP2_ERR_STREAM_CLOSING ||
-      session->js_fields_[kSessionFrameErrorListenerCount] == 0) {
+      session->js_fields_.frame_error_listener_count == 0) {
     return 0;
   }
 
@@ -1353,7 +1360,7 @@ void Http2Session::HandleHeadersFrame(const nghttp2_frame* frame) {
 // are considered advisory only, so this has no real effect other than to
 // simply let user code know that the priority has changed.
 void Http2Session::HandlePriorityFrame(const nghttp2_frame* frame) {
-  if (js_fields_[kSessionPriorityListenerCount] == 0) return;
+  if (js_fields_.priority_listener_count == 0) return;
   Isolate* isolate = env()->isolate();
   HandleScope scope(isolate);
   Local<Context> context = env()->context();
@@ -1422,7 +1429,7 @@ void Http2Session::HandleGoawayFrame(const nghttp2_frame* frame) {
 
 // Called by OnFrameReceived when a complete ALTSVC frame has been received.
 void Http2Session::HandleAltSvcFrame(const nghttp2_frame* frame) {
-  if (!(js_fields_[kBitfield] & (1 << kSessionHasAltsvcListeners))) return;
+  if (!(js_fields_.bitfield & (1 << kSessionHasAltsvcListeners))) return;
   Isolate* isolate = env()->isolate();
   HandleScope scope(isolate);
   Local<Context> context = env()->context();
@@ -1501,7 +1508,7 @@ void Http2Session::HandlePingFrame(const nghttp2_frame* frame) {
     return;
   }
 
-  if (!(js_fields_[kBitfield] & (1 << kSessionHasPingListeners))) return;
+  if (!(js_fields_.bitfield & (1 << kSessionHasPingListeners))) return;
   // Notify the session that a ping occurred
   arg = Buffer::Copy(env(),
                       reinterpret_cast<const char*>(frame->ping.opaque_data),
@@ -1513,8 +1520,8 @@ void Http2Session::HandlePingFrame(const nghttp2_frame* frame) {
 void Http2Session::HandleSettingsFrame(const nghttp2_frame* frame) {
   bool ack = frame->hd.flags & NGHTTP2_FLAG_ACK;
   if (!ack) {
-    js_fields_[kBitfield] &= ~(1 << kSessionRemoteSettingsIsUpToDate);
-    if (!(js_fields_[kBitfield] & (1 << kSessionHasRemoteSettingsListeners)))
+    js_fields_.bitfield &= ~(1 << kSessionRemoteSettingsIsUpToDate);
+    if (!(js_fields_.bitfield & (1 << kSessionHasRemoteSettingsListeners)))
       return;
     // This is not a SETTINGS acknowledgement, notify and return
     MakeCallback(env()->http2session_on_settings_function(), 0, nullptr);
@@ -1876,7 +1883,10 @@ void Http2Session::OnStreamRead(ssize_t nread, const uv_buf_t& buf_) {
     nread = buf.size();
     stream_buf_offset_ = 0;
     stream_buf_ab_.Reset();
-    DecrementCurrentSessionMemory(stream_buf_offset_);
+
+    // We have now fully processed the stream_buf_ input chunk (by moving the
+    // remaining part into buf, which will be accounted for below).
+    DecrementCurrentSessionMemory(stream_buf_.len);
   }
 
   // Shrink to the actual amount of used data.
@@ -3059,6 +3069,8 @@ void Initialize(Local<Object> target,
   NODE_DEFINE_CONSTANT(target, kBitfield);
   NODE_DEFINE_CONSTANT(target, kSessionPriorityListenerCount);
   NODE_DEFINE_CONSTANT(target, kSessionFrameErrorListenerCount);
+  NODE_DEFINE_CONSTANT(target, kSessionMaxInvalidFrames);
+  NODE_DEFINE_CONSTANT(target, kSessionMaxRejectedStreams);
   NODE_DEFINE_CONSTANT(target, kSessionUint8FieldCount);
 
   NODE_DEFINE_CONSTANT(target, kSessionHasRemoteSettingsListeners);

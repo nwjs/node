@@ -192,7 +192,7 @@ added: v8.5.0
 -->
 
 Enable latest experimental modules features (currently
-`--experimental-conditional-exports` and `--experimental-self-resolve`).
+`--experimental-conditional-exports` and `--experimental-resolve-self`).
 
 ### `--experimental-policy`
 <!-- YAML
@@ -229,6 +229,13 @@ added: v9.6.0
 -->
 
 Enable experimental ES Module support in the `vm` module.
+
+### `--experimental-wasi-unstable-preview0`
+<!-- YAML
+added: v13.3.0
+-->
+
+Enable experimental WebAssembly System Interface (WASI) support.
 
 ### `--experimental-wasm-modules`
 <!-- YAML
@@ -1048,6 +1055,7 @@ Node.js options that are allowed are:
 * `--experimental-report`
 * `--experimental-resolve-self`
 * `--experimental-vm-modules`
+* `--experimental-wasi-unstable-preview0`
 * `--experimental-wasm-modules`
 * `--force-context-aware`
 * `--force-fips`

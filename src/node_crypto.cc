@@ -142,8 +142,8 @@ static bool extra_root_certs_loaded = false;
 template void SSLWrap<TLSWrap>::AddMethods(Environment* env,
                                            Local<FunctionTemplate> t);
 template void SSLWrap<TLSWrap>::ConfigureSecureContext(SecureContext* sc);
-template void SSLWrap<TLSWrap>::SetSNIContext(SecureContext* sc);
 template int SSLWrap<TLSWrap>::SetCACerts(SecureContext* sc);
+template void SSLWrap<TLSWrap>::MemoryInfo(MemoryTracker* tracker) const;
 template SSL_SESSION* SSLWrap<TLSWrap>::GetSessionCallback(
     SSL* s,
     const unsigned char* key,
@@ -2990,9 +2990,10 @@ void SSLWrap<Base>::CertCbDone(const FunctionCallbackInfo<Value>& args) {
     goto fire_cb;
 
   if (cons->HasInstance(ctx)) {
-    SecureContext* sc;
-    ASSIGN_OR_RETURN_UNWRAP(&sc, ctx.As<Object>());
-    w->sni_context_.Reset(env->isolate(), ctx);
+    SecureContext* sc = Unwrap<SecureContext>(ctx.As<Object>());
+    CHECK_NOT_NULL(sc);
+    // Store the SNI context for later use.
+    w->sni_context_ = BaseObjectPtr<SecureContext>(sc);
 
     int rv;
 
@@ -3051,15 +3052,6 @@ void SSLWrap<Base>::DestroySSL() {
 
 
 template <class Base>
-void SSLWrap<Base>::SetSNIContext(SecureContext* sc) {
-  ConfigureSecureContext(sc);
-  CHECK_EQ(SSL_set_SSL_CTX(ssl_.get(), sc->ctx_.get()), sc->ctx_.get());
-
-  SetCACerts(sc);
-}
-
-
-template <class Base>
 int SSLWrap<Base>::SetCACerts(SecureContext* sc) {
   int err = SSL_set1_verify_cert_store(ssl_.get(),
                                        SSL_CTX_get_cert_store(sc->ctx_.get()));
@@ -3072,6 +3064,12 @@ int SSLWrap<Base>::SetCACerts(SecureContext* sc) {
   // NOTE: `SSL_set_client_CA_list` takes the ownership of `list`
   SSL_set_client_CA_list(ssl_.get(), list);
   return 1;
+}
+
+template <class Base>
+void SSLWrap<Base>::MemoryInfo(MemoryTracker* tracker) const {
+  tracker->TrackField("ocsp_response", ocsp_response_);
+  tracker->TrackField("sni_context", sni_context_);
 }
 
 int VerifyCallback(int preverify_ok, X509_STORE_CTX* ctx) {
@@ -5041,19 +5039,17 @@ static AllocatedBuffer ConvertSignatureToP1363(Environment* env,
   const unsigned char* sig_data =
       reinterpret_cast<unsigned char*>(signature.data());
 
-  ECDSA_SIG* asn1_sig = d2i_ECDSA_SIG(nullptr, &sig_data, signature.size());
-  if (asn1_sig == nullptr)
+  ECDSASigPointer asn1_sig(d2i_ECDSA_SIG(nullptr, &sig_data, signature.size()));
+  if (!asn1_sig)
     return AllocatedBuffer();
 
   AllocatedBuffer buf = env->AllocateManaged(2 * n);
   unsigned char* data = reinterpret_cast<unsigned char*>(buf.data());
 
-  const BIGNUM* r = ECDSA_SIG_get0_r(asn1_sig);
-  const BIGNUM* s = ECDSA_SIG_get0_s(asn1_sig);
-  CHECK_EQ(n, BN_bn2binpad(r, data, n));
-  CHECK_EQ(n, BN_bn2binpad(s, data + n, n));
-
-  ECDSA_SIG_free(asn1_sig);
+  const BIGNUM* r = ECDSA_SIG_get0_r(asn1_sig.get());
+  const BIGNUM* s = ECDSA_SIG_get0_s(asn1_sig.get());
+  CHECK_EQ(n, static_cast<unsigned int>(BN_bn2binpad(r, data, n)));
+  CHECK_EQ(n, static_cast<unsigned int>(BN_bn2binpad(s, data + n, n)));
 
   return buf;
 }
@@ -5071,19 +5067,18 @@ static ByteSource ConvertSignatureToDER(
   if (signature.length() != 2 * n)
     return ByteSource();
 
-  ECDSA_SIG* asn1_sig = ECDSA_SIG_new();
-  CHECK_NOT_NULL(asn1_sig);
+  ECDSASigPointer asn1_sig(ECDSA_SIG_new());
+  CHECK(asn1_sig);
   BIGNUM* r = BN_new();
   CHECK_NOT_NULL(r);
   BIGNUM* s = BN_new();
   CHECK_NOT_NULL(s);
   CHECK_EQ(r, BN_bin2bn(sig_data, n, r));
   CHECK_EQ(s, BN_bin2bn(sig_data + n, n, s));
-  CHECK_EQ(1, ECDSA_SIG_set0(asn1_sig, r, s));
+  CHECK_EQ(1, ECDSA_SIG_set0(asn1_sig.get(), r, s));
 
   unsigned char* data = nullptr;
-  int len = i2d_ECDSA_SIG(asn1_sig, &data);
-  ECDSA_SIG_free(asn1_sig);
+  int len = i2d_ECDSA_SIG(asn1_sig.get(), &data);
 
   if (len <= 0)
     return ByteSource();

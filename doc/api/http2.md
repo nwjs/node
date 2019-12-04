@@ -1941,6 +1941,12 @@ error will be thrown.
 <!-- YAML
 added: v8.4.0
 changes:
+  - version: v13.3.0
+    pr-url: https://github.com/nodejs/node/pull/30534
+    description: Added `maxSessionRejectedStreams` option with a default of 100.
+  - version: v13.3.0
+    pr-url: https://github.com/nodejs/node/pull/30534
+    description: Added `maxSessionInvalidFrames` option with a default of 1000.
   - version: v13.0.0
     pr-url: https://github.com/nodejs/node/pull/29144
     description: The `PADDING_STRATEGY_CALLBACK` has been made equivalent to
@@ -2001,6 +2007,15 @@ changes:
     streams for the remote peer as if a `SETTINGS` frame had been received. Will
     be overridden if the remote peer sets its own value for
     `maxConcurrentStreams`. **Default:** `100`.
+  * `maxSessionInvalidFrames` {integer} Sets the maximum number of invalid
+    frames that will be tolerated before the session is closed.
+    **Default:** `1000`.
+  * `maxSessionRejectedStreams` {integer} Sets the maximum number of rejected
+    upon creation streams that will be tolerated before the session is closed.
+    Each rejection is associated with an `NGHTTP2_ENHANCE_YOUR_CALM`
+    error that should tell the peer to not open any more streams, continuing
+    to open streams is therefore regarded as a sign of a misbehaving peer.
+    **Default:** `100`.
   * `settings` {HTTP/2 Settings Object} The initial settings to send to the
     remote peer upon connection.
   * `Http1IncomingMessage` {http.IncomingMessage} Specifies the
@@ -2053,6 +2068,12 @@ server.listen(80);
 <!-- YAML
 added: v8.4.0
 changes:
+  - version: v13.3.0
+    pr-url: https://github.com/nodejs/node/pull/30534
+    description: Added `maxSessionRejectedStreams` option with a default of 100.
+  - version: v13.3.0
+    pr-url: https://github.com/nodejs/node/pull/30534
+    description: Added `maxSessionInvalidFrames` option with a default of 1000.
   - version: v13.0.0
     pr-url: https://github.com/nodejs/node/pull/29144
     description: The `PADDING_STRATEGY_CALLBACK` has been made equivalent to
@@ -2113,6 +2134,15 @@ changes:
     streams for the remote peer as if a `SETTINGS` frame had been received. Will
     be overridden if the remote peer sets its own value for
     `maxConcurrentStreams`. **Default:** `100`.
+  * `maxSessionInvalidFrames` {integer} Sets the maximum number of invalid
+    frames that will be tolerated before the session is closed.
+    **Default:** `1000`.
+  * `maxSessionRejectedStreams` {integer} Sets the maximum number of rejected
+    upon creation streams that will be tolerated before the session is closed.
+    Each rejection is associated with an `NGHTTP2_ENHANCE_YOUR_CALM`
+    error that should tell the peer to not open any more streams, continuing
+    to open streams is therefore regarded as a sign of a misbehaving peer.
+    **Default:** `100`.
   * `settings` {HTTP/2 Settings Object} The initial settings to send to the
     remote peer upon connection.
   * ...: Any [`tls.createServer()`][] options can be provided. For

@@ -97,6 +97,7 @@
 
 #if defined(NODE_HAVE_I18N_SUPPORT)
 #include <unicode/uvernum.h>
+#include <unicode/utypes.h>
 #endif
 
 
@@ -115,6 +116,9 @@
 #include <unistd.h>        // STDIN_FILENO, STDERR_FILENO
 #endif
 
+#ifdef __PASE__
+#include <sys/ioctl.h>  // ioctl
+#endif
 // ========== global C++ headers ==========
 
 #include <cerrno>
@@ -575,7 +579,14 @@ inline void PlatformInit() {
     while (s.flags == -1 && errno == EINTR);  // NOLINT
     CHECK_NE(s.flags, -1);
 
+#ifdef __PASE__
+    // On IBMi PASE isatty() always returns true for stdin, stdout and stderr.
+    // Use ioctl() instead to identify whether it's actually a TTY.
+    if (ioctl(fd, TXISATTY + 0x81, nullptr) == -1 && errno == ENOTTY)
+      continue;
+#else
     if (!isatty(fd)) continue;
+#endif
     s.isatty = true;
 
     do
@@ -894,6 +905,25 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
   if (per_process::cli_options->icu_data_dir.empty())
     credentials::SafeGetenv("NODE_ICU_DATA",
                             &per_process::cli_options->icu_data_dir);
+
+#ifdef NODE_ICU_DEFAULT_DATA_DIR
+  // If neither the CLI option nor the environment variable was specified,
+  // fall back to the configured default
+  if (per_process::cli_options->icu_data_dir.empty()) {
+    // Check whether the NODE_ICU_DEFAULT_DATA_DIR contains the right data
+    // file and can be read.
+    static const char full_path[] =
+        NODE_ICU_DEFAULT_DATA_DIR "/" U_ICUDATA_NAME ".dat";
+
+    FILE* f = fopen(full_path, "rb");
+
+    if (f != nullptr) {
+      fclose(f);
+      per_process::cli_options->icu_data_dir = NODE_ICU_DEFAULT_DATA_DIR;
+    }
+  }
+#endif  // NODE_ICU_DEFAULT_DATA_DIR
+
   // Initialize ICU.
   // If icu_data_dir is empty here, it will load the 'minimal' data.
   if (!i18n::InitializeICUDirectory(per_process::cli_options->icu_data_dir)) {
@@ -1031,7 +1061,7 @@ char* StartupDataHandler::RelativePath(char** buffer, const char* exec_path,
 
 void StartupDataHandler::LoadFromFiles(const char* natives_blob,
                                        const char* snapshot_blob) {
-  Load(natives_blob, &natives_, v8::V8::SetNativesDataBlob);
+  //Load(natives_blob, &natives_, v8::V8::SetNativesDataBlob);
   Load(snapshot_blob, &snapshot_, v8::V8::SetSnapshotDataBlob);
 }
 
@@ -1495,8 +1525,9 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
     memset(tls_ctx, 0, sizeof(node::thread_ctx_st));
     uv_key_set(&node::thread_ctx_key, tls_ctx);
     node::binding::RegisterBuiltinModules();
-  }
-  node::IsolateData* isolate_data = node::CreateIsolateData(isolate, uv_default_loop());
+  } 
+  node::NodePlatform* platform = new node::NodePlatform(node::per_process::cli_options->v8_thread_pool_size, new v8::TracingController());
+  node::IsolateData* isolate_data = node::CreateIsolateData(isolate, uv_default_loop(), platform);
   node::NewContext(isolate, v8::Local<v8::ObjectTemplate>(), false);
   tls_ctx->env = node::CreateEnvironment(isolate_data, context, argc, argv, 0, nullptr);
   isolate->SetFatalErrorHandler(node::OnFatalError);

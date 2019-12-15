@@ -1,6 +1,8 @@
 // Flags: --experimental-modules
 import { mustCall } from '../common/index.mjs';
+import { path } from '../common/fixtures.mjs';
 import { ok, deepStrictEqual, strictEqual } from 'assert';
+import { spawn } from 'child_process';
 
 import { requireFixture, importFixture } from '../fixtures/pkgexports.mjs';
 import fromInside from '../fixtures/node_modules/pkgexports/lib/hole.js';
@@ -29,7 +31,7 @@ import fromInside from '../fixtures/node_modules/pkgexports/lib/hole.js';
     ['pkgexports-sugar', { default: 'main' }],
     // Conditional object exports sugar
     ['pkgexports-sugar2', isRequire ? { default: 'not-exported' } :
-      { default: 'main' }]
+      { default: 'main' }],
   ]);
 
   for (const [validSpecifier, expected] of validSpecifiers) {
@@ -49,7 +51,7 @@ import fromInside from '../fixtures/node_modules/pkgexports/lib/hole.js';
     ['pkgexports-number/hidden.js', './hidden.js'],
     // Sugar cases still encapsulate
     ['pkgexports-sugar/not-exported.js', './not-exported.js'],
-    ['pkgexports-sugar2/not-exported.js', './not-exported.js']
+    ['pkgexports-sugar2/not-exported.js', './not-exported.js'],
   ]);
 
   const invalidExports = new Map([
@@ -92,6 +94,15 @@ import fromInside from '../fixtures/node_modules/pkgexports/lib/hole.js';
       assertIncludes(err.message, isRequire ?
         `do not define a valid '${subpath}' target` :
         `matched for '${subpath}'`);
+    }));
+  }
+
+  // Conditional export, even with no match, should still be used instead
+  // of falling back to main
+  if (isRequire) {
+    loadFixture('pkgexports-main').catch(mustCall((err) => {
+      strictEqual(err.code, 'MODULE_NOT_FOUND');
+      assertStartsWith(err.message, 'No valid export');
     }));
   }
 
@@ -149,3 +160,33 @@ function assertIncludes(actual, expected) {
   ok(actual.toString().indexOf(expected) !== -1,
      `${JSON.stringify(actual)} includes ${JSON.stringify(expected)}`);
 }
+
+// Test warning message
+[
+  [
+    '--experimental-conditional-exports',
+    '/es-modules/conditional-exports.js',
+    'Conditional exports',
+  ],
+  [
+    '--experimental-resolve-self',
+    '/node_modules/pkgexports/resolve-self.js',
+    'Package name self resolution',
+  ],
+].forEach(([flag, file, message]) => {
+  const child = spawn(process.execPath, [flag, path(file)]);
+
+  let stderr = '';
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (data) => {
+    stderr += data;
+  });
+  child.on('close', (code, signal) => {
+    strictEqual(code, 0);
+    strictEqual(signal, null);
+    ok(stderr.toString().includes(
+      `ExperimentalWarning: ${message} is an experimental feature. ` +
+      'This feature could change at any time'
+    ));
+  });
+});

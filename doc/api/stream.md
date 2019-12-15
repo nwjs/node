@@ -297,10 +297,10 @@ const writer = getWritableStreamSomehow();
 for (let i = 0; i < 100; i++) {
   writer.write(`hello, #${i}!\n`);
 }
-writer.end('This is the end\n');
 writer.on('finish', () => {
   console.log('All writes are now complete.');
 });
+writer.end('This is the end\n');
 ```
 
 ##### Event: 'pipe'
@@ -1641,6 +1641,10 @@ readable.on('data', (chunk) => {
   console.log(chunk);
 });
 ```
+
+Calling `Readable.from(string)` or `Readable.from(buffer)` will not have
+the strings or buffers be iterated to match the other streams semantics
+for performance reasons.
 
 ## API for Stream Implementers
 

@@ -1533,6 +1533,9 @@ changes:
 Asynchronous close(2). No arguments other than a possible exception are given
 to the completion callback.
 
+Calling `fs.close()` on any file descriptor (`fd`) that is currently in use
+through any other `fs` operation may lead to undefined behavior.
+
 ## fs.closeSync(fd)
 <!-- YAML
 added: v0.1.21
@@ -1541,6 +1544,9 @@ added: v0.1.21
 * `fd` {integer}
 
 Synchronous close(2). Returns `undefined`.
+
+Calling `fs.closeSync()` on any file descriptor (`fd`) that is currently in use
+through any other `fs` operation may lead to undefined behavior.
 
 ## fs.constants
 
@@ -3473,10 +3479,10 @@ completion callback.
 
 The `type` argument is only available on Windows and ignored on other platforms.
 It can be set to `'dir'`, `'file'`, or `'junction'`. If the `type` argument is
-not set, Node will autodetect `target` type and use `'file'` or `'dir'`. If the
-`target` does not exist, `'file'` will be used. Windows junction points require
-the destination path to be absolute.  When using `'junction'`, the `target`
-argument will automatically be normalized to absolute path.
+not set, Node.js will autodetect `target` type and use `'file'` or `'dir'`. If
+the `target` does not exist, `'file'` will be used. Windows junction points
+require the destination path to be absolute.  When using `'junction'`, the
+`target` argument will automatically be normalized to absolute path.
 
 Relative targets are relative to the link’s parent directory.
 

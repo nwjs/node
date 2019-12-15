@@ -398,6 +398,10 @@ stream.write('With ES6');
 <!-- YAML
 added: v0.3.0
 changes:
+  - version: v13.5.0
+    pr-url: https://github.com/nodejs/node/pull/30768
+    description: User defined prototype properties are inspected in case
+                 `showHidden` is `true`.
   - version: v13.0.0
     pr-url: https://github.com/nodejs/node/pull/27685
     description: Circular references now include a marker to the reference.
@@ -461,7 +465,8 @@ changes:
 * `options` {Object}
   * `showHidden` {boolean} If `true`, `object`'s non-enumerable symbols and
     properties are included in the formatted result. [`WeakMap`][] and
-    [`WeakSet`][] entries are also included. **Default:** `false`.
+    [`WeakSet`][] entries are also included as well as user defined prototype
+    properties (excluding method properties). **Default:** `false`.
   * `depth` {number} Specifies the number of times to recurse while formatting
     `object`. This is useful for inspecting large objects. To recurse up to
     the maximum call stack size pass `Infinity` or `null`.
@@ -571,7 +576,7 @@ console.log(util.inspect(o, { compact: true, depth: 5, breakLength: 80 }));
 //           'test',
 //           'foo' ] ],
 //     4 ],
-//   b: Map { 'za' => 1, 'zb' => 'test' } }
+//   b: Map(2) { 'za' => 1, 'zb' => 'test' } }
 
 // Setting `compact` to false changes the output to be more reader friendly.
 console.log(util.inspect(o, { compact: false, depth: 5, breakLength: 80 }));
@@ -592,7 +597,7 @@ console.log(util.inspect(o, { compact: false, depth: 5, breakLength: 80 }));
 //     ],
 //     4
 //   ],
-//   b: Map {
+//   b: Map(2) {
 //     'za' => 1,
 //     'zb' => 'test'
 //   }
@@ -634,9 +639,9 @@ const o1 = {
   c: new Set([2, 3, 1])
 };
 console.log(inspect(o1, { sorted: true }));
-// { a: '`a` comes before `b`', b: [ 2, 3, 1 ], c: Set { 1, 2, 3 } }
+// { a: '`a` comes before `b`', b: [ 2, 3, 1 ], c: Set(3) { 1, 2, 3 } }
 console.log(inspect(o1, { sorted: (a, b) => b.localeCompare(a) }));
-// { c: Set { 3, 2, 1 }, b: [ 2, 3, 1 ], a: '`a` comes before `b`' }
+// { c: Set(3) { 3, 2, 1 }, b: [ 2, 3, 1 ], a: '`a` comes before `b`' }
 
 const o2 = {
   c: new Set([2, 1, 3]),
@@ -678,12 +683,71 @@ The default styles and associated colors are:
 * `symbol`: `green`
 * `undefined`: `grey`
 
-The predefined color codes are: `white`, `grey`, `black`, `blue`, `cyan`,
-`green`, `magenta`, `red` and `yellow`. There are also `bold`, `italic`,
-`underline` and `inverse` codes.
-
 Color styling uses ANSI control codes that may not be supported on all
 terminals. To verify color support use [`tty.hasColors()`][].
+
+Predefined control codes are listed below (grouped as "Modifiers", "Foreground
+colors", and "Background colors").
+
+#### Modifiers
+
+Modifier support varies throughout different terminals. They will mostly be
+ignored, if not supported.
+
+* `reset` - Resets all (color) modifiers to their defaults
+* **bold** - Make text bold
+* _italic_ - Make text italic
+* <span style="border-bottom: 1px;">underline</span> - Make text underlined
+* ~~strikethrough~~ - Puts a horizontal line through the center of the text
+  (Alias: `strikeThrough`, `crossedout`, `crossedOut`)
+* `hidden` - Prints the text, but makes it invisible (Alias: conceal)
+* <span style="opacity: 0.5;">dim</span> - Decreased color intensity (Alias:
+  `faint`)
+* <span style="border-top: 1px">overlined</span> - Make text overlined
+* blink - Hides and shows the text in an interval
+* <span style="filter: invert(100%)">inverse</span> - Swap foreground and
+  background colors (Alias: `swapcolors`, `swapColors`)
+* <span style="border-bottom: 1px double;">doubleunderline</span> - Make text
+  double underlined (Alias: `doubleUnderline`)
+* <span style="border: 1px">framed</span> - Draw a frame around the text
+
+#### Foreground colors
+
+* `black`
+* `red`
+* `green`
+* `yellow`
+* `blue`
+* `magenta`
+* `cyan`
+* `white`
+* `gray` (alias: `grey`, `blackBright`)
+* `redBright`
+* `greenBright`
+* `yellowBright`
+* `blueBright`
+* `magentaBright`
+* `cyanBright`
+* `whiteBright`
+
+#### Background colors
+
+* `bgBlack`
+* `bgRed`
+* `bgGreen`
+* `bgYellow`
+* `bgBlue`
+* `bgMagenta`
+* `bgCyan`
+* `bgWhite`
+* `bgGray` (alias: `bgGrey`, `bgBlackBright`)
+* `bgRedBright`
+* `bgGreenBright`
+* `bgYellowBright`
+* `bgBlueBright`
+* `bgMagentaBright`
+* `bgCyanBright`
+* `bgWhiteBright`
 
 ### Custom inspection functions on Objects
 

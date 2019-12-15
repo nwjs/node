@@ -8,6 +8,7 @@ const REPL = require('internal/repl');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+const { inspect } = require('util');
 
 const tmpdir = require('../common/tmpdir');
 tmpdir.refresh();
@@ -17,6 +18,7 @@ const defaultHistoryPath = path.join(tmpdir.path, '.node_repl_history');
 // Create an input stream specialized for testing an array of actions
 class ActionStream extends stream.Stream {
   run(data) {
+    let reallyWait = true;
     const _iter = data[Symbol.iterator]();
     const doAction = () => {
       const next = _iter.next();
@@ -32,42 +34,230 @@ class ActionStream extends stream.Stream {
       } else {
         this.emit('data', `${action}`);
       }
-      setImmediate(doAction);
+      if (action === WAIT && reallyWait) {
+        setTimeout(doAction, common.platformTimeout(50));
+        reallyWait = false;
+      } else {
+        setImmediate(doAction);
+      }
     };
-    setImmediate(doAction);
+    doAction();
   }
   resume() {}
   pause() {}
 }
 ActionStream.prototype.readable = true;
 
-
 // Mock keys
 const ENTER = { name: 'enter' };
 const UP = { name: 'up' };
 const DOWN = { name: 'down' };
+const LEFT = { name: 'left' };
+const RIGHT = { name: 'right' };
+const DELETE = { name: 'delete' };
+const BACKSPACE = { name: 'backspace' };
+const WORD_LEFT = { name: 'left', ctrl: true };
+const WORD_RIGHT = { name: 'right', ctrl: true };
+const GO_TO_END = { name: 'end' };
 
 const prompt = '> ';
+const WAIT = '€';
+
+const prev = process.features.inspector;
 
 const tests = [
   { // Creates few history to navigate for
     env: { NODE_REPL_HISTORY: defaultHistoryPath },
     test: [ 'let ab = 45', ENTER,
             '555 + 909', ENTER,
-            '{key : {key2 :[] }}', ENTER],
+            '{key : {key2 :[] }}', ENTER,
+            'Array(100).fill(1).map((e, i) => i ** i)', LEFT, LEFT, DELETE,
+            '2', ENTER],
     expected: [],
     clean: false
   },
   {
     env: { NODE_REPL_HISTORY: defaultHistoryPath },
-    test: [UP, UP, UP, UP, DOWN, DOWN, DOWN],
+    test: [UP, UP, UP, UP, UP, DOWN, DOWN, DOWN, DOWN],
     expected: [prompt,
+               `${prompt}Array(100).fill(1).map((e, i) => i ** 2)`,
+               prev && '\n// [ 0, 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121, ' +
+                 '144, 169, 196, 225, 256, 289, 324, 361, 400, 441, 484, 529,' +
+                 ' 576, 625, 676, 729, 784, 841, 900, 961, 1024, 1089, 1156, ' +
+                 '1225, 1296, 1369, 1444, 1521, 1600, 1681, 1764, 1849, 1936,' +
+                 ' 2025, 2116, 2209, ...',
                `${prompt}{key : {key2 :[] }}`,
+               prev && '\n// { key: { key2: [] } }',
                `${prompt}555 + 909`,
+               prev && '\n// 1464',
                `${prompt}let ab = 45`,
                `${prompt}555 + 909`,
+               prev && '\n// 1464',
                `${prompt}{key : {key2 :[] }}`,
-               prompt],
+               prev && '\n// { key: { key2: [] } }',
+               `${prompt}Array(100).fill(1).map((e, i) => i ** 2)`,
+               prev && '\n// [ 0, 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121, ' +
+                 '144, 169, 196, 225, 256, 289, 324, 361, 400, 441, 484, 529,' +
+                 ' 576, 625, 676, 729, 784, 841, 900, 961, 1024, 1089, 1156, ' +
+                 '1225, 1296, 1369, 1444, 1521, 1600, 1681, 1764, 1849, 1936,' +
+                 ' 2025, 2116, 2209, ...',
+               prompt].filter((e) => typeof e === 'string'),
+    clean: true
+  },
+  {
+    env: { NODE_REPL_HISTORY: defaultHistoryPath },
+    skip: !process.features.inspector,
+    test: [
+      `const ${'veryLongName'.repeat(30)} = 'I should not be previewed'`,
+      ENTER,
+      'const e = new RangeError("visible\\ninvisible")',
+      ENTER,
+      'e',
+      ENTER,
+      'veryLongName'.repeat(30),
+      ENTER,
+      `${'\x1B[90m \x1B[39m'.repeat(235)} fun`,
+      ENTER,
+      `${' '.repeat(236)} fun`,
+      ENTER
+    ],
+    expected: [],
+    clean: false
+  },
+  {
+    env: { NODE_REPL_HISTORY: defaultHistoryPath },
+    columns: 250,
+    skip: !process.features.inspector,
+    test: [
+      UP,
+      UP,
+      UP,
+      UP,
+      BACKSPACE
+    ],
+    expected: [
+      prompt,
+      // This exceeds the maximum columns (250):
+      // Whitespace + prompt + ' // '.length + 'function'.length
+      // 236 + 2 + 4 + 8
+      `${prompt}${' '.repeat(236)} fun`,
+      `${prompt}${' '.repeat(235)} fun`,
+      ' // ction',
+      ' // ction',
+      `${prompt}${'veryLongName'.repeat(30)}`,
+      `${prompt}e`,
+      '\n// RangeError: visible',
+      prompt
+    ],
+    clean: true
+  },
+  {
+    env: { NODE_REPL_HISTORY: defaultHistoryPath },
+    showEscapeCodes: true,
+    skip: !process.features.inspector,
+    test: [
+      'fun',
+      RIGHT,
+      BACKSPACE,
+      LEFT,
+      LEFT,
+      'A',
+      BACKSPACE,
+      GO_TO_END,
+      BACKSPACE,
+      WORD_LEFT,
+      WORD_RIGHT,
+      ENTER
+    ],
+    // C = Cursor forward
+    // D = Cursor back
+    // G = Cursor to column n
+    // J = Erase in screen
+    // K = Erase in line
+    expected: [
+      // 0.
+      // 'f'
+      '\x1B[1G', '\x1B[0J', prompt, '\x1B[3G', 'f',
+      // 'u'
+      'u', ' // nction', '\x1B[5G',
+      // 'n' - Cleanup
+      '\x1B[0K',
+      'n', ' // ction', '\x1B[6G',
+      // 1. Right. Cleanup
+      '\x1B[0K',
+      'ction',
+      // 2. Backspace. Refresh
+      '\x1B[1G', '\x1B[0J', `${prompt}functio`, '\x1B[10G',
+      // Autocomplete and refresh?
+      ' // n', '\x1B[10G', ' // n', '\x1B[10G',
+      // 3. Left. Cleanup
+      '\x1B[0K',
+      '\x1B[1D', '\x1B[10G', ' // n', '\x1B[9G',
+      // 4. Left. Cleanup
+      '\x1B[10G', '\x1B[0K', '\x1B[9G',
+      '\x1B[1D', '\x1B[10G', ' // n', '\x1B[8G',
+      // 5. 'A' - Cleanup
+      '\x1B[10G', '\x1B[0K', '\x1B[8G',
+      // Refresh
+      '\x1B[1G', '\x1B[0J', `${prompt}functAio`, '\x1B[9G',
+      // 6. Backspace. Refresh
+      '\x1B[1G', '\x1B[0J', `${prompt}functio`, '\x1B[8G', '\x1B[10G', ' // n',
+      '\x1B[8G', '\x1B[10G', ' // n',
+      '\x1B[8G', '\x1B[10G',
+      // 7. Go to end. Cleanup
+      '\x1B[0K', '\x1B[8G', '\x1B[2C',
+      'n',
+      // 8. Backspace. Refresh
+      '\x1B[1G', '\x1B[0J', `${prompt}functio`, '\x1B[10G',
+      // Autocomplete
+      ' // n', '\x1B[10G', ' // n', '\x1B[10G',
+      // 9. Word left. Cleanup
+      '\x1B[0K', '\x1B[7D', '\x1B[10G', ' // n', '\x1B[3G', '\x1B[10G',
+      // 10. Word right. Cleanup
+      '\x1B[0K', '\x1B[3G', '\x1B[7C', ' // n', '\x1B[10G',
+      '\x1B[0K',
+    ],
+    clean: true
+  },
+  {
+    // Check that the completer ignores completions that are outdated.
+    env: { NODE_REPL_HISTORY: defaultHistoryPath },
+    completer(line, callback) {
+      if (line.endsWith(WAIT)) {
+        setTimeout(
+          callback,
+          common.platformTimeout(40),
+          null,
+          [[`${WAIT}WOW`], line]
+        );
+      } else {
+        callback(null, [[' Always visible'], line]);
+      }
+    },
+    skip: !process.features.inspector,
+    test: [
+      WAIT, // The first call is awaited before new input is triggered!
+      BACKSPACE,
+      's',
+      BACKSPACE,
+      WAIT, // The second call is not awaited. It won't trigger the preview.
+      BACKSPACE,
+      's',
+      BACKSPACE
+    ],
+    expected: [
+      prompt,
+      WAIT,
+      ' // WOW',
+      prompt,
+      's',
+      ' // Always visible',
+      prompt,
+      WAIT,
+      prompt,
+      's',
+      ' // Always visible',
+    ],
     clean: true
   }
 ];
@@ -90,29 +280,47 @@ function runTest() {
   const opts = tests.shift();
   if (!opts) return; // All done
 
-  const env = opts.env;
-  const test = opts.test;
-  const expected = opts.expected;
+  const { expected, skip } = opts;
 
-  REPL.createInternalRepl(env, {
+  // Test unsupported on platform.
+  if (skip) {
+    setImmediate(runTestWrap, true);
+    return;
+  }
+
+  const lastChunks = [];
+
+  REPL.createInternalRepl(opts.env, {
     input: new ActionStream(),
     output: new stream.Writable({
       write(chunk, _, next) {
         const output = chunk.toString();
 
-        if (output.charCodeAt(0) === 27 || /^[\r\n]+$/.test(output)) {
+        if (!opts.showEscapeCodes &&
+            output.charCodeAt(0) === 27 || /^[\r\n]+$/.test(output)) {
           return next();
         }
 
+        lastChunks.push(inspect(output));
+
         if (expected.length) {
-          assert.strictEqual(output, expected[0]);
+          try {
+            assert.strictEqual(output, expected[0]);
+          } catch (e) {
+            console.error(`Failed test # ${numtests - tests.length}`);
+            console.error('Last outputs: ' + inspect(lastChunks, {
+              breakLength: 5, colors: true
+            }));
+            throw e;
+          }
           expected.shift();
         }
 
         next();
       }
     }),
-    prompt: prompt,
+    completer: opts.completer,
+    prompt,
     useColors: false,
     terminal: true
   }, function(err, repl) {
@@ -131,7 +339,13 @@ function runTest() {
       setImmediate(runTestWrap, true);
     });
 
-    repl.inputStream.run(test);
+    if (opts.columns) {
+      Object.defineProperty(repl, 'columns', {
+        value: opts.columns,
+        enumerable: true
+      });
+    }
+    repl.inputStream.run(opts.test);
   });
 }
 

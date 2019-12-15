@@ -363,6 +363,8 @@ class DiagnosticFilename {
   std::string filename_;
 };
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-private-field"
 class TraceEventScope {
  public:
   TraceEventScope(const char* category,
@@ -379,6 +381,7 @@ class TraceEventScope {
   const char* name_;
   void* id_;
 };
+#pragma clang diagnostic pop
 
 }  // namespace node
 

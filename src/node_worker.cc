@@ -155,7 +155,7 @@ class WorkerThreadData {
     isolate->AddNearHeapLimitCallback(Worker::NearHeapLimit, w);
 
     {
-      Locker locker(isolate);
+      //Locker locker(isolate);
       Isolate::Scope isolate_scope(isolate);
 
       HandleScope handle_scope(isolate);
@@ -190,8 +190,13 @@ class WorkerThreadData {
         *static_cast<bool*>(data) = true;
       }, &platform_finished);
 
-      isolate->Dispose();
+      // The order of these calls is important; if the Isolate is first disposed
+      // and then unregistered, there is a race condition window in which no
+      // new Isolate at the same address can successfully be registered with
+      // the platform.
+      // (Refs: https://github.com/nodejs/node/issues/30846)
       w_->platform_->UnregisterIsolate(isolate);
+      isolate->Dispose();
 
       // Wait until the platform has cleaned up all relevant resources.
       while (!platform_finished)
@@ -229,13 +234,13 @@ void Worker::Run() {
   CHECK_NOT_NULL(platform_);
 
   Debug(this, "Creating isolate for worker with id %llu", thread_id_);
-
+  v8::SetTLSPlatform(platform_);
   WorkerThreadData data(this);
   if (isolate_ == nullptr) return;
 
   Debug(this, "Starting worker with id %llu", thread_id_);
   {
-    Locker locker(isolate_);
+    //Locker locker(isolate_);
     Isolate::Scope isolate_scope(isolate_);
     SealHandleScope outer_seal(isolate_);
 
@@ -318,6 +323,10 @@ void Worker::Run() {
         if (stopped_) return;
         this->env_ = env_.get();
       }
+      node::thread_ctx_st* tls_ctx = (node::thread_ctx_st*)malloc(sizeof(node::thread_ctx_st));
+      memset(tls_ctx, 0, sizeof(node::thread_ctx_st));
+      uv_key_set(&node::thread_ctx_key, tls_ctx);
+      node::binding::RegisterBuiltinModules();
       Debug(this, "Created Environment for worker with id %llu", thread_id_);
       if (is_stopped()) return;
       {

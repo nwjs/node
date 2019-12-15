@@ -104,6 +104,7 @@ class EnvironmentOptions : public Options {
   bool experimental_conditional_exports = false;
   bool experimental_json_modules = false;
   bool experimental_resolve_self = false;
+  std::string experimental_specifier_resolution;
   std::string es_module_specifier_resolution;
   bool experimental_wasm_modules = false;
   std::string module_type;
@@ -140,6 +141,7 @@ class EnvironmentOptions : public Options {
   bool test_udp_no_try_send = false;
   bool throw_deprecation = false;
   bool trace_deprecation = false;
+  bool trace_exit = false;
   bool trace_sync_io = false;
   bool trace_tls = false;
   bool trace_uncaught = false;
@@ -157,6 +159,8 @@ class EnvironmentOptions : public Options {
   bool print_eval = false;
   bool force_repl = false;
 
+  bool insecure_http_parser = false;
+
   bool tls_min_v1_0 = false;
   bool tls_min_v1_1 = false;
   bool tls_min_v1_2 = false;
@@ -169,8 +173,9 @@ class EnvironmentOptions : public Options {
 
   std::vector<std::string> user_argv;
 
-  inline DebugOptions* get_debug_options();
-  inline const DebugOptions& debug_options() const;
+  inline DebugOptions* get_debug_options() { return &debug_options_; }
+  inline const DebugOptions& debug_options() const { return debug_options_; }
+
   void CheckOptions(std::vector<std::string>* errors) override;
 
  private:

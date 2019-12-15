@@ -27,6 +27,8 @@
     'openssl_no_asm': 1,
     'mac_product_name': 'nwjs',
     'enable_lto': 'false',
+    'v8_enable_pointer_compression': 0,
+    'v8_enable_31bit_smis_on_64bit_arch': 0,
 
     'node_tag%': '',
     'uv_library%': 'static_library',
@@ -85,9 +87,6 @@
     # TODO(refack): make v8-perfetto happen
     'v8_use_perfetto': 0,
 
-    'v8_enable_pointer_compression': 0,
-    'v8_enable_31bit_smis_on_64bit_arch': 0,
-
     ##### end V8 defaults #####
     'variables': {
       'building_nw%' : 0,
@@ -112,6 +111,10 @@
       }, {
         'obj_dir%': '<(PRODUCT_DIR)/obj.target',
         #'v8_base': '<(PRODUCT_DIR)/obj.target/tools/v8_gypfiles/libv8_snapshot.a',
+      }],
+      ['target_arch=="x64"', {
+        'v8_enable_pointer_compression': 1,
+        'v8_enable_31bit_smis_on_64bit_arch': 1,
       }],
       ['OS=="linux" and target_arch=="ia32" and <(building_nw)==1', {
         'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_sid_i386-sysroot',
@@ -274,8 +277,8 @@
             'ldflags': [ '-Wl,-bbigtoc' ],
           }],
           ['OS == "android"', {
-            'cflags': [ '-fPIE' ],
-            'ldflags': [ '-fPIE', '-pie' ]
+            'cflags': [ '-fPIC' ],
+            'ldflags': [ '-fPIC' ]
           }],
         ],
         'msvs_settings': {
@@ -334,8 +337,8 @@
             ],
           },],
           ['OS == "android"', {
-            'cflags': [ '-fPIE' ],
-            'ldflags': [ '-fPIE', '-pie' ]
+            'cflags': [ '-fPIC' ],
+            'ldflags': [ '-fPIC' ]
           }],
         ],
         'msvs_settings': {

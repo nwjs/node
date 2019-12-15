@@ -110,9 +110,6 @@ Enable FIPS-compliant crypto at startup.
 Requires Node.js to be built with
 .Sy ./configure --openssl-fips .
 .
-.It Fl -es-module-specifier-resolution
-Select extension resolution algorithm for ES Modules; either 'explicit' (default) or 'node'
-.
 .It Fl -experimental-conditional-exports
 Enable experimental support for "require" and "node" conditional export targets.
 .
@@ -129,6 +126,9 @@ Use the specified file as a security policy.
 Enable experimental top-level
 .Sy await
 keyword support in REPL.
+.
+.It Fl -experimental-specifier-resolution
+Select extension resolution algorithm for ES Modules; either 'explicit' (default) or 'node'
 .
 .It Fl -experimental-report
 Enable experimental
@@ -212,6 +212,12 @@ It uses the Chrome DevTools Protocol.
 Specify the
 .Ar module
 to use as a custom module loader.
+.
+.It Fl -insecure-http-parser
+Use an insecure HTTP parser that accepts invalid HTTP headers. This may allow
+interoperability with non-conformant HTTP implementations. It may also allow
+request smuggling and other HTTP attacks that rely on invalid headers being
+accepted. Avoid using this option.
 .
 .It Fl -max-http-header-size Ns = Ns Ar size
 Specify the maximum size of HTTP headers in bytes. Defaults to 8KB.
@@ -348,6 +354,10 @@ and
 .
 .It Fl -trace-events-enabled
 Enable the collection of trace event tracing information.
+.
+.It Fl -trace-exit
+Prints a stack trace whenever an environment is exited proactively,
+i.e. invoking `process.exit()`.
 .
 .It Fl -trace-sync-io
 Print a stack trace whenever synchronous I/O is detected after the first turn of the event loop.

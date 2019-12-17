@@ -27,6 +27,8 @@
     'openssl_no_asm': 1,
     'mac_product_name': 'nwjs',
     'enable_lto': 'false',
+    'v8_enable_pointer_compression': 0,
+    'v8_enable_31bit_smis_on_64bit_arch': 0,
 
     'node_tag%': '',
     'uv_library%': 'static_library',
@@ -84,9 +86,6 @@
 
     # TODO(refack): make v8-perfetto happen
     'v8_use_perfetto': 0,
-
-    'v8_enable_pointer_compression': 0,
-    'v8_enable_31bit_smis_on_64bit_arch': 0,
 
     ##### end V8 defaults #####
     'variables': {
@@ -274,8 +273,8 @@
             'ldflags': [ '-Wl,-bbigtoc' ],
           }],
           ['OS == "android"', {
-            'cflags': [ '-fPIE' ],
-            'ldflags': [ '-fPIE', '-pie' ]
+            'cflags': [ '-fPIC' ],
+            'ldflags': [ '-fPIC' ]
           }],
         ],
         'msvs_settings': {
@@ -334,8 +333,8 @@
             ],
           },],
           ['OS == "android"', {
-            'cflags': [ '-fPIE' ],
-            'ldflags': [ '-fPIE', '-pie' ]
+            'cflags': [ '-fPIC' ],
+            'ldflags': [ '-fPIC' ]
           }],
         ],
         'msvs_settings': {

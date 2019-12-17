@@ -1,6 +1,8 @@
 #include "env-inl.h"
 #include "base_object-inl.h"
 #include "debug_utils.h"
+#include "memory_tracker-inl.h"
+#include "node_mem-inl.h"
 #include "util-inl.h"
 #include "node.h"
 #include "uv.h"
@@ -85,14 +87,33 @@ WASI::WASI(Environment* env,
            Local<Object> object,
            uvwasi_options_t* options) : BaseObject(env, object) {
   MakeWeak();
+  alloc_info_ = MakeAllocator();
+  options->allocator = &alloc_info_;
   CHECK_EQ(uvwasi_init(&uvw_, options), UVWASI_ESUCCESS);
 }
 
 
 WASI::~WASI() {
   uvwasi_destroy(&uvw_);
+  CHECK_EQ(current_uvwasi_memory_, 0);
 }
 
+void WASI::MemoryInfo(MemoryTracker* tracker) const {
+  tracker->TrackField("memory", memory_);
+  tracker->TrackFieldWithSize("uvwasi_memory", current_uvwasi_memory_);
+}
+
+void WASI::CheckAllocatedSize(size_t previous_size) const {
+  CHECK_GE(current_uvwasi_memory_, previous_size);
+}
+
+void WASI::IncreaseAllocatedSize(size_t size) {
+  current_uvwasi_memory_ += size;
+}
+
+void WASI::DecreaseAllocatedSize(size_t size) {
+  current_uvwasi_memory_ -= size;
+}
 
 void WASI::New(const FunctionCallbackInfo<Value>& args) {
   CHECK(args.IsConstructCall());
@@ -134,7 +155,7 @@ void WASI::New(const FunctionCallbackInfo<Value>& args) {
   Local<Array> preopens = args[2].As<Array>();
   CHECK_EQ(preopens->Length() % 2, 0);
   options.preopenc = preopens->Length() / 2;
-  options.preopens = UncheckedCalloc<uvwasi_preopen_t>(options.preopenc);
+  options.preopens = Calloc<uvwasi_preopen_t>(options.preopenc);
   int index = 0;
   for (uint32_t i = 0; i < preopens->Length(); i += 2) {
     auto mapped = preopens->Get(context, i).ToLocalChecked();
@@ -144,7 +165,9 @@ void WASI::New(const FunctionCallbackInfo<Value>& args) {
     node::Utf8Value mapped_path(env->isolate(), mapped);
     node::Utf8Value real_path(env->isolate(), real);
     options.preopens[index].mapped_path = strdup(*mapped_path);
+    CHECK_NOT_NULL(options.preopens[index].mapped_path);
     options.preopens[index].real_path = strdup(*real_path);
+    CHECK_NOT_NULL(options.preopens[index].real_path);
     index++;
   }
 
@@ -160,6 +183,15 @@ void WASI::New(const FunctionCallbackInfo<Value>& args) {
     for (uint32_t i = 0; options.envp[i]; i++)
       free(options.envp[i]);
     delete[] options.envp;
+  }
+
+  if (options.preopens != nullptr) {
+    for (uint32_t i = 0; i < options.preopenc; i++) {
+      free(options.preopens[i].mapped_path);
+      free(options.preopens[i].real_path);
+    }
+
+    delete[] options.preopens;
   }
 }
 

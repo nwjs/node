@@ -7,6 +7,7 @@
 #include "util-inl.h"
 #include "node_contextify.h"
 #include "node_watchdog.h"
+#include "node_process.h"
 
 #include <sys/stat.h>  // S_IFDIR
 
@@ -789,7 +790,7 @@ inline Maybe<URL> ResolveIndex(const URL& search) {
 Maybe<URL> FinalizeResolution(Environment* env,
                               const URL& resolved,
                               const URL& base) {
-  if (env->options()->es_module_specifier_resolution == "node") {
+  if (env->options()->experimental_specifier_resolution == "node") {
     Maybe<URL> file = ResolveExtensions<TRY_EXACT_NAME>(resolved);
     if (!file.IsNothing()) {
       return file;
@@ -962,6 +963,18 @@ Maybe<URL> ResolveExportsTarget(Environment* env,
       Maybe<URL> resolved = ResolveExportsTarget(env, pjson_url,
             conditionalTarget, subpath, pkg_subpath, base, false);
       if (!resolved.IsNothing()) {
+        ProcessEmitExperimentalWarning(env, "Conditional exports");
+        return resolved;
+      }
+    }
+    if (env->options()->experimental_conditional_exports &&
+        target_obj->HasOwnProperty(context, env->import_string()).FromJust()) {
+      matched = true;
+      conditionalTarget =
+          target_obj->Get(context, env->import_string()).ToLocalChecked();
+      Maybe<URL> resolved = ResolveExportsTarget(env, pjson_url,
+            conditionalTarget, subpath, pkg_subpath, base, false);
+      if (!resolved.IsNothing()) {
         return resolved;
       }
     }
@@ -1053,7 +1066,7 @@ Maybe<URL> PackageMainResolve(Environment* env,
         return Just(resolved);
       }
     }
-    if (env->options()->es_module_specifier_resolution == "node") {
+    if (env->options()->experimental_specifier_resolution == "node") {
       if (pcfg.has_main == HasMain::Yes) {
         return FinalizeResolution(env, URL(pcfg.main, pjson_url), base);
       } else {
@@ -1267,6 +1280,7 @@ Maybe<URL> PackageResolve(Environment* env,
 
   Maybe<URL> self_url = ResolveSelf(env, specifier, base);
   if (self_url.IsJust()) {
+    ProcessEmitExperimentalWarning(env, "Package name self resolution");
     return self_url;
   }
 

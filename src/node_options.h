@@ -104,6 +104,7 @@ class EnvironmentOptions : public Options {
   bool experimental_conditional_exports = false;
   bool experimental_json_modules = false;
   bool experimental_resolve_self = false;
+  std::string experimental_specifier_resolution;
   std::string es_module_specifier_resolution;
   bool experimental_wasm_modules = false;
   std::string module_type;
@@ -156,6 +157,8 @@ class EnvironmentOptions : public Options {
   std::string eval_string;
   bool print_eval = false;
   bool force_repl = false;
+
+  bool insecure_http_parser = false;
 
   bool tls_min_v1_0 = false;
   bool tls_min_v1_1 = false;

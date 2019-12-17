@@ -2118,7 +2118,7 @@ static Local<Object> X509ToObject(Environment* env, X509* cert) {
   rsa.reset();
   ec.reset();
 
-  ASN1_TIME_print(bio.get(), X509_get_notBefore(cert));
+  ASN1_TIME_print(bio.get(), X509_get0_notBefore(cert));
   BIO_get_mem_ptr(bio.get(), &mem);
   info->Set(context, env->valid_from_string(),
             String::NewFromUtf8(env->isolate(), mem->data,
@@ -2126,7 +2126,7 @@ static Local<Object> X509ToObject(Environment* env, X509* cert) {
                                 mem->length).ToLocalChecked()).Check();
   USE(BIO_reset(bio.get()));
 
-  ASN1_TIME_print(bio.get(), X509_get_notAfter(cert));
+  ASN1_TIME_print(bio.get(), X509_get0_notAfter(cert));
   BIO_get_mem_ptr(bio.get(), &mem);
   info->Set(context, env->valid_to_string(),
             String::NewFromUtf8(env->isolate(), mem->data,
@@ -2685,6 +2685,9 @@ void SSLWrap<Base>::GetCipher(const FunctionCallbackInfo<Value>& args) {
   const char* cipher_name = SSL_CIPHER_get_name(c);
   info->Set(context, env->name_string(),
             OneByteString(args.GetIsolate(), cipher_name)).Check();
+  const char* cipher_standard_name = SSL_CIPHER_standard_name(c);
+  info->Set(context, env->standard_name_string(),
+            OneByteString(args.GetIsolate(), cipher_standard_name)).Check();
   const char* cipher_version = SSL_CIPHER_get_version(c);
   info->Set(context, env->version_string(),
             OneByteString(args.GetIsolate(), cipher_version)).Check();
@@ -2697,11 +2700,11 @@ void SSLWrap<Base>::GetSharedSigalgs(const FunctionCallbackInfo<Value>& args) {
   Base* w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
   Environment* env = w->ssl_env();
-  std::vector<Local<Value>> ret_arr;
 
   SSL* ssl = w->ssl_.get();
   int nsig = SSL_get_shared_sigalgs(ssl, 0, nullptr, nullptr, nullptr, nullptr,
                                     nullptr);
+  MaybeStackBuffer<Local<Value>, 16> ret_arr(nsig);
 
   for (int i = 0; i < nsig; i++) {
     int hash_nid;
@@ -2765,12 +2768,11 @@ void SSLWrap<Base>::GetSharedSigalgs(const FunctionCallbackInfo<Value>& args) {
     } else {
       sig_with_md += "UNDEF";
     }
-
-    ret_arr.push_back(OneByteString(env->isolate(), sig_with_md.c_str()));
+    ret_arr[i] = OneByteString(env->isolate(), sig_with_md.c_str());
   }
 
   args.GetReturnValue().Set(
-                 Array::New(env->isolate(), ret_arr.data(), ret_arr.size()));
+                 Array::New(env->isolate(), ret_arr.out(), ret_arr.length()));
 }
 
 

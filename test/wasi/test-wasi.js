@@ -22,7 +22,7 @@ if (process.argv[2] === 'wasi-child') {
       '/tmp': tmpdir.path
     }
   });
-  const importObject = { wasi_unstable: wasi.wasiImport };
+  const importObject = { wasi_snapshot_preview1: wasi.wasiImport };
   const modulePath = path.join(wasmDir, `${process.argv[3]}.wasm`);
   const buffer = fs.readFileSync(modulePath);
 
@@ -44,7 +44,7 @@ if (process.argv[2] === 'wasi-child') {
       opts.input = options.stdin;
 
     const child = cp.spawnSync(process.execPath, [
-      '--experimental-wasi-unstable-preview0',
+      '--experimental-wasi-unstable-preview1',
       '--experimental-wasm-bigint',
       __filename,
       'wasi-child',

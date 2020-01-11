@@ -103,7 +103,6 @@ class EnvironmentOptions : public Options {
   bool enable_source_maps = false;
   bool experimental_conditional_exports = false;
   bool experimental_json_modules = false;
-  bool experimental_resolve_self = false;
   std::string experimental_specifier_resolution;
   std::string es_module_specifier_resolution;
   bool experimental_wasm_modules = false;
@@ -237,6 +236,7 @@ class PerProcessOptions : public Options {
   bool force_fips_crypto = false;
 #endif
 #endif
+  std::string use_largepages = "off";
 
 #ifdef NODE_REPORT
   std::vector<std::string> cmdline;
@@ -253,6 +253,7 @@ namespace options_parser {
 HostPort SplitHostPort(const std::string& arg,
     std::vector<std::string>* errors);
 void GetOptions(const v8::FunctionCallbackInfo<v8::Value>& args);
+std::string GetBashCompletion();
 
 enum OptionType {
   kNoOp,
@@ -436,6 +437,7 @@ class OptionsParser {
   friend class OptionsParser;
 
   friend void GetOptions(const v8::FunctionCallbackInfo<v8::Value>& args);
+  friend std::string GetBashCompletion();
 };
 
 using StringVector = std::vector<std::string>;

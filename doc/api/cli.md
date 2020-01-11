@@ -178,7 +178,7 @@ added: v8.5.0
 -->
 
 Enable latest experimental modules features (currently
-`--experimental-conditional-exports` and `--experimental-resolve-self`).
+`--experimental-conditional-exports`).
 
 ### `--experimental-policy`
 <!-- YAML
@@ -201,14 +201,6 @@ added: v11.8.0
 
 Enable experimental diagnostic report feature.
 
-### `--experimental-resolve-self`
-<!-- YAML
-added: v13.1.0
--->
-
-Enable experimental support for a package using `require` or `import` to load
-itself.
-
 ### `--experimental-specifier-resolution=mode`
 <!-- YAML
 added: v13.4.0
@@ -230,9 +222,14 @@ added: v9.6.0
 
 Enable experimental ES Module support in the `vm` module.
 
-### `--experimental-wasi-unstable-preview0`
+### `--experimental-wasi-unstable-preview1`
 <!-- YAML
 added: v13.3.0
+changes:
+  - version: v13.6.0
+    pr-url: https://github.com/nodejs/node/pull/30980
+    description: changed from `--experimental-wasi-unstable-preview0` to
+                 `--experimental-wasi-unstable-preview1`
 -->
 
 Enable experimental WebAssembly System Interface (WASI) support.
@@ -871,6 +868,22 @@ environment variables.
 
 See `SSL_CERT_DIR` and `SSL_CERT_FILE`.
 
+### `--use-largepages=mode`
+<!-- YAML
+added: v13.6.0
+-->
+
+Re-map the Node.js static code to large memory pages at startup. If supported on
+the target system, this will cause the Node.js static code to be moved onto 2
+MiB pages instead of 4 KiB pages.
+
+The following values are valid for `mode`:
+* `off`: No mapping will be attempted. This is the default.
+* `on`: If supported by the OS, mapping will be attempted. Failure to map will
+  be ignored and a message will be printed to standard error.
+* `silent`: If supported by the OS, mapping will be attempted. Failure to map
+  will be ignored and will not be reported.
+
 ### `--v8-options`
 <!-- YAML
 added: v0.1.3
@@ -1070,10 +1083,9 @@ Node.js options that are allowed are:
 * `--experimental-policy`
 * `--experimental-repl-await`
 * `--experimental-report`
-* `--experimental-resolve-self`
 * `--experimental-specifier-resolution`
 * `--experimental-vm-modules`
-* `--experimental-wasi-unstable-preview0`
+* `--experimental-wasi-unstable-preview1`
 * `--experimental-wasm-modules`
 * `--force-context-aware`
 * `--force-fips`
@@ -1128,6 +1140,7 @@ Node.js options that are allowed are:
 * `--track-heap-objects`
 * `--unhandled-rejections`
 * `--use-bundled-ca`
+* `--use-largepages`
 * `--use-openssl-ca`
 * `--v8-pool-size`
 * `--zero-fill-buffers`

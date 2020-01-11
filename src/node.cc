@@ -139,7 +139,6 @@ namespace node {
 
 using native_module::NativeModuleEnv;
 
-using v8::Boolean;
 using v8::EscapableHandleScope;
 using v8::Function;
 using v8::FunctionCallbackInfo;
@@ -317,25 +316,59 @@ MaybeLocal<Value> Environment::BootstrapNode() {
   global->Set(context(), FIXED_ONE_BYTE_STRING(isolate_, "global"), global)
       .Check();
 
-  // process, require, internalBinding, isMainThread,
-  // ownsProcessState, primordials
+  // process, require, internalBinding, primordials
   std::vector<Local<String>> node_params = {
       process_string(),
       require_string(),
       internal_binding_string(),
-      FIXED_ONE_BYTE_STRING(isolate_, "isMainThread"),
-      FIXED_ONE_BYTE_STRING(isolate_, "ownsProcessState"),
       primordials_string()};
   std::vector<Local<Value>> node_args = {
       process_object(),
       native_module_require(),
       internal_binding_loader(),
-      Boolean::New(isolate_, is_main_thread()),
-      Boolean::New(isolate_, owns_process_state()),
       primordials()};
 
   MaybeLocal<Value> result = ExecuteBootstrapper(
       this, "internal/bootstrap/node", &node_params, &node_args);
+
+  if (result.IsEmpty()) {
+    return scope.EscapeMaybe(result);
+  }
+
+  if (is_main_thread()) {
+    result = ExecuteBootstrapper(this,
+                                 "internal/bootstrap/switches/is_main_thread",
+                                 &node_params,
+                                 &node_args);
+  } else {
+    result =
+        ExecuteBootstrapper(this,
+                            "internal/bootstrap/switches/is_not_main_thread",
+                            &node_params,
+                            &node_args);
+  }
+
+  if (result.IsEmpty()) {
+    return scope.EscapeMaybe(result);
+  }
+
+  if (owns_process_state()) {
+    result = ExecuteBootstrapper(
+        this,
+        "internal/bootstrap/switches/does_own_process_state",
+        &node_params,
+        &node_args);
+  } else {
+    result = ExecuteBootstrapper(
+        this,
+        "internal/bootstrap/switches/does_not_own_process_state",
+        &node_params,
+        &node_args);
+  }
+
+  if (result.IsEmpty()) {
+    return scope.EscapeMaybe(result);
+  }
 
   Local<Object> env_var_proxy;
   if (!CreateEnvVarProxy(context(), isolate_, as_callback_data())
@@ -427,9 +460,6 @@ MaybeLocal<Value> StartMainThreadExecution(Environment* env) {
     return StartExecution(env, "internal/main/print_help");
   }
 
-  if (per_process::cli_options->print_bash_completion) {
-    return StartExecution(env, "internal/main/print_bash_completion");
-  }
 
   if (env->options()->prof_process) {
     return StartExecution(env, "internal/main/prof_process");
@@ -965,6 +995,12 @@ void Init(int* argc,
     exit(0);
   }
 
+  if (per_process::cli_options->print_bash_completion) {
+    std::string completion = options_parser::GetBashCompletion();
+    printf("%s\n", completion.c_str());
+    exit(0);
+  }
+
   if (per_process::cli_options->print_v8_help) {
     // Doesn't return.
     V8::SetFlagsFromString("--help", static_cast<size_t>(6));
@@ -1098,14 +1134,6 @@ InitializationResult InitializeOncePerProcess(int argc, char** argv) {
 
   CHECK_GT(argc, 0);
 
-#ifdef NODE_ENABLE_LARGE_CODE_PAGES
-  if (node::IsLargePagesEnabled()) {
-    if (node::MapStaticCodeToLargePages() != 0) {
-      fprintf(stderr, "Reverting to default page size\n");
-    }
-  }
-#endif
-
   // Hack around with the argv pointer. Used for process.title = "blah".
   argv = uv_setup_args(argc, argv);
 
@@ -1125,11 +1153,37 @@ InitializationResult InitializeOncePerProcess(int argc, char** argv) {
     }
   }
 
+#if defined(NODE_ENABLE_LARGE_CODE_PAGES) && NODE_ENABLE_LARGE_CODE_PAGES
+  if (per_process::cli_options->use_largepages == "on" ||
+      per_process::cli_options->use_largepages == "silent") {
+    if (node::IsLargePagesEnabled()) {
+      if (node::MapStaticCodeToLargePages() != 0 &&
+          per_process::cli_options->use_largepages != "silent") {
+        fprintf(stderr,
+                "Mapping code to large pages failed. Reverting to default page "
+                "size.\n");
+      }
+    } else if (per_process::cli_options->use_largepages != "silent") {
+      fprintf(stderr, "Large pages are not enabled.\n");
+    }
+  }
+#else
+  if (per_process::cli_options->use_largepages == "on") {
+    fprintf(stderr, "Mapping to large pages is not supported.\n");
+  }
+#endif  // NODE_ENABLE_LARGE_CODE_PAGES
+
   if (per_process::cli_options->print_version) {
     printf("%s\n", NODE_VERSION);
     result.exit_code = 0;
     result.early_return = true;
     return result;
+  }
+
+  if (per_process::cli_options->print_bash_completion) {
+    std::string completion = options_parser::GetBashCompletion();
+    printf("%s\n", completion.c_str());
+    exit(0);
   }
 
   if (per_process::cli_options->print_v8_help) {

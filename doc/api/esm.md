@@ -57,11 +57,11 @@ or when referenced by `import` statements within ES module code:
 * Strings passed in as an argument to `--eval` or `--print`, or piped to
   `node` via `STDIN`, with the flag `--input-type=commonjs`.
 
-### <code>package.json</code> <code>"type"</code> field
+### `package.json` `"type"` field
 
-Files ending with `.js` or `.mjs`, or lacking any extension,
-will be loaded as ES modules when the nearest parent `package.json` file
-contains a top-level field `"type"` with a value of `"module"`.
+Files ending with `.js` or lacking any extension will be loaded as ES modules
+when the nearest parent `package.json` file contains a top-level field `"type"`
+with a value of `"module"`.
 
 The nearest parent `package.json` is defined as the first `package.json` found
 when searching in the current folder, that folder’s parent, and so on up
@@ -84,7 +84,8 @@ If the nearest parent `package.json` lacks a `"type"` field, or contains
 `"type": "commonjs"`, extensionless and `.js` files are treated as CommonJS.
 If the volume root is reached and no `package.json` is found,
 Node.js defers to the default, a `package.json` with no `"type"`
-field.
+field. "Extensionless" refers to file paths which do not contain
+an extension as opposed to optionally dropping a file extension in a specifier.
 
 `import` statements of `.js` and extensionless files are treated as ES modules
 if the nearest parent `package.json` contains `"type": "module"`.
@@ -99,6 +100,9 @@ sources are CommonJS. Being explicit about the `type` of the package will
 future-proof the package in case the default type of Node.js ever changes, and
 it will also make things easier for build tools and loaders to determine how the
 files in the package should be interpreted.
+
+Regardless of the value of the `"type"` field, `.mjs` files are always treated
+as ES modules and `.cjs` files are always treated as CommonJS.
 
 ### Package Scope and File Extensions
 
@@ -158,7 +162,7 @@ package scope:
   extension (since both `.js` and `.cjs` files are treated as CommonJS within a
   `"commonjs"` package scope).
 
-### <code>--input-type</code> flag
+### `--input-type` flag
 
 Strings passed in as an argument to `--eval` or `--print` (or `-e` or `-p`), or
 piped to `node` via `STDIN`, will be treated as ES modules when the
@@ -189,7 +193,7 @@ defined in `"exports"`. If package entry points are defined in both `"main"` and
 `"exports"`. [Conditional Exports][] can also be used within `"exports"` to
 define different package entry points per environment.
 
-#### <code>package.json</code> <code>"main"</code>
+#### `package.json` `"main"`
 
 The `package.json` `"main"` field defines the entry point for a package,
 whether the package is included into CommonJS via `require` or into an ES
@@ -709,7 +713,7 @@ If the `--experimental-conditional-exports` flag is dropped and therefore
 easily updated to use conditional exports by adding conditions to the `"."`
 path; while keeping `"./module"` for backward compatibility.
 
-## <code>import</code> Specifiers
+## `import` Specifiers
 
 ### Terminology
 
@@ -766,7 +770,7 @@ import 'data:text/javascript,console.log("hello!");';
 import _ from 'data:application/json,"world!"';
 ```
 
-## import.meta
+## `import.meta`
 
 * {Object}
 
@@ -785,12 +789,12 @@ indexes (e.g. `'./startup/index.js'`) must also be fully specified.
 This behavior matches how `import` behaves in browser environments, assuming a
 typically configured server.
 
-### No <code>NODE_PATH</code>
+### No `NODE_PATH`
 
 `NODE_PATH` is not part of resolving `import` specifiers. Please use symlinks
 if this behavior is desired.
 
-### No <code>require</code>, <code>exports</code>, <code>module.exports</code>, <code>\_\_filename</code>, <code>\_\_dirname</code>
+### No `require`, `exports`, `module.exports`, `__filename`, `__dirname`
 
 These CommonJS variables are not available in ES modules.
 
@@ -807,12 +811,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 ```
 
-### No <code>require.extensions</code>
+### No `require.extensions`
 
 `require.extensions` is not used by `import`. The expectation is that loader
 hooks can provide this workflow in the future.
 
-### No <code>require.cache</code>
+### No `require.cache`
 
 `require.cache` is not used by `import`. It has a separate cache.
 
@@ -834,7 +838,7 @@ For now, only modules using the `file:` protocol can be loaded.
 
 ## Interoperability with CommonJS
 
-### <code>require</code>
+### `require`
 
 `require` always treats the files it references as CommonJS. This applies
 whether `require` is used the traditional way within a CommonJS environment, or
@@ -842,7 +846,7 @@ in an ES module environment using [`module.createRequire()`][].
 
 To include an ES module into CommonJS, use [`import()`][].
 
-### <code>import</code> statements
+### `import` statements
 
 An `import` statement can reference an ES module or a CommonJS module. Other
 file types such as JSON or Native modules are not supported. For those, use
@@ -873,7 +877,7 @@ import packageMain from 'commonjs-package'; // Works
 import { method } from 'commonjs-package'; // Errors
 ```
 
-### <code>import()</code> expressions
+### `import()` expressions
 
 Dynamic `import()` is supported in both CommonJS and ES modules. It can be used
 to include ES module files from CommonJS code.
@@ -1153,15 +1157,13 @@ updates.
 In the following algorithms, all subroutine errors are propagated as errors
 of these top-level routines unless stated otherwise.
 
-_isMain_ is **true** when resolving the Node.js application entry point.
-
 _defaultEnv_ is the conditional environment name priority array,
 `["node", "import"]`.
 
 <details>
 <summary>Resolver algorithm specification</summary>
 
-**ESM_RESOLVE**(_specifier_, _parentURL_, _isMain_)
+**ESM_RESOLVE**(_specifier_, _parentURL_)
 
 > 1. Let _resolvedURL_ be **undefined**.
 > 1. If _specifier_ is a valid URL, then
@@ -1182,7 +1184,7 @@ _defaultEnv_ is the conditional environment name priority array,
 > 1. If the file at _resolvedURL_ does not exist, then
 >    1. Throw a _Module Not Found_ error.
 > 1. Set _resolvedURL_ to the real path of _resolvedURL_.
-> 1. Let _format_ be the result of **ESM_FORMAT**(_resolvedURL_, _isMain_).
+> 1. Let _format_ be the result of **ESM_FORMAT**(_resolvedURL_).
 > 1. Load _resolvedURL_ as module format, _format_.
 
 **PACKAGE_RESOLVE**(_packageSpecifier_, _parentURL_)
@@ -1206,6 +1208,9 @@ _defaultEnv_ is the conditional environment name priority array,
 > 1. If _packageSubpath_ contains any _"."_ or _".."_ segments or percent
 >    encoded strings for _"/"_ or _"\\"_, then
 >    1. Throw an _Invalid Specifier_ error.
+> 1. Set _selfUrl_ to the result of
+>    **SELF_REFERENCE_RESOLVE**(_packageName_, _packageSubpath_, _parentURL_).
+> 1. If _selfUrl_ isn't empty, return _selfUrl_.
 > 1. If _packageSubpath_ is _undefined_ and _packageName_ is a Node.js builtin
 >    module, then
 >    1. Return the string _"node:"_ concatenated with _packageSpecifier_.
@@ -1227,30 +1232,27 @@ _defaultEnv_ is the conditional environment name priority array,
 >             1. Return **PACKAGE_EXPORTS_RESOLVE**(_packageURL_,
 >                _packageSubpath_, _pjson.exports_).
 >       1. Return the URL resolution of _packageSubpath_ in _packageURL_.
-> 1. Set _selfUrl_ to the result of
->    **SELF_REFERENCE_RESOLE**(_packageSpecifier_, _parentURL_).
-> 1. If _selfUrl_ isn't empty, return _selfUrl_.
 > 1. Throw a _Module Not Found_ error.
 
-**SELF_REFERENCE_RESOLVE**(_specifier_, _parentURL_)
+**SELF_REFERENCE_RESOLVE**(_packageName_, _packageSubpath_, _parentURL_)
 
 > 1. Let _packageURL_ be the result of **READ_PACKAGE_SCOPE**(_parentURL_).
 > 1. If _packageURL_ is **null**, then
->    1. Return an empty result.
+>    1. Return **undefined**.
 > 1. Let _pjson_ be the result of **READ_PACKAGE_JSON**(_packageURL_).
-> 1. Set _name_ to _pjson.name_.
-> 1. If _name_ is empty, then return an empty result.
-> 1. If _name_ is equal to _specifier_, then
->    1. Return the result of **PACKAGE_MAIN_RESOLVE**(_packageURL_, _pjson_).
-> 1. If _specifier_ starts with _name_ followed by "/", then
->    1. Set _subpath_ to everything after the "/".
->    1. If _pjson_ is not **null** and _pjson_ has an _"exports"_ key, then
->       1. Let _exports_ be _pjson.exports_.
->       1. If _exports_ is not **null** or **undefined**, then
->          1. Return **PACKAGE_EXPORTS_RESOLVE**(_packageURL_, _subpath_,
->             _pjson.exports_).
->    1. Return the URL resolution of _subpath_ in _packageURL_.
-> 1. Otherwise return an empty result.
+> 1. If _pjson_ does not include an _"exports"_ property, then
+>    1. Return **undefined**.
+> 1. If _pjson.name_ is equal to _packageName_, then
+>    1. If _packageSubpath_ is _undefined_, then
+>       1. Return the result of **PACKAGE_MAIN_RESOLVE**(_packageURL_, _pjson_).
+>    1. Otherwise,
+>       1. If _pjson_ is not **null** and _pjson_ has an _"exports"_ key, then
+>          1. Let _exports_ be _pjson.exports_.
+>          1. If _exports_ is not **null** or **undefined**, then
+>             1. Return **PACKAGE_EXPORTS_RESOLVE**(_packageURL_, _subpath_,
+>                _pjson.exports_).
+>       1. Return the URL resolution of _subpath_ in _packageURL_.
+> 1. Otherwise, return **undefined**.
 
 **PACKAGE_MAIN_RESOLVE**(_packageURL_, _pjson_)
 
@@ -1333,20 +1335,20 @@ _defaultEnv_ is the conditional environment name priority array,
 >       1. Return _resolved_.
 > 1. Throw a _Module Not Found_ error.
 
-**ESM_FORMAT**(_url_, _isMain_)
+**ESM_FORMAT**(_url_)
 
-> 1. Assert: _url_ corresponds to an existing file.
+> 1. Assert: _url_ corresponds to an existing file pathname.
 > 1. Let _pjson_ be the result of **READ_PACKAGE_SCOPE**(_url_).
 > 1. If _url_ ends in _".mjs"_, then
 >    1. Return _"module"_.
 > 1. If _url_ ends in _".cjs"_, then
 >    1. Return _"commonjs"_.
 > 1. If _pjson?.type_ exists and is _"module"_, then
->    1. If _isMain_ is **true** or _url_ ends in _".js"_, then
+>    1. If _url_ ends in _".js"_ or lacks a file extension, then
 >       1. Return _"module"_.
 >    1. Throw an _Unsupported File Extension_ error.
 > 1. Otherwise,
->    1. If _isMain_ is **true**, then
+>    1. If _url_ lacks a file extension, then
 >       1. Return _"commonjs"_.
 >    1. Throw an _Unsupported File Extension_ error.
 

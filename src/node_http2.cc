@@ -297,13 +297,16 @@ void Http2Session::Http2Settings::RefreshDefaults(Environment* env) {
       DEFAULT_SETTINGS_MAX_FRAME_SIZE;
   buffer[IDX_SETTINGS_MAX_HEADER_LIST_SIZE] =
       DEFAULT_SETTINGS_MAX_HEADER_LIST_SIZE;
+  buffer[IDX_SETTINGS_ENABLE_CONNECT_PROTOCOL] =
+      DEFAULT_SETTINGS_ENABLE_CONNECT_PROTOCOL;
   buffer[IDX_SETTINGS_COUNT] =
     (1 << IDX_SETTINGS_HEADER_TABLE_SIZE) |
     (1 << IDX_SETTINGS_ENABLE_PUSH) |
     (1 << IDX_SETTINGS_MAX_CONCURRENT_STREAMS) |
     (1 << IDX_SETTINGS_INITIAL_WINDOW_SIZE) |
     (1 << IDX_SETTINGS_MAX_FRAME_SIZE) |
-    (1 << IDX_SETTINGS_MAX_HEADER_LIST_SIZE);
+    (1 << IDX_SETTINGS_MAX_HEADER_LIST_SIZE) |
+    (1 << IDX_SETTINGS_ENABLE_CONNECT_PROTOCOL);
 }
 
 
@@ -686,6 +689,13 @@ void Http2Session::Close(uint32_t code, bool socket_closed) {
   }
 
   flags_ |= SESSION_STATE_CLOSED;
+
+  // If we are writing we will get to make the callback in OnStreamAfterWrite.
+  if ((flags_ & SESSION_STATE_WRITE_IN_PROGRESS) == 0) {
+    Debug(this, "make done session callback");
+    HandleScope scope(env()->isolate());
+    MakeCallback(env()->ondone_string(), 0, nullptr);
+  }
 
   // If there are outstanding pings, those will need to be canceled, do
   // so on the next iteration of the event loop to avoid calling out into
@@ -1489,6 +1499,12 @@ void Http2Session::OnStreamAfterWrite(WriteWrap* w, int status) {
     stream_->ReadStart();
   }
 
+  if ((flags_ & SESSION_STATE_CLOSED) != 0) {
+    HandleScope scope(env()->isolate());
+    MakeCallback(env()->ondone_string(), 0, nullptr);
+    return;
+  }
+
   // If there is more incoming data queued up, consume it.
   if (stream_buf_offset_ > 0) {
     ConsumeHTTP2Data();
@@ -1773,7 +1789,7 @@ void Http2Session::OnStreamRead(ssize_t nread, const uv_buf_t& buf_) {
   Context::Scope context_scope(env()->context());
   Http2Scope h2scope(this);
   CHECK_NOT_NULL(stream_);
-  Debug(this, "receiving %d bytes", nread);
+  Debug(this, "receiving %d bytes, offset %d", nread, stream_buf_offset_);
   AllocatedBuffer buf(env(), buf_);
 
   // Only pass data on if nread > 0
@@ -3128,6 +3144,8 @@ void Initialize(Local<Object> target,
   NODE_DEFINE_CONSTANT(constants, DEFAULT_SETTINGS_MAX_CONCURRENT_STREAMS);
   NODE_DEFINE_CONSTANT(constants, DEFAULT_SETTINGS_INITIAL_WINDOW_SIZE);
   NODE_DEFINE_CONSTANT(constants, DEFAULT_SETTINGS_MAX_FRAME_SIZE);
+  NODE_DEFINE_CONSTANT(constants, DEFAULT_SETTINGS_MAX_HEADER_LIST_SIZE);
+  NODE_DEFINE_CONSTANT(constants, DEFAULT_SETTINGS_ENABLE_CONNECT_PROTOCOL);
   NODE_DEFINE_CONSTANT(constants, MAX_MAX_FRAME_SIZE);
   NODE_DEFINE_CONSTANT(constants, MIN_MAX_FRAME_SIZE);
   NODE_DEFINE_CONSTANT(constants, MAX_INITIAL_WINDOW_SIZE);

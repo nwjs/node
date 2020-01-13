@@ -53,6 +53,10 @@
       'lib/internal/bootstrap/loaders.js',
       'lib/internal/bootstrap/node.js',
       'lib/internal/bootstrap/pre_execution.js',
+      'lib/internal/bootstrap/switches/does_own_process_state.js',
+      'lib/internal/bootstrap/switches/does_not_own_process_state.js',
+      'lib/internal/bootstrap/switches/is_main_thread.js',
+      'lib/internal/bootstrap/switches/is_not_main_thread.js',
       'lib/internal/per_context/primordials.js',
       'lib/internal/per_context/domexception.js',
       'lib/async_hooks.js',
@@ -165,7 +169,6 @@
       'lib/internal/main/eval_string.js',
       'lib/internal/main/eval_stdin.js',
       'lib/internal/main/inspect.js',
-      'lib/internal/main/print_bash_completion.js',
       'lib/internal/main/print_help.js',
       'lib/internal/main/prof_process.js',
       'lib/internal/main/repl.js',
@@ -188,14 +191,13 @@
       'lib/internal/priority_queue.js',
       'lib/internal/process/esm_loader.js',
       'lib/internal/process/execution.js',
-      'lib/internal/process/main_thread_only.js',
       'lib/internal/process/per_thread.js',
       'lib/internal/process/policy.js',
       'lib/internal/process/promises.js',
-      'lib/internal/process/stdio.js',
       'lib/internal/process/warning.js',
       'lib/internal/process/worker_thread_only.js',
       'lib/internal/process/report.js',
+      'lib/internal/process/signal.js',
       'lib/internal/process/task_queues.js',
       'lib/internal/querystring.js',
       'lib/internal/readline/utils.js',
@@ -320,7 +322,7 @@
           '-Wl,-bnoerrmsg',
         ],
       }],
-      ['OS in ("linux") and llvm_version != "0.0"', {
+      ['OS == "linux" and llvm_version != "0.0"', {
         'libraries': ['-latomic'],
       }],
     ],
@@ -888,10 +890,9 @@
             }],
           ],
         }],
-        [ 'node_use_large_pages=="true" and OS in "linux freebsd mac"', {
+        [ 'OS in "linux freebsd mac" and '
+          'target_arch=="x64"', {
           'defines': [ 'NODE_ENABLE_LARGE_CODE_PAGES=1' ],
-          # The current implementation of Large Pages is under Linux.
-          # Other implementations are possible but not currently supported.
           'sources': [
             'src/large_pages/node_large_page.cc',
             'src/large_pages/node_large_page.h'

@@ -1,6 +1,6 @@
 'use strict';
 
-// Flags: --experimental-wasi-unstable-preview0
+// Flags: --experimental-wasi-unstable-preview1
 
 require('../common');
 const assert = require('assert');
@@ -20,3 +20,14 @@ assert.throws(() => { new WASI({ env: 'fhqwhgads' }); },
 // If preopens is not an Object and not undefined, it should throw.
 assert.throws(() => { new WASI({ preopens: 'fhqwhgads' }); },
               { code: 'ERR_INVALID_ARG_TYPE', message: /\bpreopens\b/ });
+
+// If options is provided, but not an object, the constructor should throw.
+[null, 'foo', '', 0, NaN, Symbol(), true, false, () => {}].forEach((value) => {
+  assert.throws(() => { new WASI(value); },
+                { code: 'ERR_INVALID_ARG_TYPE' });
+});
+
+// Verify that exceptions thrown from the binding layer are handled.
+assert.throws(() => {
+  new WASI({ preopens: { '/sandbox': '__/not/real/path' } });
+}, { code: 'UVWASI_ENOENT', message: /uvwasi_init/ });

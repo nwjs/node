@@ -15,8 +15,12 @@ rules:
       message: "Use `const { BigInt } = primordials;` instead of the global."
     - name: Boolean
       message: "Use `const { Boolean } = primordials;` instead of the global."
+    - name: Error
+      message: "Use `const { Error } = primordials;` instead of the global."
     - name: JSON
       message: "Use `const { JSON } = primordials;` instead of the global."
+    - name: Map
+      message: "Use `const { Map } = primordials;` instead of the global."
     - name: Math
       message: "Use `const { Math } = primordials;` instead of the global."
     - name: Number
@@ -27,8 +31,14 @@ rules:
       message: "Use `const { Promise } = primordials;` instead of the global."
     - name: Reflect
       message: "Use `const { Reflect } = primordials;` instead of the global."
+    - name: Set
+      message: "Use `const { Set } = primordials;` instead of the global."
     - name: Symbol
       message: "Use `const { Symbol } = primordials;` instead of the global."
+    - name: WeakMap
+      message: "Use `const { WeakMap } = primordials;` instead of the global."
+    - name: WeakSet
+      message: "Use `const { WeakSet } = primordials;` instead of the global."
   no-restricted-syntax:
     # Config copied from .eslintrc.js
     - error

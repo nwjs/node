@@ -115,7 +115,10 @@
           'defines': [ 'CARES_BUILDING_LIBRARY' ]
         }],
         [ 'OS=="win"', {
-          'defines': [ 'CARES_PULL_WS2TCPIP_H=1' ],
+          'defines': [
+            'CARES_PULL_WS2TCPIP_H=1',
+            '_WINSOCK_DEPRECATED_NO_WARNINGS',
+          ],
           'include_dirs': [ 'config/win32' ],
           'msvs_disabled_warnings': [4133],
           'sources': [

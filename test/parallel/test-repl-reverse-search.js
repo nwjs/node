@@ -223,7 +223,7 @@ const tests = [
       '\r\n',
       '\x1B[1G', '\x1B[0J',
       prompt, '\x1B[3G',
-      '1', '+', '1', '\n// 2', '\x1B[1C\x1B[1A',
+      '1', '+', '1', '\n// 2', '\x1B[6G', '\x1B[1A',
       '\x1B[1B', '\x1B[2K', '\x1B[1A',
       '\r\n',
       '2\n',
@@ -239,7 +239,7 @@ const tests = [
       '2\n',
       '\x1B[1G', '\x1B[0J',
       prompt, '\x1B[3G',
-      '2', '\n// 2', '\x1B[1D\x1B[1A',
+      '2', '\n// 2', '\x1B[4G', '\x1B[1A',
       '\x1B[1B', '\x1B[2K', '\x1B[1A',
       '\nbck-i-search: _', '\x1B[1A', '\x1B[4G',
       '\x1B[3G', '\x1B[0J',
@@ -252,7 +252,7 @@ const tests = [
       `${prompt}ab = "aaaa"`, '\x1B[14G',
       '\x1B[1G', '\x1B[0J',
       `${prompt}repl.repl.historyIndex`, '\x1B[25G', '\n// -1',
-      '\x1B[19C\x1B[1A',
+      '\x1B[25G', '\x1B[1A',
       '\x1B[1B', '\x1B[2K', '\x1B[1A',
       '\nfwd-i-search: _', '\x1B[1A', '\x1B[25G',
       '\x1B[3G', '\x1B[0J',
@@ -309,10 +309,9 @@ function runTest() {
 
         lastChunks.push(output);
 
-        if (expected.length) {
+        if (expected.length && !opts.checkTotal) {
           try {
-            if (!opts.checkTotal)
-              assert.strictEqual(output, expected[i]);
+            assert.strictEqual(output, expected[i]);
           } catch (e) {
             console.error(`Failed test # ${numtests - tests.length}`);
             console.error('Last outputs: ' + inspect(lastChunks, {
@@ -342,7 +341,8 @@ function runTest() {
 
       if (opts.checkTotal) {
         assert.deepStrictEqual(lastChunks, expected);
-      } else if (expected.length !== 0) {
+      } else if (expected.length !== i) {
+        console.error(tests[numtests - tests.length - 1]);
         throw new Error(`Failed test # ${numtests - tests.length}`);
       }
 

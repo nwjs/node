@@ -493,8 +493,12 @@ implementation can use to persist VM-specific state. This structure is passed
 to native functions when they're invoked, and it must be passed back when
 making N-API calls. Specifically, the same `napi_env` that was passed in when
 the initial native function was called must be passed to any subsequent
-nested N-API calls. Caching the `napi_env` for the purpose of general reuse is
-not allowed.
+nested N-API calls. Caching the `napi_env` for the purpose of general reuse,
+and passing the `napi_env` between instances of the same addon running on
+different [`Worker`][] threads is not allowed. The `napi_env` becomes invalid
+when an instance of a native addon is unloaded. Notification of this event is
+delivered through the callbacks given to [`napi_add_env_cleanup_hook`][] and
+[`napi_set_instance_data`][].
 
 ### napi_value
 
@@ -1656,6 +1660,66 @@ However, for better performance, it's better for the caller to make sure that
 the `napi_value` in question is of the JavaScript type expected by the API.
 
 ### Enum types
+#### napi_key_collection_mode
+<!-- YAML
+added: v13.7.0
+-->
+
+> Stability: 1 - Experimental
+
+```C
+typedef enum {
+  napi_key_include_prototypes,
+  napi_key_own_only
+} napi_key_collection_mode;
+```
+
+Describes the `Keys/Properties` filter enums:
+
+`napi_key_collection_mode` limits the range of collected properties.
+
+`napi_key_own_only` limits the collected properties to the given
+object only. `napi_key_include_prototypes` will include all keys
+of the objects's prototype chain as well.
+
+#### napi_key_filter
+<!-- YAML
+added: v13.7.0
+-->
+
+> Stability: 1 - Experimental
+
+```C
+typedef enum {
+  napi_key_all_properties = 0,
+  napi_key_writable = 1,
+  napi_key_enumerable = 1 << 1,
+  napi_key_configurable = 1 << 2,
+  napi_key_skip_strings = 1 << 3,
+  napi_key_skip_symbols = 1 << 4
+} napi_key_filter;
+```
+
+Property filter bits. They can be or'ed to build a composite filter.
+
+#### napi_key_conversion
+<!-- YAML
+added: v13.7.0
+-->
+
+> Stability: 1 - Experimental
+
+```C
+typedef enum {
+  napi_key_keep_numbers,
+  napi_key_numbers_to_strings
+} napi_key_conversion;
+```
+
+`napi_key_numbers_to_strings` will convert integer indices to
+strings. `napi_key_keep_numbers` will return numbers for integer
+indices.
+
 #### napi_valuetype
 
 ```C
@@ -3528,6 +3592,37 @@ This API returns the names of the enumerable properties of `object` as an array
 of strings. The properties of `object` whose key is a symbol will not be
 included.
 
+#### napi_get_all_property_names
+<!-- YAML
+added: v13.7.0
+-->
+
+> Stability: 1 - Experimental
+
+```C
+napi_get_all_property_names(napi_env env,
+                            napi_value object,
+                            napi_key_collection_mode key_mode,
+                            napi_key_filter key_filter,
+                            napi_key_conversion key_conversion,
+                            napi_value* result);
+```
+
+* `[in] env`: The environment that the N-API call is invoked under.
+* `[in] object`: The object from which to retrieve the properties.
+* `[in] key_mode`: Whether to retrieve prototype properties as well.
+* `[in] key_filter`: Which properties to retrieve
+(enumerable/readable/writable).
+* `[in] key_conversion`: Whether to convert numbered property keys to strings.
+* `[out] result`: A `napi_value` representing an array of JavaScript values
+that represent the property names of the object. [`napi_get_array_length`][] and
+[`napi_get_element`][] can be used to iterate over `result`.
+
+Returns `napi_ok` if the API succeeded.
+
+This API returns an array containing the names of the available properties
+of this object.
+
 #### napi_set_property
 <!-- YAML
 added: v8.0.0
@@ -5304,8 +5399,10 @@ This API may only be called from the main thread.
 [Xcode]: https://developer.apple.com/xcode/
 [`Number.MAX_SAFE_INTEGER`]: https://tc39.github.io/ecma262/#sec-number.max_safe_integer
 [`Number.MIN_SAFE_INTEGER`]: https://tc39.github.io/ecma262/#sec-number.min_safe_integer
+[`Worker`]: worker_threads.html#worker_threads_class_worker
 [`global`]: globals.html#globals_global
 [`init` hooks]: async_hooks.html#async_hooks_init_asyncid_type_triggerasyncid_resource
+[`napi_add_env_cleanup_hook`]: #n_api_napi_add_env_cleanup_hook
 [`napi_add_finalizer`]: #n_api_napi_add_finalizer
 [`napi_async_init`]: #n_api_napi_async_init
 [`napi_cancel_async_work`]: #n_api_napi_cancel_async_work
@@ -5341,6 +5438,7 @@ This API may only be called from the main thread.
 [`napi_queue_async_work`]: #n_api_napi_queue_async_work
 [`napi_reference_ref`]: #n_api_napi_reference_ref
 [`napi_reference_unref`]: #n_api_napi_reference_unref
+[`napi_set_instance_data`]: #n_api_napi_set_instance_data
 [`napi_set_property`]: #n_api_napi_set_property
 [`napi_throw_error`]: #n_api_napi_throw_error
 [`napi_throw_range_error`]: #n_api_napi_throw_range_error

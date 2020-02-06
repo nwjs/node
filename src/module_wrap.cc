@@ -2,17 +2,17 @@
 
 #include "env.h"
 #include "memory_tracker-inl.h"
-#include "node_errors.h"
-#include "node_url.h"
-#include "util-inl.h"
 #include "node_contextify.h"
-#include "node_watchdog.h"
+#include "node_errors.h"
+#include "node_internals.h"
 #include "node_process.h"
+#include "node_url.h"
+#include "node_watchdog.h"
+#include "util-inl.h"
 
 #include <sys/stat.h>  // S_IFDIR
 
 #include <algorithm>
-#include <climits>  // PATH_MAX
 
 namespace node {
 namespace loader {
@@ -23,6 +23,7 @@ using node::contextify::ContextifyContext;
 using node::url::URL;
 using node::url::URL_FLAGS_FAILED;
 using v8::Array;
+using v8::ArrayBufferView;
 using v8::Context;
 using v8::Function;
 using v8::FunctionCallbackInfo;
@@ -45,6 +46,7 @@ using v8::Promise;
 using v8::ScriptCompiler;
 using v8::ScriptOrigin;
 using v8::String;
+using v8::UnboundModuleScript;
 using v8::Undefined;
 using v8::Value;
 
@@ -132,7 +134,7 @@ void ModuleWrap::New(const FunctionCallbackInfo<Value>& args) {
     // new ModuleWrap(url, context, exportNames, syntheticExecutionFunction)
     CHECK(args[3]->IsFunction());
   } else {
-    // new ModuleWrap(url, context, source, lineOffset, columOffset)
+    // new ModuleWrap(url, context, source, lineOffset, columOffset, cachedData)
     CHECK(args[2]->IsString());
     CHECK(args[3]->IsNumber());
     line_offset = args[3].As<Integer>();
@@ -168,6 +170,17 @@ void ModuleWrap::New(const FunctionCallbackInfo<Value>& args) {
       module = Module::CreateSyntheticModule(isolate, url, export_names,
         SyntheticModuleEvaluationStepsCallback);
     } else {
+      ScriptCompiler::CachedData* cached_data = nullptr;
+      if (!args[5]->IsUndefined()) {
+        CHECK(args[5]->IsArrayBufferView());
+        Local<ArrayBufferView> cached_data_buf = args[5].As<ArrayBufferView>();
+        uint8_t* data = static_cast<uint8_t*>(
+            cached_data_buf->Buffer()->GetBackingStore()->Data());
+        cached_data =
+            new ScriptCompiler::CachedData(data + cached_data_buf->ByteOffset(),
+                                           cached_data_buf->ByteLength());
+      }
+
       Local<String> source_text = args[2].As<String>();
       ScriptOrigin origin(url,
                           line_offset,                      // line offset
@@ -179,8 +192,15 @@ void ModuleWrap::New(const FunctionCallbackInfo<Value>& args) {
                           False(isolate),                   // is WASM
                           True(isolate),                    // is ES Module
                           host_defined_options);
-      ScriptCompiler::Source source(source_text, origin);
-      if (!ScriptCompiler::CompileModule(isolate, &source).ToLocal(&module)) {
+      ScriptCompiler::Source source(source_text, origin, cached_data);
+      ScriptCompiler::CompileOptions options;
+      if (source.GetCachedData() == nullptr) {
+        options = ScriptCompiler::kNoCompileOptions;
+      } else {
+        options = ScriptCompiler::kConsumeCodeCache;
+      }
+      if (!ScriptCompiler::CompileModule(isolate, &source, options)
+               .ToLocal(&module)) {
         if (try_catch.HasCaught() && !try_catch.HasTerminated()) {
           CHECK(!try_catch.Message().IsEmpty());
           CHECK(!try_catch.Exception().IsEmpty());
@@ -188,6 +208,13 @@ void ModuleWrap::New(const FunctionCallbackInfo<Value>& args) {
                               ErrorHandlingMode::MODULE_ERROR);
           try_catch.ReThrow();
         }
+        return;
+      }
+      if (options == ScriptCompiler::kConsumeCodeCache &&
+          source.GetCachedData()->rejected) {
+        THROW_ERR_VM_MODULE_CACHED_DATA_REJECTED(
+            env, "cachedData buffer was rejected");
+        try_catch.ReThrow();
         return;
       }
     }
@@ -908,6 +935,25 @@ Maybe<URL> ResolveExportsTargetString(Environment* env,
   return Just(subpath_resolved);
 }
 
+bool IsArrayIndex(Environment* env, Local<Value> p) {
+  Local<Context> context = env->context();
+  Local<String> p_str = p->ToString(context).ToLocalChecked();
+  double n_dbl = static_cast<double>(p_str->NumberValue(context).FromJust());
+  Local<Number> n = Number::New(env->isolate(), n_dbl);
+  Local<String> cmp_str = n->ToString(context).ToLocalChecked();
+  if (!p_str->Equals(context, cmp_str).FromJust()) {
+    return false;
+  }
+  if (n_dbl == 0 && std::signbit(n_dbl) == false) {
+    return true;
+  }
+  Local<Integer> cmp_integer;
+  if (!n->ToInteger(context).ToLocal(&cmp_integer)) {
+    return false;
+  }
+  return n_dbl > 0 && n_dbl < (2 ^ 32) - 1;
+}
+
 Maybe<URL> ResolveExportsTarget(Environment* env,
                                 const URL& pjson_url,
                                 Local<Value> target,
@@ -953,44 +999,49 @@ Maybe<URL> ResolveExportsTarget(Environment* env,
       return Nothing<URL>();
   } else if (target->IsObject()) {
     Local<Object> target_obj = target.As<Object>();
-    bool matched = false;
+    Local<Array> target_obj_keys =
+        target_obj->GetOwnPropertyNames(context).ToLocalChecked();
     Local<Value> conditionalTarget;
-    if (env->options()->experimental_conditional_exports &&
-        target_obj->HasOwnProperty(context, env->node_string()).FromJust()) {
-      matched = true;
-      conditionalTarget =
-          target_obj->Get(context, env->node_string()).ToLocalChecked();
-      Maybe<URL> resolved = ResolveExportsTarget(env, pjson_url,
-            conditionalTarget, subpath, pkg_subpath, base, false);
-      if (!resolved.IsNothing()) {
-        ProcessEmitExperimentalWarning(env, "Conditional exports");
-        return resolved;
+    bool matched = false;
+    for (uint32_t i = 0; i < target_obj_keys->Length(); ++i) {
+      Local<Value> key =
+          target_obj_keys->Get(context, i).ToLocalChecked();
+      if (IsArrayIndex(env, key)) {
+        const std::string msg = "Invalid package config for " +
+            pjson_url.ToFilePath() + ", \"exports\" cannot contain numeric " +
+            "property keys.";
+        node::THROW_ERR_INVALID_PACKAGE_CONFIG(env, msg.c_str());
+        return Nothing<URL>();
       }
     }
-    if (env->options()->experimental_conditional_exports &&
-        target_obj->HasOwnProperty(context, env->import_string()).FromJust()) {
-      matched = true;
-      conditionalTarget =
-          target_obj->Get(context, env->import_string()).ToLocalChecked();
-      Maybe<URL> resolved = ResolveExportsTarget(env, pjson_url,
+    for (uint32_t i = 0; i < target_obj_keys->Length(); ++i) {
+      Local<Value> key = target_obj_keys->Get(context, i).ToLocalChecked();
+      Utf8Value key_utf8(env->isolate(),
+                         key->ToString(context).ToLocalChecked());
+      std::string key_str(*key_utf8, key_utf8.length());
+      if (key_str == "node" || key_str == "import") {
+        matched = true;
+        conditionalTarget = target_obj->Get(context, key).ToLocalChecked();
+        Maybe<URL> resolved = ResolveExportsTarget(env, pjson_url,
             conditionalTarget, subpath, pkg_subpath, base, false);
-      if (!resolved.IsNothing()) {
-        return resolved;
-      }
-    }
-    if (target_obj->HasOwnProperty(context, env->default_string()).FromJust()) {
-      matched = true;
-      conditionalTarget =
-          target_obj->Get(context, env->default_string()).ToLocalChecked();
-      Maybe<URL> resolved = ResolveExportsTarget(env, pjson_url,
+        if (!resolved.IsNothing()) {
+          ProcessEmitExperimentalWarning(env, "Conditional exports");
+          return resolved;
+        }
+      } else if (key_str == "default") {
+        matched = true;
+        conditionalTarget = target_obj->Get(context, key).ToLocalChecked();
+        Maybe<URL> resolved = ResolveExportsTarget(env, pjson_url,
             conditionalTarget, subpath, pkg_subpath, base, false);
-      if (!resolved.IsNothing()) {
-        return resolved;
+        if (!resolved.IsNothing()) {
+          ProcessEmitExperimentalWarning(env, "Conditional exports");
+          return resolved;
+        }
       }
     }
     if (matched && throw_invalid) {
       Maybe<URL> resolved = ResolveExportsTarget(env, pjson_url,
-            conditionalTarget, subpath, pkg_subpath, base, true);
+          conditionalTarget, subpath, pkg_subpath, base, true);
       CHECK(resolved.IsNothing());
       return Nothing<URL>();
     }
@@ -1013,8 +1064,8 @@ Maybe<bool> IsConditionalExportsMainSugar(Environment* env,
       exports_obj->GetOwnPropertyNames(context).ToLocalChecked();
   bool isConditionalSugar = false;
   for (uint32_t i = 0; i < keys->Length(); ++i) {
-    Local<String> key = keys->Get(context, i).ToLocalChecked().As<String>();
-    Utf8Value key_utf8(env->isolate(), key);
+    Local<Value> key = keys->Get(context, i).ToLocalChecked();
+    Utf8Value key_utf8(env->isolate(), key->ToString(context).ToLocalChecked());
     bool curIsConditionalSugar = key_utf8.length() == 0 || key_utf8[0] != '.';
     if (i == 0) {
       isConditionalSugar = curIsConditionalSugar;
@@ -1122,13 +1173,13 @@ Maybe<URL> PackageExportsResolve(Environment* env,
   Local<Array> keys =
       exports_obj->GetOwnPropertyNames(context).ToLocalChecked();
   for (uint32_t i = 0; i < keys->Length(); ++i) {
-    Local<String> key = keys->Get(context, i).ToLocalChecked().As<String>();
-    Utf8Value key_utf8(isolate, key);
+    Local<Value> key = keys->Get(context, i).ToLocalChecked();
+    Utf8Value key_utf8(isolate, key->ToString(context).ToLocalChecked());
     std::string key_str(*key_utf8, key_utf8.length());
     if (key_str.back() != '/') continue;
     if (pkg_subpath.substr(0, key_str.length()) == key_str &&
         key_str.length() > best_match_str.length()) {
-      best_match = key;
+      best_match = key->ToString(context).ToLocalChecked();
       best_match_str = key_str;
     }
   }
@@ -1483,8 +1534,7 @@ MaybeLocal<Value> ModuleWrap::SyntheticModuleEvaluationStepsCallback(
   return ret;
 }
 
-void ModuleWrap::SetSyntheticExport(
-      const v8::FunctionCallbackInfo<v8::Value>& args) {
+void ModuleWrap::SetSyntheticExport(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
   Local<Object> that = args.This();
 
@@ -1504,6 +1554,35 @@ void ModuleWrap::SetSyntheticExport(
   USE(module->SetSyntheticModuleExport(isolate, export_name, export_value));
 }
 
+void ModuleWrap::CreateCachedData(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  Local<Object> that = args.This();
+
+  ModuleWrap* obj;
+  ASSIGN_OR_RETURN_UNWRAP(&obj, that);
+
+  CHECK(!obj->synthetic_);
+
+  Local<Module> module = obj->module_.Get(isolate);
+
+  CHECK_LT(module->GetStatus(), v8::Module::Status::kEvaluating);
+
+  Local<UnboundModuleScript> unbound_module_script =
+      module->GetUnboundModuleScript();
+  std::unique_ptr<ScriptCompiler::CachedData> cached_data(
+      ScriptCompiler::CreateCodeCache(unbound_module_script));
+  Environment* env = Environment::GetCurrent(args);
+  if (!cached_data) {
+    args.GetReturnValue().Set(Buffer::New(env, 0).ToLocalChecked());
+  } else {
+    MaybeLocal<Object> buf =
+        Buffer::Copy(env,
+                     reinterpret_cast<const char*>(cached_data->data),
+                     cached_data->length);
+    args.GetReturnValue().Set(buf.ToLocalChecked());
+  }
+}
+
 void ModuleWrap::Initialize(Local<Object> target,
                             Local<Value> unused,
                             Local<Context> context,
@@ -1519,6 +1598,7 @@ void ModuleWrap::Initialize(Local<Object> target,
   env->SetProtoMethod(tpl, "instantiate", Instantiate);
   env->SetProtoMethod(tpl, "evaluate", Evaluate);
   env->SetProtoMethod(tpl, "setExport", SetSyntheticExport);
+  env->SetProtoMethodNoSideEffect(tpl, "createCachedData", CreateCachedData);
   env->SetProtoMethodNoSideEffect(tpl, "getNamespace", GetNamespace);
   env->SetProtoMethodNoSideEffect(tpl, "getStatus", GetStatus);
   env->SetProtoMethodNoSideEffect(tpl, "getError", GetError);

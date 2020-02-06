@@ -59,6 +59,8 @@ const BACKSPACE = { name: 'backspace' };
 const WORD_LEFT = { name: 'left', ctrl: true };
 const WORD_RIGHT = { name: 'right', ctrl: true };
 const GO_TO_END = { name: 'end' };
+const DELETE_WORD_LEFT = { name: 'backspace', ctrl: true };
+const SIGINT = { name: 'c', ctrl: true };
 
 const prompt = '> ';
 const WAIT = '€';
@@ -78,18 +80,20 @@ const tests = [
   },
   {
     env: { NODE_REPL_HISTORY: defaultHistoryPath },
-    test: [UP, UP, UP, UP, UP, DOWN, DOWN, DOWN, DOWN],
+    test: [UP, UP, UP, UP, UP, DOWN, DOWN, DOWN, DOWN, DOWN],
     expected: [prompt,
                `${prompt}Array(100).fill(1).map((e, i) => i ** 2)`,
                prev && '\n// [ 0, 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121, ' +
                  '144, 169, 196, 225, 256, 289, 324, 361, 400, 441, 484, 529,' +
                  ' 576, 625, 676, 729, 784, 841, 900, 961, 1024, 1089, 1156, ' +
                  '1225, 1296, 1369, 1444, 1521, 1600, 1681, 1764, 1849, 1936,' +
-                 ' 2025, 2116, 2209, ...',
+                 ' 2025, 2116, 2209,...',
                `${prompt}{key : {key2 :[] }}`,
                prev && '\n// { key: { key2: [] } }',
                `${prompt}555 + 909`,
                prev && '\n// 1464',
+               `${prompt}let ab = 45`,
+               prompt,
                `${prompt}let ab = 45`,
                `${prompt}555 + 909`,
                prev && '\n// 1464',
@@ -100,14 +104,77 @@ const tests = [
                  '144, 169, 196, 225, 256, 289, 324, 361, 400, 441, 484, 529,' +
                  ' 576, 625, 676, 729, 784, 841, 900, 961, 1024, 1089, 1156, ' +
                  '1225, 1296, 1369, 1444, 1521, 1600, 1681, 1764, 1849, 1936,' +
-                 ' 2025, 2116, 2209, ...',
+                 ' 2025, 2116, 2209,...',
                prompt].filter((e) => typeof e === 'string'),
+    clean: false
+  },
+  { // Creates more history entries to navigate through.
+    env: { NODE_REPL_HISTORY: defaultHistoryPath },
+    test: [
+      '555 + 909', ENTER, // Add a duplicate to the history set.
+      'const foo = true', ENTER,
+      '555n + 111n', ENTER,
+      '5 + 5', ENTER,
+      '55 - 13 === 42', ENTER
+    ],
+    expected: [],
+    clean: false
+  },
+  {
+    env: { NODE_REPL_HISTORY: defaultHistoryPath },
+    checkTotal: true,
+    preview: false,
+    showEscapeCodes: true,
+    test: [
+      '55', UP, UP, UP, UP, UP, UP, ENTER
+    ],
+    expected: [
+      '\x1B[1G', '\x1B[0J', prompt, '\x1B[3G',
+      // '55'
+      '5', '5',
+      // UP
+      '\x1B[1G', '\x1B[0J',
+      '> 55 - 13 === 42', '\x1B[17G',
+      // UP - skipping 5 + 5
+      '\x1B[1G', '\x1B[0J',
+      '> 555n + 111n', '\x1B[14G',
+      // UP - skipping const foo = true
+      '\x1B[1G', '\x1B[0J',
+      '> 555 + 909', '\x1B[12G',
+      // UP, UP
+      // UPs at the end of the history reset the line to the original input.
+      '\x1B[1G', '\x1B[0J',
+      '> 55', '\x1B[5G',
+      // ENTER
+      '\r\n', '55\n',
+      '\x1B[1G', '\x1B[0J',
+      '> ', '\x1B[3G',
+      '\r\n'
+    ],
     clean: true
   },
   {
     env: { NODE_REPL_HISTORY: defaultHistoryPath },
     skip: !process.features.inspector,
     test: [
+      // あ is a fill width character with a length of one.
+      // 🐕 is a full width character with a length of two.
+      // 𐐷 is a half width character with the length of two.
+      // '\u0301', '0x200D', '\u200E' are zero width characters.
+      `const x1 = '${'あ'.repeat(124)}'`, ENTER, // Fully visible
+      ENTER,
+      `const y1 = '${'あ'.repeat(125)}'`, ENTER, // Cut off
+      ENTER,
+      `const x2 = '${'🐕'.repeat(124)}'`, ENTER, // Fully visible
+      ENTER,
+      `const y2 = '${'🐕'.repeat(125)}'`, ENTER, // Cut off
+      ENTER,
+      `const x3 = '${'𐐷'.repeat(248)}'`, ENTER, // Fully visible
+      ENTER,
+      `const y3 = '${'𐐷'.repeat(249)}'`, ENTER, // Cut off
+      ENTER,
+      `const x4 = 'a${'\u0301'.repeat(1000)}'`, ENTER, // á
+      ENTER,
       `const ${'veryLongName'.repeat(30)} = 'I should be previewed'`,
       ENTER,
       'const e = new RangeError("visible\\ninvisible")',
@@ -127,6 +194,7 @@ const tests = [
   {
     env: { NODE_REPL_HISTORY: defaultHistoryPath },
     columns: 250,
+    checkTotal: true,
     showEscapeCodes: true,
     skip: !process.features.inspector,
     test: [
@@ -135,7 +203,21 @@ const tests = [
       UP,
       WORD_LEFT,
       UP,
-      BACKSPACE
+      BACKSPACE,
+      'x1',
+      BACKSPACE,
+      '2',
+      BACKSPACE,
+      '3',
+      BACKSPACE,
+      '4',
+      DELETE_WORD_LEFT,
+      'y1',
+      BACKSPACE,
+      '2',
+      BACKSPACE,
+      '3',
+      SIGINT
     ],
     // A = Cursor n up
     // B = Cursor n down
@@ -154,6 +236,9 @@ const tests = [
       // 236 + 2 + 4 + 8
       '\x1B[1G', '\x1B[0J',
       `${prompt}${' '.repeat(236)} fun`, '\x1B[243G',
+      ' // ction', '\x1B[243G',
+      ' // ction', '\x1B[243G',
+      '\x1B[0K',
       // 2. UP
       '\x1B[1G', '\x1B[0J',
       `${prompt}${' '.repeat(235)} fun`, '\x1B[242G',
@@ -169,7 +254,7 @@ const tests = [
       // 360 % 250 + 2 === 112 (+1)
       `${prompt}${'veryLongName'.repeat(30)}`, '\x1B[113G',
       // "// 'I should be previewed'".length + 86 === 112 (+1)
-      "\n// 'I should be previewed'", '\x1B[86C\x1B[1A',
+      "\n// 'I should be previewed'", '\x1B[113G', '\x1B[1A',
       // Preview cleanup
       '\x1B[1B', '\x1B[2K', '\x1B[1A',
       // 4. WORD LEFT
@@ -178,19 +263,56 @@ const tests = [
       '\x1B[1A',
       '\x1B[1G', '\x1B[0J',
       `${prompt}${'veryLongName'.repeat(30)}`, '\x1B[3G', '\x1B[1A',
-      '\x1B[1B', "\n// 'I should be previewed'", '\x1B[24D\x1B[2A',
+      '\x1B[1B', "\n// 'I should be previewed'", '\x1B[3G', '\x1B[2A',
       // Preview cleanup
       '\x1B[2B', '\x1B[2K', '\x1B[2A',
       // 5. UP
       '\x1B[1G', '\x1B[0J',
       `${prompt}e`, '\x1B[4G',
       // '// RangeError: visible'.length - 19 === 3 (+1)
-      '\n// RangeError: visible', '\x1B[19D\x1B[1A',
+      '\n// RangeError: visible', '\x1B[4G', '\x1B[1A',
       // Preview cleanup
       '\x1B[1B', '\x1B[2K', '\x1B[1A',
       // 6. Backspace
       '\x1B[1G', '\x1B[0J',
-      prompt, '\x1B[3G'
+      '> ', '\x1B[3G', 'x', '1',
+      `\n// '${'あ'.repeat(124)}'`,
+      '\x1B[5G', '\x1B[1A',
+      '\x1B[1B', '\x1B[2K', '\x1B[1A',
+      '\x1B[1G', '\x1B[0J',
+      '> x', '\x1B[4G', '2',
+      `\n// '${'🐕'.repeat(124)}'`,
+      '\x1B[5G', '\x1B[1A',
+      '\x1B[1B', '\x1B[2K', '\x1B[1A',
+      '\x1B[1G', '\x1B[0J',
+      '> x', '\x1B[4G', '3',
+      `\n// '${'𐐷'.repeat(248)}'`,
+      '\x1B[5G', '\x1B[1A',
+      '\x1B[1B', '\x1B[2K', '\x1B[1A',
+      '\x1B[1G', '\x1B[0J',
+      '> x', '\x1B[4G', '4',
+      `\n// 'a${'\u0301'.repeat(1000)}'`,
+      '\x1B[5G', '\x1B[1A',
+      '\x1B[1B', '\x1B[2K', '\x1B[1A',
+      '\x1B[1G', '\x1B[0J',
+      '> ', '\x1B[3G', 'y', '1',
+      `\n// '${'あ'.repeat(121)}...`,
+      '\x1B[5G', '\x1B[1A',
+      '\x1B[1B', '\x1B[2K', '\x1B[1A',
+      '\x1B[1G', '\x1B[0J',
+      '> y', '\x1B[4G', '2',
+      `\n// '${'🐕'.repeat(121)}...`,
+      '\x1B[5G', '\x1B[1A',
+      '\x1B[1B', '\x1B[2K', '\x1B[1A',
+      '\x1B[1G', '\x1B[0J',
+      '> y', '\x1B[4G', '3',
+      `\n// '${'𐐷'.repeat(242)}...`,
+      '\x1B[5G', '\x1B[1A',
+      '\x1B[1B', '\x1B[2K', '\x1B[1A',
+      '\r\n',
+      '\x1B[1G', '\x1B[0J',
+      '> ', '\x1B[3G',
+      '\r\n'
     ],
     clean: true
   },
@@ -199,7 +321,8 @@ const tests = [
     showEscapeCodes: true,
     skip: !process.features.inspector,
     test: [
-      'fun',
+      'fu',
+      'n',
       RIGHT,
       BACKSPACE,
       LEFT,
@@ -259,6 +382,51 @@ const tests = [
       // 10. Word right. Cleanup
       '\x1B[0K', '\x1B[3G', '\x1B[7C', ' // n', '\x1B[10G',
       '\x1B[0K',
+      // 11. ENTER
+      '\r\n',
+      'Uncaught ReferenceError: functio is not defined\n',
+      '\x1B[1G', '\x1B[0J',
+      prompt, '\x1B[3G', '\r\n'
+    ],
+    clean: true
+  },
+  {
+    // Check changed inspection defaults.
+    env: { NODE_REPL_HISTORY: defaultHistoryPath },
+    skip: !process.features.inspector,
+    test: [
+      'util.inspect.replDefaults.showHidden',
+      ENTER
+    ],
+    expected: [],
+    clean: false
+  },
+  {
+    env: { NODE_REPL_HISTORY: defaultHistoryPath },
+    skip: !process.features.inspector,
+    checkTotal: true,
+    test: [
+      '[ ]',
+      WORD_LEFT,
+      WORD_LEFT,
+      UP,
+      ' = true',
+      ENTER,
+      '[ ]',
+      ENTER
+    ],
+    expected: [
+      prompt,
+      '[', ' ', ']',
+      '\n// []', '\n// []', '\n// []',
+      '> util.inspect.replDefaults.showHidden',
+      '\n// false',
+      ' ', '=', ' ', 't', 'r', 'u', 'e',
+      'true\n',
+      '> ', '[', ' ', ']',
+      '\n// [ [length]: 0 ]',
+      '[ [length]: 0 ]\n',
+      '> ',
     ],
     clean: true
   },
@@ -300,6 +468,7 @@ const tests = [
       prompt,
       's',
       ' // Always visible',
+      prompt,
     ],
     clean: true
   }
@@ -330,8 +499,8 @@ function runTest() {
     setImmediate(runTestWrap, true);
     return;
   }
-
   const lastChunks = [];
+  let i = 0;
 
   REPL.createInternalRepl(opts.env, {
     input: new ActionStream(),
@@ -344,11 +513,11 @@ function runTest() {
           return next();
         }
 
-        lastChunks.push(inspect(output));
+        lastChunks.push(output);
 
-        if (expected.length) {
+        if (expected.length && !opts.checkTotal) {
           try {
-            assert.strictEqual(output, expected[0]);
+            assert.strictEqual(output, expected[i]);
           } catch (e) {
             console.error(`Failed test # ${numtests - tests.length}`);
             console.error('Last outputs: ' + inspect(lastChunks, {
@@ -356,7 +525,8 @@ function runTest() {
             }));
             throw e;
           }
-          expected.shift();
+          // TODO(BridgeAR): Auto close on last chunk!
+          i++;
         }
 
         next();
@@ -365,6 +535,7 @@ function runTest() {
     completer: opts.completer,
     prompt,
     useColors: false,
+    preview: opts.preview,
     terminal: true
   }, function(err, repl) {
     if (err) {
@@ -376,9 +547,13 @@ function runTest() {
       if (opts.clean)
         cleanupTmpFile();
 
-      if (expected.length !== 0) {
+      if (opts.checkTotal) {
+        assert.deepStrictEqual(lastChunks, expected);
+      } else if (expected.length !== i) {
+        console.error(tests[numtests - tests.length - 1]);
         throw new Error(`Failed test # ${numtests - tests.length}`);
       }
+
       setImmediate(runTestWrap, true);
     });
 

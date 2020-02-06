@@ -116,9 +116,6 @@
 #include <unistd.h>        // STDIN_FILENO, STDERR_FILENO
 #endif
 
-#ifdef __PASE__
-#include <sys/ioctl.h>  // ioctl
-#endif
 // ========== global C++ headers ==========
 
 #include <cerrno>
@@ -609,14 +606,7 @@ inline void PlatformInit() {
     while (s.flags == -1 && errno == EINTR);  // NOLINT
     CHECK_NE(s.flags, -1);
 
-#ifdef __PASE__
-    // On IBMi PASE isatty() always returns true for stdin, stdout and stderr.
-    // Use ioctl() instead to identify whether it's actually a TTY.
-    if (ioctl(fd, TXISATTY + 0x81, nullptr) == -1 && errno == ENOTTY)
-      continue;
-#else
-    if (!isatty(fd)) continue;
-#endif
+    if (uv_guess_handle(fd) != UV_TTY) continue;
     s.isatty = true;
 
     do
@@ -899,7 +889,7 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
       }
 
       if (will_start_new_arg) {
-        env_argv.push_back(std::string(1, c));
+        env_argv.emplace_back(std::string(1, c));
         will_start_new_arg = false;
       } else {
         env_argv.back() += c;
@@ -1222,7 +1212,8 @@ InitializationResult InitializeOncePerProcess(int argc, char** argv) {
   if (icu_data)
     udata_setCommonData((uint8_t*)icu_data, &err);
 
-  InitializeV8Platform(per_process::cli_options->v8_thread_pool_size);
+  per_process::v8_platform.Initialize(
+      per_process::cli_options->v8_thread_pool_size);
   V8::Initialize();
   //performance::performance_v8_start = PERFORMANCE_NOW();
   per_process::v8_initialized = true;

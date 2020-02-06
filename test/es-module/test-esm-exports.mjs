@@ -1,8 +1,6 @@
 // Flags: --experimental-modules
 import { mustCall } from '../common/index.mjs';
-import { path } from '../common/fixtures.mjs';
 import { ok, deepStrictEqual, strictEqual } from 'assert';
-import { spawn } from 'child_process';
 
 import { requireFixture, importFixture } from '../fixtures/pkgexports.mjs';
 import fromInside from '../fixtures/node_modules/pkgexports/lib/hole.js';
@@ -124,6 +122,11 @@ import fromInside from '../fixtures/node_modules/pkgexports/lib/hole.js';
       'ERR_MODULE_NOT_FOUND');
   }));
 
+  // Package export with numeric index properties must throw a validation error
+  loadFixture('pkgexports-numeric').catch(mustCall((err) => {
+    strictEqual(err.code, 'ERR_INVALID_PACKAGE_CONFIG');
+  }));
+
   // Sugar conditional exports main mixed failure case
   loadFixture('pkgexports-sugar-fail').catch(mustCall((err) => {
     strictEqual(err.code, 'ERR_INVALID_PACKAGE_CONFIG');
@@ -163,28 +166,3 @@ function assertIncludes(actual, expected) {
   ok(actual.toString().indexOf(expected) !== -1,
      `${JSON.stringify(actual)} includes ${JSON.stringify(expected)}`);
 }
-
-// Test warning message
-[
-  [
-    '--experimental-conditional-exports',
-    '/es-modules/conditional-exports.js',
-    'Conditional exports',
-  ]
-].forEach(([flag, file, message]) => {
-  const child = spawn(process.execPath, [flag, path(file)]);
-
-  let stderr = '';
-  child.stderr.setEncoding('utf8');
-  child.stderr.on('data', (data) => {
-    stderr += data;
-  });
-  child.on('close', (code, signal) => {
-    strictEqual(code, 0);
-    strictEqual(signal, null);
-    ok(stderr.toString().includes(
-      `ExperimentalWarning: ${message} is an experimental feature. ` +
-      'This feature could change at any time'
-    ));
-  });
-});

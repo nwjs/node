@@ -1792,7 +1792,7 @@ additional details.
 <a id="ERR_TLS_CERT_ALTNAME_INVALID"></a>
 ### `ERR_TLS_CERT_ALTNAME_INVALID`
 
-While using TLS, the hostname/IP of the peer did not match any of the
+While using TLS, the host name/IP of the peer did not match any of the
 `subjectAltNames` in its certificate.
 
 <a id="ERR_TLS_DH_PARAM_SIZE"></a>
@@ -1843,7 +1843,7 @@ An attempt was made to renegotiate TLS on a socket instance with TLS disabled.
 ### `ERR_TLS_REQUIRED_SERVER_NAME`
 
 While using TLS, the `server.addContext()` method was called without providing
-a hostname in the first parameter.
+a host name in the first parameter.
 
 <a id="ERR_TLS_SESSION_ATTACK"></a>
 ### `ERR_TLS_SESSION_ATTACK`
@@ -1987,6 +1987,16 @@ the following reasons:
 * It has already been linked (`linkingStatus` is `'linked'`)
 * It is being linked (`linkingStatus` is `'linking'`)
 * Linking has failed for this module (`linkingStatus` is `'errored'`)
+
+<a id="ERR_VM_MODULE_CACHED_DATA_REJECTED"></a>
+### `ERR_VM_MODULE_CACHED_DATA_REJECTED`
+
+The `cachedData` option passed to a module constructor is invalid.
+
+<a id="ERR_VM_MODULE_CANNOT_CREATE_CACHED_DATA"></a>
+### `ERR_VM_MODULE_CANNOT_CREATE_CACHED_DATA`
+
+Cached data cannot be created for modules which have already been evaluated.
 
 <a id="ERR_VM_MODULE_DIFFERENT_CONTEXT"></a>
 ### `ERR_VM_MODULE_DIFFERENT_CONTEXT`

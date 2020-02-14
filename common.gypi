@@ -122,6 +122,9 @@
       ['OS=="linux" and target_arch=="x64" and <(building_nw)==1', {
         'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_sid_amd64-sysroot',
       }],
+      ['OS=="linux" and target_arch=="arm" and <(building_nw)==1', {
+        'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_sid_arm-sysroot',
+      }],
       ['openssl_fips != ""', {
         'openssl_product': '<(STATIC_LIB_PREFIX)crypto<(STATIC_LIB_SUFFIX)',
       }, {

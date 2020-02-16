@@ -321,10 +321,12 @@ class HeapSnapshotStream : public AsyncWrap,
 };
 
 inline void TakeSnapshot(Isolate* isolate, v8::OutputStream* out) {
+#if 0
   const HeapSnapshot* const snapshot =
       isolate->GetHeapProfiler()->TakeHeapSnapshot();
   snapshot->Serialize(out, HeapSnapshot::kJSON);
   const_cast<HeapSnapshot*>(snapshot)->Delete();
+#endif
 }
 
 inline bool WriteSnapshot(Isolate* isolate, const char* filename) {
@@ -340,6 +342,7 @@ inline bool WriteSnapshot(Isolate* isolate, const char* filename) {
 }  // namespace
 
 void CreateHeapSnapshotStream(const FunctionCallbackInfo<Value>& args) {
+#if 0
   Environment* env = Environment::GetCurrent(args);
   HandleScope scope(env->isolate());
   const HeapSnapshot* const snapshot =
@@ -353,6 +356,7 @@ void CreateHeapSnapshotStream(const FunctionCallbackInfo<Value>& args) {
   }
   HeapSnapshotStream* out = new HeapSnapshotStream(env, snapshot, obj);
   args.GetReturnValue().Set(out->object());
+#endif
 }
 
 void TriggerHeapSnapshot(const FunctionCallbackInfo<Value>& args) {

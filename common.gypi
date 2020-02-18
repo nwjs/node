@@ -540,6 +540,10 @@
             'cflags': [ '--sysroot=<(sysroot)', '-nostdinc++', '-isystem<(DEPTH)/buildtools/third_party/libc++/trunk/include', '-isystem<(DEPTH)/buildtools/third_party/libc++abi/trunk/include' ],
             'ldflags': [ '--sysroot=<(sysroot)','<!(<(DEPTH)/content/nw/tools/sysroot_ld_path.sh <(sysroot))', '-nostdlib++' ],
           }],
+          [ 'OS=="linux" and target_arch=="arm"', {
+            'cflags': [ '--target=arm-linux-gnueabihf' ],
+            'ldflags': [ '--target=arm-linux-gnueabihf' ],
+          }],
           [ 'target_arch=="ppc" and OS!="aix"', {
             'cflags': [ '-m32' ],
             'ldflags': [ '-m32' ],

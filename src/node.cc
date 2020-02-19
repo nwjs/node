@@ -23,7 +23,7 @@
 
 // ========== local headers ==========
 
-#include "debug_utils.h"
+#include "debug_utils-inl.h"
 #include "env-inl.h"
 #include "memory_tracker-inl.h"
 #include "node_binding.h"
@@ -332,48 +332,32 @@ MaybeLocal<Value> Environment::BootstrapNode() {
     return scope.EscapeMaybe(result);
   }
 
-  if (is_main_thread()) {
-    result = ExecuteBootstrapper(this,
-                                 "internal/bootstrap/switches/is_main_thread",
-                                 &node_params,
-                                 &node_args);
-  } else {
-    result =
-        ExecuteBootstrapper(this,
-                            "internal/bootstrap/switches/is_not_main_thread",
-                            &node_params,
-                            &node_args);
-  }
+  auto thread_switch_id =
+      is_main_thread() ? "internal/bootstrap/switches/is_main_thread"
+                       : "internal/bootstrap/switches/is_not_main_thread";
+  result =
+      ExecuteBootstrapper(this, thread_switch_id, &node_params, &node_args);
 
   if (result.IsEmpty()) {
     return scope.EscapeMaybe(result);
   }
 
-  if (owns_process_state()) {
-    result = ExecuteBootstrapper(
-        this,
-        "internal/bootstrap/switches/does_own_process_state",
-        &node_params,
-        &node_args);
-  } else {
-    result = ExecuteBootstrapper(
-        this,
-        "internal/bootstrap/switches/does_not_own_process_state",
-        &node_params,
-        &node_args);
-  }
+  auto process_state_switch_id =
+      owns_process_state()
+          ? "internal/bootstrap/switches/does_own_process_state"
+          : "internal/bootstrap/switches/does_not_own_process_state";
+  result = ExecuteBootstrapper(
+      this, process_state_switch_id, &node_params, &node_args);
 
   if (result.IsEmpty()) {
     return scope.EscapeMaybe(result);
   }
 
+  Local<String> env_string = FIXED_ONE_BYTE_STRING(isolate_, "env");
   Local<Object> env_var_proxy;
   if (!CreateEnvVarProxy(context(), isolate_, as_callback_data())
            .ToLocal(&env_var_proxy) ||
-      process_object()
-          ->Set(
-              context(), FIXED_ONE_BYTE_STRING(isolate_, "env"), env_var_proxy)
-          .IsNothing()) {
+      process_object()->Set(context(), env_string, env_var_proxy).IsNothing()) {
     return MaybeLocal<Value>();
   }
 
@@ -827,80 +811,19 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
   V8::SetFlagsFromString(NODE_V8_OPTIONS, sizeof(NODE_V8_OPTIONS) - 1);
 #endif
 
-  std::shared_ptr<EnvironmentOptions> default_env_options =
-      per_process::cli_options->per_isolate->per_env;
-  {
-    std::string text;
-    default_env_options->pending_deprecation =
-        credentials::SafeGetenv("NODE_PENDING_DEPRECATION", &text) &&
-        text[0] == '1';
-  }
-
-  // Allow for environment set preserving symlinks.
-  {
-    std::string text;
-    default_env_options->preserve_symlinks =
-        credentials::SafeGetenv("NODE_PRESERVE_SYMLINKS", &text) &&
-        text[0] == '1';
-  }
-
-  {
-    std::string text;
-    default_env_options->preserve_symlinks_main =
-        credentials::SafeGetenv("NODE_PRESERVE_SYMLINKS_MAIN", &text) &&
-        text[0] == '1';
-  }
-
-  if (default_env_options->redirect_warnings.empty()) {
-    credentials::SafeGetenv("NODE_REDIRECT_WARNINGS",
-                            &default_env_options->redirect_warnings);
-  }
+  HandleEnvOptions(per_process::cli_options->per_isolate->per_env);
 
 #if !defined(NODE_WITHOUT_NODE_OPTIONS)
   std::string node_options;
 
   if (credentials::SafeGetenv("NODE_OPTIONS", &node_options)) {
-    std::vector<std::string> env_argv;
+    std::vector<std::string> env_argv =
+        ParseNodeOptionsEnvVar(node_options, errors);
+
+    if (!errors->empty()) return 9;
+
     // [0] is expected to be the program name, fill it in from the real argv.
-    env_argv.push_back(argv->at(0));
-
-    bool is_in_string = false;
-    bool will_start_new_arg = true;
-    for (std::string::size_type index = 0;
-         index < node_options.size();
-         ++index) {
-      char c = node_options.at(index);
-
-      // Backslashes escape the following character
-      if (c == '\\' && is_in_string) {
-        if (index + 1 == node_options.size()) {
-          errors->push_back("invalid value for NODE_OPTIONS "
-                            "(invalid escape)\n");
-          return 9;
-        } else {
-          c = node_options.at(++index);
-        }
-      } else if (c == ' ' && !is_in_string) {
-        will_start_new_arg = true;
-        continue;
-      } else if (c == '"') {
-        is_in_string = !is_in_string;
-        continue;
-      }
-
-      if (will_start_new_arg) {
-        env_argv.emplace_back(std::string(1, c));
-        will_start_new_arg = false;
-      } else {
-        env_argv.back() += c;
-      }
-    }
-
-    if (is_in_string) {
-      errors->push_back("invalid value for NODE_OPTIONS "
-                        "(unterminated string)\n");
-      return 9;
-    }
+    env_argv.insert(env_argv.begin(), argv->at(0));
 
     const int exit_code = ProcessGlobalArgs(&env_argv,
                                             nullptr,
@@ -1585,9 +1508,8 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
   {
     node::InternalCallbackScope callback_scope(
           tls_ctx->env,
-          v8::Local<v8::Object>(),
+          v8::Object::New(isolate),
           { 1, 0 },
-          node::InternalCallbackScope::kAllowEmptyResource |
           node::InternalCallbackScope::kSkipAsyncHooks);
     node::LoadEnvironment(tls_ctx->env);
   }

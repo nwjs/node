@@ -113,6 +113,9 @@ Requires Node.js to be built with
 .It Fl -enable-source-maps
 Enable experimental Source Map V3 support for stack traces.
 .
+.It Fl -experimental-import-meta-resolve
+Enable experimental ES modules support for import.meta.resolve().
+.
 .It Fl -experimental-json-modules
 Enable experimental JSON interop support for the ES Module loader.
 .
@@ -367,6 +370,8 @@ Enable the collection of trace event tracing information.
 .It Fl -trace-exit
 Prints a stack trace whenever an environment is exited proactively,
 i.e. invoking `process.exit()`.
+.It Fl -trace-sigint
+Prints a stack trace on SIGINT.
 .
 .It Fl -trace-sync-io
 Print a stack trace whenever synchronous I/O is detected after the first turn of the event loop.

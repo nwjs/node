@@ -1886,8 +1886,8 @@ methods only.
 
 The `writable._writev()` method may be implemented in addition or alternatively
 to `writable._write()` in stream implementations that are capable of processing
-multiple chunks of data at once. If implemented, the method will be called with
-all chunks of data currently buffered in the write queue.
+multiple chunks of data at once. If implemented and if there is buffered data
+from previous writes, `_writev()` will be called instead of `_write()`.
 
 The `writable._writev()` method is prefixed with an underscore because it is
 internal to the class that defines it, and should never be called directly by
@@ -2644,12 +2644,22 @@ const finished = util.promisify(stream.finished);
 
 const writable = fs.createWriteStream('./file');
 
+function drain(writable) {
+  if (writable.destroyed) {
+    return Promise.reject(new Error('premature close'));
+  }
+  return Promise.race([
+    once(writable, 'drain'),
+    once(writable, 'close')
+      .then(() => Promise.reject(new Error('premature close')))
+  ]);
+}
+
 async function pump(iterable, writable) {
   for await (const chunk of iterable) {
     // Handle backpressure on write().
     if (!writable.write(chunk)) {
-      if (writable.destroyed) return;
-      await once(writable, 'drain');
+      await drain(writable);
     }
   }
   writable.end();

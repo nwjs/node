@@ -1960,7 +1960,7 @@ Node.js callbacks. `fs.existsSync()` does not use a callback.
 
 ```js
 if (fs.existsSync('/etc/passwd')) {
-  console.log('The file exists.');
+  console.log('The path exists.');
 }
 ```
 
@@ -4941,6 +4941,18 @@ will be passed as `Buffer` objects.
 If `options.withFileTypes` is set to `true`, the resolved array will contain
 [`fs.Dirent`][] objects.
 
+```js
+const fs = require('fs');
+
+async function print(path) {
+  const files = await fs.promises.readdir(path);
+  for (const file of files) {
+    console.log(file);
+  }
+}
+print('./').catch(console.error);
+```
+
 ### `fsPromises.readFile(path[, options])`
 <!-- YAML
 added: v10.0.0
@@ -5588,4 +5600,4 @@ the file contents.
 [chcp]: https://ss64.com/nt/chcp.html
 [inode]: https://en.wikipedia.org/wiki/Inode
 [support of file system `flags`]: #fs_file_system_flags
-[Writable Stream]: #stream_class_stream_writable
+[Writable Stream]: stream.html#stream_class_stream_writable

@@ -40,7 +40,7 @@ CallbackScope::~CallbackScope() {
 
 InternalCallbackScope::InternalCallbackScope(AsyncWrap* async_wrap, int flags)
     : InternalCallbackScope(async_wrap->env(),
-                            async_wrap->object(),
+                            async_wrap->GetResource(),
                             { async_wrap->get_async_id(),
                               async_wrap->get_trigger_async_id() },
                             flags) {}
@@ -54,7 +54,6 @@ InternalCallbackScope::InternalCallbackScope(Environment* env,
     object_(object),
     skip_hooks_(flags & kSkipAsyncHooks),
     skip_task_queues_(flags & kSkipTaskQueues) {
-  CHECK_IMPLIES(!(flags & kAllowEmptyResource), !object.IsEmpty());
   CHECK_NOT_NULL(env);
   env->PushAsyncCallbackScope();
 
@@ -73,8 +72,9 @@ InternalCallbackScope::InternalCallbackScope(Environment* env,
     AsyncWrap::EmitBefore(env, asyncContext.async_id);
   }
 
-  env->async_hooks()->push_async_ids(async_context_.async_id,
-                               async_context_.trigger_async_id);
+  env->async_hooks()->push_async_context(async_context_.async_id,
+                              async_context_.trigger_async_id, object);
+
   pushed_ids_ = true;
 }
 
@@ -93,7 +93,7 @@ void InternalCallbackScope::Close() {
   }
 
   if (pushed_ids_)
-    env_->async_hooks()->pop_async_id(async_context_.async_id);
+    env_->async_hooks()->pop_async_context(async_context_.async_id);
 
   if (failed_) return;
 
@@ -129,7 +129,7 @@ MaybeLocal<Value> InternalMakeCallback(Environment* env,
 
   Local<Function> domain_cb = env->domain_callback();
   MaybeLocal<Value> ret;
-  if (asyncContext.async_id != 0 || domain_cb.IsEmpty() || recv.IsEmpty()) {
+  if (asyncContext.async_id != 0 || domain_cb.IsEmpty()) {
     ret = callback->Call(env->context(), recv, argc, argv);
   } else {
     std::vector<Local<Value>> args(1 + argc);

@@ -4,6 +4,7 @@
     'icu_gyp_path%': '../icu/icu.gyp',
     'coverage': 'false',
     'node_report': 'false',
+    'debug_node': 'false',
     'v8_trace_maps%': 0,
     'v8_enable_pointer_compression': 0,
     'v8_enable_31bit_smis_on_64bit_arch': 0,
@@ -38,6 +39,7 @@
     'node_lib_target_name%': 'node',
     'node_intermediate_lib_type%': 'shared_library',
     'node_target_type%': 'shared_library',
+    'node_builtin_modules_path%': '',
     'node_tag%': '',
     'node_release_urlbase%': '',
     'node_byteorder%': 'little',
@@ -59,6 +61,7 @@
       'lib/internal/bootstrap/switches/is_not_main_thread.js',
       'lib/internal/per_context/primordials.js',
       'lib/internal/per_context/domexception.js',
+      'lib/internal/per_context/messageport.js',
       'lib/async_hooks.js',
       'lib/assert.js',
       'lib/buffer.js',
@@ -161,6 +164,7 @@
       'lib/internal/fs/utils.js',
       'lib/internal/fs/watchers.js',
       'lib/internal/http.js',
+      'lib/internal/heap_utils.js',
       'lib/internal/idna.js',
       'lib/internal/inspector_async_hook.js',
       'lib/internal/js_stream_socket.js',
@@ -234,6 +238,7 @@
       'lib/internal/vm/module.js',
       'lib/internal/worker.js',
       'lib/internal/worker/io.js',
+      'lib/internal/watchdog.js',
       'lib/internal/streams/lazy_transform.js',
       'lib/internal/streams/async_iterator.js',
       'lib/internal/streams/buffer_list.js',
@@ -657,6 +662,7 @@
         'src/connect_wrap.h',
         'src/connection_wrap.h',
         'src/debug_utils.h',
+        'src/debug_utils-inl.h',
         'src/env.h',
         'src/env-inl.h',
         'src/handle_wrap.h',
@@ -761,6 +767,9 @@
       'msvs_disabled_warnings!': [4244],
 
       'conditions': [
+        [ 'node_builtin_modules_path!=""', {
+          'defines': [ 'NODE_BUILTIN_MODULES_PATH="<(node_builtin_modules_path)"' ]
+        }],
         [ 'node_shared=="true"', {
           'sources': [
             'src/node_snapshot_stub.cc',
@@ -894,7 +903,8 @@
           ],
         }],
         [ 'OS in "linux freebsd mac" and '
-          'target_arch=="x64"', {
+          'target_arch=="x64" and '
+          'node_target_type=="executable"', {
           'defines': [ 'NODE_ENABLE_LARGE_CODE_PAGES=1' ],
           'sources': [
             'src/large_pages/node_large_page.cc',

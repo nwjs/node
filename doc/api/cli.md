@@ -54,7 +54,7 @@ the next argument will be used as a script filename.
 
 ### `--abort-on-uncaught-exception`
 <!-- YAML
-added: v0.10
+added: v0.10.8
 -->
 
 Aborting instead of exiting causes a core file to be generated for post-mortem
@@ -155,6 +155,13 @@ Enable experimental Source Map V3 support for stack traces.
 
 Currently, overriding `Error.prepareStackTrace` is ignored when the
 `--enable-source-maps` flag is set.
+
+### `--experimental-import-meta-resolve`
+<!-- YAML
+added: v13.9.0
+-->
+
+Enable experimental `import.meta.resolve()` support.
 
 ### `--experimental-json-modules`
 <!-- YAML
@@ -779,6 +786,13 @@ added: v13.5.0
 Prints a stack trace whenever an environment is exited proactively,
 i.e. invoking `process.exit()`.
 
+### `--trace-sigint`
+<!-- YAML
+added: v13.9.0
+-->
+
+Prints a stack trace on SIGINT.
+
 ### `--trace-sync-io`
 <!-- YAML
 added: v2.1.0
@@ -1066,6 +1080,7 @@ Node.js options that are allowed are:
 <!-- node-options-node start -->
 * `--enable-fips`
 * `--enable-source-maps`
+* `--experimental-import-meta-resolve`
 * `--experimental-json-modules`
 * `--experimental-loader`
 * `--experimental-modules`
@@ -1122,6 +1137,7 @@ Node.js options that are allowed are:
 * `--trace-event-file-pattern`
 * `--trace-events-enabled`
 * `--trace-exit`
+* `--trace-sigint`
 * `--trace-sync-io`
 * `--trace-tls`
 * `--trace-uncaught`

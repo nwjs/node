@@ -352,7 +352,10 @@
             'RuntimeLibrary': '<(win_release_RuntimeLibrary)',
             'RuntimeTypeInfo': 'false',
           }
-        }
+        },
+        'xcode_settings': {
+          'GCC_OPTIMIZATION_LEVEL': '3', # stop gyp from defaulting to -Os
+        },
       },
       'Debug': {
         'inherit_from': ['Common_Base', 'Debug_Base'],

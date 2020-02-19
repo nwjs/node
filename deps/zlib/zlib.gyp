@@ -6,7 +6,7 @@
   'variables': {
     'use_system_zlib%': 0,
     'arm_fpu%': '',
-    'llvm_version%': '0.0',
+    'llvm_version': '10.0',
   },
   'conditions': [
     ['use_system_zlib==0', {
@@ -91,6 +91,17 @@
                 'x86.c',
               ],
               'conditions': [
+                ['OS=="win"', {
+                  'msvs_settings': {
+                    'VCCLCompilerTool': {
+                      'AdditionalOptions': [
+                        '-mssse3',
+                        '-msse4.2',
+                        '-mpclmul',
+                      ],
+                    },
+                  },
+                }],
                 ['OS!="win" or llvm_version!="0.0"', {
                   'cflags': [
                     '-mssse3',

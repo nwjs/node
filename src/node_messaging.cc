@@ -220,6 +220,14 @@ class SerializerDelegate : public ValueSerializer::Delegate {
   SerializerDelegate(Environment* env, Local<Context> context, Message* m)
       : env_(env), context_(context), msg_(m) {}
 
+  void* ReallocateBufferMemory(void* old_buffer, size_t size, size_t* actual_size) override {
+    *actual_size = size;
+    return realloc(old_buffer, size);
+  }
+
+  void FreeBufferMemory(void* buffer) override {
+    free(buffer);
+  }
   void ThrowDataCloneError(Local<String> message) override {
     ThrowDataCloneException(context_, message);
   }

@@ -180,6 +180,10 @@ void AsyncWrap::EmitAfter(Environment* env, double async_id) {
 
 class PromiseWrap : public AsyncWrap {
  public:
+  enum InternalFields {
+    kIsChainedPromiseField = AsyncWrap::kInternalFieldCount,
+    kInternalFieldCount = 3
+  };
   PromiseWrap(Environment* env, Local<Object> object, bool silent)
       : AsyncWrap(env, object, PROVIDER_PROMISE, kInvalidAsyncId, silent) {
     MakeWeak();
@@ -188,9 +192,6 @@ class PromiseWrap : public AsyncWrap {
   SET_NO_MEMORY_INFO()
   SET_MEMORY_INFO_NAME(PromiseWrap)
   SET_SELF_SIZE(PromiseWrap)
-
-  static constexpr int kIsChainedPromiseField = 1;
-  static constexpr int kInternalFieldCount = 3;
 
   static PromiseWrap* New(Environment* env,
                           Local<Promise> promise,
@@ -217,7 +218,7 @@ PromiseWrap* PromiseWrap::New(Environment* env,
 void PromiseWrap::getIsChainedPromise(Local<String> property,
                                       const PropertyCallbackInfo<Value>& info) {
   info.GetReturnValue().Set(
-    info.Holder()->GetInternalField(kIsChainedPromiseField));
+      info.Holder()->GetInternalField(PromiseWrap::kIsChainedPromiseField));
 }
 
 static PromiseWrap* extractPromiseWrap(Local<Promise> promise) {
@@ -229,11 +230,12 @@ static PromiseWrap* extractPromiseWrap(Local<Promise> promise) {
 
   if (!promise->HasPrivate(promise->CreationContext(), env->promise_wrap_private()).FromJust())
     return nullptr;
-  Local<Value> resource_object_value = promise->GetPrivate(promise->CreationContext(), env->promise_wrap_private()).ToLocalChecked();
-  if (resource_object_value->IsObject()) {
-    return Unwrap<PromiseWrap>(resource_object_value.As<Object>());
-  }
-  return nullptr;
+  // This check is imperfect. If the internal field is set, it should
+  // be an object. If it's not, we just ignore it. Ideally v8 would
+  // have had GetInternalField returning a MaybeLocal but this works
+  // for now.
+  Local<Value> obj = promise->GetPrivate(promise->CreationContext(), env->promise_wrap_private()).ToLocalChecked();
+  return obj->IsObject() ? Unwrap<PromiseWrap>(obj.As<Object>()) : nullptr;
 }
 
 static void PromiseHook(PromiseHookType type, Local<Promise> promise,
@@ -573,7 +575,7 @@ void AsyncWrap::Initialize(Local<Object> target,
     function_template->SetClassName(class_name);
     function_template->Inherit(AsyncWrap::GetConstructorTemplate(env));
     auto instance_template = function_template->InstanceTemplate();
-    instance_template->SetInternalFieldCount(1);
+    instance_template->SetInternalFieldCount(AsyncWrap::kInternalFieldCount);
     auto function =
         function_template->GetFunction(env->context()).ToLocalChecked();
     target->Set(env->context(), class_name, function).Check();
@@ -763,7 +765,7 @@ MaybeLocal<Value> AsyncWrap::MakeCallback(const Local<Function> cb,
   ProviderType provider = provider_type();
   async_context context { get_async_id(), get_trigger_async_id() };
   MaybeLocal<Value> ret = InternalMakeCallback(
-      env(), object(), cb, argc, argv, context);
+      env(), GetResource(), object(), cb, argc, argv, context);
 
   // This is a static call with cached values because the `this` object may
   // no longer be alive at this point.

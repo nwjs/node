@@ -672,7 +672,7 @@ function invalidArgTypeHelper(input) {
   return ` Received type ${typeof input} (${inspected})`;
 }
 
-module.exports = {
+const common = {
   allowGlobals,
   buildType,
   canCreateSymLink,
@@ -717,7 +717,7 @@ module.exports = {
   skipIfReportDisabled,
   skipIfWorker,
 
-  get enoughTestCPU() {
+  get enoughTestCpu() {
     const cpus = require('os').cpus();
     return Array.isArray(cpus) && (cpus.length > 1 || cpus[0].speed > 999);
   },
@@ -815,3 +815,12 @@ module.exports = {
   }
 
 };
+
+const validProperties = new Set(Object.keys(common));
+module.exports = new Proxy(common, {
+  get(obj, prop) {
+    if (!validProperties.has(prop))
+      throw new Error(`Using invalid common property: '${prop}'`);
+    return obj[prop];
+  }
+});

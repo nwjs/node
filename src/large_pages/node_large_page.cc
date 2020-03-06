@@ -21,6 +21,11 @@
 // SPDX-License-Identifier: MIT
 
 #include "node_large_page.h"
+
+#include <cerrno>   // NOLINT(build/include)
+
+// Besides returning ENOTSUP at runtime we do nothing if this define is missing.
+#if defined(NODE_ENABLE_LARGE_CODE_PAGES) && NODE_ENABLE_LARGE_CODE_PAGES
 #include "util.h"
 #include "uv.h"
 
@@ -35,7 +40,6 @@
 #endif
 #include <unistd.h>  // readlink
 
-#include <cerrno>   // NOLINT(build/include)
 #include <climits>  // PATH_MAX
 #include <clocale>
 #include <csignal>
@@ -67,11 +71,19 @@
 
 #if defined(__linux__)
 extern "C" {
-char __executable_start;
+// This symbol must be declared weak because this file becomes part of all
+// Node.js targets (like node_mksnapshot, node_mkcodecache, and cctest) and
+// those files do not supply the symbol.
+char __node_text_start;
+char __start_lpstub;
 }  // extern "C"
 #endif  // defined(__linux__)
 
+#endif  // defined(NODE_ENABLE_LARGE_CODE_PAGES) && NODE_ENABLE_LARGE_CODE_PAGES
 namespace node {
+#if defined(NODE_ENABLE_LARGE_CODE_PAGES) && NODE_ENABLE_LARGE_CODE_PAGES
+
+namespace {
 
 struct text_region {
   char* from;
@@ -103,7 +115,7 @@ inline uintptr_t hugepage_align_down(uintptr_t addr) {
 // 00400000-00452000 r-xp 00000000 08:02 173521      /usr/bin/dbus-daemon
 // This is also handling the case where the first line is not the binary.
 
-static struct text_region FindNodeTextRegion() {
+struct text_region FindNodeTextRegion() {
   struct text_region nregion;
   nregion.found_text_region = false;
 #if defined(__linux__)
@@ -113,6 +125,8 @@ static struct text_region FindNodeTextRegion() {
   std::string dev;
   char dash;
   uintptr_t start, end, offset, inode;
+  uintptr_t node_text_start = reinterpret_cast<uintptr_t>(&__node_text_start);
+  uintptr_t lpstub_start = reinterpret_cast<uintptr_t>(&__start_lpstub);
 
   ifs.open("/proc/self/maps");
   if (!ifs) {
@@ -136,21 +150,15 @@ static struct text_region FindNodeTextRegion() {
     std::string pathname;
     iss >> pathname;
 
-    if (start != reinterpret_cast<uintptr_t>(&__executable_start))
+    if (permission != "r-xp")
       continue;
 
-    // The next line is our .text section.
-    if (!std::getline(ifs, map_line))
-      break;
+    if (node_text_start < start || node_text_start >= end)
+      continue;
 
-    iss = std::istringstream(map_line);
-    iss >> std::hex >> start;
-    iss >> dash;
-    iss >> std::hex >> end;
-    iss >> permission;
-
-    if (permission != "r-xp")
-      break;
+    start = node_text_start;
+    if (lpstub_start > start && lpstub_start <= end)
+      end = lpstub_start;
 
     char* from = reinterpret_cast<char*>(hugepage_align_up(start));
     char* to = reinterpret_cast<char*>(hugepage_align_down(end));
@@ -263,7 +271,7 @@ static struct text_region FindNodeTextRegion() {
 }
 
 #if defined(__linux__)
-static bool IsTransparentHugePagesEnabled() {
+bool IsTransparentHugePagesEnabled() {
   std::ifstream ifs;
 
   ifs.open("/sys/kernel/mm/transparent_hugepage/enabled");
@@ -294,6 +302,8 @@ static bool IsSuperPagesEnabled() {
 }
 #endif
 
+}  // End of anonymous namespace
+
 // Moving the text region to large pages. We need to be very careful.
 // 1: This function itself should not be moved.
 // We use a gcc attributes
@@ -308,7 +318,7 @@ static bool IsSuperPagesEnabled() {
 // d. If successful copy the code there and unmap the original region
 int
 #if !defined(__APPLE__)
-__attribute__((__section__(".lpstub")))
+__attribute__((__section__("lpstub")))
 #else
 __attribute__((__section__("__TEXT,__lpstub")))
 #endif
@@ -408,14 +418,26 @@ MoveTextRegionToLargePages(const text_region& r) {
   if (-1 == munmap(nmem, size)) PrintSystemError(errno);
   return ret;
 }
+#endif  // defined(NODE_ENABLE_LARGE_CODE_PAGES) && NODE_ENABLE_LARGE_CODE_PAGES
 
 // This is the primary API called from main.
 int MapStaticCodeToLargePages() {
+#if defined(NODE_ENABLE_LARGE_CODE_PAGES) && NODE_ENABLE_LARGE_CODE_PAGES
+  bool have_thp = false;
+#if defined(__linux__)
+  have_thp = IsTransparentHugePagesEnabled();
+#elif defined(__FreeBSD__)
+  have_thp = IsSuperPagesEnabled();
+#elif defined(__APPLE__)
+  // pse-36 flag is present in recent mac x64 products.
+  have_thp = true;
+#endif
+  if (!have_thp)
+    return EACCES;
+
   struct text_region r = FindNodeTextRegion();
-  if (r.found_text_region == false) {
-    PrintWarning("failed to find text region");
-    return -1;
-  }
+  if (r.found_text_region == false)
+    return ENOENT;
 
 #if defined(__FreeBSD__)
   if (r.from < reinterpret_cast<void*>(&MoveTextRegionToLargePages))
@@ -423,18 +445,32 @@ int MapStaticCodeToLargePages() {
 #endif
 
   return MoveTextRegionToLargePages(r);
+#else
+  return ENOTSUP;
+#endif
 }
 
-bool IsLargePagesEnabled() {
-  return false;
-#if defined(__linux__)
-  return IsTransparentHugePagesEnabled();
-#elif defined(__FreeBSD__)
-  return IsSuperPagesEnabled();
-#elif defined(__APPLE__)
-  // pse-36 flag is present in recent mac x64 products.
-  return true;
-#endif
+const char* LargePagesError(int status) {
+  switch (status) {
+    case ENOTSUP:
+      return "Mapping to large pages is not supported.";
+
+    case EACCES:
+      return "Large pages are not enabled.";
+
+    case ENOENT:
+      return "failed to find text region";
+
+    case -1:
+      return "Mapping code to large pages failed. Reverting to default page "
+          "size.";
+
+    case 0:
+      return "OK";
+
+    default:
+      return "Unknown error";
+  }
 }
 
 }  // namespace node

@@ -101,6 +101,7 @@ std::string GetProcessTitle(const char* default_title);
 std::string GetHumanReadableProcessName();
 
 void InitializeContextRuntime(v8::Local<v8::Context>);
+bool InitializePrimordials(v8::Local<v8::Context> context);
 
 namespace task_queue {
 void PromiseRejectCallback(v8::PromiseRejectMessage message);
@@ -200,6 +201,7 @@ static v8::MaybeLocal<v8::Object> New(Environment* env,
 
 v8::MaybeLocal<v8::Value> InternalMakeCallback(
     Environment* env,
+    v8::Local<v8::Object> resource,
     v8::Local<v8::Object> recv,
     const v8::Local<v8::Function> callback,
     int argc,

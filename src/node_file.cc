@@ -700,16 +700,11 @@ void AfterScanDirWithTypes(uv_fs_t* req) {
     type_v.emplace_back(Integer::New(isolate, ent.type));
   }
 
-  Local<Array> result = Array::New(isolate, 2);
-  result->Set(env->context(),
-              0,
-              Array::New(isolate, name_v.data(),
-              name_v.size())).Check();
-  result->Set(env->context(),
-              1,
-              Array::New(isolate, type_v.data(),
-              type_v.size())).Check();
-  req_wrap->Resolve(result);
+  Local<Value> result[] = {
+    Array::New(isolate, name_v.data(), name_v.size()),
+    Array::New(isolate, type_v.data(), type_v.size())
+  };
+  req_wrap->Resolve(Array::New(isolate, result, arraysize(result)));
 }
 
 void Access(const FunctionCallbackInfo<Value>& args) {
@@ -1519,13 +1514,11 @@ static void ReadDir(const FunctionCallbackInfo<Value>& args) {
 
     Local<Array> names = Array::New(isolate, name_v.data(), name_v.size());
     if (with_types) {
-      Local<Array> result = Array::New(isolate, 2);
-      result->Set(env->context(), 0, names).Check();
-      result->Set(env->context(),
-                  1,
-                  Array::New(isolate, type_v.data(),
-                             type_v.size())).Check();
-      args.GetReturnValue().Set(result);
+      Local<Value> result[] = {
+        names,
+        Array::New(isolate, type_v.data(), type_v.size())
+      };
+      args.GetReturnValue().Set(Array::New(isolate, result, arraysize(result)));
     } else {
       args.GetReturnValue().Set(names);
     }
@@ -2205,7 +2198,8 @@ void Initialize(Local<Object> target,
 
   // Create FunctionTemplate for FSReqCallback
   Local<FunctionTemplate> fst = env->NewFunctionTemplate(NewFSReqCallback);
-  fst->InstanceTemplate()->SetInternalFieldCount(1);
+  fst->InstanceTemplate()->SetInternalFieldCount(
+      FSReqBase::kInternalFieldCount);
   fst->Inherit(AsyncWrap::GetConstructorTemplate(env));
   Local<String> wrapString =
       FIXED_ONE_BYTE_STRING(isolate, "FSReqCallback");
@@ -2218,7 +2212,8 @@ void Initialize(Local<Object> target,
   // Create FunctionTemplate for FileHandleReadWrap. There’s no need
   // to do anything in the constructor, so we only store the instance template.
   Local<FunctionTemplate> fh_rw = FunctionTemplate::New(isolate);
-  fh_rw->InstanceTemplate()->SetInternalFieldCount(1);
+  fh_rw->InstanceTemplate()->SetInternalFieldCount(
+      FSReqBase::kInternalFieldCount);
   fh_rw->Inherit(AsyncWrap::GetConstructorTemplate(env));
   Local<String> fhWrapString =
       FIXED_ONE_BYTE_STRING(isolate, "FileHandleReqWrap");
@@ -2233,7 +2228,7 @@ void Initialize(Local<Object> target,
       FIXED_ONE_BYTE_STRING(isolate, "FSReqPromise");
   fpt->SetClassName(promiseString);
   Local<ObjectTemplate> fpo = fpt->InstanceTemplate();
-  fpo->SetInternalFieldCount(1);
+  fpo->SetInternalFieldCount(FSReqBase::kInternalFieldCount);
   env->set_fsreqpromise_constructor_template(fpo);
 
   // Create FunctionTemplate for FileHandle
@@ -2242,7 +2237,7 @@ void Initialize(Local<Object> target,
   env->SetProtoMethod(fd, "close", FileHandle::Close);
   env->SetProtoMethod(fd, "releaseFD", FileHandle::ReleaseFD);
   Local<ObjectTemplate> fdt = fd->InstanceTemplate();
-  fdt->SetInternalFieldCount(StreamBase::kStreamBaseFieldCount);
+  fdt->SetInternalFieldCount(StreamBase::kInternalFieldCount);
   Local<String> handleString =
        FIXED_ONE_BYTE_STRING(isolate, "FileHandle");
   fd->SetClassName(handleString);
@@ -2259,7 +2254,7 @@ void Initialize(Local<Object> target,
                         "FileHandleCloseReq"));
   fdclose->Inherit(AsyncWrap::GetConstructorTemplate(env));
   Local<ObjectTemplate> fdcloset = fdclose->InstanceTemplate();
-  fdcloset->SetInternalFieldCount(1);
+  fdcloset->SetInternalFieldCount(FSReqBase::kInternalFieldCount);
   env->set_fdclose_constructor_template(fdcloset);
 
   Local<Symbol> use_promises_symbol =

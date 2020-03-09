@@ -236,18 +236,16 @@ class HeapSnapshotStream : public AsyncWrap,
  public:
   HeapSnapshotStream(
       Environment* env,
-      const HeapSnapshot* snapshot,
+      HeapSnapshotPointer&& snapshot,
       v8::Local<v8::Object> obj) :
       AsyncWrap(env, obj, AsyncWrap::PROVIDER_HEAPSNAPSHOT),
       StreamBase(env),
-      snapshot_(snapshot) {
+      snapshot_(std::move(snapshot)) {
     MakeWeak();
     StreamBase::AttachToObject(GetObject());
   }
 
-  ~HeapSnapshotStream() override {
-    Cleanup();
-  }
+  ~HeapSnapshotStream() override {}
 
   int GetChunkSize() override {
     return 65536;  // big chunks == faster
@@ -255,7 +253,7 @@ class HeapSnapshotStream : public AsyncWrap,
 
   void EndOfStream() override {
     EmitRead(UV_EOF);
-    Cleanup();
+    snapshot_.reset();
   }
 
   WriteResult WriteAsciiChunk(char* data, int size) override {
@@ -309,23 +307,14 @@ class HeapSnapshotStream : public AsyncWrap,
   SET_SELF_SIZE(HeapSnapshotStream)
 
  private:
-  void Cleanup() {
-    if (snapshot_ != nullptr) {
-      const_cast<HeapSnapshot*>(snapshot_)->Delete();
-      snapshot_ = nullptr;
-    }
-  }
-
-
-  const HeapSnapshot* snapshot_;
+  HeapSnapshotPointer snapshot_;
 };
 
 inline void TakeSnapshot(Isolate* isolate, v8::OutputStream* out) {
 #if 0
-  const HeapSnapshot* const snapshot =
-      isolate->GetHeapProfiler()->TakeHeapSnapshot();
+  HeapSnapshotPointer snapshot {
+      isolate->GetHeapProfiler()->TakeHeapSnapshot() };
   snapshot->Serialize(out, HeapSnapshot::kJSON);
-  const_cast<HeapSnapshot*>(snapshot)->Delete();
 #endif
 }
 
@@ -341,21 +330,45 @@ inline bool WriteSnapshot(Isolate* isolate, const char* filename) {
 
 }  // namespace
 
-void CreateHeapSnapshotStream(const FunctionCallbackInfo<Value>& args) {
-#if 0
-  Environment* env = Environment::GetCurrent(args);
+void DeleteHeapSnapshot(const v8::HeapSnapshot* snapshot) {
+  const_cast<HeapSnapshot*>(snapshot)->Delete();
+}
+
+BaseObjectPtr<AsyncWrap> CreateHeapSnapshotStream(
+    Environment* env, HeapSnapshotPointer&& snapshot) {
   HandleScope scope(env->isolate());
-  const HeapSnapshot* const snapshot =
-      env->isolate()->GetHeapProfiler()->TakeHeapSnapshot();
-  CHECK_NOT_NULL(snapshot);
+
+  if (env->streambaseoutputstream_constructor_template().IsEmpty()) {
+    // Create FunctionTemplate for HeapSnapshotStream
+    Local<FunctionTemplate> os = FunctionTemplate::New(env->isolate());
+    os->Inherit(AsyncWrap::GetConstructorTemplate(env));
+    Local<ObjectTemplate> ost = os->InstanceTemplate();
+    ost->SetInternalFieldCount(StreamBase::kInternalFieldCount);
+    os->SetClassName(
+        FIXED_ONE_BYTE_STRING(env->isolate(), "HeapSnapshotStream"));
+    StreamBase::AddMethods(env, os);
+    env->set_streambaseoutputstream_constructor_template(ost);
+  }
+
   Local<Object> obj;
   if (!env->streambaseoutputstream_constructor_template()
            ->NewInstance(env->context())
            .ToLocal(&obj)) {
-    return;
+    return {};
   }
-  HeapSnapshotStream* out = new HeapSnapshotStream(env, snapshot, obj);
-  args.GetReturnValue().Set(out->object());
+  return MakeBaseObject<HeapSnapshotStream>(env, std::move(snapshot), obj);
+}
+
+void CreateHeapSnapshotStream(const FunctionCallbackInfo<Value>& args) {
+#if 0
+  Environment* env = Environment::GetCurrent(args);
+  HeapSnapshotPointer snapshot {
+      env->isolate()->GetHeapProfiler()->TakeHeapSnapshot() };
+  CHECK(snapshot);
+  BaseObjectPtr<AsyncWrap> stream =
+      CreateHeapSnapshotStream(env, std::move(snapshot));
+  if (stream)
+    args.GetReturnValue().Set(stream->object());
 #endif
 }
 
@@ -389,24 +402,9 @@ void Initialize(Local<Object> target,
                 void* priv) {
   Environment* env = Environment::GetCurrent(context);
 
-  env->SetMethodNoSideEffect(target,
-                             "buildEmbedderGraph",
-                             BuildEmbedderGraph);
-  env->SetMethodNoSideEffect(target,
-                             "triggerHeapSnapshot",
-                             TriggerHeapSnapshot);
-  env->SetMethodNoSideEffect(target,
-                             "createHeapSnapshotStream",
-                             CreateHeapSnapshotStream);
-
-  // Create FunctionTemplate for HeapSnapshotStream
-  Local<FunctionTemplate> os = FunctionTemplate::New(env->isolate());
-  os->Inherit(AsyncWrap::GetConstructorTemplate(env));
-  Local<ObjectTemplate> ost = os->InstanceTemplate();
-  ost->SetInternalFieldCount(StreamBase::kStreamBaseFieldCount);
-  os->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "HeapSnapshotStream"));
-  StreamBase::AddMethods(env, os);
-  env->set_streambaseoutputstream_constructor_template(ost);
+  env->SetMethod(target, "buildEmbedderGraph", BuildEmbedderGraph);
+  env->SetMethod(target, "triggerHeapSnapshot", TriggerHeapSnapshot);
+  env->SetMethod(target, "createHeapSnapshotStream", CreateHeapSnapshotStream);
 }
 
 }  // namespace heap

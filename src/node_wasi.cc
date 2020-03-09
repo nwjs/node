@@ -1,6 +1,6 @@
 #include "env-inl.h"
 #include "base_object-inl.h"
-#include "debug_utils.h"
+#include "debug_utils-inl.h"
 #include "memory_tracker-inl.h"
 #include "node_mem-inl.h"
 #include "util-inl.h"
@@ -1063,7 +1063,7 @@ void WASI::PathFilestatGet(const FunctionCallbackInfo<Value>& args) {
   CHECK_TO_TYPE_OR_RETURN(args, args[4], Uint32, buf_ptr);
   ASSIGN_OR_RETURN_UNWRAP(&wasi, args.This());
   Debug(wasi,
-        "path_filestat_get(%d, %d, %d, %d, %d)\n",
+        "path_filestat_get(%d, %d, %d)\n",
         fd,
         path_ptr,
         path_len);
@@ -1810,7 +1810,7 @@ static void Initialize(Local<Object> target,
 
   Local<FunctionTemplate> tmpl = env->NewFunctionTemplate(WASI::New);
   auto wasi_wrap_string = FIXED_ONE_BYTE_STRING(env->isolate(), "WASI");
-  tmpl->InstanceTemplate()->SetInternalFieldCount(1);
+  tmpl->InstanceTemplate()->SetInternalFieldCount(WASI::kInternalFieldCount);
   tmpl->SetClassName(wasi_wrap_string);
 
   env->SetProtoMethod(tmpl, "args_get", WASI::ArgsGet);

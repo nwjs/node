@@ -1,9 +1,13 @@
-#include "debug_utils.h"
+#include "debug_utils-inl.h"  // NOLINT(build/include)
 #include "env-inl.h"
 
 #ifdef __POSIX__
 #if defined(__linux__)
 #include <features.h>
+#endif
+
+#ifdef __ANDROID__
+#include <android/log.h>
 #endif
 
 #if defined(__linux__) && !defined(__GLIBC__) || \
@@ -96,16 +100,14 @@ class PosixSymbolDebuggingContext final : public NativeSymbolDebuggingContext {
 
 std::unique_ptr<NativeSymbolDebuggingContext>
 NativeSymbolDebuggingContext::New() {
-  return std::unique_ptr<NativeSymbolDebuggingContext>(
-      new PosixSymbolDebuggingContext());
+  return std::make_unique<PosixSymbolDebuggingContext>();
 }
 
 #else  // HAVE_EXECINFO_H
 
 std::unique_ptr<NativeSymbolDebuggingContext>
 NativeSymbolDebuggingContext::New() {
-  return std::unique_ptr<NativeSymbolDebuggingContext>(
-      new NativeSymbolDebuggingContext());
+  return std::make_unique<NativeSymbolDebuggingContext>();
 }
 
 #endif  // HAVE_EXECINFO_H
@@ -437,6 +439,43 @@ std::vector<std::string> NativeSymbolDebuggingContext::GetLoadedLibraries() {
   return list;
 }
 
+void FWrite(FILE* file, const std::string& str) {
+  auto simple_fwrite = [&]() {
+    // The return value is ignored because there's no good way to handle it.
+    fwrite(str.data(), str.size(), 1, file);
+  };
+
+  if (file != stderr && file != stdout) {
+    simple_fwrite();
+    return;
+  }
+#ifdef _WIN32
+  HANDLE handle =
+      GetStdHandle(file == stdout ? STD_OUTPUT_HANDLE : STD_ERROR_HANDLE);
+
+  // Check if stderr is something other than a tty/console
+  if (handle == INVALID_HANDLE_VALUE || handle == nullptr ||
+      uv_guess_handle(_fileno(file)) != UV_TTY) {
+    simple_fwrite();
+    return;
+  }
+
+  // Get required wide buffer size
+  int n = MultiByteToWideChar(CP_UTF8, 0, str.data(), str.size(), nullptr, 0);
+
+  std::vector<wchar_t> wbuf(n);
+  MultiByteToWideChar(CP_UTF8, 0, str.data(), str.size(), wbuf.data(), n);
+
+  WriteConsoleW(handle, wbuf.data(), n, nullptr, nullptr);
+  return;
+#elif defined(__ANDROID__)
+  if (file == stderr) {
+    __android_log_print(ANDROID_LOG_ERROR, "nodejs", "%s", str.data());
+    return;
+  }
+#endif
+  simple_fwrite();
+}
 
 }  // namespace node
 

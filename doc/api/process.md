@@ -805,7 +805,7 @@ added: v0.7.2
 
 * {number}
 
-The port used by Node.js's debugger when enabled.
+The port used by the Node.js debugger when enabled.
 
 ```js
 process.debugPort = 5858;
@@ -1482,6 +1482,9 @@ is no entry script.
 <!-- YAML
 added: v0.1.16
 changes:
+  - version: v13.9.0
+    pr-url: https://github.com/nodejs/node/pull/31550
+    description: Added `arrayBuffers` to the returned object.
   - version: v7.2.0
     pr-url: https://github.com/nodejs/node/pull/9587
     description: Added `external` to the returned object.
@@ -1492,6 +1495,7 @@ changes:
   * `heapTotal` {integer}
   * `heapUsed` {integer}
   * `external` {integer}
+  * `arrayBuffers` {integer}
 
 The `process.memoryUsage()` method returns an object describing the memory usage
 of the Node.js process measured in bytes.
@@ -1510,19 +1514,22 @@ Will generate:
   rss: 4935680,
   heapTotal: 1826816,
   heapUsed: 650472,
-  external: 49879
+  external: 49879,
+  arrayBuffers: 9386
 }
 ```
 
-`heapTotal` and `heapUsed` refer to V8's memory usage.
-`external` refers to the memory usage of C++ objects bound to JavaScript
-objects managed by V8. `rss`, Resident Set Size, is the amount of space
-occupied in the main memory device (that is a subset of the total allocated
-memory) for the process, which includes the _heap_, _code segment_ and _stack_.
-
-The _heap_ is where objects, strings, and closures are stored. Variables are
-stored in the _stack_ and the actual JavaScript code resides in the
-_code segment_.
+* `heapTotal` and `heapUsed` refer to V8's memory usage.
+* `external` refers to the memory usage of C++ objects bound to JavaScript
+  objects managed by V8.
+* `rss`, Resident Set Size, is the amount of space occupied in the main
+  memory device (that is a subset of the total allocated memory) for the
+  process, including all C++ and JavaScript objects and code.
+* `arrayBuffers` refers to memory allocated for `ArrayBuffer`s and
+  `SharedArrayBuffer`s, including all Node.js [`Buffer`][]s.
+  This is also included in the `external` value. When Node.js is used as an
+  embedded library, this value may be `0` because allocations for `ArrayBuffer`s
+  may not be tracked in that case.
 
 When using [`Worker`][] threads, `rss` will be a value that is valid for the
 entire process, while the other fields will only refer to the current thread.
@@ -2162,6 +2169,14 @@ a [Writable][] stream.
 `process.stderr` differs from other Node.js streams in important ways. See
 [note on process I/O][] for more information.
 
+### `process.stderr.fd`
+
+* {number}
+
+This property refers to the value of underlying file descriptor of
+`process.stderr`. The value is fixed at `2`. In [`Worker`][] threads,
+this field does not exist.
+
 ## `process.stdin`
 
 * {Stream}
@@ -2195,6 +2210,14 @@ In "old" streams mode the `stdin` stream is paused by default, so one
 must call `process.stdin.resume()` to read from it. Note also that calling
 `process.stdin.resume()` itself would switch stream to "old" mode.
 
+### `process.stdin.fd`
+
+* {number}
+
+This property refers to the value of underlying file descriptor of
+`process.stdin`. The value is fixed at `0`. In [`Worker`][] threads,
+this field does not exist.
+
 ## `process.stdout`
 
 * {Stream}
@@ -2212,6 +2235,14 @@ process.stdin.pipe(process.stdout);
 
 `process.stdout` differs from other Node.js streams in important ways. See
 [note on process I/O][] for more information.
+
+### `process.stdout.fd`
+
+* {number}
+
+This property refers to the value of underlying file descriptor of
+`process.stdout`. The value is fixed at `1`. In [`Worker`][] threads,
+this field does not exist.
 
 ### A note on process I/O
 
@@ -2427,11 +2458,11 @@ cases:
   handler.
 * `2`: Unused (reserved by Bash for builtin misuse)
 * `3` **Internal JavaScript Parse Error**: The JavaScript source code
-  internal in Node.js's bootstrapping process caused a parse error. This
+  internal in the Node.js bootstrapping process caused a parse error. This
   is extremely rare, and generally can only happen during development
   of Node.js itself.
 * `4` **Internal JavaScript Evaluation Failure**: The JavaScript
-  source code internal in Node.js's bootstrapping process failed to
+  source code internal in the Node.js bootstrapping process failed to
   return a function value when evaluated. This is extremely rare, and
   generally can only happen during development of Node.js itself.
 * `5` **Fatal Error**: There was a fatal unrecoverable error in V8.
@@ -2450,7 +2481,7 @@ cases:
 * `9` **Invalid Argument**: Either an unknown option was specified,
   or an option requiring a value was provided without a value.
 * `10` **Internal JavaScript Run-Time Failure**: The JavaScript
-  source code internal in Node.js's bootstrapping process threw an error
+  source code internal in the Node.js bootstrapping process threw an error
   when the bootstrapping function was called. This is extremely rare,
   and generally can only happen during development of Node.js itself.
 * `12` **Invalid Debug Argument**: The `--inspect` and/or `--inspect-brk`
@@ -2466,6 +2497,7 @@ cases:
 [`'exit'`]: #process_event_exit
 [`'message'`]: child_process.html#child_process_event_message
 [`'uncaughtException'`]: #process_event_uncaughtexception
+[`Buffer`]: buffer.html
 [`ChildProcess.disconnect()`]: child_process.html#child_process_subprocess_disconnect
 [`ChildProcess.send()`]: child_process.html#child_process_subprocess_send_message_sendhandle_options_callback
 [`ChildProcess`]: child_process.html#child_process_class_childprocess

@@ -82,3 +82,70 @@ const { readFileSync } = require('fs');
   assert.strictEqual(payload.sources[0], sourceMap.payload.sources[0]);
   assert.notStrictEqual(payload.sources, sourceMap.payload.sources);
 }
+
+// Test various known decodings to ensure decodeVLQ works correctly.
+{
+  function makeMinimalMap(column) {
+    return {
+      sources: ['test.js'],
+      // Mapping from the 0th line, 0th column of the output file to the 0th
+      // source file, 0th line, ${column}th column.
+      mappings: `AAA${column}`,
+    };
+  }
+  const knownDecodings = {
+    'A': 0,
+    'B': -2147483648,
+    'C': 1,
+    'D': -1,
+    'E': 2,
+    'F': -2,
+
+    // 2^31 - 1, maximum values
+    '+/////D': 2147483647,
+    '8/////D': 2147483646,
+    '6/////D': 2147483645,
+    '4/////D': 2147483644,
+    '2/////D': 2147483643,
+    '0/////D': 2147483642,
+
+    // -2^31 + 1, minimum values
+    '//////D': -2147483647,
+    '9/////D': -2147483646,
+    '7/////D': -2147483645,
+    '5/////D': -2147483644,
+    '3/////D': -2147483643,
+    '1/////D': -2147483642,
+  };
+
+  for (const column in knownDecodings) {
+    const sourceMap = new SourceMap(makeMinimalMap(column));
+    const { originalColumn } = sourceMap.findEntry(0, 0);
+    assert.strictEqual(originalColumn, knownDecodings[column]);
+  }
+}
+
+// Test that generated columns are sorted when a negative offset is
+// observed, see: https://github.com/mozilla/source-map/pull/92
+{
+  function makeMinimalMap(generatedColumns, originalColumns) {
+    return {
+      sources: ['test.js'],
+      // Mapping from the 0th line, ${g}th column of the output file to the 0th
+      // source file, 0th line, ${column}th column.
+      mappings: generatedColumns.map((g, i) => `${g}AA${originalColumns[i]}`)
+        .join(',')
+    };
+  }
+  // U = 10
+  // F = -2
+  // A = 0
+  // E = 2
+  const sourceMap = new SourceMap(makeMinimalMap(
+    ['U', 'F', 'F'],
+    ['A', 'E', 'E']
+  ));
+  assert.strictEqual(sourceMap.findEntry(0, 6).originalColumn, 4);
+  assert.strictEqual(sourceMap.findEntry(0, 8).originalColumn, 2);
+  assert.strictEqual(sourceMap.findEntry(0, 10).originalColumn, 0);
+}

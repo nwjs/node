@@ -175,9 +175,8 @@ for (let i = 0; i < 10; ++i) {
   script.runInContext(context);
 }
 
-console.log(util.inspect(context));
-
-// { animal: 'cat', count: 12, name: 'kitty' }
+console.log(context);
+// Prints: { animal: 'cat', count: 12, name: 'kitty' }
 ```
 
 Using the `timeout` or `breakOnSigint` options will result in new event loops
@@ -246,9 +245,8 @@ contexts.forEach((context) => {
   script.runInNewContext(context);
 });
 
-console.log(util.inspect(contexts));
-
-// [{ globalVar: 'set' }, { globalVar: 'set' }, { globalVar: 'set' }]
+console.log(contexts);
+// Prints: [{ globalVar: 'set' }, { globalVar: 'set' }, { globalVar: 'set' }]
 ```
 
 ### `script.runInThisContext([options])`
@@ -295,6 +293,56 @@ for (let i = 0; i < 1000; ++i) {
 console.log(globalVar);
 
 // 1000
+```
+
+## `vm.measureMemory([options])`
+
+<!-- YAML
+added: v13.10.0
+-->
+
+> Stability: 1 - Experimental
+
+Measure the memory known to V8 and used by the current execution context
+or a specified context.
+
+* `options` {Object} Optional.
+  * `mode` {string} Either `'summary'` or `'detailed'`.
+    **Default:** `'summary'`
+  * `context` {Object} Optional. A [contextified][] object returned
+    by `vm.createContext()`. If not specified, measure the memory
+    usage of the current context where `vm.measureMemory()` is invoked.
+* Returns: {Promise} If the memory is successfully measured the promise will
+  resolve with an object containing information about the memory usage.
+
+The format of the object that the returned Promise may resolve with is
+specific to the V8 engine and may change from one version of V8 to the next.
+
+The returned result is different from the statistics returned by
+`v8.getHeapSpaceStatistics()` in that `vm.measureMemory()` measures
+the memory reachable by V8 from a specific context, while
+`v8.getHeapSpaceStatistics()` measures the memory used by an instance
+of V8 engine, which can switch among multiple contexts that reference
+objects in the heap of one engine.
+
+```js
+const vm = require('vm');
+// Measure the memory used by the current context and return the result
+// in summary.
+vm.measureMemory({ mode: 'summary' })
+  // Is the same as vm.measureMemory()
+  .then((result) => {
+    // The current format is:
+    // { total: { jsMemoryEstimate: 2211728, jsMemoryRange: [ 0, 2211728 ] } }
+    console.log(result);
+  });
+
+const context = vm.createContext({});
+vm.measureMemory({ mode: 'detailed' }, context)
+  .then((result) => {
+    // At the moment the detailed format is the same as the summary one.
+    console.log(result);
+  });
 ```
 
 ## Class: `vm.Module`
@@ -804,9 +852,11 @@ vm.createContext(context);
 
 vm.runInContext('globalVar *= 2;', context);
 
-console.log(util.inspect(context)); // { globalVar: 2 }
+console.log(context);
+// Prints: { globalVar: 2 }
 
-console.log(util.inspect(globalVar)); // 3
+console.log(global.globalVar);
+// Prints: 3
 ```
 
 If `contextObject` is omitted (or passed explicitly as `undefined`), a new,
@@ -906,9 +956,8 @@ vm.createContext(contextObject);
 for (let i = 0; i < 10; ++i) {
   vm.runInContext('globalVar *= 2;', contextObject);
 }
-console.log(util.inspect(contextObject));
-
-// { globalVar: 1024 }
+console.log(contextObject);
+// Prints: { globalVar: 1024 }
 ```
 
 ## `vm.runInNewContext(code[, contextObject[, options]])`
@@ -1003,9 +1052,8 @@ const contextObject = {
 };
 
 vm.runInNewContext('count += 1; name = "kitty"', contextObject);
-console.log(util.inspect(contextObject));
-
-// { animal: 'cat', count: 3, name: 'kitty' }
+console.log(contextObject);
+// Prints: { animal: 'cat', count: 3, name: 'kitty' }
 ```
 
 ## `vm.runInThisContext(code[, options])`
@@ -1075,15 +1123,12 @@ const vm = require('vm');
 let localVar = 'initial value';
 
 const vmResult = vm.runInThisContext('localVar = "vm";');
-console.log('vmResult:', vmResult);
-console.log('localVar:', localVar);
+console.log(`vmResult: '${vmResult}', localVar: '${localVar}'`);
+// Prints: vmResult: 'vm', localVar: 'initial value'
 
 const evalResult = eval('localVar = "eval";');
-console.log('evalResult:', evalResult);
-console.log('localVar:', localVar);
-
-// vmResult: 'vm', localVar: 'initial value'
-// evalResult: 'eval', localVar: 'eval'
+console.log(`evalResult: '${evalResult}', localVar: '${localVar}'`);
+// Prints: evalResult: 'eval', localVar: 'eval'
 ```
 
 Because `vm.runInThisContext()` does not have access to the local scope,

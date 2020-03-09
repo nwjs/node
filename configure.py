@@ -89,6 +89,11 @@ parser.add_option('--debug',
     dest='debug',
     help='also build debug build')
 
+parser.add_option('--debug-node',
+    action='store_true',
+    dest='debug_node',
+    help='build the Node.js part of the binary with debugging symbols')
+
 parser.add_option('--dest-cpu',
     action='store',
     dest='dest_cpu',
@@ -609,6 +614,12 @@ parser.add_option('--v8-non-optimized-debug',
     default=False,
     help='compile V8 with minimal optimizations and with runtime checks')
 
+parser.add_option('--node-builtin-modules-path',
+    action='store',
+    dest='node_builtin_modules_path',
+    default=False,
+    help='node will load builtin modules from disk instead of from binary')
+
 # Create compile_commands.json in out/Debug and out/Release.
 parser.add_option('-C',
     action='store_true',
@@ -969,6 +980,7 @@ def configure_node(o):
   o['variables']['node_prefix'] = options.prefix
   o['variables']['node_install_npm'] = b(not options.without_npm)
   o['variables']['node_report'] = b(not options.without_report)
+  o['variables']['debug_node'] = b(options.debug_node)
   o['default_configuration'] = 'Debug' if options.debug else 'Release'
 
   host_arch = host_arch_win() if os.name == 'nt' else host_arch_cc()
@@ -992,18 +1004,18 @@ def configure_node(o):
 
   o['variables']['want_separate_host_toolset'] = int(cross_compiling)
 
-  if not options.without_node_snapshot:
+  if options.without_node_snapshot or options.node_builtin_modules_path:
+    o['variables']['node_use_node_snapshot'] = 'false'
+  else:
     o['variables']['node_use_node_snapshot'] = b(
       not cross_compiling and not options.shared)
-  else:
-    o['variables']['node_use_node_snapshot'] = 'false'
 
-  if not options.without_node_code_cache:
+  if options.without_node_code_cache or options.node_builtin_modules_path:
+    o['variables']['node_use_node_code_cache'] = 'false'
+  else:
     # TODO(refack): fix this when implementing embedded code-cache when cross-compiling.
     o['variables']['node_use_node_code_cache'] = b(
       not cross_compiling and not options.shared)
-  else:
-    o['variables']['node_use_node_code_cache'] = 'false'
 
   if target_arch == 'arm':
     configure_arm(o)
@@ -1144,6 +1156,10 @@ def configure_node(o):
     o['variables']['node_target_type'] = 'static_library'
   else:
     o['variables']['node_target_type'] = 'executable'
+
+  if options.node_builtin_modules_path:
+    print('Warning! Loading builtin modules from disk is for development')
+    o['variables']['node_builtin_modules_path'] = options.node_builtin_modules_path
 
 def configure_napi(output):
   version = getnapibuildversion.get_napi_version()

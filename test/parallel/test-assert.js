@@ -401,7 +401,7 @@ assert.throws(
     threw = true;
     assert.ok(e.message.includes(rangeError.message));
     assert.ok(e instanceof assert.AssertionError);
-    assert.ok(!e.stack.includes('doesNotThrow'), e.stack);
+    assert.ok(!e.stack.includes('doesNotThrow'), e);
   }
   assert.ok(threw);
 }
@@ -1460,4 +1460,17 @@ assert.throws(
     }
   );
   assert.doesNotMatch('I will pass', /different$/);
+}
+
+{
+  const tempColor = inspect.defaultOptions.colors;
+  assert.throws(() => {
+    inspect.defaultOptions.colors = true;
+    // Guarantee the position indicator is placed correctly.
+    assert.strictEqual(111554n, 11111115);
+  }, (err) => {
+    assert.strictEqual(inspect(err).split('\n')[5], '     ^');
+    inspect.defaultOptions.colors = tempColor;
+    return true;
+  });
 }

@@ -53,7 +53,6 @@ namespace fs {
 
 using v8::Array;
 using v8::Context;
-using v8::DontDelete;
 using v8::EscapableHandleScope;
 using v8::Function;
 using v8::FunctionCallbackInfo;
@@ -68,8 +67,6 @@ using v8::Number;
 using v8::Object;
 using v8::ObjectTemplate;
 using v8::Promise;
-using v8::PropertyAttribute;
-using v8::ReadOnly;
 using v8::String;
 using v8::Symbol;
 using v8::Uint32;
@@ -138,15 +135,6 @@ FileHandle* FileHandle::New(Environment* env, int fd, Local<Object> obj) {
                             .ToLocal(&obj)) {
     return nullptr;
   }
-  PropertyAttribute attr =
-      static_cast<PropertyAttribute>(ReadOnly | DontDelete);
-  if (obj->DefineOwnProperty(env->context(),
-                             env->fd_string(),
-                             Integer::New(env->isolate(), fd),
-                             attr)
-          .IsNothing()) {
-    return nullptr;
-  }
   return new FileHandle(env, obj, fd);
 }
 
@@ -190,11 +178,12 @@ inline void FileHandle::Close() {
   uv_fs_t req;
   int ret = uv_fs_close(env()->event_loop(), &req, fd_, nullptr);
   uv_fs_req_cleanup(&req);
-  AfterClose();
 
   struct err_detail { int ret; int fd; };
 
   err_detail detail { ret, fd_ };
+
+  AfterClose();
 
   if (ret < 0) {
     // Do not unref this
@@ -340,6 +329,7 @@ void FileHandle::ReleaseFD(const FunctionCallbackInfo<Value>& args) {
 void FileHandle::AfterClose() {
   closing_ = false;
   closed_ = true;
+  fd_ = -1;
   if (reading_ && !persistent().IsEmpty())
     EmitRead(UV_EOF);
 }
@@ -710,16 +700,11 @@ void AfterScanDirWithTypes(uv_fs_t* req) {
     type_v.emplace_back(Integer::New(isolate, ent.type));
   }
 
-  Local<Array> result = Array::New(isolate, 2);
-  result->Set(env->context(),
-              0,
-              Array::New(isolate, name_v.data(),
-              name_v.size())).Check();
-  result->Set(env->context(),
-              1,
-              Array::New(isolate, type_v.data(),
-              type_v.size())).Check();
-  req_wrap->Resolve(result);
+  Local<Value> result[] = {
+    Array::New(isolate, name_v.data(), name_v.size()),
+    Array::New(isolate, type_v.data(), type_v.size())
+  };
+  req_wrap->Resolve(Array::New(isolate, result, arraysize(result)));
 }
 
 void Access(const FunctionCallbackInfo<Value>& args) {
@@ -1236,11 +1221,18 @@ int MKDirpSync(uv_loop_t* loop,
     int err = uv_fs_mkdir(loop, req, next_path.c_str(), mode, nullptr);
     while (true) {
       switch (err) {
+        // Note: uv_fs_req_cleanup in terminal paths will be called by
+        // ~FSReqWrapSync():
         case 0:
           if (continuation_data.paths().size() == 0) {
             return 0;
           }
           break;
+        case UV_EACCES:
+        case UV_ENOTDIR:
+        case UV_EPERM: {
+          return err;
+        }
         case UV_ENOENT: {
           std::string dirname = next_path.substr(0,
                                         next_path.find_last_of(kPathSeparator));
@@ -1252,9 +1244,6 @@ int MKDirpSync(uv_loop_t* loop,
             continue;
           }
           break;
-        }
-        case UV_EPERM: {
-          return err;
         }
         default:
           uv_fs_req_cleanup(req);
@@ -1303,6 +1292,8 @@ int MKDirpAsync(uv_loop_t* loop,
 
     while (true) {
       switch (err) {
+        // Note: uv_fs_req_cleanup in terminal paths will be called by
+        // FSReqAfterScope::~FSReqAfterScope()
         case 0: {
           if (req_wrap->continuation_data()->paths().size() == 0) {
             req_wrap->continuation_data()->Done(0);
@@ -1311,6 +1302,12 @@ int MKDirpAsync(uv_loop_t* loop,
             MKDirpAsync(loop, req, path.c_str(),
                         req_wrap->continuation_data()->mode(), nullptr);
           }
+          break;
+        }
+        case UV_EACCES:
+        case UV_ENOTDIR:
+        case UV_EPERM: {
+          req_wrap->continuation_data()->Done(err);
           break;
         }
         case UV_ENOENT: {
@@ -1326,10 +1323,6 @@ int MKDirpAsync(uv_loop_t* loop,
           uv_fs_req_cleanup(req);
           MKDirpAsync(loop, req, path.c_str(),
                       req_wrap->continuation_data()->mode(), nullptr);
-          break;
-        }
-        case UV_EPERM: {
-          req_wrap->continuation_data()->Done(err);
           break;
         }
         default:
@@ -1355,7 +1348,6 @@ int MKDirpAsync(uv_loop_t* loop,
             }
             // verify that the path pointed to is actually a directory.
             if (err == 0 && !S_ISDIR(req->statbuf.st_mode)) err = UV_EEXIST;
-            uv_fs_req_cleanup(req);
             req_wrap->continuation_data()->Done(err);
           }});
           if (err < 0) req_wrap->continuation_data()->Done(err);
@@ -1522,13 +1514,11 @@ static void ReadDir(const FunctionCallbackInfo<Value>& args) {
 
     Local<Array> names = Array::New(isolate, name_v.data(), name_v.size());
     if (with_types) {
-      Local<Array> result = Array::New(isolate, 2);
-      result->Set(env->context(), 0, names).Check();
-      result->Set(env->context(),
-                  1,
-                  Array::New(isolate, type_v.data(),
-                             type_v.size())).Check();
-      args.GetReturnValue().Set(result);
+      Local<Value> result[] = {
+        names,
+        Array::New(isolate, type_v.data(), type_v.size())
+      };
+      args.GetReturnValue().Set(Array::New(isolate, result, arraysize(result)));
     } else {
       args.GetReturnValue().Set(names);
     }
@@ -2208,7 +2198,8 @@ void Initialize(Local<Object> target,
 
   // Create FunctionTemplate for FSReqCallback
   Local<FunctionTemplate> fst = env->NewFunctionTemplate(NewFSReqCallback);
-  fst->InstanceTemplate()->SetInternalFieldCount(1);
+  fst->InstanceTemplate()->SetInternalFieldCount(
+      FSReqBase::kInternalFieldCount);
   fst->Inherit(AsyncWrap::GetConstructorTemplate(env));
   Local<String> wrapString =
       FIXED_ONE_BYTE_STRING(isolate, "FSReqCallback");
@@ -2221,7 +2212,8 @@ void Initialize(Local<Object> target,
   // Create FunctionTemplate for FileHandleReadWrap. There’s no need
   // to do anything in the constructor, so we only store the instance template.
   Local<FunctionTemplate> fh_rw = FunctionTemplate::New(isolate);
-  fh_rw->InstanceTemplate()->SetInternalFieldCount(1);
+  fh_rw->InstanceTemplate()->SetInternalFieldCount(
+      FSReqBase::kInternalFieldCount);
   fh_rw->Inherit(AsyncWrap::GetConstructorTemplate(env));
   Local<String> fhWrapString =
       FIXED_ONE_BYTE_STRING(isolate, "FileHandleReqWrap");
@@ -2236,7 +2228,7 @@ void Initialize(Local<Object> target,
       FIXED_ONE_BYTE_STRING(isolate, "FSReqPromise");
   fpt->SetClassName(promiseString);
   Local<ObjectTemplate> fpo = fpt->InstanceTemplate();
-  fpo->SetInternalFieldCount(1);
+  fpo->SetInternalFieldCount(FSReqBase::kInternalFieldCount);
   env->set_fsreqpromise_constructor_template(fpo);
 
   // Create FunctionTemplate for FileHandle
@@ -2245,7 +2237,7 @@ void Initialize(Local<Object> target,
   env->SetProtoMethod(fd, "close", FileHandle::Close);
   env->SetProtoMethod(fd, "releaseFD", FileHandle::ReleaseFD);
   Local<ObjectTemplate> fdt = fd->InstanceTemplate();
-  fdt->SetInternalFieldCount(StreamBase::kStreamBaseFieldCount);
+  fdt->SetInternalFieldCount(StreamBase::kInternalFieldCount);
   Local<String> handleString =
        FIXED_ONE_BYTE_STRING(isolate, "FileHandle");
   fd->SetClassName(handleString);
@@ -2262,7 +2254,7 @@ void Initialize(Local<Object> target,
                         "FileHandleCloseReq"));
   fdclose->Inherit(AsyncWrap::GetConstructorTemplate(env));
   Local<ObjectTemplate> fdcloset = fdclose->InstanceTemplate();
-  fdcloset->SetInternalFieldCount(1);
+  fdcloset->SetInternalFieldCount(FSReqBase::kInternalFieldCount);
   env->set_fdclose_constructor_template(fdcloset);
 
   Local<Symbol> use_promises_symbol =

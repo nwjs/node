@@ -1,5 +1,5 @@
 #include "aliased_buffer.h"
-#include "debug_utils.h"
+#include "debug_utils-inl.h"
 #include "memory_tracker-inl.h"
 #include "node.h"
 #include "node_buffer.h"
@@ -1943,7 +1943,7 @@ std::string Http2Stream::diagnostic_name() const {
 
 // Notify the Http2Stream that a new block of HEADERS is being processed.
 void Http2Stream::StartHeaders(nghttp2_headers_category category) {
-  Debug(this, "starting headers, category: %d", id_, category);
+  Debug(this, "starting headers, category: %d", category);
   CHECK(!this->IsDestroyed());
   session_->DecrementCurrentSessionMemory(current_headers_length_);
   current_headers_length_ = 0;
@@ -2201,7 +2201,7 @@ int Http2Stream::DoWrite(WriteWrap* req_wrap,
     req_wrap->Done(UV_EOF);
     return 0;
   }
-  Debug(this, "queuing %d buffers to send", id_, nbufs);
+  Debug(this, "queuing %d buffers to send", nbufs);
   for (size_t i = 0; i < nbufs; ++i) {
     // Store the req_wrap on the last write info in the queue, so that it is
     // only marked as finished once all buffers associated with it are finished.
@@ -3028,14 +3028,14 @@ void Initialize(Local<Object> target,
   ping->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "Http2Ping"));
   ping->Inherit(AsyncWrap::GetConstructorTemplate(env));
   Local<ObjectTemplate> pingt = ping->InstanceTemplate();
-  pingt->SetInternalFieldCount(1);
+  pingt->SetInternalFieldCount(Http2Session::Http2Ping::kInternalFieldCount);
   env->set_http2ping_constructor_template(pingt);
 
   Local<FunctionTemplate> setting = FunctionTemplate::New(env->isolate());
   setting->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "Http2Setting"));
   setting->Inherit(AsyncWrap::GetConstructorTemplate(env));
   Local<ObjectTemplate> settingt = setting->InstanceTemplate();
-  settingt->SetInternalFieldCount(1);
+  settingt->SetInternalFieldCount(AsyncWrap::kInternalFieldCount);
   env->set_http2settings_constructor_template(settingt);
 
   Local<FunctionTemplate> stream = FunctionTemplate::New(env->isolate());
@@ -3052,7 +3052,7 @@ void Initialize(Local<Object> target,
   stream->Inherit(AsyncWrap::GetConstructorTemplate(env));
   StreamBase::AddMethods(env, stream);
   Local<ObjectTemplate> streamt = stream->InstanceTemplate();
-  streamt->SetInternalFieldCount(StreamBase::kStreamBaseFieldCount);
+  streamt->SetInternalFieldCount(StreamBase::kInternalFieldCount);
   env->set_http2stream_constructor_template(streamt);
   target->Set(context,
               FIXED_ONE_BYTE_STRING(env->isolate(), "Http2Stream"),
@@ -3061,7 +3061,8 @@ void Initialize(Local<Object> target,
   Local<FunctionTemplate> session =
       env->NewFunctionTemplate(Http2Session::New);
   session->SetClassName(http2SessionClassName);
-  session->InstanceTemplate()->SetInternalFieldCount(1);
+  session->InstanceTemplate()->SetInternalFieldCount(
+      Http2Session::kInternalFieldCount);
   session->Inherit(AsyncWrap::GetConstructorTemplate(env));
   env->SetProtoMethod(session, "origin", Http2Session::Origin);
   env->SetProtoMethod(session, "altsvc", Http2Session::AltSvc);

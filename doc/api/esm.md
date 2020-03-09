@@ -33,9 +33,8 @@ initial input, or when referenced by `import` statements within ES module code:
 
 * Files ending in `.mjs`.
 
-* Files ending in `.js`, or extensionless files, when the nearest parent
-  `package.json` file contains a top-level field `"type"` with a value of
-  `"module"`.
+* Files ending in `.js` when the nearest parent `package.json` file contains a
+  top-level field `"type"` with a value of `"module"`.
 
 * Strings passed in as an argument to `--eval` or `--print`, or piped to
   `node` via `STDIN`, with the flag `--input-type=module`.
@@ -50,18 +49,17 @@ or when referenced by `import` statements within ES module code:
 
 * Files ending in `.cjs`.
 
-* Files ending in `.js`, or extensionless files, when the nearest parent
-  `package.json` file contains a top-level field `"type"` with a value of
-  `"commonjs"`.
+* Files ending in `.js` when the nearest parent `package.json` file contains a
+  top-level field `"type"` with a value of `"commonjs"`.
 
 * Strings passed in as an argument to `--eval` or `--print`, or piped to
   `node` via `STDIN`, with the flag `--input-type=commonjs`.
 
 ### `package.json` `"type"` field
 
-Files ending with `.js` or lacking any extension will be loaded as ES modules
-when the nearest parent `package.json` file contains a top-level field `"type"`
-with a value of `"module"`.
+Files ending with `.js` will be loaded as ES modules when the nearest parent
+`package.json` file contains a top-level field `"type"` with a value of
+`"module"`.
 
 The nearest parent `package.json` is defined as the first `package.json` found
 when searching in the current folder, that folder’s parent, and so on up
@@ -81,14 +79,12 @@ node my-app.js # Runs as ES module
 ```
 
 If the nearest parent `package.json` lacks a `"type"` field, or contains
-`"type": "commonjs"`, extensionless and `.js` files are treated as CommonJS.
-If the volume root is reached and no `package.json` is found,
-Node.js defers to the default, a `package.json` with no `"type"`
-field. "Extensionless" refers to file paths which do not contain
-an extension as opposed to optionally dropping a file extension in a specifier.
+`"type": "commonjs"`, `.js` files are treated as CommonJS. If the volume root is
+reached and no `package.json` is found, Node.js defers to the default, a
+`package.json` with no `"type"` field.
 
-`import` statements of `.js` and extensionless files are treated as ES modules
-if the nearest parent `package.json` contains `"type": "module"`.
+`import` statements of `.js` files are treated as ES modules if the nearest
+parent `package.json` contains `"type": "module"`.
 
 ```js
 // my-app.js, part of the same example as above
@@ -106,14 +102,13 @@ as ES modules and `.cjs` files are always treated as CommonJS.
 
 ### Package Scope and File Extensions
 
-A folder containing a `package.json` file, and all subfolders below that
-folder down until the next folder containing another `package.json`, is
-considered a _package scope_. The `"type"` field defines how `.js` and
-extensionless files should be treated within a particular `package.json` file’s
-package scope. Every package in a project’s `node_modules` folder contains its
-own `package.json` file, so each project’s dependencies have their own package
-scopes. A `package.json` lacking a `"type"` field is treated as if it contained
-`"type": "commonjs"`.
+A folder containing a `package.json` file, and all subfolders below that folder
+down until the next folder containing another `package.json`, is considered a
+_package scope_. The `"type"` field defines how `.js` files should be treated
+within a particular `package.json` file’s package scope. Every package in a
+project’s `node_modules` folder contains its own `package.json` file, so each
+project’s dependencies have their own package scopes. A `package.json` lacking a
+`"type"` field is treated as if it contained `"type": "commonjs"`.
 
 The package scope applies not only to initial entry points (`node my-app.js`)
 but also to files referenced by `import` statements and `import()` expressions.
@@ -791,6 +786,32 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 ```
 
+### No `require.resolve`
+
+Former use cases relying on `require.resolve` to determine the resolved path
+of a module can be supported via `import.meta.resolve`, which is experimental
+and supported via the `--experimental-import-meta-resolve` flag:
+
+```js
+(async () => {
+  const dependencyAsset = await import.meta.resolve('component-lib/asset.css');
+})();
+```
+
+`import.meta.resolve` also accepts a second argument which is the parent module
+from which to resolve from:
+
+```js
+(async () => {
+  // Equivalent to import.meta.resolve('./dep')
+  await import.meta.resolve('./dep', import.meta.url);
+})();
+```
+
+This function is asynchronous since the ES module resolver in Node.js is
+asynchronous. With the introduction of [Top-Level Await][], these use cases
+will be easier as they won't require an async function wrapper.
+
 ### No `require.extensions`
 
 `require.extensions` is not used by `import`. The expectation is that loader
@@ -1355,19 +1376,31 @@ The resolver has the following properties:
 
 The algorithm to load an ES module specifier is given through the
 **ESM_RESOLVE** method below. It returns the resolved URL for a
-module specifier relative to a parentURL, in addition to the unique module
-format for that resolved URL given by the **ESM_FORMAT** routine.
+module specifier relative to a parentURL.
 
-The _"module"_ format is returned for an ECMAScript Module, while the
-_"commonjs"_ format is used to indicate loading through the legacy
-CommonJS loader. Additional formats such as _"addon"_ can be extended in future
-updates.
+The algorithm to determine the module format of a resolved URL is
+provided by **ESM_FORMAT**, which returns the unique module
+format for any file. The _"module"_ format is returned for an ECMAScript
+Module, while the _"commonjs"_ format is used to indicate loading through the
+legacy CommonJS loader. Additional formats such as _"addon"_ can be extended in
+future updates.
 
 In the following algorithms, all subroutine errors are propagated as errors
 of these top-level routines unless stated otherwise.
 
 _defaultEnv_ is the conditional environment name priority array,
 `["node", "import"]`.
+
+The resolver can throw the following errors:
+* _Invalid Module Specifier_: Module specifier is an invalid URL, package name
+  or package subpath specifier.
+* _Invalid Package Configuration_: package.json configuration is invalid or
+  contains an invalid configuration.
+* _Invalid Package Target_: Package exports define a target module within the
+  package that is an invalid type or string target.
+* _Package Path Not Exported_: Package exports do not define or permit a target
+  subpath in the package for the given module.
+* _Module Not Found_: The package or module requested does not exist.
 
 <details>
 <summary>Resolver algorithm specification</summary>
@@ -1379,7 +1412,7 @@ _defaultEnv_ is the conditional environment name priority array,
 >    1. Set _resolvedURL_ to the result of parsing and reserializing
 >       _specifier_ as a URL.
 > 1. Otherwise, if _specifier_ starts with _"/"_, then
->    1. Throw an _Invalid Specifier_ error.
+>    1. Throw an _Invalid Module Specifier_ error.
 > 1. Otherwise, if _specifier_ starts with _"./"_ or _"../"_, then
 >    1. Set _resolvedURL_ to the URL resolution of _specifier_ relative to
 >       _parentURL_.
@@ -1389,26 +1422,28 @@ _defaultEnv_ is the conditional environment name priority array,
 >       **PACKAGE_RESOLVE**(_specifier_, _parentURL_).
 > 1. If _resolvedURL_ contains any percent encodings of _"/"_ or _"\\"_ (_"%2f"_
 >    and _"%5C"_ respectively), then
->    1. Throw an _Invalid Specifier_ error.
-> 1. If the file at _resolvedURL_ does not exist, then
+>    1. Throw an _Invalid Module Specifier_ error.
+> 1. If _resolvedURL_ does not end with a trailing _"/"_ and the file at
+>    _resolvedURL_ does not exist, then
 >    1. Throw a _Module Not Found_ error.
 > 1. Set _resolvedURL_ to the real path of _resolvedURL_.
 > 1. Let _format_ be the result of **ESM_FORMAT**(_resolvedURL_).
 > 1. Load _resolvedURL_ as module format, _format_.
+> 1. Return _resolvedURL_.
 
 **PACKAGE_RESOLVE**(_packageSpecifier_, _parentURL_)
 
 > 1. Let _packageName_ be *undefined*.
 > 1. Let _packageSubpath_ be *undefined*.
 > 1. If _packageSpecifier_ is an empty string, then
->    1. Throw an _Invalid Specifier_ error.
+>    1. Throw an _Invalid Module Specifier_ error.
 > 1. Otherwise,
 >    1. If _packageSpecifier_ does not contain a _"/"_ separator, then
->       1. Throw an _Invalid Specifier_ error.
+>       1. Throw an _Invalid Module Specifier_ error.
 >    1. Set _packageName_ to the substring of _packageSpecifier_
 >       until the second _"/"_ separator or the end of the string.
 > 1. If _packageName_ starts with _"."_ or contains _"\\"_ or _"%"_, then
->    1. Throw an _Invalid Specifier_ error.
+>    1. Throw an _Invalid Module Specifier_ error.
 > 1. Let _packageSubpath_ be _undefined_.
 > 1. If the length of _packageSpecifier_ is greater than the length of
 >    _packageName_, then
@@ -1416,13 +1451,13 @@ _defaultEnv_ is the conditional environment name priority array,
 >       _packageSpecifier_ from the position at the length of _packageName_.
 > 1. If _packageSubpath_ contains any _"."_ or _".."_ segments or percent
 >    encoded strings for _"/"_ or _"\\"_, then
->    1. Throw an _Invalid Specifier_ error.
+>    1. Throw an _Invalid Module Specifier_ error.
 > 1. Set _selfUrl_ to the result of
 >    **SELF_REFERENCE_RESOLVE**(_packageName_, _packageSubpath_, _parentURL_).
 > 1. If _selfUrl_ isn't empty, return _selfUrl_.
 > 1. If _packageSubpath_ is _undefined_ and _packageName_ is a Node.js builtin
 >    module, then
->    1. Return the string _"node:"_ concatenated with _packageSpecifier_.
+>    1. Return the string _"nodejs:"_ concatenated with _packageSpecifier_.
 > 1. While _parentURL_ is not the file system root,
 >    1. Let _packageURL_ be the URL resolution of _"node_modules/"_
 >       concatenated with _packageSpecifier_, relative to _parentURL_.
@@ -1431,6 +1466,8 @@ _defaultEnv_ is the conditional environment name priority array,
 >       1. Set _parentURL_ to the parent URL path of _parentURL_.
 >       1. Continue the next loop iteration.
 >    1. Let _pjson_ be the result of **READ_PACKAGE_JSON**(_packageURL_).
+>    1. If _packageSubpath_ is equal to _"./"_, then
+>       1. Return _packageURL_ + _"/"_.
 >    1. If _packageSubpath_ is _undefined__, then
 >       1. Return the result of **PACKAGE_MAIN_RESOLVE**(_packageURL_,
 >          _pjson_).
@@ -1452,6 +1489,8 @@ _defaultEnv_ is the conditional environment name priority array,
 > 1. If _pjson_ does not include an _"exports"_ property, then
 >    1. Return **undefined**.
 > 1. If _pjson.name_ is equal to _packageName_, then
+>    1. If _packageSubpath_ is equal to _"./"_, then
+>       1. Return _packageURL_ + _"/"_.
 >    1. If _packageSubpath_ is _undefined_, then
 >       1. Return the result of **PACKAGE_MAIN_RESOLVE**(_packageURL_, _pjson_).
 >    1. Otherwise,
@@ -1469,7 +1508,7 @@ _defaultEnv_ is the conditional environment name priority array,
 >    1. Throw a _Module Not Found_ error.
 > 1. If _pjson.exports_ is not **null** or **undefined**, then
 >    1. If _exports_ is an Object with both a key starting with _"."_ and a key
->       not starting with _"."_, throw an "Invalid Package Configuration" error.
+>       not starting with _"."_, throw an _Invalid Package Configuration_ error.
 >    1. If _pjson.exports_ is a String or Array, or an Object containing no
 >       keys starting with _"."_, then
 >       1. Return **PACKAGE_EXPORTS_TARGET_RESOLVE**(_packageURL_,
@@ -1478,6 +1517,7 @@ _defaultEnv_ is the conditional environment name priority array,
 >       1. Let _mainExport_ be the _"."_ property in _pjson.exports_.
 >       1. Return **PACKAGE_EXPORTS_TARGET_RESOLVE**(_packageURL_,
 >          _mainExport_, _""_).
+>    1. Throw a _Package Path Not Exported_ error.
 > 1. If _pjson.main_ is a String, then
 >    1. Let _resolvedMain_ be the URL resolution of _packageURL_, "/", and
 >       _pjson.main_.
@@ -1492,7 +1532,7 @@ _defaultEnv_ is the conditional environment name priority array,
 
 **PACKAGE_EXPORTS_RESOLVE**(_packageURL_, _packagePath_, _exports_)
 > 1. If _exports_ is an Object with both a key starting with _"."_ and a key not
->    starting with _"."_, throw an "Invalid Package Configuration" error.
+>    starting with _"."_, throw an _Invalid Package Configuration_ error.
 > 1. If _exports_ is an Object and all keys of _exports_ start with _"."_, then
 >    1. Set _packagePath_ to _"./"_ concatenated with _packagePath_.
 >    1. If _packagePath_ is a key of _exports_, then
@@ -1508,59 +1548,58 @@ _defaultEnv_ is the conditional environment name priority array,
 >             of the length of _directory_.
 >          1. Return **PACKAGE_EXPORTS_TARGET_RESOLVE**(_packageURL_, _target_,
 >             _subpath_, _defaultEnv_).
-> 1. Throw a _Module Not Found_ error.
+> 1. Throw a _Package Path Not Exported_ error.
 
 **PACKAGE_EXPORTS_TARGET_RESOLVE**(_packageURL_, _target_, _subpath_, _env_)
 
-> 1. If _target_ is a String, then
->    1. If _target_ does not start with _"./"_, throw a _Module Not Found_
->       error.
->    1. If _subpath_ has non-zero length and _target_ does not end with _"/"_,
->       throw a _Module Not Found_ error.
->    1. If _target_ or _subpath_ contain any _"node_modules"_ segments including
->       _"node_modules"_ percent-encoding, throw a _Module Not Found_ error.
+> 1.If _target_ is a String, then
+>    1. If _target_ does not start with _"./"_ or contains any _"node_modules"_
+>       segments including _"node_modules"_ percent-encoding, throw an
+>       _Invalid Package Target_ error.
 >    1. Let _resolvedTarget_ be the URL resolution of the concatenation of
 >       _packageURL_ and _target_.
->    1. If _resolvedTarget_ is contained in _packageURL_, then
->       1. Let _resolved_ be the URL resolution of the concatenation of
->          _subpath_ and _resolvedTarget_.
->       1. If _resolved_ is contained in _resolvedTarget_, then
->          1. Return _resolved_.
+>    1. If _resolvedTarget_ is not contained in _packageURL_, throw an
+>       _Invalid Package Target_ error.
+>    1. If _subpath_ has non-zero length and _target_ does not end with _"/"_,
+>       throw an _Invalid Module Specifier_ error.
+>    1. Let _resolved_ be the URL resolution of the concatenation of
+>       _subpath_ and _resolvedTarget_.
+>    1. If _resolved_ is not contained in _resolvedTarget_, throw an
+>       _Invalid Module Specifier_ error.
+>    1. Return _resolved_.
 > 1. Otherwise, if _target_ is a non-null Object, then
 >    1. If _exports_ contains any index property keys, as defined in ECMA-262
 >       [6.1.7 Array Index][], throw an _Invalid Package Configuration_ error.
 >    1. For each property _p_ of _target_, in object insertion order as,
 >       1. If _env_ contains an entry for _p_, then
 >          1. Let _targetValue_ be the value of the _p_ property in _target_.
->          1. Let _resolved_ be the result of **PACKAGE_EXPORTS_TARGET_RESOLVE**
->             (_packageURL_, _targetValue_, _subpath_, _env_).
->          1. Assert: _resolved_ is a String.
->          1. Return _resolved_.
+>          1. Return the result of **PACKAGE_EXPORTS_TARGET_RESOLVE**(
+>             _packageURL_, _targetValue_, _subpath_, _env_), continuing the
+>             loop on any _Package Path Not Exported_ error.
+>    1. Throw a _Package Path Not Exported_ error.
 > 1. Otherwise, if _target_ is an Array, then
+>    1. If _target.length is zero, throw an _Invalid Package Target_ error.
 >    1. For each item _targetValue_ in _target_, do
 >       1. If _targetValue_ is an Array, continue the loop.
->       1. Let _resolved_ be the result of
->          **PACKAGE_EXPORTS_TARGET_RESOLVE**(_packageURL_, _targetValue_,
->          _subpath_, _env_), continuing the loop on abrupt completion.
->       1. Assert: _resolved_ is a String.
->       1. Return _resolved_.
-> 1. Throw a _Module Not Found_ error.
+>       1. Return the result of **PACKAGE_EXPORTS_TARGET_RESOLVE**(_packageURL_,
+>          _targetValue_, _subpath_, _env_), continuing the loop on any
+>          _Package Path Not Exported_ or _Invalid Package Target_ error.
+>    1. Throw the last fallback resolution error.
+> 1. Otherwise throw an _Invalid Package Target_ error.
 
 **ESM_FORMAT**(_url_)
 
-> 1. Assert: _url_ corresponds to an existing file pathname.
+> 1. Assert: _url_ corresponds to an existing file.
 > 1. Let _pjson_ be the result of **READ_PACKAGE_SCOPE**(_url_).
 > 1. If _url_ ends in _".mjs"_, then
 >    1. Return _"module"_.
 > 1. If _url_ ends in _".cjs"_, then
 >    1. Return _"commonjs"_.
 > 1. If _pjson?.type_ exists and is _"module"_, then
->    1. If _url_ ends in _".js"_ or lacks a file extension, then
+>    1. If _url_ ends in _".js"_, then
 >       1. Return _"module"_.
 >    1. Throw an _Unsupported File Extension_ error.
 > 1. Otherwise,
->    1. If _url_ lacks a file extension, then
->       1. Return _"commonjs"_.
 >    1. Throw an _Unsupported File Extension_ error.
 
 **READ_PACKAGE_SCOPE**(_url_)
@@ -1632,3 +1671,4 @@ success!
 [the official standard format]: https://tc39.github.io/ecma262/#sec-modules
 [transpiler loader example]: #esm_transpiler_loader
 [6.1.7 Array Index]: https://tc39.es/ecma262/#integer-index
+[Top-Level Await]: https://github.com/tc39/proposal-top-level-await

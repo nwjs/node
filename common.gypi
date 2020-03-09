@@ -47,7 +47,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.28',
+    'v8_embedder_string': '-node.29',
 
     ##### V8 defaults for Node.js #####
 
@@ -121,6 +121,9 @@
       }],
       ['OS=="linux" and target_arch=="x64" and <(building_nw)==1', {
         'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_sid_amd64-sysroot',
+      }],
+      ['OS=="linux" and target_arch=="arm" and <(building_nw)==1', {
+        'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_sid_arm-sysroot',
       }],
       ['openssl_fips != ""', {
         'openssl_product': '<(STATIC_LIB_PREFIX)crypto<(STATIC_LIB_SUFFIX)',
@@ -352,7 +355,10 @@
             'RuntimeLibrary': '<(win_release_RuntimeLibrary)',
             'RuntimeTypeInfo': 'false',
           }
-        }
+        },
+        'xcode_settings': {
+          'GCC_OPTIMIZATION_LEVEL': '3', # stop gyp from defaulting to -Os
+        },
       },
       'Debug': {
         'inherit_from': ['Common_Base', 'Debug_Base'],
@@ -533,6 +539,10 @@
           [ 'building_nw==1', {
             'cflags': [ '--sysroot=<(sysroot)', '-nostdinc++', '-isystem<(DEPTH)/buildtools/third_party/libc++/trunk/include', '-isystem<(DEPTH)/buildtools/third_party/libc++abi/trunk/include' ],
             'ldflags': [ '--sysroot=<(sysroot)','<!(<(DEPTH)/content/nw/tools/sysroot_ld_path.sh <(sysroot))', '-nostdlib++' ],
+          }],
+          [ 'OS=="linux" and target_arch=="arm"', {
+            'cflags': [ '--target=arm-linux-gnueabihf' ],
+            'ldflags': [ '--target=arm-linux-gnueabihf' ],
           }],
           [ 'target_arch=="ppc" and OS!="aix"', {
             'cflags': [ '-m32' ],

@@ -25,8 +25,6 @@ void AppendExceptionLine(Environment* env,
 [[noreturn]] void FatalError(const char* location, const char* message);
 void OnFatalError(const char* location, const char* message);
 
-void PrintErrorString(const char* format, ...);
-
 // Helpers to construct errors similar to the ones provided by
 // lib/internal/errors.js.
 // Example: with `V(ERR_INVALID_ARG_TYPE, TypeError)`, there will be
@@ -39,11 +37,14 @@ void PrintErrorString(const char* format, ...);
   V(ERR_BUFFER_TOO_LARGE, Error)                                             \
   V(ERR_CONSTRUCT_CALL_REQUIRED, TypeError)                                  \
   V(ERR_CONSTRUCT_CALL_INVALID, TypeError)                                   \
+  V(ERR_CRYPTO_UNKNOWN_CIPHER, Error)                                        \
+  V(ERR_CRYPTO_UNKNOWN_DH_GROUP, Error)                                      \
   V(ERR_INVALID_ARG_VALUE, TypeError)                                        \
   V(ERR_OSSL_EVP_INVALID_DIGEST, Error)                                      \
   V(ERR_INVALID_ARG_TYPE, TypeError)                                         \
   V(ERR_INVALID_MODULE_SPECIFIER, TypeError)                                 \
-  V(ERR_INVALID_PACKAGE_CONFIG, SyntaxError)                                 \
+  V(ERR_INVALID_PACKAGE_CONFIG, Error)                                       \
+  V(ERR_INVALID_PACKAGE_TARGET, Error)                                       \
   V(ERR_INVALID_TRANSFER_OBJECT, TypeError)                                  \
   V(ERR_MEMORY_ALLOCATION_FAILED, Error)                                     \
   V(ERR_MISSING_ARGS, TypeError)                                             \
@@ -53,6 +54,7 @@ void PrintErrorString(const char* format, ...);
   V(ERR_NON_CONTEXT_AWARE_DISABLED, Error)                                   \
   V(ERR_MODULE_NOT_FOUND, Error)                                             \
   V(ERR_OUT_OF_RANGE, RangeError)                                            \
+  V(ERR_PACKAGE_PATH_NOT_EXPORTED, Error)                                    \
   V(ERR_SCRIPT_EXECUTION_INTERRUPTED, Error)                                 \
   V(ERR_SCRIPT_EXECUTION_TIMEOUT, Error)                                     \
   V(ERR_STRING_TOO_LONG, Error)                                              \
@@ -89,6 +91,8 @@ void PrintErrorString(const char* format, ...);
     "Buffer is not available for the current Context")                       \
   V(ERR_CONSTRUCT_CALL_INVALID, "Constructor cannot be called")              \
   V(ERR_CONSTRUCT_CALL_REQUIRED, "Cannot call constructor without `new`")    \
+  V(ERR_CRYPTO_UNKNOWN_CIPHER, "Unknown cipher")                             \
+  V(ERR_CRYPTO_UNKNOWN_DH_GROUP, "Unknown DH group")                         \
   V(ERR_INVALID_TRANSFER_OBJECT, "Found invalid object in transferList")     \
   V(ERR_MEMORY_ALLOCATION_FAILED, "Failed to allocate memory")               \
   V(ERR_OSSL_EVP_INVALID_DIGEST, "Invalid digest used")                      \

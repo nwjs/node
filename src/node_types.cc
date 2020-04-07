@@ -35,7 +35,7 @@ namespace {
   V(DataView)                                                                 \
   V(SharedArrayBuffer)                                                        \
   V(Proxy)                                                                    \
-  V(WebAssemblyCompiledModule)                                                \
+  V(WasmModuleObject)                                                \
   V(ModuleNamespaceObject)                                                    \
 
 #define V(type) \

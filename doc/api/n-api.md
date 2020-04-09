@@ -246,10 +246,10 @@ listed as supporting a later version.
 | v6.x  |         |          | v6.14.2* |          |           |
 | v8.x  | v8.0.0* | v8.10.0* | v8.11.2  | v8.16.0  |           |
 | v9.x  | v9.0.0* | v9.3.0*  | v9.11.0* |          |           |
-| v10.x |         |          | v10.0.0  | v10.16.0 |           |
-| v11.x |         |          | v11.0.0  | v11.8.0  |           |
-| v12.x |         |          |          | v12.0.0  | v12.11.0  |
-| v13.x |         |          |          |          | v13.0.0   |
+| v10.x | v10.0.0 | v10.0.0  | v10.0.0  | v10.16.0 | v10.17.0  |
+| v11.x | v11.0.0 | v11.0.0  | v11.0.0  | v11.8.0  |           |
+| v12.x | v12.0.0 | v12.0.0  | v12.0.0  | v12.0.0  | v12.11.0  |
+| v13.x | v13.0.0 | v13.0.0  | v13.0.0  | v13.0.0  | v13.0.0   |
 
 \* Indicates that the N-API version was released as experimental
 
@@ -374,6 +374,7 @@ tied to the life cycle of the Agent.
 ### napi_set_instance_data
 <!-- YAML
 added: v12.8.0
+napiVersion: 6
 -->
 
 ```C
@@ -401,6 +402,7 @@ by the previous call, it will not be called.
 ### napi_get_instance_data
 <!-- YAML
 added: v12.8.0
+napiVersion: 6
 -->
 
 ```C
@@ -797,9 +799,8 @@ This API can be called even if there is a pending JavaScript exception.
 ### Exceptions
 
 Any N-API function call may result in a pending JavaScript exception. This is
-obviously the case for any function that may cause the execution of
-JavaScript, but N-API specifies that an exception may be pending
-on return from any of the API functions.
+the case for any of the API functions, even those that may not cause the
+execution of JavaScript.
 
 If the `napi_status` returned by a function is `napi_ok` then no
 exception is pending and no additional action is required. If the
@@ -1663,9 +1664,8 @@ the `napi_value` in question is of the JavaScript type expected by the API.
 #### napi_key_collection_mode
 <!-- YAML
 added: v13.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 typedef enum {
@@ -1685,9 +1685,8 @@ of the objects's prototype chain as well.
 #### napi_key_filter
 <!-- YAML
 added: v13.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 typedef enum {
@@ -1705,9 +1704,8 @@ Property filter bits. They can be or'ed to build a composite filter.
 #### napi_key_conversion
 <!-- YAML
 added: v13.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 typedef enum {
@@ -2262,9 +2260,8 @@ The JavaScript `Number` type is described in
 #### napi_create_bigint_int64
 <!-- YAML
 added: v10.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 napi_status napi_create_bigint_int64(napi_env env,
@@ -2283,9 +2280,8 @@ This API converts the C `int64_t` type to the JavaScript `BigInt` type.
 #### napi_create_bigint_uint64
 <!-- YAML
 added: v10.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 napi_status napi_create_bigint_uint64(napi_env env,
@@ -2304,9 +2300,8 @@ This API converts the C `uint64_t` type to the JavaScript `BigInt` type.
 #### napi_create_bigint_words
 <!-- YAML
 added: v10.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 napi_status napi_create_bigint_words(napi_env env,
@@ -2653,9 +2648,8 @@ This API returns the C double primitive equivalent of the given JavaScript
 #### napi_get_value_bigint_int64
 <!-- YAML
 added: v10.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 napi_status napi_get_value_bigint_int64(napi_env env,
@@ -2680,9 +2674,8 @@ This API returns the C `int64_t` primitive equivalent of the given JavaScript
 #### napi_get_value_bigint_uint64
 <!-- YAML
 added: v10.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 napi_status napi_get_value_bigint_uint64(napi_env env,
@@ -2707,9 +2700,8 @@ This API returns the C `uint64_t` primitive equivalent of the given JavaScript
 #### napi_get_value_bigint_words
 <!-- YAML
 added: v10.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 napi_status napi_get_value_bigint_words(napi_env env,
@@ -3595,9 +3587,8 @@ included.
 #### napi_get_all_property_names
 <!-- YAML
 added: v13.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 napi_get_all_property_names(napi_env env,

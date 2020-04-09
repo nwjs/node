@@ -364,6 +364,8 @@
       'type': 'executable',
 
       'defines': [
+        'NODE_ARCH="<(target_arch)"',
+        'NODE_PLATFORM="<(OS)"',
         'NODE_WANT_INTERNALS=1',
       ],
 
@@ -450,13 +452,6 @@
           'xcode_settings': {
             'OTHER_LDFLAGS': [ '-Wl,-rpath,@loader_path', ],
           },
-        }],
-        [ 'node_report=="true"', {
-          'defines': [
-            'NODE_REPORT',
-            'NODE_ARCH="<(target_arch)"',
-            'NODE_PLATFORM="<(OS)"',
-          ],
         }],
         ['OS=="win"', {
           'libraries': [
@@ -598,7 +593,6 @@
         'src/api/exceptions.cc',
         'src/api/hooks.cc',
         'src/api/utils.cc',
-
         'src/async_wrap.cc',
         'src/cares_wrap.cc',
         'src/connect_wrap.cc',
@@ -646,7 +640,11 @@
         'src/node_process_events.cc',
         'src/node_process_methods.cc',
         'src/node_process_object.cc',
+        'src/node_report.cc',
+        'src/node_report_module.cc',
+        'src/node_report_utils.cc',
         'src/node_serdes.cc',
+        'src/node_sockaddr.cc',
         'src/node_stat_watcher.cc',
         'src/node_symbols.cc',
         'src/node_task_queue.cc',
@@ -713,6 +711,8 @@
         'src/node_errors.h',
         'src/node_file.h',
         'src/node_file-inl.h',
+        'src/node_http_common.h',
+        'src/node_http_common-inl.h',
         'src/node_http2.h',
         'src/node_http2_state.h',
         'src/node_i18n.h',
@@ -732,8 +732,11 @@
         'src/node_perf_common.h',
         'src/node_platform.h',
         'src/node_process.h',
+        'src/node_report.h',
         'src/node_revert.h',
         'src/node_root_certs.h',
+        'src/node_sockaddr.h',
+        'src/node_sockaddr-inl.h',
         'src/node_stat_watcher.h',
         'src/node_union_bytes.h',
         'src/node_url.h',
@@ -828,9 +831,9 @@
               ],
             }],
             [ 'component == "shared_library"', {
-              'libraries': [ '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/nw.dll.lib', '<(PRODUCT_DIR)/../nw/libc++.dll.lib'],
+              'libraries': [ 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/nw.dll.lib', '<(PRODUCT_DIR)/../nw/libc++.dll.lib'],
             }, {
-              'libraries': [ '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/nw.dll.lib', '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libcpp.lib'],
+              'libraries': [ 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/nw.dll.lib', '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libcpp.lib'],
             }],
           ],
         }],
@@ -914,23 +917,6 @@
             'src/node_crypto_groups.h',
             'src/tls_wrap.cc',
             'src/tls_wrap.h'
-          ],
-        }],
-        [ 'node_report=="true"', {
-          'sources': [
-            'src/node_report.cc',
-            'src/node_report_module.cc',
-            'src/node_report_utils.cc',
-          ],
-          'defines': [
-            'NODE_REPORT',
-            'NODE_ARCH="<(target_arch)"',
-            'NODE_PLATFORM="<(OS)"',
-          ],
-          'conditions': [
-            ['OS=="win"', {
-              'libraries': [ 'Ws2_32' ],
-            }],
           ],
         }],
         [ 'OS in "linux freebsd mac" and '
@@ -1189,7 +1175,11 @@
         'test/cctest',
       ],
 
-      'defines': [ 'NODE_WANT_INTERNALS=1' ],
+      'defines': [
+        'NODE_ARCH="<(target_arch)"',
+        'NODE_PLATFORM="<(OS)"',
+        'NODE_WANT_INTERNALS=1',
+      ],
 
       'sources': [
         'src/node_snapshot_stub.cc',
@@ -1206,6 +1196,8 @@
         'test/cctest/test_linked_binding.cc',
         'test/cctest/test_per_process.cc',
         'test/cctest/test_platform.cc',
+        'test/cctest/test_report_util.cc',
+        'test/cctest/test_sockaddr.cc',
         'test/cctest/test_traced_value.cc',
         'test/cctest/test_util.cc',
         'test/cctest/test_url.cc',
@@ -1241,21 +1233,6 @@
           'xcode_settings': {
             'OTHER_LDFLAGS': [ '-Wl,-rpath,@loader_path', ],
           },
-        }],
-        [ 'node_report=="true"', {
-          'sources': [
-            'test/cctest/test_report_util.cc',
-          ],
-          'defines': [
-            'NODE_REPORT',
-            'NODE_ARCH="<(target_arch)"',
-            'NODE_PLATFORM="<(OS)"',
-          ],
-          'conditions': [
-            ['OS=="win"', {
-              'libraries': [ 'Ws2_32' ],
-            }],
-          ],
         }],
         ['OS=="win"', {
           'libraries': [
@@ -1308,6 +1285,16 @@
       ],
 
       'conditions': [
+        [ 'node_use_openssl=="true"', {
+          'defines': [
+            'HAVE_OPENSSL=1',
+          ],
+        }],
+        ['v8_enable_inspector==1', {
+          'defines': [
+            'HAVE_INSPECTOR=1',
+          ],
+        }],
         ['OS=="win"', {
           'libraries': [
             'dbghelp.lib',
@@ -1352,6 +1339,16 @@
       ],
 
       'conditions': [
+        [ 'node_use_openssl=="true"', {
+          'defines': [
+            'HAVE_OPENSSL=1',
+          ],
+        }],
+        ['v8_enable_inspector==1', {
+          'defines': [
+            'HAVE_INSPECTOR=1',
+          ],
+        }],
         ['OS=="win"', {
           'libraries': [
             'Dbghelp.lib',

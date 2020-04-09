@@ -29,6 +29,7 @@
 #include "inspector_agent.h"
 #include "inspector_profiler.h"
 #endif
+#include "debug_utils.h"
 #include "handle_wrap.h"
 #include "node.h"
 #include "node_binding.h"
@@ -218,7 +219,6 @@ constexpr size_t kFsStatsBufferLength =
   V(dns_srv_string, "SRV")                                                     \
   V(dns_txt_string, "TXT")                                                     \
   V(done_string, "done")                                                       \
-  V(dot_string, ".")                                                           \
   V(duration_string, "duration")                                               \
   V(ecdh_string, "ECDH")                                                       \
   V(emit_warning_string, "emitWarning")                                        \
@@ -273,7 +273,6 @@ constexpr size_t kFsStatsBufferLength =
   V(kind_string, "kind")                                                       \
   V(library_string, "library")                                                 \
   V(mac_string, "mac")                                                         \
-  V(main_string, "main")                                                       \
   V(max_buffer_string, "maxBuffer")                                            \
   V(message_port_constructor_string, "MessagePort")                            \
   V(message_port_string, "messagePort")                                        \
@@ -412,6 +411,7 @@ constexpr size_t kFsStatsBufferLength =
   V(http2settings_constructor_template, v8::ObjectTemplate)                    \
   V(http2stream_constructor_template, v8::ObjectTemplate)                      \
   V(http2ping_constructor_template, v8::ObjectTemplate)                        \
+  V(i18n_converter_template, v8::ObjectTemplate)                               \
   V(libuv_stream_wrap_ctor_template, v8::FunctionTemplate)                     \
   V(message_port_constructor_template, v8::FunctionTemplate)                   \
   V(pipe_constructor_template, v8::FunctionTemplate)                           \
@@ -502,7 +502,7 @@ class IsolateData : public MemoryRetainer {
 #define VY(PropertyName, StringValue) V(v8::Symbol, PropertyName)
 #define VS(PropertyName, StringValue) V(v8::String, PropertyName)
 #define V(TypeName, PropertyName)                                             \
-  inline v8::Local<TypeName> PropertyName(v8::Isolate* isolate) const;
+  inline v8::Local<TypeName> PropertyName() const;
   PER_ISOLATE_PRIVATE_SYMBOL_PROPERTIES(VP)
   PER_ISOLATE_SYMBOL_PROPERTIES(VY)
   PER_ISOLATE_STRING_PROPERTIES(VS)
@@ -511,7 +511,7 @@ class IsolateData : public MemoryRetainer {
 #undef VS
 #undef VP
 
-  std::unordered_map<nghttp2_rcbuf*, v8::Eternal<v8::String>> http2_static_strs;
+  std::unordered_map<const char*, v8::Eternal<v8::String>> http_static_strs;
   inline v8::Isolate* isolate() const;
   IsolateData(const IsolateData&) = delete;
   IsolateData& operator=(const IsolateData&) = delete;
@@ -551,20 +551,7 @@ struct ContextInfo {
   bool is_default = false;
 };
 
-// Listing the AsyncWrap provider types first enables us to cast directly
-// from a provider type to a debug category.
-#define DEBUG_CATEGORY_NAMES(V)                                                \
-  NODE_ASYNC_PROVIDER_TYPES(V)                                                 \
-  V(INSPECTOR_SERVER)                                                          \
-  V(INSPECTOR_PROFILER)                                                        \
-  V(WASI)
-
-enum class DebugCategory {
-#define V(name) name,
-  DEBUG_CATEGORY_NAMES(V)
-#undef V
-  CATEGORY_COUNT
-};
+class EnabledDebugList;
 
 // A unique-pointer-ish object that is compatible with the JS engine's
 // ArrayBuffer::Allocator.
@@ -609,11 +596,13 @@ class KVStore {
 
   virtual v8::MaybeLocal<v8::String> Get(v8::Isolate* isolate,
                                          v8::Local<v8::String> key) const = 0;
+  virtual v8::Maybe<std::string> Get(const char* key) const = 0;
   virtual void Set(v8::Isolate* isolate,
                    v8::Local<v8::String> key,
                    v8::Local<v8::String> value) = 0;
   virtual int32_t Query(v8::Isolate* isolate,
                         v8::Local<v8::String> key) const = 0;
+  virtual int32_t Query(const char* key) const = 0;
   virtual void Delete(v8::Isolate* isolate, v8::Local<v8::String> key) = 0;
   virtual v8::Local<v8::Array> Enumerate(v8::Isolate* isolate) const = 0;
 
@@ -1003,9 +992,6 @@ class Environment : public MemoryRetainer {
   inline uint32_t get_next_script_id();
   inline uint32_t get_next_function_id();
 
-  std::unordered_map<std::string, const loader::PackageConfig>
-      package_json_cache;
-
   bool KickNextTick();
 
   inline double* heap_statistics_buffer() const;
@@ -1025,9 +1011,7 @@ class Environment : public MemoryRetainer {
   inline http2::Http2State* http2_state() const;
   inline void set_http2_state(std::unique_ptr<http2::Http2State> state);
 
-  inline bool debug_enabled(DebugCategory category) const;
-  inline void set_debug_enabled(DebugCategory category, bool enabled);
-  void set_debug_categories(const std::string& cats, bool enabled);
+  EnabledDebugList* enabled_debug_list() { return &enabled_debug_list_; }
 
   inline AliasedFloat64Array* fs_stats_field_array();
   inline AliasedBigUint64Array* fs_stats_field_bigint_array();
@@ -1191,7 +1175,8 @@ class Environment : public MemoryRetainer {
   }
 
   // cb will be called as cb(env) on the next event loop iteration.
-  // keep_alive will be kept alive between now and after the callback has run.
+  // Unlike the JS setImmediate() function, nested SetImmediate() calls will
+  // be run without returning control to the event loop, similar to nextTick().
   template <typename Fn>
   inline void SetImmediate(Fn&& cb);
   template <typename Fn>
@@ -1383,9 +1368,7 @@ class Environment : public MemoryRetainer {
   bool http_parser_buffer_in_use_ = false;
   std::unique_ptr<http2::Http2State> http2_state_;
 
-  bool debug_enabled_[static_cast<int>(DebugCategory::CATEGORY_COUNT)] = {
-      false};
-
+  EnabledDebugList enabled_debug_list_;
   AliasedFloat64Array fs_stats_field_array_;
   AliasedBigUint64Array fs_stats_field_bigint_array_;
 

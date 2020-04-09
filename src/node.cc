@@ -35,6 +35,7 @@
 #include "node_options-inl.h"
 #include "node_perf.h"
 #include "node_process.h"
+#include "node_report.h"
 #include "node_revert.h"
 #include "node_v8_platform-inl.h"
 #include "node_version.h"
@@ -72,10 +73,6 @@
 #endif
 
 #include "large_pages/node_large_page.h"
-
-#ifdef NODE_REPORT
-#include "node_report.h"
-#endif
 
 #if defined(__APPLE__) || defined(__linux__)
 #define NODE_USE_V8_WASM_TRAP_HANDLER 1
@@ -740,6 +737,13 @@ int ProcessGlobalArgs(std::vector<std::string>* args,
     }
   }
 
+  if (per_process::cli_options->disable_proto != "delete" &&
+      per_process::cli_options->disable_proto != "throw" &&
+      per_process::cli_options->disable_proto != "") {
+    errors->emplace_back("invalid mode passed to --disable-proto");
+    return 12;
+  }
+
   auto env_opts = per_process::cli_options->per_isolate->per_env;
   if (std::find(v8_args.begin(), v8_args.end(),
                 "--abort-on-uncaught-exception") != v8_args.end() ||
@@ -802,11 +806,9 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
   uv_disable_stdio_inheritance();
   } //node_is_nwjs
 
-#ifdef NODE_REPORT
   // Cache the original command line to be
   // used in diagnostic reports.
   per_process::cli_options->cmdline = *argv;
-#endif  //  NODE_REPORT
 
 #if defined(NODE_V8_OPTIONS)
   // Should come before the call to V8::SetFlagsFromCommandLine()
@@ -1046,6 +1048,10 @@ void StartupDataHandler::Load(const char* blob_file,
 
 
 InitializationResult InitializeOncePerProcess(int argc, char** argv) {
+  // Initialized the enabled list for Debug() calls with system
+  // environment variables.
+  per_process::enabled_debug_list.Parse(nullptr);
+
   atexit(ResetStdio);
   PlatformInit();
 

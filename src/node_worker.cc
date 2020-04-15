@@ -140,10 +140,10 @@ class WorkerThreadData {
       uv_err_name_r(ret, err_buf, sizeof(err_buf));
       w->custom_error_ = "ERR_WORKER_INIT_FAILED";
       w->custom_error_str_ = err_buf;
-      w->loop_init_failed_ = true;
       w->stopped_ = true;
       return;
     }
+    loop_init_failed_ = false;
 
     std::shared_ptr<ArrayBufferAllocator> allocator =
         ArrayBufferAllocator::Create();
@@ -199,6 +199,7 @@ class WorkerThreadData {
     }
 
     if (isolate != nullptr) {
+      CHECK(!loop_init_failed_);
       bool platform_finished = false;
 
       isolate_data_.reset();
@@ -217,18 +218,20 @@ class WorkerThreadData {
 
       // Wait until the platform has cleaned up all relevant resources.
       while (!platform_finished) {
-        CHECK(!w_->loop_init_failed_);
         uv_run(&loop_, UV_RUN_ONCE);
       }
     }
-    if (!w_->loop_init_failed_) {
+    if (!loop_init_failed_) {
       CheckedUvLoopClose(&loop_);
     }
   }
 
+  bool loop_is_usable() const { return !loop_init_failed_; }
+
  private:
   Worker* const w_;
   uv_loop_t loop_;
+  bool loop_init_failed_ = true;
   DeleteFnPtr<IsolateData, FreeIsolateData> isolate_data_;
 
   friend class Worker;
@@ -258,7 +261,7 @@ void Worker::Run() {
   v8::SetTLSPlatform(platform_);
   WorkerThreadData data(this);
   if (isolate_ == nullptr) return;
-  CHECK(!data.w_->loop_init_failed_);
+  CHECK(data.loop_is_usable());
 
   Debug(this, "Starting worker with id %llu", thread_id_);
   {
@@ -613,21 +616,12 @@ void Worker::StartThread(const FunctionCallbackInfo<Value>& args) {
   ASSIGN_OR_RETURN_UNWRAP(&w, args.This());
   Mutex::ScopedLock lock(w->mutex_);
 
-  // The object now owns the created thread and should not be garbage collected
-  // until that finishes.
-  w->ClearWeak();
-
-  w->env()->add_sub_worker_context(w);
   w->stopped_ = false;
-  w->thread_joined_ = false;
-
-  if (w->has_ref_)
-    w->env()->add_refs(1);
 
   uv_thread_options_t thread_options;
   thread_options.flags = UV_THREAD_HAS_STACK_SIZE;
   thread_options.stack_size = kStackSize;
-  CHECK_EQ(uv_thread_create_ex(&w->tid_, &thread_options, [](void* arg) {
+  int ret = uv_thread_create_ex(&w->tid_, &thread_options, [](void* arg) {
     // XXX: This could become a std::unique_ptr, but that makes at least
     // gcc 6.3 detect undefined behaviour when there shouldn't be any.
     // gcc 7+ handles this well.
@@ -648,7 +642,29 @@ void Worker::StartThread(const FunctionCallbackInfo<Value>& args) {
           w->JoinThread();
           // implicitly delete w
         });
-  }, static_cast<void*>(w)), 0);
+  }, static_cast<void*>(w));
+
+  if (ret == 0) {
+    // The object now owns the created thread and should not be garbage
+    // collected until that finishes.
+    w->ClearWeak();
+    w->thread_joined_ = false;
+
+    if (w->has_ref_)
+      w->env()->add_refs(1);
+
+    w->env()->add_sub_worker_context(w);
+  } else {
+    w->stopped_ = true;
+
+    char err_buf[128];
+    uv_err_name_r(ret, err_buf, sizeof(err_buf));
+    {
+      Isolate* isolate = w->env()->isolate();
+      HandleScope handle_scope(isolate);
+      THROW_ERR_WORKER_INIT_FAILED(isolate, err_buf);
+    }
+  }
 }
 
 void Worker::StopThread(const FunctionCallbackInfo<Value>& args) {

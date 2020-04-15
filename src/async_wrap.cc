@@ -49,7 +49,6 @@ using v8::PropertyAttribute;
 using v8::PropertyCallbackInfo;
 using v8::ReadOnly;
 using v8::String;
-using v8::TryCatch;
 using v8::Uint32;
 using v8::Undefined;
 using v8::Value;
@@ -363,6 +362,10 @@ class DestroyParam {
   Global<Object> propBag;
 };
 
+static void DestroyParamCleanupHook(void* ptr) {
+  delete static_cast<DestroyParam*>(ptr);
+}
+
 void AsyncWrap::WeakCallback(const WeakCallbackInfo<DestroyParam>& info) {
   HandleScope scope(info.GetIsolate());
 
@@ -370,6 +373,8 @@ void AsyncWrap::WeakCallback(const WeakCallbackInfo<DestroyParam>& info) {
   Local<Object> prop_bag = PersistentToLocal::Default(info.GetIsolate(),
                                                       p->propBag);
   Local<Value> val;
+
+  p->env->RemoveCleanupHook(DestroyParamCleanupHook, p.get());
 
   if (!prop_bag->Get(p->env->context(), p->env->destroyed_string())
         .ToLocal(&val)) {
@@ -395,6 +400,7 @@ static void RegisterDestroyHook(const FunctionCallbackInfo<Value>& args) {
   p->target.Reset(isolate, args[0].As<Object>());
   p->propBag.Reset(isolate, args[2].As<Object>());
   p->target.SetWeak(p, AsyncWrap::WeakCallback, WeakCallbackType::kParameter);
+  p->env->AddCleanupHook(DestroyParamCleanupHook, p);
 }
 
 void AsyncWrap::GetAsyncId(const FunctionCallbackInfo<Value>& args) {

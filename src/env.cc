@@ -66,9 +66,9 @@ std::vector<size_t> IsolateData::Serialize(SnapshotCreator* creator) {
   // but that's not part of the V8 API contract so we use an array
   // just to be safe.
 
-#define VP(PropertyName, StringValue) V(v8::Private, PropertyName)
-#define VY(PropertyName, StringValue) V(v8::Symbol, PropertyName)
-#define VS(PropertyName, StringValue) V(v8::String, PropertyName)
+#define VP(PropertyName, StringValue) V(Private, PropertyName)
+#define VY(PropertyName, StringValue) V(Symbol, PropertyName)
+#define VS(PropertyName, StringValue) V(String, PropertyName)
 #define V(TypeName, PropertyName)                                              \
   indexes.push_back(creator->AddData(PropertyName##_.Get(isolate)));
   PER_ISOLATE_PRIVATE_SYMBOL_PROPERTIES(VP)
@@ -86,9 +86,9 @@ void IsolateData::DeserializeProperties(const std::vector<size_t>* indexes) {
   size_t i = 0;
   HandleScope handle_scope(isolate_);
 
-#define VP(PropertyName, StringValue) V(v8::Private, PropertyName)
-#define VY(PropertyName, StringValue) V(v8::Symbol, PropertyName)
-#define VS(PropertyName, StringValue) V(v8::String, PropertyName)
+#define VP(PropertyName, StringValue) V(Private, PropertyName)
+#define VY(PropertyName, StringValue) V(Symbol, PropertyName)
+#define VS(PropertyName, StringValue) V(String, PropertyName)
 #define V(TypeName, PropertyName)                                              \
   do {                                                                         \
     MaybeLocal<TypeName> field =                                               \
@@ -209,7 +209,7 @@ void InitThreadLocalOnce() {
 }
 
 void TrackingTraceStateObserver::UpdateTraceCategoryState() {
-  if (!env_->owns_process_state()) {
+  if (!env_->owns_process_state() || !env_->can_call_into_js()) {
     // Ideally, we’d have a consistent story that treats all threads/Environment
     // instances equally here. However, tracing is essentially global, and this
     // callback is called from whichever thread calls `StartTracing()` or
@@ -230,8 +230,7 @@ void TrackingTraceStateObserver::UpdateTraceCategoryState() {
   TryCatchScope try_catch(env_);
   try_catch.SetVerbose(true);
   Local<Value> args[] = {Boolean::New(isolate, async_hooks_enabled)};
-  cb->Call(env_->context(), Undefined(isolate), arraysize(args), args)
-      .ToLocalChecked();
+  USE(cb->Call(env_->context(), Undefined(isolate), arraysize(args), args));
 }
 
 static std::atomic<uint64_t> next_thread_id{0};
@@ -353,7 +352,7 @@ Environment::Environment(IsolateData* isolate_data,
       this);
 
   performance_state_ =
-      std::make_unique<performance::performance_state>(isolate());
+      std::make_unique<performance::PerformanceState>(isolate());
 #if 0
   performance_state_->Mark(
       performance::NODE_PERFORMANCE_MILESTONE_ENVIRONMENT);
@@ -976,6 +975,7 @@ void Environment::Exit(int exit_code) {
                         isolate(), stack_trace_limit(), StackTrace::kDetailed));
   }
   if (is_main_thread()) {
+    set_can_call_into_js(false);
     stop_sub_worker_contexts();
     DisposePlatform();
     exit(exit_code);
@@ -985,6 +985,8 @@ void Environment::Exit(int exit_code) {
 }
 
 void Environment::stop_sub_worker_contexts() {
+  DCHECK_EQ(Isolate::GetCurrent(), isolate());
+
   while (!sub_worker_contexts_.empty()) {
     Worker* w = *sub_worker_contexts_.begin();
     remove_sub_worker_context(w);
@@ -1001,7 +1003,7 @@ Environment* Environment::worker_parent_env() const {
 void MemoryTracker::TrackField(const char* edge_name,
                                const CleanupHookCallback& value,
                                const char* node_name) {
-  v8::HandleScope handle_scope(isolate_);
+  HandleScope handle_scope(isolate_);
   // Here, we utilize the fact that CleanupHookCallback instances
   // are all unique and won't be tracked twice in one BuildEmbedderGraph
   // callback.

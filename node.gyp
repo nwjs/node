@@ -350,7 +350,7 @@
       'target_name': 'node_text_start',
       'type': 'none',
       'conditions': [
-        [ 'OS=="linux" and '
+        [ 'OS in "linux freebsd" and '
           'target_arch=="x64"', {
           'type': 'static_library',
           'sources': [
@@ -539,7 +539,7 @@
             'src/node_snapshot_stub.cc'
           ],
         }],
-        [ 'OS=="linux" and '
+        [ 'OS in "linux freebsd" and '
           'target_arch=="x64"', {
           'dependencies': [ 'node_text_start' ],
           'ldflags+': [
@@ -609,6 +609,7 @@
         'src/js_native_api_v8.h',
         'src/js_native_api_v8_internals.h',
         'src/js_stream.cc',
+        'src/json_utils.cc',
         'src/module_wrap.cc',
         'src/node.cc',
         'src/node_snapshot_stub.cc',
@@ -694,6 +695,7 @@
         'src/histogram.h',
         'src/histogram-inl.h',
         'src/js_stream.h',
+        'src/json_utils.h',
         'src/large_pages/node_large_page.cc',
         'src/large_pages/node_large_page.h',
         'src/memory_tracker.h',
@@ -1196,7 +1198,7 @@
         'test/cctest/test_linked_binding.cc',
         'test/cctest/test_per_process.cc',
         'test/cctest/test_platform.cc',
-        'test/cctest/test_report_util.cc',
+        'test/cctest/test_json_utils.cc',
         'test/cctest/test_sockaddr.cc',
         'test/cctest/test_traced_value.cc',
         'test/cctest/test_util.cc',

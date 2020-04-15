@@ -64,7 +64,7 @@ class FileHandleReadWrap;
 }
 
 namespace performance {
-class performance_state;
+class PerformanceState;
 }
 
 namespace tracing {
@@ -1019,7 +1019,7 @@ class Environment : public MemoryRetainer {
   inline std::vector<std::unique_ptr<fs::FileHandleReadWrap>>&
       file_handle_read_wrap_freelist();
 
-  inline performance::performance_state* performance_state();
+  inline performance::PerformanceState* performance_state();
   inline std::unordered_map<std::string, uint64_t>* performance_marks();
 
   void CollectUVExceptionInfo(v8::Local<v8::Value> context,
@@ -1326,7 +1326,7 @@ class Environment : public MemoryRetainer {
 
   AliasedInt32Array stream_base_state_;
 
-  std::unique_ptr<performance::performance_state> performance_state_;
+  std::unique_ptr<performance::PerformanceState> performance_state_;
   std::unordered_map<std::string, uint64_t> performance_marks_;
 
   bool has_run_bootstrapping_code_ = false;

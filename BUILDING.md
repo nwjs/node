@@ -28,6 +28,7 @@ file a new issue.
     * [Running Coverage](#running-coverage)
     * [Building the documentation](#building-the-documentation)
     * [Building a debug build](#building-a-debug-build)
+    * [Building an ASAN build](#building-an-asan-build)
     * [Troubleshooting Unix and macOS builds](#troubleshooting-unix-and-macos-builds)
   * [Windows](#windows)
     * [Prerequisites](#prerequisites)
@@ -490,6 +491,22 @@ $ gdb /opt/node-debug/node core.node.8.1535359906
 $ backtrace
 ```
 
+#### Building an ASAN build
+
+[ASAN](https://github.com/google/sanitizers) can help detect various memory
+related bugs. ASAN builds are currently only supported on linux.
+If you want to check it on Windows or macOS or you want a consistent toolchain
+on Linux, you can try [Docker](https://www.docker.com/products/docker-desktop)
+ (using an image like `gengjiawen/node-build:2020-02-14`).
+
+The `--debug` is not necessary and will slow down build and testing, but it can
+show clear stacktrace if ASAN hits an issue.
+
+``` console
+$  ./configure --debug --enable-asan && make -j4
+$ make test-only
+```
+
 #### Troubleshooting Unix and macOS builds
 
 Stale builds can sometimes result in `file not found` errors while building.
@@ -539,7 +556,6 @@ Optional requirements for compiling for Windows 10 on ARM (ARM64):
 * Windows 10 SDK 10.0.17763.0 or newer
 
 ##### Option 2: Automated install with Boxstarter
-<a name="boxstarter"></a>
 
 A [Boxstarter](https://boxstarter.org/) script can be used for easy setup of
 Windows systems with all the required prerequisites for Node.js development.
@@ -550,7 +566,7 @@ packages:
   Unix tools added to the `PATH`.
 * [Python 3.x](https://chocolatey.org/packages/python) and
   [legacy Python](https://chocolatey.org/packages/python2)
-* [Visual Studio 2017 Build Tools](https://chocolatey.org/packages/visualstudio2017buildtools)
+* [Visual Studio 2019 Build Tools](https://chocolatey.org/packages/visualstudio2019buildtools)
   with [Visual C++ workload](https://chocolatey.org/packages/visualstudio2017-workload-vctools)
 * [NetWide Assembler](https://chocolatey.org/packages/nasm)
 

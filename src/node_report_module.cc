@@ -16,6 +16,7 @@
 
 namespace report {
 using node::Environment;
+using node::Mutex;
 using node::Utf8Value;
 using v8::Boolean;
 using v8::Context;
@@ -69,20 +70,22 @@ void GetReport(const FunctionCallbackInfo<Value>& info) {
 }
 
 static void GetCompact(const FunctionCallbackInfo<Value>& info) {
-  Environment* env = Environment::GetCurrent(info);
-  info.GetReturnValue().Set(env->isolate_data()->options()->report_compact);
+  node::Mutex::ScopedLock lock(node::per_process::cli_options_mutex);
+  info.GetReturnValue().Set(node::per_process::cli_options->report_compact);
 }
 
 static void SetCompact(const FunctionCallbackInfo<Value>& info) {
+  node::Mutex::ScopedLock lock(node::per_process::cli_options_mutex);
   Environment* env = Environment::GetCurrent(info);
   Isolate* isolate = env->isolate();
   bool compact = info[0]->ToBoolean(isolate)->Value();
-  env->isolate_data()->options()->report_compact = compact;
+  node::per_process::cli_options->report_compact = compact;
 }
 
 static void GetDirectory(const FunctionCallbackInfo<Value>& info) {
+  node::Mutex::ScopedLock lock(node::per_process::cli_options_mutex);
   Environment* env = Environment::GetCurrent(info);
-  std::string directory = env->isolate_data()->options()->report_directory;
+  std::string directory = node::per_process::cli_options->report_directory;
   auto result = String::NewFromUtf8(env->isolate(),
                                     directory.c_str(),
                                     v8::NewStringType::kNormal);
@@ -90,15 +93,17 @@ static void GetDirectory(const FunctionCallbackInfo<Value>& info) {
 }
 
 static void SetDirectory(const FunctionCallbackInfo<Value>& info) {
+  node::Mutex::ScopedLock lock(node::per_process::cli_options_mutex);
   Environment* env = Environment::GetCurrent(info);
   CHECK(info[0]->IsString());
   Utf8Value dir(env->isolate(), info[0].As<String>());
-  env->isolate_data()->options()->report_directory = *dir;
+  node::per_process::cli_options->report_directory = *dir;
 }
 
 static void GetFilename(const FunctionCallbackInfo<Value>& info) {
+  node::Mutex::ScopedLock lock(node::per_process::cli_options_mutex);
   Environment* env = Environment::GetCurrent(info);
-  std::string filename = env->isolate_data()->options()->report_filename;
+  std::string filename = node::per_process::cli_options->report_filename;
   auto result = String::NewFromUtf8(env->isolate(),
                                     filename.c_str(),
                                     v8::NewStringType::kNormal);
@@ -106,10 +111,11 @@ static void GetFilename(const FunctionCallbackInfo<Value>& info) {
 }
 
 static void SetFilename(const FunctionCallbackInfo<Value>& info) {
+  node::Mutex::ScopedLock lock(node::per_process::cli_options_mutex);
   Environment* env = Environment::GetCurrent(info);
   CHECK(info[0]->IsString());
   Utf8Value name(env->isolate(), info[0].As<String>());
-  env->isolate_data()->options()->report_filename = *name;
+  node::per_process::cli_options->report_filename = *name;
 }
 
 static void GetSignal(const FunctionCallbackInfo<Value>& info) {
@@ -129,14 +135,14 @@ static void SetSignal(const FunctionCallbackInfo<Value>& info) {
 }
 
 static void ShouldReportOnFatalError(const FunctionCallbackInfo<Value>& info) {
-  Environment* env = Environment::GetCurrent(info);
+  Mutex::ScopedLock lock(node::per_process::cli_options_mutex);
   info.GetReturnValue().Set(
       node::per_process::cli_options->report_on_fatalerror);
 }
 
 static void SetReportOnFatalError(const FunctionCallbackInfo<Value>& info) {
-  Environment* env = Environment::GetCurrent(info);
   CHECK(info[0]->IsBoolean());
+  Mutex::ScopedLock lock(node::per_process::cli_options_mutex);
   node::per_process::cli_options->report_on_fatalerror = info[0]->IsTrue();
 }
 

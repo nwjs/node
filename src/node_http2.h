@@ -24,13 +24,13 @@ namespace http2 {
 // may send in order to prevent abuse. The current default cap is 10. The
 // user may set a different limit using a per Http2Session configuration
 // option.
-#define DEFAULT_MAX_PINGS 10
+constexpr size_t kDefaultMaxPings = 10;
 
 // Also strictly limit the number of outstanding SETTINGS frames a user sends
-#define DEFAULT_MAX_SETTINGS 10
+constexpr size_t kDefaultMaxSettings = 10;
 
 // Default maximum total memory cap for Http2Session.
-#define DEFAULT_MAX_SESSION_MEMORY 1e7
+constexpr uint64_t kDefaultMaxSessionMemory = 10000000;
 
 // These are the standard HTTP/2 defaults as specified by the RFC
 #define DEFAULT_SETTINGS_HEADER_TABLE_SIZE 4096
@@ -43,6 +43,24 @@ namespace http2 {
 #define MAX_MAX_FRAME_SIZE 16777215
 #define MIN_MAX_FRAME_SIZE DEFAULT_SETTINGS_MAX_FRAME_SIZE
 #define MAX_INITIAL_WINDOW_SIZE 2147483647
+
+template <typename T, void(*fn)(T*)>
+struct Nghttp2Deleter {
+  void operator()(T* ptr) const noexcept { fn(ptr); }
+};
+
+using Nghttp2OptionPointer =
+    std::unique_ptr<nghttp2_option,
+                    Nghttp2Deleter<nghttp2_option, nghttp2_option_del>>;
+
+using Nghttp2SessionPointer =
+    std::unique_ptr<nghttp2_session,
+                    Nghttp2Deleter<nghttp2_session, nghttp2_session_del>>;
+
+using Nghttp2SessionCallbacksPointer =
+    std::unique_ptr<nghttp2_session_callbacks,
+                    Nghttp2Deleter<nghttp2_session_callbacks,
+                                   nghttp2_session_callbacks_del>>;
 
 struct Http2HeadersTraits {
   typedef nghttp2_nv nv_t;
@@ -105,17 +123,17 @@ enum nghttp2_stream_options {
   STREAM_OPTION_GET_TRAILERS = 0x2,
 };
 
-struct nghttp2_stream_write : public MemoryRetainer {
+struct NgHttp2StreamWrite : public MemoryRetainer {
   WriteWrap* req_wrap = nullptr;
   uv_buf_t buf;
 
-  inline explicit nghttp2_stream_write(uv_buf_t buf_) : buf(buf_) {}
-  inline nghttp2_stream_write(WriteWrap* req, uv_buf_t buf_) :
+  inline explicit NgHttp2StreamWrite(uv_buf_t buf_) : buf(buf_) {}
+  inline NgHttp2StreamWrite(WriteWrap* req, uv_buf_t buf_) :
       req_wrap(req), buf(buf_) {}
 
   void MemoryInfo(MemoryTracker* tracker) const override;
-  SET_MEMORY_INFO_NAME(nghttp2_stream_write)
-  SET_SELF_SIZE(nghttp2_stream_write)
+  SET_MEMORY_INFO_NAME(NgHttp2StreamWrite)
+  SET_SELF_SIZE(NgHttp2StreamWrite)
 };
 
 // The Padding Strategy determines the method by which extra padding is
@@ -173,12 +191,10 @@ class Http2Options {
  public:
   Http2Options(Environment* env, nghttp2_session_type type);
 
-  ~Http2Options() {
-    nghttp2_option_del(options_);
-  }
+  ~Http2Options() = default;
 
   nghttp2_option* operator*() const {
-    return options_;
+    return options_.get();
   }
 
   void SetMaxHeaderPairs(uint32_t max) {
@@ -201,7 +217,7 @@ class Http2Options {
     max_outstanding_pings_ = max;
   }
 
-  size_t GetMaxOutstandingPings() {
+  size_t GetMaxOutstandingPings() const {
     return max_outstanding_pings_;
   }
 
@@ -209,7 +225,7 @@ class Http2Options {
     max_outstanding_settings_ = max;
   }
 
-  size_t GetMaxOutstandingSettings() {
+  size_t GetMaxOutstandingSettings() const {
     return max_outstanding_settings_;
   }
 
@@ -217,31 +233,24 @@ class Http2Options {
     max_session_memory_ = max;
   }
 
-  uint64_t GetMaxSessionMemory() {
+  uint64_t GetMaxSessionMemory() const {
     return max_session_memory_;
   }
 
  private:
-  nghttp2_option* options_;
-  uint64_t max_session_memory_ = DEFAULT_MAX_SESSION_MEMORY;
+  Nghttp2OptionPointer options_;
+  uint64_t max_session_memory_ = kDefaultMaxSessionMemory;
   uint32_t max_header_pairs_ = DEFAULT_MAX_HEADER_LIST_PAIRS;
   padding_strategy_type padding_strategy_ = PADDING_STRATEGY_NONE;
-  size_t max_outstanding_pings_ = DEFAULT_MAX_PINGS;
-  size_t max_outstanding_settings_ = DEFAULT_MAX_SETTINGS;
+  size_t max_outstanding_pings_ = kDefaultMaxPings;
+  size_t max_outstanding_settings_ = kDefaultMaxSettings;
 };
 
-class Http2Priority {
- public:
+struct Http2Priority : public nghttp2_priority_spec {
   Http2Priority(Environment* env,
                 v8::Local<v8::Value> parent,
                 v8::Local<v8::Value> weight,
                 v8::Local<v8::Value> exclusive);
-
-  nghttp2_priority_spec* operator*() {
-    return &spec;
-  }
- private:
-  nghttp2_priority_spec spec;
 };
 
 class Http2StreamListener : public StreamListener {
@@ -457,7 +466,7 @@ class Http2Stream : public AsyncWrap,
 
   // Outbound Data... This is the data written by the JS layer that is
   // waiting to be written out to the socket.
-  std::queue<nghttp2_stream_write> queue_;
+  std::queue<NgHttp2StreamWrite> queue_;
   size_t available_outbound_length_ = 0;
 
   Http2StreamListener stream_listener_;
@@ -571,9 +580,9 @@ class Http2Session : public AsyncWrap,
 
   inline nghttp2_session_type type() const { return session_type_; }
 
-  inline nghttp2_session* session() const { return session_; }
+  inline nghttp2_session* session() const { return session_.get(); }
 
-  inline nghttp2_session* operator*() { return session_; }
+  inline nghttp2_session* operator*() { return session_.get(); }
 
   inline uint32_t GetMaxHeaderPairs() const { return max_header_pairs_; }
 
@@ -799,16 +808,15 @@ class Http2Session : public AsyncWrap,
 
   struct Callbacks {
     inline explicit Callbacks(bool kHasGetPaddingCallback);
-    inline ~Callbacks();
 
-    nghttp2_session_callbacks* callbacks;
+    Nghttp2SessionCallbacksPointer callbacks;
   };
 
   /* Use callback_struct_saved[kHasGetPaddingCallback ? 1 : 0] */
   static const Callbacks callback_struct_saved[2];
 
   // The underlying nghttp2_session handle
-  nghttp2_session* session_;
+  Nghttp2SessionPointer session_;
 
   // JS-accessible numeric fields, as indexed by SessionUint8Fields.
   SessionJSFields js_fields_ = {};
@@ -820,7 +828,7 @@ class Http2Session : public AsyncWrap,
   uint32_t max_header_pairs_ = DEFAULT_MAX_HEADER_LIST_PAIRS;
 
   // The maximum amount of memory allocated for this session
-  uint64_t max_session_memory_ = DEFAULT_MAX_SESSION_MEMORY;
+  uint64_t max_session_memory_ = kDefaultMaxSessionMemory;
   uint64_t current_session_memory_ = 0;
   // The amount of memory allocated by nghttp2 internals
   uint64_t current_nghttp2_memory_ = 0;
@@ -843,13 +851,13 @@ class Http2Session : public AsyncWrap,
   AllocatedBuffer stream_buf_allocation_;
   size_t stream_buf_offset_ = 0;
 
-  size_t max_outstanding_pings_ = DEFAULT_MAX_PINGS;
+  size_t max_outstanding_pings_ = kDefaultMaxPings;
   std::queue<BaseObjectPtr<Http2Ping>> outstanding_pings_;
 
-  size_t max_outstanding_settings_ = DEFAULT_MAX_SETTINGS;
+  size_t max_outstanding_settings_ = kDefaultMaxSettings;
   std::queue<BaseObjectPtr<Http2Settings>> outstanding_settings_;
 
-  std::vector<nghttp2_stream_write> outgoing_buffers_;
+  std::vector<NgHttp2StreamWrite> outgoing_buffers_;
   std::vector<uint8_t> outgoing_storage_;
   size_t outgoing_length_ = 0;
   std::vector<int32_t> pending_rst_streams_;
@@ -861,7 +869,7 @@ class Http2Session : public AsyncWrap,
   // Also use the invalid frame count as a measure for rejecting input frames.
   uint32_t invalid_frame_count_ = 0;
 
-  void PushOutgoingBuffer(nghttp2_stream_write&& write);
+  void PushOutgoingBuffer(NgHttp2StreamWrite&& write);
   void CopyDataIntoOutgoing(const uint8_t* src, size_t src_length);
   void ClearOutgoing(int status);
 

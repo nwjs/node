@@ -12,14 +12,10 @@
 
 namespace node {
 
-using v8::Local;
-using v8::Message;
-using v8::Value;
-
 enum ErrorHandlingMode { CONTEXTIFY_ERROR, FATAL_ERROR, MODULE_ERROR };
 void AppendExceptionLine(Environment* env,
-                         Local<Value> er,
-                         Local<Message> message,
+                         v8::Local<v8::Value> er,
+                         v8::Local<v8::Message> message,
                          enum ErrorHandlingMode mode);
 
 [[noreturn]] void FatalError(const char* location, const char* message);
@@ -58,6 +54,7 @@ void OnFatalError(const char* location, const char* message);
   V(ERR_TRANSFERRING_EXTERNALIZED_SHAREDARRAYBUFFER, TypeError)                \
   V(ERR_TLS_PSK_SET_IDENTIY_HINT_FAILED, Error)                                \
   V(ERR_VM_MODULE_CACHED_DATA_REJECTED, Error)                                 \
+  V(ERR_WORKER_INIT_FAILED, Error)                                             \
   V(ERR_PROTO_ACCESS, Error)
 
 #define V(code, type)                                                         \
@@ -107,6 +104,7 @@ void OnFatalError(const char* location, const char* message);
   V(ERR_TRANSFERRING_EXTERNALIZED_SHAREDARRAYBUFFER,                           \
     "Cannot serialize externalized SharedArrayBuffer")                         \
   V(ERR_TLS_PSK_SET_IDENTIY_HINT_FAILED, "Failed to set PSK identity hint")    \
+  V(ERR_WORKER_INIT_FAILED, "Worker initialization failure")                   \
   V(ERR_PROTO_ACCESS,                                                          \
     "Accessing Object.prototype.__proto__ has been "                           \
     "disallowed with --disable-proto=throw")
@@ -193,8 +191,8 @@ class TryCatchScope : public v8::TryCatch {
 void TriggerUncaughtException(v8::Isolate* isolate,
                               const v8::TryCatch& try_catch);
 void TriggerUncaughtException(v8::Isolate* isolate,
-                              Local<Value> error,
-                              Local<Message> message,
+                              v8::Local<v8::Value> error,
+                              v8::Local<v8::Message> message,
                               bool from_promise = false);
 
 const char* errno_string(int errorno);

@@ -29,13 +29,6 @@ test-worker-message-port-transfer-terminate: PASS,FLAKY
 [$system==linux]
 
 [$system==macos]
-# https://github.com/nodejs/node/issues/30030
-test-dgram-connect-send-empty-buffer: PASS,FLAKY
-test-dgram-connect-send-empty-array: PASS,FLAKY
-test-dgram-connect-send-empty-packet: PASS,FLAKY
-test-dgram-send-empty-array: PASS,FLAKY
-test-dgram-send-empty-buffer: PASS,FLAKY
-test-dgram-send-empty-packet: PASS,FLAKY
 
 [$arch==arm || $arch==arm64]
 # https://github.com/nodejs/node/issues/26610
@@ -49,6 +42,8 @@ test-crypto-keygen: SKIP
 [$system==freebsd]
 # https://github.com/nodejs/node/issues/31727
 test-fs-stat-bigint: PASS,FLAKY
+# https://github.com/nodejs/node/issues/29802
+test-http2-reset-flood: PASS,FLAKY
 
 [$system==aix]
 

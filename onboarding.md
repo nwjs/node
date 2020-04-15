@@ -83,7 +83,7 @@ onboarding session.
   * Be nice about closing issues! Let people know why, and that issues and PRs
     can be reopened if necessary
 
-* [**See "Labels"**](./onboarding-extras.md#labels)
+* [**See "Labels"**](./doc/guides/onboarding-extras.md#labels)
   * There is [a bot](https://github.com/nodejs-github-bot/github-bot) that
     applies subsystem labels (for example, `doc`, `test`, `assert`, or `buffer`)
     so that we know what parts of the code base the pull request modifies. It is
@@ -110,7 +110,7 @@ onboarding session.
     organization (not just Collaborators on Node.js core) have access. Its
     contents should not be shared externally.
   * You can find the full moderation policy
-    [here](https://github.com/nodejs/TSC/blob/master/Moderation-Policy.md).
+    [here](https://github.com/nodejs/admin/blob/master/Moderation-Policy.md).
 
 ## Reviewing PRs
 
@@ -207,8 +207,7 @@ needs to be pointed out separately during the onboarding.
 * Optionally, include your personal pronouns.
 * Label your pull request with the `doc`, `notable-change`, and `fast-track`
   labels.
-* Run CI on the PR. Because the PR does not affect any code, use the
-  `node-test-pull-request-lite-pipeline` CI task.
+* Run CI on the PR. Use the `node-test-pull-request` CI task.
 * After two Collaborator approvals for the change and two Collaborator approvals
   for fast-tracking, land the PR.
   * Be sure to add the `PR-URL: <full-pr-url>` and appropriate `Reviewed-By:`

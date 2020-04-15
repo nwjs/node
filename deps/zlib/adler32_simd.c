@@ -51,7 +51,7 @@
 
 #if defined(ADLER32_SIMD_SSSE3)
 #ifndef __GNUC__
-#define __attribute__()
+//#define __attribute__()
 #endif
 
 #include <tmmintrin.h>

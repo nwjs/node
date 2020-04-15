@@ -9,7 +9,7 @@
 
 #if defined(CRC32_SIMD_SSE42_PCLMUL)
 #ifndef __GNUC__
-#define __attribute__()
+//#define __attribute__()
 #endif
 
 /*

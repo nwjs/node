@@ -24,7 +24,7 @@
 #include <wmmintrin.h>
 
 #ifndef __GNUC__
-#define __attribute__()
+//#define __attribute__()
 #endif
 
 #define CRC_LOAD(s) \

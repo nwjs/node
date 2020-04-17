@@ -664,6 +664,10 @@ $ bash -c 'exec -a customArgv0 ./node'
 ## `process.channel`
 <!-- YAML
 added: v7.1.0
+changes:
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/30165
+    description: The object no longer accidentally exposes native C++ bindings.
 -->
 
 * {Object}
@@ -672,6 +676,30 @@ If the Node.js process was spawned with an IPC channel (see the
 [Child Process][] documentation), the `process.channel`
 property is a reference to the IPC channel. If no IPC channel exists, this
 property is `undefined`.
+
+### `process.channel.ref()`
+<!-- YAML
+added: v7.1.0
+-->
+
+This method makes the IPC channel keep the event loop of the process
+running if `.unref()` has been called before.
+
+Typically, this is managed through the number of `'disconnect'` and `'message'`
+listeners on the `process` object. However, this method can be used to
+explicitly request a specific behavior.
+
+### `process.channel.unref()`
+<!-- YAML
+added: v7.1.0
+-->
+
+This method makes the IPC channel not keep the event loop of the process
+running, and lets it finish even while the channel is open.
+
+Typically, this is managed through the number of `'disconnect'` and `'message'`
+listeners on the `process` object. However, this method can be used to
+explicitly request a specific behavior.
 
 ## `process.chdir(directory)`
 <!-- YAML
@@ -1471,7 +1499,10 @@ debugger. See [Signal Events][].
 ## `process.mainModule`
 <!-- YAML
 added: v0.1.17
+deprecated: v14.0.0
 -->
+
+> Stability: 0 - Deprecated: Use [`require.main`][] instead.
 
 * {Object}
 
@@ -2392,17 +2423,33 @@ documentation for the [`'warning'` event][process_warning] and the
 [`emitWarning()` method][process_emit_warning] for more information about this
 flag's behavior.
 
-## `process.umask([mask])`
+## `process.umask()`
+<!-- YAML
+added: v0.1.19
+changes:
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/32499
+    description: Calling `process.umask()` with no arguments is deprecated.
+
+-->
+
+> Stability: 0 - Deprecated. Calling `process.umask()` with no argument causes
+> the process-wide umask to be written twice. This introduces a race condition
+> between threads, and is a potential security vulnerability. There is no safe,
+> cross-platform alternative API.
+
+`process.umask()` returns the Node.js process's file mode creation mask. Child
+processes inherit the mask from the parent process.
+
+## `process.umask(mask)`
 <!-- YAML
 added: v0.1.19
 -->
 
 * `mask` {string|integer}
 
-The `process.umask()` method sets or returns the Node.js process's file mode
-creation mask. Child processes inherit the mask from the parent process. Invoked
-without an argument, the current mask is returned, otherwise the umask is set to
-the argument value and the previous mask is returned.
+`process.umask(mask)` sets the Node.js process's file mode creation mask. Child
+processes inherit the mask from the parent process. Returns the previous mask.
 
 ```js
 const newmask = 0o022;
@@ -2412,8 +2459,7 @@ console.log(
 );
 ```
 
-[`Worker`][] threads are able to read the umask, however attempting to set the
-umask will result in a thrown exception.
+In [`Worker`][] threads, `process.umask(mask)` will throw an exception.
 
 ## `process.uptime()`
 <!-- YAML

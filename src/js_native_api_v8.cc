@@ -2712,8 +2712,15 @@ napi_status napi_create_external_arraybuffer(napi_env env,
   CHECK_ARG(env, result);
 
   v8::Isolate* isolate = env->isolate;
+  // The buffer will be freed with v8impl::ArrayBufferReference::New()
+  // below, hence this BackingStore does not need to free the buffer.
+  std::unique_ptr<v8::BackingStore> backing =
+      v8::ArrayBuffer::NewBackingStore(external_data,
+                                       byte_length,
+                                       [](void*, size_t, void*){},
+                                       nullptr);
   v8::Local<v8::ArrayBuffer> buffer =
-      v8::ArrayBuffer::New(isolate, external_data, byte_length);
+      v8::ArrayBuffer::New(isolate, std::move(backing));
   v8::Maybe<bool> marked = env->mark_arraybuffer_as_untransferable(buffer);
   CHECK_MAYBE_NOTHING(env, marked, napi_generic_failure);
 
@@ -3175,9 +3182,6 @@ napi_status napi_detach_arraybuffer(napi_env env, napi_value arraybuffer) {
       env, value->IsArrayBuffer(), napi_arraybuffer_expected);
 
   v8::Local<v8::ArrayBuffer> it = value.As<v8::ArrayBuffer>();
-  // TODO(addaleax): Remove the first condition once we have V8 8.0.
-  RETURN_STATUS_IF_FALSE(
-      env, it->IsExternal(), napi_detachable_arraybuffer_expected);
   RETURN_STATUS_IF_FALSE(
       env, it->IsDetachable(), napi_detachable_arraybuffer_expected);
 

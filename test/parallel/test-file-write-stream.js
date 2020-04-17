@@ -46,9 +46,6 @@ file
     callbacks.open++;
     assert.strictEqual(typeof fd, 'number');
   })
-  .on('error', common.mustCall((err) => {
-    assert.strictEqual(err.code, 'ERR_STREAM_WRITE_AFTER_END');
-  }))
   .on('drain', function() {
     console.error('drain!', callbacks.drain);
     callbacks.drain++;
@@ -61,11 +58,15 @@ file
     }
   })
   .on('close', function() {
+    console.error('close!');
     assert.strictEqual(file.bytesWritten, EXPECTED.length * 2);
 
     callbacks.close++;
-    file.write('should not work anymore', common.mustCall((err) => {
-      assert.strictEqual(err.code, 'ERR_STREAM_WRITE_AFTER_END');
+    console.error('write after end should not be allowed');
+    file.write('should not work anymore', common.expectsError({
+      code: 'ERR_STREAM_WRITE_AFTER_END',
+      name: 'Error',
+      message: 'write after end'
     }));
 
     fs.unlinkSync(fn);

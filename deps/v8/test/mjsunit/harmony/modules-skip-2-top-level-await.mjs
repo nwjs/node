@@ -12,3 +12,4 @@ export let stringlife = m1.stringlife;
 export function life() {
   return m2_namespace.life();
 }
+

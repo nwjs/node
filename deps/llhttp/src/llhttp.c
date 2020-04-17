@@ -1943,7 +1943,7 @@ static llparse_state_t llhttp__internal__run(
     case s_n_llhttp__internal__n_header_value_te_chunked:
     s_n_llhttp__internal__n_header_value_te_chunked: {
       llparse_match_t match_seq;
-      
+
       if (p == endp) {
         return s_n_llhttp__internal__n_header_value_te_chunked;
       }

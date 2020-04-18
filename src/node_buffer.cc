@@ -415,7 +415,7 @@ MaybeLocal<Object> New(Environment* env,
                                    length,
                                    [](void*, size_t, void*){},
                                    nullptr);
-  Local<ArrayBuffer> ab = ArrayBuffer::New(env->isolate(),
+  Local<ArrayBuffer> ab = ArrayBuffer::NewNode(env->isolate(),
                                            std::move(backing));
   if (ab->SetPrivate(env->context(),
                      env->arraybuffer_untransferable_private_symbol(),
@@ -1203,13 +1203,17 @@ void Initialize(Local<Object> target,
   if (NodeArrayBufferAllocator* allocator =
           env->isolate_data()->node_allocator()) {
     uint32_t* zero_fill_field = allocator->zero_fill_field();
+#if 0
     std::unique_ptr<BackingStore> backing =
       ArrayBuffer::NewBackingStore(zero_fill_field,
                                    sizeof(*zero_fill_field),
                                    [](void*, size_t, void*){},
                                    nullptr);
+#endif
     Local<ArrayBuffer> array_buffer =
-        ArrayBuffer::New(env->isolate(), std::move(backing));
+        ArrayBuffer::NewNode(env->isolate(), zero_fill_field,
+			sizeof(*zero_fill_field));
+        //ArrayBuffer::NewNode(env->isolate(), std::move(backing));
     array_buffer->SetPrivate(
         env->context(),
         env->arraybuffer_untransferable_private_symbol(),

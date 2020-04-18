@@ -121,8 +121,14 @@ void* NodeArrayBufferAllocator::Reallocate(
 }
 
 void NodeArrayBufferAllocator::Free(void* data, size_t size) {
+  if (data == &zero_fill_field_)
+    return;
   total_mem_usage_.fetch_sub(size, std::memory_order_relaxed);
   free(data);
+}
+
+void NodeArrayBufferAllocator::Free(void* data, size_t size, AllocationMode mode) {
+  Free(data, size);
 }
 
 DebuggingArrayBufferAllocator::~DebuggingArrayBufferAllocator() {

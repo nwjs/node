@@ -114,6 +114,7 @@ class NodeArrayBufferAllocator : public ArrayBufferAllocator {
   void* Allocate(size_t size) override;  // Defined in src/node.cc
   void* AllocateUninitialized(size_t size) override;
   void Free(void* data, size_t size) override;
+  void Free(void* data, size_t size, AllocationMode mode) override;
   virtual void* Reallocate(void* data, size_t old_size, size_t size);
   virtual void RegisterPointer(void* data, size_t size) {
     total_mem_usage_.fetch_add(size, std::memory_order_relaxed);

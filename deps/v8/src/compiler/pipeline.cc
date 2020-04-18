@@ -36,7 +36,7 @@
 #include "src/compiler/control-flow-optimizer.h"
 #include "src/compiler/csa-load-elimination.h"
 #include "src/compiler/dead-code-elimination.h"
-#include "src/compiler/decompression-optimizer.h"
+#include "src/compiler/decompression-elimination.h"
 #include "src/compiler/effect-control-linearizer.h"
 #include "src/compiler/escape-analysis-reducer.h"
 #include "src/compiler/escape-analysis.h"
@@ -64,7 +64,6 @@
 #include "src/compiler/pipeline-statistics.h"
 #include "src/compiler/redundancy-elimination.h"
 #include "src/compiler/schedule.h"
-#include "src/compiler/scheduled-machine-lowering.h"
 #include "src/compiler/scheduler.h"
 #include "src/compiler/select-lowering.h"
 #include "src/compiler/serializer-for-background-compilation.h"
@@ -83,7 +82,6 @@
 #include "src/diagnostics/disassembler.h"
 #include "src/execution/isolate-inl.h"
 #include "src/init/bootstrapper.h"
-#include "src/logging/counters.h"
 #include "src/objects/shared-function-info.h"
 #include "src/parsing/parse-info.h"
 #include "src/tracing/trace-event.h"
@@ -132,8 +130,7 @@ class PipelineData {
   // For main entry point.
   PipelineData(ZoneStats* zone_stats, Isolate* isolate,
                OptimizedCompilationInfo* info,
-               PipelineStatistics* pipeline_statistics,
-               bool is_concurrent_inlining)
+               PipelineStatistics* pipeline_statistics)
       : isolate_(isolate),
         allocator_(isolate->allocator()),
         info_(info),
@@ -151,8 +148,7 @@ class PipelineData {
         codegen_zone_scope_(zone_stats_, kCodegenZoneName),
         codegen_zone_(codegen_zone_scope_.zone()),
         broker_(new JSHeapBroker(isolate_, info_->zone(),
-                                 info_->trace_heap_broker_enabled(),
-                                 is_concurrent_inlining)),
+                                 info_->trace_heap_broker_enabled())),
         register_allocation_zone_scope_(zone_stats_,
                                         kRegisterAllocationZoneName),
         register_allocation_zone_(register_allocation_zone_scope_.zone()),
@@ -211,12 +207,10 @@ class PipelineData {
   // For CodeStubAssembler and machine graph testing entry point.
   PipelineData(ZoneStats* zone_stats, OptimizedCompilationInfo* info,
                Isolate* isolate, AccountingAllocator* allocator, Graph* graph,
-               JSGraph* jsgraph, Schedule* schedule,
-               SourcePositionTable* source_positions,
+               Schedule* schedule, SourcePositionTable* source_positions,
                NodeOriginTable* node_origins, JumpOptimizationInfo* jump_opt,
                const AssemblerOptions& assembler_options)
       : isolate_(isolate),
-        wasm_engine_(isolate_->wasm_engine()),
         allocator_(allocator),
         info_(info),
         debug_name_(info_->GetDebugName()),
@@ -236,23 +230,15 @@ class PipelineData {
         register_allocation_zone_(register_allocation_zone_scope_.zone()),
         jump_optimization_info_(jump_opt),
         assembler_options_(assembler_options) {
-    if (jsgraph) {
-      jsgraph_ = jsgraph;
-      simplified_ = jsgraph->simplified();
-      machine_ = jsgraph->machine();
-      common_ = jsgraph->common();
-      javascript_ = jsgraph->javascript();
-    } else {
-      simplified_ = new (graph_zone_) SimplifiedOperatorBuilder(graph_zone_);
-      machine_ = new (graph_zone_) MachineOperatorBuilder(
-          graph_zone_, MachineType::PointerRepresentation(),
-          InstructionSelector::SupportedMachineOperatorFlags(),
-          InstructionSelector::AlignmentRequirements());
-      common_ = new (graph_zone_) CommonOperatorBuilder(graph_zone_);
-      javascript_ = new (graph_zone_) JSOperatorBuilder(graph_zone_);
-      jsgraph_ = new (graph_zone_) JSGraph(isolate_, graph_, common_,
-                                           javascript_, simplified_, machine_);
-    }
+    simplified_ = new (graph_zone_) SimplifiedOperatorBuilder(graph_zone_);
+    machine_ = new (graph_zone_) MachineOperatorBuilder(
+        graph_zone_, MachineType::PointerRepresentation(),
+        InstructionSelector::SupportedMachineOperatorFlags(),
+        InstructionSelector::AlignmentRequirements());
+    common_ = new (graph_zone_) CommonOperatorBuilder(graph_zone_);
+    javascript_ = new (graph_zone_) JSOperatorBuilder(graph_zone_);
+    jsgraph_ = new (graph_zone_)
+        JSGraph(isolate_, graph_, common_, javascript_, simplified_, machine_);
   }
 
   // For register allocation testing entry point.
@@ -389,12 +375,6 @@ class PipelineData {
   size_t max_unoptimized_frame_height() const {
     return max_unoptimized_frame_height_;
   }
-  size_t* address_of_max_pushed_argument_count() {
-    return &max_pushed_argument_count_;
-  }
-  size_t max_pushed_argument_count() const {
-    return max_pushed_argument_count_;
-  }
 
   CodeTracer* GetCodeTracer() const {
     return wasm_engine_ == nullptr ? isolate_->GetCodeTracer()
@@ -511,7 +491,7 @@ class PipelineData {
         osr_helper_, start_source_position_, jump_optimization_info_,
         info()->GetPoisoningMitigationLevel(), assembler_options_,
         info_->builtin_index(), max_unoptimized_frame_height(),
-        max_pushed_argument_count(), std::move(buffer));
+        std::move(buffer));
   }
 
   void BeginPhaseKind(const char* phase_kind_name) {
@@ -530,16 +510,6 @@ class PipelineData {
 
   bool roots_relative_addressing_enabled() {
     return roots_relative_addressing_enabled_;
-  }
-
-  // RuntimeCallStats that is only available during job execution but not
-  // finalization.
-  // TODO(delphick): Currently even during execution this can be nullptr, due to
-  // JSToWasmWrapperCompilationUnit::Execute. Once a table can be extracted
-  // there, this method can DCHECK that it is never nullptr.
-  RuntimeCallStats* runtime_call_stats() const { return runtime_call_stats_; }
-  void set_runtime_call_stats(RuntimeCallStats* stats) {
-    runtime_call_stats_ = stats;
   }
 
  private:
@@ -610,12 +580,9 @@ class PipelineData {
   Maybe<OuterContext> specialization_context_ = Nothing<OuterContext>();
 
   // The maximal combined height of all inlined frames in their unoptimized
-  // state, and the maximal number of arguments pushed during function calls.
-  // Calculated during instruction selection, applied during code generation.
+  // state. Calculated during instruction selection, applied during code
+  // generation.
   size_t max_unoptimized_frame_height_ = 0;
-  size_t max_pushed_argument_count_ = 0;
-
-  RuntimeCallStats* runtime_call_stats_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(PipelineData);
 };
@@ -793,8 +760,8 @@ void PrintCode(Isolate* isolate, Handle<Code> code,
 #endif  // ENABLE_DISASSEMBLER
 }
 
-void TraceScheduleAndVerify(OptimizedCompilationInfo* info, PipelineData* data,
-                            Schedule* schedule, const char* phase_name) {
+void TraceSchedule(OptimizedCompilationInfo* info, PipelineData* data,
+                   Schedule* schedule, const char* phase_name) {
   if (info->trace_turbo_json_enabled()) {
     AllowHandleDereference allow_deref;
     TurboJsonFile json_of(info, std::ios_base::app);
@@ -814,9 +781,8 @@ void TraceScheduleAndVerify(OptimizedCompilationInfo* info, PipelineData* data,
     OFStream os(tracing_scope.file());
     os << "-- Schedule --------------------------------------\n" << *schedule;
   }
-
-  if (FLAG_turbo_verify) ScheduleVerifier::Run(schedule);
 }
+
 
 class SourcePositionWrapper final : public Reducer {
  public:
@@ -883,15 +849,10 @@ void AddReducer(PipelineData* data, GraphReducer* graph_reducer,
 
 class PipelineRunScope {
  public:
-  PipelineRunScope(
-      PipelineData* data, const char* phase_name,
-      RuntimeCallCounterId runtime_call_counter_id,
-      RuntimeCallStats::CounterMode counter_mode = RuntimeCallStats::kExact)
+  PipelineRunScope(PipelineData* data, const char* phase_name)
       : phase_scope_(data->pipeline_statistics(), phase_name),
         zone_scope_(data->zone_stats(), phase_name),
-        origin_scope_(data->node_origins(), phase_name),
-        runtime_call_timer_scope(data->runtime_call_stats(),
-                                 runtime_call_counter_id, counter_mode) {
+        origin_scope_(data->node_origins(), phase_name) {
     DCHECK_NOT_NULL(phase_name);
   }
 
@@ -901,7 +862,6 @@ class PipelineRunScope {
   PhaseScope phase_scope_;
   ZoneStats::Scope zone_scope_;
   NodeOriginTable::PhaseScope origin_scope_;
-  RuntimeCallTimerScope runtime_call_timer_scope;
 };
 
 PipelineStatistics* CreatePipelineStatistics(Handle<Script> script,
@@ -978,13 +938,12 @@ class PipelineCompilationJob final : public OptimizedCompilationJob {
  public:
   PipelineCompilationJob(Isolate* isolate,
                          Handle<SharedFunctionInfo> shared_info,
-                         Handle<JSFunction> function, BailoutId osr_offset,
-                         JavaScriptFrame* osr_frame);
+                         Handle<JSFunction> function);
   ~PipelineCompilationJob() final;
 
  protected:
   Status PrepareJobImpl(Isolate* isolate) final;
-  Status ExecuteJobImpl(RuntimeCallStats* stats) final;
+  Status ExecuteJobImpl() final;
   Status FinalizeJobImpl(Isolate* isolate) final;
 
   // Registers weak object to optimized code dependencies.
@@ -1004,8 +963,7 @@ class PipelineCompilationJob final : public OptimizedCompilationJob {
 
 PipelineCompilationJob::PipelineCompilationJob(
     Isolate* isolate, Handle<SharedFunctionInfo> shared_info,
-    Handle<JSFunction> function, BailoutId osr_offset,
-    JavaScriptFrame* osr_frame)
+    Handle<JSFunction> function)
     // Note that the OptimizedCompilationInfo is not initialized at the time
     // we pass it to the CompilationJob constructor, but it is not
     // dereferenced there.
@@ -1018,39 +976,27 @@ PipelineCompilationJob::PipelineCompilationJob(
           handle(Script::cast(shared_info->script()), isolate),
           compilation_info(), function->GetIsolate(), &zone_stats_)),
       data_(&zone_stats_, function->GetIsolate(), compilation_info(),
-            pipeline_statistics_.get(),
-            FLAG_concurrent_inlining && osr_offset.IsNone()),
+            pipeline_statistics_.get()),
       pipeline_(&data_),
       linkage_(nullptr) {
-  compilation_info_.SetOptimizingForOsr(osr_offset, osr_frame);
+  TRACE_EVENT_WITH_FLOW1(
+      TRACE_DISABLED_BY_DEFAULT("v8.compile"), "v8.optimizingCompile.start",
+      this, TRACE_EVENT_FLAG_FLOW_OUT, "function", shared_info->TraceIDRef());
 }
 
-PipelineCompilationJob::~PipelineCompilationJob() {}
-
-namespace {
-// Ensure that the RuntimeStats table is set on the PipelineData for
-// duration of the job phase and unset immediately afterwards. Each job
-// needs to set the correct RuntimeCallStats table depending on whether it
-// is running on a background or foreground thread.
-class PipelineJobScope {
- public:
-  PipelineJobScope(PipelineData* data, RuntimeCallStats* stats) : data_(data) {
-    data_->set_runtime_call_stats(stats);
-  }
-
-  ~PipelineJobScope() { data_->set_runtime_call_stats(nullptr); }
-
- private:
-  PipelineData* data_;
-};
-}  // namespace
+PipelineCompilationJob::~PipelineCompilationJob() {
+  TRACE_EVENT_WITH_FLOW1(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
+                         "v8.optimizingCompile.end", this,
+                         TRACE_EVENT_FLAG_FLOW_IN, "compilationInfo",
+                         compilation_info()->ToTracedValue());
+}
 
 PipelineCompilationJob::Status PipelineCompilationJob::PrepareJobImpl(
     Isolate* isolate) {
-  // Ensure that the RuntimeCallStats table of main thread is available for
-  // phases happening during PrepareJob.
-  PipelineJobScope scope(&data_, isolate->counters()->runtime_call_stats());
-
+  TRACE_EVENT_WITH_FLOW1(
+      TRACE_DISABLED_BY_DEFAULT("v8.compile"), "v8.optimizingCompile.prepare",
+      this, TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "function",
+      compilation_info()->shared_info()->TraceIDRef());
   if (compilation_info()->bytecode_array()->length() >
       FLAG_max_optimized_bytecode_size) {
     return AbortOptimization(BailoutReason::kFunctionTooBig);
@@ -1064,6 +1010,9 @@ PipelineCompilationJob::Status PipelineCompilationJob::PrepareJobImpl(
   }
   if (FLAG_turbo_inlining) {
     compilation_info()->MarkAsInliningEnabled();
+  }
+  if (FLAG_inline_accessors) {
+    compilation_info()->MarkAsAccessorInliningEnabled();
   }
 
   // This is the bottleneck for computing and setting poisoning level in the
@@ -1113,7 +1062,7 @@ PipelineCompilationJob::Status PipelineCompilationJob::PrepareJobImpl(
 
   pipeline_.Serialize();
 
-  if (!data_.broker()->is_concurrent_inlining()) {
+  if (!FLAG_concurrent_inlining) {
     if (!pipeline_.CreateGraph()) {
       CHECK(!isolate->has_pending_exception());
       return AbortOptimization(BailoutReason::kGraphBuildingFailed);
@@ -1123,12 +1072,13 @@ PipelineCompilationJob::Status PipelineCompilationJob::PrepareJobImpl(
   return SUCCEEDED;
 }
 
-PipelineCompilationJob::Status PipelineCompilationJob::ExecuteJobImpl(
-    RuntimeCallStats* stats) {
-  // Ensure that the RuntimeCallStats table is only available during execution
-  // and not during finalization as that might be on a different thread.
-  PipelineJobScope scope(&data_, stats);
-  if (data_.broker()->is_concurrent_inlining()) {
+PipelineCompilationJob::Status PipelineCompilationJob::ExecuteJobImpl() {
+  TRACE_EVENT_WITH_FLOW1(
+      TRACE_DISABLED_BY_DEFAULT("v8.compile"), "v8.optimizingCompile.execute",
+      this, TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "function",
+      compilation_info()->shared_info()->TraceIDRef());
+
+  if (FLAG_concurrent_inlining) {
     if (!pipeline_.CreateGraph()) {
       return AbortOptimization(BailoutReason::kGraphBuildingFailed);
     }
@@ -1143,17 +1093,15 @@ PipelineCompilationJob::Status PipelineCompilationJob::ExecuteJobImpl(
   if (!success) return FAILED;
 
   pipeline_.AssembleCode(linkage_);
-
   return SUCCEEDED;
 }
 
 PipelineCompilationJob::Status PipelineCompilationJob::FinalizeJobImpl(
     Isolate* isolate) {
-  // Ensure that the RuntimeCallStats table of main thread is available for
-  // phases happening during PrepareJob.
-  PipelineJobScope scope(&data_, isolate->counters()->runtime_call_stats());
-  RuntimeCallTimerScope runtimeTimer(
-      isolate, RuntimeCallCounterId::kOptimizeFinalizePipelineJob);
+  TRACE_EVENT_WITH_FLOW1(
+      TRACE_DISABLED_BY_DEFAULT("v8.compile"), "v8.optimizingCompile.finalize",
+      this, TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "function",
+      compilation_info()->shared_info()->TraceIDRef());
   MaybeHandle<Code> maybe_code = pipeline_.FinalizeCode();
   Handle<Code> code;
   if (!maybe_code.ToHandle(&code)) {
@@ -1217,14 +1165,14 @@ class WasmHeapStubCompilationJob final : public OptimizedCompilationJob {
         zone_(std::move(zone)),
         graph_(graph),
         data_(&zone_stats_, &info_, isolate, wasm_engine->allocator(), graph_,
-              nullptr, nullptr, source_positions,
+              nullptr, source_positions,
               new (zone_.get()) NodeOriginTable(graph_), nullptr, options),
         pipeline_(&data_),
         wasm_engine_(wasm_engine) {}
 
  protected:
   Status PrepareJobImpl(Isolate* isolate) final;
-  Status ExecuteJobImpl(RuntimeCallStats* stats) final;
+  Status ExecuteJobImpl() final;
   Status FinalizeJobImpl(Isolate* isolate) final;
 
  private:
@@ -1258,8 +1206,7 @@ CompilationJob::Status WasmHeapStubCompilationJob::PrepareJobImpl(
   UNREACHABLE();
 }
 
-CompilationJob::Status WasmHeapStubCompilationJob::ExecuteJobImpl(
-    RuntimeCallStats* stats) {
+CompilationJob::Status WasmHeapStubCompilationJob::ExecuteJobImpl() {
   std::unique_ptr<PipelineStatistics> pipeline_statistics;
   if (FLAG_turbo_stats || FLAG_turbo_stats_nvp) {
     pipeline_statistics.reset(new PipelineStatistics(
@@ -1315,26 +1262,13 @@ CompilationJob::Status WasmHeapStubCompilationJob::FinalizeJobImpl(
 
 template <typename Phase, typename... Args>
 void PipelineImpl::Run(Args&&... args) {
-  PipelineRunScope scope(this->data_, Phase::phase_name(),
-                         Phase::kRuntimeCallCounterId, Phase::kCounterMode);
+  PipelineRunScope scope(this->data_, Phase::phase_name());
   Phase phase;
   phase.Run(this->data_, scope.zone(), std::forward<Args>(args)...);
 }
 
-#define DECL_PIPELINE_PHASE_CONSTANTS_HELPER(Name, Mode)        \
-  static const char* phase_name() { return "V8.TF" #Name; }     \
-  static constexpr RuntimeCallCounterId kRuntimeCallCounterId = \
-      RuntimeCallCounterId::kOptimize##Name;                    \
-  static constexpr RuntimeCallStats::CounterMode kCounterMode = Mode;
-
-#define DECL_PIPELINE_PHASE_CONSTANTS(Name) \
-  DECL_PIPELINE_PHASE_CONSTANTS_HELPER(Name, RuntimeCallStats::kThreadSpecific)
-
-#define DECL_MAIN_THREAD_PIPELINE_PHASE_CONSTANTS(Name) \
-  DECL_PIPELINE_PHASE_CONSTANTS_HELPER(Name, RuntimeCallStats::kExact)
-
 struct GraphBuilderPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(BytecodeGraphBuilder)
+  static const char* phase_name() { return "V8.TFBytecodeGraphBuilder"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     BytecodeGraphBuilderFlags flags;
@@ -1356,7 +1290,7 @@ struct GraphBuilderPhase {
 };
 
 struct InliningPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(Inlining)
+  static const char* phase_name() { return "V8.TFInlining"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     OptimizedCompilationInfo* info = data->info();
@@ -1368,12 +1302,10 @@ struct InliningPhase {
     CommonOperatorReducer common_reducer(&graph_reducer, data->graph(),
                                          data->broker(), data->common(),
                                          data->machine(), temp_zone);
-    JSCallReducer::Flags call_reducer_flags = JSCallReducer::kNoFlags;
-    if (data->info()->is_bailout_on_uninitialized()) {
-      call_reducer_flags |= JSCallReducer::kBailoutOnUninitialized;
-    }
     JSCallReducer call_reducer(&graph_reducer, data->jsgraph(), data->broker(),
-                               temp_zone, call_reducer_flags,
+                               data->info()->is_bailout_on_uninitialized()
+                                   ? JSCallReducer::kBailoutOnUninitialized
+                                   : JSCallReducer::kNoFlags,
                                data->dependencies());
     JSContextSpecialization context_specialization(
         &graph_reducer, data->jsgraph(), data->broker(),
@@ -1383,6 +1315,9 @@ struct InliningPhase {
             : MaybeHandle<JSFunction>());
     JSNativeContextSpecialization::Flags flags =
         JSNativeContextSpecialization::kNoFlags;
+    if (data->info()->is_accessor_inlining_enabled()) {
+      flags |= JSNativeContextSpecialization::kAccessorInliningEnabled;
+    }
     if (data->info()->is_bailout_on_uninitialized()) {
       flags |= JSNativeContextSpecialization::kBailoutOnUninitialized;
     }
@@ -1393,9 +1328,11 @@ struct InliningPhase {
         &graph_reducer, data->jsgraph(), data->broker(), flags,
         data->dependencies(), temp_zone, info->zone());
     JSInliningHeuristic inlining(&graph_reducer,
+                                 data->info()->is_inlining_enabled()
+                                     ? JSInliningHeuristic::kGeneralInlining
+                                     : JSInliningHeuristic::kRestrictedInlining,
                                  temp_zone, data->info(), data->jsgraph(),
                                  data->broker(), data->source_positions());
-
     JSIntrinsicLowering intrinsic_lowering(&graph_reducer, data->jsgraph(),
                                            data->broker());
     AddReducer(data, &graph_reducer, &dead_code_elimination);
@@ -1405,16 +1342,14 @@ struct InliningPhase {
     AddReducer(data, &graph_reducer, &context_specialization);
     AddReducer(data, &graph_reducer, &intrinsic_lowering);
     AddReducer(data, &graph_reducer, &call_reducer);
-    if (data->info()->is_inlining_enabled()) {
-      AddReducer(data, &graph_reducer, &inlining);
-    }
+    AddReducer(data, &graph_reducer, &inlining);
     graph_reducer.ReduceGraph();
   }
 };
 
 
 struct TyperPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(Typer)
+  static const char* phase_name() { return "V8.TFTyper"; }
 
   void Run(PipelineData* data, Zone* temp_zone, Typer* typer) {
     NodeVector roots(temp_zone);
@@ -1432,7 +1367,7 @@ struct TyperPhase {
 };
 
 struct UntyperPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(Untyper)
+  static const char* phase_name() { return "V8.TFUntyper"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     class RemoveTypeReducer final : public Reducer {
@@ -1463,7 +1398,7 @@ struct UntyperPhase {
 };
 
 struct HeapBrokerInitializationPhase {
-  DECL_MAIN_THREAD_PIPELINE_PHASE_CONSTANTS(HeapBrokerInitialization)
+  static const char* phase_name() { return "V8.TFHeapBrokerInitialization"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     data->broker()->InitializeAndStartSerializing(data->native_context());
@@ -1471,7 +1406,7 @@ struct HeapBrokerInitializationPhase {
 };
 
 struct CopyMetadataForConcurrentCompilePhase {
-  DECL_MAIN_THREAD_PIPELINE_PHASE_CONSTANTS(SerializeMetadata)
+  static const char* phase_name() { return "V8.TFSerializeMetadata"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     GraphReducer graph_reducer(temp_zone, data->graph(),
@@ -1489,7 +1424,7 @@ struct CopyMetadataForConcurrentCompilePhase {
 };
 
 struct SerializationPhase {
-  DECL_MAIN_THREAD_PIPELINE_PHASE_CONSTANTS(Serialization)
+  static const char* phase_name() { return "V8.TFSerialization"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     SerializerForBackgroundCompilationFlags flags;
@@ -1503,9 +1438,6 @@ struct SerializationPhase {
       flags |=
           SerializerForBackgroundCompilationFlag::kAnalyzeEnvironmentLiveness;
     }
-    if (data->info()->is_inlining_enabled()) {
-      flags |= SerializerForBackgroundCompilationFlag::kEnableTurboInlining;
-    }
     RunSerializerForBackgroundCompilation(
         data->zone_stats(), data->broker(), data->dependencies(),
         data->info()->closure(), flags, data->info()->osr_offset());
@@ -1517,7 +1449,7 @@ struct SerializationPhase {
 };
 
 struct TypedLoweringPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(TypedLowering)
+  static const char* phase_name() { return "V8.TFTypedLowering"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     GraphReducer graph_reducer(temp_zone, data->graph(),
@@ -1554,7 +1486,7 @@ struct TypedLoweringPhase {
 
 
 struct EscapeAnalysisPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(EscapeAnalysis)
+  static const char* phase_name() { return "V8.TFEscapeAnalysis"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     EscapeAnalysis escape_analysis(data->jsgraph(),
@@ -1574,7 +1506,7 @@ struct EscapeAnalysisPhase {
 };
 
 struct TypeAssertionsPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(TypeAssertions)
+  static const char* phase_name() { return "V8.TFTypeAssertions"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     GraphReducer graph_reducer(temp_zone, data->graph(),
@@ -1588,7 +1520,7 @@ struct TypeAssertionsPhase {
 };
 
 struct SimplifiedLoweringPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(SimplifiedLowering)
+  static const char* phase_name() { return "V8.TFSimplifiedLowering"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     SimplifiedLowering lowering(data->jsgraph(), data->broker(), temp_zone,
@@ -1600,7 +1532,7 @@ struct SimplifiedLoweringPhase {
 };
 
 struct LoopPeelingPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(LoopPeeling)
+  static const char* phase_name() { return "V8.TFLoopPeeling"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     GraphTrimmer trimmer(temp_zone, data->graph());
@@ -1617,7 +1549,7 @@ struct LoopPeelingPhase {
 };
 
 struct LoopExitEliminationPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(LoopExitElimination)
+  static const char* phase_name() { return "V8.TFLoopExitElimination"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     LoopPeeler::EliminateLoopExits(data->graph(), temp_zone);
@@ -1625,7 +1557,7 @@ struct LoopExitEliminationPhase {
 };
 
 struct GenericLoweringPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(GenericLowering)
+  static const char* phase_name() { return "V8.TFGenericLowering"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     GraphReducer graph_reducer(temp_zone, data->graph(),
@@ -1639,7 +1571,7 @@ struct GenericLoweringPhase {
 };
 
 struct EarlyOptimizationPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(EarlyOptimization)
+  static const char* phase_name() { return "V8.TFEarlyOptimization"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     GraphReducer graph_reducer(temp_zone, data->graph(),
@@ -1666,7 +1598,7 @@ struct EarlyOptimizationPhase {
 };
 
 struct ControlFlowOptimizationPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(ControlFlowOptimization)
+  static const char* phase_name() { return "V8.TFControlFlowOptimization"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     ControlFlowOptimizer optimizer(data->graph(), data->common(),
@@ -1677,7 +1609,7 @@ struct ControlFlowOptimizationPhase {
 };
 
 struct EffectControlLinearizationPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(EffectLinearization)
+  static const char* phase_name() { return "V8.TFEffectLinearization"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     {
@@ -1696,8 +1628,9 @@ struct EffectControlLinearizationPhase {
       Schedule* schedule = Scheduler::ComputeSchedule(
           temp_zone, data->graph(), Scheduler::kTempSchedule,
           &data->info()->tick_counter());
-      TraceScheduleAndVerify(data->info(), data, schedule,
-                             "effect linearization schedule");
+      if (FLAG_turbo_verify) ScheduleVerifier::Run(schedule);
+      TraceSchedule(data->info(), data, schedule,
+                    "effect linearization schedule");
 
       MaskArrayIndexEnable mask_array_index =
           (data->info()->GetPoisoningMitigationLevel() !=
@@ -1711,7 +1644,7 @@ struct EffectControlLinearizationPhase {
       // - introduce effect phis and rewire effects to get SSA again.
       LinearizeEffectControl(data->jsgraph(), schedule, temp_zone,
                              data->source_positions(), data->node_origins(),
-                             mask_array_index, MaintainSchedule::kDiscard);
+                             mask_array_index);
     }
     {
       // The {EffectControlLinearizer} might leave {Dead} nodes behind, so we
@@ -1735,7 +1668,7 @@ struct EffectControlLinearizationPhase {
 };
 
 struct StoreStoreEliminationPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(StoreStoreElimination)
+  static const char* phase_name() { return "V8.TFStoreStoreElimination"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     GraphTrimmer trimmer(temp_zone, data->graph());
@@ -1749,7 +1682,7 @@ struct StoreStoreEliminationPhase {
 };
 
 struct LoadEliminationPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(LoadElimination)
+  static const char* phase_name() { return "V8.TFLoadElimination"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     GraphReducer graph_reducer(temp_zone, data->graph(),
@@ -1789,7 +1722,7 @@ struct LoadEliminationPhase {
 };
 
 struct MemoryOptimizationPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(MemoryOptimization)
+  static const char* phase_name() { return "V8.TFMemoryOptimization"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     // The memory optimizer requires the graphs to be trimmed, so trim now.
@@ -1810,7 +1743,7 @@ struct MemoryOptimizationPhase {
 };
 
 struct LateOptimizationPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(LateOptimization)
+  static const char* phase_name() { return "V8.TFLateOptimization"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     GraphReducer graph_reducer(temp_zone, data->graph(),
@@ -1825,8 +1758,15 @@ struct LateOptimizationPhase {
     CommonOperatorReducer common_reducer(&graph_reducer, data->graph(),
                                          data->broker(), data->common(),
                                          data->machine(), temp_zone);
-    JSGraphAssembler graph_assembler(data->jsgraph(), temp_zone);
-    SelectLowering select_lowering(&graph_assembler, data->graph());
+    SelectLowering select_lowering(data->jsgraph(), temp_zone);
+    // TODO(v8:7703, solanes): go back to using #if guards once
+    // FLAG_turbo_decompression_elimination gets removed.
+    DecompressionElimination decompression_elimination(
+        &graph_reducer, data->graph(), data->machine(), data->common());
+    if (COMPRESS_POINTERS_BOOL && FLAG_turbo_decompression_elimination) {
+      AddReducer(data, &graph_reducer, &decompression_elimination);
+    }
+    USE(decompression_elimination);
     AddReducer(data, &graph_reducer, &branch_condition_elimination);
     AddReducer(data, &graph_reducer, &dead_code_elimination);
     AddReducer(data, &graph_reducer, &machine_reducer);
@@ -1838,7 +1778,7 @@ struct LateOptimizationPhase {
 };
 
 struct MachineOperatorOptimizationPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(MachineOperatorOptimization)
+  static const char* phase_name() { return "V8.TFMachineOperatorOptimization"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     GraphReducer graph_reducer(temp_zone, data->graph(),
@@ -1853,69 +1793,30 @@ struct MachineOperatorOptimizationPhase {
   }
 };
 
-struct DecompressionOptimizationPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(DecompressionOptimization)
-
-  void Run(PipelineData* data, Zone* temp_zone) {
-    if (COMPRESS_POINTERS_BOOL) {
-      DecompressionOptimizer decompression_optimizer(
-          temp_zone, data->graph(), data->common(), data->machine());
-      decompression_optimizer.Reduce();
-    }
-  }
-};
-
-struct ScheduledEffectControlLinearizationPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(ScheduledEffectControlLinearization)
-
-  void Run(PipelineData* data, Zone* temp_zone) {
-    MaskArrayIndexEnable mask_array_index =
-        (data->info()->GetPoisoningMitigationLevel() !=
-         PoisoningMitigationLevel::kDontPoison)
-            ? MaskArrayIndexEnable::kMaskArrayIndex
-            : MaskArrayIndexEnable::kDoNotMaskArrayIndex;
-    // Post-pass for wiring the control/effects
-    // - connect allocating representation changes into the control&effect
-    //   chains and lower them,
-    // - get rid of the region markers,
-    // - introduce effect phis and rewire effects to get SSA again.
-    LinearizeEffectControl(data->jsgraph(), data->schedule(), temp_zone,
-                           data->source_positions(), data->node_origins(),
-                           mask_array_index, MaintainSchedule::kMaintain);
-
-    // TODO(rmcilroy) Avoid having to rebuild rpo_order on schedule each time.
-    Scheduler::ComputeSpecialRPO(temp_zone, data->schedule());
-    if (FLAG_turbo_verify) Scheduler::GenerateDominatorTree(data->schedule());
-    TraceScheduleAndVerify(data->info(), data, data->schedule(),
-                           "effect linearization schedule");
-  }
-};
-
-struct ScheduledMachineLoweringPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(ScheduledMachineLowering)
-
-  void Run(PipelineData* data, Zone* temp_zone) {
-    ScheduledMachineLowering machine_lowering(
-        data->jsgraph(), data->schedule(), temp_zone, data->source_positions(),
-        data->node_origins(), data->info()->GetPoisoningMitigationLevel());
-    machine_lowering.Run();
-
-    // TODO(rmcilroy) Avoid having to rebuild rpo_order on schedule each time.
-    Scheduler::ComputeSpecialRPO(temp_zone, data->schedule());
-    if (FLAG_turbo_verify) Scheduler::GenerateDominatorTree(data->schedule());
-    TraceScheduleAndVerify(data->info(), data, data->schedule(),
-                           "machine lowered schedule");
-  }
-};
-
-struct CsaEarlyOptimizationPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(CSAEarlyOptimization)
+struct MidTierMachineLoweringPhase {
+  static const char* phase_name() { return "V8.TFMidTierMachineLoweringPhase"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     GraphReducer graph_reducer(temp_zone, data->graph(),
                                &data->info()->tick_counter(),
                                data->jsgraph()->Dead());
-    MachineOperatorReducer machine_reducer(&graph_reducer, data->jsgraph());
+    SelectLowering select_lowering(data->jsgraph(), temp_zone);
+    MemoryLowering memory_lowering(data->jsgraph(), temp_zone,
+                                   data->info()->GetPoisoningMitigationLevel());
+
+    AddReducer(data, &graph_reducer, &memory_lowering);
+    AddReducer(data, &graph_reducer, &select_lowering);
+    graph_reducer.ReduceGraph();
+  }
+};
+
+struct CsaEarlyOptimizationPhase {
+  static const char* phase_name() { return "V8.CSAEarlyOptimization"; }
+
+  void Run(PipelineData* data, Zone* temp_zone) {
+    GraphReducer graph_reducer(temp_zone, data->graph(),
+                               &data->info()->tick_counter(),
+                               data->jsgraph()->Dead());
     BranchElimination branch_condition_elimination(&graph_reducer,
                                                    data->jsgraph(), temp_zone);
     DeadCodeElimination dead_code_elimination(&graph_reducer, data->graph(),
@@ -1926,7 +1827,6 @@ struct CsaEarlyOptimizationPhase {
     ValueNumberingReducer value_numbering(temp_zone, data->graph()->zone());
     CsaLoadElimination load_elimination(&graph_reducer, data->jsgraph(),
                                         temp_zone);
-    AddReducer(data, &graph_reducer, &machine_reducer);
     AddReducer(data, &graph_reducer, &branch_condition_elimination);
     AddReducer(data, &graph_reducer, &dead_code_elimination);
     AddReducer(data, &graph_reducer, &common_reducer);
@@ -1937,7 +1837,7 @@ struct CsaEarlyOptimizationPhase {
 };
 
 struct CsaOptimizationPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(CSAOptimization)
+  static const char* phase_name() { return "V8.CSAOptimization"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     GraphReducer graph_reducer(temp_zone, data->graph(),
@@ -1951,6 +1851,14 @@ struct CsaOptimizationPhase {
     CommonOperatorReducer common_reducer(&graph_reducer, data->graph(),
                                          data->broker(), data->common(),
                                          data->machine(), temp_zone);
+    // TODO(v8:7703, solanes): go back to using #if guards once
+    // FLAG_turbo_decompression_elimination gets removed.
+    DecompressionElimination decompression_elimination(
+        &graph_reducer, data->graph(), data->machine(), data->common());
+    if (COMPRESS_POINTERS_BOOL && FLAG_turbo_decompression_elimination) {
+      AddReducer(data, &graph_reducer, &decompression_elimination);
+    }
+    USE(decompression_elimination);
     AddReducer(data, &graph_reducer, &branch_condition_elimination);
     AddReducer(data, &graph_reducer, &dead_code_elimination);
     AddReducer(data, &graph_reducer, &machine_reducer);
@@ -1960,8 +1868,7 @@ struct CsaOptimizationPhase {
 };
 
 struct EarlyGraphTrimmingPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(EarlyTrimming)
-
+  static const char* phase_name() { return "V8.TFEarlyTrimming"; }
   void Run(PipelineData* data, Zone* temp_zone) {
     GraphTrimmer trimmer(temp_zone, data->graph());
     NodeVector roots(temp_zone);
@@ -1972,8 +1879,7 @@ struct EarlyGraphTrimmingPhase {
 
 
 struct LateGraphTrimmingPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(LateGraphTrimming)
-
+  static const char* phase_name() { return "V8.TFLateGraphTrimming"; }
   void Run(PipelineData* data, Zone* temp_zone) {
     GraphTrimmer trimmer(temp_zone, data->graph());
     NodeVector roots(temp_zone);
@@ -1986,7 +1892,7 @@ struct LateGraphTrimmingPhase {
 
 
 struct ComputeSchedulePhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(Scheduling)
+  static const char* phase_name() { return "V8.TFScheduling"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     Schedule* schedule = Scheduler::ComputeSchedule(
@@ -1994,6 +1900,7 @@ struct ComputeSchedulePhase {
         data->info()->is_splitting_enabled() ? Scheduler::kSplitNodes
                                              : Scheduler::kNoFlags,
         &data->info()->tick_counter());
+    if (FLAG_turbo_verify) ScheduleVerifier::Run(schedule);
     data->set_schedule(schedule);
   }
 };
@@ -2031,7 +1938,7 @@ std::ostream& operator<<(std::ostream& out, const InstructionRangesAsJSON& s) {
 }
 
 struct InstructionSelectionPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(SelectInstructions)
+  static const char* phase_name() { return "V8.TFSelectInstructions"; }
 
   void Run(PipelineData* data, Zone* temp_zone, Linkage* linkage) {
     InstructionSelector selector(
@@ -2042,7 +1949,6 @@ struct InstructionSelectionPhase {
             : InstructionSelector::kDisableSwitchJumpTable,
         &data->info()->tick_counter(),
         data->address_of_max_unoptimized_frame_height(),
-        data->address_of_max_pushed_argument_count(),
         data->info()->is_source_positions_enabled()
             ? InstructionSelector::kAllSourcePositions
             : InstructionSelector::kCallSourcePositions,
@@ -2073,7 +1979,8 @@ struct InstructionSelectionPhase {
 
 
 struct MeetRegisterConstraintsPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(MeetRegisterConstraints)
+  static const char* phase_name() { return "V8.TFMeetRegisterConstraints"; }
+
   void Run(PipelineData* data, Zone* temp_zone) {
     ConstraintBuilder builder(data->register_allocation_data());
     builder.MeetRegisterConstraints();
@@ -2082,7 +1989,7 @@ struct MeetRegisterConstraintsPhase {
 
 
 struct ResolvePhisPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(ResolvePhis)
+  static const char* phase_name() { return "V8.TFResolvePhis"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     ConstraintBuilder builder(data->register_allocation_data());
@@ -2092,7 +1999,7 @@ struct ResolvePhisPhase {
 
 
 struct BuildLiveRangesPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(BuildLiveRanges)
+  static const char* phase_name() { return "V8.TFBuildLiveRanges"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     LiveRangeBuilder builder(data->register_allocation_data(), temp_zone);
@@ -2101,7 +2008,7 @@ struct BuildLiveRangesPhase {
 };
 
 struct BuildBundlesPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(BuildLiveRangeBundles)
+  static const char* phase_name() { return "V8.TFBuildLiveRangeBundles"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     BundleBuilder builder(data->register_allocation_data());
@@ -2110,7 +2017,7 @@ struct BuildBundlesPhase {
 };
 
 struct SplinterLiveRangesPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(SplinterLiveRanges)
+  static const char* phase_name() { return "V8.TFSplinterLiveRanges"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     LiveRangeSeparator live_range_splinterer(data->register_allocation_data(),
@@ -2122,7 +2029,7 @@ struct SplinterLiveRangesPhase {
 
 template <typename RegAllocator>
 struct AllocateGeneralRegistersPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(AllocateGeneralRegisters)
+  static const char* phase_name() { return "V8.TFAllocateGeneralRegisters"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     RegAllocator allocator(data->register_allocation_data(), GENERAL_REGISTERS,
@@ -2133,7 +2040,7 @@ struct AllocateGeneralRegistersPhase {
 
 template <typename RegAllocator>
 struct AllocateFPRegistersPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(AllocateFPRegisters)
+  static const char* phase_name() { return "V8.TFAllocateFPRegisters"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     RegAllocator allocator(data->register_allocation_data(), FP_REGISTERS,
@@ -2144,8 +2051,7 @@ struct AllocateFPRegistersPhase {
 
 
 struct MergeSplintersPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(MergeSplinteredRanges)
-
+  static const char* phase_name() { return "V8.TFMergeSplinteredRanges"; }
   void Run(PipelineData* pipeline_data, Zone* temp_zone) {
     RegisterAllocationData* data = pipeline_data->register_allocation_data();
     LiveRangeMerger live_range_merger(data, temp_zone);
@@ -2155,7 +2061,7 @@ struct MergeSplintersPhase {
 
 
 struct LocateSpillSlotsPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(LocateSpillSlots)
+  static const char* phase_name() { return "V8.TFLocateSpillSlots"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     SpillSlotLocator locator(data->register_allocation_data());
@@ -2164,7 +2070,7 @@ struct LocateSpillSlotsPhase {
 };
 
 struct DecideSpillingModePhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(DecideSpillingMode)
+  static const char* phase_name() { return "V8.TFDecideSpillingMode"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     OperandAssigner assigner(data->register_allocation_data());
@@ -2173,7 +2079,7 @@ struct DecideSpillingModePhase {
 };
 
 struct AssignSpillSlotsPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(AssignSpillSlots)
+  static const char* phase_name() { return "V8.TFAssignSpillSlots"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     OperandAssigner assigner(data->register_allocation_data());
@@ -2183,7 +2089,7 @@ struct AssignSpillSlotsPhase {
 
 
 struct CommitAssignmentPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(CommitAssignment)
+  static const char* phase_name() { return "V8.TFCommitAssignment"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     OperandAssigner assigner(data->register_allocation_data());
@@ -2193,7 +2099,7 @@ struct CommitAssignmentPhase {
 
 
 struct PopulateReferenceMapsPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(PopulatePointerMaps)
+  static const char* phase_name() { return "V8.TFPopulatePointerMaps"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     ReferenceMapPopulator populator(data->register_allocation_data());
@@ -2203,7 +2109,7 @@ struct PopulateReferenceMapsPhase {
 
 
 struct ConnectRangesPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(ConnectRanges)
+  static const char* phase_name() { return "V8.TFConnectRanges"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     LiveRangeConnector connector(data->register_allocation_data());
@@ -2213,7 +2119,7 @@ struct ConnectRangesPhase {
 
 
 struct ResolveControlFlowPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(ResolveControlFlow)
+  static const char* phase_name() { return "V8.TFResolveControlFlow"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     LiveRangeConnector connector(data->register_allocation_data());
@@ -2223,7 +2129,7 @@ struct ResolveControlFlowPhase {
 
 
 struct OptimizeMovesPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(OptimizeMoves)
+  static const char* phase_name() { return "V8.TFOptimizeMoves"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     MoveOptimizer move_optimizer(temp_zone, data->sequence());
@@ -2233,7 +2139,7 @@ struct OptimizeMovesPhase {
 
 
 struct FrameElisionPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(FrameElision)
+  static const char* phase_name() { return "V8.TFFrameElision"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     FrameElider(data->sequence()).Run();
@@ -2242,7 +2148,7 @@ struct FrameElisionPhase {
 
 
 struct JumpThreadingPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(JumpThreading)
+  static const char* phase_name() { return "V8.TFJumpThreading"; }
 
   void Run(PipelineData* data, Zone* temp_zone, bool frame_at_start) {
     ZoneVector<RpoNumber> result(temp_zone);
@@ -2254,7 +2160,7 @@ struct JumpThreadingPhase {
 };
 
 struct AssembleCodePhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(AssembleCode)
+  static const char* phase_name() { return "V8.TFAssembleCode"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     data->code_generator()->AssembleCode();
@@ -2262,7 +2168,7 @@ struct AssembleCodePhase {
 };
 
 struct FinalizeCodePhase {
-  DECL_MAIN_THREAD_PIPELINE_PHASE_CONSTANTS(FinalizeCode)
+  static const char* phase_name() { return "V8.TFFinalizeCode"; }
 
   void Run(PipelineData* data, Zone* temp_zone) {
     data->set_code(data->code_generator()->FinalizeCode());
@@ -2271,7 +2177,7 @@ struct FinalizeCodePhase {
 
 
 struct PrintGraphPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(PrintGraph)
+  static const char* phase_name() { return "V8.TFPrintGraph"; }
 
   void Run(PipelineData* data, Zone* temp_zone, const char* phase) {
     OptimizedCompilationInfo* info = data->info();
@@ -2312,7 +2218,7 @@ struct PrintGraphPhase {
 
 
 struct VerifyGraphPhase {
-  DECL_PIPELINE_PHASE_CONSTANTS(VerifyGraph)
+  static const char* phase_name() { return "V8.TFVerifyGraph"; }
 
   void Run(PipelineData* data, Zone* temp_zone, const bool untyped,
            bool values_only = false) {
@@ -2334,10 +2240,6 @@ struct VerifyGraphPhase {
                   code_type);
   }
 };
-
-#undef DECL_MAIN_THREAD_PIPELINE_PHASE_CONSTANTS
-#undef DECL_PIPELINE_PHASE_CONSTANTS
-#undef DECL_PIPELINE_PHASE_CONSTANTS_HELPER
 
 void PipelineImpl::RunPrintAndVerify(const char* phase, bool untyped) {
   if (info()->trace_turbo_json_enabled() ||
@@ -2373,7 +2275,7 @@ void PipelineImpl::Serialize() {
   }
 
   data->broker()->SetTargetNativeContextRef(data->native_context());
-  if (data->broker()->is_concurrent_inlining()) {
+  if (FLAG_concurrent_inlining) {
     Run<HeapBrokerInitializationPhase>();
     Run<SerializationPhase>();
     data->broker()->StopSerializing();
@@ -2413,7 +2315,7 @@ bool PipelineImpl::CreateGraph() {
 
   // Run the type-sensitive lowerings and optimizations on the graph.
   {
-    if (!data->broker()->is_concurrent_inlining()) {
+    if (!FLAG_concurrent_inlining) {
       Run<HeapBrokerInitializationPhase>();
       Run<CopyMetadataForConcurrentCompilePhase>();
       data->broker()->StopSerializing();
@@ -2522,9 +2424,6 @@ bool PipelineImpl::OptimizeGraph(Linkage* linkage) {
   Run<MachineOperatorOptimizationPhase>();
   RunPrintAndVerify(MachineOperatorOptimizationPhase::phase_name(), true);
 
-  Run<DecompressionOptimizationPhase>();
-  RunPrintAndVerify(DecompressionOptimizationPhase::phase_name(), true);
-
   data->source_positions()->RemoveDecorator();
   if (data->info()->trace_turbo_json_enabled()) {
     data->node_origins()->RemoveDecorator();
@@ -2583,26 +2482,25 @@ bool PipelineImpl::OptimizeGraphForMidTier(Linkage* linkage) {
 
   data->BeginPhaseKind("V8.TFBlockBuilding");
 
-  ComputeScheduledGraph();
+  Run<EffectControlLinearizationPhase>();
+  RunPrintAndVerify(EffectControlLinearizationPhase::phase_name(), true);
 
-  Run<ScheduledEffectControlLinearizationPhase>();
-  RunPrintAndVerify(ScheduledEffectControlLinearizationPhase::phase_name(),
-                    true);
-
-  Run<ScheduledMachineLoweringPhase>();
-  RunPrintAndVerify(ScheduledMachineLoweringPhase::phase_name(), true);
+  Run<MidTierMachineLoweringPhase>();
+  RunPrintAndVerify(MidTierMachineLoweringPhase::phase_name(), true);
 
   data->source_positions()->RemoveDecorator();
   if (data->info()->trace_turbo_json_enabled()) {
     data->node_origins()->RemoveDecorator();
   }
 
+  ComputeScheduledGraph();
+
   return SelectInstructions(linkage);
 }
 
 MaybeHandle<Code> Pipeline::GenerateCodeForCodeStub(
     Isolate* isolate, CallDescriptor* call_descriptor, Graph* graph,
-    JSGraph* jsgraph, SourcePositionTable* source_positions, Code::Kind kind,
+    SourcePositionTable* source_positions, Code::Kind kind,
     const char* debug_name, int32_t builtin_index,
     PoisoningMitigationLevel poisoning_level, const AssemblerOptions& options) {
   OptimizedCompilationInfo info(CStrVector(debug_name), graph->zone(), kind);
@@ -2619,7 +2517,7 @@ MaybeHandle<Code> Pipeline::GenerateCodeForCodeStub(
   bool should_optimize_jumps =
       isolate->serializer_enabled() && FLAG_turbo_rewrite_far_jumps;
   PipelineData data(&zone_stats, &info, isolate, isolate->allocator(), graph,
-                    jsgraph, nullptr, source_positions, &node_origins,
+                    nullptr, source_positions, &node_origins,
                     should_optimize_jumps ? &jump_opt : nullptr, options);
   data.set_verify_graph(FLAG_verify_csa);
   std::unique_ptr<PipelineStatistics> pipeline_statistics;
@@ -2657,10 +2555,6 @@ MaybeHandle<Code> Pipeline::GenerateCodeForCodeStub(
   pipeline.Run<CsaOptimizationPhase>();
   pipeline.RunPrintAndVerify(CsaOptimizationPhase::phase_name(), true);
 
-  pipeline.Run<DecompressionOptimizationPhase>();
-  pipeline.RunPrintAndVerify(DecompressionOptimizationPhase::phase_name(),
-                             true);
-
   pipeline.Run<VerifyGraphPhase>(true);
   pipeline.ComputeScheduledGraph();
   DCHECK_NOT_NULL(data.schedule());
@@ -2669,7 +2563,7 @@ MaybeHandle<Code> Pipeline::GenerateCodeForCodeStub(
   // repeat it for jump optimization. The first run has to happen on a temporary
   // pipeline to avoid deletion of zones on the main pipeline.
   PipelineData second_data(&zone_stats, &info, isolate, isolate->allocator(),
-                           data.graph(), data.jsgraph(), data.schedule(),
+                           data.graph(), data.schedule(),
                            data.source_positions(), data.node_origins(),
                            data.jump_optimization_info(), options);
   second_data.set_verify_graph(FLAG_verify_csa);
@@ -2810,9 +2704,7 @@ MaybeHandle<Code> Pipeline::GenerateCodeForTesting(
   std::unique_ptr<PipelineStatistics> pipeline_statistics(
       CreatePipelineStatistics(Handle<Script>::null(), info, isolate,
                                &zone_stats));
-
-  PipelineData data(&zone_stats, isolate, info, pipeline_statistics.get(),
-                    i::FLAG_concurrent_inlining);
+  PipelineData data(&zone_stats, isolate, info, pipeline_statistics.get());
   PipelineImpl pipeline(&data);
 
   Linkage linkage(Linkage::ComputeIncoming(data.instruction_zone(), info));
@@ -2840,8 +2732,7 @@ MaybeHandle<Code> Pipeline::GenerateCodeForTesting(
   ZoneStats zone_stats(isolate->allocator());
   NodeOriginTable* node_positions = new (info->zone()) NodeOriginTable(graph);
   PipelineData data(&zone_stats, info, isolate, isolate->allocator(), graph,
-                    nullptr, schedule, nullptr, node_positions, nullptr,
-                    options);
+                    schedule, nullptr, node_positions, nullptr, options);
   std::unique_ptr<PipelineStatistics> pipeline_statistics;
   if (FLAG_turbo_stats || FLAG_turbo_stats_nvp) {
     pipeline_statistics.reset(new PipelineStatistics(
@@ -2874,12 +2765,10 @@ MaybeHandle<Code> Pipeline::GenerateCodeForTesting(
 
 // static
 std::unique_ptr<OptimizedCompilationJob> Pipeline::NewCompilationJob(
-    Isolate* isolate, Handle<JSFunction> function, bool has_script,
-    BailoutId osr_offset, JavaScriptFrame* osr_frame) {
+    Isolate* isolate, Handle<JSFunction> function, bool has_script) {
   Handle<SharedFunctionInfo> shared =
       handle(function->shared(), function->GetIsolate());
-  return std::make_unique<PipelineCompilationJob>(isolate, shared, function,
-                                                  osr_offset, osr_frame);
+  return std::make_unique<PipelineCompilationJob>(isolate, shared, function);
 }
 
 // static
@@ -2921,8 +2810,7 @@ void Pipeline::GenerateCodeForWasmFunction(
     data.info()->MarkAsSplittingEnabled();
   }
   if (FLAG_wasm_opt || is_asm_js) {
-    PipelineRunScope scope(&data, "V8.WasmFullOptimization",
-                           RuntimeCallCounterId::kOptimizeWasmFullOptimization);
+    PipelineRunScope scope(&data, "V8.WasmFullOptimization");
     GraphReducer graph_reducer(scope.zone(), data.graph(),
                                &data.info()->tick_counter(),
                                data.mcgraph()->Dead());
@@ -2941,8 +2829,7 @@ void Pipeline::GenerateCodeForWasmFunction(
     AddReducer(&data, &graph_reducer, &value_numbering);
     graph_reducer.ReduceGraph();
   } else {
-    PipelineRunScope scope(&data, "V8.OptimizeWasmBaseOptimization",
-                           RuntimeCallCounterId::kOptimizeWasmBaseOptimization);
+    PipelineRunScope scope(&data, "V8.WasmBaseOptimization");
     GraphReducer graph_reducer(scope.zone(), data.graph(),
                                &data.info()->tick_counter(),
                                data.mcgraph()->Dead());
@@ -3030,7 +2917,7 @@ void PipelineImpl::ComputeScheduledGraph() {
   RunPrintAndVerify(LateGraphTrimmingPhase::phase_name(), true);
 
   Run<ComputeSchedulePhase>();
-  TraceScheduleAndVerify(data->info(), data, data->schedule(), "schedule");
+  TraceSchedule(data->info(), data, data->schedule(), "schedule");
 }
 
 bool PipelineImpl::SelectInstructions(Linkage* linkage) {
@@ -3046,11 +2933,7 @@ bool PipelineImpl::SelectInstructions(Linkage* linkage) {
         info(), data->graph(), data->schedule(), data->isolate()));
   }
 
-  bool verify_stub_graph =
-      data->verify_graph() ||
-      (FLAG_turbo_verify_machine_graph != nullptr &&
-       (!strcmp(FLAG_turbo_verify_machine_graph, "*") ||
-        !strcmp(FLAG_turbo_verify_machine_graph, data->debug_name())));
+  bool verify_stub_graph = data->verify_graph();
   // Jump optimization runs instruction selection twice, but the instruction
   // selector mutates nodes like swapping the inputs of a load, which can
   // violate the machine graph verification rules. So we skip the second
@@ -3059,7 +2942,10 @@ bool PipelineImpl::SelectInstructions(Linkage* linkage) {
   if (jump_opt && jump_opt->is_optimizing()) {
     verify_stub_graph = false;
   }
-  if (verify_stub_graph) {
+  if (verify_stub_graph ||
+      (FLAG_turbo_verify_machine_graph != nullptr &&
+       (!strcmp(FLAG_turbo_verify_machine_graph, "*") ||
+        !strcmp(FLAG_turbo_verify_machine_graph, data->debug_name())))) {
     if (FLAG_trace_verify_csa) {
       AllowHandleDereference allow_deref;
       CodeTracer::Scope tracing_scope(data->GetCodeTracer());
@@ -3359,7 +3245,7 @@ void PipelineImpl::AllocateRegisters(const RegisterConfiguration* config,
     verifier_zone.reset(
         new Zone(data->allocator(), kRegisterAllocatorVerifierZoneName));
     verifier = new (verifier_zone.get()) RegisterAllocatorVerifier(
-        verifier_zone.get(), config, data->sequence(), data->frame());
+        verifier_zone.get(), config, data->sequence());
   }
 
 #ifdef DEBUG

@@ -157,8 +157,6 @@ class JSSpeculativeBinopBuilder final {
     switch (op_->opcode()) {
       case IrOpcode::kJSAdd:
         return simplified()->SpeculativeBigIntAdd(hint);
-      case IrOpcode::kJSSubtract:
-        return simplified()->SpeculativeBigIntSubtract(hint);
       default:
         break;
     }
@@ -399,8 +397,7 @@ JSTypeHintLowering::LoweringResult JSTypeHintLowering::ReduceBinaryOperation(
       if (Node* node = b.TryBuildNumberBinop()) {
         return LoweringResult::SideEffectFree(node, node, control);
       }
-      if (op->opcode() == IrOpcode::kJSAdd ||
-          op->opcode() == IrOpcode::kJSSubtract) {
+      if (op->opcode() == IrOpcode::kJSAdd) {
         if (Node* node = b.TryBuildBigIntBinop()) {
           return LoweringResult::SideEffectFree(node, node, control);
         }

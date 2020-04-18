@@ -16,7 +16,7 @@ async function testAwait() {
   await foo();
   assert.notStrictEqual(asyncLocalStorage.getStore(), undefined);
   assert.strictEqual(asyncLocalStorage.getStore().get('key'), 'value');
-  await asyncLocalStorage.exit(testOut);
+  await asyncLocalStorage.exitSyncAndReturn(testOut);
 }
 
 asyncLocalStorage.run(new Map(), () => {

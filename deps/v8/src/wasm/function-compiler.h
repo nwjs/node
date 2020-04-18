@@ -35,9 +35,7 @@ class WasmInstructionBuffer final {
   std::unique_ptr<AssemblerBuffer> CreateView();
   std::unique_ptr<uint8_t[]> ReleaseBuffer();
 
-  // Allocate a new {WasmInstructionBuffer}. The size is the maximum of {size}
-  // and {AssemblerBase::kMinimalSize}.
-  static std::unique_ptr<WasmInstructionBuffer> New(size_t size = 0);
+  static std::unique_ptr<WasmInstructionBuffer> New();
 
   // Override {operator delete} to avoid implicit instantiation of {operator
   // delete} with {size_t} argument. The {size_t} argument would be incorrect.
@@ -76,7 +74,7 @@ struct WasmCompilationResult {
 
 class V8_EXPORT_PRIVATE WasmCompilationUnit final {
  public:
-  static ExecutionTier GetBaselineExecutionTier(const WasmModule*);
+  static ExecutionTier GetDefaultExecutionTier(const WasmModule*);
 
   WasmCompilationUnit(int index, ExecutionTier tier)
       : func_index_(index), tier_(tier) {}

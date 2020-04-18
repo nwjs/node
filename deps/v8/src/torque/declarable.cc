@@ -56,62 +56,17 @@ std::ostream& operator<<(std::ostream& os, const RuntimeFunction& b) {
   return os;
 }
 
-std::ostream& operator<<(std::ostream& os, const GenericCallable& g) {
+std::ostream& operator<<(std::ostream& os, const Generic& g) {
   os << "generic " << g.name() << "<";
-  PrintCommaSeparatedList(os, g.generic_parameters(),
-                          [](const GenericParameter& identifier) {
-                            return identifier.name->value;
-                          });
+  PrintCommaSeparatedList(
+      os, g.generic_parameters(),
+      [](const Identifier* identifier) { return identifier->value; });
   os << ">";
 
   return os;
 }
 
-SpecializationRequester::SpecializationRequester(SourcePosition position,
-                                                 Scope* scope, std::string name)
-    : position(position), name(std::move(name)) {
-  // Skip scopes that are not related to template specializations, they might be
-  // stack-allocated and not live for long enough.
-  while (scope && scope->GetSpecializationRequester().IsNone())
-    scope = scope->ParentScope();
-  this->scope = scope;
-}
-
-base::Optional<std::string> TypeConstraint::IsViolated(const Type* type) const {
-  if (upper_bound && !type->IsSubtypeOf(*upper_bound)) {
-    return {ToString("expected ", *type, " to be a subtype of ", *upper_bound)};
-  }
-  return base::nullopt;
-}
-
-base::Optional<std::string> FindConstraintViolation(
-    const std::vector<const Type*>& types,
-    const std::vector<TypeConstraint>& constraints) {
-  DCHECK_EQ(constraints.size(), types.size());
-  for (size_t i = 0; i < types.size(); ++i) {
-    if (auto violation = constraints[i].IsViolated(types[i])) {
-      return {"Could not instantiate generic, " + *violation + "."};
-    }
-  }
-  return base::nullopt;
-}
-
-std::vector<TypeConstraint> ComputeConstraints(
-    Scope* scope, const GenericParameters& parameters) {
-  CurrentScope::Scope scope_scope(scope);
-  std::vector<TypeConstraint> result;
-  for (const GenericParameter& parameter : parameters) {
-    if (parameter.constraint) {
-      result.push_back(TypeConstraint::SubtypeConstraint(
-          TypeVisitor::ComputeType(*parameter.constraint)));
-    } else {
-      result.push_back(TypeConstraint::Unconstrained());
-    }
-  }
-  return result;
-}
-
-TypeArgumentInference GenericCallable::InferSpecializationTypes(
+TypeArgumentInference Generic::InferSpecializationTypes(
     const TypeVector& explicit_specialization_types,
     const TypeVector& arguments) {
   size_t implicit_count = declaration()->parameters.implicit_count;
@@ -124,16 +79,10 @@ TypeArgumentInference GenericCallable::InferSpecializationTypes(
   TypeArgumentInference inference(generic_parameters(),
                                   explicit_specialization_types,
                                   explicit_parameters, arguments);
-  if (!inference.HasFailed()) {
-    if (auto violation =
-            FindConstraintViolation(inference.GetResult(), Constraints())) {
-      inference.Fail(*violation);
-    }
-  }
   return inference;
 }
 
-base::Optional<Statement*> GenericCallable::CallableBody() {
+base::Optional<Statement*> Generic::CallableBody() {
   if (auto* decl = TorqueMacroDeclaration::DynamicCast(declaration())) {
     return decl->body;
   } else if (auto* decl =

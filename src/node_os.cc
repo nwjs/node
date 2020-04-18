@@ -75,6 +75,7 @@ static void GetHostname(const FunctionCallbackInfo<Value>& args) {
           .ToLocalChecked());
 }
 
+
 static void GetOSInformation(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
   uv_utsname_t info;
@@ -97,6 +98,7 @@ static void GetOSInformation(const FunctionCallbackInfo<Value>& args) {
                                        osInformation,
                                        arraysize(osInformation)));
 }
+
 
 static void GetCPUInfo(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
@@ -386,12 +388,12 @@ void Initialize(Local<Object> target,
   env->SetMethod(target, "getTotalMem", GetTotalMemory);
   env->SetMethod(target, "getFreeMem", GetFreeMemory);
   env->SetMethod(target, "getCPUs", GetCPUInfo);
+  env->SetMethod(target, "getOSInformation", GetOSInformation);
   env->SetMethod(target, "getInterfaceAddresses", GetInterfaceAddresses);
   env->SetMethod(target, "getHomeDirectory", GetHomeDirectory);
   env->SetMethod(target, "getUserInfo", GetUserInfo);
   env->SetMethod(target, "setPriority", SetPriority);
   env->SetMethod(target, "getPriority", GetPriority);
-  env->SetMethod(target, "getOSInformation", GetOSInformation);
   target->Set(env->context(),
               FIXED_ONE_BYTE_STRING(env->isolate(), "isBigEndian"),
               Boolean::New(env->isolate(), IsBigEndian())).Check();

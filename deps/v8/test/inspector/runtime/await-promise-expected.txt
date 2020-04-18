@@ -120,3 +120,12 @@ Running test: testResolvedWithoutArgsPromise
         }
     }
 }
+
+Running test: testGarbageCollectedPromise
+{
+    error : {
+        code : -32000
+        message : Promise was collected
+    }
+    id : <messageId>
+}

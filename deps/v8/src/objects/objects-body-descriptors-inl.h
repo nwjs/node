@@ -18,7 +18,7 @@
 #include "src/objects/js-collection.h"
 #include "src/objects/js-weak-refs.h"
 #include "src/objects/oddball.h"
-#include "src/objects/ordered-hash-table-inl.h"
+#include "src/objects/ordered-hash-table.h"
 #include "src/objects/source-text-module.h"
 #include "src/objects/synthetic-module.h"
 #include "src/objects/transitions.h"
@@ -219,8 +219,7 @@ class WeakCell::BodyDescriptor final : public BodyDescriptorBase {
                                  ObjectVisitor* v) {
     IteratePointers(obj, HeapObject::kHeaderSize, kTargetOffset, v);
     IterateCustomWeakPointer(obj, kTargetOffset, v);
-    IterateCustomWeakPointer(obj, kUnregisterTokenOffset, v);
-    IteratePointers(obj, kUnregisterTokenOffset + kTaggedSize, object_size, v);
+    IteratePointers(obj, kTargetOffset + kTaggedSize, object_size, v);
   }
 
   static inline int SizeOf(Map map, HeapObject object) {
@@ -546,7 +545,7 @@ class PrototypeInfo::BodyDescriptor final : public BodyDescriptorBase {
 
 class JSWeakCollection::BodyDescriptorImpl final : public BodyDescriptorBase {
  public:
-  STATIC_ASSERT(kTableOffset + kTaggedSize == kHeaderSizeOfAllWeakCollections);
+  STATIC_ASSERT(kTableOffset + kTaggedSize == kSizeOfAllWeakCollections);
 
   static bool IsValidSlot(Map map, HeapObject obj, int offset) {
     return IsValidJSObjectSlotImpl(map, obj, offset);
@@ -696,7 +695,7 @@ class WasmInstanceObject::BodyDescriptor final : public BodyDescriptorBase {
     for (uint16_t offset : kTaggedFieldOffsets) {
       IteratePointer(obj, offset, v);
     }
-    IterateJSObjectBodyImpl(map, obj, kHeaderSize, object_size, v);
+    IterateJSObjectBodyImpl(map, obj, kSize, object_size, v);
   }
 
   static inline int SizeOf(Map map, HeapObject object) {
@@ -948,7 +947,6 @@ ReturnType BodyDescriptorApply(InstanceType type, T1 p1, T2 p2, T3 p3, T4 p4) {
     case JS_V8_BREAK_ITERATOR_TYPE:
     case JS_COLLATOR_TYPE:
     case JS_DATE_TIME_FORMAT_TYPE:
-    case JS_DISPLAY_NAMES_TYPE:
     case JS_LIST_FORMAT_TYPE:
     case JS_LOCALE_TYPE:
     case JS_NUMBER_FORMAT_TYPE:
@@ -1108,10 +1106,11 @@ class EphemeronHashTable::BodyDescriptor final : public BodyDescriptorBase {
                         EphemeronHashTable::kElementsStartIndex * kTaggedSize;
     IteratePointers(obj, EphemeronHashTable::kHeaderSize, entries_start, v);
     EphemeronHashTable table = EphemeronHashTable::unchecked_cast(obj);
-    for (InternalIndex i : table.IterateEntries()) {
+    int entries = table.Capacity();
+    for (int i = 0; i < entries; ++i) {
       const int key_index = EphemeronHashTable::EntryToIndex(i);
       const int value_index = EphemeronHashTable::EntryToValueIndex(i);
-      IterateEphemeron(obj, i.as_int(), OffsetOfElementAt(key_index),
+      IterateEphemeron(obj, i, OffsetOfElementAt(key_index),
                        OffsetOfElementAt(value_index), v);
     }
   }

@@ -109,10 +109,9 @@ TEST(LocalEmbedderHeapTracer, EnterFinalPauseDefaultStackStateUnkown) {
   local_tracer.EnterFinalPause();
 }
 
-TEST_F(LocalEmbedderHeapTracerWithIsolate,
-       EnterFinalPauseStackStateIsForwarded) {
+TEST(LocalEmbedderHeapTracer, EnterFinalPauseStackStateIsForwarded) {
   StrictMock<MockEmbedderHeapTracer> remote_tracer;
-  LocalEmbedderHeapTracer local_tracer(isolate());
+  LocalEmbedderHeapTracer local_tracer(nullptr);
   local_tracer.SetRemoteTracer(&remote_tracer);
   local_tracer.SetEmbedderStackStateForNextFinalization(
       EmbedderHeapTracer::kEmpty);
@@ -120,9 +119,9 @@ TEST_F(LocalEmbedderHeapTracerWithIsolate,
   local_tracer.EnterFinalPause();
 }
 
-TEST_F(LocalEmbedderHeapTracerWithIsolate, TemporaryEmbedderStackState) {
+TEST(LocalEmbedderHeapTracer, TemporaryEmbedderStackState) {
   StrictMock<MockEmbedderHeapTracer> remote_tracer;
-  LocalEmbedderHeapTracer local_tracer(isolate());
+  LocalEmbedderHeapTracer local_tracer(nullptr);
   local_tracer.SetRemoteTracer(&remote_tracer);
   // Default is unknown, see above.
   {
@@ -132,10 +131,9 @@ TEST_F(LocalEmbedderHeapTracerWithIsolate, TemporaryEmbedderStackState) {
   }
 }
 
-TEST_F(LocalEmbedderHeapTracerWithIsolate,
-       TemporaryEmbedderStackStateRestores) {
+TEST(LocalEmbedderHeapTracer, TemporaryEmbedderStackStateRestores) {
   StrictMock<MockEmbedderHeapTracer> remote_tracer;
-  LocalEmbedderHeapTracer local_tracer(isolate());
+  LocalEmbedderHeapTracer local_tracer(nullptr);
   local_tracer.SetRemoteTracer(&remote_tracer);
   // Default is unknown, see above.
   {
@@ -151,9 +149,9 @@ TEST_F(LocalEmbedderHeapTracerWithIsolate,
   }
 }
 
-TEST_F(LocalEmbedderHeapTracerWithIsolate, EnterFinalPauseStackStateResets) {
+TEST(LocalEmbedderHeapTracer, EnterFinalPauseStackStateResets) {
   StrictMock<MockEmbedderHeapTracer> remote_tracer;
-  LocalEmbedderHeapTracer local_tracer(isolate());
+  LocalEmbedderHeapTracer local_tracer(nullptr);
   local_tracer.SetRemoteTracer(&remote_tracer);
   local_tracer.SetEmbedderStackStateForNextFinalization(
       EmbedderHeapTracer::kEmpty);

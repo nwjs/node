@@ -9,7 +9,8 @@ from testrunner.objects import testcase
 
 proposal_flags = [{
                     'name': 'reference-types',
-                    'flags': ['--experimental-wasm-anyref']
+                    'flags': ['--experimental-wasm-anyref',
+                              '--no-experimental-wasm-bulk-memory']
                   },
                   {
                     'name': 'bulk-memory-operations',
@@ -23,11 +24,6 @@ proposal_flags = [{
                   {
                     'name': 'JS-BigInt-integration',
                     'flags': ['--experimental-wasm-bigint']
-                  },
-                  {
-                    'name': 'multi-value',
-                    'flags': ['--experimental-wasm-mv',
-                              '--no-experimental-wasm-bulk-memory']
                   },
                   ]
 

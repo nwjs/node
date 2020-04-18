@@ -1,10 +1,10 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <node_api.h>
 #include <assert.h>
 #include "../../js-native-api/common.h"
 
 uint32_t free_call_count = 0;
+char data[] = "hello";
 
 napi_value GetFreeCallCount(napi_env env, napi_callback_info info) {
   napi_value value;
@@ -13,7 +13,7 @@ napi_value GetFreeCallCount(napi_env env, napi_callback_info info) {
 }
 
 static void finalize_cb(napi_env env, void* finalize_data, void* hint) {
-  free(finalize_data);
+  assert(finalize_data == data);
   free_call_count++;
 }
 
@@ -29,9 +29,6 @@ NAPI_MODULE_INIT() {
   // rather than a Node.js Buffer, since testing the latter would only test
   // the same code paths and not the ones specific to N-API.
   napi_value buffer;
-
-  char* data = malloc(sizeof(char));
-
   NAPI_CALL(env, napi_create_external_arraybuffer(
       env,
       data,

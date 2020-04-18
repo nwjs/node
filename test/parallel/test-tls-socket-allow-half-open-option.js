@@ -21,10 +21,7 @@ const tls = require('tls');
 {
   // The option is ignored when the `socket` argument is a generic
   // `stream.Duplex`.
-  const duplex = new stream.Duplex({
-    allowHalfOpen: false,
-    read() {}
-  });
+  const duplex = new stream.Duplex({ allowHalfOpen: false });
   const socket = new tls.TLSSocket(duplex, { allowHalfOpen: true });
   assert.strictEqual(socket.allowHalfOpen, false);
 }

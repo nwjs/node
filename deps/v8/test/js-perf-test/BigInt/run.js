@@ -5,13 +5,16 @@
 "use strict";
 
 load('../base.js');
-load(arguments[0] + '.js');
+load('test-config.js');
+load('to-boolean.js');
+load('add.js');
+load('as-uint-n.js');
+
 
 var success = true;
 
-
 function PrintResult(name, result) {
-  print(`BigInt-${name}(Score): ${result}`);
+  print(name + '-BigInt(Score): ' + result);
 }
 
 

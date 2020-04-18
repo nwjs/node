@@ -30,4 +30,8 @@ export abstract class PhaseView extends View {
   constructor(idOrContainer: string | HTMLElement) {
     super(idOrContainer);
   }
+
+  public isScrollable(): boolean {
+    return false;
+  }
 }

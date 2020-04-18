@@ -13,11 +13,13 @@ namespace compiler {
 
 class JSInliningHeuristic final : public AdvancedReducer {
  public:
-  JSInliningHeuristic(Editor* editor, Zone* local_zone,
+  enum Mode { kGeneralInlining, kRestrictedInlining, kStressInlining };
+  JSInliningHeuristic(Editor* editor, Mode mode, Zone* local_zone,
                       OptimizedCompilationInfo* info, JSGraph* jsgraph,
                       JSHeapBroker* broker,
                       SourcePositionTable* source_positions)
       : AdvancedReducer(editor),
+        mode_(mode),
         inliner_(editor, local_zone, info, jsgraph, broker, source_positions),
         candidates_(local_zone),
         seen_(local_zone),
@@ -88,6 +90,7 @@ class JSInliningHeuristic final : public AdvancedReducer {
   Isolate* isolate() const { return jsgraph_->isolate(); }
   SimplifiedOperatorBuilder* simplified() const;
 
+  Mode const mode_;
   JSInliner inliner_;
   Candidates candidates_;
   ZoneSet<NodeId> seen_;

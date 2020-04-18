@@ -65,7 +65,9 @@ config("inspector_config") {
   visibility = [ ":*" ]  # Only targets in this file can depend on this.
 
   configs = [ "../../:internal_config" ]
-  include_dirs = [ "../../include" ]
+  include_dirs = [
+    "../../include",
+  ]
 }
 
 v8_header_set("inspector_test_headers") {
@@ -95,7 +97,8 @@ v8_source_set("inspector") {
   deps = [
     ":inspector_string_conversions",
     "../..:v8_version",
-    "../../third_party/inspector_protocol:crdtp",
+    "../../third_party/inspector_protocol:encoding",
+    "../../third_party/inspector_protocol:bindings",
   ]
 
   public_deps = [
@@ -143,6 +146,8 @@ v8_source_set("inspector") {
     "v8-heap-profiler-agent-impl.h",
     "v8-inspector-impl.cc",
     "v8-inspector-impl.h",
+    "v8-inspector-protocol-encoding.cc",
+    "v8-inspector-protocol-encoding.h",
     "v8-inspector-session-impl.cc",
     "v8-inspector-session-impl.h",
     "v8-profiler-agent-impl.cc",
@@ -159,6 +164,8 @@ v8_source_set("inspector") {
     "v8-value-utils.h",
     "value-mirror.cc",
     "value-mirror.h",
+    "wasm-translation.cc",
+    "wasm-translation.h",
   ]
 }
 

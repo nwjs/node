@@ -335,12 +335,13 @@ HEAP_TEST(CompactionPartiallyAbortedPageIntraAbortedPointers) {
   }
 }
 
-HEAP_TEST(CompactionPartiallyAbortedPageWithRememberedSetEntries) {
-  if (FLAG_never_compact || FLAG_always_promote_young_mc) return;
+
+HEAP_TEST(CompactionPartiallyAbortedPageWithStoreBufferEntries) {
+  if (FLAG_never_compact) return;
   // Test the scenario where we reach OOM during compaction and parts of the
   // page have already been migrated to a new one. Objects on the aborted page
   // are linked together and the very first object on the aborted page points
-  // into new space. The test verifies that the remembered set entries are
+  // into new space. The test verifies that the store buffer entries are
   // properly cleared and rebuilt after aborting a page. Failing to do so can
   // result in other objects being allocated in the free space where their
   // payload looks like a valid new space pointer.
@@ -451,7 +452,7 @@ HEAP_TEST(CompactionPartiallyAbortedPageWithRememberedSetEntries) {
                      .ToHandleChecked();
       } while (Page::FromHeapObject(*string) != to_be_aborted_page);
 
-      // If remembered set entries are not properly filtered/reset for aborted
+      // If store buffer entries are not properly filtered/reset for aborted
       // pages we have now a broken address at an object slot in old space and
       // the following scavenge will crash.
       CcTest::CollectGarbage(NEW_SPACE);

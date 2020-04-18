@@ -105,11 +105,11 @@ ObjectSlot DescriptorArray::GetDescriptorSlot(int descriptor) {
 }
 
 Name DescriptorArray::GetKey(InternalIndex descriptor_number) const {
-  const Isolate* isolate = GetIsolateForPtrCompr(*this);
+  Isolate* isolate = GetIsolateForPtrCompr(*this);
   return GetKey(isolate, descriptor_number);
 }
 
-Name DescriptorArray::GetKey(const Isolate* isolate,
+Name DescriptorArray::GetKey(Isolate* isolate,
                              InternalIndex descriptor_number) const {
   DCHECK_LT(descriptor_number.as_int(), number_of_descriptors());
   int entry_offset = OffsetOfDescriptorAt(descriptor_number.as_int());
@@ -128,12 +128,11 @@ int DescriptorArray::GetSortedKeyIndex(int descriptor_number) {
 }
 
 Name DescriptorArray::GetSortedKey(int descriptor_number) {
-  const Isolate* isolate = GetIsolateForPtrCompr(*this);
+  Isolate* isolate = GetIsolateForPtrCompr(*this);
   return GetSortedKey(isolate, descriptor_number);
 }
 
-Name DescriptorArray::GetSortedKey(const Isolate* isolate,
-                                   int descriptor_number) {
+Name DescriptorArray::GetSortedKey(Isolate* isolate, int descriptor_number) {
   return GetKey(isolate, InternalIndex(GetSortedKeyIndex(descriptor_number)));
 }
 
@@ -143,11 +142,11 @@ void DescriptorArray::SetSortedKey(int descriptor_number, int pointer) {
 }
 
 Object DescriptorArray::GetStrongValue(InternalIndex descriptor_number) {
-  const Isolate* isolate = GetIsolateForPtrCompr(*this);
+  Isolate* isolate = GetIsolateForPtrCompr(*this);
   return GetStrongValue(isolate, descriptor_number);
 }
 
-Object DescriptorArray::GetStrongValue(const Isolate* isolate,
+Object DescriptorArray::GetStrongValue(Isolate* isolate,
                                        InternalIndex descriptor_number) {
   return GetValue(isolate, descriptor_number).cast<Object>();
 }
@@ -161,11 +160,11 @@ void DescriptorArray::SetValue(InternalIndex descriptor_number,
 }
 
 MaybeObject DescriptorArray::GetValue(InternalIndex descriptor_number) {
-  const Isolate* isolate = GetIsolateForPtrCompr(*this);
+  Isolate* isolate = GetIsolateForPtrCompr(*this);
   return GetValue(isolate, descriptor_number);
 }
 
-MaybeObject DescriptorArray::GetValue(const Isolate* isolate,
+MaybeObject DescriptorArray::GetValue(Isolate* isolate,
                                       InternalIndex descriptor_number) {
   DCHECK_LT(descriptor_number.as_int(), number_of_descriptors());
   int entry_offset = OffsetOfDescriptorAt(descriptor_number.as_int());
@@ -192,11 +191,11 @@ int DescriptorArray::GetFieldIndex(InternalIndex descriptor_number) {
 }
 
 FieldType DescriptorArray::GetFieldType(InternalIndex descriptor_number) {
-  const Isolate* isolate = GetIsolateForPtrCompr(*this);
+  Isolate* isolate = GetIsolateForPtrCompr(*this);
   return GetFieldType(isolate, descriptor_number);
 }
 
-FieldType DescriptorArray::GetFieldType(const Isolate* isolate,
+FieldType DescriptorArray::GetFieldType(Isolate* isolate,
                                         InternalIndex descriptor_number) {
   DCHECK_EQ(GetDetails(descriptor_number).location(), kField);
   MaybeObject wrapped_type = GetValue(isolate, descriptor_number);

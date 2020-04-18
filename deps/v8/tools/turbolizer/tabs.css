@@ -1,8 +1,6 @@
 .content {
     display: grid;
-    grid-template-areas:
-        "tabs"
-        "window";
+    grid-template-areas: "tabs" "window";
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
     min-height: calc(100vh);

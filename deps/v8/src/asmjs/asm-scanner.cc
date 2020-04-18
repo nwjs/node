@@ -424,8 +424,7 @@ void AsmJsScanner::ConsumeCompareOrShift(uc32 ch) {
 }
 
 bool AsmJsScanner::IsIdentifierStart(uc32 ch) {
-  return base::IsInRange(AsciiAlphaToLower(ch), 'a', 'z') || ch == '_' ||
-         ch == '$';
+  return IsInRange(AsciiAlphaToLower(ch), 'a', 'z') || ch == '_' || ch == '$';
 }
 
 bool AsmJsScanner::IsIdentifierPart(uc32 ch) { return IsAsciiIdentifier(ch); }

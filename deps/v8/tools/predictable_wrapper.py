@@ -37,8 +37,7 @@ def main(args):
         return line
     return None
 
-  cmd = command.Command(
-      args[0], args[1:], timeout=TIMEOUT, handle_sigterm=True)
+  cmd = command.Command(args[0], args[1:], timeout=TIMEOUT)
 
   previous_allocations = None
   for run in range(1, MAX_TRIES + 1):

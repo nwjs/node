@@ -157,7 +157,8 @@ TNode<Object> InterpreterAssembler::GetAccumulator() {
   return TaggedPoisonOnSpeculation(GetAccumulatorUnchecked());
 }
 
-void InterpreterAssembler::SetAccumulator(TNode<Object> value) {
+// TODO(v8:6949): Remove sloppy-ness from SetAccumulator's value argument.
+void InterpreterAssembler::SetAccumulator(SloppyTNode<Object> value) {
   DCHECK(Bytecodes::WritesAccumulator(bytecode_));
   accumulator_use_ = accumulator_use_ | AccumulatorUse::kWrite;
   accumulator_ = value;
@@ -210,15 +211,15 @@ void InterpreterAssembler::GotoIfHasContextExtensionUpToDepth(
   Goto(&context_search);
   BIND(&context_search);
   {
-    // Check if context has an extension slot.
+    // Check if context has an extension slot
     TNode<BoolT> has_extension =
-        LoadScopeInfoHasExtensionField(LoadScopeInfo(cur_context.value()));
+        LoadContextHasExtensionField(cur_context.value());
     GotoIfNot(has_extension, &no_extension);
 
-    // Jump to the target if the extension slot is not an undefined value.
+    // Jump to the target if the extension slot is not a hole.
     TNode<Object> extension_slot =
         LoadContextElement(cur_context.value(), Context::EXTENSION_INDEX);
-    Branch(TaggedNotEqual(extension_slot, UndefinedConstant()), target,
+    Branch(TaggedNotEqual(extension_slot, TheHoleConstant()), target,
            &no_extension);
 
     BIND(&no_extension);
@@ -1186,7 +1187,8 @@ void InterpreterAssembler::UpdateInterruptBudget(TNode<Int32T> weight,
 
   // Update budget.
   StoreObjectFieldNoWriteBarrier(
-      feedback_cell, FeedbackCell::kInterruptBudgetOffset, new_budget.value());
+      feedback_cell, FeedbackCell::kInterruptBudgetOffset, new_budget.value(),
+      MachineRepresentation::kWord32);
   Goto(&done);
   BIND(&done);
   Comment("] UpdateInterruptBudget");

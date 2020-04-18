@@ -12,7 +12,6 @@
 #include <set>
 #include <string>
 
-#include "src/base/bit-field.h"
 #include "src/execution/isolate.h"
 #include "src/heap/factory.h"
 #include "src/objects/intl-objects.h"
@@ -98,7 +97,6 @@ class JSNumberFormat : public JSObject {
   STATIC_ASSERT(Style::UNIT <= StyleBits::kMax);
 
   DECL_ACCESSORS(locale, String)
-  DECL_ACCESSORS(numberingSystem, String)
   DECL_ACCESSORS(icu_number_formatter,
                  Managed<icu::number::LocalizedNumberFormatter>)
   DECL_ACCESSORS(bound_format, Object)

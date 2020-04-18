@@ -154,8 +154,9 @@ void Deoptimizer::GenerateDeoptimizationEntries(MacroAssembler* masm,
   __ Ldr(x1, MemOperand(fp, CommonFrameConstants::kContextOrFrameTypeOffset));
 
   // Ensure we can safely load from below fp.
-  DCHECK_GT(kSavedRegistersAreaSize, -StandardFrameConstants::kFunctionOffset);
-  __ Ldr(x0, MemOperand(fp, StandardFrameConstants::kFunctionOffset));
+  DCHECK_GT(kSavedRegistersAreaSize,
+            -JavaScriptFrameConstants::kFunctionOffset);
+  __ Ldr(x0, MemOperand(fp, JavaScriptFrameConstants::kFunctionOffset));
 
   // If x1 is a smi, zero x0.
   __ Tst(x1, kSmiTagMask);

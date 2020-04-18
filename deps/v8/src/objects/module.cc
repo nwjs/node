@@ -67,20 +67,13 @@ void Module::RecordError(Isolate* isolate, Handle<Object> error) {
   PrintStatusTransition(Module::kErrored);
 #endif  // DEBUG
   set_status(Module::kErrored);
-  if (isolate->is_catchable_by_javascript(*error)) {
-    set_exception(*error);
-  } else {
-    // v8::TryCatch uses `null` for termination exceptions.
-    set_exception(*isolate->factory()->null_value());
-  }
+  set_exception(*error);
 }
 
 void Module::ResetGraph(Isolate* isolate, Handle<Module> module) {
+  DCHECK_NE(module->status(), kInstantiating);
   DCHECK_NE(module->status(), kEvaluating);
-  if (module->status() != kPreInstantiating &&
-      module->status() != kInstantiating) {
-    return;
-  }
+  if (module->status() != kPreInstantiating) return;
 
   Handle<FixedArray> requested_modules =
       module->IsSourceTextModule()
@@ -182,14 +175,15 @@ bool Module::Instantiate(Isolate* isolate, Handle<Module> module,
 
   if (!PrepareInstantiate(isolate, module, context, callback)) {
     ResetGraph(isolate, module);
-    DCHECK_EQ(module->status(), kUninstantiated);
     return false;
   }
   Zone zone(isolate->allocator(), ZONE_NAME);
   ZoneForwardList<Handle<SourceTextModule>> stack(&zone);
   unsigned dfs_index = 0;
   if (!FinishInstantiate(isolate, module, &stack, &dfs_index, &zone)) {
-    ResetGraph(isolate, module);
+    for (auto& descendant : stack) {
+      Reset(isolate, descendant);
+    }
     DCHECK_EQ(module->status(), kUninstantiated);
     return false;
   }
@@ -309,7 +303,7 @@ Handle<JSModuleNamespace> Module::GetModuleNamespace(Isolate* isolate,
   Handle<ObjectHashTable> exports(module->exports(), isolate);
   ZoneVector<Handle<String>> names(&zone);
   names.reserve(exports->NumberOfElements());
-  for (InternalIndex i : exports->IterateEntries()) {
+  for (int i = 0, n = exports->Capacity(); i < n; ++i) {
     Object key;
     if (!exports->ToKey(roots, i, &key)) continue;
     names.push_back(handle(String::cast(key), isolate));

@@ -5,11 +5,20 @@ const { AsyncLocalStorage } = require('async_hooks');
 
 const asyncLocalStorage = new AsyncLocalStorage();
 
-asyncLocalStorage.run('hello node', () => {
+asyncLocalStorage.run(42, () => {
+  assert.strictEqual(asyncLocalStorage.getStore(), 42);
+});
+
+const runStore = { foo: 'bar' };
+asyncLocalStorage.run(runStore, () => {
+  assert.strictEqual(asyncLocalStorage.getStore(), runStore);
+});
+
+asyncLocalStorage.runSyncAndReturn('hello node', () => {
   assert.strictEqual(asyncLocalStorage.getStore(), 'hello node');
 });
 
-const runStore = { hello: 'node' };
-asyncLocalStorage.run(runStore, () => {
-  assert.strictEqual(asyncLocalStorage.getStore(), runStore);
+const runSyncStore = { hello: 'node' };
+asyncLocalStorage.runSyncAndReturn(runSyncStore, () => {
+  assert.strictEqual(asyncLocalStorage.getStore(), runSyncStore);
 });

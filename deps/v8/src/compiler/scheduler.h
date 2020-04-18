@@ -42,9 +42,6 @@ class V8_EXPORT_PRIVATE Scheduler {
   // Compute the RPO of blocks in an existing schedule.
   static BasicBlockVector* ComputeSpecialRPO(Zone* zone, Schedule* schedule);
 
-  // Computes the dominator tree on an existing schedule that has RPO computed.
-  static void GenerateDominatorTree(Schedule* schedule);
-
  private:
   // Placement of a node changes during scheduling. The placement state
   // transitions over time while the scheduler is choosing a position:
@@ -101,7 +98,7 @@ class V8_EXPORT_PRIVATE Scheduler {
   void IncrementUnscheduledUseCount(Node* node, int index, Node* from);
   void DecrementUnscheduledUseCount(Node* node, int index, Node* from);
 
-  static void PropagateImmediateDominators(BasicBlock* block);
+  void PropagateImmediateDominators(BasicBlock* block);
 
   // Phase 1: Build control-flow graph.
   friend class CFGBuilder;
@@ -110,7 +107,7 @@ class V8_EXPORT_PRIVATE Scheduler {
   // Phase 2: Compute special RPO and dominator tree.
   friend class SpecialRPONumberer;
   void ComputeSpecialRPONumbering();
-  void GenerateDominatorTree();
+  void GenerateImmediateDominatorTree();
 
   // Phase 3: Prepare use counts for nodes.
   friend class PrepareUsesVisitor;

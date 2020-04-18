@@ -43,11 +43,10 @@ const unzips = [
 ];
 
 nonStringInputs.forEach(common.mustCall((input) => {
-  assert.throws(() => {
-    zlib.gunzip(input);
-  }, {
-    name: 'TypeError',
-    code: 'ERR_INVALID_ARG_TYPE'
+  // zlib.gunzip should not throw an error when called with bad input.
+  zlib.gunzip(input, (err, buffer) => {
+    // zlib.gunzip should pass the error to the callback.
+    assert.ok(err);
   });
 }, nonStringInputs.length));
 

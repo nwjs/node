@@ -23,7 +23,6 @@ enum class SerializerForBackgroundCompilationFlag : uint8_t {
   kBailoutOnUninitialized = 1 << 0,
   kCollectSourcePositions = 1 << 1,
   kAnalyzeEnvironmentLiveness = 1 << 2,
-  kEnableTurboInlining = 1 << 3,
 };
 using SerializerForBackgroundCompilationFlags =
     base::Flags<SerializerForBackgroundCompilationFlag>;

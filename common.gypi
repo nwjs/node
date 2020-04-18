@@ -43,7 +43,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.12',
+    'v8_embedder_string': '-node.30',
 
     ##### V8 defaults for Node.js #####
 
@@ -449,9 +449,8 @@
         'cflags+': [
           '-fno-omit-frame-pointer',
           '-fsanitize=address',
-          '-fsanitize-address-use-after-scope',
+          '-DLEAK_SANITIZER'
         ],
-        'defines': [ 'LEAK_SANITIZER', 'V8_USE_ADDRESS_SANITIZER' ],
         'cflags!': [ '-fomit-frame-pointer' ],
         'ldflags': [ '-fsanitize=address' ],
       }],
@@ -623,7 +622,7 @@
           'GCC_ENABLE_CPP_RTTI': 'NO',              # -fno-rtti
           'GCC_ENABLE_PASCAL_STRINGS': 'NO',        # No -mpascal-strings
           'PREBINDING': 'NO',                       # No -Wl,-prebind
-          'MACOSX_DEPLOYMENT_TARGET': '10.13',      # -mmacosx-version-min=10.13
+          'MACOSX_DEPLOYMENT_TARGET': '10.10',      # -mmacosx-version-min=10.10
           'USE_HEADERMAP': 'NO',
           'OTHER_CFLAGS': [
             '-fno-strict-aliasing',

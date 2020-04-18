@@ -34,6 +34,13 @@ class Tuple2 : public TorqueGeneratedTuple2<Tuple2, Struct> {
   TQ_OBJECT_CONSTRUCTORS(Tuple2)
 };
 
+class Tuple3 : public TorqueGeneratedTuple3<Tuple3, Tuple2> {
+ public:
+  void BriefPrintDetails(std::ostream& os);
+
+  TQ_OBJECT_CONSTRUCTORS(Tuple3)
+};
+
 // Support for JavaScript accessors: A pair of a getter and a setter. Each
 // accessor can either be
 //   * a JavaScript function or proxy: a real accessor
@@ -42,7 +49,6 @@ class Tuple2 : public TorqueGeneratedTuple2<Tuple2, Struct> {
 //   * null: an accessor which has not been set
 class AccessorPair : public TorqueGeneratedAccessorPair<AccessorPair, Struct> {
  public:
-  NEVER_READ_ONLY_SPACE
   static Handle<AccessorPair> Copy(Isolate* isolate, Handle<AccessorPair> pair);
 
   inline Object get(AccessorComponent component);

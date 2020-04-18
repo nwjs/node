@@ -9,13 +9,11 @@ namespace regexp {
   // ES#sec-regexp.prototype.test
   // RegExp.prototype.test ( S )
   transitioning javascript builtin RegExpPrototypeTest(
-      js-implicit context: NativeContext,
-      receiver: JSAny)(string: JSAny): JSAny {
+      js-implicit context: Context, receiver: JSAny)(string: JSAny): JSAny {
     const methodName: constexpr string = 'RegExp.prototype.test';
     const receiver = Cast<JSReceiver>(receiver)
-        otherwise ThrowTypeError(
-        MessageTemplate::kIncompatibleMethodReceiver, methodName);
-    const str: String = ToString_Inline(string);
+        otherwise ThrowTypeError(kIncompatibleMethodReceiver, methodName);
+    const str: String = ToString_Inline(context, string);
     if (IsFastRegExpPermissive(receiver)) {
       RegExpPrototypeExecBodyWithoutResultFast(
           UnsafeCast<JSRegExp>(receiver), str)
@@ -26,8 +24,12 @@ namespace regexp {
     return SelectBooleanConstant(matchIndices != Null);
   }
 
+  extern macro RegExpBuiltinsAssembler::IsFastRegExpWithOriginalExec(
+      implicit context: Context)(JSRegExp): bool;
+
   transitioning builtin RegExpPrototypeTestFast(implicit context: Context)(
       receiver: JSRegExp, string: String): Object {
+    assert(IsFastRegExpWithOriginalExec(receiver));
     RegExpPrototypeExecBodyWithoutResultFast(receiver, string)
         otherwise return False;
     return True;

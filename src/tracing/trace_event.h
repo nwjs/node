@@ -318,9 +318,7 @@ const uint64_t kNoId = 0;
 // Refs: https://github.com/nodejs/node/pull/28724
 class NODE_EXTERN TraceEventHelper {
  public:
-  static v8::TracingController* GetTracingController();
-  static void SetTracingController(v8::TracingController* controller);
-
+  static TracingController* GetTracingController();
   static Agent* GetAgent();
   static void SetAgent(Agent* agent);
 };
@@ -513,10 +511,9 @@ static V8_INLINE void AddMetadataEventImpl(
     arg_convertibles[1].reset(reinterpret_cast<v8::ConvertableToTraceFormat*>(
         static_cast<intptr_t>(arg_values[1])));
   }
-  node::tracing::Agent* agent =
-      node::tracing::TraceEventHelper::GetAgent();
-  if (agent == nullptr) return;
-  return agent->GetTracingController()->AddMetadataEvent(
+  node::tracing::TracingController* controller =
+      node::tracing::TraceEventHelper::GetTracingController();
+  return controller->AddMetadataEvent(
       category_group_enabled, name, num_args, arg_names, arg_types, arg_values,
       arg_convertibles, flags);
 }

@@ -32,8 +32,7 @@ constexpr int kJumpTableSlotCount = 128;
 constexpr uint32_t kJumpTableSize =
     JumpTableAssembler::SizeForNumberOfSlots(kJumpTableSlotCount);
 
-// Must be a safe commit page size.
-constexpr size_t kThunkBufferSize = 4 * KB;
+constexpr size_t kThunkBufferSize = AssemblerBase::kMinimalBufferSize;
 
 #if V8_TARGET_ARCH_ARM64 || V8_TARGET_ARCH_X64
 constexpr uint32_t kAvailableBufferSlots =

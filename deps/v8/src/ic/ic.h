@@ -183,8 +183,7 @@ class LoadIC : public IC {
   }
 
   V8_WARN_UNUSED_RESULT MaybeHandle<Object> Load(Handle<Object> object,
-                                                 Handle<Name> name,
-                                                 bool update_feedback = true);
+                                                 Handle<Name> name);
 
  protected:
   // Update the inline cache and the global stub cache based on the
@@ -204,8 +203,7 @@ class LoadGlobalIC : public LoadIC {
                FeedbackSlot slot, FeedbackSlotKind kind)
       : LoadIC(isolate, vector, slot, kind) {}
 
-  V8_WARN_UNUSED_RESULT MaybeHandle<Object> Load(Handle<Name> name,
-                                                 bool update_feedback = true);
+  V8_WARN_UNUSED_RESULT MaybeHandle<Object> Load(Handle<Name> name);
 };
 
 class KeyedLoadIC : public LoadIC {

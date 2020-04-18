@@ -37,7 +37,7 @@ namespace collections {
         goto MayHaveSideEffects;
       }
       case (o: JSAny): deferred {
-        ThrowTypeError(MessageTemplate::kIteratorValueNotAnObject, o);
+        ThrowTypeError(kIteratorValueNotAnObject, o);
       }
     }
   }

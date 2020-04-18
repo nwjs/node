@@ -72,7 +72,6 @@ TEST(Promotion) {
 }
 
 HEAP_TEST(NoPromotion) {
-  if (FLAG_always_promote_young_mc) return;
   // Page promotion allows pages to be moved to old space even in the case of
   // OOM scenarios.
   FLAG_page_promotion = false;
@@ -371,7 +370,7 @@ TEST(Regress5829) {
   IncrementalMarking::MarkingState* marking_state = marking->marking_state();
   for (auto object_and_size :
        LiveObjectRange<kGreyObjects>(page, marking_state->bitmap(page))) {
-    CHECK(!object_and_size.first.IsFreeSpaceOrFiller());
+    CHECK(!object_and_size.first.IsFiller());
   }
 }
 

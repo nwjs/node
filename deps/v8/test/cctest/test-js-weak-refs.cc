@@ -124,26 +124,18 @@ void VerifyWeakCellChain(Isolate* isolate, Object list_head, int n_args, ...) {
 
 // Like VerifyWeakCellChain but verifies the chain created with key_list_prev
 // and key_list_next instead of prev and next.
-void VerifyWeakCellKeyChain(Isolate* isolate, SimpleNumberDictionary key_map,
-                            Object unregister_token, int n_args, ...) {
+void VerifyWeakCellKeyChain(Isolate* isolate, Object list_head, int n_args,
+                            ...) {
   CHECK_GE(n_args, 0);
 
   va_list args;
   va_start(args, n_args);
 
-  Object hash = unregister_token.GetHash();
-  InternalIndex entry = InternalIndex::NotFound();
-  if (!hash.IsUndefined(isolate)) {
-    uint32_t key = Smi::ToInt(hash);
-    entry = key_map.FindEntry(isolate, key);
-  }
   if (n_args == 0) {
     // Verify empty list
-    CHECK(entry.is_not_found());
+    CHECK(list_head.IsTheHole(isolate));
   } else {
-    CHECK(entry.is_found());
     WeakCell current = WeakCell::cast(Object(va_arg(args, Address)));
-    Object list_head = key_map.ValueAt(entry);
     CHECK_EQ(current, list_head);
     CHECK(current.key_list_prev().IsUndefined(isolate));
 
@@ -209,45 +201,48 @@ TEST(TestRegisterWithKey) {
   Handle<JSObject> js_object =
       isolate->factory()->NewJSObject(isolate->object_function());
 
-  Handle<JSObject> token1 = CreateKey("token1", isolate);
-  Handle<JSObject> token2 = CreateKey("token2", isolate);
+  Handle<JSObject> key1 = CreateKey("key1", isolate);
+  Handle<JSObject> key2 = CreateKey("key2", isolate);
   Handle<Object> undefined =
       handle(ReadOnlyRoots(isolate).undefined_value(), isolate);
 
   // Register a weak reference with a key and verify internal data structures.
   Handle<WeakCell> weak_cell1 = FinalizationGroupRegister(
-      finalization_group, js_object, undefined, token1, isolate);
+      finalization_group, js_object, undefined, key1, isolate);
 
   {
-    SimpleNumberDictionary key_map =
-        SimpleNumberDictionary::cast(finalization_group->key_map());
-    VerifyWeakCellKeyChain(isolate, key_map, *token1, 1, *weak_cell1);
-    VerifyWeakCellKeyChain(isolate, key_map, *token2, 0);
+    CHECK(finalization_group->key_map().IsObjectHashTable());
+    Handle<ObjectHashTable> key_map =
+        handle(ObjectHashTable::cast(finalization_group->key_map()), isolate);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key1), 1, *weak_cell1);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key2), 0);
   }
 
   // Register another weak reference with a different key and verify internal
   // data structures.
   Handle<WeakCell> weak_cell2 = FinalizationGroupRegister(
-      finalization_group, js_object, undefined, token2, isolate);
+      finalization_group, js_object, undefined, key2, isolate);
 
   {
-    SimpleNumberDictionary key_map =
-        SimpleNumberDictionary::cast(finalization_group->key_map());
-    VerifyWeakCellKeyChain(isolate, key_map, *token1, 1, *weak_cell1);
-    VerifyWeakCellKeyChain(isolate, key_map, *token2, 1, *weak_cell2);
+    CHECK(finalization_group->key_map().IsObjectHashTable());
+    Handle<ObjectHashTable> key_map =
+        handle(ObjectHashTable::cast(finalization_group->key_map()), isolate);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key1), 1, *weak_cell1);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key2), 1, *weak_cell2);
   }
 
-  // Register another weak reference with token1 and verify internal data
+  // Register another weak reference with key1 and verify internal data
   // structures.
   Handle<WeakCell> weak_cell3 = FinalizationGroupRegister(
-      finalization_group, js_object, undefined, token1, isolate);
+      finalization_group, js_object, undefined, key1, isolate);
 
   {
-    SimpleNumberDictionary key_map =
-        SimpleNumberDictionary::cast(finalization_group->key_map());
-    VerifyWeakCellKeyChain(isolate, key_map, *token1, 2, *weak_cell3,
+    CHECK(finalization_group->key_map().IsObjectHashTable());
+    Handle<ObjectHashTable> key_map =
+        handle(ObjectHashTable::cast(finalization_group->key_map()), isolate);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key1), 2, *weak_cell3,
                            *weak_cell1);
-    VerifyWeakCellKeyChain(isolate, key_map, *token2, 1, *weak_cell2);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key2), 1, *weak_cell2);
   }
 }
 
@@ -390,14 +385,14 @@ TEST(TestJSFinalizationGroupPopClearedCellHoldings2) {
       ConstructJSFinalizationGroup(isolate);
   Handle<JSObject> js_object =
       isolate->factory()->NewJSObject(isolate->object_function());
-  Handle<JSObject> token1 = CreateKey("token1", isolate);
+  Handle<JSObject> key1 = CreateKey("key1", isolate);
 
   Handle<Object> holdings1 = factory->NewStringFromAsciiChecked("holdings1");
   Handle<WeakCell> weak_cell1 = FinalizationGroupRegister(
-      finalization_group, js_object, holdings1, token1, isolate);
+      finalization_group, js_object, holdings1, key1, isolate);
   Handle<Object> holdings2 = factory->NewStringFromAsciiChecked("holdings2");
   Handle<WeakCell> weak_cell2 = FinalizationGroupRegister(
-      finalization_group, js_object, holdings2, token1, isolate);
+      finalization_group, js_object, holdings2, key1, isolate);
 
   NullifyWeakCell(weak_cell1, isolate);
   NullifyWeakCell(weak_cell2, isolate);
@@ -405,9 +400,9 @@ TEST(TestJSFinalizationGroupPopClearedCellHoldings2) {
   // Nullifying doesn't affect the key chains (just moves WeakCells from
   // active_cells to cleared_cells).
   {
-    SimpleNumberDictionary key_map =
-        SimpleNumberDictionary::cast(finalization_group->key_map());
-    VerifyWeakCellKeyChain(isolate, key_map, *token1, 2, *weak_cell2,
+    Handle<ObjectHashTable> key_map =
+        handle(ObjectHashTable::cast(finalization_group->key_map()), isolate);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key1), 2, *weak_cell2,
                            *weak_cell1);
   }
 
@@ -416,9 +411,9 @@ TEST(TestJSFinalizationGroupPopClearedCellHoldings2) {
   CHECK_EQ(cleared1, *holdings2);
 
   {
-    SimpleNumberDictionary key_map =
-        SimpleNumberDictionary::cast(finalization_group->key_map());
-    VerifyWeakCellKeyChain(isolate, key_map, *token1, 1, *weak_cell1);
+    Handle<ObjectHashTable> key_map =
+        handle(ObjectHashTable::cast(finalization_group->key_map()), isolate);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key1), 1, *weak_cell1);
   }
 
   Object cleared2 =
@@ -426,9 +421,9 @@ TEST(TestJSFinalizationGroupPopClearedCellHoldings2) {
   CHECK_EQ(cleared2, *holdings1);
 
   {
-    SimpleNumberDictionary key_map =
-        SimpleNumberDictionary::cast(finalization_group->key_map());
-    VerifyWeakCellKeyChain(isolate, key_map, *token1, 0);
+    Handle<ObjectHashTable> key_map =
+        handle(ObjectHashTable::cast(finalization_group->key_map()), isolate);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key1), 0);
   }
 }
 
@@ -443,39 +438,39 @@ TEST(TestUnregisterActiveCells) {
   Handle<JSObject> js_object =
       isolate->factory()->NewJSObject(isolate->object_function());
 
-  Handle<JSObject> token1 = CreateKey("token1", isolate);
-  Handle<JSObject> token2 = CreateKey("token2", isolate);
+  Handle<JSObject> key1 = CreateKey("key1", isolate);
+  Handle<JSObject> key2 = CreateKey("key2", isolate);
   Handle<Object> undefined =
       handle(ReadOnlyRoots(isolate).undefined_value(), isolate);
 
   Handle<WeakCell> weak_cell1a = FinalizationGroupRegister(
-      finalization_group, js_object, undefined, token1, isolate);
+      finalization_group, js_object, undefined, key1, isolate);
   Handle<WeakCell> weak_cell1b = FinalizationGroupRegister(
-      finalization_group, js_object, undefined, token1, isolate);
+      finalization_group, js_object, undefined, key1, isolate);
 
   Handle<WeakCell> weak_cell2a = FinalizationGroupRegister(
-      finalization_group, js_object, undefined, token2, isolate);
+      finalization_group, js_object, undefined, key2, isolate);
   Handle<WeakCell> weak_cell2b = FinalizationGroupRegister(
-      finalization_group, js_object, undefined, token2, isolate);
+      finalization_group, js_object, undefined, key2, isolate);
 
   VerifyWeakCellChain(isolate, finalization_group->active_cells(), 4,
                       *weak_cell2b, *weak_cell2a, *weak_cell1b, *weak_cell1a);
   VerifyWeakCellChain(isolate, finalization_group->cleared_cells(), 0);
   {
-    SimpleNumberDictionary key_map =
-        SimpleNumberDictionary::cast(finalization_group->key_map());
-    VerifyWeakCellKeyChain(isolate, key_map, *token1, 2, *weak_cell1b,
+    Handle<ObjectHashTable> key_map =
+        handle(ObjectHashTable::cast(finalization_group->key_map()), isolate);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key1), 2, *weak_cell1b,
                            *weak_cell1a);
-    VerifyWeakCellKeyChain(isolate, key_map, *token2, 2, *weak_cell2b,
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key2), 2, *weak_cell2b,
                            *weak_cell2a);
   }
 
-  JSFinalizationGroup::Unregister(finalization_group, token1, isolate);
+  JSFinalizationGroup::Unregister(finalization_group, key1, isolate);
   {
-    SimpleNumberDictionary key_map =
-        SimpleNumberDictionary::cast(finalization_group->key_map());
-    VerifyWeakCellKeyChain(isolate, key_map, *token1, 0);
-    VerifyWeakCellKeyChain(isolate, key_map, *token2, 2, *weak_cell2b,
+    Handle<ObjectHashTable> key_map =
+        handle(ObjectHashTable::cast(finalization_group->key_map()), isolate);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key1), 0);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key2), 2, *weak_cell2b,
                            *weak_cell2a);
   }
 
@@ -496,20 +491,20 @@ TEST(TestUnregisterActiveAndClearedCells) {
   Handle<JSObject> js_object =
       isolate->factory()->NewJSObject(isolate->object_function());
 
-  Handle<JSObject> token1 = CreateKey("token1", isolate);
-  Handle<JSObject> token2 = CreateKey("token2", isolate);
+  Handle<JSObject> key1 = CreateKey("key1", isolate);
+  Handle<JSObject> key2 = CreateKey("key2", isolate);
   Handle<Object> undefined =
       handle(ReadOnlyRoots(isolate).undefined_value(), isolate);
 
   Handle<WeakCell> weak_cell1a = FinalizationGroupRegister(
-      finalization_group, js_object, undefined, token1, isolate);
+      finalization_group, js_object, undefined, key1, isolate);
   Handle<WeakCell> weak_cell1b = FinalizationGroupRegister(
-      finalization_group, js_object, undefined, token1, isolate);
+      finalization_group, js_object, undefined, key1, isolate);
 
   Handle<WeakCell> weak_cell2a = FinalizationGroupRegister(
-      finalization_group, js_object, undefined, token2, isolate);
+      finalization_group, js_object, undefined, key2, isolate);
   Handle<WeakCell> weak_cell2b = FinalizationGroupRegister(
-      finalization_group, js_object, undefined, token2, isolate);
+      finalization_group, js_object, undefined, key2, isolate);
 
   NullifyWeakCell(weak_cell2a, isolate);
 
@@ -518,26 +513,26 @@ TEST(TestUnregisterActiveAndClearedCells) {
   VerifyWeakCellChain(isolate, finalization_group->cleared_cells(), 1,
                       *weak_cell2a);
   {
-    SimpleNumberDictionary key_map =
-        SimpleNumberDictionary::cast(finalization_group->key_map());
-    VerifyWeakCellKeyChain(isolate, key_map, *token1, 2, *weak_cell1b,
+    Handle<ObjectHashTable> key_map =
+        handle(ObjectHashTable::cast(finalization_group->key_map()), isolate);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key1), 2, *weak_cell1b,
                            *weak_cell1a);
-    VerifyWeakCellKeyChain(isolate, key_map, *token2, 2, *weak_cell2b,
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key2), 2, *weak_cell2b,
                            *weak_cell2a);
   }
 
-  JSFinalizationGroup::Unregister(finalization_group, token2, isolate);
+  JSFinalizationGroup::Unregister(finalization_group, key2, isolate);
 
   // Both weak_cell2a and weak_cell2b removed.
   VerifyWeakCellChain(isolate, finalization_group->active_cells(), 2,
                       *weak_cell1b, *weak_cell1a);
   VerifyWeakCellChain(isolate, finalization_group->cleared_cells(), 0);
   {
-    SimpleNumberDictionary key_map =
-        SimpleNumberDictionary::cast(finalization_group->key_map());
-    VerifyWeakCellKeyChain(isolate, key_map, *token1, 2, *weak_cell1b,
+    Handle<ObjectHashTable> key_map =
+        handle(ObjectHashTable::cast(finalization_group->key_map()), isolate);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key1), 2, *weak_cell1b,
                            *weak_cell1a);
-    VerifyWeakCellKeyChain(isolate, key_map, *token2, 0);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key2), 0);
   }
 }
 
@@ -552,40 +547,40 @@ TEST(TestWeakCellUnregisterTwice) {
   Handle<JSObject> js_object =
       isolate->factory()->NewJSObject(isolate->object_function());
 
-  Handle<JSObject> token1 = CreateKey("token1", isolate);
+  Handle<JSObject> key1 = CreateKey("key1", isolate);
   Handle<Object> undefined =
       handle(ReadOnlyRoots(isolate).undefined_value(), isolate);
 
   Handle<WeakCell> weak_cell1 = FinalizationGroupRegister(
-      finalization_group, js_object, undefined, token1, isolate);
+      finalization_group, js_object, undefined, key1, isolate);
 
   VerifyWeakCellChain(isolate, finalization_group->active_cells(), 1,
                       *weak_cell1);
   VerifyWeakCellChain(isolate, finalization_group->cleared_cells(), 0);
   {
-    SimpleNumberDictionary key_map =
-        SimpleNumberDictionary::cast(finalization_group->key_map());
-    VerifyWeakCellKeyChain(isolate, key_map, *token1, 1, *weak_cell1);
+    Handle<ObjectHashTable> key_map =
+        handle(ObjectHashTable::cast(finalization_group->key_map()), isolate);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key1), 1, *weak_cell1);
   }
 
-  JSFinalizationGroup::Unregister(finalization_group, token1, isolate);
+  JSFinalizationGroup::Unregister(finalization_group, key1, isolate);
 
   VerifyWeakCellChain(isolate, finalization_group->active_cells(), 0);
   VerifyWeakCellChain(isolate, finalization_group->cleared_cells(), 0);
   {
-    SimpleNumberDictionary key_map =
-        SimpleNumberDictionary::cast(finalization_group->key_map());
-    VerifyWeakCellKeyChain(isolate, key_map, *token1, 0);
+    Handle<ObjectHashTable> key_map =
+        handle(ObjectHashTable::cast(finalization_group->key_map()), isolate);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key1), 0);
   }
 
-  JSFinalizationGroup::Unregister(finalization_group, token1, isolate);
+  JSFinalizationGroup::Unregister(finalization_group, key1, isolate);
 
   VerifyWeakCellChain(isolate, finalization_group->active_cells(), 0);
   VerifyWeakCellChain(isolate, finalization_group->cleared_cells(), 0);
   {
-    SimpleNumberDictionary key_map =
-        SimpleNumberDictionary::cast(finalization_group->key_map());
-    VerifyWeakCellKeyChain(isolate, key_map, *token1, 0);
+    Handle<ObjectHashTable> key_map =
+        handle(ObjectHashTable::cast(finalization_group->key_map()), isolate);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key1), 0);
   }
 }
 
@@ -600,10 +595,10 @@ TEST(TestWeakCellUnregisterPopped) {
       ConstructJSFinalizationGroup(isolate);
   Handle<JSObject> js_object =
       isolate->factory()->NewJSObject(isolate->object_function());
-  Handle<JSObject> token1 = CreateKey("token1", isolate);
+  Handle<JSObject> key1 = CreateKey("key1", isolate);
   Handle<Object> holdings1 = factory->NewStringFromAsciiChecked("holdings1");
   Handle<WeakCell> weak_cell1 = FinalizationGroupRegister(
-      finalization_group, js_object, holdings1, token1, isolate);
+      finalization_group, js_object, holdings1, key1, isolate);
 
   NullifyWeakCell(weak_cell1, isolate);
 
@@ -615,19 +610,19 @@ TEST(TestWeakCellUnregisterPopped) {
   VerifyWeakCellChain(isolate, finalization_group->active_cells(), 0);
   VerifyWeakCellChain(isolate, finalization_group->cleared_cells(), 0);
   {
-    SimpleNumberDictionary key_map =
-        SimpleNumberDictionary::cast(finalization_group->key_map());
-    VerifyWeakCellKeyChain(isolate, key_map, *token1, 0);
+    Handle<ObjectHashTable> key_map =
+        handle(ObjectHashTable::cast(finalization_group->key_map()), isolate);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key1), 0);
   }
 
-  JSFinalizationGroup::Unregister(finalization_group, token1, isolate);
+  JSFinalizationGroup::Unregister(finalization_group, key1, isolate);
 
   VerifyWeakCellChain(isolate, finalization_group->active_cells(), 0);
   VerifyWeakCellChain(isolate, finalization_group->cleared_cells(), 0);
   {
-    SimpleNumberDictionary key_map =
-        SimpleNumberDictionary::cast(finalization_group->key_map());
-    VerifyWeakCellKeyChain(isolate, key_map, *token1, 0);
+    Handle<ObjectHashTable> key_map =
+        handle(ObjectHashTable::cast(finalization_group->key_map()), isolate);
+    VerifyWeakCellKeyChain(isolate, key_map->Lookup(key1), 0);
   }
 }
 
@@ -639,9 +634,9 @@ TEST(TestWeakCellUnregisterNonexistentKey) {
   HandleScope outer_scope(isolate);
   Handle<JSFinalizationGroup> finalization_group =
       ConstructJSFinalizationGroup(isolate);
-  Handle<JSObject> token1 = CreateKey("token1", isolate);
+  Handle<JSObject> key1 = CreateKey("key1", isolate);
 
-  JSFinalizationGroup::Unregister(finalization_group, token1, isolate);
+  JSFinalizationGroup::Unregister(finalization_group, key1, isolate);
 }
 
 TEST(TestJSWeakRef) {
@@ -779,70 +774,6 @@ TEST(TestJSWeakRefKeepDuringJobIncrementalMarking) {
   CcTest::CollectAllGarbage();
 
   CHECK(weak_ref->target().IsUndefined(isolate));
-}
-
-TEST(TestRemoveUnregisterToken) {
-  FLAG_harmony_weak_refs = true;
-  CcTest::InitializeVM();
-  LocalContext context;
-  Isolate* isolate = CcTest::i_isolate();
-  HandleScope outer_scope(isolate);
-  Handle<JSFinalizationGroup> finalization_group =
-      ConstructJSFinalizationGroup(isolate);
-  Handle<JSObject> js_object =
-      isolate->factory()->NewJSObject(isolate->object_function());
-
-  Handle<JSObject> token1 = CreateKey("token1", isolate);
-  Handle<JSObject> token2 = CreateKey("token2", isolate);
-  Handle<Object> undefined =
-      handle(ReadOnlyRoots(isolate).undefined_value(), isolate);
-
-  Handle<WeakCell> weak_cell1a = FinalizationGroupRegister(
-      finalization_group, js_object, undefined, token1, isolate);
-  Handle<WeakCell> weak_cell1b = FinalizationGroupRegister(
-      finalization_group, js_object, undefined, token1, isolate);
-
-  Handle<WeakCell> weak_cell2a = FinalizationGroupRegister(
-      finalization_group, js_object, undefined, token2, isolate);
-  Handle<WeakCell> weak_cell2b = FinalizationGroupRegister(
-      finalization_group, js_object, undefined, token2, isolate);
-
-  NullifyWeakCell(weak_cell2a, isolate);
-
-  VerifyWeakCellChain(isolate, finalization_group->active_cells(), 3,
-                      *weak_cell2b, *weak_cell1b, *weak_cell1a);
-  VerifyWeakCellChain(isolate, finalization_group->cleared_cells(), 1,
-                      *weak_cell2a);
-  {
-    SimpleNumberDictionary key_map =
-        SimpleNumberDictionary::cast(finalization_group->key_map());
-    VerifyWeakCellKeyChain(isolate, key_map, *token1, 2, *weak_cell1b,
-                           *weak_cell1a);
-    VerifyWeakCellKeyChain(isolate, key_map, *token2, 2, *weak_cell2b,
-                           *weak_cell2a);
-  }
-
-  finalization_group->RemoveUnregisterToken(
-      JSReceiver::cast(*token2), isolate,
-      [undefined](WeakCell matched_cell) {
-        matched_cell.set_unregister_token(*undefined);
-      },
-      [](HeapObject, ObjectSlot, Object) {});
-
-  // Both weak_cell2a and weak_cell2b remain on the weak cell chains.
-  VerifyWeakCellChain(isolate, finalization_group->active_cells(), 3,
-                      *weak_cell2b, *weak_cell1b, *weak_cell1a);
-  VerifyWeakCellChain(isolate, finalization_group->cleared_cells(), 1,
-                      *weak_cell2a);
-
-  // But both weak_cell2a and weak_cell2b are removed from the key chain.
-  {
-    SimpleNumberDictionary key_map =
-        SimpleNumberDictionary::cast(finalization_group->key_map());
-    VerifyWeakCellKeyChain(isolate, key_map, *token1, 2, *weak_cell1b,
-                           *weak_cell1a);
-    VerifyWeakCellKeyChain(isolate, key_map, *token2, 0);
-  }
 }
 
 }  // namespace internal

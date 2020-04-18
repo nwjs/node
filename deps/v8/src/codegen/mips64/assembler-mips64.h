@@ -1642,8 +1642,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   // the generated instructions. This is so that multi-instruction sequences do
   // not have to check for overflow. The same is true for writes of large
   // relocation info entries.
-  static constexpr int kGap = 64;
-  STATIC_ASSERT(AssemblerBase::kMinimalBufferSize >= 2 * kGap);
+  static constexpr int kGap = 128;
 
   // Repeated checking whether the trampoline pool should be emitted is rather
   // expensive. By default we only check again once a number of instructions

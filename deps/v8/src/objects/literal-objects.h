@@ -5,7 +5,6 @@
 #ifndef V8_OBJECTS_LITERAL_OBJECTS_H_
 #define V8_OBJECTS_LITERAL_OBJECTS_H_
 
-#include "src/base/bit-field.h"
 #include "src/objects/fixed-array.h"
 #include "src/objects/struct.h"
 
@@ -26,10 +25,10 @@ class ClassLiteral;
 class ObjectBoilerplateDescription : public FixedArray {
  public:
   inline Object name(int index) const;
-  inline Object name(const Isolate* isolate, int index) const;
+  inline Object name(Isolate* isolate, int index) const;
 
   inline Object value(int index) const;
-  inline Object value(const Isolate* isolate, int index) const;
+  inline Object value(Isolate* isolate, int index) const;
 
   inline void set_key_value(int index, Object key, Object value);
 
@@ -120,12 +119,12 @@ class ClassBoilerplate : public FixedArray {
   static void AddToPropertiesTemplate(Isolate* isolate,
                                       Handle<NameDictionary> dictionary,
                                       Handle<Name> name, int key_index,
-                                      ValueKind value_kind, Smi value);
+                                      ValueKind value_kind, Object value);
 
   static void AddToElementsTemplate(Isolate* isolate,
                                     Handle<NumberDictionary> dictionary,
                                     uint32_t key, int key_index,
-                                    ValueKind value_kind, Smi value);
+                                    ValueKind value_kind, Object value);
 
   static Handle<ClassBoilerplate> BuildClassBoilerplate(Isolate* isolate,
                                                         ClassLiteral* expr);

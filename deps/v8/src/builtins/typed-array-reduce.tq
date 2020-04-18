@@ -4,16 +4,18 @@
 
 #include 'src/builtins/builtins-typed-array-gen.h'
 
-namespace typed_array {
-  const kBuiltinNameReduce: constexpr string = '%TypedArray%.prototype.reduce';
+namespace typed_array_reduce {
+  const kBuiltinName: constexpr string = '%TypedArray%.prototype.reduce';
 
   transitioning macro ReduceAllElements(implicit context: Context)(
       array: typed_array::AttachedJSTypedArray, callbackfn: Callable,
-      initialValue: JSAny|TheHole): JSAny {
+      initialValue: JSAny | TheHole): JSAny {
     let witness = typed_array::NewAttachedJSTypedArrayWitness(array);
-    const length: uintptr = witness.Get().length;
+    // TODO(v8:4153): Support huge TypedArrays here.
+    const length =
+        Cast<Smi>(Convert<Number>(witness.Get().length)) otherwise unreachable;
     let accumulator = initialValue;
-    for (let k: uintptr = 0; k < length; k++) {
+    for (let k: Smi = 0; k < length; k++) {
       // BUG(4895): We should throw on detached buffers rather than simply exit.
       witness.Recheck() otherwise break;
       const value: JSAny = witness.Load(k);
@@ -22,17 +24,15 @@ namespace typed_array {
           accumulator = value;
         }
         case (accumulatorNotHole: JSAny): {
-          // TODO(v8:4153): Consider versioning this loop for Smi and non-Smi
-          // indices to optimize Convert<Number>(k) for the most common case.
           accumulator = Call(
-              context, callbackfn, Undefined, accumulatorNotHole, value,
-              Convert<Number>(k), witness.GetStable());
+              context, callbackfn, Undefined, accumulatorNotHole, value, k,
+              witness.GetStable());
         }
       }
     }
     typeswitch (accumulator) {
       case (TheHole): {
-        ThrowTypeError(MessageTemplate::kReduceNoInitial, kBuiltinNameReduce);
+        ThrowTypeError(kReduceNoInitial, kBuiltinName);
       }
       case (accumulator: JSAny): {
         return accumulator;
@@ -42,9 +42,8 @@ namespace typed_array {
 
   // https://tc39.github.io/ecma262/#sec-%typedarray%.prototype.reduce
   transitioning javascript builtin
-  TypedArrayPrototypeReduce(
-      js-implicit context: NativeContext,
-      receiver: JSAny)(...arguments): JSAny {
+  TypedArrayPrototypeReduce(js-implicit context: Context, receiver: JSAny)(
+      ...arguments): JSAny {
     // arguments[0] = callback
     // arguments[1] = initialValue.
     try {
@@ -57,13 +56,13 @@ namespace typed_array {
       return ReduceAllElements(uarray, callbackfn, initialValue);
     }
     label NotCallable deferred {
-      ThrowTypeError(MessageTemplate::kCalledNonCallable, arguments[0]);
+      ThrowTypeError(kCalledNonCallable, arguments[0]);
     }
     label NotTypedArray deferred {
-      ThrowTypeError(MessageTemplate::kNotTypedArray, kBuiltinNameReduce);
+      ThrowTypeError(kNotTypedArray, kBuiltinName);
     }
     label IsDetached deferred {
-      ThrowTypeError(MessageTemplate::kDetachedOperation, kBuiltinNameReduce);
+      ThrowTypeError(kDetachedOperation, kBuiltinName);
     }
   }
 }

@@ -21,11 +21,12 @@ enum class MachineRepresentation : uint8_t {
   kWord16,
   kWord32,
   kWord64,
-  kTaggedSigned,       // (uncompressed) Smi
-  kTaggedPointer,      // (uncompressed) HeapObject
-  kTagged,             // (uncompressed) Object (Smi or HeapObject)
-  kCompressedPointer,  // (compressed) HeapObject
-  kCompressed,         // (compressed) Object (Smi or HeapObject)
+  kTaggedSigned,
+  kTaggedPointer,
+  kTagged,
+  kCompressedSigned,
+  kCompressedPointer,
+  kCompressed,
   // FP representations must be last, and in order of increasing size.
   kFloat32,
   kFloat64,
@@ -53,10 +54,9 @@ enum class MachineSemantic : uint8_t {
   kAny
 };
 
-V8_EXPORT_PRIVATE inline constexpr int ElementSizeLog2Of(MachineRepresentation);
+V8_EXPORT_PRIVATE inline int ElementSizeLog2Of(MachineRepresentation rep);
 
-V8_EXPORT_PRIVATE inline constexpr int ElementSizeInBytes(
-    MachineRepresentation);
+V8_EXPORT_PRIVATE inline int ElementSizeInBytes(MachineRepresentation rep);
 
 class MachineType {
  public:
@@ -106,7 +106,11 @@ class MachineType {
   }
   constexpr bool IsCompressed() const {
     return representation() == MachineRepresentation::kCompressedPointer ||
+           representation() == MachineRepresentation::kCompressedSigned ||
            representation() == MachineRepresentation::kCompressed;
+  }
+  constexpr bool IsCompressedSigned() const {
+    return representation() == MachineRepresentation::kCompressedSigned;
   }
   constexpr bool IsCompressedPointer() const {
     return representation() == MachineRepresentation::kCompressedPointer;
@@ -177,6 +181,10 @@ class MachineType {
   constexpr static MachineType AnyTagged() {
     return MachineType(MachineRepresentation::kTagged, MachineSemantic::kAny);
   }
+  constexpr static MachineType CompressedSigned() {
+    return MachineType(MachineRepresentation::kCompressedSigned,
+                       MachineSemantic::kInt32);
+  }
   constexpr static MachineType CompressedPointer() {
     return MachineType(MachineRepresentation::kCompressedPointer,
                        MachineSemantic::kAny);
@@ -232,6 +240,85 @@ class MachineType {
     return MachineType(MachineRepresentation::kBit, MachineSemantic::kNone);
   }
 
+  // These methods return compressed representations when the compressed
+  // pointer flag is enabled. Otherwise, they returned the corresponding tagged
+  // one.
+  constexpr static MachineRepresentation RepCompressedTagged() {
+    if (COMPRESS_POINTERS_BOOL && FLAG_turbo_decompression_elimination) {
+      return MachineRepresentation::kCompressed;
+    } else {
+      return MachineRepresentation::kTagged;
+    }
+  }
+  constexpr static MachineRepresentation RepCompressedTaggedSigned() {
+    if (COMPRESS_POINTERS_BOOL && FLAG_turbo_decompression_elimination) {
+      return MachineRepresentation::kCompressedSigned;
+    } else {
+      return MachineRepresentation::kTaggedSigned;
+    }
+  }
+  constexpr static MachineRepresentation RepCompressedTaggedPointer() {
+    if (COMPRESS_POINTERS_BOOL && FLAG_turbo_decompression_elimination) {
+      return MachineRepresentation::kCompressedPointer;
+    } else {
+      return MachineRepresentation::kTaggedPointer;
+    }
+  }
+
+  constexpr static MachineType TypeRawTagged() {
+    if (COMPRESS_POINTERS_BOOL && FLAG_turbo_decompression_elimination) {
+      return MachineType::Int32();
+    } else {
+      return MachineType::Pointer();
+    }
+  }
+
+  constexpr static MachineType TypeCompressedTagged() {
+    if (COMPRESS_POINTERS_BOOL && FLAG_turbo_decompression_elimination) {
+      return MachineType::AnyCompressed();
+    } else {
+      return MachineType::AnyTagged();
+    }
+  }
+  constexpr static MachineType TypeCompressedTaggedSigned() {
+    if (COMPRESS_POINTERS_BOOL && FLAG_turbo_decompression_elimination) {
+      return MachineType::CompressedSigned();
+    } else {
+      return MachineType::TaggedSigned();
+    }
+  }
+  constexpr static MachineType TypeCompressedTaggedPointer() {
+    if (COMPRESS_POINTERS_BOOL && FLAG_turbo_decompression_elimination) {
+      return MachineType::CompressedPointer();
+    } else {
+      return MachineType::TaggedPointer();
+    }
+  }
+
+  constexpr bool IsCompressedTagged() const {
+    if (COMPRESS_POINTERS_BOOL && FLAG_turbo_decompression_elimination) {
+      return IsCompressed();
+    } else {
+      return IsTagged();
+    }
+  }
+
+  constexpr bool IsCompressedTaggedSigned() const {
+    if (COMPRESS_POINTERS_BOOL && FLAG_turbo_decompression_elimination) {
+      return IsCompressedSigned();
+    } else {
+      return IsTaggedSigned();
+    }
+  }
+
+  constexpr bool IsCompressedTaggedPointer() const {
+    if (COMPRESS_POINTERS_BOOL && FLAG_turbo_decompression_elimination) {
+      return IsCompressedPointer();
+    } else {
+      return IsTaggedPointer();
+    }
+  }
+
   static MachineType TypeForRepresentation(const MachineRepresentation& rep,
                                            bool isSigned = true) {
     switch (rep) {
@@ -263,6 +350,8 @@ class MachineType {
         return MachineType::AnyCompressed();
       case MachineRepresentation::kCompressedPointer:
         return MachineType::CompressedPointer();
+      case MachineRepresentation::kCompressedSigned:
+        return MachineType::CompressedSigned();
       default:
         UNREACHABLE();
     }
@@ -318,13 +407,26 @@ inline bool CanBeTaggedOrCompressedPointer(MachineRepresentation rep) {
   return CanBeTaggedPointer(rep) || CanBeCompressedPointer(rep);
 }
 
+inline bool CanBeCompressedSigned(MachineRepresentation rep) {
+  return rep == MachineRepresentation::kCompressed ||
+         rep == MachineRepresentation::kCompressedSigned;
+}
+
 inline bool IsAnyCompressed(MachineRepresentation rep) {
-  return CanBeCompressedPointer(rep);
+  return CanBeCompressedPointer(rep) ||
+         rep == MachineRepresentation::kCompressedSigned;
+}
+
+inline bool IsAnyCompressedTagged(MachineRepresentation rep) {
+  if (COMPRESS_POINTERS_BOOL && FLAG_turbo_decompression_elimination) {
+    return IsAnyCompressed(rep);
+  } else {
+    return IsAnyTagged(rep);
+  }
 }
 
 // Gets the log2 of the element size in bytes of the machine type.
-V8_EXPORT_PRIVATE inline constexpr int ElementSizeLog2Of(
-    MachineRepresentation rep) {
+V8_EXPORT_PRIVATE inline int ElementSizeLog2Of(MachineRepresentation rep) {
   switch (rep) {
     case MachineRepresentation::kBit:
     case MachineRepresentation::kWord8:
@@ -342,21 +444,17 @@ V8_EXPORT_PRIVATE inline constexpr int ElementSizeLog2Of(
     case MachineRepresentation::kTaggedSigned:
     case MachineRepresentation::kTaggedPointer:
     case MachineRepresentation::kTagged:
+    case MachineRepresentation::kCompressedSigned:
     case MachineRepresentation::kCompressedPointer:
     case MachineRepresentation::kCompressed:
       return kTaggedSizeLog2;
     default:
-#if V8_HAS_CXX14_CONSTEXPR
-      UNREACHABLE();
-#else
-      // Return something for older compilers.
-      return -1;
-#endif
+      break;
   }
+  UNREACHABLE();
 }
 
-V8_EXPORT_PRIVATE inline constexpr int ElementSizeInBytes(
-    MachineRepresentation rep) {
+V8_EXPORT_PRIVATE inline int ElementSizeInBytes(MachineRepresentation rep) {
   return 1 << ElementSizeLog2Of(rep);
 }
 

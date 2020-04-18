@@ -7,7 +7,6 @@
 
 #include "src/strings/char-predicates.h"
 #include "src/utils/allocation.h"
-#include "src/utils/vector.h"
 
 namespace v8 {
 namespace internal {

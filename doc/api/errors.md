@@ -1742,6 +1742,11 @@ value.
 While using [`dgram.createSocket()`][], the size of the receive or send `Buffer`
 could not be determined.
 
+<a id="ERR_SOCKET_CANNOT_SEND"></a>
+### `ERR_SOCKET_CANNOT_SEND`
+
+Data could be sent on a socket.
+
 <a id="ERR_SOCKET_CLOSED"></a>
 ### `ERR_SOCKET_CLOSED`
 
@@ -2303,15 +2308,6 @@ removed: v10.0.0
 
 The `repl` module was unable to parse data from the REPL history file.
 
-<a id="ERR_SOCKET_CANNOT_SEND"></a>
-### `ERR_SOCKET_CANNOT_SEND`
-<!-- YAML
-added: v9.0.0
-removed: v14.0.0
--->
-
-Data could be sent on a socket.
-
 <a id="ERR_STDERR_CLOSE"></a>
 ### `ERR_STDERR_CLOSE`
 <!-- YAML
@@ -2476,12 +2472,6 @@ The `--entry-type=...` flag is not compatible with the Node.js REPL.
 
 Used when an [ES Module][] loader hook specifies `format: 'dynamic'` but does
 not provide a `dynamicInstantiate` hook.
-
-<a id="ERR_FEATURE_UNAVAILABLE_ON_PLATFORM"></a>
-#### `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM`
-
-Used when a feature that is not available
-to the current platform which is running Node.js is used.
 
 <a id="ERR_STREAM_HAS_STRINGDECODER"></a>
 #### `ERR_STREAM_HAS_STRINGDECODER`

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-namespace array {
+namespace array_slice {
   macro HandleSimpleArgumentsSlice(
       context: NativeContext, args: JSArgumentsObjectWithLength, start: Smi,
       count: Smi): JSArray
@@ -15,15 +15,14 @@ namespace array {
         Cast<FixedArray>(args.elements) otherwise Bailout;
     if (SmiAbove(end, sourceElements.length)) goto Bailout;
 
-    const arrayMap: Map =
-        LoadJSArrayElementsMap(ElementsKind::HOLEY_ELEMENTS, context);
+    const arrayMap: Map = LoadJSArrayElementsMap(HOLEY_ELEMENTS, context);
     const result: JSArray =
-        AllocateJSArray(ElementsKind::HOLEY_ELEMENTS, arrayMap, count, count);
+        AllocateJSArray(HOLEY_ELEMENTS, arrayMap, count, count);
     const newElements: FixedArray =
         Cast<FixedArray>(result.elements) otherwise Bailout;
     CopyElements(
-        ElementsKind::PACKED_ELEMENTS, newElements, 0, sourceElements,
-        Convert<intptr>(start), Convert<intptr>(count));
+        PACKED_ELEMENTS, newElements, 0, sourceElements, Convert<intptr>(start),
+        Convert<intptr>(count));
     return result;
   }
 
@@ -52,10 +51,9 @@ namespace array {
     const argumentsContext: Context = UnsafeCast<Context>(
         sloppyElements.objects[kSloppyArgumentsContextIndex]);
 
-    const arrayMap: Map =
-        LoadJSArrayElementsMap(ElementsKind::HOLEY_ELEMENTS, context);
+    const arrayMap: Map = LoadJSArrayElementsMap(HOLEY_ELEMENTS, context);
     const result: JSArray =
-        AllocateJSArray(ElementsKind::HOLEY_ELEMENTS, arrayMap, count, count);
+        AllocateJSArray(HOLEY_ELEMENTS, arrayMap, count, count);
 
     let indexOut: Smi = 0;
     const resultElements: FixedArray = UnsafeCast<FixedArray>(result.elements);
@@ -65,7 +63,7 @@ namespace array {
     for (let current: Smi = start; current < to; ++current) {
       const e: Object =
           sloppyElements.objects[current + kSloppyArgumentsParameterMapStart];
-      const newElement = UnsafeCast<(JSAny | TheHole)>(
+      const newElement: JSAny = UnsafeCast<JSAny>(
           e != TheHole ? argumentsContext[UnsafeCast<Smi>(e)] :
                          unmappedElements.objects[current]);
       // It is safe to skip the write barrier here because resultElements was
@@ -81,9 +79,9 @@ namespace array {
     const unmappedFrom: Smi = SmiMin(SmiMax(parameterMapLength, start), end);
     const restCount: Smi = end - unmappedFrom;
     CopyElements(
-        ElementsKind::PACKED_ELEMENTS, resultElements,
-        Convert<intptr>(indexOut), unmappedElements,
-        Convert<intptr>(unmappedFrom), Convert<intptr>(restCount));
+        PACKED_ELEMENTS, resultElements, Convert<intptr>(indexOut),
+        unmappedElements, Convert<intptr>(unmappedFrom),
+        Convert<intptr>(restCount));
     return result;
   }
 
@@ -95,46 +93,36 @@ namespace array {
     const count: Smi = Cast<Smi>(countNumber) otherwise Bailout;
     assert(start >= 0);
 
-    try {
-      typeswitch (o) {
-        case (a: FastJSArrayForCopy): {
-          // It's possible to modify the array length from a valueOf
-          // callback between the original array length read and this
-          // point. That can change the length of the array backing store,
-          // in the worst case, making it smaller than the region that needs
-          // to be copied out. Therefore, re-check the length before calling
-          // the appropriate fast path. See regress-785804.js
-          if (SmiAbove(start + count, a.length)) goto Bailout;
-          return ExtractFastJSArray(context, a, start, count);
-        }
-        case (a: JSStrictArgumentsObject): {
-          goto HandleSimpleArgumentsSlice(a);
-        }
-        case (a: JSSloppyArgumentsObject): {
-          const map: Map = a.map;
-          if (IsFastAliasedArgumentsMap(map)) {
-            return HandleFastAliasedSloppyArgumentsSlice(
-                context, a, start, count)
-                otherwise Bailout;
-          } else if (IsSloppyArgumentsMap(map)) {
-            goto HandleSimpleArgumentsSlice(a);
-          }
-          goto Bailout;
-        }
-        case (JSAny): {
-          goto Bailout;
+    typeswitch (o) {
+      case (a: FastJSArrayForCopy): {
+        // It's possible to modify the array length from a valueOf
+        // callback between the original array length read and this
+        // point. That can change the length of the array backing store,
+        // in the worst case, making it smaller than the region that needs
+        // to be copied out. Therefore, re-check the length before calling
+        // the appropriate fast path. See regress-785804.js
+        if (SmiAbove(start + count, a.length)) goto Bailout;
+        return ExtractFastJSArray(context, a, start, count);
+      }
+      case (a: JSArgumentsObjectWithLength): {
+        const map: Map = a.map;
+        if (IsFastAliasedArgumentsMap(map)) {
+          return HandleFastAliasedSloppyArgumentsSlice(context, a, start, count)
+              otherwise Bailout;
+        } else if (IsStrictArgumentsMap(map) || IsSloppyArgumentsMap(map)) {
+          return HandleSimpleArgumentsSlice(context, a, start, count)
+              otherwise Bailout;
         }
       }
+      case (JSAny): {
+      }
     }
-    label HandleSimpleArgumentsSlice(a: JSArgumentsObjectWithLength) {
-      return HandleSimpleArgumentsSlice(context, a, start, count)
-          otherwise Bailout;
-    }
+    goto Bailout;
   }
 
   // https://tc39.github.io/ecma262/#sec-array.prototype.slice
   transitioning javascript builtin
-  ArrayPrototypeSlice(js-implicit context: NativeContext, receiver: JSAny)(
+  ArrayPrototypeSlice(js-implicit context: Context, receiver: JSAny)(
       ...arguments): JSAny {
     // Handle array cloning case if the receiver is a fast array.
     if (arguments.length == 0) {
@@ -155,7 +143,7 @@ namespace array {
 
     // 3. Let relativeStart be ? ToInteger(start).
     const start: JSAny = arguments[0];
-    const relativeStart: Number = ToInteger_Inline(start);
+    const relativeStart: Number = ToInteger_Inline(context, start);
 
     // 4. If relativeStart < 0, let k be max((len + relativeStart), 0);
     //    else let k be min(relativeStart, len).
@@ -165,7 +153,8 @@ namespace array {
     // 5. If end is undefined, let relativeEnd be len;
     //    else let relativeEnd be ? ToInteger(end).
     const end: JSAny = arguments[1];
-    const relativeEnd: Number = end == Undefined ? len : ToInteger_Inline(end);
+    const relativeEnd: Number =
+        end == Undefined ? len : ToInteger_Inline(context, end);
 
     // 6. If relativeEnd < 0, let final be max((len + relativeEnd), 0);
     //    else let final be min(relativeEnd, len).
@@ -183,7 +172,7 @@ namespace array {
     assert(count <= len);
 
     try {
-      return HandleFastSlice(context, o, k, count)
+      return HandleFastSlice(UnsafeCast<NativeContext>(context), o, k, count)
           otherwise Slow;
     }
     label Slow {}

@@ -71,7 +71,7 @@ MaybeHandle<Object> JSReceiver::GetElement(Isolate* isolate,
 
 Handle<Object> JSReceiver::GetDataProperty(Handle<JSReceiver> object,
                                            Handle<Name> name) {
-  LookupIterator it(object->GetIsolate(), object, name, object,
+  LookupIterator it(object, name, object,
                     LookupIterator::PROTOTYPE_CHAIN_SKIP_INTERCEPTOR);
   if (!it.IsFound()) return it.factory()->undefined_value();
   return GetDataProperty(&it);
@@ -302,12 +302,11 @@ void JSObject::SetEmbedderField(int index, Smi value) {
 }
 
 bool JSObject::IsUnboxedDoubleField(FieldIndex index) const {
-  const Isolate* isolate = GetIsolateForPtrCompr(*this);
+  Isolate* isolate = GetIsolateForPtrCompr(*this);
   return IsUnboxedDoubleField(isolate, index);
 }
 
-bool JSObject::IsUnboxedDoubleField(const Isolate* isolate,
-                                    FieldIndex index) const {
+bool JSObject::IsUnboxedDoubleField(Isolate* isolate, FieldIndex index) const {
   if (!FLAG_unbox_double_fields) return false;
   return map(isolate).IsUnboxedDoubleField(isolate, index);
 }
@@ -316,12 +315,11 @@ bool JSObject::IsUnboxedDoubleField(const Isolate* isolate,
 // is needed to correctly distinguish between properties stored in-object and
 // properties stored in the properties array.
 Object JSObject::RawFastPropertyAt(FieldIndex index) const {
-  const Isolate* isolate = GetIsolateForPtrCompr(*this);
+  Isolate* isolate = GetIsolateForPtrCompr(*this);
   return RawFastPropertyAt(isolate, index);
 }
 
-Object JSObject::RawFastPropertyAt(const Isolate* isolate,
-                                   FieldIndex index) const {
+Object JSObject::RawFastPropertyAt(Isolate* isolate, FieldIndex index) const {
   DCHECK(!IsUnboxedDoubleField(isolate, index));
   if (index.is_inobject()) {
     return TaggedField<Object>::load(isolate, *this, index.offset());
@@ -455,10 +453,6 @@ ACCESSORS(JSFunction, raw_feedback_cell, FeedbackCell, kFeedbackCellOffset)
 
 ACCESSORS(JSGlobalObject, native_context, NativeContext, kNativeContextOffset)
 ACCESSORS(JSGlobalObject, global_proxy, JSGlobalProxy, kGlobalProxyOffset)
-
-DEF_GETTER(JSGlobalObject, native_context_unchecked, Object) {
-  return TaggedField<Object, kNativeContextOffset>::load(isolate, *this);
-}
 
 FeedbackVector JSFunction::feedback_vector() const {
   DCHECK(has_feedback_vector());
@@ -705,15 +699,12 @@ bool JSFunction::NeedsResetDueToFlushedBytecode() {
          code.builtin_index() != Builtins::kCompileLazy;
 }
 
-void JSFunction::ResetIfBytecodeFlushed(
-    base::Optional<std::function<void(HeapObject object, ObjectSlot slot,
-                                      HeapObject target)>>
-        gc_notify_updated_slot) {
+void JSFunction::ResetIfBytecodeFlushed() {
   if (FLAG_flush_bytecode && NeedsResetDueToFlushedBytecode()) {
     // Bytecode was flushed and function is now uncompiled, reset JSFunction
     // by setting code to CompileLazy and clearing the feedback vector.
     set_code(GetIsolate()->builtins()->builtin(i::Builtins::kCompileLazy));
-    raw_feedback_cell().reset_feedback_vector(gc_notify_updated_slot);
+    raw_feedback_cell().reset();
   }
 }
 
@@ -942,9 +933,8 @@ DEF_GETTER(JSReceiver, property_array, PropertyArray) {
 
 Maybe<bool> JSReceiver::HasProperty(Handle<JSReceiver> object,
                                     Handle<Name> name) {
-  Isolate* isolate = object->GetIsolate();
-  LookupIterator::Key key(isolate, name);
-  LookupIterator it(isolate, object, key, object);
+  LookupIterator it = LookupIterator::PropertyOrElement(object->GetIsolate(),
+                                                        object, name, object);
   return HasProperty(&it);
 }
 
@@ -966,17 +956,15 @@ Maybe<bool> JSReceiver::HasOwnProperty(Handle<JSReceiver> object,
 
 Maybe<PropertyAttributes> JSReceiver::GetPropertyAttributes(
     Handle<JSReceiver> object, Handle<Name> name) {
-  Isolate* isolate = object->GetIsolate();
-  LookupIterator::Key key(isolate, name);
-  LookupIterator it(isolate, object, key, object);
+  LookupIterator it = LookupIterator::PropertyOrElement(object->GetIsolate(),
+                                                        object, name, object);
   return GetPropertyAttributes(&it);
 }
 
 Maybe<PropertyAttributes> JSReceiver::GetOwnPropertyAttributes(
     Handle<JSReceiver> object, Handle<Name> name) {
-  Isolate* isolate = object->GetIsolate();
-  LookupIterator::Key key(isolate, name);
-  LookupIterator it(isolate, object, key, object, LookupIterator::OWN);
+  LookupIterator it = LookupIterator::PropertyOrElement(
+      object->GetIsolate(), object, name, object, LookupIterator::OWN);
   return GetPropertyAttributes(&it);
 }
 
@@ -1017,7 +1005,7 @@ bool JSGlobalProxy::IsDetachedFrom(JSGlobalObject global) const {
 
 inline int JSGlobalProxy::SizeWithEmbedderFields(int embedder_field_count) {
   DCHECK_GE(embedder_field_count, 0);
-  return kHeaderSize + embedder_field_count * kEmbedderDataSlotSize;
+  return kSize + embedder_field_count * kEmbedderDataSlotSize;
 }
 
 ACCESSORS(JSIteratorResult, value, Object, kValueOffset)

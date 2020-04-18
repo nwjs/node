@@ -53,6 +53,21 @@ class PredictablePlatform : public Platform {
     // Never run delayed tasks.
   }
 
+  void CallOnForegroundThread(v8::Isolate* isolate, Task* task) override {
+    // This is a deprecated function and should not be called anymore.
+    UNREACHABLE();
+  }
+
+  void CallDelayedOnForegroundThread(v8::Isolate* isolate, Task* task,
+                                     double delay_in_seconds) override {
+    // This is a deprecated function and should not be called anymore.
+    UNREACHABLE();
+  }
+
+  void CallIdleOnForegroundThread(Isolate* isolate, IdleTask* task) override {
+    UNREACHABLE();
+  }
+
   bool IdleTasksEnabled(Isolate* isolate) override { return false; }
 
   double MonotonicallyIncreasingTime() override {
@@ -147,6 +162,22 @@ class DelayedTasksPlatform : public Platform {
                                          delay_in_seconds);
   }
 
+  void CallOnForegroundThread(v8::Isolate* isolate, Task* task) override {
+    // This is a deprecated function and should not be called anymore.
+    UNREACHABLE();
+  }
+
+  void CallDelayedOnForegroundThread(v8::Isolate* isolate, Task* task,
+                                     double delay_in_seconds) override {
+    // This is a deprecated function and should not be called anymore.
+    UNREACHABLE();
+  }
+
+  void CallIdleOnForegroundThread(Isolate* isolate, IdleTask* task) override {
+    // This is a deprecated function and should not be called anymore.
+    UNREACHABLE();
+  }
+
   bool IdleTasksEnabled(Isolate* isolate) override {
     return platform_->IdleTasksEnabled(isolate);
   }
@@ -175,11 +206,6 @@ class DelayedTasksPlatform : public Platform {
       task_runner_->PostTask(platform_->MakeDelayedTask(std::move(task)));
     }
 
-    void PostNonNestableTask(std::unique_ptr<Task> task) final {
-      task_runner_->PostNonNestableTask(
-          platform_->MakeDelayedTask(std::move(task)));
-    }
-
     void PostDelayedTask(std::unique_ptr<Task> task,
                          double delay_in_seconds) final {
       task_runner_->PostDelayedTask(platform_->MakeDelayedTask(std::move(task)),
@@ -192,10 +218,6 @@ class DelayedTasksPlatform : public Platform {
     }
 
     bool IdleTasksEnabled() final { return task_runner_->IdleTasksEnabled(); }
-
-    bool NonNestableTasksEnabled() const final {
-      return task_runner_->NonNestableTasksEnabled();
-    }
 
    private:
     friend class DelayedTaskRunnerDeleter;

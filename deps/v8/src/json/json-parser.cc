@@ -64,7 +64,7 @@ enum class EscapeKind : uint8_t {
   kUnicode
 };
 
-using EscapeKindField = base::BitField8<EscapeKind, 0, 3>;
+using EscapeKindField = BitField8<EscapeKind, 0, 3>;
 using MayTerminateStringField = EscapeKindField::Next<bool, 1>;
 using NumberPartField = MayTerminateStringField::Next<bool, 1>;
 
@@ -362,7 +362,7 @@ JsonString JsonParser<Char>::ScanJsonPropertyKey(JsonContinuation* cont) {
         uint32_t index = first - '0';
         while (true) {
           cursor_ = std::find_if(cursor_ + 1, end_, [&index](Char c) {
-            return !TryAddArrayIndexChar(&index, c);
+            return !TryAddIndexChar(&index, c);
           });
 
           if (CurrentCharacter() == '"') {
@@ -374,7 +374,7 @@ JsonString JsonParser<Char>::ScanJsonPropertyKey(JsonContinuation* cont) {
           }
 
           if (CurrentCharacter() == '\\' && NextCharacter() == 'u') {
-            if (TryAddArrayIndexChar(&index, ScanUnicodeCharacter())) continue;
+            if (TryAddIndexChar(&index, ScanUnicodeCharacter())) continue;
           }
 
           break;
@@ -840,9 +840,6 @@ MaybeHandle<Object> JsonParser<Char>::ParseJsonValue() {
             // from the transition tree.
             if (!maybe_feedback.GetBackPointer().IsUndefined(isolate_)) {
               feedback = handle(maybe_feedback, isolate_);
-              if (feedback->is_deprecated()) {
-                feedback = Map::Update(isolate_, feedback);
-              }
             }
           }
           value = BuildJsonObject(cont, property_stack, feedback);
@@ -909,8 +906,7 @@ Handle<Object> JsonParser<Char>::ParseJsonNumber() {
       // Prefix zero is only allowed if it's the only digit before
       // a decimal point or exponent.
       c = NextCharacter();
-      if (base::IsInRange(c, 0,
-                          static_cast<int32_t>(unibrow::Latin1::kMaxChar)) &&
+      if (IsInRange(c, 0, static_cast<int32_t>(unibrow::Latin1::kMaxChar)) &&
           IsNumberPart(character_json_scan_flags[c])) {
         if (V8_UNLIKELY(IsDecimalDigit(c))) {
           AllowHeapAllocation allow_before_exception;
@@ -933,8 +929,7 @@ Handle<Object> JsonParser<Char>::ParseJsonNumber() {
       STATIC_ASSERT(Smi::IsValid(999999999));
       const int kMaxSmiLength = 9;
       if ((cursor_ - smi_start) <= kMaxSmiLength &&
-          (!base::IsInRange(c, 0,
-                            static_cast<int32_t>(unibrow::Latin1::kMaxChar)) ||
+          (!IsInRange(c, 0, static_cast<int32_t>(unibrow::Latin1::kMaxChar)) ||
            !IsNumberPart(character_json_scan_flags[c]))) {
         // Smi.
         int32_t i = 0;
@@ -1154,7 +1149,7 @@ JsonString JsonParser<Char>::ScanJsonString(bool needs_internalization) {
     if (*cursor_ == '\\') {
       has_escape = true;
       uc32 c = NextCharacter();
-      if (V8_UNLIKELY(!base::IsInRange(
+      if (V8_UNLIKELY(!IsInRange(
               c, 0, static_cast<int32_t>(unibrow::Latin1::kMaxChar)))) {
         AllowHeapAllocation allow_before_exception;
         ReportUnexpectedCharacter(c);

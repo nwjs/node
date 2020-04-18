@@ -162,26 +162,16 @@ RUNTIME_FUNCTION(Runtime_GrowArrayElements) {
   HandleScope scope(isolate);
   DCHECK_EQ(2, args.length());
   CONVERT_ARG_HANDLE_CHECKED(JSObject, object, 0);
-  CONVERT_ARG_HANDLE_CHECKED(Object, key, 1);
-  uint32_t index;
-  if (key->IsSmi()) {
-    int value = Smi::ToInt(*key);
-    if (value < 0) return Smi::zero();
-    index = static_cast<uint32_t>(value);
-  } else {
-    CHECK(key->IsHeapNumber());
-    double value = HeapNumber::cast(*key).value();
-    if (value < 0 || value > std::numeric_limits<uint32_t>::max()) {
-      return Smi::zero();
-    }
-    index = static_cast<uint32_t>(value);
-  }
+  CONVERT_NUMBER_CHECKED(int, key, Int32, args[1]);
+
+  if (key < 0) return Smi::kZero;
 
   uint32_t capacity = static_cast<uint32_t>(object->elements().length());
+  uint32_t index = static_cast<uint32_t>(key);
 
   if (index >= capacity) {
     if (!object->GetElementsAccessor()->GrowCapacity(object, index)) {
-      return Smi::zero();
+      return Smi::kZero;
     }
   }
 
@@ -288,8 +278,9 @@ RUNTIME_FUNCTION(Runtime_ArrayIncludes_Slow) {
       JSObject::PrototypeHasNoElements(isolate, JSObject::cast(*object))) {
     Handle<JSObject> obj = Handle<JSObject>::cast(object);
     ElementsAccessor* elements = obj->GetElementsAccessor();
-    Maybe<bool> result =
-        elements->IncludesValue(isolate, obj, search_element, index, len);
+    Maybe<bool> result = elements->IncludesValue(isolate, obj, search_element,
+                                                 static_cast<uint32_t>(index),
+                                                 static_cast<uint32_t>(len));
     MAYBE_RETURN(result, ReadOnlyRoots(isolate).exception());
     return *isolate->factory()->ToBoolean(result.FromJust());
   }
@@ -301,8 +292,11 @@ RUNTIME_FUNCTION(Runtime_ArrayIncludes_Slow) {
     // Let elementK be the result of ? Get(O, ! ToString(k)).
     Handle<Object> element_k;
     {
-      LookupIterator::Key key(isolate, static_cast<double>(index));
-      LookupIterator it(isolate, object, key);
+      Handle<Object> index_obj = isolate->factory()->NewNumberFromInt64(index);
+      bool success;
+      LookupIterator it = LookupIterator::PropertyOrElement(
+          isolate, object, index_obj, &success);
+      DCHECK(success);
       ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, element_k,
                                          Object::GetProperty(&it));
     }
@@ -392,21 +386,24 @@ RUNTIME_FUNCTION(Runtime_ArrayIndexOf) {
     return *isolate->factory()->NewNumberFromInt64(result.FromJust());
   }
 
-  // Otherwise, perform slow lookups for special receiver types.
+  // Otherwise, perform slow lookups for special receiver types
   for (; index < len; ++index) {
     HandleScope iteration_hs(isolate);
     // Let elementK be the result of ? Get(O, ! ToString(k)).
     Handle<Object> element_k;
     {
-      LookupIterator::Key key(isolate, static_cast<double>(index));
-      LookupIterator it(isolate, object, key);
+      Handle<Object> index_obj = isolate->factory()->NewNumberFromInt64(index);
+      bool success;
+      LookupIterator it = LookupIterator::PropertyOrElement(
+          isolate, object, index_obj, &success);
+      DCHECK(success);
       Maybe<bool> present = JSReceiver::HasProperty(&it);
       MAYBE_RETURN(present, ReadOnlyRoots(isolate).exception());
       if (!present.FromJust()) continue;
       ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, element_k,
                                          Object::GetProperty(&it));
       if (search_element->StrictEquals(*element_k)) {
-        return *isolate->factory()->NewNumberFromInt64(index);
+        return *index_obj;
       }
     }
   }

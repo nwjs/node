@@ -13,32 +13,28 @@ const genSetNoDelay = (desiredArg) => (enable) => {
 // setNoDelay should default to true
 let socket = new net.Socket({
   handle: {
-    setNoDelay: common.mustCall(genSetNoDelay(true)),
-    readStart() {}
+    setNoDelay: common.mustCall(genSetNoDelay(true))
   }
 });
 socket.setNoDelay();
 
 socket = new net.Socket({
   handle: {
-    setNoDelay: common.mustCall(genSetNoDelay(true), 1),
-    readStart() {}
+    setNoDelay: common.mustCall(genSetNoDelay(true), 1)
   }
 });
 truthyValues.forEach((testVal) => socket.setNoDelay(testVal));
 
 socket = new net.Socket({
   handle: {
-    setNoDelay: common.mustNotCall(),
-    readStart() {}
+    setNoDelay: common.mustNotCall()
   }
 });
 falseyValues.forEach((testVal) => socket.setNoDelay(testVal));
 
 socket = new net.Socket({
   handle: {
-    setNoDelay: common.mustCall(() => {}, 3),
-    readStart() {}
+    setNoDelay: common.mustCall(() => {}, 3)
   }
 });
 truthyValues.concat(falseyValues).concat(truthyValues)
@@ -48,8 +44,7 @@ truthyValues.concat(falseyValues).concat(truthyValues)
 // In the case below, if it is called an exception will be thrown
 socket = new net.Socket({
   handle: {
-    setNoDelay: null,
-    readStart() {}
+    setNoDelay: null
   }
 });
 const returned = socket.setNoDelay(true);

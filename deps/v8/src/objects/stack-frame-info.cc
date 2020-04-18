@@ -58,11 +58,6 @@ int StackTraceFrame::GetFunctionOffset(Handle<StackTraceFrame> frame) {
 }
 
 // static
-int StackTraceFrame::GetWasmFunctionIndex(Handle<StackTraceFrame> frame) {
-  return GetFrameInfo(frame)->wasm_function_index();
-}
-
-// static
 Handle<Object> StackTraceFrame::GetFileName(Handle<StackTraceFrame> frame) {
   auto name = GetFrameInfo(frame)->script_name();
   return handle(name, frame->GetIsolate());
@@ -386,7 +381,7 @@ void SerializeWasmStackFrame(Isolate* isolate, Handle<StackTraceFrame> frame,
     builder->AppendCString(" (");
   }
 
-  const int wasm_func_index = StackTraceFrame::GetWasmFunctionIndex(frame);
+  const int wasm_func_index = StackTraceFrame::GetLineNumber(frame);
 
   builder->AppendCString("wasm-function[");
   builder->AppendInt(wasm_func_index);

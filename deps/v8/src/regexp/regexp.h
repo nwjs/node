@@ -15,7 +15,6 @@ class RegExpTree;
 
 enum class RegExpCompilationTarget : int { kBytecode, kNative };
 
-// TODO(jgruber): Do not expose in regexp.h.
 // TODO(jgruber): Consider splitting between ParseData and CompileData.
 struct RegExpCompileData {
   // The parsed AST as produced by the RegExpParser.
@@ -67,7 +66,7 @@ class RegExp final : public AllStatic {
   // Returns false if compilation fails.
   V8_WARN_UNUSED_RESULT static MaybeHandle<Object> Compile(
       Isolate* isolate, Handle<JSRegExp> re, Handle<String> pattern,
-      JSRegExp::Flags flags, uint32_t backtrack_limit);
+      JSRegExp::Flags flags);
 
   enum CallOrigin : int {
     kFromRuntime = 0,

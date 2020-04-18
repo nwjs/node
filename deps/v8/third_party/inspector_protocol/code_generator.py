@@ -112,9 +112,16 @@ def read_config():
       ".lib": False,
       ".lib.export_macro": "",
       ".lib.export_header": False,
-      ".crdtp": False,
-      ".crdtp.dir": os.path.join(inspector_protocol_dir, "crdtp"),
-      ".crdtp.namespace": "crdtp",
+      # The encoding lib consists of encoding/encoding.h and
+      # encoding/encoding.cc in its subdirectory, which binaries
+      # must link / depend on.
+      ".encoding_lib.header": os.path.join(inspector_protocol_dir,
+                                           "encoding/encoding.h"),
+      ".encoding_lib.namespace": "",
+      # Ditto for bindings, see bindings/bindings.h.
+      ".bindings_lib.header": os.path.join(inspector_protocol_dir,
+                                           "bindings/bindings.h"),
+      ".bindings_lib.namespace": ""
     }
     for key_value in config_values:
       parts = key_value.split("=")

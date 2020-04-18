@@ -13,8 +13,6 @@ export class SequenceView extends TextView {
   createViewElement() {
     const pane = document.createElement('div');
     pane.setAttribute('id', "sequence");
-    pane.classList.add("scrollable");
-    pane.setAttribute("tabindex", "0");
     return pane;
   }
 
@@ -103,9 +101,7 @@ export class SequenceView extends TextView {
       const offsets = view.sourceResolver.instructionToPcOffsets(instruction.id);
       instId.classList.add("clickable");
       instId.dataset.instructionId = instruction.id;
-      if (offsets) {
-        instId.setAttribute("title", `This instruction generated gap code at pc-offset 0x${offsets.gap.toString(16)}, code at pc-offset 0x${offsets.arch.toString(16)}, condition handling at pc-offset 0x${offsets.condition.toString(16)}.`);
-      }
+      instId.setAttribute("title", `This instruction generated gap code at pc-offset 0x${offsets.gap.toString(16)}, code at pc-offset 0x${offsets.arch.toString(16)}, condition handling at pc-offset 0x${offsets.condition.toString(16)}.`);
       instNodeEl.appendChild(instId);
 
       const instContentsEl = createElement("div", "instruction-contents");

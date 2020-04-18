@@ -23,12 +23,12 @@ class AsyncFunctionBuiltinsAssembler : public AsyncBuiltinsAssembler {
   void AsyncFunctionAwait(const bool is_predicted_as_caught);
 
   void AsyncFunctionAwaitResumeClosure(
-      const TNode<Context> context, const TNode<Object> sent_value,
+      Node* const context, Node* const sent_value,
       JSGeneratorObject::ResumeMode resume_mode);
 };
 
 void AsyncFunctionBuiltinsAssembler::AsyncFunctionAwaitResumeClosure(
-    TNode<Context> context, TNode<Object> sent_value,
+    Node* context, Node* sent_value,
     JSGeneratorObject::ResumeMode resume_mode) {
   DCHECK(resume_mode == JSGeneratorObject::kNext ||
          resume_mode == JSGeneratorObject::kThrow);
@@ -84,13 +84,13 @@ TF_BUILTIN(AsyncFunctionEnter, AsyncFunctionBuiltinsAssembler) {
   // Compute the number of registers and parameters.
   TNode<SharedFunctionInfo> shared = LoadObjectField<SharedFunctionInfo>(
       closure, JSFunction::kSharedFunctionInfoOffset);
-  TNode<IntPtrT> formal_parameter_count =
-      ChangeInt32ToIntPtr(LoadObjectField<Uint16T>(
-          shared, SharedFunctionInfo::kFormalParameterCountOffset));
+  TNode<IntPtrT> formal_parameter_count = ChangeInt32ToIntPtr(
+      LoadObjectField(shared, SharedFunctionInfo::kFormalParameterCountOffset,
+                      MachineType::Uint16()));
   TNode<BytecodeArray> bytecode_array =
       LoadSharedFunctionInfoBytecodeArray(shared);
-  TNode<IntPtrT> frame_size = ChangeInt32ToIntPtr(LoadObjectField<Uint32T>(
-      bytecode_array, BytecodeArray::kFrameSizeOffset));
+  TNode<IntPtrT> frame_size = ChangeInt32ToIntPtr(LoadObjectField(
+      bytecode_array, BytecodeArray::kFrameSizeOffset, MachineType::Int32()));
   TNode<IntPtrT> parameters_and_register_length =
       Signed(IntPtrAdd(WordSar(frame_size, IntPtrConstant(kTaggedSizeLog2)),
                        formal_parameter_count));
@@ -98,14 +98,14 @@ TF_BUILTIN(AsyncFunctionEnter, AsyncFunctionBuiltinsAssembler) {
   // Allocate and initialize the register file.
   TNode<FixedArrayBase> parameters_and_registers =
       AllocateFixedArray(HOLEY_ELEMENTS, parameters_and_register_length,
-                         kAllowLargeObjectAllocation);
+                         INTPTR_PARAMETERS, kAllowLargeObjectAllocation);
   FillFixedArrayWithValue(HOLEY_ELEMENTS, parameters_and_registers,
                           IntPtrConstant(0), parameters_and_register_length,
                           RootIndex::kUndefinedValue);
 
   // Allocate space for the promise, the async function object.
   TNode<IntPtrT> size = IntPtrConstant(JSPromise::kSizeWithEmbedderFields +
-                                       JSAsyncFunctionObject::kHeaderSize);
+                                       JSAsyncFunctionObject::kSize);
   TNode<HeapObject> base = AllocateInNewSpace(size);
 
   // Initialize the promise.
@@ -115,7 +115,7 @@ TF_BUILTIN(AsyncFunctionEnter, AsyncFunctionBuiltinsAssembler) {
   TNode<Map> promise_map = LoadObjectField<Map>(
       promise_function, JSFunction::kPrototypeOrInitialMapOffset);
   TNode<JSPromise> promise = UncheckedCast<JSPromise>(
-      InnerAllocate(base, JSAsyncFunctionObject::kHeaderSize));
+      InnerAllocate(base, JSAsyncFunctionObject::kSize));
   StoreMapNoWriteBarrier(promise, promise_map);
   StoreObjectFieldRoot(promise, JSPromise::kPropertiesOrHashOffset,
                        RootIndex::kEmptyFixedArray);
@@ -230,8 +230,8 @@ TF_BUILTIN(AsyncFunctionLazyDeoptContinuation, AsyncFunctionBuiltinsAssembler) {
 
 TF_BUILTIN(AsyncFunctionAwaitRejectClosure, AsyncFunctionBuiltinsAssembler) {
   CSA_ASSERT_JS_ARGC_EQ(this, 1);
-  const TNode<Object> sentError = CAST(Parameter(Descriptor::kSentError));
-  const TNode<Context> context = CAST(Parameter(Descriptor::kContext));
+  Node* const sentError = Parameter(Descriptor::kSentError);
+  Node* const context = Parameter(Descriptor::kContext);
 
   AsyncFunctionAwaitResumeClosure(context, sentError,
                                   JSGeneratorObject::kThrow);
@@ -240,8 +240,8 @@ TF_BUILTIN(AsyncFunctionAwaitRejectClosure, AsyncFunctionBuiltinsAssembler) {
 
 TF_BUILTIN(AsyncFunctionAwaitResolveClosure, AsyncFunctionBuiltinsAssembler) {
   CSA_ASSERT_JS_ARGC_EQ(this, 1);
-  const TNode<Object> sentValue = CAST(Parameter(Descriptor::kSentValue));
-  const TNode<Context> context = CAST(Parameter(Descriptor::kContext));
+  Node* const sentValue = Parameter(Descriptor::kSentValue);
+  Node* const context = Parameter(Descriptor::kContext);
 
   AsyncFunctionAwaitResumeClosure(context, sentValue, JSGeneratorObject::kNext);
   Return(UndefinedConstant());

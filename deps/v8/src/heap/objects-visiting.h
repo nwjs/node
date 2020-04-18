@@ -28,7 +28,6 @@ namespace internal {
   V(EmbedderDataArray)                 \
   V(EphemeronHashTable)                \
   V(FeedbackCell)                      \
-  V(FeedbackMetadata)                  \
   V(FeedbackVector)                    \
   V(FixedArray)                        \
   V(FixedDoubleArray)                  \

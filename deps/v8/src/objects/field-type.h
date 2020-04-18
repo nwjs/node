@@ -43,6 +43,9 @@ class FieldType : public Object {
 
   V8_EXPORT_PRIVATE void PrintTo(std::ostream& os) const;
 
+  FieldType* operator->() { return this; }
+  const FieldType* operator->() const { return this; }
+
  private:
   explicit constexpr FieldType(Address ptr) : Object(ptr) {}
 };

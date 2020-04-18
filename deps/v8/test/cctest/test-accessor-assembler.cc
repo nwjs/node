@@ -28,10 +28,9 @@ void TestStubCacheOffsetCalculation(StubCache::Table table) {
   AccessorAssembler m(data.state());
 
   {
-    TNode<Name> name = m.CAST(m.Parameter(0));
-    TNode<Map> map = m.CAST(m.Parameter(1));
-    TNode<IntPtrT> primary_offset =
-        m.StubCachePrimaryOffsetForTesting(name, map);
+    Node* name = m.Parameter(0);
+    Node* map = m.Parameter(1);
+    Node* primary_offset = m.StubCachePrimaryOffsetForTesting(name, map);
     Node* result;
     if (table == StubCache::kPrimary) {
       result = primary_offset;
@@ -60,6 +59,7 @@ void TestStubCacheOffsetCalculation(StubCache::Table table) {
   };
 
   Handle<Map> maps[] = {
+      Handle<Map>(Map(), isolate),
       factory->cell_map(),
       Map::Create(isolate, 0),
       factory->meta_map(),
@@ -128,8 +128,8 @@ TEST(TryProbeStubCache) {
   stub_cache.Clear();
 
   {
-    TNode<Object> receiver = m.CAST(m.Parameter(0));
-    TNode<Name> name = m.CAST(m.Parameter(1));
+    Node* receiver = m.Parameter(0);
+    TNode<Object> name = m.CAST(m.Parameter(1));
     TNode<MaybeObject> expected_handler =
         m.UncheckedCast<MaybeObject>(m.Parameter(2));
 

@@ -11,7 +11,7 @@ namespace internal {
 class CodeCommentsIterator;
 class HeapObject;
 class Isolate;
-class OldLargeObjectSpace;
+class LargeObjectSpace;
 class PagedSpace;
 
 class CodeStatistics {
@@ -20,8 +20,7 @@ class CodeStatistics {
   static void CollectCodeStatistics(PagedSpace* space, Isolate* isolate);
 
   // Collect statistics related to code size from large object space.
-  static void CollectCodeStatistics(OldLargeObjectSpace* space,
-                                    Isolate* isolate);
+  static void CollectCodeStatistics(LargeObjectSpace* space, Isolate* isolate);
 
   // Reset code size related statistics
   static void ResetCodeAndMetadataStatistics(Isolate* isolate);

@@ -10,7 +10,9 @@ namespace v8 {
 namespace internal {
 namespace wasm {
 
+// TODO(gdeepti): Enable tests to run in the interpreter.
 WASM_EXEC_TEST(I32SExtendI8) {
+  EXPERIMENTAL_FLAG_SCOPE(se);
   WasmRunner<int32_t, int32_t> r(execution_tier);
   BUILD(r, WASM_I32_SIGN_EXT_I8(WASM_GET_LOCAL(0)));
   CHECK_EQ(0, r.Call(0));
@@ -21,6 +23,7 @@ WASM_EXEC_TEST(I32SExtendI8) {
 }
 
 WASM_EXEC_TEST(I32SExtendI16) {
+  EXPERIMENTAL_FLAG_SCOPE(se);
   WasmRunner<int32_t, int32_t> r(execution_tier);
   BUILD(r, WASM_I32_SIGN_EXT_I16(WASM_GET_LOCAL(0)));
   CHECK_EQ(0, r.Call(0));
@@ -31,6 +34,7 @@ WASM_EXEC_TEST(I32SExtendI16) {
 }
 
 WASM_EXEC_TEST(I64SExtendI8) {
+  EXPERIMENTAL_FLAG_SCOPE(se);
   WasmRunner<int64_t, int64_t> r(execution_tier);
   BUILD(r, WASM_I64_SIGN_EXT_I8(WASM_GET_LOCAL(0)));
   CHECK_EQ(0, r.Call(0));
@@ -41,6 +45,7 @@ WASM_EXEC_TEST(I64SExtendI8) {
 }
 
 WASM_EXEC_TEST(I64SExtendI16) {
+  EXPERIMENTAL_FLAG_SCOPE(se);
   WasmRunner<int64_t, int64_t> r(execution_tier);
   BUILD(r, WASM_I64_SIGN_EXT_I16(WASM_GET_LOCAL(0)));
   CHECK_EQ(0, r.Call(0));
@@ -51,6 +56,7 @@ WASM_EXEC_TEST(I64SExtendI16) {
 }
 
 WASM_EXEC_TEST(I64SExtendI32) {
+  EXPERIMENTAL_FLAG_SCOPE(se);
   WasmRunner<int64_t, int64_t> r(execution_tier);
   BUILD(r, WASM_I64_SIGN_EXT_I32(WASM_GET_LOCAL(0)));
   CHECK_EQ(0, r.Call(0));

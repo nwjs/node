@@ -7,7 +7,6 @@
 #include <cstdint>
 #include "nghttp2/nghttp2.h"
 
-#include "aliased_struct.h"
 #include "node_http2_state.h"
 #include "node_http_common.h"
 #include "node_mem.h"
@@ -190,8 +189,7 @@ class Http2Scope {
 // configured.
 class Http2Options {
  public:
-  Http2Options(Http2State* http2_state,
-               nghttp2_session_type type);
+  Http2Options(Environment* env, nghttp2_session_type type);
 
   ~Http2Options() = default;
 
@@ -543,7 +541,7 @@ class Http2Session : public AsyncWrap,
                      public StreamListener,
                      public mem::NgLibMemoryManager<Http2Session, nghttp2_mem> {
  public:
-  Http2Session(Http2State* http2_state,
+  Http2Session(Environment* env,
                v8::Local<v8::Object> wrap,
                nghttp2_session_type type = NGHTTP2_SESSION_SERVER);
   ~Http2Session() override;
@@ -676,9 +674,6 @@ class Http2Session : public AsyncWrap,
     return env()->event_loop();
   }
 
-  Http2State* http2_state() {
-    return http2_state_.get();
-  }
   BaseObjectPtr<Http2Ping> PopPing();
   Http2Ping* AddPing(BaseObjectPtr<Http2Ping> ping);
 
@@ -824,7 +819,7 @@ class Http2Session : public AsyncWrap,
   Nghttp2SessionPointer session_;
 
   // JS-accessible numeric fields, as indexed by SessionUint8Fields.
-  AliasedStruct<SessionJSFields> js_fields_;
+  SessionJSFields js_fields_ = {};
 
   // The session type: client or server
   nghttp2_session_type session_type_;
@@ -875,9 +870,6 @@ class Http2Session : public AsyncWrap,
   uint32_t invalid_frame_count_ = 0;
 
   void PushOutgoingBuffer(NgHttp2StreamWrite&& write);
-
-  BaseObjectPtr<Http2State> http2_state_;
-
   void CopyDataIntoOutgoing(const uint8_t* src, size_t src_length);
   void ClearOutgoing(int status);
 
@@ -888,11 +880,11 @@ class Http2Session : public AsyncWrap,
 class Http2SessionPerformanceEntry : public performance::PerformanceEntry {
  public:
   Http2SessionPerformanceEntry(
-      Http2State* http2_state,
+      Environment* env,
       const Http2Session::Statistics& stats,
       nghttp2_session_type type) :
           performance::PerformanceEntry(
-              http2_state->env(), "Http2Session", "http2",
+              env, "Http2Session", "http2",
               stats.start_time,
               stats.end_time),
           ping_rtt_(stats.ping_rtt),
@@ -903,8 +895,7 @@ class Http2SessionPerformanceEntry : public performance::PerformanceEntry {
           stream_count_(stats.stream_count),
           max_concurrent_streams_(stats.max_concurrent_streams),
           stream_average_duration_(stats.stream_average_duration),
-          session_type_(type),
-          http2_state_(http2_state) { }
+          session_type_(type) { }
 
   uint64_t ping_rtt() const { return ping_rtt_; }
   uint64_t data_sent() const { return data_sent_; }
@@ -915,7 +906,6 @@ class Http2SessionPerformanceEntry : public performance::PerformanceEntry {
   size_t max_concurrent_streams() const { return max_concurrent_streams_; }
   double stream_average_duration() const { return stream_average_duration_; }
   nghttp2_session_type type() const { return session_type_; }
-  Http2State* http2_state() const { return http2_state_.get(); }
 
   void Notify(v8::Local<v8::Value> obj) {
     performance::PerformanceEntry::Notify(env(), kind(), obj);
@@ -931,18 +921,17 @@ class Http2SessionPerformanceEntry : public performance::PerformanceEntry {
   size_t max_concurrent_streams_;
   double stream_average_duration_;
   nghttp2_session_type session_type_;
-  BaseObjectPtr<Http2State> http2_state_;
 };
 
 class Http2StreamPerformanceEntry
     : public performance::PerformanceEntry {
  public:
   Http2StreamPerformanceEntry(
-      Http2State* http2_state,
+      Environment* env,
       int32_t id,
       const Http2Stream::Statistics& stats) :
           performance::PerformanceEntry(
-              http2_state->env(), "Http2Stream", "http2",
+              env, "Http2Stream", "http2",
               stats.start_time,
               stats.end_time),
           id_(id),
@@ -950,8 +939,7 @@ class Http2StreamPerformanceEntry
           first_byte_(stats.first_byte),
           first_byte_sent_(stats.first_byte_sent),
           sent_bytes_(stats.sent_bytes),
-          received_bytes_(stats.received_bytes),
-          http2_state_(http2_state) { }
+          received_bytes_(stats.received_bytes) { }
 
   int32_t id() const { return id_; }
   uint64_t first_header() const { return first_header_; }
@@ -959,7 +947,6 @@ class Http2StreamPerformanceEntry
   uint64_t first_byte_sent() const { return first_byte_sent_; }
   uint64_t sent_bytes() const { return sent_bytes_; }
   uint64_t received_bytes() const { return received_bytes_; }
-  Http2State* http2_state() const { return http2_state_.get(); }
 
   void Notify(v8::Local<v8::Value> obj) {
     performance::PerformanceEntry::Notify(env(), kind(), obj);
@@ -972,7 +959,6 @@ class Http2StreamPerformanceEntry
   uint64_t first_byte_sent_;
   uint64_t sent_bytes_;
   uint64_t received_bytes_;
-  BaseObjectPtr<Http2State> http2_state_;
 };
 
 class Http2Session::Http2Ping : public AsyncWrap {
@@ -1000,7 +986,7 @@ class Http2Session::Http2Ping : public AsyncWrap {
 // structs.
 class Http2Session::Http2Settings : public AsyncWrap {
  public:
-  Http2Settings(Http2State* http2_state,
+  Http2Settings(Environment* env,
                 Http2Session* session,
                 v8::Local<v8::Object> obj,
                 uint64_t start_time = uv_hrtime());
@@ -1019,14 +1005,15 @@ class Http2Session::Http2Settings : public AsyncWrap {
   v8::Local<v8::Value> Pack();
 
   // Resets the default values in the settings buffer
-  static void RefreshDefaults(Http2State* http2_state);
+  static void RefreshDefaults(Environment* env);
 
   // Update the local or remote settings for the given session
-  static void Update(Http2Session* session,
+  static void Update(Environment* env,
+                     Http2Session* session,
                      get_setting fn);
 
  private:
-  void Init(Http2State* http2_state);
+  void Init();
   Http2Session* session_;
   uint64_t startTime_;
   size_t count_ = 0;

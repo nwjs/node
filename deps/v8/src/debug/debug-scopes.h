@@ -41,13 +41,10 @@ class ScopeIterator {
   static const int kScopeDetailsFunctionIndex = 5;
   static const int kScopeDetailsSize = 6;
 
-  enum class ReparseStrategy {
-    kScript,
-    kFunctionLiteral,
-  };
+  enum Option { DEFAULT, COLLECT_NON_LOCALS };
 
   ScopeIterator(Isolate* isolate, FrameInspector* frame_inspector,
-                ReparseStrategy strategy);
+                Option options = DEFAULT);
 
   ScopeIterator(Isolate* isolate, Handle<JSFunction> function);
   ScopeIterator(Isolate* isolate, Handle<JSGeneratorObject> generator);
@@ -132,7 +129,7 @@ class ScopeIterator {
 
   int GetSourcePosition();
 
-  void TryParseAndRetrieveScopes(ReparseStrategy strategy);
+  void TryParseAndRetrieveScopes(ScopeIterator::Option option);
 
   void UnwrapEvaluationContext();
 

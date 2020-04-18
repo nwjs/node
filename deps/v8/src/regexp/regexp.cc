@@ -33,8 +33,7 @@ class RegExpImpl final : public AllStatic {
   // Prepares a JSRegExp object with Irregexp-specific data.
   static void IrregexpInitialize(Isolate* isolate, Handle<JSRegExp> re,
                                  Handle<String> pattern, JSRegExp::Flags flags,
-                                 int capture_register_count,
-                                 uint32_t backtrack_limit);
+                                 int capture_register_count);
 
   static void AtomCompile(Isolate* isolate, Handle<JSRegExp> re,
                           Handle<String> pattern, JSRegExp::Flags flags,
@@ -76,8 +75,7 @@ class RegExpImpl final : public AllStatic {
   // Returns true on success, false on failure.
   static bool Compile(Isolate* isolate, Zone* zone, RegExpCompileData* input,
                       JSRegExp::Flags flags, Handle<String> pattern,
-                      Handle<String> sample_subject, bool is_one_byte,
-                      uint32_t backtrack_limit);
+                      Handle<String> sample_subject, bool is_one_byte);
 
   // For acting on the JSRegExp data FixedArray.
   static int IrregexpMaxRegisterCount(FixedArray re);
@@ -133,27 +131,17 @@ static bool HasFewDifferentCharacters(Handle<String> pattern) {
 // static
 MaybeHandle<Object> RegExp::Compile(Isolate* isolate, Handle<JSRegExp> re,
                                     Handle<String> pattern,
-                                    JSRegExp::Flags flags,
-                                    uint32_t backtrack_limit) {
+                                    JSRegExp::Flags flags) {
   DCHECK(pattern->IsFlat());
 
-  // Caching is based only on the pattern and flags, but code also differs when
-  // a backtrack limit is set. A present backtrack limit is very much *not* the
-  // common case, so just skip the cache for these.
-  const bool is_compilation_cache_enabled =
-      (backtrack_limit == JSRegExp::kNoBacktrackLimit);
-
   Zone zone(isolate->allocator(), ZONE_NAME);
-  CompilationCache* compilation_cache = nullptr;
-  if (is_compilation_cache_enabled) {
-    compilation_cache = isolate->compilation_cache();
-    MaybeHandle<FixedArray> maybe_cached =
-        compilation_cache->LookupRegExp(pattern, flags);
-    Handle<FixedArray> cached;
-    if (maybe_cached.ToHandle(&cached)) {
-      re->set_data(*cached);
-      return re;
-    }
+  CompilationCache* compilation_cache = isolate->compilation_cache();
+  MaybeHandle<FixedArray> maybe_cached =
+      compilation_cache->LookupRegExp(pattern, flags);
+  Handle<FixedArray> cached;
+  if (maybe_cached.ToHandle(&cached)) {
+    re->set_data(*cached);
+    return re;
   }
 
   PostponeInterruptsScope postpone(isolate);
@@ -188,15 +176,13 @@ MaybeHandle<Object> RegExp::Compile(Isolate* isolate, Handle<JSRegExp> re,
   }
   if (!has_been_compiled) {
     RegExpImpl::IrregexpInitialize(isolate, re, pattern, flags,
-                                   parse_result.capture_count, backtrack_limit);
+                                   parse_result.capture_count);
   }
   DCHECK(re->data().IsFixedArray());
   // Compilation succeeded so the data is set on the regexp
   // and we can store it in the cache.
   Handle<FixedArray> data(FixedArray::cast(re->data()), isolate);
-  if (is_compilation_cache_enabled) {
-    compilation_cache->PutRegExp(pattern, flags, data);
-  }
+  compilation_cache->PutRegExp(pattern, flags, data);
 
   return re;
 }
@@ -405,7 +391,7 @@ bool RegExpImpl::CompileIrregexp(Isolate* isolate, Handle<JSRegExp> re,
                                         : RegExpCompilationTarget::kNative;
   const bool compilation_succeeded =
       Compile(isolate, &zone, &compile_data, flags, pattern, sample_subject,
-              is_one_byte, re->BacktrackLimit());
+              is_one_byte);
   if (!compilation_succeeded) {
     DCHECK(!compile_data.error.is_null());
     ThrowRegExpException(isolate, re, compile_data.error);
@@ -459,7 +445,7 @@ void RegExpImpl::SetIrregexpMaxRegisterCount(FixedArray re, int value) {
 void RegExpImpl::SetIrregexpCaptureNameMap(FixedArray re,
                                            Handle<FixedArray> value) {
   if (value.is_null()) {
-    re.set(JSRegExp::kIrregexpCaptureNameMapIndex, Smi::zero());
+    re.set(JSRegExp::kIrregexpCaptureNameMapIndex, Smi::kZero);
   } else {
     re.set(JSRegExp::kIrregexpCaptureNameMapIndex, *value);
   }
@@ -483,11 +469,10 @@ Code RegExpImpl::IrregexpNativeCode(FixedArray re, bool is_one_byte) {
 
 void RegExpImpl::IrregexpInitialize(Isolate* isolate, Handle<JSRegExp> re,
                                     Handle<String> pattern,
-                                    JSRegExp::Flags flags, int capture_count,
-                                    uint32_t backtrack_limit) {
+                                    JSRegExp::Flags flags, int capture_count) {
   // Initialize compiled code entries to null.
-  isolate->factory()->SetRegExpIrregexpData(
-      re, JSRegExp::IRREGEXP, pattern, flags, capture_count, backtrack_limit);
+  isolate->factory()->SetRegExpIrregexpData(re, JSRegExp::IRREGEXP, pattern,
+                                            flags, capture_count);
 }
 
 // static
@@ -673,8 +658,12 @@ Handle<RegExpMatchInfo> RegExp::SetLastMatchInfo(
   // regexp, RegExpExecStub finds that the match info is too small, it restarts
   // execution in RegExpImpl::Exec, which finally grows the match info right
   // here.
-  Handle<RegExpMatchInfo> result =
-      RegExpMatchInfo::ReserveCaptures(isolate, last_match_info, capture_count);
+
+  int capture_register_count = (capture_count + 1) * 2;
+  Handle<RegExpMatchInfo> result = RegExpMatchInfo::ReserveCaptures(
+      isolate, last_match_info, capture_register_count);
+  result->SetNumberOfCaptureRegisters(capture_register_count);
+
   if (*result != *last_match_info) {
     if (*last_match_info == *isolate->regexp_last_match_info()) {
       // This inner condition is only needed for special situations like the
@@ -685,7 +674,6 @@ Handle<RegExpMatchInfo> RegExp::SetLastMatchInfo(
     }
   }
 
-  int capture_register_count = (capture_count + 1) * 2;
   DisallowHeapAllocation no_allocation;
   if (match != nullptr) {
     for (int i = 0; i < capture_register_count; i += 2) {
@@ -731,14 +719,12 @@ bool RegExp::CompileForTesting(Isolate* isolate, Zone* zone,
                                Handle<String> sample_subject,
                                bool is_one_byte) {
   return RegExpImpl::Compile(isolate, zone, data, flags, pattern,
-                             sample_subject, is_one_byte,
-                             JSRegExp::kNoBacktrackLimit);
+                             sample_subject, is_one_byte);
 }
 
 bool RegExpImpl::Compile(Isolate* isolate, Zone* zone, RegExpCompileData* data,
                          JSRegExp::Flags flags, Handle<String> pattern,
-                         Handle<String> sample_subject, bool is_one_byte,
-                         uint32_t backtrack_limit) {
+                         Handle<String> sample_subject, bool is_one_byte) {
   if ((data->capture_count + 1) * 2 - 1 > RegExpMacroAssembler::kMaxRegister) {
     data->error =
         isolate->factory()->NewStringFromAsciiChecked("RegExp too big");
@@ -858,7 +844,6 @@ bool RegExpImpl::Compile(Isolate* isolate, Zone* zone, RegExpCompileData* data,
   }
 
   macro_assembler->set_slow_safe(TooMuchRegExpCode(isolate, pattern));
-  macro_assembler->set_backtrack_limit(backtrack_limit);
 
   // Inserted here, instead of in Assembler, because it depends on information
   // in the AST that isn't replicated in the Node structure.
@@ -902,11 +887,12 @@ bool RegExpImpl::Compile(Isolate* isolate, Zone* zone, RegExpCompileData* data,
     }
   }
 
+  if (FLAG_correctness_fuzzer_suppressions &&
+      strncmp(result.error_message, "Stack overflow", 15) == 0) {
+    FATAL("Aborting on stack overflow");
+  }
+
   if (result.error_message != nullptr) {
-    if (FLAG_correctness_fuzzer_suppressions &&
-        strncmp(result.error_message, "Stack overflow", 15) == 0) {
-      FATAL("Aborting on stack overflow");
-    }
     data->error =
         isolate->factory()->NewStringFromAsciiChecked(result.error_message);
   }
@@ -1043,10 +1029,10 @@ Object RegExpResultsCache::Lookup(Heap* heap, String key_string,
                                   FixedArray* last_match_cache,
                                   ResultsCacheType type) {
   FixedArray cache;
-  if (!key_string.IsInternalizedString()) return Smi::zero();
+  if (!key_string.IsInternalizedString()) return Smi::kZero;
   if (type == STRING_SPLIT_SUBSTRINGS) {
     DCHECK(key_pattern.IsString());
-    if (!key_pattern.IsInternalizedString()) return Smi::zero();
+    if (!key_pattern.IsInternalizedString()) return Smi::kZero;
     cache = heap->string_split_cache();
   } else {
     DCHECK(type == REGEXP_MULTIPLE_INDICES);
@@ -1063,7 +1049,7 @@ Object RegExpResultsCache::Lookup(Heap* heap, String key_string,
         ((index + kArrayEntriesPerCacheEntry) & (kRegExpResultsCacheSize - 1));
     if (cache.get(index + kStringOffset) != key_string ||
         cache.get(index + kPatternOffset) != key_pattern) {
-      return Smi::zero();
+      return Smi::kZero;
     }
   }
 
@@ -1092,7 +1078,7 @@ void RegExpResultsCache::Enter(Isolate* isolate, Handle<String> key_string,
   uint32_t hash = key_string->Hash();
   uint32_t index = ((hash & (kRegExpResultsCacheSize - 1)) &
                     ~(kArrayEntriesPerCacheEntry - 1));
-  if (cache->get(index + kStringOffset) == Smi::zero()) {
+  if (cache->get(index + kStringOffset) == Smi::kZero) {
     cache->set(index + kStringOffset, *key_string);
     cache->set(index + kPatternOffset, *key_pattern);
     cache->set(index + kArrayOffset, *value_array);
@@ -1100,16 +1086,16 @@ void RegExpResultsCache::Enter(Isolate* isolate, Handle<String> key_string,
   } else {
     uint32_t index2 =
         ((index + kArrayEntriesPerCacheEntry) & (kRegExpResultsCacheSize - 1));
-    if (cache->get(index2 + kStringOffset) == Smi::zero()) {
+    if (cache->get(index2 + kStringOffset) == Smi::kZero) {
       cache->set(index2 + kStringOffset, *key_string);
       cache->set(index2 + kPatternOffset, *key_pattern);
       cache->set(index2 + kArrayOffset, *value_array);
       cache->set(index2 + kLastMatchOffset, *last_match_cache);
     } else {
-      cache->set(index2 + kStringOffset, Smi::zero());
-      cache->set(index2 + kPatternOffset, Smi::zero());
-      cache->set(index2 + kArrayOffset, Smi::zero());
-      cache->set(index2 + kLastMatchOffset, Smi::zero());
+      cache->set(index2 + kStringOffset, Smi::kZero);
+      cache->set(index2 + kPatternOffset, Smi::kZero);
+      cache->set(index2 + kArrayOffset, Smi::kZero);
+      cache->set(index2 + kLastMatchOffset, Smi::kZero);
       cache->set(index + kStringOffset, *key_string);
       cache->set(index + kPatternOffset, *key_pattern);
       cache->set(index + kArrayOffset, *value_array);
@@ -1132,7 +1118,7 @@ void RegExpResultsCache::Enter(Isolate* isolate, Handle<String> key_string,
 
 void RegExpResultsCache::Clear(FixedArray cache) {
   for (int i = 0; i < kRegExpResultsCacheSize; i++) {
-    cache.set(i, Smi::zero());
+    cache.set(i, Smi::kZero);
   }
 }
 

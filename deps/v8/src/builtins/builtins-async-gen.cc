@@ -30,10 +30,10 @@ TNode<Object> AsyncBuiltinsAssembler::AwaitOld(
     TNode<IntPtrT> on_resolve_context_index,
     TNode<IntPtrT> on_reject_context_index,
     TNode<Oddball> is_predicted_as_caught) {
-  const TNode<NativeContext> native_context = LoadNativeContext(context);
+  TNode<NativeContext> const native_context = LoadNativeContext(context);
 
   static const int kWrappedPromiseOffset =
-      FixedArray::SizeFor(Context::MIN_CONTEXT_EXTENDED_SLOTS);
+      FixedArray::SizeFor(Context::MIN_CONTEXT_SLOTS);
   static const int kResolveClosureOffset =
       kWrappedPromiseOffset + JSPromise::kSizeWithEmbedderFields;
   static const int kRejectClosureOffset =
@@ -45,13 +45,10 @@ TNode<Object> AsyncBuiltinsAssembler::AwaitOld(
   TNode<Context> closure_context = UncheckedCast<Context>(base);
   {
     // Initialize the await context, storing the {generator} as extension.
-    TNode<Map> map = CAST(
-        LoadContextElement(native_context, Context::AWAIT_CONTEXT_MAP_INDEX));
-    StoreMapNoWriteBarrier(closure_context, map);
-    StoreObjectFieldNoWriteBarrier(
-        closure_context, Context::kLengthOffset,
-        SmiConstant(Context::MIN_CONTEXT_EXTENDED_SLOTS));
-    const TNode<Object> empty_scope_info =
+    StoreMapNoWriteBarrier(closure_context, RootIndex::kAwaitContextMap);
+    StoreObjectFieldNoWriteBarrier(closure_context, Context::kLengthOffset,
+                                   SmiConstant(Context::MIN_CONTEXT_SLOTS));
+    TNode<Object> const empty_scope_info =
         LoadContextElement(native_context, Context::SCOPE_INFO_INDEX);
     StoreContextElementNoWriteBarrier(
         closure_context, Context::SCOPE_INFO_INDEX, empty_scope_info);
@@ -59,13 +56,15 @@ TNode<Object> AsyncBuiltinsAssembler::AwaitOld(
                                       native_context);
     StoreContextElementNoWriteBarrier(closure_context, Context::EXTENSION_INDEX,
                                       generator);
+    StoreContextElementNoWriteBarrier(
+        closure_context, Context::NATIVE_CONTEXT_INDEX, native_context);
   }
 
   // Let promiseCapability be ! NewPromiseCapability(%Promise%).
-  const TNode<JSFunction> promise_fun =
+  TNode<JSFunction> const promise_fun =
       CAST(LoadContextElement(native_context, Context::PROMISE_FUNCTION_INDEX));
   CSA_ASSERT(this, IsFunctionWithPrototypeSlotMap(LoadMap(promise_fun)));
-  const TNode<Map> promise_map = CAST(
+  TNode<Map> const promise_map = CAST(
       LoadObjectField(promise_fun, JSFunction::kPrototypeOrInitialMapOffset));
   // Assert that the JSPromise map has an instance size is
   // JSPromise::kSizeWithEmbedderFields.
@@ -73,18 +72,15 @@ TNode<Object> AsyncBuiltinsAssembler::AwaitOld(
              IntPtrEqual(LoadMapInstanceSizeInWords(promise_map),
                          IntPtrConstant(JSPromise::kSizeWithEmbedderFields /
                                         kTaggedSize)));
-  TNode<JSPromise> promise;
+  TNode<HeapObject> wrapped_value = InnerAllocate(base, kWrappedPromiseOffset);
   {
     // Initialize Promise
-    TNode<HeapObject> wrapped_value =
-        InnerAllocate(base, kWrappedPromiseOffset);
     StoreMapNoWriteBarrier(wrapped_value, promise_map);
     StoreObjectFieldRoot(wrapped_value, JSPromise::kPropertiesOrHashOffset,
                          RootIndex::kEmptyFixedArray);
     StoreObjectFieldRoot(wrapped_value, JSPromise::kElementsOffset,
                          RootIndex::kEmptyFixedArray);
-    promise = CAST(wrapped_value);
-    PromiseInit(promise);
+    PromiseInit(wrapped_value);
   }
 
   // Initialize resolve handler
@@ -106,16 +102,16 @@ TNode<Object> AsyncBuiltinsAssembler::AwaitOld(
   Branch(IsPromiseHookEnabledOrDebugIsActiveOrHasAsyncEventDelegate(),
          &if_debugging, &do_resolve_promise);
   BIND(&if_debugging);
-  var_throwaway =
-      CAST(CallRuntime(Runtime::kAwaitPromisesInitOld, context, value, promise,
-                       outer_promise, on_reject, is_predicted_as_caught));
+  var_throwaway = CAST(CallRuntime(Runtime::kAwaitPromisesInitOld, context,
+                                   value, wrapped_value, outer_promise,
+                                   on_reject, is_predicted_as_caught));
   Goto(&do_resolve_promise);
   BIND(&do_resolve_promise);
 
   // Perform ! Call(promiseCapability.[[Resolve]], undefined, « promise »).
-  CallBuiltin(Builtins::kResolvePromise, context, promise, value);
+  CallBuiltin(Builtins::kResolvePromise, context, wrapped_value, value);
 
-  return CallBuiltin(Builtins::kPerformPromiseThen, context, promise,
+  return CallBuiltin(Builtins::kPerformPromiseThen, context, wrapped_value,
                      on_resolve, on_reject, var_throwaway.value());
 }
 
@@ -125,10 +121,10 @@ TNode<Object> AsyncBuiltinsAssembler::AwaitOptimized(
     TNode<IntPtrT> on_resolve_context_index,
     TNode<IntPtrT> on_reject_context_index,
     TNode<Oddball> is_predicted_as_caught) {
-  const TNode<NativeContext> native_context = LoadNativeContext(context);
+  TNode<NativeContext> const native_context = LoadNativeContext(context);
 
   static const int kResolveClosureOffset =
-      FixedArray::SizeFor(Context::MIN_CONTEXT_EXTENDED_SLOTS);
+      FixedArray::SizeFor(Context::MIN_CONTEXT_SLOTS);
   static const int kRejectClosureOffset =
       kResolveClosureOffset + JSFunction::kSizeWithoutPrototype;
   static const int kTotalSize =
@@ -142,13 +138,10 @@ TNode<Object> AsyncBuiltinsAssembler::AwaitOptimized(
   TNode<Context> closure_context = UncheckedCast<Context>(base);
   {
     // Initialize the await context, storing the {generator} as extension.
-    TNode<Map> map = CAST(
-        LoadContextElement(native_context, Context::AWAIT_CONTEXT_MAP_INDEX));
-    StoreMapNoWriteBarrier(closure_context, map);
-    StoreObjectFieldNoWriteBarrier(
-        closure_context, Context::kLengthOffset,
-        SmiConstant(Context::MIN_CONTEXT_EXTENDED_SLOTS));
-    const TNode<Object> empty_scope_info =
+    StoreMapNoWriteBarrier(closure_context, RootIndex::kAwaitContextMap);
+    StoreObjectFieldNoWriteBarrier(closure_context, Context::kLengthOffset,
+                                   SmiConstant(Context::MIN_CONTEXT_SLOTS));
+    TNode<Object> const empty_scope_info =
         LoadContextElement(native_context, Context::SCOPE_INFO_INDEX);
     StoreContextElementNoWriteBarrier(
         closure_context, Context::SCOPE_INFO_INDEX, empty_scope_info);
@@ -156,6 +149,8 @@ TNode<Object> AsyncBuiltinsAssembler::AwaitOptimized(
                                       native_context);
     StoreContextElementNoWriteBarrier(closure_context, Context::EXTENSION_INDEX,
                                       generator);
+    StoreContextElementNoWriteBarrier(
+        closure_context, Context::NATIVE_CONTEXT_INDEX, native_context);
   }
 
   // Initialize resolve handler
@@ -204,14 +199,14 @@ TNode<Object> AsyncBuiltinsAssembler::Await(
   // logic.
   GotoIf(TaggedIsSmi(value), &if_old);
   TNode<HeapObject> value_object = CAST(value);
-  const TNode<Map> value_map = LoadMap(value_object);
+  TNode<Map> const value_map = LoadMap(value_object);
   GotoIfNot(IsJSPromiseMap(value_map), &if_old);
   // We can skip the "constructor" lookup on {value} if it's [[Prototype]]
   // is the (initial) Promise.prototype and the @@species protector is
   // intact, as that guards the lookup path for "constructor" on
   // JSPromise instances which have the (initial) Promise.prototype.
-  const TNode<NativeContext> native_context = LoadNativeContext(context);
-  const TNode<Object> promise_prototype =
+  TNode<NativeContext> const native_context = LoadNativeContext(context);
+  TNode<Object> const promise_prototype =
       LoadContextElement(native_context, Context::PROMISE_PROTOTYPE_INDEX);
   GotoIfNot(TaggedEqual(LoadMapPrototype(value_map), promise_prototype),
             &if_slow_constructor);
@@ -222,9 +217,9 @@ TNode<Object> AsyncBuiltinsAssembler::Await(
   // have the %Promise% as its "constructor", so we need to check that as well.
   BIND(&if_slow_constructor);
   {
-    const TNode<Object> value_constructor =
+    TNode<Object> const value_constructor =
         GetProperty(context, value, isolate()->factory()->constructor_string());
-    const TNode<Object> promise_function =
+    TNode<Object> const promise_function =
         LoadContextElement(native_context, Context::PROMISE_FUNCTION_INDEX);
     Branch(TaggedEqual(value_constructor, promise_function), &if_new, &if_old);
   }
@@ -298,8 +293,8 @@ TNode<Context> AsyncBuiltinsAssembler::AllocateAsyncIteratorValueUnwrapContext(
     TNode<NativeContext> native_context, TNode<Oddball> done) {
   CSA_ASSERT(this, IsBoolean(done));
 
-  TNode<Context> context = AllocateSyntheticFunctionContext(
-      native_context, ValueUnwrapContext::kLength);
+  TNode<Context> context =
+      CreatePromiseContext(native_context, ValueUnwrapContext::kLength);
   StoreContextElementNoWriteBarrier(context, ValueUnwrapContext::kDoneSlot,
                                     done);
   return context;
@@ -309,11 +304,11 @@ TF_BUILTIN(AsyncIteratorValueUnwrap, AsyncBuiltinsAssembler) {
   TNode<Object> value = CAST(Parameter(Descriptor::kValue));
   TNode<Context> context = CAST(Parameter(Descriptor::kContext));
 
-  const TNode<Object> done =
+  TNode<Object> const done =
       LoadContextElement(context, ValueUnwrapContext::kDoneSlot);
   CSA_ASSERT(this, IsBoolean(CAST(done)));
 
-  const TNode<Object> unwrapped_value =
+  TNode<Object> const unwrapped_value =
       CallBuiltin(Builtins::kCreateIterResultObject, context, value, done);
 
   Return(unwrapped_value);

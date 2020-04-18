@@ -14,8 +14,12 @@ namespace internal {
 
 // static
 bool InstructionStream::PcIsOffHeap(Isolate* isolate, Address pc) {
-  const Address start = reinterpret_cast<Address>(isolate->embedded_blob());
-  return start <= pc && pc < start + isolate->embedded_blob_size();
+  if (FLAG_embedded_builtins) {
+    const Address start = reinterpret_cast<Address>(isolate->embedded_blob());
+    return start <= pc && pc < start + isolate->embedded_blob_size();
+  } else {
+    return false;
+  }
 }
 
 // static
@@ -199,6 +203,16 @@ EmbeddedData EmbeddedData::FromIsolate(Isolate* isolate) {
       if (!code.IsIsolateIndependent(isolate)) {
         saw_unsafe_builtin = true;
         fprintf(stderr, "%s is not isolate-independent.\n", Builtins::name(i));
+      }
+      if (Builtins::IsWasmRuntimeStub(i) &&
+          RelocInfo::RequiresRelocation(code)) {
+        // Wasm additionally requires that its runtime stubs must be
+        // individually PIC (i.e. we must be able to copy each stub outside the
+        // embedded area without relocations). In particular, that means
+        // pc-relative calls to other builtins are disallowed.
+        saw_unsafe_builtin = true;
+        fprintf(stderr, "%s is a wasm runtime stub but needs relocation.\n",
+                Builtins::name(i));
       }
       if (BuiltinAliasesOffHeapTrampolineRegister(isolate, code)) {
         saw_unsafe_builtin = true;

@@ -108,7 +108,6 @@ class InjectedScript final {
   void addPromiseCallback(V8InspectorSessionImpl* session,
                           v8::MaybeLocal<v8::Value> value,
                           const String16& objectGroup, WrapMode wrapMode,
-                          bool replMode,
                           std::unique_ptr<EvaluateCallback> callback);
 
   Response findObject(const RemoteObjectId&, v8::Local<v8::Value>*) const;
@@ -121,11 +120,6 @@ class InjectedScript final {
   Response createExceptionDetails(
       const v8::TryCatch&, const String16& groupName,
       Maybe<protocol::Runtime::ExceptionDetails>* result);
-  Response createExceptionDetails(
-      v8::Local<v8::Message> message, v8::Local<v8::Value> exception,
-      const String16& groupName,
-      Maybe<protocol::Runtime::ExceptionDetails>* result);
-
   Response wrapEvaluateResult(
       v8::MaybeLocal<v8::Value> maybeResultValue, const v8::TryCatch&,
       const String16& objectGroup, WrapMode wrapMode,

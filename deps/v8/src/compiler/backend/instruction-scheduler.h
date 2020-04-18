@@ -5,16 +5,10 @@
 #ifndef V8_COMPILER_BACKEND_INSTRUCTION_SCHEDULER_H_
 #define V8_COMPILER_BACKEND_INSTRUCTION_SCHEDULER_H_
 
-#include "src/base/optional.h"
 #include "src/compiler/backend/instruction.h"
 #include "src/zone/zone-containers.h"
 
 namespace v8 {
-
-namespace base {
-class RandomNumberGenerator;
-}
-
 namespace internal {
 namespace compiler {
 
@@ -30,9 +24,6 @@ enum ArchOpcodeFlags {
                                  // instruction e.g. div on Intel platform which
                                  // will raise an exception when the divisor is
                                  // zero.
-  kIsBarrier = 8,  // The instruction can cause GC or it reads/writes registers
-                   // that are not explicitly given. Nothing can be reordered
-                   // across such an instruction.
 };
 
 class InstructionScheduler final : public ZoneObject {
@@ -55,7 +46,7 @@ class InstructionScheduler final : public ZoneObject {
    public:
     ScheduleGraphNode(Zone* zone, Instruction* instr);
 
-    // Mark the instruction represented by 'node' as a dependency of this one.
+    // Mark the instruction represented by 'node' as a dependecy of this one.
     // The current instruction will be registered as an unscheduled predecessor
     // of 'node' (i.e. it must be scheduled before 'node').
     void AddSuccessor(ScheduleGraphNode* node);
@@ -144,23 +135,17 @@ class InstructionScheduler final : public ZoneObject {
     ScheduleGraphNode* PopBestCandidate(int cycle);
 
    private:
-    base::RandomNumberGenerator* random_number_generator() {
-      return scheduler_->random_number_generator();
-    }
+    Isolate* isolate() { return scheduler_->isolate(); }
   };
 
   // Perform scheduling for the current block specifying the queue type to
   // use to determine the next best candidate.
   template <typename QueueType>
-  void Schedule();
+  void ScheduleBlock();
 
   // Return the scheduling properties of the given instruction.
   V8_EXPORT_PRIVATE int GetInstructionFlags(const Instruction* instr) const;
   int GetTargetInstructionFlags(const Instruction* instr) const;
-
-  bool IsBarrier(const Instruction* instr) const {
-    return (GetInstructionFlags(instr) & kIsBarrier) != 0;
-  }
 
   // Check whether the given instruction has side effects (e.g. function call,
   // memory store).
@@ -208,9 +193,7 @@ class InstructionScheduler final : public ZoneObject {
 
   Zone* zone() { return zone_; }
   InstructionSequence* sequence() { return sequence_; }
-  base::RandomNumberGenerator* random_number_generator() {
-    return &random_number_generator_.value();
-  }
+  Isolate* isolate() { return sequence()->isolate(); }
 
   Zone* zone_;
   InstructionSequence* sequence_;
@@ -240,8 +223,6 @@ class InstructionScheduler final : public ZoneObject {
   // Keep track of definition points for virtual registers. This is used to
   // record operand dependencies in the scheduling graph.
   ZoneMap<int32_t, ScheduleGraphNode*> operands_map_;
-
-  base::Optional<base::RandomNumberGenerator> random_number_generator_;
 };
 
 }  // namespace compiler

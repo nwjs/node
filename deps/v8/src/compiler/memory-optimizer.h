@@ -5,7 +5,6 @@
 #ifndef V8_COMPILER_MEMORY_OPTIMIZER_H_
 #define V8_COMPILER_MEMORY_OPTIMIZER_H_
 
-#include "src/compiler/graph-assembler.h"
 #include "src/compiler/memory-lowering.h"
 #include "src/zone/zone-containers.h"
 
@@ -79,7 +78,6 @@ class MemoryOptimizer final {
   JSGraph* jsgraph() const { return jsgraph_; }
   Zone* zone() const { return zone_; }
 
-  JSGraphAssembler graph_assembler_;
   MemoryLowering memory_lowering_;
   JSGraph* jsgraph_;
   AllocationState const* const empty_state_;

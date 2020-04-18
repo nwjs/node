@@ -137,6 +137,23 @@ class MockPlatform : public v8::Platform {
     UNREACHABLE();
   }
 
+  void CallOnForegroundThread(v8::Isolate* isolate, Task* task) override {
+    base::MutexGuard lock(&mutex_);
+    foreground_tasks_.push_back(std::unique_ptr<Task>(task));
+  }
+
+  void CallDelayedOnForegroundThread(v8::Isolate* isolate, Task* task,
+                                     double delay_in_seconds) override {
+    UNREACHABLE();
+  }
+
+  void CallIdleOnForegroundThread(v8::Isolate* isolate,
+                                  IdleTask* task) override {
+    base::MutexGuard lock(&mutex_);
+    ASSERT_TRUE(idle_task_ == nullptr);
+    idle_task_ = task;
+  }
+
   bool IdleTasksEnabled(v8::Isolate* isolate) override { return true; }
 
   double MonotonicallyIncreasingTime() override {
@@ -272,11 +289,6 @@ class MockPlatform : public v8::Platform {
       platform_->foreground_tasks_.push_back(std::move(task));
     }
 
-    void PostNonNestableTask(std::unique_ptr<v8::Task> task) override {
-      // The mock platform does not nest tasks.
-      PostTask(std::move(task));
-    }
-
     void PostDelayedTask(std::unique_ptr<Task> task,
                          double delay_in_seconds) override {
       UNREACHABLE();
@@ -290,8 +302,6 @@ class MockPlatform : public v8::Platform {
     }
 
     bool IdleTasksEnabled() override { return true; }
-
-    bool NonNestableTasksEnabled() const override { return false; }
 
    private:
     MockPlatform* platform_;

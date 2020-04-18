@@ -242,9 +242,8 @@ void TracingController::AddMetadataEvent(
       TRACE_EVENT_FLAG_NONE,
       CurrentTimestampMicroseconds(),
       CurrentCpuTimestampMicroseconds());
-  Agent* node_agent = node::tracing::TraceEventHelper::GetAgent();
-  if (node_agent != nullptr)
-    node_agent->AddMetadataEvent(std::move(trace_event));
+  node::tracing::TraceEventHelper::GetAgent()->AddMetadataEvent(
+      std::move(trace_event));
 }
 
 }  // namespace tracing

@@ -36,6 +36,7 @@ void TraceProtectorInvalidation(const char* protector_name) {
 #define INVALIDATE_PROTECTOR_ON_NATIVE_CONTEXT_DEFINITION(name, cell)       \
   void Protectors::Invalidate##name(Isolate* isolate,                       \
                                     Handle<NativeContext> native_context) { \
+    DCHECK_EQ(*native_context, isolate->raw_native_context());              \
     DCHECK(native_context->cell().value().IsSmi());                         \
     DCHECK(Is##name##Intact(native_context));                               \
     if (FLAG_trace_protector_invalidation) {                                \

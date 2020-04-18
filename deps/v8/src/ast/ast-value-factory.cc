@@ -27,9 +27,6 @@
 
 #include "src/ast/ast-value-factory.h"
 
-#include "src/common/globals.h"
-#include "src/heap/factory-inl.h"
-#include "src/heap/off-thread-factory-inl.h"
 #include "src/objects/objects-inl.h"
 #include "src/objects/objects.h"
 #include "src/strings/char-predicates-inl.h"
@@ -41,7 +38,7 @@ namespace internal {
 
 namespace {
 
-// For using StringToIndex.
+// For using StringToArrayIndex.
 class OneByteStringStream {
  public:
   explicit OneByteStringStream(Vector<const byte> lb) :
@@ -57,40 +54,18 @@ class OneByteStringStream {
 
 }  // namespace
 
-void AstRawString::Internalize(Factory* factory) {
+void AstRawString::Internalize(Isolate* isolate) {
   DCHECK(!has_string_);
   if (literal_bytes_.length() == 0) {
-    set_string(factory->empty_string());
+    set_string(isolate->factory()->empty_string());
   } else if (is_one_byte()) {
     OneByteStringKey key(hash_field_, literal_bytes_);
-    set_string(factory->InternalizeStringWithKey(&key));
+    set_string(StringTable::LookupKey(isolate, &key));
   } else {
     TwoByteStringKey key(hash_field_,
                          Vector<const uint16_t>::cast(literal_bytes_));
-    set_string(factory->InternalizeStringWithKey(&key));
+    set_string(StringTable::LookupKey(isolate, &key));
   }
-}
-
-void AstRawString::Internalize(OffThreadFactory* factory) {
-  DCHECK(!has_string_);
-  if (literal_bytes_.length() == 0) {
-    set_string(factory->empty_string());
-    return;
-  }
-
-  // For the off-thread case, we already de-duplicated the AstRawStrings during
-  // construction and don't have access to the main thread string table yet, so
-  // we just unconditionally create strings and will internalize them properly
-  // during merging.
-  OffThreadHandle<SeqString> string;
-  if (is_one_byte()) {
-    string = factory->NewOneByteInternalizedString(
-        Vector<const uint8_t>::cast(literal_bytes_), hash_field());
-  } else {
-    string = factory->NewTwoByteInternalizedString(
-        Vector<const uc16>::cast(literal_bytes_), hash_field());
-  }
-  set_string(string);
 }
 
 bool AstRawString::AsArrayIndex(uint32_t* index) const {
@@ -101,13 +76,9 @@ bool AstRawString::AsArrayIndex(uint32_t* index) const {
     *index = Name::ArrayIndexValueBits::decode(hash_field_);
   } else {
     OneByteStringStream stream(literal_bytes_);
-    CHECK(StringToIndex(&stream, index));
+    CHECK(StringToArrayIndex(&stream, index));
   }
   return true;
-}
-
-bool AstRawString::IsIntegerIndex() const {
-  return (hash_field_ & Name::kIsNotIntegerIndexMask) == 0;
 }
 
 bool AstRawString::IsOneByteEqualTo(const char* data) const {
@@ -159,37 +130,22 @@ bool AstRawString::Compare(void* a, void* b) {
   }
 }
 
-template <typename Factory>
-void AstConsString::Internalize(Factory* factory) {
+void AstConsString::Internalize(Isolate* isolate) {
   if (IsEmpty()) {
-    set_string(factory->empty_string());
+    set_string(isolate->factory()->empty_string());
     return;
   }
   // AstRawStrings are internalized before AstConsStrings, so
   // AstRawString::string() will just work.
-  FactoryHandle<Factory, String> tmp(segment_.string->string().get<Factory>());
+  Handle<String> tmp(segment_.string->string());
   for (AstConsString::Segment* current = segment_.next; current != nullptr;
        current = current->next) {
-    tmp =
-        factory
-            ->NewConsString(
-                current->string->string().get<Factory>(), tmp,
-                // TODO(leszeks): This is to avoid memory regressions while this
-                // path is under development -- the off-thread factory doesn't
-                // support young allocations. Figure out a way to avoid memory
-                // regressions related to ConsStrings in the off-thread path.
-                std::is_same<Factory, OffThreadFactory>::value
-                    ? AllocationType::kOld
-                    : AllocationType::kYoung)
-            .ToHandleChecked();
+    tmp = isolate->factory()
+              ->NewConsString(current->string->string(), tmp)
+              .ToHandleChecked();
   }
   set_string(tmp);
 }
-template EXPORT_TEMPLATE_DEFINE(
-    V8_EXPORT_PRIVATE) void AstConsString::Internalize<Factory>(Factory*
-                                                                    factory);
-template EXPORT_TEMPLATE_DEFINE(V8_EXPORT_PRIVATE) void AstConsString::
-    Internalize<OffThreadFactory>(OffThreadFactory* factory);
 
 std::forward_list<const AstRawString*> AstConsString::ToRawStrings() const {
   std::forward_list<const AstRawString*> result;
@@ -290,30 +246,24 @@ AstConsString* AstValueFactory::NewConsString(const AstRawString* str1,
   return NewConsString()->AddString(zone_, str1)->AddString(zone_, str2);
 }
 
-template <typename Factory>
-void AstValueFactory::Internalize(Factory* factory) {
+void AstValueFactory::Internalize(Isolate* isolate) {
   // Strings need to be internalized before values, because values refer to
   // strings.
   for (AstRawString* current = strings_; current != nullptr;) {
     AstRawString* next = current->next();
-    current->Internalize(factory);
+    current->Internalize(isolate);
     current = next;
   }
 
   // AstConsStrings refer to AstRawStrings.
   for (AstConsString* current = cons_strings_; current != nullptr;) {
     AstConsString* next = current->next();
-    current->Internalize(factory);
+    current->Internalize(isolate);
     current = next;
   }
 
   ResetStrings();
 }
-template EXPORT_TEMPLATE_DEFINE(
-    V8_EXPORT_PRIVATE) void AstValueFactory::Internalize<Factory>(Factory*
-                                                                      factory);
-template EXPORT_TEMPLATE_DEFINE(V8_EXPORT_PRIVATE) void AstValueFactory::
-    Internalize<OffThreadFactory>(OffThreadFactory* factory);
 
 AstRawString* AstValueFactory::GetString(uint32_t hash_field, bool is_one_byte,
                                          Vector<const byte> literal_bytes) {

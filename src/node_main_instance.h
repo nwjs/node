@@ -59,8 +59,9 @@ class NodeMainInstance {
 
   IsolateData* isolate_data() { return isolate_data_.get(); }
 
-  DeleteFnPtr<Environment, FreeEnvironment> CreateMainEnvironment(
-      int* exit_code);
+  // TODO(joyeecheung): align this with the CreateEnvironment exposed in node.h
+  // and the environment creation routine in workers somehow.
+  std::unique_ptr<Environment> CreateMainEnvironment(int* exit_code);
 
   // If nullptr is returned, the binary is not built with embedded
   // snapshot.

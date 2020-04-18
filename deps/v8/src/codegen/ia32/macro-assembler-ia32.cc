@@ -159,6 +159,7 @@ Operand TurboAssembler::ExternalReferenceAsOperand(ExternalReference reference,
 // TurboAssembler.
 Operand TurboAssembler::ExternalReferenceAddressAsOperand(
     ExternalReference reference) {
+  DCHECK(FLAG_embedded_builtins);
   DCHECK(root_array_available());
   DCHECK(options().isolate_independent_code);
   return Operand(
@@ -169,6 +170,7 @@ Operand TurboAssembler::ExternalReferenceAddressAsOperand(
 // TODO(v8:6666): If possible, refactor into a platform-independent function in
 // TurboAssembler.
 Operand TurboAssembler::HeapObjectAsOperand(Handle<HeapObject> object) {
+  DCHECK(FLAG_embedded_builtins);
   DCHECK(root_array_available());
 
   int builtin_index;
@@ -571,10 +573,9 @@ void TurboAssembler::Cvttsd2ui(Register dst, Operand src, XMMRegister tmp) {
 }
 
 void TurboAssembler::ShlPair(Register high, Register low, uint8_t shift) {
-  DCHECK_GE(63, shift);
   if (shift >= 32) {
     mov(high, low);
-    if (shift != 32) shl(high, shift - 32);
+    shl(high, shift - 32);
     xor_(low, low);
   } else {
     shld(high, low, shift);
@@ -594,13 +595,12 @@ void TurboAssembler::ShlPair_cl(Register high, Register low) {
 }
 
 void TurboAssembler::ShrPair(Register high, Register low, uint8_t shift) {
-  DCHECK_GE(63, shift);
   if (shift >= 32) {
     mov(low, high);
-    if (shift != 32) shr(low, shift - 32);
+    shr(low, shift - 32);
     xor_(high, high);
   } else {
-    shrd(low, high, shift);
+    shrd(high, low, shift);
     shr(high, shift);
   }
 }
@@ -617,13 +617,12 @@ void TurboAssembler::ShrPair_cl(Register high, Register low) {
 }
 
 void TurboAssembler::SarPair(Register high, Register low, uint8_t shift) {
-  DCHECK_GE(63, shift);
   if (shift >= 32) {
     mov(low, high);
-    if (shift != 32) sar(low, shift - 32);
+    sar(low, shift - 32);
     sar(high, 31);
   } else {
-    shrd(low, high, shift);
+    shrd(high, low, shift);
     sar(high, shift);
   }
 }
@@ -639,13 +638,9 @@ void TurboAssembler::SarPair_cl(Register high, Register low) {
   bind(&done);
 }
 
-void TurboAssembler::LoadMap(Register destination, Register object) {
-  mov(destination, FieldOperand(object, HeapObject::kMapOffset));
-}
-
 void MacroAssembler::CmpObjectType(Register heap_object, InstanceType type,
                                    Register map) {
-  LoadMap(map, heap_object);
+  mov(map, FieldOperand(heap_object, HeapObject::kMapOffset));
   CmpInstanceType(map, type);
 }
 
@@ -665,9 +660,9 @@ void MacroAssembler::AssertConstructor(Register object) {
     test(object, Immediate(kSmiTagMask));
     Check(not_equal, AbortReason::kOperandIsASmiAndNotAConstructor);
     Push(object);
-    LoadMap(object, object);
+    mov(object, FieldOperand(object, HeapObject::kMapOffset));
     test_b(FieldOperand(object, Map::kBitFieldOffset),
-           Immediate(Map::Bits1::IsConstructorBit::kMask));
+           Immediate(Map::IsConstructorBit::kMask));
     Pop(object);
     Check(not_zero, AbortReason::kOperandIsNotAConstructor);
   }
@@ -705,7 +700,8 @@ void MacroAssembler::AssertGeneratorObject(Register object) {
     Push(object);
     Register map = object;
 
-    LoadMap(map, object);
+    // Load map
+    mov(map, FieldOperand(object, HeapObject::kMapOffset));
 
     Label do_check;
     // Check if JSGeneratorObject
@@ -980,6 +976,20 @@ void MacroAssembler::CallRuntime(const Runtime::Function* f, int num_arguments,
   Call(code, RelocInfo::CODE_TARGET);
 }
 
+void TurboAssembler::CallRuntimeWithCEntry(Runtime::FunctionId fid,
+                                           Register centry) {
+  const Runtime::Function* f = Runtime::FunctionForId(fid);
+  // TODO(1236192): Most runtime routines don't need the number of
+  // arguments passed in because it is constant. At some point we
+  // should remove this need and make the runtime routine entry code
+  // smarter.
+  Move(kRuntimeCallArgCountRegister, Immediate(f->nargs));
+  Move(kRuntimeCallFunctionRegister, Immediate(ExternalReference::Create(f)));
+  DCHECK(!AreAliased(centry, kRuntimeCallArgCountRegister,
+                     kRuntimeCallFunctionRegister));
+  CallCodeObject(centry);
+}
+
 void MacroAssembler::TailCallRuntime(Runtime::FunctionId fid) {
   // ----------- S t a t e -------------
   //  -- esp[0]                 : return address
@@ -1017,18 +1027,36 @@ void MacroAssembler::JumpToInstructionStream(Address entry) {
 }
 
 void TurboAssembler::PrepareForTailCall(
-    Register callee_args_count, Register caller_args_count, Register scratch0,
-    Register scratch1, int number_of_temp_values_after_return_address) {
-  DCHECK(!AreAliased(callee_args_count, caller_args_count, scratch0, scratch1));
+    const ParameterCount& callee_args_count, Register caller_args_count_reg,
+    Register scratch0, Register scratch1,
+    int number_of_temp_values_after_return_address) {
+#if DEBUG
+  if (callee_args_count.is_reg()) {
+    DCHECK(!AreAliased(callee_args_count.reg(), caller_args_count_reg, scratch0,
+                       scratch1));
+  } else {
+    DCHECK(!AreAliased(caller_args_count_reg, scratch0, scratch1));
+  }
+#endif
 
   // Calculate the destination address where we will put the return address
   // after we drop current frame.
   Register new_sp_reg = scratch0;
-  sub(caller_args_count, callee_args_count);
-  lea(new_sp_reg, Operand(ebp, caller_args_count, times_system_pointer_size,
-                          StandardFrameConstants::kCallerPCOffset -
-                              number_of_temp_values_after_return_address *
-                                  kSystemPointerSize));
+  if (callee_args_count.is_reg()) {
+    sub(caller_args_count_reg, callee_args_count.reg());
+    lea(new_sp_reg,
+        Operand(ebp, caller_args_count_reg, times_system_pointer_size,
+                StandardFrameConstants::kCallerPCOffset -
+                    number_of_temp_values_after_return_address *
+                        kSystemPointerSize));
+  } else {
+    lea(new_sp_reg,
+        Operand(ebp, caller_args_count_reg, times_system_pointer_size,
+                StandardFrameConstants::kCallerPCOffset -
+                    (callee_args_count.immediate() +
+                     number_of_temp_values_after_return_address) *
+                        kSystemPointerSize));
+  }
 
   if (FLAG_debug_code) {
     cmp(esp, new_sp_reg);
@@ -1049,9 +1077,15 @@ void TurboAssembler::PrepareForTailCall(
   mov(ebp, Operand(ebp, StandardFrameConstants::kCallerFPOffset));
 
   // +2 here is to copy both receiver and return address.
-  Register count_reg = caller_args_count;
-  lea(count_reg, Operand(callee_args_count,
-                         2 + number_of_temp_values_after_return_address));
+  Register count_reg = caller_args_count_reg;
+  if (callee_args_count.is_reg()) {
+    lea(count_reg, Operand(callee_args_count.reg(),
+                           2 + number_of_temp_values_after_return_address));
+  } else {
+    mov(count_reg, Immediate(callee_args_count.immediate() + 2 +
+                             number_of_temp_values_after_return_address));
+    // TODO(ishell): Unroll copying loop for small immediate values.
+  }
 
   // Now copy callee arguments to the caller frame going backwards to avoid
   // callee arguments corruption (source and destination areas could overlap).
@@ -1069,70 +1103,121 @@ void TurboAssembler::PrepareForTailCall(
   mov(esp, new_sp_reg);
 }
 
-void MacroAssembler::InvokePrologue(Register expected_parameter_count,
-                                    Register actual_parameter_count,
-                                    Label* done, InvokeFlag flag) {
-  DCHECK_EQ(actual_parameter_count, eax);
+void MacroAssembler::InvokePrologue(const ParameterCount& expected,
+                                    const ParameterCount& actual, Label* done,
+                                    bool* definitely_mismatches,
+                                    InvokeFlag flag,
+                                    Label::Distance done_near) {
+  DCHECK_IMPLIES(expected.is_reg(), expected.reg() == ecx);
+  DCHECK_IMPLIES(actual.is_reg(), actual.reg() == eax);
 
-  if (expected_parameter_count != actual_parameter_count) {
-    DCHECK_EQ(expected_parameter_count, ecx);
+  bool definitely_matches = false;
+  *definitely_mismatches = false;
+  Label invoke;
+  if (expected.is_immediate()) {
+    DCHECK(actual.is_immediate());
+    mov(eax, actual.immediate());
+    if (expected.immediate() == actual.immediate()) {
+      definitely_matches = true;
+    } else {
+      const int sentinel = SharedFunctionInfo::kDontAdaptArgumentsSentinel;
+      if (expected.immediate() == sentinel) {
+        // Don't worry about adapting arguments for builtins that
+        // don't want that done. Skip adaption code by making it look
+        // like we have a match between expected and actual number of
+        // arguments.
+        definitely_matches = true;
+      } else {
+        *definitely_mismatches = true;
+        mov(ecx, expected.immediate());
+      }
+    }
+  } else {
+    if (actual.is_immediate()) {
+      // Expected is in register, actual is immediate. This is the
+      // case when we invoke function values without going through the
+      // IC mechanism.
+      mov(eax, actual.immediate());
+      cmp(expected.reg(), actual.immediate());
+      j(equal, &invoke);
+      DCHECK(expected.reg() == ecx);
+    } else if (expected.reg() != actual.reg()) {
+      // Both expected and actual are in (different) registers. This
+      // is the case when we invoke functions using call and apply.
+      cmp(expected.reg(), actual.reg());
+      j(equal, &invoke);
+      DCHECK(actual.reg() == eax);
+      DCHECK(expected.reg() == ecx);
+    } else {
+      definitely_matches = true;
+      Move(eax, actual.reg());
+    }
+  }
 
-    Label regular_invoke;
-    cmp(expected_parameter_count, actual_parameter_count);
-    j(equal, &regular_invoke);
+  if (!definitely_matches) {
     Handle<Code> adaptor = BUILTIN_CODE(isolate(), ArgumentsAdaptorTrampoline);
     if (flag == CALL_FUNCTION) {
       Call(adaptor, RelocInfo::CODE_TARGET);
-      jmp(done, Label::kNear);
+      if (!*definitely_mismatches) {
+        jmp(done, done_near);
+      }
     } else {
       Jump(adaptor, RelocInfo::CODE_TARGET);
     }
-    bind(&regular_invoke);
+    bind(&invoke);
   }
 }
 
 void MacroAssembler::CallDebugOnFunctionCall(Register fun, Register new_target,
-                                             Register expected_parameter_count,
-                                             Register actual_parameter_count) {
+                                             const ParameterCount& expected,
+                                             const ParameterCount& actual) {
   FrameScope frame(this, has_frame() ? StackFrame::NONE : StackFrame::INTERNAL);
-  SmiTag(expected_parameter_count);
-  Push(expected_parameter_count);
-
-  SmiTag(actual_parameter_count);
-  Push(actual_parameter_count);
-  SmiUntag(actual_parameter_count);
-
+  if (expected.is_reg()) {
+    SmiTag(expected.reg());
+    Push(expected.reg());
+  }
+  if (actual.is_reg()) {
+    SmiTag(actual.reg());
+    Push(actual.reg());
+    SmiUntag(actual.reg());
+  }
   if (new_target.is_valid()) {
     Push(new_target);
   }
   Push(fun);
   Push(fun);
   Operand receiver_op =
-      Operand(ebp, actual_parameter_count, times_system_pointer_size,
-              kSystemPointerSize * 2);
+      actual.is_reg()
+          ? Operand(ebp, actual.reg(), times_system_pointer_size,
+                    kSystemPointerSize * 2)
+          : Operand(ebp, actual.immediate() * times_system_pointer_size +
+                             kSystemPointerSize * 2);
   Push(receiver_op);
   CallRuntime(Runtime::kDebugOnFunctionCall);
   Pop(fun);
   if (new_target.is_valid()) {
     Pop(new_target);
   }
-  Pop(actual_parameter_count);
-  SmiUntag(actual_parameter_count);
-
-  Pop(expected_parameter_count);
-  SmiUntag(expected_parameter_count);
+  if (actual.is_reg()) {
+    Pop(actual.reg());
+    SmiUntag(actual.reg());
+  }
+  if (expected.is_reg()) {
+    Pop(expected.reg());
+    SmiUntag(expected.reg());
+  }
 }
 
 void MacroAssembler::InvokeFunctionCode(Register function, Register new_target,
-                                        Register expected_parameter_count,
-                                        Register actual_parameter_count,
+                                        const ParameterCount& expected,
+                                        const ParameterCount& actual,
                                         InvokeFlag flag) {
   // You can't call a function without a valid frame.
   DCHECK(flag == JUMP_FUNCTION || has_frame());
-  DCHECK_EQ(function, edi);
+  DCHECK(function == edi);
   DCHECK_IMPLIES(new_target.is_valid(), new_target == edx);
-  DCHECK(expected_parameter_count == ecx || expected_parameter_count == eax);
-  DCHECK_EQ(actual_parameter_count, eax);
+  DCHECK_IMPLIES(expected.is_reg(), expected.reg() == ecx);
+  DCHECK_IMPLIES(actual.is_reg(), actual.reg() == eax);
 
   // On function call, call into the debugger if necessary.
   Label debug_hook, continue_after_hook;
@@ -1152,31 +1237,34 @@ void MacroAssembler::InvokeFunctionCode(Register function, Register new_target,
   }
 
   Label done;
-  InvokePrologue(expected_parameter_count, actual_parameter_count, &done, flag);
-  // We call indirectly through the code field in the function to
-  // allow recompilation to take effect without changing any of the
-  // call sites.
-  static_assert(kJavaScriptCallCodeStartRegister == ecx, "ABI mismatch");
-  mov(ecx, FieldOperand(function, JSFunction::kCodeOffset));
-  if (flag == CALL_FUNCTION) {
-    CallCodeObject(ecx);
-  } else {
-    DCHECK(flag == JUMP_FUNCTION);
-    JumpCodeObject(ecx);
+  bool definitely_mismatches = false;
+  InvokePrologue(expected, actual, &done, &definitely_mismatches, flag,
+                 Label::kNear);
+  if (!definitely_mismatches) {
+    // We call indirectly through the code field in the function to
+    // allow recompilation to take effect without changing any of the
+    // call sites.
+    static_assert(kJavaScriptCallCodeStartRegister == ecx, "ABI mismatch");
+    mov(ecx, FieldOperand(function, JSFunction::kCodeOffset));
+    if (flag == CALL_FUNCTION) {
+      CallCodeObject(ecx);
+    } else {
+      DCHECK(flag == JUMP_FUNCTION);
+      JumpCodeObject(ecx);
+    }
   }
   jmp(&done, Label::kNear);
 
   // Deferred debug hook.
   bind(&debug_hook);
-  CallDebugOnFunctionCall(function, new_target, expected_parameter_count,
-                          actual_parameter_count);
+  CallDebugOnFunctionCall(function, new_target, expected, actual);
   jmp(&continue_after_hook, Label::kNear);
 
   bind(&done);
 }
 
 void MacroAssembler::InvokeFunction(Register fun, Register new_target,
-                                    Register actual_parameter_count,
+                                    const ParameterCount& actual,
                                     InvokeFlag flag) {
   // You can't call a function without a valid frame.
   DCHECK(flag == JUMP_FUNCTION || has_frame());
@@ -1187,21 +1275,20 @@ void MacroAssembler::InvokeFunction(Register fun, Register new_target,
   movzx_w(ecx,
           FieldOperand(ecx, SharedFunctionInfo::kFormalParameterCountOffset));
 
-  InvokeFunctionCode(edi, new_target, ecx, actual_parameter_count, flag);
+  ParameterCount expected(ecx);
+  InvokeFunctionCode(edi, new_target, expected, actual, flag);
 }
 
 void MacroAssembler::LoadGlobalProxy(Register dst) {
-  LoadNativeContextSlot(dst, Context::GLOBAL_PROXY_INDEX);
+  mov(dst, NativeContextOperand());
+  mov(dst, ContextOperand(dst, Context::GLOBAL_PROXY_INDEX));
 }
 
-void MacroAssembler::LoadNativeContextSlot(Register destination, int index) {
+void MacroAssembler::LoadGlobalFunction(int index, Register function) {
   // Load the native context from the current context.
-  LoadMap(destination, esi);
-  mov(destination,
-      FieldOperand(destination,
-                   Map::kConstructorOrBackPointerOrNativeContextOffset));
+  mov(function, NativeContextOperand());
   // Load the function from the native context.
-  mov(destination, Operand(destination, Context::SlotOffset(index)));
+  mov(function, ContextOperand(function, index));
 }
 
 int MacroAssembler::SafepointRegisterStackIndex(int reg_code) {
@@ -1541,20 +1628,6 @@ void TurboAssembler::Pextrd(Register dst, XMMRegister src, uint8_t imm8) {
   add(esp, Immediate(kDoubleSize));
 }
 
-void TurboAssembler::Pinsrb(XMMRegister dst, Operand src, int8_t imm8) {
-  if (CpuFeatures::IsSupported(AVX)) {
-    CpuFeatureScope scope(this, AVX);
-    vpinsrb(dst, dst, src, imm8);
-    return;
-  }
-  if (CpuFeatures::IsSupported(SSE4_1)) {
-    CpuFeatureScope sse_scope(this, SSE4_1);
-    pinsrb(dst, src, imm8);
-    return;
-  }
-  FATAL("no AVX or SSE4.1 support");
-}
-
 void TurboAssembler::Pinsrd(XMMRegister dst, Operand src, uint8_t imm8) {
   if (CpuFeatures::IsSupported(AVX)) {
     CpuFeatureScope scope(this, AVX);
@@ -1585,27 +1658,6 @@ void TurboAssembler::Pinsrd(XMMRegister dst, Operand src, uint8_t imm8) {
   add(esp, Immediate(kDoubleSize));
 }
 
-void TurboAssembler::Pinsrw(XMMRegister dst, Operand src, int8_t imm8) {
-  if (CpuFeatures::IsSupported(AVX)) {
-    CpuFeatureScope scope(this, AVX);
-    vpinsrw(dst, dst, src, imm8);
-    return;
-  } else {
-    pinsrw(dst, src, imm8);
-    return;
-  }
-}
-
-void TurboAssembler::Vbroadcastss(XMMRegister dst, Operand src) {
-  if (CpuFeatures::IsSupported(AVX)) {
-    CpuFeatureScope avx_scope(this, AVX);
-    vbroadcastss(dst, src);
-    return;
-  }
-  movss(dst, src);
-  shufps(dst, dst, static_cast<byte>(0));
-}
-
 void TurboAssembler::Lzcnt(Register dst, Operand src) {
   if (CpuFeatures::IsSupported(LZCNT)) {
     CpuFeatureScope scope(this, LZCNT);
@@ -1615,7 +1667,7 @@ void TurboAssembler::Lzcnt(Register dst, Operand src) {
   Label not_zero_src;
   bsr(dst, src);
   j(not_zero, &not_zero_src, Label::kNear);
-  mov(dst, 63);  // 63^31 == 32
+  Move(dst, Immediate(63));  // 63^31 == 32
   bind(&not_zero_src);
   xor_(dst, Immediate(31));  // for x in [0..31], 31^x == 31-x.
 }
@@ -1629,7 +1681,7 @@ void TurboAssembler::Tzcnt(Register dst, Operand src) {
   Label not_zero_src;
   bsf(dst, src);
   j(not_zero, &not_zero_src, Label::kNear);
-  mov(dst, 32);  // The result of tzcnt is 32 if src = 0.
+  Move(dst, Immediate(32));  // The result of tzcnt is 32 if src = 0.
   bind(&not_zero_src);
 }
 
@@ -1856,6 +1908,7 @@ void TurboAssembler::CallBuiltinByIndex(Register builtin_index) {
 
 void TurboAssembler::CallBuiltin(int builtin_index) {
   DCHECK(Builtins::IsBuiltinId(builtin_index));
+  DCHECK(FLAG_embedded_builtins);
   RecordCommentForOffHeapTrampoline(builtin_index);
   CHECK_NE(builtin_index, Builtins::kNoBuiltinId);
   EmbeddedData d = EmbeddedData::FromBlob();
@@ -2034,8 +2087,6 @@ void TurboAssembler::CallForDeoptimization(Address target, int deopt_id) {
   mov(ebx, deopt_id);
   call(target, RelocInfo::RUNTIME_ENTRY);
 }
-
-void TurboAssembler::Trap() { int3(); }
 
 }  // namespace internal
 }  // namespace v8

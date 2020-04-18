@@ -32,7 +32,7 @@ const assert = require('assert');
 
 const stream = require('stream');
 const hwm = 10;
-const r = stream.Readable({ highWaterMark: hwm, autoDestroy: false });
+const r = stream.Readable({ highWaterMark: hwm });
 const chunks = 10;
 
 const data = Buffer.allocUnsafe(chunks * hwm + Math.ceil(hwm / 2));
@@ -68,9 +68,6 @@ r._read = function(n) {
 };
 
 function pushError() {
-  r.unshift(Buffer.allocUnsafe(1));
-  w.end();
-
   assert.throws(() => {
     r.push(Buffer.allocUnsafe(1));
   }, {
@@ -88,7 +85,10 @@ w._write = function(chunk, encoding, cb) {
   cb();
 };
 
-r.on('end', common.mustNotCall());
+r.on('end', common.mustCall(function() {
+  r.unshift(Buffer.allocUnsafe(1));
+  w.end();
+}));
 
 r.on('readable', function() {
   let chunk;

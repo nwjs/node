@@ -11,7 +11,7 @@ var arr = [];
 var stop = false;
 function generateGarbage() {
   while(!stop) {
-    arr.push(new Array(1000));
+    arr.push(42);
   }
 }
 //# sourceURL=test.js`, 10, 26);

@@ -8,13 +8,13 @@ tmpdir.refresh();
 
 {
   const stream = fs.createReadStream(__filename);
-  stream.on('close', common.mustCall());
+  stream.on('close', common.mustNotCall());
   test(stream);
 }
 
 {
   const stream = fs.createWriteStream(`${tmpdir.path}/dummy`);
-  stream.on('close', common.mustCall());
+  stream.on('close', common.mustNotCall());
   test(stream);
 }
 

@@ -12,9 +12,10 @@ utils.load('test/mjsunit/wasm/wasm-module-builder.js');
 // This failed before (http://crbug.com/v8/5971).
 
 var builder_a = new WasmModuleBuilder();
-var func = builder_a.addFunction('func', kSig_v_v)
+var func_idx = builder_a.addFunction('func', kSig_v_v)
                    .addBody([kExprNop])
-                   .exportFunc();
+                   .exportFunc()
+                   .index;
 var module_a_bytes = builder_a.toArray();
 
 var builder_b = new WasmModuleBuilder();
@@ -59,8 +60,7 @@ Protocol.Debugger.enable()
     .then(url => (InspectorTest.log('Setting breakpoint in line 1:'), url))
     .then(
         url =>
-            Protocol.Debugger.setBreakpointByUrl(
-                {lineNumber: 0, columnNumber: func.body_offset, url: url}))
+            Protocol.Debugger.setBreakpointByUrl({lineNumber: 1, url: url}))
     .then(printFailure)
     .then(msg => session.logSourceLocations(msg.result.locations))
     .then(() => InspectorTest.log('Calling instantiate function for module B.'))

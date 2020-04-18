@@ -46,9 +46,9 @@ class DebugPropertyIterator final : public debug::PropertyIterator {
   enum Stage { kExoticIndices = 0, kEnumerableStrings = 1, kAllProperties = 2 };
   Stage stage_ = kExoticIndices;
 
-  size_t current_key_index_ = 0;
+  uint32_t current_key_index_ = 0;
   Handle<FixedArray> keys_;
-  size_t exotic_length_ = 0;
+  uint32_t exotic_length_ = 0;
 
   bool calculated_native_accessor_flags_ = false;
   int native_accessor_flags_ = 0;

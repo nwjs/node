@@ -32,7 +32,6 @@
 #include "src/init/v8.h"
 
 #include "src/api/api-inl.h"
-#include "src/base/bit-field.h"
 #include "src/base/platform/platform.h"
 #include "src/numbers/conversions.h"
 #include "test/cctest/cctest.h"
@@ -80,7 +79,7 @@ TEST(Utils1) {
 
 
 TEST(BitSetComputer) {
-  using BoolComputer = base::BitSetComputer<bool, 1, kSmiValueSize, uint32_t>;
+  using BoolComputer = BitSetComputer<bool, 1, kSmiValueSize, uint32_t>;
   CHECK_EQ(0, BoolComputer::word_count(0));
   CHECK_EQ(1, BoolComputer::word_count(8));
   CHECK_EQ(2, BoolComputer::word_count(50));
@@ -98,7 +97,7 @@ TEST(BitSetComputer) {
 
   // Lets store 2 bits per item with 3000 items and verify the values are
   // correct.
-  using TwoBits = base::BitSetComputer<unsigned char, 2, 8, unsigned char>;
+  using TwoBits = BitSetComputer<unsigned char, 2, 8, unsigned char>;
   const int words = 750;
   CHECK_EQ(words, TwoBits::word_count(3000));
   const int offset = 10;

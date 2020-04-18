@@ -32,6 +32,7 @@ REFBUILD_EXECUTABLE_FILES = [
 
 SUPPLEMENTARY_FILES = [
   'icudtl.dat',
+  'natives_blob.bin',
   'snapshot_blob.bin',
   'v8_build_config.json',
 ]

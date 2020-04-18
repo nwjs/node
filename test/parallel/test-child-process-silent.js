@@ -42,7 +42,8 @@ if (process.argv[2] === 'pipe') {
   const child = childProcess.fork(process.argv[1], ['pipe'], { silent: true });
 
   // Allow child process to self terminate
-  child.disconnect();
+  child.channel.close();
+  child.channel = null;
 
   child.on('exit', function() {
     process.exit(0);

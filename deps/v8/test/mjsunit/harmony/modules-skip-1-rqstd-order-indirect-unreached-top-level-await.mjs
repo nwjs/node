@@ -5,4 +5,3 @@
 import 'modules-skip-1-rqstd-order-unreached-top-level-await.mjs';
 
 Function('return this;')().test262.push('1_uind');
-

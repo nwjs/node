@@ -5,7 +5,6 @@
 #ifndef V8_TORQUE_AST_H_
 #define V8_TORQUE_AST_H_
 
-#include <algorithm>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -67,14 +66,12 @@ namespace torque {
 #define AST_TYPE_DECLARATION_NODE_KIND_LIST(V) \
   V(AbstractTypeDeclaration)                   \
   V(TypeAliasDeclaration)                      \
-  V(BitFieldStructDeclaration)                 \
   V(ClassDeclaration)                          \
   V(StructDeclaration)
 
 #define AST_DECLARATION_NODE_KIND_LIST(V) \
   AST_TYPE_DECLARATION_NODE_KIND_LIST(V)  \
-  V(GenericCallableDeclaration)           \
-  V(GenericTypeDeclaration)               \
+  V(GenericDeclaration)                   \
   V(SpecializationDeclaration)            \
   V(ExternConstDeclaration)               \
   V(NamespaceDeclaration)                 \
@@ -185,23 +182,6 @@ struct NamespaceDeclaration : Declaration {
   std::string name;
 };
 
-struct EnumDescription {
-  SourcePosition pos;
-  std::string name;
-  std::string constexpr_generates;
-  bool is_open;
-  std::vector<std::string> entries;
-
-  EnumDescription(SourcePosition pos, std::string name,
-                  std::string constexpr_generates, bool is_open,
-                  std::vector<std::string> entries = {})
-      : pos(std::move(pos)),
-        name(std::move(name)),
-        constexpr_generates(std::move(constexpr_generates)),
-        is_open(is_open),
-        entries(std::move(entries)) {}
-};
-
 class Ast {
  public:
   Ast() {}
@@ -221,26 +201,10 @@ class Ast {
     declared_imports_[CurrentSourcePosition::Get().source].insert(import_id);
   }
 
-  void AddEnumDescription(EnumDescription description) {
-    std::string name = description.name;
-    DCHECK(!name.empty());
-    auto f = [&](const auto& d) { return d.name == name; };
-    USE(f);  // Suppress unused in release.
-    DCHECK_EQ(
-        std::find_if(enum_descriptions_.begin(), enum_descriptions_.end(), f),
-        enum_descriptions_.end());
-    enum_descriptions_.push_back(std::move(description));
-  }
-
-  std::vector<EnumDescription>& EnumDescriptions() {
-    return enum_descriptions_;
-  }
-
  private:
   std::vector<Declaration*> declarations_;
   std::vector<std::unique_ptr<AstNode>> nodes_;
   std::map<SourceId, std::set<SourceId>> declared_imports_;
-  std::vector<EnumDescription> enum_descriptions_;
 };
 
 static const char* const kThisParameterName = "this";
@@ -460,14 +424,14 @@ struct StringLiteralExpression : Expression {
 
 struct NumberLiteralExpression : Expression {
   DEFINE_AST_NODE_LEAF_BOILERPLATE(NumberLiteralExpression)
-  NumberLiteralExpression(SourcePosition pos, double number)
-      : Expression(kKind, pos), number(number) {}
+  NumberLiteralExpression(SourcePosition pos, std::string name)
+      : Expression(kKind, pos), number(std::move(name)) {}
 
   void VisitAllSubExpressions(VisitCallback callback) override {
     callback(this);
   }
 
-  double number;
+  std::string number;
 };
 
 struct ElementAccessExpression : LocationExpression {
@@ -874,11 +838,6 @@ struct StructFieldExpression {
   bool const_qualified;
 };
 
-struct BitFieldDeclaration {
-  NameAndTypeExpression name_and_type;
-  int num_bits;
-};
-
 enum class ConditionalAnnotationType {
   kPositive,
   kNegative,
@@ -889,20 +848,14 @@ struct ConditionalAnnotation {
   ConditionalAnnotationType type;
 };
 
-struct AnnotationParameter {
-  std::string string_value;
-  int int_value;
-  bool is_int;
-};
-
 struct Annotation {
   Identifier* name;
-  base::Optional<AnnotationParameter> param;
+  base::Optional<std::string> param;
 };
 
 struct ClassFieldExpression {
   NameAndTypeExpression name_and_type;
-  base::Optional<Expression*> index;
+  base::Optional<std::string> index;
   std::vector<ConditionalAnnotation> conditions;
   bool weak;
   bool const_qualified;
@@ -1064,43 +1017,16 @@ struct ConstDeclaration : Declaration {
   Expression* expression;
 };
 
-struct GenericParameter {
-  Identifier* name;
-  base::Optional<TypeExpression*> constraint;
-};
-
-using GenericParameters = std::vector<GenericParameter>;
-
-// The AST re-shuffles generics from the concrete syntax:
-// Instead of the generic parameters being part of a normal declaration,
-// a declaration with generic parameters gets wrapped in a generic declaration,
-// which holds the generic parameters. This corresponds to how you write
-// templates in C++, with the template parameters coming before the declaration.
-
-struct GenericCallableDeclaration : Declaration {
-  DEFINE_AST_NODE_LEAF_BOILERPLATE(GenericCallableDeclaration)
-  GenericCallableDeclaration(SourcePosition pos,
-                             GenericParameters generic_parameters,
-                             CallableDeclaration* declaration)
+struct GenericDeclaration : Declaration {
+  DEFINE_AST_NODE_LEAF_BOILERPLATE(GenericDeclaration)
+  GenericDeclaration(SourcePosition pos,
+                     std::vector<Identifier*> generic_parameters,
+                     CallableDeclaration* declaration)
       : Declaration(kKind, pos),
         generic_parameters(std::move(generic_parameters)),
         declaration(declaration) {}
-
-  GenericParameters generic_parameters;
+  std::vector<Identifier*> generic_parameters;
   CallableDeclaration* declaration;
-};
-
-struct GenericTypeDeclaration : Declaration {
-  DEFINE_AST_NODE_LEAF_BOILERPLATE(GenericTypeDeclaration)
-  GenericTypeDeclaration(SourcePosition pos,
-                         GenericParameters generic_parameters,
-                         TypeDeclaration* declaration)
-      : Declaration(kKind, pos),
-        generic_parameters(std::move(generic_parameters)),
-        declaration(declaration) {}
-
-  GenericParameters generic_parameters;
-  TypeDeclaration* declaration;
 };
 
 struct SpecializationDeclaration : CallableDeclaration {
@@ -1135,28 +1061,19 @@ struct ExternConstDeclaration : Declaration {
 
 struct StructDeclaration : TypeDeclaration {
   DEFINE_AST_NODE_LEAF_BOILERPLATE(StructDeclaration)
-  StructDeclaration(SourcePosition pos, StructFlags flags, Identifier* name,
+  StructDeclaration(SourcePosition pos, Identifier* name,
                     std::vector<Declaration*> methods,
-                    std::vector<StructFieldExpression> fields)
+                    std::vector<StructFieldExpression> fields,
+                    std::vector<Identifier*> generic_parameters)
       : TypeDeclaration(kKind, pos, name),
-        flags(flags),
         methods(std::move(methods)),
-        fields(std::move(fields)) {}
-  StructFlags flags;
+        fields(std::move(fields)),
+        generic_parameters(std::move(generic_parameters)) {}
   std::vector<Declaration*> methods;
   std::vector<StructFieldExpression> fields;
-};
+  std::vector<Identifier*> generic_parameters;
 
-struct BitFieldStructDeclaration : TypeDeclaration {
-  DEFINE_AST_NODE_LEAF_BOILERPLATE(BitFieldStructDeclaration)
-  BitFieldStructDeclaration(SourcePosition pos, Identifier* name,
-                            TypeExpression* parent,
-                            std::vector<BitFieldDeclaration> fields)
-      : TypeDeclaration(kKind, pos, name),
-        parent(parent),
-        fields(std::move(fields)) {}
-  TypeExpression* parent;
-  std::vector<BitFieldDeclaration> fields;
+  bool IsGeneric() const { return !generic_parameters.empty(); }
 };
 
 struct ClassBody : AstNode {
@@ -1228,8 +1145,8 @@ DECLARE_CONTEXTUAL_VARIABLE(CurrentAst, Ast);
 
 template <class T, class... Args>
 T* MakeNode(Args... args) {
-  return CurrentAst::Get().AddNode(
-      std::make_unique<T>(CurrentSourcePosition::Get(), std::move(args)...));
+  return CurrentAst::Get().AddNode(std::unique_ptr<T>(
+      new T(CurrentSourcePosition::Get(), std::move(args)...)));
 }
 
 }  // namespace torque

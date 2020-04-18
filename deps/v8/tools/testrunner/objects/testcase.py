@@ -271,7 +271,6 @@ class TestCase(object):
       timeout=timeout,
       verbose=self._test_config.verbose,
       resources_func=self._get_resources,
-      handle_sigterm=True,
     )
 
   def _parse_source_flags(self, source=None):

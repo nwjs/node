@@ -13,19 +13,16 @@ new BenchmarkSuite('Prevent-Inline-Dummy', [10000], [
   new Benchmark('Prevent-Inline-Dummy', true, false, 0, () => {})
 ]);
 
-
-new BenchmarkSuite('ToBoolean', [10000], [
-  new Benchmark('ToBoolean', true, false, 0, TestToBoolean),
+new BenchmarkSuite('BigInt-ToBoolean', [10000], [
+  new Benchmark('BigInt-ToBoolean', true, false, 0, TestToBoolean),
 ]);
 
-
-new BenchmarkSuite('BooleanConstructor', [10000], [
-  new Benchmark('BooleanConstructor', true, false, 0, TestBooleanConstructor),
+new BenchmarkSuite('BigInt-BooleanConstructor', [10000], [
+  new Benchmark('BigInt-BooleanConstructor', true, false, 0, TestBooleanConstructor),
 ]);
 
-
-new BenchmarkSuite('NewBooleanConstructor', [10000], [
-  new Benchmark('NewBooleanConstructor', true, false, 0, TestNewBooleanConstructor),
+new BenchmarkSuite('BigInt-NewBooleanConstructor', [10000], [
+  new Benchmark('BigInt-NewBooleanConstructor', true, false, 0, TestNewBooleanConstructor),
 ]);
 
 

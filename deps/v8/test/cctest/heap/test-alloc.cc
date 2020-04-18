@@ -86,10 +86,7 @@ Handle<Object> HeapTester::TestAllocateAfterFailures() {
   // Code space.
   heap::SimulateFullSpace(heap->code_space());
   size = CcTest::i_isolate()->builtins()->builtin(Builtins::kIllegal).Size();
-  obj =
-      heap->AllocateRaw(size, AllocationType::kCode, AllocationOrigin::kRuntime,
-                        AllocationAlignment::kCodeAligned)
-          .ToObjectChecked();
+  obj = heap->AllocateRaw(size, AllocationType::kCode).ToObjectChecked();
   heap->CreateFillerObjectAt(obj.address(), size, ClearRecordedSlots::kNo);
   return CcTest::i_isolate()->factory()->true_value();
 }

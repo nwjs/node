@@ -49,14 +49,14 @@ class WasmImportWrapperCache {
   // cache.
   V8_EXPORT_PRIVATE WasmCode*& operator[](const CacheKey& key);
 
-  // Thread-safe. Assumes the key exists in the map.
+  // Assumes the key exists in the map.
   V8_EXPORT_PRIVATE WasmCode* Get(compiler::WasmImportCallKind kind,
                                   FunctionSig* sig) const;
 
   ~WasmImportWrapperCache();
 
  private:
-  mutable base::Mutex mutex_;
+  base::Mutex mutex_;
   std::unordered_map<CacheKey, WasmCode*, CacheKeyHash> entry_map_;
 };
 

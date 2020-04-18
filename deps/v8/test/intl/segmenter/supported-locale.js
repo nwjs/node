@@ -19,5 +19,4 @@ const strLocale = Intl.Segmenter.supportedLocalesOf("sr");
 assertEquals("sr", strLocale[0]);
 
 const multiLocale = ["sr-Thai-RS", "de", "zh-CN"];
-assertEquals(multiLocale,
-    Intl.Segmenter.supportedLocalesOf(multiLocale, {localeMatcher: "lookup"}));
+assertEquals(multiLocale, Intl.Segmenter.supportedLocalesOf(multiLocale));

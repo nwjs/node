@@ -26,36 +26,32 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Flags: --nostress-opt --allow-natives-syntax --mock-arraybuffer-allocator
-
-let kArrayBufferByteLengthLimit = %ArrayBufferMaxByteLength() + 1;
-let kTypedArrayLengthLimit = %TypedArrayMaxLength() + 1;
+var maxSize = %MaxSmi() + 1;
+var ab;
 
 // Allocate the largest ArrayBuffer we can on this architecture.
-let ab = new ArrayBuffer(kArrayBufferByteLengthLimit - 1);
-
-function TestArray(constr, elementSize) {
-  assertEquals(kArrayBufferByteLengthLimit % elementSize, 0);
-  let bufferSizeLength = kArrayBufferByteLengthLimit / elementSize;
-
-  let minUnallocatableSize =
-      kTypedArrayLengthLimit < bufferSizeLength
-        ? kTypedArrayLengthLimit
-        : bufferSizeLength;
-
-  assertThrows(function() {
-    new constr(ab, 0, minUnallocatableSize);
-  }, RangeError);
-
-  // This one must succeed.
-  new constr(ab, 0, minUnallocatableSize - 1);
+for (k = 8; k >= 1 && ab == null; k = k/2) {
+  try {
+    ab = new ArrayBuffer(maxSize * k);
+  } catch (e) {
+    ab = null;
+  }
 }
 
-TestArray(Uint8Array, 1);
-TestArray(Int8Array, 1);
-TestArray(Uint16Array, 2);
-TestArray(Int16Array, 2);
-TestArray(Uint32Array, 4);
-TestArray(Int32Array, 4);
-TestArray(Float32Array, 4);
-TestArray(Float64Array, 8);
-TestArray(Uint8ClampedArray, 1);
+assertTrue(ab != null);
+
+function TestArray(constr) {
+  assertThrows(function() {
+    new constr(ab, 0, maxSize);
+  }, RangeError);
+}
+
+TestArray(Uint8Array);
+TestArray(Int8Array);
+TestArray(Uint16Array);
+TestArray(Int16Array);
+TestArray(Uint32Array);
+TestArray(Int32Array);
+TestArray(Float32Array);
+TestArray(Float64Array);
+TestArray(Uint8ClampedArray);

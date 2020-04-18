@@ -47,33 +47,17 @@ assert.strictEqual(
 );
 
 {
-  access(__filename, 0)
+  access(__filename, 'r')
     .then(common.mustCall());
 
-  assert.rejects(
-    access('this file does not exist', 0),
-    {
+  access('this file does not exist', 'r')
+    .then(common.mustNotCall())
+    .catch(common.expectsError({
       code: 'ENOENT',
       name: 'Error',
-      message: /^ENOENT: no such file or directory, access/
-    }
-  );
-
-  assert.rejects(
-    access(__filename, 8),
-    {
-      code: 'ERR_OUT_OF_RANGE',
-      message: /"mode".*must be an integer >= 0 && <= 7\. Received 8$/
-    }
-  );
-
-  assert.rejects(
-    access(__filename, { [Symbol.toPrimitive]() { return 5; } }),
-    {
-      code: 'ERR_INVALID_ARG_TYPE',
-      message: /"mode" argument.+integer\. Received an instance of Object$/
-    }
-  );
+      message:
+        /^ENOENT: no such file or directory, access/
+    }));
 }
 
 function verifyStatObject(stat) {
@@ -84,7 +68,7 @@ function verifyStatObject(stat) {
 
 async function getHandle(dest) {
   await copyFile(fixtures.path('baz.js'), dest);
-  await access(dest);
+  await access(dest, 'r');
 
   return open(dest, 'r+');
 }
@@ -324,7 +308,7 @@ async function getHandle(dest) {
     {
       const dir = path.join(tmpDir, nextdir(), nextdir());
       await mkdir(path.dirname(dir));
-      await writeFile(dir, '');
+      await writeFile(dir);
       assert.rejects(
         mkdir(dir, { recursive: true }),
         {
@@ -341,7 +325,7 @@ async function getHandle(dest) {
       const file = path.join(tmpDir, nextdir(), nextdir());
       const dir = path.join(file, nextdir(), nextdir());
       await mkdir(path.dirname(file));
-      await writeFile(file, '');
+      await writeFile(file);
       assert.rejects(
         mkdir(dir, { recursive: true }),
         {

@@ -7,8 +7,7 @@ const {
   Readable,
   Transform,
   pipeline,
-  PassThrough,
-  Duplex
+  PassThrough
 } = require('stream');
 const assert = require('assert');
 const http = require('http');
@@ -506,7 +505,9 @@ const { promisify } = require('util');
         res,
         stream,
         common.mustCall((err) => {
-          assert.strictEqual(err.message, 'oh no');
+          assert.ok(err);
+          // TODO(ronag):
+          // assert.strictEqual(err.message, 'oh no');
           server.close();
         })
       );
@@ -923,24 +924,6 @@ const { promisify } = require('util');
 }
 
 {
-  // Make sure 'close' before 'end' finishes without error
-  // if readable has received eof.
-  // Ref: https://github.com/nodejs/node/issues/29699
-  const r = new Readable();
-  const w = new Writable({
-    write(chunk, encoding, cb) {
-      cb();
-    }
-  });
-  pipeline(r, w, (err) => {
-    assert.strictEqual(err, undefined);
-  });
-  r.push('asd');
-  r.push(null);
-  r.emit('close');
-}
-
-{
   const server = http.createServer((req, res) => {
   });
 
@@ -1076,45 +1059,5 @@ const { promisify } = require('util');
     }
   }, common.mustCall((err) => {
     assert.ifError(err);
-  }));
-}
-
-{
-  let closed = false;
-  const src = new Readable({
-    read() {},
-    destroy(err, cb) {
-      process.nextTick(cb);
-    }
-  });
-  const dst = new Writable({
-    write(chunk, encoding, callback) {
-      callback();
-    }
-  });
-  src.on('close', () => {
-    closed = true;
-  });
-  src.push(null);
-  pipeline(src, dst, common.mustCall((err) => {
-    assert.strictEqual(closed, true);
-  }));
-}
-
-{
-  let closed = false;
-  const src = new Readable({
-    read() {},
-    destroy(err, cb) {
-      process.nextTick(cb);
-    }
-  });
-  const dst = new Duplex({});
-  src.on('close', common.mustCall(() => {
-    closed = true;
-  }));
-  src.push(null);
-  pipeline(src, dst, common.mustCall((err) => {
-    assert.strictEqual(closed, true);
   }));
 }

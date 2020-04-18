@@ -95,8 +95,7 @@ void PlatformEmbeddedFileWriterGeneric::SourceInfo(int fileid,
   fprintf(fp_, ".loc %d %d\n", fileid, line);
 }
 
-void PlatformEmbeddedFileWriterGeneric::DeclareFunctionBegin(const char* name,
-                                                             uint32_t size) {
+void PlatformEmbeddedFileWriterGeneric::DeclareFunctionBegin(const char* name) {
   DeclareLabel(name);
 
   if (target_arch_ == EmbeddedTargetArch::kArm ||
@@ -109,7 +108,6 @@ void PlatformEmbeddedFileWriterGeneric::DeclareFunctionBegin(const char* name,
     // to create a DWARF subprogram entry.
     fprintf(fp_, ".type %s, @function\n", name);
   }
-  fprintf(fp_, ".size %s, %u\n", name, size);
 }
 
 void PlatformEmbeddedFileWriterGeneric::DeclareFunctionEnd(const char* name) {}

@@ -26,12 +26,10 @@ void Isolate::set_context(Context context) {
 }
 
 Handle<NativeContext> Isolate::native_context() {
-  DCHECK(!context().is_null());
   return handle(context().native_context(), this);
 }
 
 NativeContext Isolate::raw_native_context() {
-  DCHECK(!context().is_null());
   return context().native_context();
 }
 

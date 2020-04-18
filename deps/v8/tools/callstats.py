@@ -29,7 +29,6 @@ import subprocess
 import sys
 import tempfile
 import operator
-from callstats_groups import RUNTIME_CALL_STATS_GROUPS
 
 import numpy
 import scipy
@@ -371,7 +370,8 @@ def read_stats(path, domain, args):
   if args.aggregate:
     groups = [
         ('Group-IC', re.compile(".*IC_.*")),
-        ('Group-OptimizeBackground', re.compile(".*OptimizeBackground.*")),
+        ('Group-OptimizeBackground',
+         re.compile(".*OptimizeConcurrent.*|RecompileConcurrent.*")),
         ('Group-Optimize',
          re.compile("StackGuard|.*Optimize.*|.*Deoptimize.*|Recompile.*")),
         ('Group-CompileBackground', re.compile("(.*CompileBackground.*)")),

@@ -119,12 +119,11 @@ class V8_EXPORT_PRIVATE RegExpMacroAssemblerARM64
   // When adding local variables remember to push space for them in
   // the frame in GetCode.
   static const int kSuccessCounter = kInput - kSystemPointerSize;
-  static const int kBacktrackCount = kSuccessCounter - kSystemPointerSize;
   // First position register address on the stack. Following positions are
   // below it. A position is a 32 bit value.
-  static const int kFirstRegisterOnStack = kBacktrackCount - kWRegSize;
+  static const int kFirstRegisterOnStack = kSuccessCounter - kWRegSize;
   // A capture is a 64 bit value holding two position.
-  static const int kFirstCaptureOnStack = kBacktrackCount - kXRegSize;
+  static const int kFirstCaptureOnStack = kSuccessCounter - kXRegSize;
 
   // Initial size of code buffer.
   static const int kRegExpCodeSize = 1024;

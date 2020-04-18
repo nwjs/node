@@ -37,14 +37,14 @@ namespace proxy {
       //    8.a. Let extensibleTarget be ? IsExtensible(target).
       //    8.b If extensibleTarget is true, throw a TypeError exception.
       if (ToBoolean(trapResult)) {
-        const extensibleTarget: JSAny = object::ObjectIsExtensibleImpl(target);
+        const extensibleTarget: JSAny = object::ObjectIsExtensible(target);
         assert(extensibleTarget == True || extensibleTarget == False);
         if (extensibleTarget == True) {
-          ThrowTypeError(MessageTemplate::kProxyPreventExtensionsExtensible);
+          ThrowTypeError(kProxyPreventExtensionsExtensible);
         }
       } else {
         if (doThrow == True) {
-          ThrowTypeError(MessageTemplate::kProxyTrapReturnedFalsish, kTrapName);
+          ThrowTypeError(kProxyTrapReturnedFalsish, kTrapName);
         }
         return False;
       }
@@ -60,7 +60,7 @@ namespace proxy {
       return object::ObjectPreventExtensionsDontThrow(target);
     }
     label ThrowProxyHandlerRevoked deferred {
-      ThrowTypeError(MessageTemplate::kProxyRevoked, kTrapName);
+      ThrowTypeError(kProxyRevoked, kTrapName);
     }
   }
 }  // namespace proxy

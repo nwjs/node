@@ -21,10 +21,10 @@ const int kStringBuilderConcatHelperLengthBits = 11;
 const int kStringBuilderConcatHelperPositionBits = 19;
 
 using StringBuilderSubstringLength =
-    base::BitField<int, 0, kStringBuilderConcatHelperLengthBits>;
+    BitField<int, 0, kStringBuilderConcatHelperLengthBits>;
 using StringBuilderSubstringPosition =
-    base::BitField<int, kStringBuilderConcatHelperLengthBits,
-                   kStringBuilderConcatHelperPositionBits>;
+    BitField<int, kStringBuilderConcatHelperLengthBits,
+             kStringBuilderConcatHelperPositionBits>;
 
 template <typename sinkchar>
 void StringBuilderConcatHelper(String special, sinkchar* sink,

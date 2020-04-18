@@ -666,7 +666,6 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
   const Operator* NumberSilenceNaN();
 
   const Operator* BigIntAdd();
-  const Operator* BigIntSubtract();
   const Operator* BigIntNegate();
 
   const Operator* SpeculativeSafeIntegerAdd(NumberOperationHint hint);
@@ -689,7 +688,6 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
   const Operator* SpeculativeNumberEqual(NumberOperationHint hint);
 
   const Operator* SpeculativeBigIntAdd(BigIntOperationHint hint);
-  const Operator* SpeculativeBigIntSubtract(BigIntOperationHint hint);
   const Operator* SpeculativeBigIntNegate(BigIntOperationHint hint);
   const Operator* BigIntAsUintN(int bits);
 
@@ -727,6 +725,7 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
   const Operator* PlainPrimitiveToWord32();
   const Operator* PlainPrimitiveToFloat64();
 
+  const Operator* ChangeCompressedSignedToInt32();
   const Operator* ChangeTaggedSignedToInt32();
   const Operator* ChangeTaggedSignedToInt64();
   const Operator* ChangeTaggedToInt32();
@@ -734,6 +733,9 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
   const Operator* ChangeTaggedToUint32();
   const Operator* ChangeTaggedToFloat64();
   const Operator* ChangeTaggedToTaggedSigned();
+  const Operator* ChangeCompressedToTaggedSigned();
+  const Operator* ChangeTaggedToCompressedSigned();
+  const Operator* ChangeInt31ToCompressedSigned();
   const Operator* ChangeInt31ToTaggedSigned();
   const Operator* ChangeInt32ToTagged();
   const Operator* ChangeInt64ToTagged();
@@ -781,6 +783,8 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
   const Operator* CheckedInt32Mod();
   const Operator* CheckedInt32Mul(CheckForMinusZeroMode);
   const Operator* CheckedInt32Sub();
+  const Operator* CheckedInt32ToCompressedSigned(
+      const FeedbackSource& feedback);
   const Operator* CheckedInt32ToTaggedSigned(const FeedbackSource& feedback);
   const Operator* CheckedInt64ToInt32(const FeedbackSource& feedback);
   const Operator* CheckedInt64ToTaggedSigned(const FeedbackSource& feedback);
@@ -789,12 +793,19 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
                                          const FeedbackSource& feedback);
   const Operator* CheckedTaggedToInt32(CheckForMinusZeroMode,
                                        const FeedbackSource& feedback);
-  const Operator* CheckedTaggedToArrayIndex(const FeedbackSource& feedback);
   const Operator* CheckedTaggedToInt64(CheckForMinusZeroMode,
                                        const FeedbackSource& feedback);
   const Operator* CheckedTaggedToTaggedPointer(const FeedbackSource& feedback);
   const Operator* CheckedTaggedToTaggedSigned(const FeedbackSource& feedback);
   const Operator* CheckBigInt(const FeedbackSource& feedback);
+  const Operator* CheckedCompressedToTaggedPointer(
+      const FeedbackSource& feedback);
+  const Operator* CheckedCompressedToTaggedSigned(
+      const FeedbackSource& feedback);
+  const Operator* CheckedTaggedToCompressedPointer(
+      const FeedbackSource& feedback);
+  const Operator* CheckedTaggedToCompressedSigned(
+      const FeedbackSource& feedback);
   const Operator* CheckedTruncateTaggedToWord32(CheckTaggedInputMode,
                                                 const FeedbackSource& feedback);
   const Operator* CheckedUint32Div();

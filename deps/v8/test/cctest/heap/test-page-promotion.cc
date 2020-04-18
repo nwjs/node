@@ -101,7 +101,7 @@ UNINITIALIZED_TEST(PagePromotion_NewToOld) {
 }
 
 UNINITIALIZED_TEST(PagePromotion_NewToNew) {
-  if (!i::FLAG_page_promotion || FLAG_always_promote_young_mc) return;
+  if (!i::FLAG_page_promotion) return;
 
   v8::Isolate* isolate = NewIsolateForPagePromotion();
   Isolate* i_isolate = reinterpret_cast<Isolate*>(isolate);
@@ -129,7 +129,7 @@ UNINITIALIZED_TEST(PagePromotion_NewToNew) {
 }
 
 UNINITIALIZED_TEST(PagePromotion_NewToNewJSArrayBuffer) {
-  if (!i::FLAG_page_promotion || FLAG_always_promote_young_mc) return;
+  if (!i::FLAG_page_promotion) return;
 
   // Test makes sure JSArrayBuffer backing stores are still tracked after
   // new-to-new promotion.
@@ -167,8 +167,7 @@ UNINITIALIZED_TEST(PagePromotion_NewToNewJSArrayBuffer) {
     CHECK(heap->new_space()->ToSpaceContainsSlow(buffer->address()));
     CHECK(to_be_promoted_page->Contains(first_object->address()));
     CHECK(to_be_promoted_page->Contains(buffer->address()));
-    if (!V8_ARRAY_BUFFER_EXTENSION_BOOL)
-      CHECK(ArrayBufferTracker::IsTracked(*buffer));
+    CHECK(ArrayBufferTracker::IsTracked(*buffer));
   }
   isolate->Dispose();
 }
@@ -213,14 +212,13 @@ UNINITIALIZED_TEST(PagePromotion_NewToOldJSArrayBuffer) {
     CHECK(heap->old_space()->ContainsSlow(buffer->address()));
     CHECK(to_be_promoted_page->Contains(first_object->address()));
     CHECK(to_be_promoted_page->Contains(buffer->address()));
-    if (!V8_ARRAY_BUFFER_EXTENSION_BOOL)
-      CHECK(ArrayBufferTracker::IsTracked(*buffer));
+    CHECK(ArrayBufferTracker::IsTracked(*buffer));
   }
   isolate->Dispose();
 }
 
 UNINITIALIZED_HEAP_TEST(Regress658718) {
-  if (!i::FLAG_page_promotion || FLAG_always_promote_young_mc) return;
+  if (!i::FLAG_page_promotion) return;
 
   v8::Isolate* isolate = NewIsolateForPagePromotion(4, 8);
   Isolate* i_isolate = reinterpret_cast<Isolate*>(isolate);

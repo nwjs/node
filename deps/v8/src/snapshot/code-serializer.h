@@ -94,7 +94,8 @@ class SerializedCodeData : public SerializedData {
   // [3] flag hash
   // [4] number of reservation size entries
   // [5] payload length
-  // [6] payload checksum
+  // [6] payload checksum part A
+  // [7] payload checksum part B
   // ...  reservations
   // ...  code stub keys
   // ...  serialized payload
@@ -104,8 +105,12 @@ class SerializedCodeData : public SerializedData {
   static const uint32_t kNumReservationsOffset = kFlagHashOffset + kUInt32Size;
   static const uint32_t kPayloadLengthOffset =
       kNumReservationsOffset + kUInt32Size;
-  static const uint32_t kChecksumOffset = kPayloadLengthOffset + kUInt32Size;
-  static const uint32_t kUnalignedHeaderSize = kChecksumOffset + kUInt32Size;
+  static const uint32_t kChecksumPartAOffset =
+      kPayloadLengthOffset + kUInt32Size;
+  static const uint32_t kChecksumPartBOffset =
+      kChecksumPartAOffset + kUInt32Size;
+  static const uint32_t kUnalignedHeaderSize =
+      kChecksumPartBOffset + kUInt32Size;
   static const uint32_t kHeaderSize = POINTER_SIZE_ALIGN(kUnalignedHeaderSize);
 
   // Used when consuming.

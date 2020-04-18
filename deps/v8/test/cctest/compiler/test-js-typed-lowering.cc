@@ -26,7 +26,7 @@ class JSTypedLoweringTester : public HandleAndZoneScope {
   explicit JSTypedLoweringTester(int num_parameters = 0)
       : isolate(main_isolate()),
         canonical(isolate),
-        js_heap_broker(isolate, main_zone(), FLAG_trace_heap_broker, false),
+        js_heap_broker(isolate, main_zone(), FLAG_trace_heap_broker),
         binop(nullptr),
         unop(nullptr),
         javascript(main_zone()),

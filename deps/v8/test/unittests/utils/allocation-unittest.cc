@@ -110,10 +110,6 @@ sigjmp_buf MemoryAllocationPermissionsTest::continuation_;
 
 }  // namespace
 
-// TODO(almuthanna): This test was skipped because it causes a crash when it is
-// ran on Fuchsia. This issue should be solved later on
-// Ticket: https://crbug.com/1028617
-#if !defined(V8_TARGET_OS_FUCHSIA)
 TEST_F(MemoryAllocationPermissionsTest, DoTest) {
   TestPermissions(PageAllocator::Permission::kNoAccess, false, false);
   TestPermissions(PageAllocator::Permission::kRead, true, false);
@@ -121,8 +117,6 @@ TEST_F(MemoryAllocationPermissionsTest, DoTest) {
   TestPermissions(PageAllocator::Permission::kReadWriteExecute, true, true);
   TestPermissions(PageAllocator::Permission::kReadExecute, true, false);
 }
-#endif
-
 #endif  // V8_OS_POSIX
 
 // Basic tests of allocation.

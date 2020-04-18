@@ -1,6 +1,7 @@
 // Flags: --experimental-vm-modules --expose-internals
 'use strict';
 require('../common');
+const fixtures = require('../common/fixtures');
 const assert = require('assert');
 const { types, inspect } = require('util');
 const vm = require('vm');
@@ -8,6 +9,7 @@ const { internalBinding } = require('internal/test/binding');
 const { JSStream } = internalBinding('js_stream');
 
 const external = (new JSStream())._externalStream;
+const wasmBuffer = fixtures.readSync('simple.wasm');
 
 for (const [ value, _method ] of [
   [ external, 'isExternal' ],
@@ -48,6 +50,7 @@ for (const [ value, _method ] of [
   [ new DataView(new ArrayBuffer()) ],
   [ new SharedArrayBuffer() ],
   [ new Proxy({}, {}), 'isProxy' ],
+  [ new WebAssembly.Module(wasmBuffer), 'isWebAssemblyCompiledModule' ],
 ]) {
   const method = _method || `is${value.constructor.name}`;
   assert(method in types, `Missing ${method} for ${inspect(value)}`);

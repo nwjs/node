@@ -295,16 +295,15 @@ enum LFlag {
 // Neon sizes.
 enum NeonSize { Neon8 = 0x0, Neon16 = 0x1, Neon32 = 0x2, Neon64 = 0x3 };
 
-// NEON data type, top bit set for unsigned data types.
+// NEON data type
 enum NeonDataType {
   NeonS8 = 0,
   NeonS16 = 1,
   NeonS32 = 2,
-  NeonS64 = 3,
+  // Gap to make it easier to extract U and size.
   NeonU8 = 4,
   NeonU16 = 5,
-  NeonU32 = 6,
-  NeonU64 = 7
+  NeonU32 = 6
 };
 
 inline int NeonU(NeonDataType dt) { return static_cast<int>(dt) >> 2; }

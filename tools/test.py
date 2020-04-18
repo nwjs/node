@@ -1491,7 +1491,6 @@ IGNORED_SUITES = [
   'addons',
   'benchmark',
   'doctool',
-  'embedding',
   'internet',
   'js-native-api',
   'node-api',

@@ -33,7 +33,6 @@ export class GraphMultiView extends View {
   createViewElement() {
     const pane = document.createElement("div");
     pane.setAttribute("id", multiviewID);
-    pane.setAttribute("tabindex", "1");
     pane.className = "viewpane";
     return pane;
   }
@@ -107,6 +106,7 @@ export class GraphMultiView extends View {
   displayPhaseView(view: PhaseView, data, selection?: Set<any>) {
     const rememberedSelection = selection ? selection : this.hideCurrentPhase();
     view.initializeContent(data, rememberedSelection);
+    this.divNode.classList.toggle("scrollable", view.isScrollable());
     this.currentPhaseView = view;
   }
 

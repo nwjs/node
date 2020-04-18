@@ -1,21 +1,18 @@
 'use strict';
 const common = require('../common');
 
-const assert = require('assert');
+const { strictEqual } = require('assert');
 const { Transform } = require('stream');
 
 const t = new Transform();
 
-assert.throws(
-  () => {
-    t.end(Buffer.from('blerg'));
-  },
-  {
-    name: 'Error',
-    code: 'ERR_METHOD_NOT_IMPLEMENTED',
-    message: 'The _transform() method is not implemented'
-  }
-);
+t.on('error', common.expectsError({
+  name: 'Error',
+  code: 'ERR_METHOD_NOT_IMPLEMENTED',
+  message: 'The _transform() method is not implemented'
+}));
+
+t.end(Buffer.from('blerg'));
 
 const _transform = common.mustCall((chunk, _, next) => {
   next();
@@ -35,9 +32,9 @@ const t2 = new Transform({
   final: _final
 });
 
-assert.strictEqual(t2._transform, _transform);
-assert.strictEqual(t2._flush, _flush);
-assert.strictEqual(t2._final, _final);
+strictEqual(t2._transform, _transform);
+strictEqual(t2._flush, _flush);
+strictEqual(t2._final, _final);
 
 t2.end(Buffer.from('blerg'));
 t2.resume();

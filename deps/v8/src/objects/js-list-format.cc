@@ -256,10 +256,11 @@ Maybe<std::vector<icu::UnicodeString>> ToUnicodeStringArray(
   // arrays here, so the loop below can construct an entry from the index.
   DCHECK(array->HasFastElements(isolate));
   auto* accessor = array->GetElementsAccessor();
-  size_t length = accessor->NumberOfElements(*array);
+  uint32_t length = accessor->NumberOfElements(*array);
 
   std::vector<icu::UnicodeString> result;
-  for (InternalIndex entry : InternalIndex::Range(length)) {
+  for (uint32_t i = 0; i < length; i++) {
+    InternalIndex entry(i);
     DCHECK(accessor->HasEntry(*array, entry));
     Handle<Object> item = accessor->Get(array, entry);
     DCHECK(item->IsString());

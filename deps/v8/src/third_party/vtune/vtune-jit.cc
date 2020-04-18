@@ -60,10 +60,7 @@
 #include <string.h>
 
 #include <list>
-#include <memory>
-#include <string>
 #include <unordered_map>
-#include <vector>
 
 #include "v8-vtune.h"
 #include "vtune-jit.h"
@@ -139,7 +136,7 @@ static JITCodeLineInfo* UntagLineInfo(void* ptr) {
 // function name and some other info. It comes from all the
 // Logger::CodeCreateEvent(...) function. This function get the
 // pure function name from the input parameter.
-static std::string GetFunctionNameFromMixedName(const char* str, int length) {
+static char* GetFunctionNameFromMixedName(const char* str, int length) {
   int index = 0;
   int count = 0;
   char* start_ptr = NULL;
@@ -147,7 +144,7 @@ static std::string GetFunctionNameFromMixedName(const char* str, int length) {
   while (str[index++] != ':' && (index < length)) {}
 
   if (str[index] == '*' || str[index] == '~' ) index++;
-  if (index >= length) return std::string();
+  if (index >= length) return NULL;
 
   start_ptr = const_cast<char*>(str + index);
 
@@ -155,7 +152,11 @@ static std::string GetFunctionNameFromMixedName(const char* str, int length) {
     count++;
   }
 
-  return std::string(start_ptr, count);
+  char* result = new char[count + 1];
+  memcpy(result, start_ptr, count);
+  result[count] = '\0';
+
+  return result;
 }
 
 // The JitCodeEventHandler for Vtune.
@@ -163,16 +164,16 @@ void VTUNEJITInterface::event_handler(const v8::JitCodeEvent* event) {
   if (VTUNERUNNING && event != NULL) {
     switch (event->type) {
       case v8::JitCodeEvent::CODE_ADDED: {
-        std::unique_ptr<char[]> temp_file_name;
-        std::string temp_method_name = GetFunctionNameFromMixedName(
-            event->name.str, static_cast<int>(event->name.len));
-        std::vector<LineNumberInfo> jmethod_line_number_table;
+        char* temp_file_name = NULL;
+        char* temp_method_name =
+            GetFunctionNameFromMixedName(event->name.str,
+                                         static_cast<int>(event->name.len));
         iJIT_Method_Load jmethod;
         memset(&jmethod, 0, sizeof jmethod);
         jmethod.method_id = iJIT_GetNewMethodID();
         jmethod.method_load_address = event->code_start;
         jmethod.method_size = static_cast<unsigned int>(event->code_len);
-        jmethod.method_name = const_cast<char*>(temp_method_name.c_str());
+        jmethod.method_name = temp_method_name;
 
         Local<UnboundScript> script = event->script;
 
@@ -181,10 +182,10 @@ void VTUNEJITInterface::event_handler(const v8::JitCodeEvent* event) {
           if ((*script->GetScriptName())->IsString()) {
             Local<String> script_name =
                 Local<String>::Cast(script->GetScriptName());
-            temp_file_name.reset(
-                new char[script_name->Utf8Length(event->isolate) + 1]);
-            script_name->WriteUtf8(event->isolate, temp_file_name.get());
-            jmethod.source_file_name = temp_file_name.get();
+            temp_file_name =
+                new char[script_name->Utf8Length(event->isolate) + 1];
+            script_name->WriteUtf8(event->isolate, temp_file_name);
+            jmethod.source_file_name = temp_file_name;
           }
 
           JitInfoMap::iterator entry =
@@ -196,8 +197,9 @@ void VTUNEJITInterface::event_handler(const v8::JitCodeEvent* event) {
                 line_info->GetLineNumInfo();
 
             jmethod.line_number_size = (unsigned int)vtunelineinfo->size();
-            jmethod_line_number_table.resize(jmethod.line_number_size);
-            jmethod.line_number_table = jmethod_line_number_table.data();
+            jmethod.line_number_table =
+                reinterpret_cast<LineNumberInfo*>(
+                    malloc(sizeof(LineNumberInfo)*jmethod.line_number_size));
 
             std::list<JITCodeLineInfo::LineNumInfo>::iterator Iter;
             int index = 0;
@@ -211,33 +213,14 @@ void VTUNEJITInterface::event_handler(const v8::JitCodeEvent* event) {
             }
             GetEntries()->erase(event->code_start);
           }
-        } else if (event->wasm_source_info != nullptr) {
-          const char* filename = event->wasm_source_info->filename;
-          size_t filename_size = event->wasm_source_info->filename_size;
-          const v8::JitCodeEvent::line_info_t* line_number_table =
-              event->wasm_source_info->line_number_table;
-          size_t line_number_table_size =
-              event->wasm_source_info->line_number_table_size;
-
-          temp_file_name.reset(new char[filename_size + 1]);
-          memcpy(temp_file_name.get(), filename, filename_size);
-          temp_file_name[filename_size] = '\0';
-          jmethod.source_file_name = temp_file_name.get();
-
-          jmethod.line_number_size = line_number_table_size;
-          jmethod_line_number_table.resize(jmethod.line_number_size);
-          jmethod.line_number_table = jmethod_line_number_table.data();
-
-          for (size_t index = 0; index < line_number_table_size; ++index) {
-            jmethod.line_number_table[index].LineNumber =
-                line_number_table[index].pos;
-            jmethod.line_number_table[index].Offset =
-                line_number_table[index].offset;
-          }
         }
 
         iJIT_NotifyEvent(iJVM_EVENT_TYPE_METHOD_LOAD_FINISHED,
                          reinterpret_cast<void*>(&jmethod));
+        if (temp_method_name)
+          delete []temp_method_name;
+        if (temp_file_name)
+          delete []temp_file_name;
         break;
       }
       // TODO(chunyang.dai@intel.com): code_move will be supported.

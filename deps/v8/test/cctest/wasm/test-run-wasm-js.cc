@@ -147,8 +147,9 @@ WASM_EXEC_TEST(Run_IndirectCallJSFunction) {
   r.builder().AddIndirectFunctionTable(indirect_function_table,
                                        arraysize(indirect_function_table));
 
-  BUILD(rc_fn, WASM_CALL_INDIRECT(sig_index, WASM_I32V(left), WASM_I32V(right),
-                                  WASM_GET_LOCAL(0), WASM_I32V(js_index)));
+  BUILD(rc_fn,
+        WASM_CALL_INDIRECT3(sig_index, WASM_I32V(js_index), WASM_I32V(left),
+                            WASM_I32V(right), WASM_GET_LOCAL(0)));
 
   Handle<Object> args_left[] = {isolate->factory()->NewNumber(1)};
   r.CheckCallApplyViaJS(left, rc_fn.function_index(), args_left, 1);
@@ -544,9 +545,9 @@ void RunPickerTest(ExecutionTier tier, bool indirect) {
     r.builder().AddIndirectFunctionTable(indirect_function_table,
                                          arraysize(indirect_function_table));
 
-    BUILD(rc_fn, WASM_RETURN_CALL_INDIRECT(sig_index, WASM_I32V(left),
-                                           WASM_I32V(right), WASM_GET_LOCAL(0),
-                                           WASM_I32V(js_index)));
+    BUILD(rc_fn, WASM_RETURN_CALL_INDIRECT(sig_index, WASM_I32V(js_index),
+                                           WASM_I32V(left), WASM_I32V(right),
+                                           WASM_GET_LOCAL(0)));
   } else {
     BUILD(rc_fn,
           WASM_RETURN_CALL_FUNCTION(js_index, WASM_I32V(left), WASM_I32V(right),

@@ -10,6 +10,7 @@ using v8::Object;
 using v8::Value;
 
 uint32_t free_call_count = 0;
+char data[] = "hello";
 
 void GetFreeCallCount(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(free_call_count);
@@ -20,9 +21,6 @@ void Initialize(Local<Object> exports,
                 Local<Context> context) {
   Isolate* isolate = context->GetIsolate();
   NODE_SET_METHOD(exports, "getFreeCallCount", GetFreeCallCount);
-
-  char* data = new char;
-
   exports->Set(context,
                v8::String::NewFromUtf8(
                    isolate, "buffer", v8::NewStringType::kNormal)
@@ -32,7 +30,6 @@ void Initialize(Local<Object> exports,
                    data,
                    sizeof(data),
                    [](char* data, void* hint) {
-                     delete data;
                      free_call_count++;
                    },
                    nullptr).ToLocalChecked()).Check();

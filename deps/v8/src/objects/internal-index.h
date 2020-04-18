@@ -19,14 +19,14 @@ namespace internal {
 // wrapper: get it via GetEntryForIndex, pass it on to consumers.
 class InternalIndex {
  public:
-  explicit constexpr InternalIndex(size_t raw) : entry_(raw) {}
+  explicit InternalIndex(size_t raw) : entry_(raw) {}
   static InternalIndex NotFound() { return InternalIndex(kNotFound); }
 
-  V8_WARN_UNUSED_RESULT InternalIndex adjust_down(size_t subtract) const {
+  InternalIndex adjust_down(size_t subtract) {
     DCHECK_GE(entry_, subtract);
     return InternalIndex(entry_ - subtract);
   }
-  V8_WARN_UNUSED_RESULT InternalIndex adjust_up(size_t add) const {
+  InternalIndex adjust_up(size_t add) {
     DCHECK_LT(entry_, std::numeric_limits<size_t>::max() - add);
     return InternalIndex(entry_ + add);
   }
@@ -39,10 +39,8 @@ class InternalIndex {
     DCHECK_LE(entry_, std::numeric_limits<uint32_t>::max());
     return static_cast<uint32_t>(entry_);
   }
-  constexpr int as_int() const {
-#if V8_HAS_CXX14_CONSTEXPR
-    DCHECK_LE(entry_, std::numeric_limits<int>::max());
-#endif
+  int as_int() const {
+    DCHECK(entry_ >= 0 && entry_ <= std::numeric_limits<int>::max());
     return static_cast<int>(entry_);
   }
 

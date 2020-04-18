@@ -58,7 +58,7 @@ TEST_F(WasmCapiTest, Traps) {
   i::Isolate* isolate =
       reinterpret_cast<::wasm::StoreImpl*>(store())->i_isolate();
   ModuleResult result = DecodeWasmModule(
-      WasmFeatures::All(), wire_bytes()->begin(), wire_bytes()->end(), false,
+      kAllWasmFeatures, wire_bytes()->begin(), wire_bytes()->end(), false,
       ModuleOrigin::kWasmOrigin, isolate->counters(),
       isolate->wasm_engine()->allocator());
   ASSERT_TRUE(result.ok());

@@ -21,10 +21,8 @@ class EnumSet {
  public:
   constexpr EnumSet() = default;
 
-  explicit constexpr EnumSet(std::initializer_list<E> init) {
-    T bits = 0;
-    for (E e : init) bits |= Mask(e);
-    bits_ = bits;
+  EnumSet(std::initializer_list<E> init) {
+    for (E e : init) Add(e);
   }
 
   bool empty() const { return bits_ == 0; }

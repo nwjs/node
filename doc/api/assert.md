@@ -161,10 +161,6 @@ An alias of [`assert.ok()`][].
 <!-- YAML
 added: v0.1.21
 changes:
-  - version: v14.0.0
-    pr-url: https://github.com/nodejs/node/pull/30766
-    description: NaN is now treated as being identical in case both sides are
-                 NaN.
   - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/25008
     description: The type tags are now properly compared and there are a couple
@@ -208,8 +204,7 @@ are also recursively evaluated by the following rules.
 ### Comparison details
 
 * Primitive values are compared with the [Abstract Equality Comparison][]
-  ( `==` ) with the exception of `NaN`. It is treated as being identical in case
-  both sides are `NaN`.
+  ( `==` ).
 * [Type tags][Object.prototype.toString()] of objects should be the same.
 * Only [enumerable "own" properties][] are considered.
 * [`Error`][] names and messages are always compared, even if these are not
@@ -596,11 +591,6 @@ assert.doesNotThrow(
 ## `assert.equal(actual, expected[, message])`
 <!-- YAML
 added: v0.1.21
-changes:
-  - version: v14.0.0
-    pr-url: https://github.com/nodejs/node/pull/30766
-    description: NaN is now treated as being identical in case both sides are
-                 NaN.
 -->
 
 * `actual` {any}
@@ -616,8 +606,7 @@ An alias of [`assert.strictEqual()`][].
 > Stability: 0 - Deprecated: Use [`assert.strictEqual()`][] instead.
 
 Tests shallow, coercive equality between the `actual` and `expected` parameters
-using the [Abstract Equality Comparison][] ( `==` ). `NaN` is special handled
-and treated as being identical in case both sides are `NaN`.
+using the [Abstract Equality Comparison][] ( `==` ).
 
 ```js
 const assert = require('assert');
@@ -626,8 +615,6 @@ assert.equal(1, 1);
 // OK, 1 == 1
 assert.equal(1, '1');
 // OK, 1 == '1'
-assert.equal(NaN, NaN);
-// OK
 
 assert.equal(1, 2);
 // AssertionError: 1 == 2
@@ -818,10 +805,6 @@ instance of an [`Error`][] then it will be thrown instead of the
 <!-- YAML
 added: v0.1.21
 changes:
-  - version: v14.0.0
-    pr-url: https://github.com/nodejs/node/pull/30766
-    description: NaN is now treated as being identical in case both sides are
-                 NaN.
   - version: v9.0.0
     pr-url: https://github.com/nodejs/node/pull/15001
     description: The `Error` names and messages are now properly compared
@@ -943,11 +926,6 @@ instead of the [`AssertionError`][].
 ## `assert.notEqual(actual, expected[, message])`
 <!-- YAML
 added: v0.1.21
-changes:
-  - version: v14.0.0
-    pr-url: https://github.com/nodejs/node/pull/30766
-    description: NaN is now treated as being identical in case both sides are
-                 NaN.
 -->
 
 * `actual` {any}
@@ -963,8 +941,7 @@ An alias of [`assert.notStrictEqual()`][].
 > Stability: 0 - Deprecated: Use [`assert.notStrictEqual()`][] instead.
 
 Tests shallow, coercive inequality with the [Abstract Equality Comparison][]
-(`!=` ). `NaN` is special handled and treated as being identical in case both
-sides are `NaN`.
+( `!=` ).
 
 ```js
 const assert = require('assert');

@@ -36,7 +36,7 @@
         "string_header": "v8-inspector.h",
         "string_in": "StringView",
         "string_out": "std::unique_ptr<StringBuffer>",
-        "to_string_out": "StringBufferFrom(std::move(%s))",
+        "to_string_out": "StringBufferImpl::adopt(%s)",
         "export_macro": "V8_EXPORT"
     },
 
@@ -46,7 +46,11 @@
         "string_header": "src/inspector/string-util.h"
     },
 
-    "crdtp": {
-        "namespace": "v8_crdtp"
+    "encoding_lib": {
+        "namespace": "v8_inspector_protocol_encoding"
+    },
+
+    "bindings_lib": {
+        "namespace": "v8_inspector_protocol_bindings"
     }
 }

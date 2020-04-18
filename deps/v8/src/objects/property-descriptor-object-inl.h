@@ -14,7 +14,8 @@
 namespace v8 {
 namespace internal {
 
-TQ_OBJECT_CONSTRUCTORS_IMPL(PropertyDescriptorObject)
+OBJECT_CONSTRUCTORS_IMPL(PropertyDescriptorObject, FixedArray)
+CAST_ACCESSOR(PropertyDescriptorObject)
 }
 }  // namespace v8
 

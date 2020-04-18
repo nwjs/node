@@ -70,7 +70,7 @@ class ContextualVariable {
 
  private:
   template <class T>
-  friend V8_EXPORT_PRIVATE typename T::Scope*& ContextualVariableTop();
+  friend typename T::Scope*& ContextualVariableTop();
   static Scope*& Top() { return ContextualVariableTop<Derived>(); }
 
   static bool HasScope() { return Top() != nullptr; }

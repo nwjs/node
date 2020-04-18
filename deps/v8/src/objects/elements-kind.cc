@@ -115,7 +115,7 @@ const char* ElementsKindToString(ElementsKind kind) {
   }
 }
 
-const ElementsKind kFastElementsKindSequence[kFastElementsKindCount] = {
+ElementsKind kFastElementsKindSequence[kFastElementsKindCount] = {
     PACKED_SMI_ELEMENTS,     // 0
     HOLEY_SMI_ELEMENTS,      // 1
     PACKED_DOUBLE_ELEMENTS,  // 2

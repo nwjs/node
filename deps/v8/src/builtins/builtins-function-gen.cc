@@ -159,7 +159,7 @@ TF_BUILTIN(FastFunctionPrototypeBind, CodeStubAssembler) {
   // Allocate the resulting bound function.
   Comment("Allocate the resulting bound function");
   {
-    TNode<HeapObject> bound_function = Allocate(JSBoundFunction::kHeaderSize);
+    TNode<HeapObject> bound_function = Allocate(JSBoundFunction::kSize);
     StoreMapNoWriteBarrier(bound_function, bound_function_map.value());
     StoreObjectFieldNoWriteBarrier(
         bound_function, JSBoundFunction::kBoundTargetFunctionOffset, receiver);

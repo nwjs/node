@@ -748,11 +748,9 @@ void GraphC1Visualizer::PrintLiveRange(const LiveRange* range, const char* type,
         os_ << " \"" << Register::from_code(op.register_code()) << "\"";
       } else if (op.IsDoubleRegister()) {
         os_ << " \"" << DoubleRegister::from_code(op.register_code()) << "\"";
-      } else if (op.IsFloatRegister()) {
-        os_ << " \"" << FloatRegister::from_code(op.register_code()) << "\"";
       } else {
-        DCHECK(op.IsSimd128Register());
-        os_ << " \"" << Simd128Register::from_code(op.register_code()) << "\"";
+        DCHECK(op.IsFloatRegister());
+        os_ << " \"" << FloatRegister::from_code(op.register_code()) << "\"";
       }
     } else if (range->spilled()) {
       const TopLevelLiveRange* top = range->TopLevel();

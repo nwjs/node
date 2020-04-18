@@ -47,6 +47,7 @@ using v8::Message;
 using v8::Object;
 using v8::String;
 using v8::Task;
+using v8::TaskRunner;
 using v8::Value;
 
 using v8_inspector::StringBuffer;
@@ -62,6 +63,18 @@ static std::atomic_bool start_io_thread_async_initialized { false };
 // Protects the Agent* stored in start_io_thread_async.data.
 static Mutex start_io_thread_async_mutex;
 
+class StartIoTask : public Task {
+ public:
+  explicit StartIoTask(Agent* agent) : agent(agent) {}
+
+  void Run() override {
+    agent->StartIoThread();
+  }
+
+ private:
+  Agent* agent;
+};
+
 std::unique_ptr<StringBuffer> ToProtocolString(Isolate* isolate,
                                                Local<Value> value) {
   TwoByteValue buffer(isolate, value);
@@ -71,6 +84,10 @@ std::unique_ptr<StringBuffer> ToProtocolString(Isolate* isolate,
 // Called on the main thread.
 void StartIoThreadAsyncCallback(uv_async_t* handle) {
   static_cast<Agent*>(handle->data)->StartIoThread();
+}
+
+void StartIoInterrupt(Isolate* isolate, void* agent) {
+  static_cast<Agent*>(agent)->StartIoThread();
 }
 
 
@@ -340,24 +357,30 @@ class InspectorTimer {
     int64_t interval_ms = 1000 * interval_s;
     uv_timer_start(&timer_, OnTimer, interval_ms, interval_ms);
     timer_.data = this;
+
+    env->AddCleanupHook(CleanupHook, this);
   }
 
   InspectorTimer(const InspectorTimer&) = delete;
 
   void Stop() {
-    if (timer_.data == nullptr) return;
+    env_->RemoveCleanupHook(CleanupHook, this);
 
-    timer_.data = nullptr;
-    uv_timer_stop(&timer_);
-    env_->CloseHandle(reinterpret_cast<uv_handle_t*>(&timer_), TimerClosedCb);
+    if (timer_.data == this) {
+      timer_.data = nullptr;
+      uv_timer_stop(&timer_);
+      env_->CloseHandle(reinterpret_cast<uv_handle_t*>(&timer_), TimerClosedCb);
+    }
   }
-
-  inline Environment* env() const { return env_; }
 
  private:
   static void OnTimer(uv_timer_t* uvtimer) {
     InspectorTimer* timer = node::ContainerOf(&InspectorTimer::timer_, uvtimer);
     timer->callback_(timer->data_);
+  }
+
+  static void CleanupHook(void* data) {
+    static_cast<InspectorTimer*>(data)->Stop();
   }
 
   static void TimerClosedCb(uv_handle_t* uvtimer) {
@@ -382,29 +405,16 @@ class InspectorTimerHandle {
   InspectorTimerHandle(Environment* env, double interval_s,
                        V8InspectorClient::TimerCallback callback, void* data) {
     timer_ = new InspectorTimer(env, interval_s, callback, data);
-
-    env->AddCleanupHook(CleanupHook, this);
   }
 
   InspectorTimerHandle(const InspectorTimerHandle&) = delete;
 
   ~InspectorTimerHandle() {
-    Stop();
-  }
-
- private:
-  void Stop() {
-    if (timer_ != nullptr) {
-      timer_->env()->RemoveCleanupHook(CleanupHook, this);
-      timer_->Stop();
-    }
+    CHECK_NOT_NULL(timer_);
+    timer_->Stop();
     timer_ = nullptr;
   }
-
-  static void CleanupHook(void* data) {
-    static_cast<InspectorTimerHandle*>(data)->Stop();
-  }
-
+ private:
   InspectorTimer* timer_;
 };
 
@@ -662,7 +672,8 @@ class NodeInspectorClient : public V8InspectorClient {
   std::shared_ptr<MainThreadHandle> getThreadHandle() {
     if (!interface_) {
       interface_ = std::make_shared<MainThreadInterface>(
-          env_->inspector_agent());
+          env_->inspector_agent(), env_->event_loop(), env_->isolate(),
+          env_->isolate_data()->platform());
     }
     return interface_->GetHandle();
   }
@@ -698,9 +709,10 @@ class NodeInspectorClient : public V8InspectorClient {
 
     running_nested_loop_ = true;
 
+    MultiIsolatePlatform* platform = env_->isolate_data()->platform();
     while (shouldRunMessageLoop()) {
       if (interface_) interface_->WaitForFrontendEvent();
-      env_->RunAndClearInterrupts();
+      while (platform->FlushForegroundTasks(env_->isolate())) {}
     }
     running_nested_loop_ = false;
   }
@@ -725,9 +737,8 @@ class NodeInspectorClient : public V8InspectorClient {
   bool is_main_;
   bool running_nested_loop_ = false;
   std::unique_ptr<V8Inspector> client_;
-  // Note: ~ChannelImpl may access timers_ so timers_ has to come first.
-  std::unordered_map<void*, InspectorTimerHandle> timers_;
   std::unordered_map<int, std::unique_ptr<ChannelImpl>> channels_;
+  std::unordered_map<void*, InspectorTimerHandle> timers_;
   int next_session_id_ = 1;
   bool waiting_for_resume_ = false;
   bool waiting_for_frontend_ = false;
@@ -960,10 +971,12 @@ void Agent::RequestIoThreadStart() {
   // for IO events)
   CHECK(start_io_thread_async_initialized);
   uv_async_send(&start_io_thread_async);
-  parent_env_->RequestInterrupt([this](Environment*) {
-    StartIoThread();
-  });
-
+  Isolate* isolate = parent_env_->isolate();
+  v8::Platform* platform = parent_env_->isolate_data()->platform();
+  std::shared_ptr<TaskRunner> taskrunner =
+    platform->GetForegroundTaskRunner(isolate);
+  taskrunner->PostTask(std::make_unique<StartIoTask>(this));
+  isolate->RequestInterrupt(StartIoInterrupt, this);
   CHECK(start_io_thread_async_initialized);
   uv_async_send(&start_io_thread_async);
 }

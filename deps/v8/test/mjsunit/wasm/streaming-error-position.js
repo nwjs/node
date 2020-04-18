@@ -8,25 +8,22 @@
 
 load('test/mjsunit/wasm/wasm-module-builder.js');
 
-function testErrorPositionAsyncOnly(bytes, pos, message) {
-  let buffer = bytes.trunc_buffer();
-  // Only test the streaming decoder since this kind of error is out of sync
-  // with the non-streaming decoder, hence errors cannot be compared.
-  assertThrowsAsync(
-      WebAssembly.compile(buffer), WebAssembly.CompileError,
-      new RegExp(message + '.*@\\+' + pos));
+function module(bytes) {
+  let buffer = bytes;
+  if (typeof buffer === 'string') {
+    buffer = new ArrayBuffer(bytes.length);
+    let view = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.length; ++i) {
+      view[i] = bytes.charCodeAt(i);
+    }
+  }
+  return new WebAssembly.Module(buffer);
 }
 
-function testErrorPosition(bytes, pos, message) {
-  let buffer = bytes.trunc_buffer();
-  // First check the non-streaming decoder as a reference.
-  assertThrows(
-      () => new WebAssembly.Module(buffer), WebAssembly.CompileError,
-      new RegExp(message + '.*@\\+' + pos));
-  // Next test the actual streaming decoder.
+function testErrorPosition(bytes, pos, test_name) {
   assertThrowsAsync(
-      WebAssembly.compile(buffer), WebAssembly.CompileError,
-      new RegExp(message + '.*@\\+' + pos));
+      WebAssembly.compile(bytes.trunc_buffer()), WebAssembly.CompileError,
+      new RegExp('@\\+' + pos));
 }
 
 (function testInvalidMagic() {
@@ -35,7 +32,7 @@ function testErrorPosition(bytes, pos, message) {
     kWasmH0, kWasmH1 + 1, kWasmH2, kWasmH3, kWasmV0, kWasmV1, kWasmV2, kWasmV3
   ]);
   // Error at pos==0 because that's where the magic word is.
-  testErrorPosition(bytes, 0, 'expected magic word');
+  testErrorPosition(bytes, 0, 'testInvalidMagic');
 })();
 
 (function testInvalidVersion() {
@@ -44,7 +41,7 @@ function testErrorPosition(bytes, pos, message) {
     kWasmH0, kWasmH1, kWasmH2, kWasmH3, kWasmV0, kWasmV1 + 1, kWasmV2, kWasmV3
   ]);
   // Error at pos==4 because that's where the version word is.
-  testErrorPosition(bytes, 4, 'expected version');
+  testErrorPosition(bytes, 4, 'testInvalidVersion');
 })();
 
 (function testSectionLengthInvalidVarint() {
@@ -53,7 +50,7 @@ function testErrorPosition(bytes, pos, message) {
   bytes.emit_u8(kTypeSectionCode);
   bytes.emit_bytes([0x80, 0x80, 0x80, 0x80, 0x80, 0x00]);
   let pos = bytes.length - 1 - 1;
-  testErrorPosition(bytes, pos, 'expected section length');
+  testErrorPosition(bytes, pos, 'testSectionLengthInvalidVarint');
 })();
 
 (function testSectionLengthTooBig() {
@@ -62,7 +59,7 @@ function testErrorPosition(bytes, pos, message) {
   bytes.emit_u8(kTypeSectionCode);
   bytes.emit_u32v(0xffffff23);
   let pos = bytes.length - 1;
-  testErrorPositionAsyncOnly(bytes, pos, 'maximum function size');
+  testErrorPosition(bytes, pos, 'testSectionLengthTooBig');
 })();
 
 (function testFunctionsCountInvalidVarint() {
@@ -86,7 +83,7 @@ function testErrorPosition(bytes, pos, message) {
   bytes.emit_bytes([0x80, 0x80, 0x80, 0x80, 0x80, 0x00]);
 
   let pos = bytes.length - 1 - 1;
-  testErrorPositionAsyncOnly(bytes, pos, 'expected functions count');
+  testErrorPosition(bytes, pos, 'testFunctionsCountInvalidVarint');
 })();
 
 (function testFunctionsCountTooBig() {
@@ -110,7 +107,7 @@ function testErrorPosition(bytes, pos, message) {
   bytes.emit_u32v(0xffffff23);
 
   let pos = bytes.length - 1;
-  testErrorPositionAsyncOnly(bytes, pos, 'maximum function size');
+  testErrorPosition(bytes, pos, 'testFunctionsCountTooBig');
 })();
 
 (function testFunctionsCountDoesNotMatch() {
@@ -134,7 +131,7 @@ function testErrorPosition(bytes, pos, message) {
   bytes.emit_u32v(5);
 
   let pos = bytes.length - 1;
-  testErrorPositionAsyncOnly(bytes, pos, 'function body count 5 mismatch');
+  testErrorPosition(bytes, pos, 'testFunctionsCountDoesNotMatch');
 })();
 
 (function testBodySizeInvalidVarint() {
@@ -163,7 +160,7 @@ function testErrorPosition(bytes, pos, message) {
   bytes.emit_bytes([0x80, 0x80, 0x80, 0x80, 0x80, 0x00]);
 
   let pos = bytes.length - 1 - 1;
-  testErrorPositionAsyncOnly(bytes, pos, 'expected body size');
+  testErrorPosition(bytes, pos, 'testBodySizeInvalidVarint');
 })();
 
 (function testBodySizeTooBig() {
@@ -192,7 +189,7 @@ function testErrorPosition(bytes, pos, message) {
   bytes.emit_u32v(0xffffff23);
 
   let pos = bytes.length - 1;
-  testErrorPositionAsyncOnly(bytes, pos, 'maximum function size');
+  testErrorPosition(bytes, pos, 'testBodySizeTooBig');
 })();
 
 (function testBodySizeDoesNotFit() {
@@ -221,7 +218,7 @@ function testErrorPosition(bytes, pos, message) {
   bytes.emit_u32v(20);
 
   let pos = bytes.length - 1;
-  testErrorPositionAsyncOnly(bytes, pos, 'not enough code section bytes');
+  testErrorPosition(bytes, pos, 'testBodySizeDoesNotFit');
 })();
 
 (function testBodySizeIsZero() {
@@ -250,7 +247,7 @@ function testErrorPosition(bytes, pos, message) {
   bytes.emit_u32v(0);
 
   let pos = bytes.length - 1;
-  testErrorPositionAsyncOnly(bytes, pos, 'invalid function length');
+  testErrorPosition(bytes, pos, 'testBodySizeIsZero');
 })();
 
 (function testStaleCodeSectionBytes() {
@@ -280,7 +277,7 @@ function testErrorPosition(bytes, pos, message) {
   ]);
 
   let pos = bytes.length - 1;
-  testErrorPositionAsyncOnly(bytes, pos, 'not all code section bytes were used');
+  testErrorPosition(bytes, pos, 'testStaleCodeSectionBytes');
 })();
 
 (function testInvalidCode() {
@@ -302,7 +299,7 @@ function testErrorPosition(bytes, pos, message) {
   ]);
   bytes.emit_bytes([
       kCodeSectionCode,  // section id
-      6,                 // section length
+      6,                 // section length (too big)
       1,                 // functions count
       4,                 // body size
       0,                 // locals count
@@ -312,46 +309,7 @@ function testErrorPosition(bytes, pos, message) {
 
   // Find error at the index of kExprLocalGet.
   let pos = bytes.length - 1 - 1;
-  testErrorPosition(bytes, pos, 'invalid local index');
-})();
-
-(function testCodeSectionRepeats() {
-  let bytes = new Binary;
-  bytes.emit_header();
-  bytes.emit_bytes([
-      kTypeSectionCode,       // section id
-      4,                      // section length
-      1,                      // number of types
-      kWasmFunctionTypeForm,  // type
-      0,                      // number of parameter
-      0                       // number of returns
-  ]);
-  bytes.emit_bytes([
-      kFunctionSectionCode,  // section id
-      2,                     // section length
-      1,                     // number of functions
-      0                      // signature index
-  ]);
-  bytes.emit_bytes([
-      kCodeSectionCode,  // section id
-      4,                 // section length
-      1,                 // functions count
-      2,                 // body size
-      0,                 // locals count
-      kExprEnd           // body
-  ]);
-  let pos = bytes.length;
-  bytes.emit_bytes([
-      kCodeSectionCode,  // section id (repeating)
-      4,                 // section length
-      1,                 // functions count
-      2,                 // body size
-      0,                 // locals count
-      kExprEnd           // body
-  ]);
-
-  // Find error at the second kCodeSectionCode.
-  testErrorPositionAsyncOnly(bytes, pos, 'code section can only appear once');
+  testErrorPosition(bytes, pos, 'testInvalidCode');
 })();
 
 (function testCodeSectionSizeZero() {
@@ -373,12 +331,12 @@ function testErrorPosition(bytes, pos, message) {
   ]);
   bytes.emit_bytes([
       kCodeSectionCode,  // section id
-      0,                 // section length (empty)
+      0,                 // section length (too big)
   ]);
 
-  // Find error at the code section length.
+  // Find error at the index of kExprLocalGet.
   let pos = bytes.length - 1;
-  testErrorPositionAsyncOnly(bytes, pos, 'code section cannot have size 0');
+  testErrorPosition(bytes, pos, 'testCodeSectionSizeZero');
 })();
 
 (function testInvalidSection() {
@@ -395,5 +353,5 @@ function testErrorPosition(bytes, pos, message) {
   ]);
 
   let pos = bytes.length - 1 - 1;
-  testErrorPositionAsyncOnly(bytes, pos, 'invalid local type');
+  testErrorPosition(bytes, pos, 'testInvalidSection');
 })();

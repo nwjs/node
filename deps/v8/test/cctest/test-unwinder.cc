@@ -15,22 +15,14 @@ namespace v8 {
 namespace internal {
 namespace test_unwinder {
 
-static const void* fake_stack_base = nullptr;
-
-// Ignore deprecation warnings so that we can keep the tests for now.
-// TODO(petermarshall): Delete all the tests here when the old API is removed to
-// reduce the duplication.
-#if __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated"
-#endif
+static void* unlimited_stack_base = std::numeric_limits<void*>::max();
 
 TEST(Unwind_BadState_Fail) {
   UnwindState unwind_state;  // Fields are intialized to nullptr.
   RegisterState register_state;
 
   bool unwound = v8::Unwinder::TryUnwindV8Frames(unwind_state, &register_state,
-                                                 fake_stack_base);
+                                                 unlimited_stack_base);
   CHECK(!unwound);
   // The register state should not change when unwinding fails.
   CHECK_NULL(register_state.fp);
@@ -349,7 +341,7 @@ TEST(Unwind_JSEntry_Fail) {
   register_state.pc = start + 10;
 
   bool unwound = v8::Unwinder::TryUnwindV8Frames(unwind_state, &register_state,
-                                                 fake_stack_base);
+                                                 unlimited_stack_base);
   CHECK(!unwound);
   // The register state should not change when unwinding fails.
   CHECK_NULL(register_state.fp);
@@ -548,10 +540,6 @@ TEST(PCIsInV8_LargeCodeObject) {
   void* pc = start;
   CHECK(v8::Unwinder::PCIsInV8(unwind_state, pc));
 }
-
-#if __clang__
-#pragma clang diagnostic pop
-#endif
 
 }  // namespace test_unwinder
 }  // namespace internal

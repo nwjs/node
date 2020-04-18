@@ -80,7 +80,7 @@ const stream = require('stream');
     stream.Readable.prototype.unpipe.call(this, dest);
   };
 
-  const dest = new stream.Writable({ autoDestroy: false });
+  const dest = new stream.Writable();
   dest._write = function(chunk, encoding, cb) {
     cb();
   };

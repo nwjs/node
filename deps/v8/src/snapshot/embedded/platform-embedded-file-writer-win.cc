@@ -238,7 +238,7 @@ void EmitUnwindData(PlatformEmbeddedFileWriterWin* w,
   w->Comment("    UnwindInfoAddress");
   w->StartPdataSection();
   std::vector<int> code_chunks;
-  std::vector<win64_unwindinfo::FrameOffsets> fp_adjustments;
+  std::vector<int> fp_adjustments;
 
   for (int i = 0; i < Builtins::builtin_count; i++) {
     if (!blob->ContainsBuiltin(i)) continue;
@@ -249,7 +249,7 @@ void EmitUnwindData(PlatformEmbeddedFileWriterWin* w,
     uint32_t builtin_size = blob->InstructionSizeOfBuiltin(i);
 
     const std::vector<int>& xdata_desc = unwind_infos[i].fp_offsets();
-    const std::vector<win64_unwindinfo::FrameOffsets>& xdata_fp_adjustments =
+    const std::vector<int>& xdata_fp_adjustments =
         unwind_infos[i].fp_adjustments();
     DCHECK_EQ(xdata_desc.size(), xdata_fp_adjustments.size());
 
@@ -418,9 +418,7 @@ void PlatformEmbeddedFileWriterWin::SourceInfo(int fileid, const char* filename,
   // Its syntax is #line <line> "<filename>"
 }
 
-// TODO(mmarchini): investigate emitting size annotations for Windows
-void PlatformEmbeddedFileWriterWin::DeclareFunctionBegin(const char* name,
-                                                         uint32_t size) {
+void PlatformEmbeddedFileWriterWin::DeclareFunctionBegin(const char* name) {
   fprintf(fp_, "%s%s PROC\n", SYMBOL_PREFIX, name);
 }
 
@@ -524,9 +522,7 @@ void PlatformEmbeddedFileWriterWin::SourceInfo(int fileid, const char* filename,
   // Its syntax is #line <line> "<filename>"
 }
 
-// TODO(mmarchini): investigate emitting size annotations for Windows
-void PlatformEmbeddedFileWriterWin::DeclareFunctionBegin(const char* name,
-                                                         uint32_t size) {
+void PlatformEmbeddedFileWriterWin::DeclareFunctionBegin(const char* name) {
   fprintf(fp_, "%s%s FUNCTION\n", SYMBOL_PREFIX, name);
 }
 
@@ -638,13 +634,10 @@ void PlatformEmbeddedFileWriterWin::DeclareLabel(const char* name) {
 
 void PlatformEmbeddedFileWriterWin::SourceInfo(int fileid, const char* filename,
                                                int line) {
-  // BUG(9944): Use .cv_loc to ensure CodeView information is used on
-  // Windows.
+  fprintf(fp_, ".loc %d %d\n", fileid, line);
 }
 
-// TODO(mmarchini): investigate emitting size annotations for Windows
-void PlatformEmbeddedFileWriterWin::DeclareFunctionBegin(const char* name,
-                                                         uint32_t size) {
+void PlatformEmbeddedFileWriterWin::DeclareFunctionBegin(const char* name) {
   DeclareLabel(name);
 
   if (target_arch_ == EmbeddedTargetArch::kArm64) {
@@ -673,8 +666,11 @@ void PlatformEmbeddedFileWriterWin::FilePrologue() {}
 
 void PlatformEmbeddedFileWriterWin::DeclareExternalFilename(
     int fileid, const char* filename) {
-  // BUG(9944): Use .cv_filename to ensure CodeView information is used on
-  // Windows.
+  // Replace any Windows style paths (backslashes) with forward
+  // slashes.
+  std::string fixed_filename(filename);
+  std::replace(fixed_filename.begin(), fixed_filename.end(), '\\', '/');
+  fprintf(fp_, ".file %d \"%s\"\n", fileid, fixed_filename.c_str());
 }
 
 void PlatformEmbeddedFileWriterWin::FileEpilogue() {}

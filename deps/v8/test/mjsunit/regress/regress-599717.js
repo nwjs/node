@@ -18,11 +18,9 @@ try {
   var __v_12 = new ArrayBuffer(2147483648);
   ok = true;
 } catch (e) {
-  // Can happen if the allocation fails.
+  // Can happen on 32 bit systems.
 }
 if (ok) {
   var module = __f_61(this, null, __v_12);
-  // This fails AsmJS memory size validation because of kV8MaxWasmMemoryPages
-  // value.
-  assertFalse(%IsAsmWasmCode(__f_61));
+  assertTrue(%IsAsmWasmCode(__f_61));
 }

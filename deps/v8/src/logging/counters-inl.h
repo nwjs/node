@@ -57,6 +57,11 @@ void RuntimeCallTimer::CommitTimeToCounter() {
 
 bool RuntimeCallTimer::IsStarted() { return start_ticks_ != base::TimeTicks(); }
 
+RuntimeCallTimerScope::RuntimeCallTimerScope(Isolate* isolate,
+                                             HeapObject heap_object,
+                                             RuntimeCallCounterId counter_id)
+    : RuntimeCallTimerScope(isolate, counter_id) {}
+
 }  // namespace internal
 }  // namespace v8
 

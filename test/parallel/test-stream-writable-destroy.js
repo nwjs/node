@@ -157,22 +157,13 @@ const assert = require('assert');
     write(chunk, enc, cb) { cb(); }
   });
 
-  let ticked = false;
-  write.on('close', common.mustCall(() => {
-    assert.strictEqual(ticked, true);
-  }));
-  write.on('error', common.mustCall((err) => {
-    assert.strictEqual(ticked, true);
-    assert.strictEqual(err.message, 'kaboom 1');
-    assert.strictEqual(write._writableState.errorEmitted, true);
-  }));
+  write.on('close', common.mustCall());
+  write.on('error', common.mustCall());
 
   write.destroy(new Error('kaboom 1'));
   write.destroy(new Error('kaboom 2'));
-  assert.strictEqual(write._writableState.errored, true);
-  assert.strictEqual(write._writableState.errorEmitted, false);
+  assert.strictEqual(write._writableState.errorEmitted, true);
   assert.strictEqual(write.destroyed, true);
-  ticked = true;
 }
 
 {
@@ -185,31 +176,20 @@ const assert = require('assert');
     }
   });
 
-  let ticked = false;
-  writable.on('close', common.mustCall(() => {
-    writable.on('error', common.mustNotCall());
-    writable.destroy(new Error('hello'));
-    assert.strictEqual(ticked, true);
-    assert.strictEqual(writable._writableState.errorEmitted, true);
-  }));
-  writable.on('error', common.mustCall((err) => {
-    assert.strictEqual(ticked, true);
-    assert.strictEqual(err.message, 'kaboom 1');
-    assert.strictEqual(writable._writableState.errorEmitted, true);
+  writable.on('close', common.mustCall());
+  writable.on('error', common.expectsError({
+    name: 'Error',
+    message: 'kaboom 2'
   }));
 
   writable.destroy();
   assert.strictEqual(writable.destroyed, true);
-  assert.strictEqual(writable._writableState.errored, false);
   assert.strictEqual(writable._writableState.errorEmitted, false);
 
   // Test case where `writable.destroy()` is called again with an error before
   // the `_destroy()` callback is called.
   writable.destroy(new Error('kaboom 2'));
-  assert.strictEqual(writable._writableState.errorEmitted, false);
-  assert.strictEqual(writable._writableState.errored, false);
-
-  ticked = true;
+  assert.strictEqual(writable._writableState.errorEmitted, true);
 }
 
 {
@@ -248,8 +228,8 @@ const assert = require('assert');
 
   const expected = new Error('kaboom');
 
-  write.destroy(expected, common.mustCall((err) => {
-    assert.strictEqual(err, undefined);
+  write.destroy(expected, common.mustCall(function(err) {
+    assert.strictEqual(err, expected);
   }));
 }
 
@@ -258,22 +238,24 @@ const assert = require('assert');
   // called again.
   const write = new Writable({
     write: common.mustNotCall(),
-    final: common.mustCall((cb) => cb(), 2),
-    autoDestroy: true
+    final: common.mustCall((cb) => cb(), 2)
   });
 
   write.end();
-  write.once('close', common.mustCall(() => {
-    write._undestroy();
-    write.end();
-  }));
+  write.destroy();
+  write._undestroy();
+  write.end();
 }
 
 {
   const write = new Writable();
 
   write.destroy();
-  write.on('error', common.mustNotCall());
+  write.on('error', common.expectsError({
+    name: 'Error',
+    code: 'ERR_STREAM_DESTROYED',
+    message: 'Cannot call write after a stream was destroyed'
+  }));
   write.write('asd', common.expectsError({
     name: 'Error',
     code: 'ERR_STREAM_DESTROYED',
@@ -286,7 +268,11 @@ const assert = require('assert');
     write(chunk, enc, cb) { cb(); }
   });
 
-  write.on('error', common.mustNotCall());
+  write.on('error', common.expectsError({
+    name: 'Error',
+    code: 'ERR_STREAM_DESTROYED',
+    message: 'Cannot call write after a stream was destroyed'
+  }));
 
   write.cork();
   write.write('asd', common.mustCall());
@@ -305,58 +291,6 @@ const assert = require('assert');
     message: 'Cannot call write after a stream was destroyed'
   }));
   write.uncork();
-}
-
-{
-  // Call end(cb) after error & destroy
-
-  const write = new Writable({
-    write(chunk, enc, cb) { cb(new Error('asd')); }
-  });
-  write.on('error', common.mustCall(() => {
-    write.destroy();
-    let ticked = false;
-    write.end(common.mustCall((err) => {
-      assert.strictEqual(ticked, true);
-      assert.strictEqual(err.code, 'ERR_STREAM_DESTROYED');
-    }));
-    ticked = true;
-  }));
-  write.write('asd');
-}
-
-{
-  // Call end(cb) after finish & destroy
-
-  const write = new Writable({
-    write(chunk, enc, cb) { cb(); }
-  });
-  write.on('finish', common.mustCall(() => {
-    write.destroy();
-    let ticked = false;
-    write.end(common.mustCall((err) => {
-      assert.strictEqual(ticked, true);
-      assert.strictEqual(err.code, 'ERR_STREAM_ALREADY_FINISHED');
-    }));
-    ticked = true;
-  }));
-  write.end();
-}
-
-{
-  // Call end(cb) after error & destroy and don't trigger
-  // unhandled exception.
-
-  const write = new Writable({
-    write(chunk, enc, cb) { process.nextTick(cb); }
-  });
-  write.once('error', common.mustCall((err) => {
-    assert.strictEqual(err.message, 'asd');
-  }));
-  write.end('asd', common.mustCall((err) => {
-    assert.strictEqual(err.message, 'asd');
-  }));
-  write.destroy(new Error('asd'));
 }
 
 {

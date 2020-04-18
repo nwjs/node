@@ -150,14 +150,14 @@ TEST(Shrinking) {
 
 namespace {
 bool EphemeronHashTableContainsKey(EphemeronHashTable table, HeapObject key) {
-  for (InternalIndex i : table.IterateEntries()) {
+  for (int i = 0; i < table.Capacity(); ++i) {
     if (table.KeyAt(i) == key) return true;
   }
   return false;
 }
 }  // namespace
 
-TEST(WeakMapPromotionMarkCompact) {
+TEST(WeakMapPromotion) {
   LocalContext context;
   Isolate* isolate = GetIsolateFrom(&context);
   Factory* factory = isolate->factory();
@@ -165,10 +165,7 @@ TEST(WeakMapPromotionMarkCompact) {
   Handle<JSWeakMap> weakmap = isolate->factory()->NewJSWeakMap();
 
   CcTest::CollectAllGarbage();
-
-  CHECK(FLAG_always_promote_young_mc
-            ? !ObjectInYoungGeneration(weakmap->table())
-            : ObjectInYoungGeneration(weakmap->table()));
+  CHECK(ObjectInYoungGeneration(weakmap->table()));
 
   Handle<Map> map = factory->NewMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);
   Handle<JSObject> object = factory->NewJSObjectFromMap(map);
@@ -180,8 +177,7 @@ TEST(WeakMapPromotionMarkCompact) {
       EphemeronHashTable::cast(weakmap->table()), *object));
   CcTest::CollectAllGarbage();
 
-  CHECK(FLAG_always_promote_young_mc ? !ObjectInYoungGeneration(*object)
-                                     : ObjectInYoungGeneration(*object));
+  CHECK(ObjectInYoungGeneration(*object));
   CHECK(!ObjectInYoungGeneration(weakmap->table()));
   CHECK(EphemeronHashTableContainsKey(
       EphemeronHashTable::cast(weakmap->table()), *object));
@@ -200,7 +196,7 @@ TEST(WeakMapScavenge) {
   HandleScope scope(isolate);
   Handle<JSWeakMap> weakmap = isolate->factory()->NewJSWeakMap();
 
-  heap::GcAndSweep(isolate->heap(), NEW_SPACE);
+  CcTest::CollectAllGarbage();
   CHECK(ObjectInYoungGeneration(weakmap->table()));
 
   Handle<Map> map = factory->NewMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);

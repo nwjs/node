@@ -154,7 +154,6 @@
 </table>
 
 * Other Versions
-  * [14.x](CHANGELOG_V14.md)
   * [12.x](CHANGELOG_V12.md)
   * [11.x](CHANGELOG_V11.md)
   * [10.x](CHANGELOG_V10.md)

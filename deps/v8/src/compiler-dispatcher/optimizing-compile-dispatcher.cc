@@ -65,19 +65,18 @@ class OptimizingCompileDispatcher::CompileTask : public CancelableTask {
           worker_thread_runtime_call_stats_);
       RuntimeCallTimerScope runtimeTimer(
           runtime_call_stats_scope.Get(),
-          RuntimeCallCounterId::kOptimizeBackgroundDispatcherJob);
+          RuntimeCallCounterId::kRecompileConcurrent);
 
       TimerEventScope<TimerEventRecompileConcurrent> timer(isolate_);
       TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
-                   "V8.OptimizeBackground");
+                   "V8.RecompileConcurrent");
 
       if (dispatcher_->recompilation_delay_ != 0) {
         base::OS::Sleep(base::TimeDelta::FromMilliseconds(
             dispatcher_->recompilation_delay_));
       }
 
-      dispatcher_->CompileNext(dispatcher_->NextInput(true),
-                               runtime_call_stats_scope.Get());
+      dispatcher_->CompileNext(dispatcher_->NextInput(true));
     }
     {
       base::MutexGuard lock_guard(&dispatcher_->ref_count_mutex_);
@@ -123,12 +122,11 @@ OptimizedCompilationJob* OptimizingCompileDispatcher::NextInput(
   return job;
 }
 
-void OptimizingCompileDispatcher::CompileNext(OptimizedCompilationJob* job,
-                                              RuntimeCallStats* stats) {
+void OptimizingCompileDispatcher::CompileNext(OptimizedCompilationJob* job) {
   if (!job) return;
 
   // The function may have already been optimized by OSR.  Simply continue.
-  CompilationJob::Status status = job->ExecuteJob(stats);
+  CompilationJob::Status status = job->ExecuteJob();
   USE(status);  // Prevent an unused-variable error.
 
   {
@@ -195,10 +193,14 @@ void OptimizingCompileDispatcher::Stop() {
     mode_ = COMPILE;
   }
 
-  // At this point the optimizing compiler thread's event loop has stopped.
-  // There is no need for a mutex when reading input_queue_length_.
-  DCHECK_EQ(input_queue_length_, 0);
-  FlushOutputQueue(false);
+  if (recompilation_delay_ != 0) {
+    // At this point the optimizing compiler thread's event loop has stopped.
+    // There is no need for a mutex when reading input_queue_length_.
+    while (input_queue_length_ > 0) CompileNext(NextInput());
+    InstallOptimizedFunctions();
+  } else {
+    FlushOutputQueue(false);
+  }
 }
 
 void OptimizingCompileDispatcher::InstallOptimizedFunctions() {

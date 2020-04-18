@@ -27,7 +27,7 @@
 
 // Regression test for the r1513 fix.
 
-// Flags: --allow-natives-syntax --no-force-slow-path
+// Flags: --allow-natives-syntax
 
 var foo = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 assertEquals(39, foo.length);

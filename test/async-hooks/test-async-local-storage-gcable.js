@@ -10,7 +10,7 @@ const onGC = require('../common/ongc');
 
 let asyncLocalStorage = new AsyncLocalStorage();
 
-asyncLocalStorage.run({}, () => {
+asyncLocalStorage.runSyncAndReturn({}, () => {
   asyncLocalStorage.disable();
 
   onGC(asyncLocalStorage, { ongc: common.mustCall() });

@@ -180,9 +180,6 @@ VisitorId Map::GetVisitorId(Map map) {
     case FEEDBACK_CELL_TYPE:
       return kVisitFeedbackCell;
 
-    case FEEDBACK_METADATA_TYPE:
-      return kVisitFeedbackMetadata;
-
     case FEEDBACK_VECTOR_TYPE:
       return kVisitFeedbackVector;
 
@@ -290,7 +287,6 @@ VisitorId Map::GetVisitorId(Map map) {
     case JS_V8_BREAK_ITERATOR_TYPE:
     case JS_COLLATOR_TYPE:
     case JS_DATE_TIME_FORMAT_TYPE:
-    case JS_DISPLAY_NAMES_TYPE:
     case JS_LIST_FORMAT_TYPE:
     case JS_LOCALE_TYPE:
     case JS_NUMBER_FORMAT_TYPE:
@@ -325,6 +321,7 @@ VisitorId Map::GetVisitorId(Map map) {
     case FILLER_TYPE:
     case FOREIGN_TYPE:
     case HEAP_NUMBER_TYPE:
+    case FEEDBACK_METADATA_TYPE:
       return kVisitDataObject;
 
     case BIGINT_TYPE:
@@ -636,8 +633,9 @@ Map Map::FindRootMap(Isolate* isolate) const {
   while (true) {
     Object back = result.GetBackPointer(isolate);
     if (back.IsUndefined(isolate)) {
-      // Initial map must not contain descriptors in the descriptors array
-      // that do not belong to the map.
+      // Initial map always owns descriptors and doesn't have unused entries
+      // in the descriptor array.
+      DCHECK(result.owns_descriptors());
       DCHECK_EQ(result.NumberOfOwnDescriptors(),
                 result.instance_descriptors().number_of_descriptors());
       return result;
@@ -1429,14 +1427,14 @@ Handle<Map> Map::RawCopy(Isolate* isolate, Handle<Map> map, int instance_size,
   result->set_bit_field(map->bit_field());
   result->set_bit_field2(map->bit_field2());
   int new_bit_field3 = map->bit_field3();
-  new_bit_field3 = Bits3::OwnsDescriptorsBit::update(new_bit_field3, true);
-  new_bit_field3 = Bits3::NumberOfOwnDescriptorsBits::update(new_bit_field3, 0);
+  new_bit_field3 = OwnsDescriptorsBit::update(new_bit_field3, true);
+  new_bit_field3 = NumberOfOwnDescriptorsBits::update(new_bit_field3, 0);
   new_bit_field3 =
-      Bits3::EnumLengthBits::update(new_bit_field3, kInvalidEnumCacheSentinel);
-  new_bit_field3 = Bits3::IsDeprecatedBit::update(new_bit_field3, false);
-  new_bit_field3 = Bits3::IsInRetainedMapListBit::update(new_bit_field3, false);
+      EnumLengthBits::update(new_bit_field3, kInvalidEnumCacheSentinel);
+  new_bit_field3 = IsDeprecatedBit::update(new_bit_field3, false);
+  new_bit_field3 = IsInRetainedMapListBit::update(new_bit_field3, false);
   if (!map->is_dictionary_map()) {
-    new_bit_field3 = Bits3::IsUnstableBit::update(new_bit_field3, false);
+    new_bit_field3 = IsUnstableBit::update(new_bit_field3, false);
   }
   result->set_bit_field3(new_bit_field3);
   result->clear_padding();
@@ -1480,8 +1478,7 @@ Handle<Map> Map::Normalize(Isolate* isolate, Handle<Map> fast_map,
       // The IsMigrationTargetBit might be different if the {new_map} from
       // {cache} has already been marked as a migration target.
       constexpr int ignored_bit_field3_bits =
-          Bits3::IsInRetainedMapListBit::kMask |
-          Bits3::IsMigrationTargetBit::kMask;
+          IsInRetainedMapListBit::kMask | IsMigrationTargetBit::kMask;
       DCHECK_EQ(fresh->bit_field3() & ~ignored_bit_field3_bits,
                 new_map->bit_field3() & ~ignored_bit_field3_bits);
       int offset = Map::kBitField3Offset + kInt32Size;
@@ -1495,7 +1492,7 @@ Handle<Map> Map::Normalize(Isolate* isolate, Handle<Map> fast_map,
                       Map::kPrototypeValidityCellOffset + kTaggedSize);
         offset = kTransitionsOrPrototypeInfoOffset + kTaggedSize;
         DCHECK_EQ(fresh->raw_transitions(),
-                  MaybeObject::FromObject(Smi::zero()));
+                  MaybeObject::FromObject(Smi::kZero));
       }
       DCHECK_EQ(0, memcmp(reinterpret_cast<void*>(fresh->address() + offset),
                           reinterpret_cast<void*>(new_map->address() + offset),
@@ -1574,8 +1571,9 @@ void EnsureInitialMap(Isolate* isolate, Handle<Map> map) {
          *map == *isolate->async_function_with_home_object_map() ||
          *map == *isolate->async_function_with_name_and_home_object_map());
 #endif
-  // Initial maps must not contain descriptors in the descriptors array
-  // that do not belong to the map.
+  // Initial maps must always own their descriptors and it's descriptor array
+  // does not contain descriptors that do not belong to the map.
+  DCHECK(map->owns_descriptors());
   DCHECK_EQ(map->NumberOfOwnDescriptors(),
             map->instance_descriptors().number_of_descriptors());
 }
@@ -1593,11 +1591,6 @@ Handle<Map> Map::CopyInitialMap(Isolate* isolate, Handle<Map> map,
                                 int instance_size, int inobject_properties,
                                 int unused_property_fields) {
   EnsureInitialMap(isolate, map);
-  // Initial map must not contain descriptors in the descriptors array
-  // that do not belong to the map.
-  DCHECK_EQ(map->NumberOfOwnDescriptors(),
-            map->instance_descriptors().number_of_descriptors());
-
   Handle<Map> result =
       RawCopy(isolate, map, instance_size, inobject_properties);
 
@@ -1606,10 +1599,9 @@ Handle<Map> Map::CopyInitialMap(Isolate* isolate, Handle<Map> map,
 
   int number_of_own_descriptors = map->NumberOfOwnDescriptors();
   if (number_of_own_descriptors > 0) {
-    // The copy will use the same descriptors array without ownership.
-    DescriptorArray descriptors = map->instance_descriptors();
-    result->set_owns_descriptors(false);
-    result->UpdateDescriptors(isolate, descriptors, map->GetLayoutDescriptor(),
+    // The copy will use the same descriptors array.
+    result->UpdateDescriptors(isolate, map->instance_descriptors(),
+                              map->GetLayoutDescriptor(),
                               number_of_own_descriptors);
 
     DCHECK_EQ(result->NumberOfFields(),
@@ -1689,8 +1681,9 @@ void Map::ConnectTransition(Isolate* isolate, Handle<Map> parent,
   if (!parent->GetBackPointer().IsUndefined(isolate)) {
     parent->set_owns_descriptors(false);
   } else {
-    // |parent| is initial map and it must not contain descriptors in the
-    // descriptors array that do not belong to the map.
+    // |parent| is initial map and it must keep the ownership, there must be no
+    // descriptors in the descriptors array that do not belong to the map.
+    DCHECK(parent->owns_descriptors());
     DCHECK_EQ(parent->NumberOfOwnDescriptors(),
               parent->instance_descriptors().number_of_descriptors());
   }
@@ -1829,7 +1822,7 @@ void Map::InstallDescriptors(Isolate* isolate, Handle<Map> parent,
       CHECK(child->layout_descriptor().IsConsistentWithMap(*child));
     }
 #else
-    SLOW_DCHECK(child->layout_descriptor().IsConsistentWithMap(*child));
+    SLOW_DCHECK(child->layout_descriptor()->IsConsistentWithMap(*child));
 #endif
     child->set_visitor_id(Map::GetVisitorId(*child));
   }
@@ -1934,7 +1927,6 @@ Handle<Map> Map::CopyForElementsTransition(Isolate* isolate, Handle<Map> map) {
     // In case the map owned its own descriptors, share the descriptors and
     // transfer ownership to the new map.
     // The properties did not change, so reuse descriptors.
-    map->set_owns_descriptors(false);
     new_map->InitializeDescriptors(isolate, map->instance_descriptors(),
                                    map->GetLayoutDescriptor());
   } else {
@@ -2127,7 +2119,7 @@ Handle<Map> Map::TransitionToDataProperty(Isolate* isolate, Handle<Map> map,
                                           PropertyConstness constness,
                                           StoreOrigin store_origin) {
   RuntimeCallTimerScope stats_scope(
-      isolate,
+      isolate, *map,
       map->is_prototype_map()
           ? RuntimeCallCounterId::kPrototypeMap_TransitionToDataProperty
           : RuntimeCallCounterId::kMap_TransitionToDataProperty);
@@ -2486,10 +2478,9 @@ bool Map::EquivalentToForNormalization(const Map other,
   int properties =
       mode == CLEAR_INOBJECT_PROPERTIES ? 0 : other.GetInObjectProperties();
   // Make sure the elements_kind bits are in bit_field2.
-  DCHECK_EQ(this->elements_kind(),
-            Map::Bits2::ElementsKindBits::decode(bit_field2()));
+  DCHECK_EQ(this->elements_kind(), Map::ElementsKindBits::decode(bit_field2()));
   int adjusted_other_bit_field2 =
-      Map::Bits2::ElementsKindBits::update(other.bit_field2(), elements_kind);
+      Map::ElementsKindBits::update(other.bit_field2(), elements_kind);
   return CheckEquivalent(*this, other) &&
          bit_field2() == adjusted_other_bit_field2 &&
          GetInObjectProperties() == properties &&
@@ -2643,7 +2634,7 @@ bool Map::IsPrototypeChainInvalidated(Map map) {
 void Map::SetPrototype(Isolate* isolate, Handle<Map> map,
                        Handle<HeapObject> prototype,
                        bool enable_prototype_setup_mode) {
-  RuntimeCallTimerScope stats_scope(isolate,
+  RuntimeCallTimerScope stats_scope(isolate, *map,
                                     RuntimeCallCounterId::kMap_SetPrototype);
 
   if (prototype->IsJSObject()) {

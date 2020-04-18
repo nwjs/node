@@ -84,6 +84,11 @@ TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledData)
 TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledDataWithoutPreparseData)
 TQ_OBJECT_CONSTRUCTORS_IMPL(UncompiledDataWithPreparseData)
 
+DEF_GETTER(HeapObject, IsUncompiledData, bool) {
+  return IsUncompiledDataWithoutPreparseData(isolate) ||
+         IsUncompiledDataWithPreparseData(isolate);
+}
+
 OBJECT_CONSTRUCTORS_IMPL(InterpreterData, Struct)
 
 CAST_ACCESSOR(InterpreterData)
@@ -148,16 +153,6 @@ void SharedFunctionInfo::SetName(String name) {
   UpdateFunctionMapIndex();
 }
 
-bool SharedFunctionInfo::is_script() const {
-  return scope_info().is_script_scope() &&
-         Script::cast(script()).compilation_type() ==
-             Script::COMPILATION_TYPE_HOST;
-}
-
-bool SharedFunctionInfo::needs_script_context() const {
-  return is_script() && scope_info().ContextLocalCount() > 0;
-}
-
 AbstractCode SharedFunctionInfo::abstract_code() {
   if (HasBytecodeArray()) {
     return AbstractCode::cast(GetBytecodeArray());
@@ -198,7 +193,7 @@ BIT_FIELD_ACCESSORS(SharedFunctionInfo, flags, is_asm_wasm_broken,
                     SharedFunctionInfo::IsAsmWasmBrokenBit)
 BIT_FIELD_ACCESSORS(SharedFunctionInfo, flags,
                     requires_instance_members_initializer,
-                    SharedFunctionInfo::RequiresInstanceMembersInitializerBit)
+                    SharedFunctionInfo::RequiresInstanceMembersInitializer)
 
 BIT_FIELD_ACCESSORS(SharedFunctionInfo, flags, name_should_print_as_anonymous,
                     SharedFunctionInfo::NameShouldPrintAsAnonymousBit)
@@ -209,7 +204,7 @@ BIT_FIELD_ACCESSORS(SharedFunctionInfo, flags, is_toplevel,
                     SharedFunctionInfo::IsTopLevelBit)
 BIT_FIELD_ACCESSORS(SharedFunctionInfo, flags,
                     is_oneshot_iife_or_properties_are_final,
-                    SharedFunctionInfo::IsOneshotIifeOrPropertiesAreFinalBit)
+                    SharedFunctionInfo::IsOneshotIIFEOrPropertiesAreFinalBit)
 BIT_FIELD_ACCESSORS(SharedFunctionInfo, flags,
                     is_safe_to_skip_arguments_adaptor,
                     SharedFunctionInfo::IsSafeToSkipArgumentsAdaptorBit)
@@ -619,27 +614,29 @@ void SharedFunctionInfo::ClearPreparseData() {
   DCHECK(HasUncompiledDataWithoutPreparseData());
 }
 
-void UncompiledData::Init(
-    String inferred_name, int start_position, int end_position,
+// static
+void UncompiledData::Initialize(
+    UncompiledData data, String inferred_name, int start_position,
+    int end_position,
     std::function<void(HeapObject object, ObjectSlot slot, HeapObject target)>
         gc_notify_updated_slot) {
-  set_inferred_name(inferred_name);
-  gc_notify_updated_slot(*this, RawField(UncompiledData::kInferredNameOffset),
-                         inferred_name);
-  set_start_position(start_position);
-  set_end_position(end_position);
+  data.set_inferred_name(inferred_name);
+  gc_notify_updated_slot(
+      data, data.RawField(UncompiledData::kInferredNameOffset), inferred_name);
+  data.set_start_position(start_position);
+  data.set_end_position(end_position);
 }
 
-void UncompiledDataWithPreparseData::Init(
-    String inferred_name, int start_position, int end_position,
-    PreparseData scope_data,
+void UncompiledDataWithPreparseData::Initialize(
+    UncompiledDataWithPreparseData data, String inferred_name,
+    int start_position, int end_position, PreparseData scope_data,
     std::function<void(HeapObject object, ObjectSlot slot, HeapObject target)>
         gc_notify_updated_slot) {
-  this->UncompiledData::Init(inferred_name, start_position, end_position,
+  UncompiledData::Initialize(data, inferred_name, start_position, end_position,
                              gc_notify_updated_slot);
-  set_preparse_data(scope_data);
+  data.set_preparse_data(scope_data);
   gc_notify_updated_slot(
-      *this, RawField(UncompiledDataWithPreparseData::kPreparseDataOffset),
+      data, data.RawField(UncompiledDataWithPreparseData::kPreparseDataOffset),
       scope_data);
 }
 
@@ -670,10 +667,6 @@ void SharedFunctionInfo::set_script(HeapObject script) {
   } else {
     set_script_or_debug_info(script);
   }
-}
-
-bool SharedFunctionInfo::is_repl_mode() const {
-  return script().IsScript() && Script::cast(script()).is_repl_mode();
 }
 
 bool SharedFunctionInfo::HasDebugInfo() const {
@@ -713,14 +706,14 @@ String SharedFunctionInfo::inferred_name() {
   return GetReadOnlyRoots().empty_string();
 }
 
-bool SharedFunctionInfo::IsUserJavaScript() const {
+bool SharedFunctionInfo::IsUserJavaScript() {
   Object script_obj = script();
   if (script_obj.IsUndefined()) return false;
   Script script = Script::cast(script_obj);
   return script.IsUserJavaScript();
 }
 
-bool SharedFunctionInfo::IsSubjectToDebugging() const {
+bool SharedFunctionInfo::IsSubjectToDebugging() {
   return IsUserJavaScript() && !HasAsmWasmData();
 }
 

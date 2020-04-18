@@ -157,9 +157,9 @@ void Log::MessageBuilder::AppendSymbolName(Symbol symbol) {
   DCHECK(!symbol.is_null());
   OFStream& os = log_->os_;
   os << "symbol(";
-  if (!symbol.description().IsUndefined()) {
+  if (!symbol.name().IsUndefined()) {
     os << "\"";
-    AppendSymbolNameDetails(String::cast(symbol.description()), false);
+    AppendSymbolNameDetails(String::cast(symbol.name()), false);
     os << "\" ";
   }
   os << "hash " << std::hex << symbol.Hash() << std::dec << ")";

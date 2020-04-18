@@ -4,7 +4,7 @@
 
 // Flags: --allow-natives-syntax
 
-const limit = %TypedArrayMaxLength() + 1;
+const limit = %MaxSmi() + 1;
 
 (function() {
   function foo() {

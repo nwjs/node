@@ -11,22 +11,23 @@ namespace v8 {
 namespace internal {
 namespace wasm {
 
-// static
-WasmFeatures WasmFeatures::FromFlags() {
-  WasmFeatures features = WasmFeatures::None();
-#define FLAG_REF(feat, ...) \
-  if (FLAG_experimental_wasm_##feat) features.Add(kFeature_##feat);
-  FOREACH_WASM_FEATURE(FLAG_REF)
-#undef FLAG_REF
-  return features;
+
+void UnionFeaturesInto(WasmFeatures* dst, const WasmFeatures& src) {
+#define DO_UNION(feat, desc, val) dst->feat |= src.feat;
+  FOREACH_WASM_FEATURE(DO_UNION);
+#undef DO_UNION
 }
 
-// static
-WasmFeatures WasmFeatures::FromIsolate(Isolate* isolate) {
-  WasmFeatures features = WasmFeatures::FromFlags();
-  if (isolate->AreWasmThreadsEnabled(handle(isolate->context(), isolate))) {
-    features.Add(kFeature_threads);
-  }
+WasmFeatures WasmFeaturesFromFlags() {
+#define FLAG_REF(feat, desc, val) FLAG_experimental_wasm_##feat,
+  return WasmFeatures(FOREACH_WASM_FEATURE(FLAG_REF){});
+#undef FLAG_REF
+}
+
+WasmFeatures WasmFeaturesFromIsolate(Isolate* isolate) {
+  WasmFeatures features = WasmFeaturesFromFlags();
+  features.threads |=
+      isolate->AreWasmThreadsEnabled(handle(isolate->context(), isolate));
   return features;
 }
 

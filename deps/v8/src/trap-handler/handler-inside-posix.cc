@@ -27,7 +27,7 @@
 
 #include <signal.h>
 
-#if defined(V8_OS_LINUX) || defined(V8_OS_FREEBSD)
+#ifdef V8_OS_LINUX
 #include <ucontext.h>
 #elif V8_OS_MACOSX
 #include <sys/ucontext.h>
@@ -112,8 +112,6 @@ bool TryHandleSignal(int signum, siginfo_t* info, void* context) {
     auto* context_rip = &uc->uc_mcontext.gregs[REG_RIP];
 #elif V8_OS_MACOSX
     auto* context_rip = &uc->uc_mcontext->__ss.__rip;
-#elif V8_OS_FREEBSD
-    auto* context_rip = &uc->uc_mcontext.mc_rip;
 #else
 #error Unsupported platform
 #endif

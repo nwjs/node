@@ -8,7 +8,6 @@
 #include "src/parsing/keywords-gen.h"
 #include "src/parsing/scanner.h"
 #include "src/strings/char-predicates-inl.h"
-#include "src/utils/utils.h"
 
 namespace v8 {
 namespace internal {

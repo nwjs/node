@@ -3563,7 +3563,7 @@ void DisassemblingDecoder::ProcessOutput(Instruction* /*instr*/) {
 }
 
 void DisassemblingDecoder::AppendRegisterNameToOutput(const CPURegister& reg) {
-  DCHECK(reg.is_valid());
+  DCHECK(reg.IsValid());
   char reg_char;
 
   if (reg.IsRegister()) {

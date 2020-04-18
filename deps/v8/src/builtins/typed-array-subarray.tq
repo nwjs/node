@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-namespace typed_array {
+namespace typed_array_subarray {
   // ES %TypedArray%.prototype.subarray
   transitioning javascript builtin TypedArrayPrototypeSubArray(
-      js-implicit context: NativeContext,
+      js-implicit context: Context,
       receiver: JSAny)(...arguments): JSTypedArray {
     const methodName: constexpr string = '%TypedArray%.prototype.subarray';
 
@@ -13,21 +13,20 @@ namespace typed_array {
     // 3. If O does not have a [[TypedArrayName]] internal slot, throw a
     // TypeError exception.
     const source = Cast<JSTypedArray>(receiver)
-        otherwise ThrowTypeError(
-        MessageTemplate::kIncompatibleMethodReceiver, methodName);
+        otherwise ThrowTypeError(kIncompatibleMethodReceiver, methodName);
 
     // 5. Let buffer be O.[[ViewedArrayBuffer]].
     const buffer = typed_array::GetBuffer(source);
 
     // 6. Let srcLength be O.[[ArrayLength]].
-    const srcLength: uintptr = source.length;
+    const srcLength = Convert<intptr>(source.length);
 
     // 7. Let relativeBegin be ? ToInteger(begin).
     // 8. If relativeBegin < 0, let beginIndex be max((srcLength +
     // relativeBegin), 0); else let beginIndex be min(relativeBegin,
     // srcLength).
     const arg0 = arguments[0];
-    const begin: uintptr =
+    const begin: intptr =
         arg0 != Undefined ? ConvertToRelativeIndex(arg0, srcLength) : 0;
 
     // 9. If end is undefined, let relativeEnd be srcLength;
@@ -35,11 +34,11 @@ namespace typed_array {
     // 10. If relativeEnd < 0, let endIndex be max((srcLength + relativeEnd),
     // 0); else let endIndex be min(relativeEnd, srcLength).
     const arg1 = arguments[1];
-    const end: uintptr =
+    const end: intptr =
         arg1 != Undefined ? ConvertToRelativeIndex(arg1, srcLength) : srcLength;
 
     // 11. Let newLength be max(endIndex - beginIndex, 0).
-    const newLength: uintptr = Unsigned(IntPtrMax(Signed(end - begin), 0));
+    const newLength = Convert<PositiveSmi>(IntPtrMax(end - begin, 0));
 
     // 12. Let constructorName be the String value of O.[[TypedArrayName]].
     // 13. Let elementSize be the Number value of the Element Size value
@@ -50,13 +49,16 @@ namespace typed_array {
     const srcByteOffset: uintptr = source.byte_offset;
 
     // 15. Let beginByteOffset be srcByteOffset + beginIndex × elementSize.
-    const beginByteOffset =
-        srcByteOffset + elementsInfo.CalculateByteLength(begin)
-        otherwise ThrowRangeError(MessageTemplate::kInvalidArrayBufferLength);
+    const beginByteOffset = srcByteOffset +
+        elementsInfo.CalculateByteLength(Convert<PositiveSmi>(begin))
+        otherwise ThrowRangeError(kInvalidArrayBufferLength);
 
     // 16. Let argumentsList be « buffer, beginByteOffset, newLength ».
+    const beginByteOffsetNum = Convert<Number>(beginByteOffset);
+
     // 17. Return ? TypedArraySpeciesCreate(O, argumentsList).
-    return TypedArraySpeciesCreateByBuffer(
-        methodName, source, buffer, beginByteOffset, newLength);
+    const numArgs: constexpr int31 = 3;
+    return typed_array_createtypedarray::TypedArraySpeciesCreate(
+        methodName, numArgs, source, buffer, beginByteOffsetNum, newLength);
   }
 }

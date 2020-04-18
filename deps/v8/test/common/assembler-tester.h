@@ -74,7 +74,7 @@ class TestingAssemblerBuffer : public AssemblerBuffer {
 };
 
 static inline std::unique_ptr<TestingAssemblerBuffer> AllocateAssemblerBuffer(
-    size_t requested = v8::internal::AssemblerBase::kDefaultBufferSize,
+    size_t requested = v8::internal::AssemblerBase::kMinimalBufferSize,
     void* address = nullptr) {
   return std::make_unique<TestingAssemblerBuffer>(requested, address);
 }

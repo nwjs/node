@@ -229,16 +229,16 @@ TEST(Run_Wasm_returnCallIndirectFactorial) {
   r.builder().AddIndirectFunctionTable(indirect_function_table,
                                        arraysize(indirect_function_table));
 
-  BUILD(r, WASM_RETURN_CALL_INDIRECT(sig_index, WASM_GET_LOCAL(0), WASM_I32V(1),
-                                     WASM_ZERO));
+  BUILD(r, WASM_RETURN_CALL_INDIRECT(sig_index, WASM_I32V(0), WASM_GET_LOCAL(0),
+                                     WASM_I32V(1)));
 
-  BUILD(
-      fact_aux_fn,
-      WASM_IF_ELSE_I(
-          WASM_I32_EQ(WASM_I32V(1), WASM_GET_LOCAL(0)), WASM_GET_LOCAL(1),
-          WASM_RETURN_CALL_INDIRECT(
-              sig_index, WASM_I32_SUB(WASM_GET_LOCAL(0), WASM_I32V(1)),
-              WASM_I32_MUL(WASM_GET_LOCAL(0), WASM_GET_LOCAL(1)), WASM_ZERO)));
+  BUILD(fact_aux_fn,
+        WASM_IF_ELSE_I(
+            WASM_I32_EQ(WASM_I32V(1), WASM_GET_LOCAL(0)), WASM_GET_LOCAL(1),
+            WASM_RETURN_CALL_INDIRECT(
+                sig_index, WASM_I32V(0),
+                WASM_I32_SUB(WASM_GET_LOCAL(0), WASM_I32V(1)),
+                WASM_I32_MUL(WASM_GET_LOCAL(0), WASM_GET_LOCAL(1)))));
 
   uint32_t test_values[] = {1, 2, 5, 10, 20};
 
@@ -449,6 +449,7 @@ TEST(ReferenceTypeLocals) {
     BUILD(r, WASM_REF_IS_NULL(WASM_TEE_LOCAL(0, WASM_REF_NULL)));
     CHECK_EQ(1, r.Call());
   }
+  // TODO(mstarzinger): Test and support global anyref variables.
 }
 
 TEST(TestPossibleNondeterminism) {
@@ -575,7 +576,7 @@ TEST(WasmInterpreterActivations) {
   CHECK_EQ(2, thread->NumActivations());
   CHECK_EQ(2, thread->GetFrameCount());
   CHECK_EQ(WasmInterpreter::TRAPPED, thread->Run());
-  thread->RaiseException(isolate, handle(Smi::zero(), isolate));
+  thread->RaiseException(isolate, handle(Smi::kZero, isolate));
   CHECK_EQ(1, thread->GetFrameCount());
   CHECK_EQ(2, thread->NumActivations());
   thread->FinishActivation(act1);
@@ -583,7 +584,7 @@ TEST(WasmInterpreterActivations) {
   CHECK_EQ(1, thread->GetFrameCount());
   CHECK_EQ(1, thread->NumActivations());
   CHECK_EQ(WasmInterpreter::TRAPPED, thread->Run());
-  thread->RaiseException(isolate, handle(Smi::zero(), isolate));
+  thread->RaiseException(isolate, handle(Smi::kZero, isolate));
   CHECK_EQ(0, thread->GetFrameCount());
   CHECK_EQ(1, thread->NumActivations());
   thread->FinishActivation(act0);

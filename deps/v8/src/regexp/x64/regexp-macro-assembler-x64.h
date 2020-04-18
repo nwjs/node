@@ -146,16 +146,15 @@ class V8_EXPORT_PRIVATE RegExpMacroAssemblerX64
   static const int kLastCalleeSaveRegister = kBackup_rbx;
 #endif
 
-  // When adding local variables remember to push space for them in
-  // the frame in GetCode.
   static const int kSuccessfulCaptures =
       kLastCalleeSaveRegister - kSystemPointerSize;
+  // When adding local variables remember to push space for them in
+  // the frame in GetCode.
   static const int kStringStartMinusOne =
       kSuccessfulCaptures - kSystemPointerSize;
-  static const int kBacktrackCount = kStringStartMinusOne - kSystemPointerSize;
 
   // First register address. Following registers are below it on the stack.
-  static const int kRegisterZero = kBacktrackCount - kSystemPointerSize;
+  static const int kRegisterZero = kStringStartMinusOne - kSystemPointerSize;
 
   // Initial size of code buffer.
   static const int kRegExpCodeSize = 1024;

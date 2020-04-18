@@ -378,7 +378,7 @@ class UtilsExtension : public IsolateData::SetupGlobalTask {
       v8::Local<v8::String> str_obj;
 
       if (arg->IsSymbol()) {
-        arg = v8::Local<v8::Symbol>::Cast(arg)->Description();
+        arg = v8::Local<v8::Symbol>::Cast(arg)->Name();
       }
       if (!arg->ToString(args.GetIsolate()->GetCurrentContext())
                .ToLocal(&str_obj)) {

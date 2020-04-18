@@ -32,7 +32,7 @@ const server = net.createServer((conn) => {
   }));
 }).listen(common.PIPE, () => {
   const client = net.connect(common.PIPE, common.mustCall());
-  client.once('data', () => {
+  client.on('data', () => {
     client.end(() => {
       server.close();
     });

@@ -136,13 +136,13 @@ MachineRepresentation PropertyAccessBuilder::ConvertRepresentation(
     Representation representation) {
   switch (representation.kind()) {
     case Representation::kSmi:
-      return MachineRepresentation::kTaggedSigned;
+      return MachineType::RepCompressedTaggedSigned();
     case Representation::kDouble:
       return MachineRepresentation::kFloat64;
     case Representation::kHeapObject:
-      return MachineRepresentation::kTaggedPointer;
+      return MachineType::RepCompressedTaggedPointer();
     case Representation::kTagged:
-      return MachineRepresentation::kTagged;
+      return MachineType::RepCompressedTagged();
     default:
       UNREACHABLE();
   }
@@ -215,15 +215,16 @@ Node* PropertyAccessBuilder::BuildLoadDataField(
       access_info.GetConstFieldInfo()};
   if (field_representation == MachineRepresentation::kFloat64) {
     if (!field_index.is_inobject() || !FLAG_unbox_double_fields) {
-      FieldAccess const storage_access = {kTaggedBase,
-                                          field_index.offset(),
-                                          name.object(),
-                                          MaybeHandle<Map>(),
-                                          Type::OtherInternal(),
-                                          MachineType::TaggedPointer(),
-                                          kPointerWriteBarrier,
-                                          LoadSensitivity::kCritical,
-                                          access_info.GetConstFieldInfo()};
+      FieldAccess const storage_access = {
+          kTaggedBase,
+          field_index.offset(),
+          name.object(),
+          MaybeHandle<Map>(),
+          Type::OtherInternal(),
+          MachineType::TypeCompressedTaggedPointer(),
+          kPointerWriteBarrier,
+          LoadSensitivity::kCritical,
+          access_info.GetConstFieldInfo()};
       storage = *effect = graph()->NewNode(
           simplified()->LoadField(storage_access), storage, *effect, *control);
       field_access.offset = HeapNumber::kValueOffset;

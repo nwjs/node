@@ -187,7 +187,7 @@ void TestSmiCompare(MacroAssembler* masm, Label* exit, int id, int x, int y) {
 TEST(SmiCompare) {
   Isolate* isolate = CcTest::i_isolate();
   HandleScope handles(isolate);
-  auto buffer = AllocateAssemblerBuffer(2 * Assembler::kDefaultBufferSize);
+  auto buffer = AllocateAssemblerBuffer(2 * Assembler::kMinimalBufferSize);
   MacroAssembler assembler(isolate, v8::internal::CodeObjectRequired::kYes,
                            buffer->CreateView());
 
@@ -243,7 +243,7 @@ TEST(SmiTag) {
   __ movq(rax, Immediate(1));  // Test number.
   __ movq(rcx, Immediate(0));
   __ SmiTag(rcx);
-  __ Set(rdx, Smi::zero().ptr());
+  __ Set(rdx, Smi::kZero.ptr());
   __ cmp_tagged(rcx, rdx);
   __ j(not_equal, &exit);
 

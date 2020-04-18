@@ -735,6 +735,7 @@ WASM_EXEC_TEST(I64SConvertF32) {
 }
 
 WASM_EXEC_TEST(I64SConvertSatF32) {
+  EXPERIMENTAL_FLAG_SCOPE(sat_f2i_conversions);
   WasmRunner<int64_t, float> r(execution_tier);
   BUILD(r, WASM_I64_SCONVERT_SAT_F32(WASM_GET_LOCAL(0)));
   FOR_FLOAT32_INPUTS(i) {
@@ -769,6 +770,7 @@ WASM_EXEC_TEST(I64SConvertF64) {
 }
 
 WASM_EXEC_TEST(I64SConvertSatF64) {
+  EXPERIMENTAL_FLAG_SCOPE(sat_f2i_conversions);
   WasmRunner<int64_t, double> r(execution_tier);
   BUILD(r, WASM_I64_SCONVERT_SAT_F64(WASM_GET_LOCAL(0)));
   FOR_FLOAT64_INPUTS(i) {
@@ -803,6 +805,7 @@ WASM_EXEC_TEST(I64UConvertF32) {
 }
 
 WASM_EXEC_TEST(I64UConvertSatF32) {
+  EXPERIMENTAL_FLAG_SCOPE(sat_f2i_conversions);
   WasmRunner<int64_t, float> r(execution_tier);
   BUILD(r, WASM_I64_UCONVERT_SAT_F32(WASM_GET_LOCAL(0)));
   FOR_FLOAT32_INPUTS(i) {
@@ -837,6 +840,7 @@ WASM_EXEC_TEST(I64UConvertF64) {
 }
 
 WASM_EXEC_TEST(I64UConvertSatF64) {
+  EXPERIMENTAL_FLAG_SCOPE(sat_f2i_conversions);
   WasmRunner<int64_t, double> r(execution_tier);
   BUILD(r, WASM_I64_UCONVERT_SAT_F64(WASM_GET_LOCAL(0)));
   FOR_FLOAT64_INPUTS(i) {

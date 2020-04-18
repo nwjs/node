@@ -154,7 +154,9 @@ BUILTIN(TypedArrayPrototypeFill) {
   DCHECK_LE(end, len);
   DCHECK_LE(count, len);
 
-  return ElementsAccessor::ForKind(kind)->Fill(array, obj_value, start, end);
+  return ElementsAccessor::ForKind(kind)->Fill(array, obj_value,
+                                               static_cast<uint32_t>(start),
+                                               static_cast<uint32_t>(end));
 }
 
 BUILTIN(TypedArrayPrototypeIncludes) {
@@ -184,8 +186,9 @@ BUILTIN(TypedArrayPrototypeIncludes) {
 
   Handle<Object> search_element = args.atOrUndefined(isolate, 1);
   ElementsAccessor* elements = array->GetElementsAccessor();
-  Maybe<bool> result =
-      elements->IncludesValue(isolate, array, search_element, index, len);
+  Maybe<bool> result = elements->IncludesValue(isolate, array, search_element,
+                                               static_cast<uint32_t>(index),
+                                               static_cast<uint32_t>(len));
   MAYBE_RETURN(result, ReadOnlyRoots(isolate).exception());
   return *isolate->factory()->ToBoolean(result.FromJust());
 }
@@ -214,8 +217,9 @@ BUILTIN(TypedArrayPrototypeIndexOf) {
 
   Handle<Object> search_element = args.atOrUndefined(isolate, 1);
   ElementsAccessor* elements = array->GetElementsAccessor();
-  Maybe<int64_t> result =
-      elements->IndexOfValue(isolate, array, search_element, index, len);
+  Maybe<int64_t> result = elements->IndexOfValue(isolate, array, search_element,
+                                                 static_cast<uint32_t>(index),
+                                                 static_cast<uint32_t>(len));
   MAYBE_RETURN(result, ReadOnlyRoots(isolate).exception());
   return *isolate->factory()->NewNumberFromInt64(result.FromJust());
 }
@@ -248,8 +252,8 @@ BUILTIN(TypedArrayPrototypeLastIndexOf) {
 
   Handle<Object> search_element = args.atOrUndefined(isolate, 1);
   ElementsAccessor* elements = array->GetElementsAccessor();
-  Maybe<int64_t> result =
-      elements->LastIndexOfValue(array, search_element, index);
+  Maybe<int64_t> result = elements->LastIndexOfValue(
+      array, search_element, static_cast<uint32_t>(index));
   MAYBE_RETURN(result, ReadOnlyRoots(isolate).exception());
   return *isolate->factory()->NewNumberFromInt64(result.FromJust());
 }

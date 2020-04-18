@@ -60,31 +60,30 @@ using ArrayBufferUniquePtr = std::unique_ptr<node::ArrayBufferAllocator,
 using TracingAgentUniquePtr = std::unique_ptr<node::tracing::Agent>;
 using NodePlatformUniquePtr = std::unique_ptr<node::NodePlatform>;
 
-class NodeZeroIsolateTestFixture : public ::testing::Test {
+class NodeTestFixture : public ::testing::Test {
  protected:
   static ArrayBufferUniquePtr allocator;
   static TracingAgentUniquePtr tracing_agent;
   static NodePlatformUniquePtr platform;
   static uv_loop_t current_loop;
   static bool node_initialized;
+  v8::Isolate* isolate_;
 
   static void SetUpTestCase() {
     if (!node_initialized) {
       uv_os_unsetenv("NODE_OPTIONS");
       node_initialized = true;
-      std::vector<std::string> argv { "cctest" };
-      std::vector<std::string> exec_argv;
-      std::vector<std::string> errors;
-
-      int exitcode = node::InitializeNodeWithArgs(&argv, &exec_argv, &errors);
-      CHECK_EQ(exitcode, 0);
-      CHECK(errors.empty());
+      int argc = 1;
+      const char* argv0 = "cctest";
+      int exec_argc;
+      const char** exec_argv;
+      node::Init(&argc, &argv0, &exec_argc, &exec_argv);
     }
 
     tracing_agent = std::make_unique<node::tracing::Agent>();
     node::tracing::TraceEventHelper::SetAgent(tracing_agent.get());
     node::tracing::TracingController* tracing_controller =
-        tracing_agent->GetTracingController();
+            tracing_agent->GetTracingController();
     CHECK_EQ(0, uv_loop_init(&current_loop));
     static constexpr int kV8ThreadPoolSize = 4;
     platform.reset(
@@ -105,18 +104,8 @@ class NodeZeroIsolateTestFixture : public ::testing::Test {
   void SetUp() override {
     allocator = ArrayBufferUniquePtr(node::CreateArrayBufferAllocator(),
                                      &node::FreeArrayBufferAllocator);
-  }
-};
-
-
-class NodeTestFixture : public NodeZeroIsolateTestFixture {
- protected:
-  v8::Isolate* isolate_;
-
-  void SetUp() override {
-    NodeZeroIsolateTestFixture::SetUp();
     isolate_ = NewIsolate(allocator.get(), &current_loop, platform.get());
-    CHECK_NOT_NULL(isolate_);
+    CHECK_NE(isolate_, nullptr);
     isolate_->Enter();
   }
 
@@ -126,7 +115,6 @@ class NodeTestFixture : public NodeZeroIsolateTestFixture {
     platform->UnregisterIsolate(isolate_);
     isolate_->Dispose();
     isolate_ = nullptr;
-    NodeZeroIsolateTestFixture::TearDown();
   }
 };
 
@@ -135,10 +123,7 @@ class EnvironmentTestFixture : public NodeTestFixture {
  public:
   class Env {
    public:
-    Env(const v8::HandleScope& handle_scope,
-        const Argv& argv,
-        node::EnvironmentFlags::Flags flags =
-            node::EnvironmentFlags::kDefaultFlags) {
+    Env(const v8::HandleScope& handle_scope, const Argv& argv) {
       auto isolate = handle_scope.GetIsolate();
       context_ = node::NewContext(isolate);
       CHECK(!context_.IsEmpty());
@@ -148,13 +133,10 @@ class EnvironmentTestFixture : public NodeTestFixture {
                                               &NodeTestFixture::current_loop,
                                               platform.get());
       CHECK_NE(nullptr, isolate_data_);
-      std::vector<std::string> args(*argv, *argv + 1);
-      std::vector<std::string> exec_args(*argv, *argv + 1);
       environment_ = node::CreateEnvironment(isolate_data_,
                                              context_,
-                                             args,
-                                             exec_args,
-                                             flags);
+                                             1, *argv,
+                                             argv.nr_args(), *argv);
       CHECK_NE(nullptr, environment_);
     }
 

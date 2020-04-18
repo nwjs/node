@@ -4,10 +4,10 @@
 
 // Flags: --noexpose-wasm --validate-asm --allow-natives-syntax
 
-// NOTE: This is in its own file because it calls %DisallowWasmCodegen, which
-// messes with the isolate's state.
+// NOTE: This is in its own file because it calls %DisallowCodegenFromStrings,
+// which messes with the isolate's state.
 (function testAsmWithWasmOff() {
-  %DisallowWasmCodegen(true);
+  %DisallowCodegenFromStrings(true);
   function Module() {
     'use asm';
     function foo() {

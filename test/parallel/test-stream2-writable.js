@@ -275,7 +275,7 @@ const helloWorldBuffer = Buffer.from('hello world');
 
 {
   // Verify writables cannot be piped
-  const w = new W({ autoDestroy: false });
+  const w = new W();
   w._write = common.mustNotCall();
   let gotError = false;
   w.on('error', function() {
@@ -422,12 +422,12 @@ const helloWorldBuffer = Buffer.from('hello world');
 {
   // Verify that error is only emitted once when failing in write.
   const w = new W();
-  w.on('error', common.mustNotCall());
-  assert.throws(() => {
-    w.write(null);
-  }, {
-    code: 'ERR_STREAM_NULL_VALUES'
-  });
+  w.on('error', common.mustCall((err) => {
+    assert.strictEqual(w._writableState.errorEmitted, true);
+    assert.strictEqual(err.code, 'ERR_STREAM_NULL_VALUES');
+  }));
+  w.write(null);
+  w.destroy(new Error());
 }
 
 {

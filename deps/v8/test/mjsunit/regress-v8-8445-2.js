@@ -8,7 +8,7 @@ class MyRegExp {
   exec() { return null; }
 }
 
-var r = /c/g;
+var r = /c/;
 
 assertEquals(["ab", ""], "abc".split(r));
 assertEquals([["c"]], [..."c".matchAll(r)]);
@@ -18,10 +18,10 @@ r.constructor =  { [Symbol.species] : MyRegExp };
 assertEquals(["abc"], "abc".split(r));
 assertEquals([], [..."c".matchAll(r)]);
 
-assertEquals(["ab", ""], "abc".split(/c/g));
-assertEquals([["c"]], [..."c".matchAll(/c/g)]);
+assertEquals(["ab", ""], "abc".split(/c/));
+assertEquals([["c"]], [..."c".matchAll(/c/)]);
 
 RegExp.prototype.constructor =  { [Symbol.species] : MyRegExp };
 
-assertEquals(["abc"], "abc".split(/c/g));
-assertEquals([], [..."c".matchAll(/c/g)]);
+assertEquals(["abc"], "abc".split(/c/));
+assertEquals([], [..."c".matchAll(/c/)]);

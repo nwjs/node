@@ -20,21 +20,20 @@ namespace {
 
 using Variable = CodeAssemblerVariable;
 
-TNode<Smi> SmiTag(CodeAssembler* m, Node* value) {
+Node* SmiTag(CodeAssembler* m, Node* value) {
   int32_t constant_value;
   if (m->ToInt32Constant(value, &constant_value) &&
       Smi::IsValid(constant_value)) {
     return m->SmiConstant(Smi::FromInt(constant_value));
   }
-  return m->BitcastWordToTaggedSigned(
-      m->WordShl(value, m->IntPtrConstant(kSmiShiftSize + kSmiTagSize)));
+  return m->WordShl(value, m->IntPtrConstant(kSmiShiftSize + kSmiTagSize));
 }
 
 Node* UndefinedConstant(CodeAssembler* m) {
   return m->LoadRoot(RootIndex::kUndefinedValue);
 }
 
-TNode<Smi> SmiFromInt32(CodeAssembler* m, Node* value) {
+Node* SmiFromInt32(CodeAssembler* m, Node* value) {
   value = m->ChangeInt32ToIntPtr(value);
   return m->BitcastWordToTaggedSigned(
       m->WordShl(value, kSmiShiftSize + kSmiTagSize));
@@ -161,7 +160,7 @@ TEST(SimpleCallJSFunction0Arg) {
     Node* receiver = SmiTag(&m, m.Int32Constant(42));
 
     Callable callable = CodeFactory::Call(isolate);
-    TNode<Object> result = m.CallJS(callable, context, function, receiver);
+    Node* result = m.CallJS(callable, context, function, receiver);
     m.Return(result);
   }
   FunctionTester ft(asm_tester.GenerateCode(), kNumParams);
@@ -184,7 +183,7 @@ TEST(SimpleCallJSFunction1Arg) {
     Node* a = SmiTag(&m, m.Int32Constant(13));
 
     Callable callable = CodeFactory::Call(isolate);
-    TNode<Object> result = m.CallJS(callable, context, function, receiver, a);
+    Node* result = m.CallJS(callable, context, function, receiver, a);
     m.Return(result);
   }
   FunctionTester ft(asm_tester.GenerateCode(), kNumParams);
@@ -208,8 +207,7 @@ TEST(SimpleCallJSFunction2Arg) {
     Node* b = SmiTag(&m, m.Int32Constant(153));
 
     Callable callable = CodeFactory::Call(isolate);
-    TNode<Object> result =
-        m.CallJS(callable, context, function, receiver, a, b);
+    Node* result = m.CallJS(callable, context, function, receiver, a, b);
     m.Return(result);
   }
   FunctionTester ft(asm_tester.GenerateCode(), kNumParams);
@@ -466,7 +464,7 @@ TEST(GotoIfException) {
   m.Return(string);
 
   m.Bind(&exception_handler);
-  m.Return(m.UncheckedCast<Object>(exception.value()));
+  m.Return(exception.value());
 
   FunctionTester ft(asm_tester.GenerateCode(), kNumParams);
   Handle<Object> result = ft.Call().ToHandleChecked();
@@ -527,7 +525,7 @@ TEST(GotoIfExceptionMultiple) {
                       m.Word32Xor(m.Int32Constant(2), m.Int32Constant(-1)))));
 
   m.Bind(&exception_handler3);
-  m.Return(m.UncheckedCast<Object>(error.value()));
+  m.Return(error.value());
 
   FunctionTester ft(asm_tester.GenerateCode(), kNumParams);
 

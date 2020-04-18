@@ -15,6 +15,4 @@ var strLocale = Intl.RelativeTimeFormat.supportedLocalesOf('sr');
 assertEquals('sr', strLocale[0]);
 
 var multiLocale = ['sr-Thai-RS', 'de', 'zh-CN'];
-assertEquals(multiLocale,
-    Intl.RelativeTimeFormat.supportedLocalesOf(multiLocale,
-      {localeMatcher: "lookup"}));
+assertEquals(multiLocale, Intl.RelativeTimeFormat.supportedLocalesOf(multiLocale));

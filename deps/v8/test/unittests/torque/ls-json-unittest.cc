@@ -99,10 +99,7 @@ TEST(LanguageServerJson, TestJsonObjects) {
 // issue with exceptions enabled for Torque.
 // TODO(szuend): Remove the OS check when errors are reported differently,
 //               or the issue is resolved.
-// TODO(almuthanna): These tests were skipped because they cause a crash when
-// they are ran on Fuchsia. This issue should be solved later on
-// Ticket: https://crbug.com/1028617
-#if !defined(V8_OS_WIN) && !defined(V8_TARGET_OS_FUCHSIA)
+#if !defined(V8_OS_WIN)
 using ::testing::HasSubstr;
 TEST(LanguageServerJson, ParserError) {
   JsonParserResult result = ParseJson("{]");

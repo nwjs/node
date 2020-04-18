@@ -59,7 +59,7 @@ struct KnownInstanceType {
 
 // Returns information about the instance type of the Map at the given address,
 // based on the list of known Maps.
-KnownInstanceType FindKnownMapInstanceTypes(
+KnownInstanceType FindKnownMapInstanceType(
     uintptr_t address, const d::HeapAddresses& heap_addresses);
 
 }  // namespace v8_debug_helper_internal

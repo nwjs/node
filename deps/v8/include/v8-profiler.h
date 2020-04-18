@@ -144,6 +144,10 @@ class V8_EXPORT CpuProfileNode {
     */
   unsigned GetHitCount() const;
 
+  /** Returns function entry UID. */
+  V8_DEPRECATED("Use GetScriptId, GetLineNumber, and GetColumnNumber instead.")
+  unsigned GetCallUid() const;
+
   /** Returns id of the node. The id is unique within the tree */
   unsigned GetNodeId() const;
 
@@ -366,6 +370,20 @@ class V8_EXPORT CpuProfiler {
    * If the title given is empty, finishes the last profile started.
    */
   CpuProfile* StopProfiling(Local<String> title);
+
+  /**
+   * Force collection of a sample. Must be called on the VM thread.
+   * Recording the forced sample does not contribute to the aggregated
+   * profile statistics.
+   */
+  V8_DEPRECATED("Use static CollectSample(Isolate*) instead.")
+  void CollectSample();
+
+  /**
+   * Tells the profiler whether the embedder is idle.
+   */
+  V8_DEPRECATED("Use Isolate::SetIdle(bool) instead.")
+  void SetIdle(bool is_idle);
 
   /**
    * Generate more detailed source positions to code objects. This results in
@@ -844,8 +862,7 @@ class V8_EXPORT HeapProfiler {
    */
   const HeapSnapshot* TakeHeapSnapshot(
       ActivityControl* control = nullptr,
-      ObjectNameResolver* global_object_name_resolver = nullptr,
-      bool treat_global_objects_as_roots = true);
+      ObjectNameResolver* global_object_name_resolver = nullptr);
 
   /**
    * Starts tracking of heap objects population statistics. After calling

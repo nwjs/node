@@ -12,7 +12,6 @@
 #include <set>
 #include <string>
 
-#include "src/base/bit-field.h"
 #include "src/execution/isolate.h"
 #include "src/heap/factory.h"
 #include "src/objects/managed.h"
@@ -59,7 +58,6 @@ class JSRelativeTimeFormat : public JSObject {
 
   // RelativeTimeFormat accessors.
   DECL_ACCESSORS(locale, String)
-  DECL_ACCESSORS(numberingSystem, String)
 
   DECL_ACCESSORS(icu_formatter, Managed<icu::RelativeDateTimeFormatter>)
 

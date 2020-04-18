@@ -55,7 +55,6 @@ class JSAsyncFunctionObject
  public:
   // Dispatched behavior.
   DECL_VERIFIER(JSAsyncFunctionObject)
-  DECL_PRINTER(JSAsyncFunctionObject)
 
   TQ_OBJECT_CONSTRUCTORS(JSAsyncFunctionObject)
 };
@@ -66,7 +65,6 @@ class JSAsyncGeneratorObject
  public:
   // Dispatched behavior.
   DECL_VERIFIER(JSAsyncGeneratorObject)
-  DECL_PRINTER(JSAsyncGeneratorObject)
 
   // [is_awaiting]
   // Whether or not the generator is currently awaiting.

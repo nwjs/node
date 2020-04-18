@@ -4,7 +4,7 @@
 
 load('test/mjsunit/wasm/wasm-module-builder.js');
 
-// Flags: --wasm-max-mem-pages=49151
+// Flags: --wasm-max-mem-pages=49152
 
 let builder = new WasmModuleBuilder();
 const num_pages = 49152;

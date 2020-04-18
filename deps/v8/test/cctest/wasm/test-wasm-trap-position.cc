@@ -91,9 +91,10 @@ WASM_EXEC_TEST(Unreachable) {
                          Execution::MessageHandling::kReport, &maybe_exc);
   CHECK(returnObjMaybe.is_null());
 
+  // Line and column are 1-based, so add 1 for the expected wasm output.
   ExceptionInfo expected_exceptions[] = {
-      {"main", 1, 7},    // --
-      {"callFn", 1, 24}  // --
+      {"main", static_cast<int>(wasm_index) + 1, 7},  // --
+      {"callFn", 1, 24}                               // --
   };
   CheckExceptionInfos(isolate, maybe_exc.ToHandleChecked(),
                       expected_exceptions);
@@ -133,10 +134,11 @@ WASM_EXEC_TEST(IllegalLoad) {
                          Execution::MessageHandling::kReport, &maybe_exc);
   CHECK(returnObjMaybe.is_null());
 
+  // Line and column are 1-based, so add 1 for the expected wasm output.
   ExceptionInfo expected_exceptions[] = {
-      {"main", 1, 13},       // --
-      {"call_main", 1, 30},  // --
-      {"callFn", 1, 24}      // --
+      {"main", static_cast<int>(wasm_index_1) + 1, 13},       // --
+      {"call_main", static_cast<int>(wasm_index_2) + 1, 30},  // --
+      {"callFn", 1, 24}                                       // --
   };
   CheckExceptionInfos(isolate, maybe_exc.ToHandleChecked(),
                       expected_exceptions);

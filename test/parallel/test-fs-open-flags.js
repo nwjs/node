@@ -84,6 +84,11 @@ assert.throws(
   { code: 'ERR_INVALID_OPT_VALUE', name: 'TypeError' }
 );
 
+assert.throws(
+  () => stringToFlags(null),
+  { code: 'ERR_INVALID_OPT_VALUE', name: 'TypeError' }
+);
+
 if (common.isLinux || common.isOSX) {
   const tmpdir = require('../common/tmpdir');
   tmpdir.refresh();

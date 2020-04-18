@@ -634,12 +634,6 @@ class DebugWrapper {
     return this.reconstructRemoteObject(result);
   }
 
-  evaluateGlobalREPL(expr) {
-    return %RuntimeEvaluateREPL(expr).then(value => {
-      return value[".repl_result"];
-    });
-  }
-
   eventDataException(params) {
     switch (params.data.type) {
       case "string": {

@@ -5,7 +5,6 @@
 #ifndef V8_HEAP_SPACES_INL_H_
 #define V8_HEAP_SPACES_INL_H_
 
-#include "src/common/globals.h"
 #include "src/heap/spaces.h"
 
 #include "src/base/atomic-utils.h"
@@ -56,7 +55,7 @@ HeapObject SemiSpaceObjectIterator::Next() {
     }
     HeapObject object = HeapObject::FromAddress(current_);
     current_ += object.Size();
-    if (!object.IsFreeSpaceOrFiller()) {
+    if (!object.IsFiller()) {
       return object;
     }
   }
@@ -84,11 +83,9 @@ HeapObject PagedSpaceObjectIterator::FromCurrentPage() {
     const int obj_size = obj.Size();
     cur_addr_ += obj_size;
     DCHECK_LE(cur_addr_, cur_end_);
-    if (!obj.IsFreeSpaceOrFiller()) {
+    if (!obj.IsFiller()) {
       if (obj.IsCode()) {
-        DCHECK_IMPLIES(
-            space_->identity() != CODE_SPACE,
-            space_->identity() == RO_SPACE && Code::cast(obj).is_builtin());
+        DCHECK_EQ(space_, space_->heap()->code_space());
         DCHECK_CODEOBJECT_SIZE(obj_size, space_);
       } else {
         DCHECK_OBJECT_SIZE(obj_size);
@@ -164,10 +161,7 @@ bool NewSpace::ToSpaceContains(Object o) { return to_space_.Contains(o); }
 bool NewSpace::FromSpaceContains(Object o) { return from_space_.Contains(o); }
 
 bool PagedSpace::Contains(Address addr) {
-  if (V8_ENABLE_THIRD_PARTY_HEAP_BOOL) {
-    return true;
-  }
-  return Page::FromAddress(addr)->owner() == this;
+  return MemoryChunk::FromAnyPointerAddress(addr)->owner() == this;
 }
 
 bool PagedSpace::Contains(Object o) {
@@ -207,20 +201,23 @@ bool PagedSpace::TryFreeLast(HeapObject object, int object_size) {
   return false;
 }
 
+MemoryChunk* MemoryChunk::FromAnyPointerAddress(Address addr) {
+  while (!HasHeaderSentinel(addr)) {
+    addr = BaseAddress(addr) - 1;
+  }
+  return FromAddress(addr);
+}
+
 void MemoryChunk::IncrementExternalBackingStoreBytes(
     ExternalBackingStoreType type, size_t amount) {
-#ifndef V8_ENABLE_THIRD_PARTY_HEAP
   base::CheckedIncrement(&external_backing_store_bytes_[type], amount);
   owner()->IncrementExternalBackingStoreBytes(type, amount);
-#endif
 }
 
 void MemoryChunk::DecrementExternalBackingStoreBytes(
     ExternalBackingStoreType type, size_t amount) {
-#ifndef V8_ENABLE_THIRD_PARTY_HEAP
   base::CheckedDecrement(&external_backing_store_bytes_[type], amount);
   owner()->DecrementExternalBackingStoreBytes(type, amount);
-#endif
 }
 
 void MemoryChunk::MoveExternalBackingStoreBytes(ExternalBackingStoreType type,
@@ -483,7 +480,7 @@ AllocationResult PagedSpace::AllocateRaw(int size_in_bytes,
   AllocationResult result = AllocateRawUnaligned(size_in_bytes, origin);
 #endif
   HeapObject heap_obj;
-  if (!result.IsRetry() && result.To(&heap_obj) && !is_local_space()) {
+  if (!result.IsRetry() && result.To(&heap_obj) && !is_local()) {
     AllocationStep(static_cast<int>(size_in_bytes + bytes_since_last),
                    heap_obj.address(), size_in_bytes);
     StartNextInlineAllocationStep();

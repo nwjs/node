@@ -69,9 +69,6 @@ void LocalEmbedderHeapTracer::SetEmbedderStackStateForNextFinalization(
   if (!InUse()) return;
 
   embedder_stack_state_ = stack_state;
-  if (EmbedderHeapTracer::EmbedderStackState::kEmpty == stack_state) {
-    remote_tracer()->NotifyEmptyEmbedderStack();
-  }
 }
 
 LocalEmbedderHeapTracer::ProcessingScope::ProcessingScope(
@@ -115,7 +112,7 @@ void LocalEmbedderHeapTracer::ProcessingScope::AddWrapperInfoForTesting(
 }
 
 void LocalEmbedderHeapTracer::StartIncrementalMarkingIfNeeded() {
-  if (!FLAG_global_gc_scheduling || !FLAG_incremental_marking) return;
+  if (!FLAG_global_gc_scheduling) return;
 
   Heap* heap = isolate_->heap();
   heap->StartIncrementalMarkingIfAllocationLimitIsReached(

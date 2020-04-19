@@ -389,7 +389,7 @@ operating system response.
 
 Throws a [`SystemError`][] if a user has no `username` or `homedir`.
 
-## `os.version()`
+## `os.version()`
 <!-- YAML
 added: v13.11.0
 -->

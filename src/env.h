@@ -33,7 +33,6 @@
 #include "handle_wrap.h"
 #include "node.h"
 #include "node_binding.h"
-#include "node_http2_state.h"
 #include "node_main_instance.h"
 #include "node_options.h"
 #include "req_wrap.h"
@@ -50,17 +49,11 @@
 #include <unordered_set>
 #include <vector>
 
-struct nghttp2_rcbuf;
-
 namespace node {
 
 namespace contextify {
 class ContextifyScript;
 class CompiledFnEntry;
-}
-
-namespace fs {
-class FileHandleReadWrap;
 }
 
 namespace performance {
@@ -437,6 +430,7 @@ constexpr size_t kFsStatsBufferLength =
   V(async_hooks_promise_resolve_function, v8::Function)                        \
   V(buffer_prototype_object, v8::Object)                                       \
   V(crypto_key_object_constructor, v8::Function)                               \
+  V(current_callback_data, v8::Object)                                         \
   V(domain_callback, v8::Function)                                             \
   V(domexception_function, v8::Function)                                       \
   V(enhance_fatal_stack_after_inspector, v8::Function)                         \
@@ -498,6 +492,9 @@ class IsolateData : public MemoryRetainer {
   inline v8::ArrayBuffer::Allocator* allocator() const;
   inline NodeArrayBufferAllocator* node_allocator() const;
 
+  inline worker::Worker* worker_context() const;
+  inline void set_worker_context(worker::Worker* context);
+
 #define VP(PropertyName, StringValue) V(v8::Private, PropertyName)
 #define VY(PropertyName, StringValue) V(v8::Symbol, PropertyName)
 #define VS(PropertyName, StringValue) V(v8::String, PropertyName)
@@ -510,8 +507,10 @@ class IsolateData : public MemoryRetainer {
 #undef VY
 #undef VS
 #undef VP
+  inline v8::Local<v8::String> async_wrap_provider(int index) const;
 
-  std::unordered_map<const char*, v8::Eternal<v8::String>> http_static_strs;
+  std::unordered_map<const char*, v8::Eternal<v8::String>> static_str_map;
+
   inline v8::Isolate* isolate() const;
   IsolateData(const IsolateData&) = delete;
   IsolateData& operator=(const IsolateData&) = delete;
@@ -534,6 +533,9 @@ class IsolateData : public MemoryRetainer {
 #undef VY
 #undef VS
 #undef VP
+  // Keep a list of all Persistent strings used for AsyncWrap Provider types.
+  std::array<v8::Eternal<v8::String>, AsyncWrap::PROVIDERS_LENGTH>
+      async_wrap_providers_;
 
   v8::Isolate* const isolate_;
   uv_loop_t* const event_loop_;
@@ -542,6 +544,7 @@ class IsolateData : public MemoryRetainer {
   const bool uses_node_allocator_;
   MultiIsolatePlatform* platform_;
   std::shared_ptr<PerIsolateOptions> options_;
+  worker::Worker* worker_context_ = nullptr;
 };
 
 struct ContextInfo {
@@ -691,8 +694,6 @@ class AsyncHooks : public MemoryRetainer {
  private:
   friend class Environment;  // So we can call the constructor.
   inline AsyncHooks();
-  // Keep a list of all Persistent strings used for Provider types.
-  std::array<v8::Eternal<v8::String>, AsyncWrap::PROVIDERS_LENGTH> providers_;
   // Stores the ids of the current execution context stack.
   AliasedFloat64Array async_ids_stack_;
   // Attached to a Uint32Array that tracks the number of active hooks for
@@ -855,13 +856,6 @@ class Environment : public MemoryRetainer {
   inline void PushAsyncCallbackScope();
   inline void PopAsyncCallbackScope();
 
-  enum Flags {
-    kNoFlags = 0,
-    kIsMainThread = 1 << 0,
-    kOwnsProcessState = 1 << 1,
-    kOwnsInspector = 1 << 2,
-  };
-
   static inline Environment* GetCurrent(v8::Isolate* isolate);
   static inline Environment* GetCurrent(v8::Local<v8::Context> context);
   static inline Environment* GetCurrent(
@@ -873,6 +867,24 @@ class Environment : public MemoryRetainer {
 
   static inline Environment* GetFromCallbackData(v8::Local<v8::Value> val);
 
+  // Methods created using SetMethod(), SetPrototypeMethod(), etc. inside
+  // this scope can access the created T* object using
+  // Unwrap<T>(args.Data()) later.
+  template <typename T>
+  struct BindingScope {
+    explicit inline BindingScope(Environment* env);
+    inline ~BindingScope();
+
+    T* data = nullptr;
+    Environment* env;
+
+    inline operator bool() const { return data != nullptr; }
+    inline bool operator !() const { return data == nullptr; }
+  };
+
+  template <typename T>
+  inline v8::MaybeLocal<v8::Object> MakeBindingCallbackData();
+
   static uv_key_t thread_local_env;
   static inline Environment* GetThreadLocalEnv();
 
@@ -880,8 +892,8 @@ class Environment : public MemoryRetainer {
               v8::Local<v8::Context> context,
               const std::vector<std::string>& args,
               const std::vector<std::string>& exec_args,
-              Flags flags = Flags(),
-              uint64_t thread_id = kNoThreadId);
+              EnvironmentFlags::Flags flags,
+              ThreadId thread_id);
   ~Environment() override;
 
   void InitializeLibuv(bool start_profiler_idle_notifier);
@@ -994,30 +1006,7 @@ class Environment : public MemoryRetainer {
 
   bool KickNextTick();
 
-  inline double* heap_statistics_buffer() const;
-  inline void set_heap_statistics_buffer(double* pointer);
-
-  inline double* heap_space_statistics_buffer() const;
-  inline void set_heap_space_statistics_buffer(double* pointer);
-
-  inline double* heap_code_statistics_buffer() const;
-  inline void set_heap_code_statistics_buffer(double* pointer);
-
-  inline char* http_parser_buffer() const;
-  inline void set_http_parser_buffer(char* buffer);
-  inline bool http_parser_buffer_in_use() const;
-  inline void set_http_parser_buffer_in_use(bool in_use);
-
-  inline http2::Http2State* http2_state() const;
-  inline void set_http2_state(std::unique_ptr<http2::Http2State> state);
-
   EnabledDebugList* enabled_debug_list() { return &enabled_debug_list_; }
-
-  inline AliasedFloat64Array* fs_stats_field_array();
-  inline AliasedBigUint64Array* fs_stats_field_bigint_array();
-
-  inline std::vector<std::unique_ptr<fs::FileHandleReadWrap>>&
-      file_handle_read_wrap_freelist();
 
   inline performance::PerformanceState* performance_state();
   inline std::unordered_map<std::string, uint64_t>* performance_marks();
@@ -1049,16 +1038,12 @@ class Environment : public MemoryRetainer {
   inline bool has_serialized_options() const;
   inline void set_has_serialized_options(bool has_serialized_options);
 
-  static uint64_t AllocateThreadId();
-  static constexpr uint64_t kNoThreadId = -1;
-
   inline bool is_main_thread() const;
   inline bool owns_process_state() const;
   inline bool owns_inspector() const;
   inline uint64_t thread_id() const;
   inline worker::Worker* worker_context() const;
   Environment* worker_parent_env() const;
-  inline void set_worker_context(worker::Worker* context);
   inline void add_sub_worker_context(worker::Worker* context);
   inline void remove_sub_worker_context(worker::Worker* context);
   void stop_sub_worker_contexts();
@@ -1069,6 +1054,9 @@ class Environment : public MemoryRetainer {
   inline std::list<node_module>* extra_linked_bindings();
   inline node_module* extra_linked_bindings_head();
   inline const Mutex& extra_linked_bindings_mutex() const;
+
+  inline bool filehandle_close_warning() const;
+  inline void set_filehandle_close_warning(bool on);
 
   inline void ThrowError(const char* errmsg);
   inline void ThrowTypeError(const char* errmsg);
@@ -1258,6 +1246,13 @@ class Environment : public MemoryRetainer {
 
 #endif  // HAVE_INSPECTOR
 
+  inline void set_main_utf16(std::unique_ptr<v8::String::Value>);
+  inline void set_process_exit_handler(
+      std::function<void(Environment*, int)>&& handler);
+
+  void RunAndClearNativeImmediates(bool only_refed = false);
+  void RunAndClearInterrupts();
+
  private:
   template <typename Fn>
   inline void CreateImmediate(Fn&& cb, bool ref);
@@ -1286,6 +1281,7 @@ class Environment : public MemoryRetainer {
   bool trace_sync_io_ = false;
   bool emit_env_nonstring_warning_ = true;
   bool emit_err_name_warning_ = true;
+  bool emit_filehandle_warning_ = true;
   size_t async_callback_scope_depth_ = 0;
   std::vector<double> destroy_async_id_list_;
 
@@ -1333,7 +1329,7 @@ class Environment : public MemoryRetainer {
   bool has_serialized_options_ = false;
 
   std::atomic_bool can_call_into_js_ { true };
-  Flags flags_;
+  uint64_t flags_;
   uint64_t thread_id_;
   std::unordered_set<worker::Worker*> sub_worker_contexts_;
 
@@ -1360,22 +1356,7 @@ class Environment : public MemoryRetainer {
   int handle_cleanup_waiting_ = 0;
   int request_waiting_ = 0;
 
-  double* heap_statistics_buffer_ = nullptr;
-  double* heap_space_statistics_buffer_ = nullptr;
-  double* heap_code_statistics_buffer_ = nullptr;
-
-  char* http_parser_buffer_ = nullptr;
-  bool http_parser_buffer_in_use_ = false;
-  std::unique_ptr<http2::Http2State> http2_state_;
-
   EnabledDebugList enabled_debug_list_;
-  AliasedFloat64Array fs_stats_field_array_;
-  AliasedBigUint64Array fs_stats_field_bigint_array_;
-
-  std::vector<std::unique_ptr<fs::FileHandleReadWrap>>
-      file_handle_read_wrap_freelist_;
-
-  worker::Worker* worker_context_ = nullptr;
 
   std::list<node_module> extra_linked_bindings_;
   Mutex extra_linked_bindings_mutex_;
@@ -1437,10 +1418,13 @@ class Environment : public MemoryRetainer {
   Mutex native_immediates_threadsafe_mutex_;
   NativeImmediateQueue native_immediates_threadsafe_;
   NativeImmediateQueue native_immediates_interrupts_;
+  // Also guarded by native_immediates_threadsafe_mutex_. This can be used when
+  // trying to post tasks from other threads to an Environment, as the libuv
+  // handle for the immediate queues (task_queues_async_) may not be initialized
+  // yet or already have been destroyed.
+  bool task_queues_async_initialized_ = false;
 
-  void RunAndClearNativeImmediates(bool only_refed = false);
-  void RunAndClearInterrupts();
-  Environment** interrupt_data_ = nullptr;
+  std::atomic<Environment**> interrupt_data_ {nullptr};
   void RequestInterruptFromV8();
   static void CheckImmediate(uv_check_t* handle);
 
@@ -1452,7 +1436,11 @@ class Environment : public MemoryRetainer {
   bool started_cleanup_ = false;
 
   int64_t base_object_count_ = 0;
+  int64_t initial_base_object_count_ = 0;
   std::atomic_bool is_stopping_ { false };
+
+  std::function<void(Environment*, int)> process_exit_handler_ {
+      DefaultProcessExitHandler };
 
   template <typename T>
   void ForEachBaseObject(T&& iterator);
@@ -1463,6 +1451,11 @@ class Environment : public MemoryRetainer {
 #undef V
 
   v8::Global<v8::Context> context_;
+
+  // Keeps the main script source alive is one was passed to LoadEnvironment().
+  // We should probably find a way to just use plain `v8::String`s created from
+  // the source passed to LoadEnvironment() directly instead.
+  std::unique_ptr<v8::String::Value> main_utf16_;
 };
 
 }  // namespace node

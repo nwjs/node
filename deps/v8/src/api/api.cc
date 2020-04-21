@@ -309,6 +309,7 @@ class CallDepthScope {
 #ifdef V8_CHECK_MICROTASKS_SCOPES_CONSISTENCY
     if (do_callback) CheckMicrotasksScopesConsistency(microtask_queue);
 #endif
+    DCHECK(CheckKeptObjectsClearedAfterMicrotaskCheckpoint(microtask_queue));
     isolate_->set_next_v8_call_is_safe_for_termination(safe_for_termination_);
   }
 
@@ -323,6 +324,15 @@ class CallDepthScope {
   }
 
  private:
+  bool CheckKeptObjectsClearedAfterMicrotaskCheckpoint(
+      i::MicrotaskQueue* microtask_queue) {
+    bool did_perform_microtask_checkpoint =
+        do_callback && microtask_queue &&
+        microtask_queue->microtasks_policy() == MicrotasksPolicy::kAuto;
+    return !did_perform_microtask_checkpoint ||
+           isolate_->heap()->weak_refs_keep_during_job().IsUndefined(isolate_);
+  }
+
   i::Isolate* const isolate_;
   Local<Context> context_;
   bool escaped_;
@@ -542,6 +552,21 @@ class ArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
   }
 
   void Free(void* data, size_t) override { free(data); }
+
+  void* Reallocate(void* data, size_t old_length, size_t new_length) override {
+#if V8_OS_AIX && _LINUX_SOURCE_COMPAT
+    // Work around for GCC bug on AIX
+    // See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=79839
+    void* new_data = __linux_realloc(data, new_length);
+#else
+    void* new_data = realloc(data, new_length);
+#endif
+    if (new_length > old_length) {
+      memset(reinterpret_cast<uint8_t*>(new_data) + old_length, 0,
+             new_length - old_length);
+    }
+    return new_data;
+  }
 };
 
 struct SnapshotCreatorData {
@@ -629,10 +654,6 @@ size_t SnapshotCreator::AddContext(Local<Context> context,
   data->contexts_.Append(context);
   data->embedder_fields_serializers_.push_back(callback);
   return index;
-}
-
-size_t SnapshotCreator::AddTemplate(Local<Template> template_obj) {
-  return AddData(template_obj);
 }
 
 size_t SnapshotCreator::AddData(i::Address object) {
@@ -1478,7 +1499,7 @@ static Local<FunctionTemplate> FunctionTemplateNew(
 Local<FunctionTemplate> FunctionTemplate::New(
     Isolate* isolate, FunctionCallback callback, v8::Local<Value> data,
     v8::Local<Signature> signature, int length, ConstructorBehavior behavior,
-    SideEffectType side_effect_type) {
+    SideEffectType side_effect_type, const CFunction*) {
   i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
   // Changes to the environment cannot be captured in the snapshot. Expect no
   // function templates when the isolate is created for serialization.
@@ -1488,21 +1509,6 @@ Local<FunctionTemplate> FunctionTemplate::New(
                                    false, Local<Private>(), side_effect_type);
   if (behavior == ConstructorBehavior::kThrow) templ->RemovePrototype();
   return templ;
-}
-
-MaybeLocal<FunctionTemplate> FunctionTemplate::FromSnapshot(Isolate* isolate,
-                                                            size_t index) {
-  i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
-  i::FixedArray serialized_objects = i_isolate->heap()->serialized_objects();
-  int int_index = static_cast<int>(index);
-  if (int_index < serialized_objects.length()) {
-    i::Object info = serialized_objects.get(int_index);
-    if (info.IsFunctionTemplateInfo()) {
-      return Utils::ToLocal(i::Handle<i::FunctionTemplateInfo>(
-          i::FunctionTemplateInfo::cast(info), i_isolate));
-    }
-  }
-  return Local<FunctionTemplate>();
 }
 
 Local<FunctionTemplate> FunctionTemplate::NewWithCache(
@@ -1534,7 +1540,8 @@ Local<AccessorSignature> AccessorSignature::New(
 
 void FunctionTemplate::SetCallHandler(FunctionCallback callback,
                                       v8::Local<Value> data,
-                                      SideEffectType side_effect_type) {
+                                      SideEffectType side_effect_type,
+                                      const CFunction*) {
   auto info = Utils::OpenHandle(this);
   EnsureNotInstantiated(info, "v8::FunctionTemplate::SetCallHandler");
   i::Isolate* isolate = info->GetIsolate();
@@ -1685,21 +1692,6 @@ static Local<ObjectTemplate> ObjectTemplateNew(
 Local<ObjectTemplate> ObjectTemplate::New(
     i::Isolate* isolate, v8::Local<FunctionTemplate> constructor) {
   return ObjectTemplateNew(isolate, constructor, false);
-}
-
-MaybeLocal<ObjectTemplate> ObjectTemplate::FromSnapshot(Isolate* isolate,
-                                                        size_t index) {
-  i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
-  i::FixedArray serialized_objects = i_isolate->heap()->serialized_objects();
-  int int_index = static_cast<int>(index);
-  if (int_index < serialized_objects.length()) {
-    i::Object info = serialized_objects.get(int_index);
-    if (info.IsObjectTemplateInfo()) {
-      return Utils::ToLocal(i::Handle<i::ObjectTemplateInfo>(
-          i::ObjectTemplateInfo::cast(info), i_isolate));
-    }
-  }
-  return Local<ObjectTemplate>();
 }
 
 // Ensure that the object template has a constructor.  If no
@@ -3462,7 +3454,6 @@ VALUE_IS_SPECIFIC_TYPE(Set, JSSet)
 VALUE_IS_SPECIFIC_TYPE(WasmModuleObject, WasmModuleObject)
 VALUE_IS_SPECIFIC_TYPE(WeakMap, JSWeakMap)
 VALUE_IS_SPECIFIC_TYPE(WeakSet, JSWeakSet)
-VALUE_IS_SPECIFIC_TYPE(WebAssemblyCompiledModule, WasmModuleObject)
 
 #undef VALUE_IS_SPECIFIC_TYPE
 
@@ -3782,6 +3773,22 @@ size_t v8::BackingStore::ByteLength() const {
 
 bool v8::BackingStore::IsShared() const {
   return reinterpret_cast<const i::BackingStore*>(this)->is_shared();
+}
+
+// static
+std::unique_ptr<v8::BackingStore> v8::BackingStore::Reallocate(
+    v8::Isolate* isolate, std::unique_ptr<v8::BackingStore> backing_store,
+    size_t byte_length) {
+  i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
+  LOG_API(i_isolate, ArrayBuffer, BackingStore_Reallocate);
+  CHECK_LE(byte_length, i::JSArrayBuffer::kMaxByteLength);
+  ENTER_V8_NO_SCRIPT_NO_EXCEPTION(i_isolate);
+  i::BackingStore* i_backing_store =
+      reinterpret_cast<i::BackingStore*>(backing_store.get());
+  if (!i_backing_store->Reallocate(i_isolate, byte_length)) {
+    i::FatalProcessOutOfMemory(i_isolate, "v8::BackingStore::Reallocate");
+  }
+  return backing_store;
 }
 
 std::shared_ptr<v8::BackingStore> v8::ArrayBuffer::GetBackingStore() {
@@ -5652,7 +5659,25 @@ void v8::V8::InitializePlatform(Platform* platform) {
 
 void v8::V8::ShutdownPlatform() { i::V8::ShutdownPlatform(); }
 
-bool v8::V8::Initialize() {
+bool v8::V8::Initialize(const int build_config) {
+  const bool kEmbedderPointerCompression =
+      (build_config & kPointerCompression) != 0;
+  if (kEmbedderPointerCompression != COMPRESS_POINTERS_BOOL) {
+    FATAL(
+        "Embedder-vs-V8 build configuration mismatch. On embedder side "
+        "pointer compression is %s while on V8 side it's %s.",
+        kEmbedderPointerCompression ? "ENABLED" : "DISABLED",
+        COMPRESS_POINTERS_BOOL ? "ENABLED" : "DISABLED");
+  }
+
+  const int kEmbedderSmiValueSize = (build_config & k31BitSmis) ? 31 : 32;
+  if (kEmbedderSmiValueSize != internal::kSmiValueSize) {
+    FATAL(
+        "Embedder-vs-V8 build configuration mismatch. On embedder side "
+        "Smi value size is %d while on V8 side it's %d.",
+        kEmbedderSmiValueSize, internal::kSmiValueSize);
+  }
+
   i::V8::Initialize();
   return true;
 }
@@ -5729,7 +5754,9 @@ HeapStatistics::HeapStatistics()
       peak_malloced_memory_(0),
       does_zap_garbage_(false),
       number_of_native_contexts_(0),
-      number_of_detached_contexts_(0) {}
+      number_of_detached_contexts_(0),
+      total_global_handles_size_(0),
+      used_global_handles_size_(0) {}
 
 HeapSpaceStatistics::HeapSpaceStatistics()
     : space_name_(nullptr),
@@ -7197,57 +7224,6 @@ MaybeLocal<WasmModuleObject> WasmModuleObject::FromCompiledModule(
       Utils::ToLocal(i::Handle<i::JSObject>::cast(module_object)));
 }
 
-MaybeLocal<WasmModuleObject> WasmModuleObject::Deserialize(
-    Isolate* isolate, MemorySpan<const uint8_t> serialized_module,
-    MemorySpan<const uint8_t> wire_bytes) {
-  i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
-  i::MaybeHandle<i::WasmModuleObject> maybe_module_object =
-      i::wasm::DeserializeNativeModule(
-          i_isolate, {serialized_module.data(), serialized_module.size()},
-          {wire_bytes.data(), wire_bytes.size()}, {});
-  i::Handle<i::WasmModuleObject> module_object;
-  if (!maybe_module_object.ToHandle(&module_object)) {
-    return MaybeLocal<WasmModuleObject>();
-  }
-  return Local<WasmModuleObject>::Cast(
-      Utils::ToLocal(i::Handle<i::JSObject>::cast(module_object)));
-}
-
-MaybeLocal<WasmModuleObject> WasmModuleObject::DeserializeOrCompile(
-    Isolate* isolate, MemorySpan<const uint8_t> serialized_module,
-    MemorySpan<const uint8_t> wire_bytes) {
-  MaybeLocal<WasmModuleObject> ret =
-      Deserialize(isolate, serialized_module, wire_bytes);
-  if (!ret.IsEmpty()) {
-    return ret;
-  }
-  return Compile(isolate, wire_bytes.data(), wire_bytes.size());
-}
-
-MaybeLocal<WasmModuleObject> WasmModuleObject::Compile(Isolate* isolate,
-                                                       const uint8_t* start,
-                                                       size_t length) {
-  i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
-  if (!i::wasm::IsWasmCodegenAllowed(i_isolate, i_isolate->native_context())) {
-    return MaybeLocal<WasmModuleObject>();
-  }
-  i::MaybeHandle<i::JSObject> maybe_compiled;
-  {
-    i::wasm::ErrorThrower thrower(i_isolate, "WasmModuleObject::Compile()");
-    auto enabled_features = i::wasm::WasmFeatures::FromIsolate(i_isolate);
-    maybe_compiled = i_isolate->wasm_engine()->SyncCompile(
-        i_isolate, enabled_features, &thrower,
-        i::wasm::ModuleWireBytes(start, start + length));
-  }
-  CHECK_EQ(maybe_compiled.is_null(), i_isolate->has_pending_exception());
-  if (maybe_compiled.is_null()) {
-    i_isolate->OptionalRescheduleException(false);
-    return MaybeLocal<WasmModuleObject>();
-  }
-  return Local<WasmModuleObject>::Cast(
-      Utils::ToLocal(maybe_compiled.ToHandleChecked()));
-}
-
 WasmModuleObjectBuilderStreaming::WasmModuleObjectBuilderStreaming(
     Isolate* isolate) {
   USE(isolate_);
@@ -7261,6 +7237,21 @@ void WasmModuleObjectBuilderStreaming::OnBytesReceived(const uint8_t* bytes,
 void WasmModuleObjectBuilderStreaming::Finish() {}
 
 void WasmModuleObjectBuilderStreaming::Abort(MaybeLocal<Value> exception) {}
+
+void* v8::ArrayBuffer::Allocator::Reallocate(void* data, size_t old_length,
+                                             size_t new_length) {
+  if (old_length == new_length) return data;
+  uint8_t* new_data =
+      reinterpret_cast<uint8_t*>(AllocateUninitialized(new_length));
+  if (new_data == nullptr) return nullptr;
+  size_t bytes_to_copy = std::min(old_length, new_length);
+  memcpy(new_data, data, bytes_to_copy);
+  if (new_length > bytes_to_copy) {
+    memset(new_data + bytes_to_copy, 0, new_length - bytes_to_copy);
+  }
+  Free(data, old_length);
+  return new_data;
+}
 
 // static
 v8::ArrayBuffer::Allocator* v8::ArrayBuffer::Allocator::NewDefaultAllocator() {
@@ -8655,10 +8646,10 @@ void Isolate::SetPromiseRejectCallback(PromiseRejectCallback callback) {
   isolate->SetPromiseRejectCallback(callback);
 }
 
-void Isolate::RunMicrotasks() {
+void Isolate::PerformMicrotaskCheckpoint() {
   DCHECK_NE(MicrotasksPolicy::kScoped, GetMicrotasksPolicy());
   i::Isolate* isolate = reinterpret_cast<i::Isolate*>(this);
-  isolate->default_microtask_queue()->RunMicrotasks(isolate);
+  isolate->default_microtask_queue()->PerformCheckpoint(this);
 }
 
 void Isolate::EnqueueMicrotask(Local<Function> v8_function) {
@@ -11005,6 +10996,26 @@ void InvokeFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& info,
   VMState<EXTERNAL> state(isolate);
   ExternalCallbackScope call_scope(isolate, callback_address);
   callback(info);
+}
+
+void InvokeFinalizationGroupCleanupFromTask(
+    Handle<Context> context, Handle<JSFinalizationGroup> finalization_group,
+    Handle<Object> callback) {
+  Isolate* isolate = finalization_group->native_context().GetIsolate();
+  RuntimeCallTimerScope timer(
+      isolate, RuntimeCallCounterId::kFinalizationGroupCleanupFromTask);
+  // Do not use ENTER_V8 because this is always called from a running
+  // FinalizationGroupCleanupTask within V8 and we should not log it as an API
+  // call. This method is implemented here to avoid duplication of the exception
+  // handling and microtask running logic in CallDepthScope.
+  if (IsExecutionTerminatingCheck(isolate)) return;
+  Local<v8::Context> api_context = Utils::ToLocal(context);
+  CallDepthScope<true> call_depth_scope(isolate, api_context);
+  VMState<OTHER> state(isolate);
+  if (JSFinalizationGroup::Cleanup(isolate, finalization_group, callback)
+          .IsNothing()) {
+    call_depth_scope.Escape();
+  }
 }
 
 // Undefine macros for jumbo build.

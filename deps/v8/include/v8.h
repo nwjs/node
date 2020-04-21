@@ -1128,17 +1128,11 @@ class TracedReference : public TracedReferenceBase<T> {
 
   /**
    * Copy assignment operator initializing TracedGlobal from an existing one.
-   *
-   * Note: Prohibited when |other| has a finalization callback set through
-   * |SetFinalizationCallback|.
    */
   V8_INLINE TracedReference& operator=(const TracedReference& rhs);
 
   /**
    * Copy assignment operator initializing TracedGlobal from an existing one.
-   *
-   * Note: Prohibited when |other| has a finalization callback set through
-   * |SetFinalizationCallback|.
    */
   template <class S>
   V8_INLINE TracedReference& operator=(const TracedReference<S>& rhs);
@@ -1155,20 +1149,6 @@ class TracedReference : public TracedReferenceBase<T> {
     return reinterpret_cast<TracedReference<S>&>(
         const_cast<TracedReference<T>&>(*this));
   }
-
-  /**
-   * Adds a finalization callback to the handle. The type of this callback is
-   * similar to WeakCallbackType::kInternalFields, i.e., it will pass the
-   * parameter and the first two internal fields of the object.
-   *
-   * The callback is then supposed to reset the handle in the callback. No
-   * further V8 API may be called in this callback. In case additional work
-   * involving V8 needs to be done, a second callback can be scheduled using
-   * WeakCallbackInfo<void>::SetSecondPassCallback.
-   */
-  V8_DEPRECATED("Use TracedGlobal<> if callbacks are required.")
-  V8_INLINE void SetFinalizationCallback(
-      void* parameter, WeakCallbackInfo<void>::Callback callback);
 };
 
  /**
@@ -2201,6 +2181,7 @@ enum StateTag {
   COMPILER,
   OTHER,
   EXTERNAL,
+  ATOMICS_WAIT,
   IDLE
 };
 
@@ -2465,14 +2446,6 @@ class V8_EXPORT ValueDeserializer {
    * blink::ScriptValueSerializer.
    */
   void SetSupportsLegacyWireFormat(bool supports_legacy_wire_format);
-
-  /**
-   * Expect inline wasm in the data stream (rather than in-memory transfer)
-   */
-  V8_DEPRECATED(
-      "Wasm module serialization is only supported via explicit methods, e.g. "
-      "CompiledWasmModule::Serialize()")
-  void SetExpectInlineWasm(bool allow_inline_wasm) {}
 
   /**
    * Reads the underlying wire format version. Likely mostly to be useful to
@@ -2812,9 +2785,6 @@ class V8_EXPORT Value : public Data {
    * Returns true if this value is a WasmModuleObject.
    */
   bool IsWasmModuleObject() const;
-
-  V8_DEPRECATED("Use IsWasmModuleObject")
-  bool IsWebAssemblyCompiledModule() const;
 
   /**
    * Returns true if the value is a Module Namespace Object.
@@ -4785,27 +4755,9 @@ class V8_EXPORT WasmModuleObject : public Object {
    */
   CompiledWasmModule GetCompiledModule();
 
-  /**
-   * If possible, deserialize the module, otherwise compile it from the provided
-   * uncompiled bytes.
-   */
-  V8_DEPRECATED(
-      "Use WasmStreaming for deserialization from cache or the "
-      "CompiledWasmModule to transfer between isolates")
-  static MaybeLocal<WasmModuleObject> DeserializeOrCompile(
-      Isolate* isolate, MemorySpan<const uint8_t> serialized_module,
-      MemorySpan<const uint8_t> wire_bytes);
-
   V8_INLINE static WasmModuleObject* Cast(Value* obj);
 
  private:
-  static MaybeLocal<WasmModuleObject> Deserialize(
-      Isolate* isolate, MemorySpan<const uint8_t> serialized_module,
-      MemorySpan<const uint8_t> wire_bytes);
-  static MaybeLocal<WasmModuleObject> Compile(Isolate* isolate,
-                                              const uint8_t* start,
-                                              size_t length);
-
   static void CheckCast(Value* obj);
 };
 
@@ -4978,6 +4930,15 @@ class V8_EXPORT BackingStore : public v8::internal::BackingStoreBase {
    */
   bool IsShared() const;
 
+  /**
+   * Wrapper around ArrayBuffer::Allocator::Reallocate that preserves IsShared.
+   * Assumes that the backing_store was allocated by the ArrayBuffer allocator
+   * of the given isolate.
+   */
+  static std::unique_ptr<BackingStore> Reallocate(
+      v8::Isolate* isolate, std::unique_ptr<BackingStore> backing_store,
+      size_t byte_length);
+
  private:
   /**
    * See [Shared]ArrayBuffer::GetBackingStore and
@@ -5019,13 +4980,13 @@ class V8_EXPORT ArrayBuffer : public Object {
     virtual ~Allocator() = default;
 
     /**
-     * Allocate |length| bytes. Return NULL if allocation is not successful.
+     * Allocate |length| bytes. Return nullptr if allocation is not successful.
      * Memory should be initialized to zeroes.
      */
     virtual void* Allocate(size_t length) = 0;
 
     /**
-     * Allocate |length| bytes. Return NULL if allocation is not successful.
+     * Allocate |length| bytes. Return nullptr if allocation is not successful.
      * Memory does not have to be initialized.
      */
     virtual void* AllocateUninitialized(size_t length) = 0;
@@ -5035,6 +4996,20 @@ class V8_EXPORT ArrayBuffer : public Object {
      * That memory is guaranteed to be previously allocated by |Allocate|.
      */
     virtual void Free(void* data, size_t length) = 0;
+
+    /**
+     * Reallocate the memory block of size |old_length| to a memory block of
+     * size |new_length| by expanding, contracting, or copying the existing
+     * memory block. If |new_length| > |old_length|, then the new part of
+     * the memory must be initialized to zeros. Return nullptr if reallocation
+     * is not successful.
+     *
+     * The caller guarantees that the memory block was previously allocated
+     * using Allocate or AllocateUninitialized.
+     *
+     * The default implementation allocates a new block and copies data.
+     */
+    virtual void* Reallocate(void* data, size_t old_length, size_t new_length);
 
     /**
      * ArrayBuffer allocation mode. kNormal is a malloc/free style allocation,
@@ -5931,6 +5906,9 @@ class V8_EXPORT FinalizationGroup : public Object {
    * occurred. Otherwise the result is |true| if the cleanup callback
    * was called successfully. The result is never |false|.
    */
+  V8_DEPRECATED(
+      "FinalizationGroup cleanup is automatic if "
+      "HostCleanupFinalizationGroupCallback is not set")
   static V8_WARN_UNUSED_RESULT Maybe<bool> Cleanup(
       Local<FinalizationGroup> finalization_group);
 };
@@ -5948,13 +5926,14 @@ class V8_EXPORT External : public Value {
   static void CheckCast(v8::Value* obj);
 };
 
-#define V8_INTRINSICS_LIST(F)                    \
-  F(ArrayProto_entries, array_entries_iterator)  \
-  F(ArrayProto_forEach, array_for_each_iterator) \
-  F(ArrayProto_keys, array_keys_iterator)        \
-  F(ArrayProto_values, array_values_iterator)    \
-  F(ErrorPrototype, initial_error_prototype)     \
-  F(IteratorPrototype, initial_iterator_prototype)
+#define V8_INTRINSICS_LIST(F)                      \
+  F(ArrayProto_entries, array_entries_iterator)    \
+  F(ArrayProto_forEach, array_for_each_iterator)   \
+  F(ArrayProto_keys, array_keys_iterator)          \
+  F(ArrayProto_values, array_values_iterator)      \
+  F(ErrorPrototype, initial_error_prototype)       \
+  F(IteratorPrototype, initial_iterator_prototype) \
+  F(ObjProto_valueOf, object_value_of_function)
 
 enum Intrinsic {
 #define V8_DECL_INTRINSIC(name, iname) k##name,
@@ -6300,6 +6279,7 @@ typedef bool (*AccessCheckCallback)(Local<Context> accessing_context,
                                     Local<Object> accessed_object,
                                     Local<Value> data);
 
+class CFunction;
 /**
  * A FunctionTemplate is used to create functions at runtime. There
  * can only be one function created from a FunctionTemplate in a
@@ -6408,12 +6388,8 @@ class V8_EXPORT FunctionTemplate : public Template {
       Local<Value> data = Local<Value>(),
       Local<Signature> signature = Local<Signature>(), int length = 0,
       ConstructorBehavior behavior = ConstructorBehavior::kAllow,
-      SideEffectType side_effect_type = SideEffectType::kHasSideEffect);
-
-  /** Get a template included in the snapshot by index. */
-  V8_DEPRECATED("Use v8::Isolate::GetDataFromSnapshotOnce instead")
-  static MaybeLocal<FunctionTemplate> FromSnapshot(Isolate* isolate,
-                                                   size_t index);
+      SideEffectType side_effect_type = SideEffectType::kHasSideEffect,
+      const CFunction* not_available_in_node_v14_yet = nullptr);
 
   /**
    * Creates a function template backed/cached by a private property.
@@ -6444,7 +6420,8 @@ class V8_EXPORT FunctionTemplate : public Template {
    */
   void SetCallHandler(
       FunctionCallback callback, Local<Value> data = Local<Value>(),
-      SideEffectType side_effect_type = SideEffectType::kHasSideEffect);
+      SideEffectType side_effect_type = SideEffectType::kHasSideEffect,
+      const CFunction* not_available_in_node_v14_yet = nullptr);
 
   /** Set the predefined length property for the FunctionTemplate. */
   void SetLength(int length);
@@ -6701,11 +6678,6 @@ class V8_EXPORT ObjectTemplate : public Template {
   static Local<ObjectTemplate> New(
       Isolate* isolate,
       Local<FunctionTemplate> constructor = Local<FunctionTemplate>());
-
-  /** Get a template included in the snapshot by index. */
-  V8_DEPRECATED("Use v8::Isolate::GetDataFromSnapshotOnce instead")
-  static MaybeLocal<ObjectTemplate> FromSnapshot(Isolate* isolate,
-                                                 size_t index);
 
   /** Creates a new instance of this template.*/
   V8_WARN_UNUSED_RESULT MaybeLocal<Object> NewInstance(Local<Context> context);
@@ -7297,10 +7269,10 @@ typedef void (*MicrotasksCompletedCallback)(Isolate*);
 typedef void (*MicrotasksCompletedCallbackWithData)(Isolate*, void*);
 typedef void (*MicrotaskCallback)(void* data);
 
-
 /**
  * Policy for running microtasks:
- *   - explicit: microtasks are invoked with Isolate::RunMicrotasks() method;
+ *   - explicit: microtasks are invoked with the
+ *               Isolate::PerformMicrotaskCheckpoint() method;
  *   - scoped: microtasks invocation is controlled by MicrotasksScope objects;
  *   - auto: microtasks are invoked when the script call depth decrements
  *           to zero.
@@ -7391,7 +7363,7 @@ class V8_EXPORT MicrotaskQueue {
 };
 
 /**
- * This scope is used to control microtasks when kScopeMicrotasksInvocation
+ * This scope is used to control microtasks when MicrotasksPolicy::kScoped
  * is used on Isolate. In this mode every non-primitive call to V8 should be
  * done inside some MicrotasksScope.
  * Microtasks are executed when topmost MicrotasksScope marked as kRunMicrotasks
@@ -7576,6 +7548,8 @@ class V8_EXPORT HeapStatistics {
   size_t total_heap_size_executable() { return total_heap_size_executable_; }
   size_t total_physical_size() { return total_physical_size_; }
   size_t total_available_size() { return total_available_size_; }
+  size_t total_global_handles_size() { return total_global_handles_size_; }
+  size_t used_global_handles_size() { return used_global_handles_size_; }
   size_t used_heap_size() { return used_heap_size_; }
   size_t heap_size_limit() { return heap_size_limit_; }
   size_t malloced_memory() { return malloced_memory_; }
@@ -7603,6 +7577,8 @@ class V8_EXPORT HeapStatistics {
   bool does_zap_garbage_;
   size_t number_of_native_contexts_;
   size_t number_of_detached_contexts_;
+  size_t total_global_handles_size_;
+  size_t used_global_handles_size_;
 
   friend class V8;
   friend class Isolate;
@@ -8137,7 +8113,10 @@ class V8_EXPORT Isolate {
           array_buffer_allocator_shared(),
           external_references(nullptr),
           allow_atomics_wait(true),
-          only_terminate_in_safe_scope(false) {}
+          only_terminate_in_safe_scope(false),
+          embedder_wrapper_type_index(-1),
+          embedder_wrapper_object_index(-1) {}
+
 
     /**
      * Allows the host application to provide the address of a function that is
@@ -8201,6 +8180,10 @@ class V8_EXPORT Isolate {
      * Termination is postponed when there is no active SafeForTerminationScope.
      */
     bool only_terminate_in_safe_scope;
+
+    // Not available in Node v14 yet.
+    int embedder_wrapper_type_index;
+    int embedder_wrapper_object_index;
   };
 
 
@@ -8407,6 +8390,13 @@ class V8_EXPORT Isolate {
     kRegExpReplaceCalledOnSlowRegExp = 80,
     kDisplayNames = 81,
     kSharedArrayBufferConstructed = 82,
+    kArrayPrototypeHasElements = 83,
+    kObjectPrototypeHasElements = 84,
+    kNumberFormatStyleUnit = 85,
+    kDateTimeFormatRange = 86,
+    kDateTimeFormatDateTimeStyle = 87,
+    kBreakIteratorTypeWord = 88,
+    kBreakIteratorTypeLine = 89,
 
     // If you add new values here, you'll also need to update Chromium's:
     // web_feature.mojom, use_counter_callback.cc, and enums.xml. V8 changes to
@@ -8472,10 +8462,13 @@ class V8_EXPORT Isolate {
    * objects are originally built when a WeakRef is created or
    * successfully dereferenced.
    *
-   * The embedder is expected to call this when a synchronous sequence
-   * of ECMAScript execution completes. It's the embedders
-   * responsiblity to make this call at a time which does not
-   * interrupt synchronous ECMAScript code execution.
+   * This is invoked automatically after microtasks are run. See
+   * MicrotasksPolicy for when microtasks are run.
+   *
+   * This needs to be manually invoked only if the embedder is manually running
+   * microtasks via a custom MicrotaskQueue class's PerformCheckpoint. In that
+   * case, it is the embedder's responsibility to make this call at a time which
+   * does not interrupt synchronous ECMAScript code execution.
    */
   void ClearKeptObjects();
 
@@ -8497,6 +8490,9 @@ class V8_EXPORT Isolate {
    * are ready to be cleaned up and require FinalizationGroup::Cleanup()
    * to be called in a future task.
    */
+  V8_DEPRECATED(
+      "FinalizationGroup cleanup is automatic if "
+      "HostCleanupFinalizationGroupCallback is not set")
   void SetHostCleanupFinalizationGroupCallback(
       HostCleanupFinalizationGroupCallback callback);
 
@@ -9000,10 +8996,18 @@ class V8_EXPORT Isolate {
   void SetPromiseRejectCallback(PromiseRejectCallback callback);
 
   /**
-   * Runs the default MicrotaskQueue until it gets empty.
-   * Any exceptions thrown by microtask callbacks are swallowed.
+   * An alias for PerformMicrotaskCheckpoint.
    */
-  void RunMicrotasks();
+  V8_DEPRECATE_SOON("Use PerformMicrotaskCheckpoint.")
+  void RunMicrotasks() { PerformMicrotaskCheckpoint(); }
+
+  /**
+   * Runs the default MicrotaskQueue until it gets empty and perform other
+   * microtask checkpoint steps, such as calling ClearKeptObjects. Asserts that
+   * the MicrotasksPolicy is not kScoped. Any exceptions thrown by microtask
+   * callbacks are swallowed.
+   */
+  void PerformMicrotaskCheckpoint();
 
   /**
    * Enqueues the callback to the default MicrotaskQueue
@@ -9101,10 +9105,10 @@ class V8_EXPORT Isolate {
   void LowMemoryNotification();
 
   /**
-   * Optional notification that a context has been disposed. V8 uses
-   * these notifications to guide the GC heuristic. Returns the number
-   * of context disposals - including this one - since the last time
-   * V8 had a chance to clean up.
+   * Optional notification that a context has been disposed. V8 uses these
+   * notifications to guide the GC heuristic and cancel FinalizationGroup
+   * cleanup tasks. Returns the number of context disposals - including this one
+   * - since the last time V8 had a chance to clean up.
    *
    * The optional parameter |dependant_context| specifies whether the disposed
    * context was depending on state from other contexts or not.
@@ -9218,7 +9222,7 @@ class V8_EXPORT Isolate {
    * Returns the UnwindState necessary for use with the Unwinder API.
    */
   // TODO(petermarshall): Remove this API.
-  V8_DEPRECATE_SOON("Use entry_stubs + code_pages version.")
+  V8_DEPRECATED("Use entry_stubs + code_pages version.")
   UnwindState GetUnwindState();
 
   /**
@@ -9530,7 +9534,12 @@ class V8_EXPORT V8 {
    * Initializes V8. This function needs to be called before the first Isolate
    * is created. It always returns true.
    */
-  static bool Initialize();
+  V8_INLINE static bool Initialize() {
+    const int kBuildConfiguration =
+        (internal::PointerCompressionIsEnabled() ? kPointerCompression : 0) |
+        (internal::SmiValuesAre31Bits() ? k31BitSmis : 0);
+    return Initialize(kBuildConfiguration);
+  }
 
   /**
    * Allows the host application to provide a callback which can be used
@@ -9664,6 +9673,17 @@ class V8_EXPORT V8 {
  private:
   V8();
 
+  enum BuildConfigurationFeatures {
+    kPointerCompression = 1 << 0,
+    k31BitSmis = 1 << 1,
+  };
+
+  /**
+   * Checks that the embedder build configuration is compatible with
+   * the V8 binary and if so initializes V8.
+   */
+  static bool Initialize(int build_config);
+
   static internal::Address* GlobalizeReference(internal::Isolate* isolate,
                                                internal::Address* handle);
   static internal::Address* GlobalizeTracedReference(internal::Isolate* isolate,
@@ -9777,13 +9797,6 @@ class V8_EXPORT SnapshotCreator {
   size_t AddContext(Local<Context> context,
                     SerializeInternalFieldsCallback callback =
                         SerializeInternalFieldsCallback());
-
-  /**
-   * Add a template to be included in the snapshot blob.
-   * \returns the index of the template in the snapshot blob.
-   */
-  V8_DEPRECATED("use AddData instead")
-  size_t AddTemplate(Local<Template> template_obj);
 
   /**
    * Attach arbitrary V8::Data to the context snapshot, which can be retrieved
@@ -10563,7 +10576,7 @@ class V8_EXPORT Unwinder {
    * \return True on success.
    */
   // TODO(petermarshall): Remove this API
-  V8_DEPRECATE_SOON("Use entry_stubs + code_pages version.")
+  V8_DEPRECATED("Use entry_stubs + code_pages version.")
   static bool TryUnwindV8Frames(const UnwindState& unwind_state,
                                 RegisterState* register_state,
                                 const void* stack_base);
@@ -10591,7 +10604,7 @@ class V8_EXPORT Unwinder {
    * (but not necessarily) be successful.
    */
   // TODO(petermarshall): Remove this API
-  V8_DEPRECATE_SOON("Use code_pages version.")
+  V8_DEPRECATED("Use code_pages version.")
   static bool PCIsInV8(const UnwindState& unwind_state, void* pc);
 
   /**
@@ -10932,13 +10945,6 @@ uint16_t TracedReferenceBase<T>::WrapperClassId() const {
 
 template <class T>
 void TracedGlobal<T>::SetFinalizationCallback(
-    void* parameter, typename WeakCallbackInfo<void>::Callback callback) {
-  V8::SetFinalizationCallbackTraced(
-      reinterpret_cast<internal::Address*>(this->val_), parameter, callback);
-}
-
-template <class T>
-void TracedReference<T>::SetFinalizationCallback(
     void* parameter, typename WeakCallbackInfo<void>::Callback callback) {
   V8::SetFinalizationCallbackTraced(
       reinterpret_cast<internal::Address*>(this->val_), parameter, callback);
@@ -11854,9 +11860,9 @@ int64_t Isolate::AdjustAmountOfExternalAllocatedMemory(
       reinterpret_cast<uint8_t*>(this) + I::kExternalMemoryOffset);
   int64_t* external_memory_limit = reinterpret_cast<int64_t*>(
       reinterpret_cast<uint8_t*>(this) + I::kExternalMemoryLimitOffset);
-  int64_t* external_memory_at_last_mc =
+  int64_t* external_memory_low_since_mc =
       reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(this) +
-                                 I::kExternalMemoryAtLastMarkCompactOffset);
+                                 I::kExternalMemoryLowSinceMarkCompactOffset);
 
   // Embedders are weird: we see both over- and underflows here. Perform the
   // addition with unsigned types to avoid undefined behavior.
@@ -11865,23 +11871,22 @@ int64_t Isolate::AdjustAmountOfExternalAllocatedMemory(
                            static_cast<uint64_t>(*external_memory));
   *external_memory = amount;
 
-  int64_t allocation_diff_since_last_mc =
-      static_cast<int64_t>(static_cast<uint64_t>(*external_memory) -
-                           static_cast<uint64_t>(*external_memory_at_last_mc));
+  if (amount < *external_memory_low_since_mc) {
+    *external_memory_low_since_mc = amount;
+    *external_memory_limit = amount + I::kExternalAllocationSoftLimit;
+  }
+
+  if (change_in_bytes <= 0) return *external_memory;
+
+  int64_t allocation_diff_since_last_mc = static_cast<int64_t>(
+      static_cast<uint64_t>(*external_memory) -
+      static_cast<uint64_t>(*external_memory_low_since_mc));
   // Only check memory pressure and potentially trigger GC if the amount of
   // external memory increased.
   if (allocation_diff_since_last_mc > kMemoryReducerActivationLimit) {
     CheckMemoryPressure();
   }
-
-  if (change_in_bytes < 0) {
-    const int64_t lower_limit =
-        static_cast<int64_t>(static_cast<uint64_t>(*external_memory_limit) +
-                             static_cast<uint64_t>(change_in_bytes));
-    if (lower_limit > I::kExternalAllocationSoftLimit) {
-      *external_memory_limit = lower_limit;
-    }
-  } else if (change_in_bytes > 0 && amount > *external_memory_limit) {
+  if (amount > *external_memory_limit) {
     ReportExternalAllocationLimitReached();
   }
   return *external_memory;

@@ -457,7 +457,6 @@ typedef enum {
   napi_date_expected,
   napi_arraybuffer_expected,
   napi_detachable_arraybuffer_expected,
-  napi_would_deadlock,
 } napi_status;
 ```
 
@@ -861,7 +860,7 @@ SemVer applying. In order to support this model with N-API, both
 in internal functionality and for module specific functionality
 (as its good practice), the `throw_` and `create_` functions
 take an optional code parameter which is the string for the code
-to be added to the error object. If the optional parameter is NULL
+to be added to the error object. If the optional parameter is `NULL`
 then no code will be associated with the error. If a code is provided,
 the name associated with the error is also updated to be:
 
@@ -1059,7 +1058,7 @@ napi_status napi_get_and_clear_last_exception(napi_env env,
 ```
 
 * `[in] env`: The environment that the API is invoked under.
-* `[out] result`: The exception if one is pending, NULL otherwise.
+* `[out] result`: The exception if one is pending, `NULL` otherwise.
 
 Returns `napi_ok` if the API succeeded.
 
@@ -1351,7 +1350,7 @@ then be modified through [`napi_reference_ref`][] and
 [`napi_reference_unref`][]. If an object is collected while the count
 for a reference is 0, all subsequent calls to
 get the object associated with the reference [`napi_get_reference_value`][]
-will return NULL for the returned `napi_value`. An attempt to call
+will return `NULL` for the returned `napi_value`. An attempt to call
 [`napi_reference_ref`][] for a reference whose object has been collected
 will result in an error.
 
@@ -1474,7 +1473,7 @@ Returns `napi_ok` if the API succeeded.
 
 If still valid, this API returns the `napi_value` representing the
 JavaScript `Object` associated with the `napi_ref`. Otherwise, result
-will be NULL.
+will be `NULL`.
 
 ### Cleanup on exit of the current Node.js instance
 
@@ -1550,7 +1549,7 @@ napi_value Init(napi_env env, napi_value exports);
 
 The return value from `Init` is treated as the `exports` object for the module.
 The `Init` method is passed an empty object via the `exports` parameter as a
-convenience. If `Init` returns NULL, the parameter passed as `exports` is
+convenience. If `Init` returns `NULL`, the parameter passed as `exports` is
 exported by the module. N-API modules cannot modify the `module` object but can
 specify anything as the `exports` property of the module.
 
@@ -2828,7 +2827,7 @@ napi_status napi_get_value_string_latin1(napi_env env,
 
 * `[in] env`: The environment that the API is invoked under.
 * `[in] value`: `napi_value` representing JavaScript string.
-* `[in] buf`: Buffer to write the ISO-8859-1-encoded string into. If NULL is
+* `[in] buf`: Buffer to write the ISO-8859-1-encoded string into. If `NULL` is
   passed in, the length of the string (in bytes) is returned.
 * `[in] bufsize`: Size of the destination buffer. When this value is
   insufficient, the returned string will be truncated.
@@ -2857,7 +2856,7 @@ napi_status napi_get_value_string_utf8(napi_env env,
 
 * `[in] env`: The environment that the API is invoked under.
 * `[in] value`: `napi_value` representing JavaScript string.
-* `[in] buf`: Buffer to write the UTF8-encoded string into. If NULL is passed
+* `[in] buf`: Buffer to write the UTF8-encoded string into. If `NULL` is passed
   in, the length of the string (in bytes) is returned.
 * `[in] bufsize`: Size of the destination buffer. When this value is
   insufficient, the returned string will be truncated.
@@ -2885,7 +2884,7 @@ napi_status napi_get_value_string_utf16(napi_env env,
 
 * `[in] env`: The environment that the API is invoked under.
 * `[in] value`: `napi_value` representing JavaScript string.
-* `[in] buf`: Buffer to write the UTF16-LE-encoded string into. If NULL is
+* `[in] buf`: Buffer to write the UTF16-LE-encoded string into. If `NULL` is
   passed in, the length of the string (in 2-byte code units) is returned.
 * `[in] bufsize`: Size of the destination buffer. When this value is
   insufficient, the returned string will be truncated.
@@ -5096,12 +5095,6 @@ preventing data from being successfully added to the queue. If set to
 `napi_call_threadsafe_function()` never blocks if the thread-safe function was
 created with a maximum queue size of 0.
 
-As a special case, when `napi_call_threadsafe_function()` is called from the
-main thread, it will return `napi_would_deadlock` if the queue is full and it
-was called with `napi_tsfn_blocking`. The reason for this is that the main
-thread is responsible for reducing the number of items in the queue so, if it
-waits for room to become available on the queue, then it will deadlock.
-
 The actual call into JavaScript is controlled by the callback given via the
 `call_js_cb` parameter. `call_js_cb` is invoked on the main thread once for each
 value that was placed into the queue by a successful call to
@@ -5238,12 +5231,6 @@ This API may be called from any thread which makes use of `func`.
 <!-- YAML
 added: v10.6.0
 napiVersion: 4
-changes:
-  - version: v14.0.0
-    pr-url: https://github.com/nodejs/node/pull/32689
-    description: >
-      Return `napi_would_deadlock` when called with `napi_tsfn_blocking` from
-      the main thread and the queue is full.
 -->
 
 ```C
@@ -5261,13 +5248,9 @@ napi_call_threadsafe_function(napi_threadsafe_function func,
   `napi_tsfn_nonblocking` to indicate that the call should return immediately
   with a status of `napi_queue_full` whenever the queue is full.
 
-This API will return `napi_would_deadlock` if called with `napi_tsfn_blocking`
-from the main thread and the queue is full.
-
 This API will return `napi_closing` if `napi_release_threadsafe_function()` was
-called with `abort` set to `napi_tsfn_abort` from any thread.
-
-The value is only added to the queue if the API returns `napi_ok`.
+called with `abort` set to `napi_tsfn_abort` from any thread. The value is only
+added to the queue if the API returns `napi_ok`.
 
 This API may be called from any thread which makes use of `func`.
 

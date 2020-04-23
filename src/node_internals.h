@@ -114,6 +114,7 @@ class NodeArrayBufferAllocator : public ArrayBufferAllocator {
   void* Allocate(size_t size) override;  // Defined in src/node.cc
   void* AllocateUninitialized(size_t size) override;
   void Free(void* data, size_t size) override;
+  void Free(void* data, size_t size, AllocationMode mode) override;
   virtual void* Reallocate(void* data, size_t old_size, size_t size);
   virtual void RegisterPointer(void* data, size_t size) {
     total_mem_usage_.fetch_add(size, std::memory_order_relaxed);
@@ -300,8 +301,10 @@ void DefineZlibConstants(v8::Local<v8::Object> target);
 v8::Isolate* NewIsolate(v8::Isolate::CreateParams* params,
                         uv_loop_t* event_loop,
                         MultiIsolatePlatform* platform);
+// This overload automatically picks the right 'main_script_id' if no callback
+// was provided by the embedder.
 v8::MaybeLocal<v8::Value> StartExecution(Environment* env,
-                                         const char* main_script_id);
+                                         StartExecutionCallback cb = nullptr);
 v8::MaybeLocal<v8::Object> GetPerContextExports(v8::Local<v8::Context> context);
 v8::MaybeLocal<v8::Value> ExecuteBootstrapper(
     Environment* env,
@@ -398,6 +401,10 @@ using HeapSnapshotPointer =
 BaseObjectPtr<AsyncWrap> CreateHeapSnapshotStream(
     Environment* env, HeapSnapshotPointer&& snapshot);
 }  // namespace heap
+
+namespace fs {
+std::string Basename(const std::string& str, const std::string& extension);
+}  // namespace fs
 
 }  // namespace node
 

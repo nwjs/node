@@ -8,3 +8,4 @@ let m_namespace = await m;
 export function life() {
   return m_namespace.life();
 }
+

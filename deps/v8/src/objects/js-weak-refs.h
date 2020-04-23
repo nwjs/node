@@ -6,7 +6,6 @@
 #define V8_OBJECTS_JS_WEAK_REFS_H_
 
 #include "src/objects/js-objects.h"
-#include "src/objects/microtask.h"
 
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
@@ -45,6 +44,16 @@ class JSFinalizationGroup : public JSObject {
                                 Handle<JSReceiver> unregister_token,
                                 Isolate* isolate);
 
+  // RemoveUnregisterToken is called from both Unregister and during GC. Since
+  // it modifies slots in key_map and WeakCells and the normal write barrier is
+  // disabled during GC, we need to tell the GC about the modified slots via the
+  // gc_notify_updated_slot function.
+  template <typename MatchCallback, typename GCNotifyUpdatedSlotCallback>
+  inline bool RemoveUnregisterToken(
+      JSReceiver unregister_token, Isolate* isolate,
+      MatchCallback match_callback,
+      GCNotifyUpdatedSlotCallback gc_notify_updated_slot);
+
   // Returns true if the cleared_cells list is non-empty.
   inline bool NeedsCleanup() const;
 
@@ -69,7 +78,7 @@ class JSFinalizationGroup : public JSObject {
                                 TORQUE_GENERATED_JS_FINALIZATION_GROUP_FIELDS)
 
   // Bitfields in flags.
-  using ScheduledForCleanupField = BitField<bool, 0, 1>;
+  using ScheduledForCleanupField = base::BitField<bool, 0, 1>;
 
   OBJECT_CONSTRUCTORS(JSFinalizationGroup, JSObject);
 };
@@ -86,10 +95,9 @@ class WeakCell : public TorqueGeneratedWeakCell<WeakCell, HeapObject> {
   // JSFinalizationGroup. Thus we need to tell the GC about the modified slots
   // via the gc_notify_updated_slot function. The normal write barrier is not
   // enough, since it's disabled before GC.
-  inline void Nullify(
-      Isolate* isolate,
-      std::function<void(HeapObject object, ObjectSlot slot, Object target)>
-          gc_notify_updated_slot);
+  template <typename GCNotifyUpdatedSlotCallback>
+  inline void Nullify(Isolate* isolate,
+                      GCNotifyUpdatedSlotCallback gc_notify_updated_slot);
 
   inline void RemoveFromFinalizationGroupCells(Isolate* isolate);
 

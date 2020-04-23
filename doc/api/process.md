@@ -190,7 +190,7 @@ rejection handler.
 
 There is no notion of a top level for a `Promise` chain at which rejections can
 always be handled. Being inherently asynchronous in nature, a `Promise`
-rejection can be handled at a future point in time — possibly much later than
+rejection can be handled at a future point in time, possibly much later than
 the event loop turn it takes for the `'unhandledRejection'` event to be emitted.
 
 Another way of stating this is that, unlike in synchronous code where there is
@@ -502,7 +502,7 @@ process.on('SIGTERM', handle);
 * `'SIGTERM'` is not supported on Windows, it can be listened on.
 * `'SIGINT'` from the terminal is supported on all platforms, and can usually be
   generated with `<Ctrl>+C` (though this may be configurable). It is not
-  generated when terminal raw mode is enabled.
+  generated when [terminal raw mode][] is enabled and `<Ctrl>+C` is used.
 * `'SIGBREAK'` is delivered on Windows when `<Ctrl>+<Break>` is pressed, on
   non-Windows platforms it can be listened on, but there is no way to send or
   generate it.
@@ -518,11 +518,17 @@ process.on('SIGTERM', handle);
    the process hanging in an endless loop, since listeners attached using
    `process.on()` are called asynchronously and therefore unable to correct the
    underlying problem.
+* `0` can be sent to test for the existence of a process, it has no effect if
+   the process exists, but will throw an error if the process does not exist.
 
-Windows does not support sending signals, but Node.js offers some emulation
-with [`process.kill()`][], and [`subprocess.kill()`][]. Sending signal `0` can
-be used to test for the existence of a process. Sending `SIGINT`, `SIGTERM`,
-and `SIGKILL` cause the unconditional termination of the target process.
+Windows does not support signals so has no equivalent to termination by signal,
+but Node.js offers some emulation with [`process.kill()`][], and
+[`subprocess.kill()`][]:
+* Sending `SIGINT`, `SIGTERM`, and `SIGKILL` will cause the unconditional
+  termination of the target process, and afterwards, subprocess will report that
+  the process was terminated by signal.
+* Sending signal `0` can be used as a platform independent way to test for the
+  existence of a process.
 
 ## `process.abort()`
 <!-- YAML
@@ -658,6 +664,10 @@ $ bash -c 'exec -a customArgv0 ./node'
 ## `process.channel`
 <!-- YAML
 added: v7.1.0
+changes:
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/30165
+    description: The object no longer accidentally exposes native C++ bindings.
 -->
 
 * {Object}
@@ -666,6 +676,30 @@ If the Node.js process was spawned with an IPC channel (see the
 [Child Process][] documentation), the `process.channel`
 property is a reference to the IPC channel. If no IPC channel exists, this
 property is `undefined`.
+
+### `process.channel.ref()`
+<!-- YAML
+added: v7.1.0
+-->
+
+This method makes the IPC channel keep the event loop of the process
+running if `.unref()` has been called before.
+
+Typically, this is managed through the number of `'disconnect'` and `'message'`
+listeners on the `process` object. However, this method can be used to
+explicitly request a specific behavior.
+
+### `process.channel.unref()`
+<!-- YAML
+added: v7.1.0
+-->
+
+This method makes the IPC channel not keep the event loop of the process
+running, and lets it finish even while the channel is open.
+
+Typically, this is managed through the number of `'disconnect'` and `'message'`
+listeners on the `process` object. However, this method can be used to
+explicitly request a specific behavior.
 
 ## `process.chdir(directory)`
 <!-- YAML
@@ -1465,7 +1499,10 @@ debugger. See [Signal Events][].
 ## `process.mainModule`
 <!-- YAML
 added: v0.1.17
+deprecated: v14.0.0
 -->
+
+> Stability: 0 - Deprecated: Use [`require.main`][] instead.
 
 * {Object}
 
@@ -1749,9 +1786,11 @@ relied upon to exist.
 ## `process.report`
 <!-- YAML
 added: v11.8.0
+changes:
+  - version: v13.12.0
+    pr-url: https://github.com/nodejs/node/pull/32242
+    description: This API is no longer considered experimental.
 -->
-
-> Stability: 1 - Experimental
 
 * {Object}
 
@@ -1759,12 +1798,29 @@ added: v11.8.0
 reports for the current process. Additional documentation is available in the
 [report documentation][].
 
+### `process.report.compact`
+<!-- YAML
+added: v13.12.0
+-->
+
+* {boolean}
+
+Write reports in a compact format, single-line JSON, more easily consumable
+by log processing systems than the default multi-line format designed for
+human consumption.
+
+```js
+console.log(`Reports are compact? ${process.report.compact}`);
+```
+
 ### `process.report.directory`
 <!-- YAML
 added: v11.12.0
+changes:
+  - version: v13.12.0
+    pr-url: https://github.com/nodejs/node/pull/32242
+    description: This API is no longer considered experimental.
 -->
-
-> Stability: 1 - Experimental
 
 * {string}
 
@@ -1779,9 +1835,11 @@ console.log(`Report directory is ${process.report.directory}`);
 ### `process.report.filename`
 <!-- YAML
 added: v11.12.0
+changes:
+  - version: v13.12.0
+    pr-url: https://github.com/nodejs/node/pull/32242
+    description: This API is no longer considered experimental.
 -->
-
-> Stability: 1 - Experimental
 
 * {string}
 
@@ -1796,9 +1854,11 @@ console.log(`Report filename is ${process.report.filename}`);
 ### `process.report.getReport([err])`
 <!-- YAML
 added: v11.8.0
+changes:
+  - version: v13.12.0
+    pr-url: https://github.com/nodejs/node/pull/32242
+    description: This API is no longer considered experimental.
 -->
-
-> Stability: 1 - Experimental
 
 * `err` {Error} A custom error used for reporting the JavaScript stack.
 * Returns: {Object}
@@ -1837,9 +1897,11 @@ console.log(`Report on fatal error: ${process.report.reportOnFatalError}`);
 ### `process.report.reportOnSignal`
 <!-- YAML
 added: v11.12.0
+changes:
+  - version: v13.12.0
+    pr-url: https://github.com/nodejs/node/pull/32242
+    description: This API is no longer considered experimental.
 -->
-
-> Stability: 1 - Experimental
 
 * {boolean}
 
@@ -1853,9 +1915,11 @@ console.log(`Report on signal: ${process.report.reportOnSignal}`);
 ### `process.report.reportOnUncaughtException`
 <!-- YAML
 added: v11.12.0
+changes:
+  - version: v13.12.0
+    pr-url: https://github.com/nodejs/node/pull/32242
+    description: This API is no longer considered experimental.
 -->
-
-> Stability: 1 - Experimental
 
 * {boolean}
 
@@ -1868,9 +1932,11 @@ console.log(`Report on exception: ${process.report.reportOnUncaughtException}`);
 ### `process.report.signal`
 <!-- YAML
 added: v11.12.0
+changes:
+  - version: v13.12.0
+    pr-url: https://github.com/nodejs/node/pull/32242
+    description: This API is no longer considered experimental.
 -->
-
-> Stability: 1 - Experimental
 
 * {string}
 
@@ -1884,9 +1950,11 @@ console.log(`Report signal: ${process.report.signal}`);
 ### `process.report.writeReport([filename][, err])`
 <!-- YAML
 added: v11.8.0
+changes:
+  - version: v13.12.0
+    pr-url: https://github.com/nodejs/node/pull/32242
+    description: This API is no longer considered experimental.
 -->
-
-> Stability: 1 - Experimental
 
 * `filename` {string} Name of the file where the report is written. This
   should be a relative path, that will be appended to the directory specified in
@@ -2355,17 +2423,33 @@ documentation for the [`'warning'` event][process_warning] and the
 [`emitWarning()` method][process_emit_warning] for more information about this
 flag's behavior.
 
-## `process.umask([mask])`
+## `process.umask()`
+<!-- YAML
+added: v0.1.19
+changes:
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/32499
+    description: Calling `process.umask()` with no arguments is deprecated.
+
+-->
+
+> Stability: 0 - Deprecated. Calling `process.umask()` with no argument causes
+> the process-wide umask to be written twice. This introduces a race condition
+> between threads, and is a potential security vulnerability. There is no safe,
+> cross-platform alternative API.
+
+`process.umask()` returns the Node.js process's file mode creation mask. Child
+processes inherit the mask from the parent process.
+
+## `process.umask(mask)`
 <!-- YAML
 added: v0.1.19
 -->
 
 * `mask` {string|integer}
 
-The `process.umask()` method sets or returns the Node.js process's file mode
-creation mask. Child processes inherit the mask from the parent process. Invoked
-without an argument, the current mask is returned, otherwise the umask is set to
-the argument value and the previous mask is returned.
+`process.umask(mask)` sets the Node.js process's file mode creation mask. Child
+processes inherit the mask from the parent process. Returns the previous mask.
 
 ```js
 const newmask = 0o022;
@@ -2375,8 +2459,7 @@ console.log(
 );
 ```
 
-[`Worker`][] threads are able to read the umask, however attempting to set the
-umask will result in a thrown exception.
+In [`Worker`][] threads, `process.umask(mask)` will throw an exception.
 
 ## `process.uptime()`
 <!-- YAML
@@ -2545,6 +2628,7 @@ cases:
 [process_emit_warning]: #process_process_emitwarning_warning_type_code_ctor
 [process_warning]: #process_event_warning
 [report documentation]: report.html
+[terminal raw mode]: tty.html#tty_readstream_setrawmode_mode
 [uv_rusage_t]: http://docs.libuv.org/en/v1.x/misc.html#c.uv_rusage_t
 [wikipedia_minor_fault]: https://en.wikipedia.org/wiki/Page_fault#Minor
 [wikipedia_major_fault]: https://en.wikipedia.org/wiki/Page_fault#Major

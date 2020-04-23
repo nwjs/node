@@ -246,10 +246,10 @@ listed as supporting a later version.
 | v6.x  |         |          | v6.14.2* |          |           |
 | v8.x  | v8.0.0* | v8.10.0* | v8.11.2  | v8.16.0  |           |
 | v9.x  | v9.0.0* | v9.3.0*  | v9.11.0* |          |           |
-| v10.x |         |          | v10.0.0  | v10.16.0 |           |
-| v11.x |         |          | v11.0.0  | v11.8.0  |           |
-| v12.x |         |          |          | v12.0.0  | v12.11.0  |
-| v13.x |         |          |          |          | v13.0.0   |
+| v10.x | v10.0.0 | v10.0.0  | v10.0.0  | v10.16.0 | v10.17.0  |
+| v11.x | v11.0.0 | v11.0.0  | v11.0.0  | v11.8.0  |           |
+| v12.x | v12.0.0 | v12.0.0  | v12.0.0  | v12.0.0  | v12.11.0  |
+| v13.x | v13.0.0 | v13.0.0  | v13.0.0  | v13.0.0  | v13.0.0   |
 
 \* Indicates that the N-API version was released as experimental
 
@@ -374,6 +374,7 @@ tied to the life cycle of the Agent.
 ### napi_set_instance_data
 <!-- YAML
 added: v12.8.0
+napiVersion: 6
 -->
 
 ```C
@@ -401,6 +402,7 @@ by the previous call, it will not be called.
 ### napi_get_instance_data
 <!-- YAML
 added: v12.8.0
+napiVersion: 6
 -->
 
 ```C
@@ -797,9 +799,8 @@ This API can be called even if there is a pending JavaScript exception.
 ### Exceptions
 
 Any N-API function call may result in a pending JavaScript exception. This is
-obviously the case for any function that may cause the execution of
-JavaScript, but N-API specifies that an exception may be pending
-on return from any of the API functions.
+the case for any of the API functions, even those that may not cause the
+execution of JavaScript.
 
 If the `napi_status` returned by a function is `napi_ok` then no
 exception is pending and no additional action is required. If the
@@ -859,7 +860,7 @@ SemVer applying. In order to support this model with N-API, both
 in internal functionality and for module specific functionality
 (as its good practice), the `throw_` and `create_` functions
 take an optional code parameter which is the string for the code
-to be added to the error object. If the optional parameter is NULL
+to be added to the error object. If the optional parameter is `NULL`
 then no code will be associated with the error. If a code is provided,
 the name associated with the error is also updated to be:
 
@@ -1057,7 +1058,7 @@ napi_status napi_get_and_clear_last_exception(napi_env env,
 ```
 
 * `[in] env`: The environment that the API is invoked under.
-* `[out] result`: The exception if one is pending, NULL otherwise.
+* `[out] result`: The exception if one is pending, `NULL` otherwise.
 
 Returns `napi_ok` if the API succeeded.
 
@@ -1349,7 +1350,7 @@ then be modified through [`napi_reference_ref`][] and
 [`napi_reference_unref`][]. If an object is collected while the count
 for a reference is 0, all subsequent calls to
 get the object associated with the reference [`napi_get_reference_value`][]
-will return NULL for the returned `napi_value`. An attempt to call
+will return `NULL` for the returned `napi_value`. An attempt to call
 [`napi_reference_ref`][] for a reference whose object has been collected
 will result in an error.
 
@@ -1472,7 +1473,7 @@ Returns `napi_ok` if the API succeeded.
 
 If still valid, this API returns the `napi_value` representing the
 JavaScript `Object` associated with the `napi_ref`. Otherwise, result
-will be NULL.
+will be `NULL`.
 
 ### Cleanup on exit of the current Node.js instance
 
@@ -1548,7 +1549,7 @@ napi_value Init(napi_env env, napi_value exports);
 
 The return value from `Init` is treated as the `exports` object for the module.
 The `Init` method is passed an empty object via the `exports` parameter as a
-convenience. If `Init` returns NULL, the parameter passed as `exports` is
+convenience. If `Init` returns `NULL`, the parameter passed as `exports` is
 exported by the module. N-API modules cannot modify the `module` object but can
 specify anything as the `exports` property of the module.
 
@@ -1663,9 +1664,8 @@ the `napi_value` in question is of the JavaScript type expected by the API.
 #### napi_key_collection_mode
 <!-- YAML
 added: v13.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 typedef enum {
@@ -1685,9 +1685,8 @@ of the objects's prototype chain as well.
 #### napi_key_filter
 <!-- YAML
 added: v13.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 typedef enum {
@@ -1705,9 +1704,8 @@ Property filter bits. They can be or'ed to build a composite filter.
 #### napi_key_conversion
 <!-- YAML
 added: v13.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 typedef enum {
@@ -2262,9 +2260,8 @@ The JavaScript `Number` type is described in
 #### napi_create_bigint_int64
 <!-- YAML
 added: v10.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 napi_status napi_create_bigint_int64(napi_env env,
@@ -2283,9 +2280,8 @@ This API converts the C `int64_t` type to the JavaScript `BigInt` type.
 #### napi_create_bigint_uint64
 <!-- YAML
 added: v10.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 napi_status napi_create_bigint_uint64(napi_env env,
@@ -2304,9 +2300,8 @@ This API converts the C `uint64_t` type to the JavaScript `BigInt` type.
 #### napi_create_bigint_words
 <!-- YAML
 added: v10.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 napi_status napi_create_bigint_words(napi_env env,
@@ -2452,7 +2447,8 @@ napi_status napi_get_arraybuffer_info(napi_env env,
 
 * `[in] env`: The environment that the API is invoked under.
 * `[in] arraybuffer`: `napi_value` representing the `ArrayBuffer` being queried.
-* `[out] data`: The underlying data buffer of the `ArrayBuffer`.
+* `[out] data`: The underlying data buffer of the `ArrayBuffer`. If byte_length
+  is `0`, this may be `NULL` or any other pointer value.
 * `[out] byte_length`: Length in bytes of the underlying data buffer.
 
 Returns `napi_ok` if the API succeeded.
@@ -2484,6 +2480,7 @@ napi_status napi_get_buffer_info(napi_env env,
 * `[in] env`: The environment that the API is invoked under.
 * `[in] value`: `napi_value` representing the `node::Buffer` being queried.
 * `[out] data`: The underlying data buffer of the `node::Buffer`.
+  If length is `0`, this may be `NULL` or any other pointer value.
 * `[out] length`: Length in bytes of the underlying data buffer.
 
 Returns `napi_ok` if the API succeeded.
@@ -2537,7 +2534,8 @@ napi_status napi_get_typedarray_info(napi_env env,
 * `[out] length`: The number of elements in the `TypedArray`.
 * `[out] data`: The data buffer underlying the `TypedArray` adjusted by
   the `byte_offset` value so that it points to the first element in the
-  `TypedArray`.
+  `TypedArray`. If the length of the array is `0`, this may be `NULL` or
+  any other pointer value.
 * `[out] arraybuffer`: The `ArrayBuffer` underlying the `TypedArray`.
 * `[out] byte_offset`: The byte offset within the underlying native array
   at which the first element of the arrays is located. The value for the data
@@ -2572,6 +2570,7 @@ napi_status napi_get_dataview_info(napi_env env,
   properties to query.
 * `[out] byte_length`: `Number` of bytes in the `DataView`.
 * `[out] data`: The data buffer underlying the `DataView`.
+  If byte_length is `0`, this may be `NULL` or any other pointer value.
 * `[out] arraybuffer`: `ArrayBuffer` underlying the `DataView`.
 * `[out] byte_offset`: The byte offset within the data buffer from which
   to start projecting the `DataView`.
@@ -2653,9 +2652,8 @@ This API returns the C double primitive equivalent of the given JavaScript
 #### napi_get_value_bigint_int64
 <!-- YAML
 added: v10.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 napi_status napi_get_value_bigint_int64(napi_env env,
@@ -2680,9 +2678,8 @@ This API returns the C `int64_t` primitive equivalent of the given JavaScript
 #### napi_get_value_bigint_uint64
 <!-- YAML
 added: v10.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 napi_status napi_get_value_bigint_uint64(napi_env env,
@@ -2707,9 +2704,8 @@ This API returns the C `uint64_t` primitive equivalent of the given JavaScript
 #### napi_get_value_bigint_words
 <!-- YAML
 added: v10.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 napi_status napi_get_value_bigint_words(napi_env env,
@@ -2831,7 +2827,7 @@ napi_status napi_get_value_string_latin1(napi_env env,
 
 * `[in] env`: The environment that the API is invoked under.
 * `[in] value`: `napi_value` representing JavaScript string.
-* `[in] buf`: Buffer to write the ISO-8859-1-encoded string into. If NULL is
+* `[in] buf`: Buffer to write the ISO-8859-1-encoded string into. If `NULL` is
   passed in, the length of the string (in bytes) is returned.
 * `[in] bufsize`: Size of the destination buffer. When this value is
   insufficient, the returned string will be truncated.
@@ -2860,7 +2856,7 @@ napi_status napi_get_value_string_utf8(napi_env env,
 
 * `[in] env`: The environment that the API is invoked under.
 * `[in] value`: `napi_value` representing JavaScript string.
-* `[in] buf`: Buffer to write the UTF8-encoded string into. If NULL is passed
+* `[in] buf`: Buffer to write the UTF8-encoded string into. If `NULL` is passed
   in, the length of the string (in bytes) is returned.
 * `[in] bufsize`: Size of the destination buffer. When this value is
   insufficient, the returned string will be truncated.
@@ -2888,7 +2884,7 @@ napi_status napi_get_value_string_utf16(napi_env env,
 
 * `[in] env`: The environment that the API is invoked under.
 * `[in] value`: `napi_value` representing JavaScript string.
-* `[in] buf`: Buffer to write the UTF16-LE-encoded string into. If NULL is
+* `[in] buf`: Buffer to write the UTF16-LE-encoded string into. If `NULL` is
   passed in, the length of the string (in 2-byte code units) is returned.
 * `[in] bufsize`: Size of the destination buffer. When this value is
   insufficient, the returned string will be truncated.
@@ -3595,9 +3591,8 @@ included.
 #### napi_get_all_property_names
 <!-- YAML
 added: v13.7.0
+napiVersion: 6
 -->
-
-> Stability: 1 - Experimental
 
 ```C
 napi_get_all_property_names(napi_env env,

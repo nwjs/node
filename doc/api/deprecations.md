@@ -44,6 +44,9 @@ However, the deprecation identifier will not be modified.
 ### DEP0001: `http.OutgoingMessage.prototype.flush`
 <!-- YAML
 changes:
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/31164
+    description: End-of-Life.
   - version:
     - v4.8.6
     - v6.12.0
@@ -54,9 +57,9 @@ changes:
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The `OutgoingMessage.prototype.flush()` method is deprecated. Use
+`OutgoingMessage.prototype.flush()` has been removed. Use
 `OutgoingMessage.prototype.flushHeaders()` instead.
 
 <a id="DEP0002"></a>
@@ -82,6 +85,9 @@ The `_linklist` module is deprecated. Please use a userland alternative.
 ### DEP0003: `_writableState.buffer`
 <!-- YAML
 changes:
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/31165
+    description: End-of-Life
   - version:
     - v4.8.6
     - v6.12.0
@@ -92,10 +98,10 @@ changes:
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The `_writableState.buffer` property is deprecated. Use the
-`_writableState.getBuffer()` method instead.
+The `_writableState.buffer` has been removed. Use `_writableState.getBuffer()`
+instead.
 
 <a id="DEP0004"></a>
 ### DEP0004: `CryptoStream.prototype.readyState`
@@ -233,6 +239,9 @@ to the `constants` property exposed by the relevant module. For instance,
 ### DEP0009: `crypto.pbkdf2` without digest
 <!-- YAML
 changes:
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/31166
+    description: End-of-Life (for `digest === null`)
   - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/22861
     description: Runtime deprecation (for `digest === null`).
@@ -247,7 +256,7 @@ changes:
     description: Runtime deprecation (for `digest === undefined`).
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 Use of the [`crypto.pbkdf2()`][] API without specifying a digest was deprecated
 in Node.js 6.0 because the method defaulted to using the non-recommended
@@ -256,8 +265,10 @@ Node.js 8.0.0, calling `crypto.pbkdf2()` or `crypto.pbkdf2Sync()` with
 `digest` set to `undefined` will throw a `TypeError`.
 
 Beginning in Node.js v11.0.0, calling these functions with `digest` set to
-`null` will print a deprecation warning to align with the behavior when `digest`
+`null` would print a deprecation warning to align with the behavior when `digest`
 is `undefined`.
+
+Now, however, passing either `undefined` or `null` will throw a `TypeError`.
 
 <a id="DEP0010"></a>
 ### DEP0010: `crypto.createCredentials`
@@ -396,6 +407,9 @@ The [`fs.readSync()`][] legacy `String` interface is deprecated. Use the
 ### DEP0016: `GLOBAL`/`root`
 <!-- YAML
 changes:
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/31167
+    description: End-of-Life
   - version: v6.12.0
     pr-url: https://github.com/nodejs/node/pull/10116
     description: A deprecation code has been assigned.
@@ -404,10 +418,10 @@ changes:
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The `GLOBAL` and `root` aliases for the `global` property are deprecated
-and should no longer be used.
+The `GLOBAL` and `root` aliases for the `global` property were deprecated
+in Node.js 6.0.0 and have since been removed.
 
 <a id="DEP0017"></a>
 ### DEP0017: `Intl.v8BreakIterator`
@@ -508,14 +522,18 @@ The `Server.listenFD()` method was deprecated and removed. Please use
 ### DEP0022: `os.tmpDir()`
 <!-- YAML
 changes:
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/31169
+    description: End-of-Life.
   - version: v7.0.0
     pr-url: https://github.com/nodejs/node/pull/6739
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The `os.tmpDir()` API is deprecated. Please use [`os.tmpdir()`][] instead.
+The `os.tmpDir()` API was deprecated in Node.js 7.0.0 and has since been
+removed. Please use [`os.tmpdir()`][] instead.
 
 <a id="DEP0023"></a>
 ### DEP0023: `os.getNetworkInterfaces()`
@@ -2538,7 +2556,6 @@ an officially supported API.
 changes:
   - version: v13.0.0
     pr-url: https://github.com/nodejs/node/pull/29061
-    description: Runtime deprecation.
 -->
 
 Type: Runtime
@@ -2568,6 +2585,71 @@ accordingly instead to avoid the ambigiuty.
 
 To maintain existing behaviour `response.finished` should be replaced with
 `response.writableEnded`.
+
+<a id="DEP0137"></a>
+### DEP0137: Closing fs.FileHandle on garbage collection
+<!-- YAML
+changes:
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/28396
+    description: Runtime deprecation.
+-->
+
+Type: Runtime
+
+Allowing a [`fs.FileHandle`][] object to be closed on garbage collection is
+deprecated. In the future, doing so may result in a thrown error that will
+terminate the process.
+
+Please ensure that all `fs.FileHandle` objects are explicitly closed using
+`FileHandle.prototype.close()` when the `fs.FileHandle` is no longer needed:
+
+```js
+const fsPromises = require('fs').promises;
+async function openAndClose() {
+  let filehandle;
+  try {
+    filehandle = await fsPromises.open('thefile.txt', 'r');
+  } finally {
+    if (filehandle !== undefined)
+      await filehandle.close();
+  }
+}
+```
+
+<a id="DEP0138"></a>
+### DEP0138: `process.mainModule`
+<!-- YAML
+changes:
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/32232
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only
+
+[`process.mainModule`][] is a CommonJS-only feature while `process` global
+object is shared with non-CommonJS environment. Its use within ECMAScript
+modules is unsupported.
+
+It is deprecated in favor of [`require.main`][], because it serves the same
+purpose and is only available on CommonJS environment.
+
+<a id="DEP0139"></a>
+### DEP0139: `process.umask()` with no arguments
+<!-- YAML
+changes:
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/32499
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only
+
+Calling `process.umask()` with no argument causes the process-wide umask to be
+written twice. This introduces a race condition between threads, and is a
+potential security vulnerability. There is no safe, cross-platform alternative
+API.
 
 [`--pending-deprecation`]: cli.html#cli_pending_deprecation
 [`--throw-deprecation`]: cli.html#cli_throw_deprecation
@@ -2606,6 +2688,7 @@ To maintain existing behaviour `response.finished` should be replaced with
 [`domain`]: domain.html
 [`ecdh.setPublicKey()`]: crypto.html#crypto_ecdh_setpublickey_publickey_encoding
 [`emitter.listenerCount(eventName)`]: events.html#events_emitter_listenercount_eventname
+[`fs.FileHandle`]: fs.html#fs_class_filehandle
 [`fs.access()`]: fs.html#fs_fs_access_path_mode_callback
 [`fs.createReadStream()`]: fs.html#fs_fs_createreadstream_path_options
 [`fs.createWriteStream()`]: fs.html#fs_fs_createwritestream_path_options
@@ -2625,8 +2708,10 @@ To maintain existing behaviour `response.finished` should be replaced with
 [`os.networkInterfaces()`]: os.html#os_os_networkinterfaces
 [`os.tmpdir()`]: os.html#os_os_tmpdir
 [`process.env`]: process.html#process_process_env
+[`process.mainModule`]: process.html#process_process_mainmodule
 [`punycode`]: punycode.html
 [`require.extensions`]: modules.html#modules_require_extensions
+[`require.main`]: modules.html#modules_accessing_the_main_module
 [`request.socket`]: http.html#http_request_socket
 [`request.connection`]: http.html#http_request_connection
 [`response.socket`]: http.html#http_response_socket

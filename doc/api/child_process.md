@@ -33,6 +33,14 @@ process will block waiting for the pipe buffer to accept more data. This is
 identical to the behavior of pipes in the shell. Use the `{ stdio: 'ignore' }`
 option if the output will not be consumed.
 
+The command lookup will be performed using `options.env.PATH` environment
+variable if passed in `options` object, otherwise `process.env.PATH` will be
+used. To account for the fact that Windows environment variables are
+case-insensitive Node.js will lexicographically sort all `env` keys and choose
+the first one case-insensitively matching `PATH` to perform command lookup.
+This may lead to issues on Windows when passing objects to `env` option that
+have multiple variants of `PATH` variable.
+
 The [`child_process.spawn()`][] method spawns the child process asynchronously,
 without blocking the Node.js event loop. The [`child_process.spawnSync()`][]
 function provides equivalent functionality in a synchronous manner that blocks
@@ -1018,12 +1026,32 @@ See [Advanced Serialization][] for more details.
 ### `subprocess.channel`
 <!-- YAML
 added: v7.1.0
+changes:
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/30165
+    description: The object no longer accidentally exposes native C++ bindings.
 -->
 
 * {Object} A pipe representing the IPC channel to the child process.
 
 The `subprocess.channel` property is a reference to the child's IPC channel. If
 no IPC channel currently exists, this property is `undefined`.
+
+#### `subprocess.channel.ref()`
+<!-- YAML
+added: v7.1.0
+-->
+
+This method makes the IPC channel keep the event loop of the parent process
+running if `.unref()` has been called before.
+
+#### `subprocess.channel.unref()`
+<!-- YAML
+added: v7.1.0
+-->
+
+This method makes the IPC channel not keep the event loop of the parent process
+running, and lets it finish even while the channel is open.
 
 ### `subprocess.connected`
 <!-- YAML

@@ -19,7 +19,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Flags: --expose_internals
+// Flags: --expose-internals
 'use strict';
 const common = require('../common');
 
@@ -81,11 +81,6 @@ assert.throws(
 
 assert.throws(
   () => stringToFlags(true),
-  { code: 'ERR_INVALID_OPT_VALUE', name: 'TypeError' }
-);
-
-assert.throws(
-  () => stringToFlags(null),
   { code: 'ERR_INVALID_OPT_VALUE', name: 'TypeError' }
 );
 

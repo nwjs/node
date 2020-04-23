@@ -35,6 +35,7 @@
 #include "node_options-inl.h"
 #include "node_perf.h"
 #include "node_process.h"
+#include "node_report.h"
 #include "node_revert.h"
 #include "node_v8_platform-inl.h"
 #include "node_version.h"
@@ -72,10 +73,6 @@
 #endif
 
 #include "large_pages/node_large_page.h"
-
-#ifdef NODE_REPORT
-#include "node_report.h"
-#endif
 
 #if defined(__APPLE__) || defined(__linux__)
 #define NODE_USE_V8_WASM_TRAP_HANDLER 1
@@ -220,8 +217,8 @@ MaybeLocal<Value> ExecuteBootstrapper(Environment* env,
 int Environment::InitializeInspector(
     std::unique_ptr<inspector::ParentInspectorHandle> parent_handle) {
   std::string inspector_path;
+  bool is_main = !parent_handle;
   if (parent_handle) {
-    DCHECK(!is_main_thread());
     inspector_path = parent_handle->url();
     inspector_agent_->SetParentHandle(std::move(parent_handle));
   } else {
@@ -235,7 +232,7 @@ int Environment::InitializeInspector(
   inspector_agent_->Start(inspector_path,
                           options_->debug_options(),
                           inspector_host_port(),
-                          is_main_thread());
+                          is_main);
   if (options_->debug_options().inspector_enabled &&
       !inspector_agent_->IsListening()) {
     return 12;  // Signal internal error
@@ -353,7 +350,7 @@ MaybeLocal<Value> Environment::BootstrapNode() {
 
   Local<String> env_string = FIXED_ONE_BYTE_STRING(isolate_, "env");
   Local<Object> env_var_proxy;
-  if (!CreateEnvVarProxy(context(), isolate_, as_callback_data())
+  if (!CreateEnvVarProxy(context(), isolate_, current_callback_data())
            .ToLocal(&env_var_proxy) ||
       process_object()->Set(context(), env_string, env_var_proxy).IsNothing()) {
     return MaybeLocal<Value>();
@@ -394,6 +391,7 @@ void MarkBootstrapComplete(const FunctionCallbackInfo<Value>& args) {
       performance::NODE_PERFORMANCE_MILESTONE_BOOTSTRAP_COMPLETE);
 }
 
+static
 MaybeLocal<Value> StartExecution(Environment* env, const char* main_script_id) {
   EscapableHandleScope scope(env->isolate());
   CHECK_NOT_NULL(main_script_id);
@@ -414,22 +412,40 @@ MaybeLocal<Value> StartExecution(Environment* env, const char* main_script_id) {
           ->GetFunction(env->context())
           .ToLocalChecked()};
 
-  InternalCallbackScope callback_scope(
-    env,
-    Object::New(env->isolate()),
-    { 1, 0 },
-    InternalCallbackScope::kSkipAsyncHooks);
-
   return scope.EscapeMaybe(
       ExecuteBootstrapper(env, main_script_id, &parameters, &arguments));
 }
 
-MaybeLocal<Value> StartMainThreadExecution(Environment* env) {
+MaybeLocal<Value> StartExecution(Environment* env, StartExecutionCallback cb) {
+  InternalCallbackScope callback_scope(
+      env,
+      Object::New(env->isolate()),
+      { 1, 0 },
+      InternalCallbackScope::kSkipAsyncHooks);
+
+  if (cb != nullptr) {
+    EscapableHandleScope scope(env->isolate());
+
+    if (StartExecution(env, "internal/bootstrap/environment").IsEmpty())
+      return {};
+
+    StartExecutionCallbackInfo info = {
+      env->process_object(),
+      env->native_module_require(),
+    };
+
+    return scope.EscapeMaybe(cb(info));
+  }
+
   // To allow people to extend Node in different ways, this hook allows
   // one to drop a file lib/_third_party_main.js into the build
   // directory which will be executed instead of Node's normal loading.
   if (NativeModuleEnv::Exists("_third_party_main")) {
     return StartExecution(env, "internal/main/run_third_party_main");
+  }
+
+  if (env->worker_context() != nullptr) {
+    return StartExecution(env, "internal/main/worker_thread");
   }
 
   std::string first_argv;
@@ -468,15 +484,6 @@ MaybeLocal<Value> StartMainThreadExecution(Environment* env) {
   }
 
   return StartExecution(env, "internal/main/eval_stdin");
-}
-
-void LoadEnvironment(Environment* env) {
-  CHECK(env->is_main_thread());
-  // TODO(joyeecheung): Not all of the execution modes in
-  // StartMainThreadExecution() make sense for embedders. Pick the
-  // useful ones out, and allow embedders to customize the entry
-  // point more directly without using _third_party_main.js
-  USE(StartMainThreadExecution(env));
 }
 
 #ifdef __POSIX__
@@ -740,6 +747,13 @@ int ProcessGlobalArgs(std::vector<std::string>* args,
     }
   }
 
+  if (per_process::cli_options->disable_proto != "delete" &&
+      per_process::cli_options->disable_proto != "throw" &&
+      per_process::cli_options->disable_proto != "") {
+    errors->emplace_back("invalid mode passed to --disable-proto");
+    return 12;
+  }
+
   auto env_opts = per_process::cli_options->per_isolate->per_env;
   if (std::find(v8_args.begin(), v8_args.end(),
                 "--abort-on-uncaught-exception") != v8_args.end() ||
@@ -802,11 +816,9 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
   uv_disable_stdio_inheritance();
   } //node_is_nwjs
 
-#ifdef NODE_REPORT
   // Cache the original command line to be
   // used in diagnostic reports.
   per_process::cli_options->cmdline = *argv;
-#endif  //  NODE_REPORT
 
 #if defined(NODE_V8_OPTIONS)
   // Should come before the call to V8::SetFlagsFromCommandLine()
@@ -1046,6 +1058,10 @@ void StartupDataHandler::Load(const char* blob_file,
 
 
 InitializationResult InitializeOncePerProcess(int argc, char** argv) {
+  // Initialized the enabled list for Debug() calls with system
+  // environment variables.
+  per_process::enabled_debug_list.Parse(nullptr);
+
   atexit(ResetStdio);
   PlatformInit();
 

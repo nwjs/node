@@ -533,14 +533,14 @@ program. For a comprehensive list, see the [`errno`(3) man page][].
   `ulimit -n 2048` in the same shell that will run the Node.js process.
 
 * `ENOENT` (No such file or directory): Commonly raised by [`fs`][] operations
-  to indicate that a component of the specified pathname does not exist — no
+  to indicate that a component of the specified pathname does not exist. No
   entity (file or directory) could be found by the given path.
 
 * `ENOTDIR` (Not a directory): A component of the given pathname existed, but
   was not a directory as expected. Commonly raised by [`fs.readdir`][].
 
 * `ENOTEMPTY` (Directory not empty): A directory with entries was the target
-  of an operation that requires an empty directory — usually [`fs.unlink`][].
+  of an operation that requires an empty directory, usually [`fs.unlink`][].
 
 * `ENOTFOUND` (DNS lookup failed): Indicates a DNS failure of either
   `EAI_NODATA` or `EAI_NONAME`. This is not a standard POSIX error.
@@ -555,7 +555,7 @@ program. For a comprehensive list, see the [`errno`(3) man page][].
 
 * `ETIMEDOUT` (Operation timed out): A connect or send request failed because
   the connected party did not properly respond after a period of time. Usually
-  encountered by [`http`][] or [`net`][] — often a sign that a `socket.end()`
+  encountered by [`http`][] or [`net`][]. Often a sign that a `socket.end()`
   was not properly called.
 
 ## Class: `TypeError`
@@ -888,6 +888,13 @@ provided.
 
 Encoding provided to `TextDecoder()` API was not one of the
 [WHATWG Supported Encodings][].
+
+<a id="ERR_EXECUTION_ENVIRONMENT_NOT_AVAILABLE"></a>
+### `ERR_EXECUTION_ENVIRONMENT_NOT_AVAILABLE`
+
+The JS execution context is not associated with a Node.js environment.
+This may occur when Node.js is used as an embedded library and some hooks
+for the JS engine are not set up properly.
 
 <a id="ERR_FALSY_VALUE_REJECTION"></a>
 ### `ERR_FALSY_VALUE_REJECTION`
@@ -1667,6 +1674,14 @@ The `package.json` [exports][] field does not export the requested subpath.
 Because exports are encapsulated, private internal modules that are not exported
 cannot be imported through the package resolution, unless using an absolute URL.
 
+<a id="ERR_PROTO_ACCESS"></a>
+### `ERR_PROTO_ACCESS`
+
+Accessing `Object.prototype.__proto__` has been forbidden using
+[`--disable-proto=throw`][]. [`Object.getPrototypeOf`][] and
+[`Object.setPrototypeOf`][] should be used to get and set the prototype of an
+object.
+
 <a id="ERR_REQUIRE_ESM"></a>
 ### `ERR_REQUIRE_ESM`
 
@@ -1726,11 +1741,6 @@ value.
 
 While using [`dgram.createSocket()`][], the size of the receive or send `Buffer`
 could not be determined.
-
-<a id="ERR_SOCKET_CANNOT_SEND"></a>
-### `ERR_SOCKET_CANNOT_SEND`
-
-Data could be sent on a socket.
 
 <a id="ERR_SOCKET_CLOSED"></a>
 ### `ERR_SOCKET_CLOSED`
@@ -1873,7 +1883,7 @@ added: v13.10.0
 -->
 
 The TLS socket must be connected and securily established. Ensure the 'secure'
-event is emitted, before you continue.
+event is emitted before continuing.
 
 <a id="ERR_TLS_INVALID_PROTOCOL_METHOD"></a>
 ### `ERR_TLS_INVALID_PROTOCOL_METHOD`
@@ -2293,6 +2303,15 @@ removed: v10.0.0
 
 The `repl` module was unable to parse data from the REPL history file.
 
+<a id="ERR_SOCKET_CANNOT_SEND"></a>
+### `ERR_SOCKET_CANNOT_SEND`
+<!-- YAML
+added: v9.0.0
+removed: v14.0.0
+-->
+
+Data could be sent on a socket.
+
 <a id="ERR_STDERR_CLOSE"></a>
 ### `ERR_STDERR_CLOSE`
 <!-- YAML
@@ -2458,6 +2477,12 @@ The `--entry-type=...` flag is not compatible with the Node.js REPL.
 Used when an [ES Module][] loader hook specifies `format: 'dynamic'` but does
 not provide a `dynamicInstantiate` hook.
 
+<a id="ERR_FEATURE_UNAVAILABLE_ON_PLATFORM"></a>
+#### `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM`
+
+Used when a feature that is not available
+to the current platform which is running Node.js is used.
+
 <a id="ERR_STREAM_HAS_STRINGDECODER"></a>
 #### `ERR_STREAM_HAS_STRINGDECODER`
 
@@ -2483,10 +2508,13 @@ This `Error` is thrown when a read is attempted on a TTY `WriteStream`,
 such as `process.stdout.on('data')`.
 
 [`'uncaughtException'`]: process.html#process_event_uncaughtexception
+[`--disable-proto=throw`]: cli.html#cli_disable_proto_mode
 [`--force-fips`]: cli.html#cli_force_fips
 [`Class: assert.AssertionError`]: assert.html#assert_class_assert_assertionerror
 [`ERR_INVALID_ARG_TYPE`]: #ERR_INVALID_ARG_TYPE
 [`EventEmitter`]: events.html#events_class_eventemitter
+[`Object.getPrototypeOf`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/getPrototypeOf
+[`Object.setPrototypeOf`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/setPrototypeOf
 [`REPL`]: repl.html
 [`Writable`]: stream.html#stream_class_stream_writable
 [`child_process`]: child_process.html
@@ -2540,7 +2568,7 @@ such as `process.stdout.on('data')`.
 [crypto digest algorithm]: crypto.html#crypto_crypto_gethashes
 [domains]: domain.html
 [event emitter-based]: events.html#events_class_eventemitter
-[exports]: esm.html#esm_package_exports
+[exports]: esm.html#esm_package_entry_points
 [file descriptors]: https://en.wikipedia.org/wiki/File_descriptor
 [policy]: policy.html
 [stream-based]: stream.html

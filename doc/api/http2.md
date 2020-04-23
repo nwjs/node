@@ -1797,8 +1797,27 @@ on the `Http2Server` after `msecs` milliseconds.
 
 The given callback is registered as a listener on the `'timeout'` event.
 
-In case of no callback function were assigned, a new `ERR_INVALID_CALLBACK`
+In case if `callback` is not a function, a new `ERR_INVALID_CALLBACK`
 error will be thrown.
+
+#### `server.timeout`
+<!-- YAML
+added: v8.4.0
+changes:
+  - version: v13.0.0
+    pr-url: https://github.com/nodejs/node/pull/27558
+    description: The default timeout changed from 120s to 0 (no timeout).
+-->
+
+* {number} Timeout in milliseconds. **Default:** 0 (no timeout)
+
+The number of milliseconds of inactivity before a socket is presumed
+to have timed out.
+
+A value of `0` will disable the timeout behavior on incoming connections.
+
+The socket timeout logic is set up on connection, so changing this
+value only affects new connections to the server, not any existing connections.
 
 ### Class: `Http2SecureServer`
 <!-- YAML
@@ -1943,8 +1962,27 @@ on the `Http2SecureServer` after `msecs` milliseconds.
 
 The given callback is registered as a listener on the `'timeout'` event.
 
-In case of no callback function were assigned, a new `ERR_INVALID_CALLBACK`
+In case if `callback` is not a function, a new `ERR_INVALID_CALLBACK`
 error will be thrown.
+
+#### `server.timeout`
+<!-- YAML
+added: v8.4.0
+changes:
+  - version: v13.0.0
+    pr-url: https://github.com/nodejs/node/pull/27558
+    description: The default timeout changed from 120s to 0 (no timeout).
+-->
+
+* {number} Timeout in milliseconds. **Default:** 0 (no timeout)
+
+The number of milliseconds of inactivity before a socket is presumed
+to have timed out.
+
+A value of `0` will disable the timeout behavior on incoming connections.
+
+The socket timeout logic is set up on connection, so changing this
+value only affects new connections to the server, not any existing connections.
 
 ### `http2.createServer(options[, onRequestHandler])`
 <!-- YAML
@@ -2243,7 +2281,7 @@ changes:
     * `http2.constants.PADDING_STRATEGY_NONE`: No padding is applied.
     * `http2.constants.PADDING_STRATEGY_MAX`: The maximum amount of padding,
       determined by the internal implementation, is applied.
-    * `http2.constants.PADDING_STRATEGY_ALIGNED`: Attemps to apply enough
+    * `http2.constants.PADDING_STRATEGY_ALIGNED`: Attempts to apply enough
       padding to ensure that the total frame length, including the
       9-byte header, is a multiple of 8. For each frame, there is a maximum
       allowed number of padding bytes that is determined by current flow control
@@ -3008,7 +3046,7 @@ added: v8.4.0
 
 * Extends: {Stream}
 
-This object is created internally by an HTTP server — not by the user. It is
+This object is created internally by an HTTP server, not by the user. It is
 passed as the second parameter to the [`'request'`][] event.
 
 #### Event: `'close'`

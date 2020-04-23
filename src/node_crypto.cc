@@ -145,6 +145,26 @@ template int SSLWrap<TLSWrap>::SelectALPNCallback(
     unsigned int inlen,
     void* arg);
 
+template <typename T>
+void Decode(const FunctionCallbackInfo<Value>& args,
+            void (*callback)(T*, const FunctionCallbackInfo<Value>&,
+                             const char*, size_t)) {
+  T* ctx;
+  ASSIGN_OR_RETURN_UNWRAP(&ctx, args.Holder());
+
+  if (args[0]->IsString()) {
+    StringBytes::InlineDecoder decoder;
+    Environment* env = Environment::GetCurrent(args);
+    enum encoding enc = ParseEncoding(env->isolate(), args[1], UTF8);
+    if (decoder.Decode(env, args[0].As<String>(), enc).IsNothing())
+      return;
+    callback(ctx, args, decoder.out(), decoder.size());
+  } else {
+    ArrayBufferViewContents<char> buf(args[0]);
+    callback(ctx, args, buf.data(), buf.length());
+  }
+}
+
 static int PasswordCallback(char* buf, int size, int rwflag, void* u) {
   const char* passphrase = static_cast<char*>(u);
   if (passphrase != nullptr) {
@@ -485,7 +505,7 @@ void SecureContext::Initialize(Environment* env, Local<Object> target) {
   Local<FunctionTemplate> ctx_getter_templ =
       FunctionTemplate::New(env->isolate(),
                             CtxGetter,
-                            env->as_callback_data(),
+                            env->current_callback_data(),
                             Signature::New(env->isolate(), t));
 
 
@@ -500,7 +520,7 @@ void SecureContext::Initialize(Environment* env, Local<Object> target) {
   env->set_secure_context_constructor_template(t);
 }
 
-SecureContext::SecureContext(Environment* env, v8::Local<v8::Object> wrap)
+SecureContext::SecureContext(Environment* env, Local<Object> wrap)
     : BaseObject(env, wrap) {
   MakeWeak();
   env->isolate()->AdjustAmountOfExternalAllocatedMemory(kExternalSize);
@@ -973,6 +993,8 @@ static X509_STORE* NewRootCertStore() {
   if (*system_cert_path != '\0') {
     X509_STORE_load_locations(store, system_cert_path, nullptr);
   }
+
+  Mutex::ScopedLock cli_lock(node::per_process::cli_options_mutex);
   if (per_process::cli_options->ssl_openssl_cert_store) {
     X509_STORE_set_default_paths(store);
   } else {
@@ -983,24 +1005,6 @@ static X509_STORE* NewRootCertStore() {
   }
 
   return store;
-}
-
-
-void GetRootCertificates(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-  Local<Value> result[arraysize(root_certs)];
-
-  for (size_t i = 0; i < arraysize(root_certs); i++) {
-    if (!String::NewFromOneByte(
-            env->isolate(),
-            reinterpret_cast<const uint8_t*>(root_certs[i]),
-            NewStringType::kNormal).ToLocal(&result[i])) {
-      return;
-    }
-  }
-
-  args.GetReturnValue().Set(
-      Array::New(env->isolate(), result, arraysize(root_certs)));
 }
 
 
@@ -2680,6 +2684,21 @@ static inline Local<Value> BIOToStringOrBuffer(Environment* env,
   }
 }
 
+static MaybeLocal<Value> X509ToPEM(Environment* env, X509* cert) {
+  BIOPointer bio(BIO_new(BIO_s_mem()));
+  if (!bio) {
+    ThrowCryptoError(env, ERR_get_error(), "BIO_new");
+    return MaybeLocal<Value>();
+  }
+
+  if (PEM_write_bio_X509(bio.get(), cert) == 0) {
+    ThrowCryptoError(env, ERR_get_error(), "PEM_write_bio_X509");
+    return MaybeLocal<Value>();
+  }
+
+  return BIOToStringOrBuffer(env, bio.get(), kKeyFormatPEM);
+}
+
 static bool WritePublicKeyInner(EVP_PKEY* pkey,
                                 const BIOPointer& bio,
                                 const PublicKeyEncodingConfig& config) {
@@ -3288,7 +3307,7 @@ KeyType KeyObject::GetKeyType() const {
 }
 
 KeyObject::KeyObject(Environment* env,
-                     v8::Local<v8::Object> wrap,
+                     Local<Object> wrap,
                      KeyType key_type)
     : BaseObject(env, wrap),
       key_type_(key_type),
@@ -3333,7 +3352,7 @@ void KeyObject::Init(const FunctionCallbackInfo<Value>& args) {
   }
 }
 
-void KeyObject::InitSecret(v8::Local<v8::ArrayBufferView> abv) {
+void KeyObject::InitSecret(Local<ArrayBufferView> abv) {
   CHECK_EQ(this->key_type_, kKeyTypeSecret);
 
   size_t key_len = abv->ByteLength();
@@ -3397,7 +3416,7 @@ void KeyObject::GetSymmetricKeySize(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(static_cast<uint32_t>(key->GetSymmetricKeySize()));
 }
 
-void KeyObject::Export(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void KeyObject::Export(const FunctionCallbackInfo<Value>& args) {
   KeyObject* key;
   ASSIGN_OR_RETURN_UNWRAP(&key, args.Holder());
 
@@ -3441,7 +3460,7 @@ MaybeLocal<Value> KeyObject::ExportPrivateKey(
 }
 
 CipherBase::CipherBase(Environment* env,
-                       v8::Local<v8::Object> wrap,
+                       Local<Object> wrap,
                        CipherKind kind)
     : BaseObject(env, wrap),
       ctx_(nullptr),
@@ -3949,38 +3968,24 @@ CipherBase::UpdateResult CipherBase::Update(const char* data,
 
 
 void CipherBase::Update(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+  Decode<CipherBase>(args, [](CipherBase* cipher,
+                              const FunctionCallbackInfo<Value>& args,
+                              const char* data, size_t size) {
+    AllocatedBuffer out;
+    UpdateResult r = cipher->Update(data, size, &out);
 
-  CipherBase* cipher;
-  ASSIGN_OR_RETURN_UNWRAP(&cipher, args.Holder());
-
-  AllocatedBuffer out;
-  UpdateResult r;
-
-  // Only copy the data if we have to, because it's a string
-  if (args[0]->IsString()) {
-    StringBytes::InlineDecoder decoder;
-    enum encoding enc = ParseEncoding(env->isolate(), args[1], UTF8);
-
-    if (decoder.Decode(env, args[0].As<String>(), enc).IsNothing())
+    if (r != kSuccess) {
+      if (r == kErrorState) {
+        Environment* env = Environment::GetCurrent(args);
+        ThrowCryptoError(env, ERR_get_error(),
+                         "Trying to add data in unsupported state");
+      }
       return;
-    r = cipher->Update(decoder.out(), decoder.size(), &out);
-  } else {
-    ArrayBufferViewContents<char> buf(args[0]);
-    r = cipher->Update(buf.data(), buf.length(), &out);
-  }
-
-  if (r != kSuccess) {
-    if (r == kErrorState) {
-      ThrowCryptoError(env, ERR_get_error(),
-                       "Trying to add data in unsupported state");
     }
-    return;
-  }
 
-  CHECK(out.data() != nullptr || out.size() == 0);
-
-  args.GetReturnValue().Set(out.ToBuffer().ToLocalChecked());
+    CHECK(out.data() != nullptr || out.size() == 0);
+    args.GetReturnValue().Set(out.ToBuffer().ToLocalChecked());
+  });
 }
 
 
@@ -4074,7 +4079,7 @@ void CipherBase::Final(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(out.ToBuffer().ToLocalChecked());
 }
 
-Hmac::Hmac(Environment* env, v8::Local<v8::Object> wrap)
+Hmac::Hmac(Environment* env, Local<Object> wrap)
     : BaseObject(env, wrap),
       ctx_(nullptr) {
   MakeWeak();
@@ -4142,26 +4147,11 @@ bool Hmac::HmacUpdate(const char* data, int len) {
 
 
 void Hmac::HmacUpdate(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  Hmac* hmac;
-  ASSIGN_OR_RETURN_UNWRAP(&hmac, args.Holder());
-
-  // Only copy the data if we have to, because it's a string
-  bool r = false;
-  if (args[0]->IsString()) {
-    StringBytes::InlineDecoder decoder;
-    enum encoding enc = ParseEncoding(env->isolate(), args[1], UTF8);
-
-    if (!decoder.Decode(env, args[0].As<String>(), enc).IsNothing()) {
-      r = hmac->HmacUpdate(decoder.out(), decoder.size());
-    }
-  } else {
-    ArrayBufferViewContents<char> buf(args[0]);
-    r = hmac->HmacUpdate(buf.data(), buf.length());
-  }
-
-  args.GetReturnValue().Set(r);
+  Decode<Hmac>(args, [](Hmac* hmac, const FunctionCallbackInfo<Value>& args,
+                        const char* data, size_t size) {
+    bool r = hmac->HmacUpdate(data, size);
+    args.GetReturnValue().Set(r);
+  });
 }
 
 
@@ -4199,7 +4189,7 @@ void Hmac::HmacDigest(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(rc.ToLocalChecked());
 }
 
-Hash::Hash(Environment* env, v8::Local<v8::Object> wrap)
+Hash::Hash(Environment* env, Local<Object> wrap)
     : BaseObject(env, wrap),
       mdctx_(nullptr),
       has_md_(false),
@@ -4290,28 +4280,11 @@ bool Hash::HashUpdate(const char* data, int len) {
 
 
 void Hash::HashUpdate(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  Hash* hash;
-  ASSIGN_OR_RETURN_UNWRAP(&hash, args.Holder());
-
-  // Only copy the data if we have to, because it's a string
-  bool r = true;
-  if (args[0]->IsString()) {
-    StringBytes::InlineDecoder decoder;
-    enum encoding enc = ParseEncoding(env->isolate(), args[1], UTF8);
-
-    if (decoder.Decode(env, args[0].As<String>(), enc).IsNothing()) {
-      args.GetReturnValue().Set(false);
-      return;
-    }
-    r = hash->HashUpdate(decoder.out(), decoder.size());
-  } else if (args[0]->IsArrayBufferView()) {
-    ArrayBufferViewContents<char> buf(args[0].As<ArrayBufferView>());
-    r = hash->HashUpdate(buf.data(), buf.length());
-  }
-
-  args.GetReturnValue().Set(r);
+  Decode<Hash>(args, [](Hash* hash, const FunctionCallbackInfo<Value>& args,
+                        const char* data, size_t size) {
+    bool r = hash->HashUpdate(data, size);
+    args.GetReturnValue().Set(r);
+  });
 }
 
 
@@ -4449,7 +4422,7 @@ void CheckThrow(Environment* env, SignBase::Error error) {
   }
 }
 
-SignBase::SignBase(Environment* env, v8::Local<v8::Object> wrap)
+SignBase::SignBase(Environment* env, Local<Object> wrap)
     : BaseObject(env, wrap) {
 }
 
@@ -4476,7 +4449,7 @@ static bool ApplyRSAOptions(const ManagedEVPPKey& pkey,
 }
 
 
-Sign::Sign(Environment* env, v8::Local<v8::Object> wrap) : SignBase(env, wrap) {
+Sign::Sign(Environment* env, Local<Object> wrap) : SignBase(env, wrap) {
   MakeWeak();
 }
 
@@ -4512,14 +4485,11 @@ void Sign::SignInit(const FunctionCallbackInfo<Value>& args) {
 
 
 void Sign::SignUpdate(const FunctionCallbackInfo<Value>& args) {
-  Sign* sign;
-  ASSIGN_OR_RETURN_UNWRAP(&sign, args.Holder());
-
-  Error err;
-  ArrayBufferViewContents<char> buf(args[0]);
-  err = sign->Update(buf.data(), buf.length());
-
-  sign->CheckThrow(err);
+  Decode<Sign>(args, [](Sign* sign, const FunctionCallbackInfo<Value>& args,
+                        const char* data, size_t size) {
+    Error err = sign->Update(data, size);
+    sign->CheckThrow(err);
+  });
 }
 
 static int GetDefaultSignPadding(const ManagedEVPPKey& key) {
@@ -4800,8 +4770,8 @@ void SignOneShot(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(signature.ToBuffer().ToLocalChecked());
 }
 
-Verify::Verify(Environment* env, v8::Local<v8::Object> wrap) :
-    SignBase(env, wrap) {
+Verify::Verify(Environment* env, Local<Object> wrap)
+  : SignBase(env, wrap) {
   MakeWeak();
 }
 
@@ -4837,14 +4807,12 @@ void Verify::VerifyInit(const FunctionCallbackInfo<Value>& args) {
 
 
 void Verify::VerifyUpdate(const FunctionCallbackInfo<Value>& args) {
-  Verify* verify;
-  ASSIGN_OR_RETURN_UNWRAP(&verify, args.Holder());
-
-  Error err;
-  ArrayBufferViewContents<char> buf(args[0]);
-  err = verify->Update(buf.data(), buf.length());
-
-  verify->CheckThrow(err);
+  Decode<Verify>(args, [](Verify* verify,
+                          const FunctionCallbackInfo<Value>& args,
+                          const char* data, size_t size) {
+    Error err = verify->Update(data, size);
+    verify->CheckThrow(err);
+  });
 }
 
 
@@ -5060,6 +5028,7 @@ template <PublicKeyCipher::Operation operation,
           PublicKeyCipher::EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init,
           PublicKeyCipher::EVP_PKEY_cipher_t EVP_PKEY_cipher>
 void PublicKeyCipher::Cipher(const FunctionCallbackInfo<Value>& args) {
+  MarkPopErrorOnReturn mark_pop_error_on_return;
   Environment* env = Environment::GetCurrent(args);
 
   unsigned int offset = 0;
@@ -5090,8 +5059,6 @@ void PublicKeyCipher::Cipher(const FunctionCallbackInfo<Value>& args) {
 
   AllocatedBuffer out;
 
-  ClearErrorOnReturn clear_error_on_return;
-
   bool r = Cipher<operation, EVP_PKEY_cipher_init, EVP_PKEY_cipher>(
       env,
       pkey,
@@ -5109,7 +5076,7 @@ void PublicKeyCipher::Cipher(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(out.ToBuffer().ToLocalChecked());
 }
 
-DiffieHellman::DiffieHellman(Environment* env, v8::Local<v8::Object> wrap)
+DiffieHellman::DiffieHellman(Environment* env, Local<Object> wrap)
     : BaseObject(env, wrap), verifyError_(0) {
   MakeWeak();
 }
@@ -5136,7 +5103,7 @@ void DiffieHellman::Initialize(Environment* env, Local<Object> target) {
     Local<FunctionTemplate> verify_error_getter_templ =
         FunctionTemplate::New(env->isolate(),
                               DiffieHellman::VerifyErrorGetter,
-                              env->as_callback_data(),
+                              env->current_callback_data(),
                               Signature::New(env->isolate(), t),
                               /* length */ 0,
                               ConstructorBehavior::kThrow,
@@ -5217,7 +5184,7 @@ void DiffieHellman::DiffieHellmanGroup(
   const node::Utf8Value group_name(env->isolate(), args[0]);
   const modp_group* group = FindDiffieHellmanGroup(*group_name);
   if (group == nullptr)
-    return THROW_ERR_CRYPTO_UNKNOWN_DH_GROUP(env, "Unknown group");
+    return THROW_ERR_CRYPTO_UNKNOWN_DH_GROUP(env);
 
   initialized = diffieHellman->Init(group->prime,
                                     group->prime_size,
@@ -5475,7 +5442,7 @@ void ECDH::Initialize(Environment* env, Local<Object> target) {
               t->GetFunction(env->context()).ToLocalChecked()).Check();
 }
 
-ECDH::ECDH(Environment* env, v8::Local<v8::Object> wrap, ECKeyPointer&& key)
+ECDH::ECDH(Environment* env, Local<Object> wrap, ECKeyPointer&& key)
     : BaseObject(env, wrap),
     key_(std::move(key)),
     group_(EC_KEY_get0_group(key_.get())) {
@@ -6657,6 +6624,36 @@ void ExportChallenge(const FunctionCallbackInfo<Value>& args) {
       Encode(env->isolate(), cert.get(), strlen(cert.get()), BUFFER);
 
   args.GetReturnValue().Set(outString);
+}
+
+
+void GetRootCertificates(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+
+  if (root_cert_store == nullptr)
+    root_cert_store = NewRootCertStore();
+
+  stack_st_X509_OBJECT* objs = X509_STORE_get0_objects(root_cert_store);
+  int num_objs = sk_X509_OBJECT_num(objs);
+
+  std::vector<Local<Value>> result;
+  result.reserve(num_objs);
+
+  for (int i = 0; i < num_objs; i++) {
+    X509_OBJECT* obj = sk_X509_OBJECT_value(objs, i);
+    if (X509_OBJECT_get_type(obj) == X509_LU_X509) {
+      X509* cert = X509_OBJECT_get0_X509(obj);
+
+      Local<Value> value;
+      if (!X509ToPEM(env, cert).ToLocal(&value))
+        return;
+
+      result.push_back(value);
+    }
+  }
+
+  args.GetReturnValue().Set(
+      Array::New(env->isolate(), result.data(), result.size()));
 }
 
 

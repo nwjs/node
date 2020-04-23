@@ -607,8 +607,9 @@ void SyncProcessRunner::Kill() {
     if (r < 0 && r != UV_ESRCH) {
       SetError(r);
 
-      r = uv_process_kill(&uv_process_, SIGKILL);
-      CHECK(r >= 0 || r == UV_ESRCH);
+      // Deliberately ignore the return value, we might not have
+      // sufficient privileges to signal the child process.
+      USE(uv_process_kill(&uv_process_, SIGKILL));
     }
   }
 
@@ -1039,8 +1040,7 @@ Maybe<int> SyncProcessRunner::CopyJsStringArray(Local<Value> js_value,
       js_array
           ->Set(context,
                 i,
-                value->ToString(env()->isolate()->GetCurrentContext())
-                    .ToLocalChecked())
+                string)
           .Check();
     }
 

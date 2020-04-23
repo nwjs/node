@@ -2308,8 +2308,9 @@ console.log(aliceSecret === bobSecret);
 added: v10.0.0
 -->
 
-* Returns: {boolean} `true` if and only if a FIPS compliant crypto provider is
-  currently in use.
+* Returns: {number} `1` if and only if a FIPS compliant crypto provider is
+  currently in use, `0` otherwise. A future semver-major release may change
+  the return type of this API to a {boolean}.
 
 ### `crypto.getHashes()`
 <!-- YAML
@@ -2328,6 +2329,10 @@ console.log(hashes); // ['DSA', 'DSA-SHA', 'DSA-SHA1', ...]
 <!-- YAML
 added: v0.5.5
 changes:
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/30578
+    description: The `iterations` parameter is now restricted to positive
+                 values. Earlier releases treated other values as one.
   - version: v8.0.0
     pr-url: https://github.com/nodejs/node/pull/11305
     description: The `digest` parameter is always required now.
@@ -2403,6 +2408,10 @@ negative performance implications for some applications; see the
 <!-- YAML
 added: v0.9.3
 changes:
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/30578
+    description: The `iterations` parameter is now restricted to positive
+                 values. Earlier releases treated other values as one.
   - version: v6.0.0
     pr-url: https://github.com/nodejs/node/pull/4047
     description: Calling this function without passing the `digest` parameter
@@ -2474,7 +2483,7 @@ changes:
 -->
 
 * `privateKey` {Object | string | Buffer | KeyObject}
-  * `oaepHash` {string} The hash function to use for OAEP padding.
+  * `oaepHash` {string} The hash function to use for OAEP padding and MGF1.
     **Default:** `'sha1'`
   * `oaepLabel` {Buffer | TypedArray | DataView} The label to use for OAEP
      padding. If not specified, no label is used.
@@ -2564,7 +2573,7 @@ changes:
 
 * `key` {Object | string | Buffer | KeyObject}
   * `key` {string | Buffer | KeyObject} A PEM encoded public or private key.
-  * `oaepHash` {string} The hash function to use for OAEP padding.
+  * `oaepHash` {string} The hash function to use for OAEP padding and MGF1.
     **Default:** `'sha1'`
   * `oaepLabel` {Buffer | TypedArray | DataView} The label to use for OAEP
      padding. If not specified, no label is used.

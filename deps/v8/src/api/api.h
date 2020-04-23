@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "include/v8-testing.h"
 #include "src/execution/isolate.h"
 #include "src/heap/factory.h"
 #include "src/objects/bigint.h"
@@ -27,9 +26,11 @@ namespace v8 {
 
 namespace internal {
 class JSArrayBufferView;
+class JSFinalizationGroup;
 }  // namespace internal
 
 namespace debug {
+class AccessorPair;
 class GeneratorObject;
 class Script;
 class WeakMap;
@@ -127,6 +128,7 @@ class RegisteredExtension {
   V(debug::GeneratorObject, JSGeneratorObject) \
   V(debug::Script, Script)                     \
   V(debug::WeakMap, JSWeakMap)                 \
+  V(debug::AccessorPair, AccessorPair)         \
   V(Promise, JSPromise)                        \
   V(Primitive, Object)                         \
   V(PrimitiveArray, FixedArray)                \
@@ -143,6 +145,8 @@ class Utils {
   static void ReportOOMFailure(v8::internal::Isolate* isolate,
                                const char* location, bool is_heap_oom);
 
+  static inline Local<debug::AccessorPair> ToLocal(
+      v8::internal::Handle<v8::internal::AccessorPair> obj);
   static inline Local<Context> ToLocal(
       v8::internal::Handle<v8::internal::Context> obj);
   static inline Local<Value> ToLocal(
@@ -274,6 +278,11 @@ class Utils {
   static inline CompiledWasmModule Convert(
       std::shared_ptr<i::wasm::NativeModule> native_module) {
     return CompiledWasmModule{std::move(native_module)};
+  }
+
+  static inline const std::shared_ptr<i::wasm::NativeModule>& Open(
+      const CompiledWasmModule& compiled_module) {
+    return compiled_module.native_module_;
   }
 
  private:
@@ -553,16 +562,9 @@ void InvokeAccessorGetterCallback(
 void InvokeFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& info,
                             v8::FunctionCallback callback);
 
-class Testing {
- public:
-  static v8::Testing::StressType stress_type() { return stress_type_; }
-  static void set_stress_type(v8::Testing::StressType stress_type) {
-    stress_type_ = stress_type;
-  }
-
- private:
-  static v8::Testing::StressType stress_type_;
-};
+void InvokeFinalizationGroupCleanupFromTask(
+    Handle<Context> context, Handle<JSFinalizationGroup> finalization_group,
+    Handle<Object> callback);
 
 }  // namespace internal
 }  // namespace v8

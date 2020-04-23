@@ -28,6 +28,7 @@ file a new issue.
     * [Running Coverage](#running-coverage)
     * [Building the documentation](#building-the-documentation)
     * [Building a debug build](#building-a-debug-build)
+    * [Building an ASAN build](#building-an-asan-build)
     * [Troubleshooting Unix and macOS builds](#troubleshooting-unix-and-macos-builds)
   * [Windows](#windows)
     * [Prerequisites](#prerequisites)
@@ -106,8 +107,9 @@ platforms. This is true regardless of entries in the table below.
 | GNU/Linux        | armv6            | kernel >= 4.14, glibc >= 2.24   | Experimental | Downgraded as of Node.js 12       |
 | GNU/Linux        | ppc64le >=power8 | kernel >= 3.10.0, glibc >= 2.17 | Tier 2       | e.g. Ubuntu 16.04 <sup>[1](#fn1)</sup>, EL 7  <sup>[2](#fn2)</sup> |
 | GNU/Linux        | s390x            | kernel >= 3.10.0, glibc >= 2.17 | Tier 2       | e.g. EL 7 <sup>[2](#fn2)</sup>    |
-| Windows          | x64, x86 (WoW64) | >= Windows 7/2008 R2/2012 R2    | Tier 1       | <sup>[4](#fn4),[5](#fn5)</sup>    |
-| Windows          | x86 (native)     | >= Windows 7/2008 R2/2012 R2    | Tier 1 (running) / Experimental (compiling) <sup>[6](#fn6)</sup> | |
+| Windows          | x64, x86 (WoW64) | >= Windows 8.1/2012 R2          | Tier 1       | <sup>[4](#fn4),[5](#fn5)</sup>    |
+| Windows          | x86 (native)     | >= Windows 8.1/2012 R2          | Tier 1 (running) / Experimental (compiling) <sup>[6](#fn6)</sup> | |
+| Windows          | x64, x86         | Windows Server 2012 (not R2)    | Experimental |                                   |
 | Windows          | arm64            | >= Windows 10                   | Experimental |                                   |
 | macOS            | x64              | >= 10.11                        | Tier 1       |                                   |
 | SmartOS          | x64              | >= 18                           | Tier 2       |                                   |
@@ -167,17 +169,16 @@ Binaries at <https://nodejs.org/download/release/> are produced on:
 | Binary package        | Platform and Toolchain                                                   |
 | --------------------- | ------------------------------------------------------------------------ |
 | aix-ppc64             | AIX 7.1 TL05 on PPC64BE with GCC 6                                       |
-| darwin-x64 (and .pkg) | macOS 10.11, Xcode Command Line Tools 10 with -mmacosx-version-min=10.10 |
-| linux-arm64           | CentOS 7 with devtoolset-6 / GCC 6                                       |
-| linux-armv7l          | Cross-compiled on Ubuntu 16.04 x64 with [custom GCC toolchain](https://github.com/rvagg/rpi-newer-crosstools)   |
-| linux-ppc64le         | CentOS 7 with devtoolset-6 / GCC 6 <sup>[7](#fn7)</sup>                  |
-| linux-s390x           | RHEL 7 with devtoolset-6 / GCC 6 <sup>[7](#fn7)</sup>                    |
-| linux-x64             | CentOS 7 with devtoolset-6 / GCC 6 <sup>[7](#fn7)</sup>                  |
-| sunos-x64             | SmartOS 18 with GCC 7                                                    |
-| win-x64 and win-x86   | Windows 2012 R2 (x64) with Visual Studio 2017                            |
+| darwin-x64 (and .pkg) | macOS 10.15, Xcode Command Line Tools 11 with -mmacosx-version-min=10.13 |
+| linux-arm64           | CentOS 7 with devtoolset-8 / GCC 8 <sup>[8](#fn8)</sup>                  |
+| linux-armv7l          | Cross-compiled on Ubuntu 18.04 x64 with [custom GCC toolchain](https://github.com/rvagg/rpi-newer-crosstools)   |
+| linux-ppc64le         | CentOS 7 with devtoolset-8 / GCC 8 <sup>[8](#fn8)</sup>                  |
+| linux-s390x           | RHEL 7 with devtoolset-8 / GCC 8 <sup>[8](#fn8)</sup>                    |
+| linux-x64             | CentOS 7 with devtoolset-8 / GCC 8 <sup>[8](#fn8)</sup>                  |
+| win-x64 and win-x86   | Windows 2012 R2 (x64) with Visual Studio 2019                            |
 
-<em id="fn7">7</em>: The Enterprise Linux devtoolset-6 allows us to compile
-binaries with GCC 6 but linked to the glibc and libstdc++ versions of the host
+<em id="fn8">8</em>: The Enterprise Linux devtoolset-8 allows us to compile
+binaries with GCC 8 but linked to the glibc and libstdc++ versions of the host
 platforms (CentOS 7 / RHEL 7). Therefore, binaries produced on these systems
 are compatible with glibc >= 2.17 and libstdc++ >= 6.0.20 (`GLIBCXX_3.4.20`).
 These are available on distributions natively supporting GCC 4.9, such as
@@ -490,6 +491,22 @@ $ gdb /opt/node-debug/node core.node.8.1535359906
 $ backtrace
 ```
 
+#### Building an ASAN build
+
+[ASAN](https://github.com/google/sanitizers) can help detect various memory
+related bugs. ASAN builds are currently only supported on linux.
+If you want to check it on Windows or macOS or you want a consistent toolchain
+on Linux, you can try [Docker](https://www.docker.com/products/docker-desktop)
+ (using an image like `gengjiawen/node-build:2020-02-14`).
+
+The `--debug` is not necessary and will slow down build and testing, but it can
+show clear stacktrace if ASAN hits an issue.
+
+``` console
+$  ./configure --debug --enable-asan && make -j4
+$ make test-only
+```
+
 #### Troubleshooting Unix and macOS builds
 
 Stale builds can sometimes result in `file not found` errors while building.
@@ -539,7 +556,6 @@ Optional requirements for compiling for Windows 10 on ARM (ARM64):
 * Windows 10 SDK 10.0.17763.0 or newer
 
 ##### Option 2: Automated install with Boxstarter
-<a name="boxstarter"></a>
 
 A [Boxstarter](https://boxstarter.org/) script can be used for easy setup of
 Windows systems with all the required prerequisites for Node.js development.
@@ -550,7 +566,7 @@ packages:
   Unix tools added to the `PATH`.
 * [Python 3.x](https://chocolatey.org/packages/python) and
   [legacy Python](https://chocolatey.org/packages/python2)
-* [Visual Studio 2017 Build Tools](https://chocolatey.org/packages/visualstudio2017buildtools)
+* [Visual Studio 2019 Build Tools](https://chocolatey.org/packages/visualstudio2019buildtools)
   with [Visual C++ workload](https://chocolatey.org/packages/visualstudio2017-workload-vctools)
 * [NetWide Assembler](https://chocolatey.org/packages/nasm)
 

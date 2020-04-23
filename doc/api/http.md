@@ -9,7 +9,7 @@ To use the HTTP server and client one must `require('http')`.
 The HTTP interfaces in Node.js are designed to support many features
 of the protocol which have been traditionally difficult to use.
 In particular, large, possibly chunk-encoded, messages. The interface is
-careful to never buffer entire requests or responses — the
+careful to never buffer entire requests or responses, so the
 user is able to stream data.
 
 HTTP message headers are represented by an object like this:
@@ -238,6 +238,9 @@ added: v0.11.4
 
 An object which contains arrays of sockets currently awaiting use by
 the agent when `keepAlive` is enabled. Do not modify.
+
+Sockets in the `freeSockets` list will be automatically destroyed and
+removed from the array on `'timeout'`.
 
 ### `agent.getName(options)`
 <!-- YAML
@@ -882,7 +885,7 @@ added: v0.1.29
 
 Sends a chunk of the body. By calling this method
 many times, a request body can be sent to a
-server — in that case it is suggested to use the
+server. In that case, it is suggested to use the
 `['Transfer-Encoding', 'chunked']` header line when
 creating the request.
 
@@ -1214,7 +1217,7 @@ added: v0.1.17
 
 * Extends: {Stream}
 
-This object is created internally by an HTTP server — not by the user. It is
+This object is created internally by an HTTP server, not by the user. It is
 passed as the second parameter to the [`'request'`][] event.
 
 ### Event: `'close'`
@@ -1710,12 +1713,10 @@ const server = http.createServer((req, res) => {
 });
 ```
 
-`Content-Length` is given in bytes not characters. The above example
-works because the string `'hello world'` contains only single byte characters.
-If the body contains higher coded characters then `Buffer.byteLength()`
-should be used to determine the number of bytes in a given encoding.
-And Node.js does not check whether `Content-Length` and the length of the body
-which has been transmitted are equal or not.
+`Content-Length` is given in bytes, not characters. Use
+[`Buffer.byteLength()`][] to determine the length of the body in bytes. Node.js
+does not check whether `Content-Length` and the length of the body which has
+been transmitted are equal or not.
 
 Attempting to set a header field name or value that contains invalid characters
 will result in a [`TypeError`][] being thrown.
@@ -2056,7 +2057,7 @@ changes:
   * `maxHeaderSize` {number} Optionally overrides the value of
     [`--max-http-header-size`][] for requests received by this server, i.e.
     the maximum length of request headers in bytes.
-    **Default:** 8192 (8KB).
+    **Default:** 16384 (16KB).
 * `requestListener` {Function}
 
 * Returns: {http.Server}
@@ -2210,7 +2211,7 @@ changes:
   * `maxHeaderSize` {number} Optionally overrides the value of
     [`--max-http-header-size`][] for requests received from the server, i.e.
     the maximum length of response headers in bytes.
-    **Default:** 8192 (8KB).
+    **Default:** 16384 (16KB).
   * `method` {string} A string specifying the HTTP request method. **Default:**
     `'GET'`.
   * `path` {string} Request path. Should include query string if any.
@@ -2385,6 +2386,7 @@ not abort the request or do anything besides add a `'timeout'` event.
 [`'response'`]: #http_event_response
 [`'upgrade'`]: #http_event_upgrade
 [`Agent`]: #http_class_http_agent
+[`Buffer.byteLength()`]: buffer.html#buffer_class_method_buffer_bytelength_string_encoding
 [`Duplex`]: stream.html#stream_class_stream_duplex
 [`TypeError`]: errors.html#errors_class_typeerror
 [`URL`]: url.html#url_the_whatwg_url_api

@@ -9,3 +9,8 @@ prefix addons
 [$arch==arm]
 # https://github.com/nodejs/node/issues/30786
 openssl-binding/test: PASS,FLAKY
+zlib-binding/test: PASS,FLAKY
+
+[$system==ibmi]
+openssl-binding/test: SKIP
+zlib-binding/test: SKIP

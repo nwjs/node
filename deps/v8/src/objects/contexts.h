@@ -119,8 +119,7 @@ enum ContextLookupFlags {
   V(ERROR_MESSAGE_FOR_CODE_GEN_FROM_STRINGS_INDEX, Object,                     \
     error_message_for_code_gen_from_strings)                                   \
   V(ERRORS_THROWN_INDEX, Smi, errors_thrown)                                   \
-  V(EXTRAS_EXPORTS_OBJECT_INDEX, JSObject, extras_binding_object)              \
-  V(EXTRAS_UTILS_OBJECT_INDEX, Object, extras_utils_object)                    \
+  V(EXTRAS_BINDING_OBJECT_INDEX, JSObject, extras_binding_object)              \
   V(FAST_ALIASED_ARGUMENTS_MAP_INDEX, Map, fast_aliased_arguments_map)         \
   V(FAST_TEMPLATE_INSTANTIATIONS_CACHE_INDEX, FixedArray,                      \
     fast_template_instantiations_cache)                                        \
@@ -161,6 +160,8 @@ enum ContextLookupFlags {
   V(INTL_COLLATOR_FUNCTION_INDEX, JSFunction, intl_collator_function)          \
   V(INTL_DATE_TIME_FORMAT_FUNCTION_INDEX, JSFunction,                          \
     intl_date_time_format_function)                                            \
+  V(INTL_DISPLAY_NAMES_FUNCTION_INDEX, JSFunction,                             \
+    intl_display_names_function)                                               \
   V(INTL_NUMBER_FORMAT_FUNCTION_INDEX, JSFunction,                             \
     intl_number_format_function)                                               \
   V(INTL_LOCALE_FUNCTION_INDEX, JSFunction, intl_locale_function)              \
@@ -194,6 +195,17 @@ enum ContextLookupFlags {
   V(JS_WEAK_REF_FUNCTION_INDEX, JSFunction, js_weak_ref_fun)                   \
   V(JS_FINALIZATION_GROUP_FUNCTION_INDEX, JSFunction,                          \
     js_finalization_group_fun)                                                 \
+  /* Context maps */                                                           \
+  V(NATIVE_CONTEXT_MAP_INDEX, Map, native_context_map)                         \
+  V(FUNCTION_CONTEXT_MAP_INDEX, Map, function_context_map)                     \
+  V(MODULE_CONTEXT_MAP_INDEX, Map, module_context_map)                         \
+  V(EVAL_CONTEXT_MAP_INDEX, Map, eval_context_map)                             \
+  V(SCRIPT_CONTEXT_MAP_INDEX, Map, script_context_map)                         \
+  V(AWAIT_CONTEXT_MAP_INDEX, Map, await_context_map)                           \
+  V(BLOCK_CONTEXT_MAP_INDEX, Map, block_context_map)                           \
+  V(CATCH_CONTEXT_MAP_INDEX, Map, catch_context_map)                           \
+  V(WITH_CONTEXT_MAP_INDEX, Map, with_context_map)                             \
+  V(DEBUG_EVALUATE_CONTEXT_MAP_INDEX, Map, debug_evaluate_context_map)         \
   V(MAP_CACHE_INDEX, Object, map_cache)                                        \
   V(MAP_KEY_ITERATOR_MAP_INDEX, Map, map_key_iterator_map)                     \
   V(MAP_KEY_VALUE_ITERATOR_MAP_INDEX, Map, map_key_value_iterator_map)         \
@@ -206,7 +218,6 @@ enum ContextLookupFlags {
   V(NUMBER_FUNCTION_INDEX, JSFunction, number_function)                        \
   V(OBJECT_FUNCTION_INDEX, JSFunction, object_function)                        \
   V(OBJECT_FUNCTION_PROTOTYPE_MAP_INDEX, Map, object_function_prototype_map)   \
-  V(OPAQUE_REFERENCE_FUNCTION_INDEX, JSFunction, opaque_reference_function)    \
   V(PROXY_CALLABLE_MAP_INDEX, Map, proxy_callable_map)                         \
   V(PROXY_CONSTRUCTOR_MAP_INDEX, Map, proxy_constructor_map)                   \
   V(PROXY_FUNCTION_INDEX, JSFunction, proxy_function)                          \
@@ -337,6 +348,7 @@ enum ContextLookupFlags {
   V(MAP_SET_INDEX, JSFunction, map_set)                                        \
   V(FUNCTION_HAS_INSTANCE_INDEX, JSFunction, function_has_instance)            \
   V(OBJECT_TO_STRING, JSFunction, object_to_string)                            \
+  V(OBJECT_VALUE_OF_FUNCTION_INDEX, JSFunction, object_value_of_function)      \
   V(PROMISE_ALL_INDEX, JSFunction, promise_all)                                \
   V(PROMISE_CATCH_INDEX, JSFunction, promise_catch)                            \
   V(PROMISE_FUNCTION_INDEX, JSFunction, promise_function)                      \
@@ -420,12 +432,14 @@ class ScriptContextTable : public FixedArray {
 //
 // [ previous       ]  A pointer to the previous context.
 //
-// [ extension      ]  Additional data.
+// [ extension      ]  Additional data. This slot is only available when
+//                     extension_bit is set. Check using has_extension.
 //
 //                     For native contexts, it contains the global object.
 //                     For module contexts, it contains the module object.
 //                     For await contexts, it contains the generator object.
-//                     For block contexts, it may contain an "extension object".
+//                     For var block contexts, it may contain an "extension
+//                     object".
 //                     For with contexts, it contains an "extension object".
 //
 //                     An "extension object" is used to dynamically extend a
@@ -436,11 +450,10 @@ class ScriptContextTable : public FixedArray {
 //                     extension object is the original purpose of this context
 //                     slot, hence the name.)
 //
-// [ native_context ]  A pointer to the native context.
-//
-// In addition, function contexts may have statically allocated context slots
-// to store local variables/functions that are accessed from inner functions
-// (via static context addresses) or through 'eval' (dynamic context lookups).
+// In addition, function contexts with sloppy eval may have statically
+// allocated context slots to store local variables/functions that are accessed
+// from inner functions (via static context addresses) or through 'eval'
+// (dynamic context lookups).
 // The native context contains additional slots for fast access to native
 // properties.
 //
@@ -454,31 +467,21 @@ class Context : public HeapObject {
   NEVER_READ_ONLY_SPACE
 
   DECL_CAST(Context)
-
-  enum class HasExtension { kYes, kNo };
-
   // [length]: length of the context.
   V8_INLINE int length() const;
-  V8_INLINE int synchronized_length() const;
-  V8_INLINE void initialize_length_and_extension_bit(
-      int len, HasExtension flag = HasExtension::kNo);
-
-  // We use the 30th bit. Otherwise if we set the 31st bit,
-  // the number would be pottentially bigger than an SMI.
-  // Any DCHECK(Smi::IsValue(...)) would fail.
-  using LengthField = BitField<int, 0, kSmiValueSize - 2>;
-  using HasExtensionField = BitField<int, kSmiValueSize - 2, 1>;
+  V8_INLINE void set_length(int value);
 
   // Setter and getter for elements.
   V8_INLINE Object get(int index) const;
-  V8_INLINE Object get(Isolate* isolate, int index) const;
+  V8_INLINE Object get(const Isolate* isolate, int index) const;
   V8_INLINE void set(int index, Object value);
   // Setter with explicit barrier mode.
   V8_INLINE void set(int index, Object value, WriteBarrierMode mode);
 
   DEFINE_FIELD_OFFSET_CONSTANTS(HeapObject::kHeaderSize,
                                 TORQUE_GENERATED_CONTEXT_FIELDS)
-  // TODO(v8:8989): [torque] Support marker constants.
+
+  // TODO(v8:8989): [torque] Support marker constants
   /* TODO(ishell): remove this fixedArray-like header size. */
   static const int kFixedArrayLikeHeaderSize = kScopeInfoOffset;
   static const int kStartOfTaggedFieldsOffset = kScopeInfoOffset;
@@ -487,10 +490,11 @@ class Context : public HeapObject {
   /* is removed in favour of offset-based access to common fields. */ \
   static const int kTodoHeaderSize = kHeaderSize;
 
+  // If the extension slot exists, it is the first slot after the header.
+  static const int kExtensionOffset = kHeaderSize;
+
   // Garbage collection support.
   V8_INLINE static constexpr int SizeFor(int length) {
-    // TODO(ishell): switch to kTodoHeaderSize based approach once we no longer
-    // reference common Context fields via index
     return kFixedArrayLikeHeaderSize + length * kTaggedSize;
   }
 
@@ -512,8 +516,9 @@ class Context : public HeapObject {
     // These slots are in all contexts.
     SCOPE_INFO_INDEX,
     PREVIOUS_INDEX,
+
+    // This slot only exists if the extension_flag bit is set.
     EXTENSION_INDEX,
-    NATIVE_CONTEXT_INDEX,
 
 // These slots are only in native contexts.
 #define NATIVE_CONTEXT_SLOT(index, type, name) index,
@@ -532,15 +537,20 @@ class Context : public HeapObject {
     FIRST_JS_ARRAY_MAP_SLOT = JS_ARRAY_PACKED_SMI_ELEMENTS_MAP_INDEX,
 
     // TODO(shell): Remove, once it becomes zero
-    MIN_CONTEXT_SLOTS = GLOBAL_PROXY_INDEX,
+    MIN_CONTEXT_SLOTS = EXTENSION_INDEX,
+    MIN_CONTEXT_EXTENDED_SLOTS = EXTENSION_INDEX + 1,
 
     // This slot holds the thrown value in catch contexts.
     THROWN_OBJECT_INDEX = MIN_CONTEXT_SLOTS,
 
     // These slots hold values in debug evaluate contexts.
-    WRAPPED_CONTEXT_INDEX = MIN_CONTEXT_SLOTS,
-    BLACK_LIST_INDEX = MIN_CONTEXT_SLOTS + 1
+    WRAPPED_CONTEXT_INDEX = MIN_CONTEXT_EXTENDED_SLOTS,
+    BLACK_LIST_INDEX = MIN_CONTEXT_EXTENDED_SLOTS + 1
   };
+
+  static const int kExtensionSize =
+      (MIN_CONTEXT_EXTENDED_SLOTS - MIN_CONTEXT_SLOTS) * kTaggedSize;
+  static const int kExtendedHeaderSize = kHeaderSize + kExtensionSize;
 
   // A region of native context entries containing maps for functions created
   // by Builtins::kFastNewClosure.
@@ -589,7 +599,6 @@ class Context : public HeapObject {
 
   // Compute the native context.
   inline NativeContext native_context() const;
-  inline void set_native_context(NativeContext context);
 
   // Predicates for context types.  IsNativeContext is already defined on
   // Object.
@@ -667,8 +676,6 @@ class Context : public HeapObject {
  private:
 #ifdef DEBUG
   // Bootstrapping-aware type checks.
-  V8_EXPORT_PRIVATE static bool IsBootstrappingOrNativeContext(Isolate* isolate,
-                                                               Object object);
   static bool IsBootstrappingOrValidParentContext(Object object, Context kid);
 #endif
 
@@ -693,7 +700,7 @@ class NativeContext : public Context {
 #define NATIVE_CONTEXT_FIELDS_DEF(V)                                        \
   /* TODO(ishell): move definition of common context offsets to Context. */ \
   V(kStartOfNativeContextFieldsOffset,                                      \
-    (FIRST_WEAK_SLOT - MIN_CONTEXT_SLOTS) * kTaggedSize)                    \
+    (FIRST_WEAK_SLOT - MIN_CONTEXT_EXTENDED_SLOTS) * kTaggedSize)           \
   V(kEndOfStrongFieldsOffset, 0)                                            \
   V(kStartOfWeakFieldsOffset,                                               \
     (NATIVE_CONTEXT_SLOTS - FIRST_WEAK_SLOT) * kTaggedSize)                 \
@@ -705,7 +712,7 @@ class NativeContext : public Context {
   /* Total size. */                                                         \
   V(kSize, 0)
 
-  DEFINE_FIELD_OFFSET_CONSTANTS(Context::kTodoHeaderSize,
+  DEFINE_FIELD_OFFSET_CONSTANTS(Context::kExtendedHeaderSize,
                                 NATIVE_CONTEXT_FIELDS_DEF)
 #undef NATIVE_CONTEXT_FIELDS_DEF
 

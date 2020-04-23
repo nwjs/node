@@ -43,12 +43,14 @@ using v8::Exception;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
+using v8::HandleScope;
 using v8::Integer;
 using v8::Isolate;
 using v8::Local;
 using v8::Maybe;
 using v8::MaybeLocal;
 using v8::Object;
+using v8::PropertyAttribute;
 using v8::ReadOnly;
 using v8::Signature;
 using v8::String;
@@ -1274,7 +1276,7 @@ void TLSWrap::Initialize(Local<Object> target,
   Local<FunctionTemplate> get_write_queue_size =
       FunctionTemplate::New(env->isolate(),
                             GetWriteQueueSize,
-                            env->as_callback_data(),
+                            env->current_callback_data(),
                             Signature::New(env->isolate(), t));
   t->PrototypeTemplate()->SetAccessorProperty(
       env->write_queue_size_string(),

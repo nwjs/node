@@ -13,14 +13,12 @@ const {
 } = require('async_hooks');
 const { createServer } = require('http');
 
-// Configuration for the http server
-// there is no need for parameters in this test
-const connections = 500;
-const path = '/';
-
 const bench = common.createBenchmark(main, {
   type: ['async-resource', 'destroy', 'async-local-storage'],
   asyncMethod: ['callbacks', 'async'],
+  path: '/',
+  connections: 500,
+  duration: 5,
   n: [1e6]
 });
 
@@ -37,7 +35,7 @@ function buildCurrentResource(getServe) {
 
   function getCLS() {
     const resource = executionAsyncResource();
-    if (resource === null || !resource[cls]) {
+    if (!resource[cls]) {
       return null;
     }
     return resource[cls].state;
@@ -45,9 +43,6 @@ function buildCurrentResource(getServe) {
 
   function setCLS(state) {
     const resource = executionAsyncResource();
-    if (resource === null) {
-      return;
-    }
     if (!resource[cls]) {
       resource[cls] = { state };
     } else {
@@ -56,7 +51,7 @@ function buildCurrentResource(getServe) {
   }
 
   function init(asyncId, type, triggerAsyncId, resource) {
-    var cr = executionAsyncResource();
+    const cr = executionAsyncResource();
     if (cr !== null) {
       resource[cls] = cr[cls];
     }
@@ -106,7 +101,7 @@ function buildDestroy(getServe) {
 function buildAsyncLocalStorage(getServe) {
   const asyncLocalStorage = new AsyncLocalStorage();
   const server = createServer((req, res) => {
-    asyncLocalStorage.runSyncAndReturn({}, () => {
+    asyncLocalStorage.run({}, () => {
       getServe(getCLS, setCLS)(req, res);
     });
   });
@@ -118,11 +113,17 @@ function buildAsyncLocalStorage(getServe) {
 
   function getCLS() {
     const store = asyncLocalStorage.getStore();
+    if (store === undefined) {
+      return null;
+    }
     return store.state;
   }
 
   function setCLS(state) {
     const store = asyncLocalStorage.getStore();
+    if (store === undefined) {
+      return;
+    }
     store.state = state;
   }
 
@@ -165,7 +166,7 @@ const asyncMethods = {
   'async': getServeAwait
 };
 
-function main({ type, asyncMethod }) {
+function main({ type, asyncMethod, connections, duration, path }) {
   const { server, close } = types[type](asyncMethods[asyncMethod]);
 
   server
@@ -174,7 +175,8 @@ function main({ type, asyncMethod }) {
 
       bench.http({
         path,
-        connections
+        connections,
+        duration
       }, () => {
         close();
       });

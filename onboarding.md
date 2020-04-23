@@ -83,7 +83,7 @@ onboarding session.
   * Be nice about closing issues! Let people know why, and that issues and PRs
     can be reopened if necessary
 
-* [**See "Labels"**](./onboarding-extras.md#labels)
+* [**See "Labels"**](./doc/guides/onboarding-extras.md#labels)
   * There is [a bot](https://github.com/nodejs-github-bot/github-bot) that
     applies subsystem labels (for example, `doc`, `test`, `assert`, or `buffer`)
     so that we know what parts of the code base the pull request modifies. It is
@@ -110,7 +110,7 @@ onboarding session.
     organization (not just Collaborators on Node.js core) have access. Its
     contents should not be shared externally.
   * You can find the full moderation policy
-    [here](https://github.com/nodejs/TSC/blob/master/Moderation-Policy.md).
+    [here](https://github.com/nodejs/admin/blob/master/Moderation-Policy.md).
 
 ## Reviewing PRs
 
@@ -207,8 +207,7 @@ needs to be pointed out separately during the onboarding.
 * Optionally, include your personal pronouns.
 * Label your pull request with the `doc`, `notable-change`, and `fast-track`
   labels.
-* Run CI on the PR. Because the PR does not affect any code, use the
-  `node-test-pull-request-lite-pipeline` CI task.
+* Run CI on the PR. Use the `node-test-pull-request` CI task.
 * After two Collaborator approvals for the change and two Collaborator approvals
   for fast-tracking, land the PR.
   * Be sure to add the `PR-URL: <full-pr-url>` and appropriate `Reviewed-By:`
@@ -239,13 +238,13 @@ needs to be pointed out separately during the onboarding.
   the [summit](https://github.com/nodejs/summit) repository for details.
 
 [Code of Conduct]: https://github.com/nodejs/admin/blob/master/CODE_OF_CONDUCT.md
-[`author-ready`]: https://github.com/nodejs/node/blob/master/COLLABORATOR_GUIDE.md#author-ready-pull-requests
+[`author-ready`]: doc/guides/collaborator-guide.md#author-ready-pull-requests
 [`core-validate-commit`]: https://github.com/nodejs/core-validate-commit
 [`git-node`]: https://github.com/nodejs/node-core-utils/blob/master/docs/git-node.md
 [`node-core-utils`]: https://github.com/nodejs/node-core-utils
-[Landing Pull Requests]: https://github.com/nodejs/node/blob/master/COLLABORATOR_GUIDE.md#landing-pull-requests
+[Landing Pull Requests]: doc/guides/collaborator-guide.md#landing-pull-requests
 [Publicizing or hiding organization membership]: https://help.github.com/articles/publicizing-or-hiding-organization-membership/
 [set up the credentials]: https://github.com/nodejs/node-core-utils#setting-up-credentials
 [two-factor authentication]: https://help.github.com/articles/securing-your-account-with-two-factor-authentication-2fa/
 [using a TOTP mobile app]: https://help.github.com/articles/configuring-two-factor-authentication-via-a-totp-mobile-app/
-[who-to-cc]: ../COLLABORATOR_GUIDE.md#who-to-cc-in-the-issue-tracker
+[who-to-cc]: doc/guides/collaborator-guide.md#who-to-cc-in-the-issue-tracker

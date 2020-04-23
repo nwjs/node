@@ -102,20 +102,6 @@
                     },
                   },
                 }],
-                ['OS!="win" or llvm_version!="0.0"', {
-                  'cflags': [
-                    '-mssse3',
-                    '-msse4.2',
-                    '-mpclmul',
-                  ],
-                  'xcode_settings': {
-                    'OTHER_CFLAGS': [
-                      '-mssse3',
-                      '-msse4.2',
-                      '-mpclmul',
-                    ],
-                  },
-                }],
                 ['target_arch=="x64"', {
                   'defines': [ 'INFLATE_CHUNK_READ_64LE' ],
                 }],

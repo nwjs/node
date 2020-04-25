@@ -301,6 +301,10 @@ void Worker::Run() {
       }
 
       if (is_stopped()) return;
+      node::thread_ctx_st* tls_ctx = (node::thread_ctx_st*)malloc(sizeof(node::thread_ctx_st));
+      memset(tls_ctx, 0, sizeof(node::thread_ctx_st));
+      uv_key_set(&node::thread_ctx_key, tls_ctx);
+      node::binding::RegisterBuiltinModules();
       CHECK(!context.IsEmpty());
       Context::Scope context_scope(context);
       {
@@ -324,10 +328,6 @@ void Worker::Run() {
         if (stopped_) return;
         this->env_ = env_.get();
       }
-      node::thread_ctx_st* tls_ctx = (node::thread_ctx_st*)malloc(sizeof(node::thread_ctx_st));
-      memset(tls_ctx, 0, sizeof(node::thread_ctx_st));
-      uv_key_set(&node::thread_ctx_key, tls_ctx);
-      node::binding::RegisterBuiltinModules();
       Debug(this, "Created Environment for worker with id %llu", thread_id_.id);
       if (is_stopped()) return;
       {

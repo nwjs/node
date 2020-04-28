@@ -383,7 +383,8 @@
     }],
     [ 'OS in "freebsd linux"', {
       'ldflags': [ '-Wl,-z,relro',
-                   '-Wl,-z,now' ]
+                   '-Wl,-z,now',
+                   '-Wl,--gc-sections' ]
     }],
     [ 'node_use_openssl=="true"', {
       'defines': [ 'HAVE_OPENSSL=1' ],

@@ -88,7 +88,7 @@ changes:
     This option is part of the experimental modules API, and should not be
     considered stable.
     * `specifier` {string} specifier passed to `import()`
-    * `module` {vm.Module}
+    * `script` {vm.Script}
     * Returns: {Module Namespace Object|vm.Module} Returning a `vm.Module` is
       recommended in order to take advantage of error tracking, and to avoid
       issues with namespaces that contain `then` function exports.
@@ -347,7 +347,9 @@ vm.measureMemory({ mode: 'detailed' }, context)
 
 ## Class: `vm.Module`
 <!-- YAML
-added: v13.0.0
+added:
+ - v13.0.0
+ - v12.16.0
 -->
 
 > Stability: 1 - Experimental
@@ -696,7 +698,9 @@ const module2 = new vm.SourceTextModule('const a = 1;', { cachedData });
 
 ## Class: `vm.SyntheticModule`
 <!-- YAML
-added: v13.0.0
+added:
+ - v13.0.0
+ - v12.16.0
 -->
 
 > Stability: 1 - Experimental
@@ -725,7 +729,9 @@ const module = new vm.SyntheticModule(['default'], function() {
 
 ### Constructor: `new vm.SyntheticModule(exportNames, evaluateCallback[, options])`
 <!-- YAML
-added: v13.0.0
+added:
+ - v13.0.0
+ - v12.16.0
 -->
 
 * `exportNames` {string[]} Array of names that will be exported from the module.
@@ -745,7 +751,9 @@ the module to access information outside the specified `context`. Use
 
 ### `syntheticModule.setExport(name, value)`
 <!-- YAML
-added: v13.0.0
+added:
+ - v13.0.0
+ - v12.16.0
 -->
 
 * `name` {string} Name of the export to set.
@@ -773,6 +781,10 @@ const vm = require('vm');
 ## `vm.compileFunction(code[, params[, options]])`
 <!-- YAML
 added: v10.10.0
+changes:
+  - version: v14.1.0
+    pr-url: https://github.com/nodejs/node/pull/32985
+    description: The `importModuleDynamically` option is now supported.
 -->
 
 * `code` {string} The body of the function to compile.
@@ -795,6 +807,16 @@ added: v10.10.0
   * `contextExtensions` {Object[]} An array containing a collection of context
     extensions (objects wrapping the current scope) to be applied while
     compiling. **Default:** `[]`.
+  * `importModuleDynamically` {Function} Called during evaluation of this module
+    when `import()` is called. If this option is not specified, calls to
+    `import()` will reject with [`ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`][].
+    This option is part of the experimental modules API, and should not be
+    considered stable.
+    * `specifier` {string} specifier passed to `import()`
+    * `function` {Function}
+    * Returns: {Module Namespace Object|vm.Module} Returning a `vm.Module` is
+      recommended in order to take advantage of error tracking, and to avoid
+      issues with namespaces that contain `then` function exports.
 * Returns: {Function}
 
 Compiles the given code into the provided context (if no context is

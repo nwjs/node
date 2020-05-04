@@ -1,7 +1,7 @@
 'use strict';
 
 const common = require('../common');
-const { Writable, Readable, Transform, finished } = require('stream');
+const { Writable, Readable, Transform, finished, Duplex } = require('stream');
 const assert = require('assert');
 const EE = require('events');
 const fs = require('fs');
@@ -351,4 +351,48 @@ testClosed((opts) => new Writable({ write() {}, ...opts }));
   r.push('asd');
   r.push(null);
   r.destroy();
+}
+
+{
+  const d = new Duplex({
+    final(cb) { }, // Never close writable side for test purpose
+    read() {
+      this.push(null);
+    }
+  });
+
+  d.on('end', common.mustCall());
+
+  finished(d, { readable: true, writable: false }, common.mustCall());
+
+  d.end();
+  d.resume();
+}
+
+{
+  const d = new Duplex({
+    final(cb) { }, // Never close writable side for test purpose
+    read() {
+      this.push(null);
+    }
+  });
+
+  d.on('end', common.mustCall());
+
+  d.end();
+  finished(d, { readable: true, writable: false }, common.mustCall());
+
+  d.resume();
+}
+
+{
+  // Test for compat for e.g. fd-slicer which implements
+  // non standard destroy behavior which might not emit
+  // 'close'.
+  const r = new Readable();
+  finished(r, common.mustCall());
+  r.resume();
+  r.push('asd');
+  r.destroyed = true;
+  r.push(null);
 }

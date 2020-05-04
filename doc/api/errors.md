@@ -1194,7 +1194,7 @@ is set for the `Http2Stream`.
 ### `ERR_INTERNAL_ASSERTION`
 
 There was a bug in Node.js or incorrect usage of Node.js internals.
-To fix the error, open an issue at https://github.com/nodejs/node/issues.
+To fix the error, open an issue at <https://github.com/nodejs/node/issues>.
 
 <a id="ERR_INCOMPATIBLE_OPTION_PAIR"></a>
 ### `ERR_INCOMPATIBLE_OPTION_PAIR`
@@ -2145,7 +2145,9 @@ Creation of a [`zlib`][] object failed due to incorrect configuration.
 ### `HPE_HEADER_OVERFLOW`
 <!-- YAML
 changes:
-  - version: v11.4.0
+  - version:
+     - v11.4.0
+     - v10.15.0
     pr-url: https://github.com/nodejs/node/commit/186035243fad247e3955f
     description: Max header size in `http_parser` was set to 8KB.
 -->
@@ -2310,7 +2312,7 @@ added: v9.0.0
 removed: v14.0.0
 -->
 
-Data could be sent on a socket.
+Data could not be sent on a socket.
 
 <a id="ERR_STDERR_CLOSE"></a>
 ### `ERR_STDERR_CLOSE`

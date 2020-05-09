@@ -34,6 +34,7 @@
     'uv_library%': 'static_library',
 
     'clang%': 0,
+    'error_on_warn%': 'false',
 
     'openssl_fips': '',
     'llvm_version': '6.0',
@@ -43,7 +44,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.32',
+    'v8_embedder_string': '-node.33',
 
     ##### V8 defaults for Node.js #####
 
@@ -383,7 +384,7 @@
     # Forcibly disable -Werror.  We support a wide range of compilers, it's
     # simply not feasible to squelch all warnings, never mind that the
     # libraries in deps/ are not under our control.
-    'cflags!': ['-Werror'],
+
     'msvs_settings': {
       'VCCLCompilerTool': {
         'BufferSecurityCheck': 'true',
@@ -433,6 +434,12 @@
 
     'msvs_disabled_warnings': [4351, 4355, 4800, 4251, 4275, 4244, 4267, 4595],
     'conditions': [
+      [ 'error_on_warn=="false"', {
+        'cflags!': ['-Werror'],
+      }, '(_target_name!="<(node_lib_target_name)" or '
+          '_target_name!="<(node_core_target_name)")', {
+        'cflags!': ['-Werror'],
+      }],
       [ 'configuring_node', {
         'msvs_configuration_attributes': {
           'OutputDirectory': '<(DEPTH)/out/$(Configuration)/',

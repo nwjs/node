@@ -1,3 +1,4 @@
+<!--lint disable no-literal-urls-->
 <p align="center">
   <a href="https://nodejs.org/">
     <img
@@ -79,7 +80,7 @@ contains the latest Carbon (Node.js 8) release.
 #### Nightly Releases
 <https://nodejs.org/download/nightly/>
 
-Each directory name and filename contains a date (in UTC time) and the commit
+Each directory name and filename contains a date (in UTC) and the commit
 SHA at the HEAD of the release.
 
 #### API Documentation
@@ -331,6 +332,8 @@ For information about the governance of the Node.js project, see
 **João Reis** &lt;reis@janeasystems.com&gt;
 * [joyeecheung](https://github.com/joyeecheung) -
 **Joyee Cheung** &lt;joyeec9h3@gmail.com&gt; (she/her)
+* [juanarbol](https://github.com/juanarbol) -
+**Juan José Arboleda** &lt;soyjuanarbol@gmail.com&gt; (he/him)
 * [JungMinu](https://github.com/JungMinu) -
 **Minwoo Jung** &lt;nodecorelab@gmail.com&gt; (he/him)
 * [kfarnung](https://github.com/kfarnung) -

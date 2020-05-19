@@ -392,10 +392,12 @@ class ArrayBufferReference final : public Reference {
   inline void Finalize(bool is_env_teardown) override {
     if (is_env_teardown) {
       v8::HandleScope handle_scope(_env->isolate);
-      v8::Local<v8::Value> ab = Get();
-      CHECK(!ab.IsEmpty());
-      CHECK(ab->IsArrayBuffer());
-      ab.As<v8::ArrayBuffer>()->Detach();
+      v8::Local<v8::Value> obj = Get();
+      CHECK(!obj.IsEmpty());
+      CHECK(obj->IsArrayBuffer());
+      v8::Local<v8::ArrayBuffer> ab = obj.As<v8::ArrayBuffer>();
+      if (ab->IsDetachable())
+        ab->Detach();
     }
 
     Reference::Finalize(is_env_teardown);
@@ -740,6 +742,7 @@ const char* error_messages[] = {nullptr,
                                 "A date was expected",
                                 "An arraybuffer was expected",
                                 "A detachable arraybuffer was expected",
+                                "Main thread would deadlock",
 };
 
 napi_status napi_get_last_error_info(napi_env env,
@@ -751,7 +754,7 @@ napi_status napi_get_last_error_info(napi_env env,
   // message in the `napi_status` enum each time a new error message is added.
   // We don't have a napi_status_last as this would result in an ABI
   // change each time a message was added.
-  const int last_status = napi_detachable_arraybuffer_expected;
+  const int last_status = napi_would_deadlock;
 
   static_assert(
       NAPI_ARRAYSIZE(error_messages) == last_status + 1,

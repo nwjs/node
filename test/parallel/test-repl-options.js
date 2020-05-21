@@ -19,6 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// Flags: --pending-deprecation
+
 'use strict';
 const common = require('../common');
 const ArrayStream = require('../common/arraystream');
@@ -27,10 +29,15 @@ const repl = require('repl');
 const cp = require('child_process');
 
 assert.strictEqual(repl.repl, undefined);
+repl._builtinLibs;
 
 common.expectWarning({
   DeprecationWarning: {
-    DEP0124: 'REPLServer.rli is deprecated'
+    DEP0142:
+      'repl._builtinLibs is deprecated. Check module.builtinModules instead',
+    DEP0141: 'repl.inputStream and repl.outputStream is deprecated. ' +
+             'Use repl.input and repl.output instead',
+    DEP0124: 'REPLServer.rli is deprecated',
   }
 });
 

@@ -435,6 +435,10 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             "throw an exception on deprecations",
             &EnvironmentOptions::throw_deprecation,
             kAllowedInEnvironment);
+  AddOption("--trace-atomics-wait",
+            "trace Atomics.wait() operations",
+            &EnvironmentOptions::trace_atomics_wait,
+            kAllowedInEnvironment);
   AddOption("--trace-deprecation",
             "show stack traces on deprecations",
             &EnvironmentOptions::trace_deprecation,
@@ -592,6 +596,13 @@ PerIsolateOptionsParser::PerIsolateOptionsParser(
             &PerIsolateOptions::report_signal,
             kAllowedInEnvironment);
   Implies("--report-signal", "--report-on-signal");
+
+  AddOption("--experimental-top-level-await",
+            "enable experimental support for ECMAScript Top-Level Await",
+            &PerIsolateOptions::experimental_top_level_await);
+  AddOption("--harmony-top-level-await", "", V8Option{});
+  Implies("--experimental-top-level-await", "--harmony-top-level-await");
+  Implies("--harmony-top-level-await", "--experimental-top-level-await");
 
   Insert(eop, &PerIsolateOptions::get_per_env_options);
 }

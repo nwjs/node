@@ -505,7 +505,7 @@ void SecureContext::Initialize(Environment* env, Local<Object> target) {
   Local<FunctionTemplate> ctx_getter_templ =
       FunctionTemplate::New(env->isolate(),
                             CtxGetter,
-                            env->current_callback_data(),
+                            Local<Value>(),
                             Signature::New(env->isolate(), t));
 
 
@@ -2923,7 +2923,7 @@ ByteSource ByteSource::NullTerminatedCopy(Environment* env,
 ByteSource ByteSource::FromSymmetricKeyObject(Local<Value> handle) {
   CHECK(handle->IsObject());
   KeyObject* key = Unwrap<KeyObject>(handle.As<Object>());
-  CHECK(key);
+  CHECK_NOT_NULL(key);
   return Foreign(key->GetSymmetricKey(), key->GetSymmetricKeySize());
 }
 
@@ -3129,7 +3129,7 @@ static ManagedEVPPKey GetPublicOrPrivateKeyFromJs(
   } else {
     CHECK(args[*offset]->IsObject());
     KeyObject* key = Unwrap<KeyObject>(args[*offset].As<Object>());
-    CHECK(key);
+    CHECK_NOT_NULL(key);
     CHECK_NE(key->GetKeyType(), kKeyTypeSecret);
     (*offset) += 4;
     return key->GetAsymmetricKey();
@@ -3271,7 +3271,7 @@ MaybeLocal<Object> KeyObject::Create(Environment* env,
   }
 
   KeyObject* key = Unwrap<KeyObject>(obj);
-  CHECK(key);
+  CHECK_NOT_NULL(key);
   if (key_type == kKeyTypePublic)
     key->InitPublic(pkey);
   else
@@ -5103,7 +5103,7 @@ void DiffieHellman::Initialize(Environment* env, Local<Object> target) {
     Local<FunctionTemplate> verify_error_getter_templ =
         FunctionTemplate::New(env->isolate(),
                               DiffieHellman::VerifyErrorGetter,
-                              env->current_callback_data(),
+                              Local<Value>(),
                               Signature::New(env->isolate(), t),
                               /* length */ 0,
                               ConstructorBehavior::kThrow,

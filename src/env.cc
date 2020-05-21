@@ -31,7 +31,6 @@ using v8::ArrayBuffer;
 using v8::Boolean;
 using v8::Context;
 using v8::EmbedderGraph;
-using v8::FinalizationGroup;
 using v8::Function;
 using v8::FunctionTemplate;
 using v8::HandleScope;
@@ -263,29 +262,17 @@ void TrackingTraceStateObserver::UpdateTraceCategoryState() {
   USE(cb->Call(env_->context(), Undefined(isolate), arraysize(args), args));
 }
 
-class NoBindingData : public BaseObject {
- public:
-  NoBindingData(Environment* env, Local<Object> obj) : BaseObject(env, obj) {}
-
-  SET_NO_MEMORY_INFO()
-  SET_MEMORY_INFO_NAME(NoBindingData)
-  SET_SELF_SIZE(NoBindingData)
-};
-
 void Environment::CreateProperties() {
   HandleScope handle_scope(isolate_);
   Local<Context> ctx = context();
+
   {
     Context::Scope context_scope(ctx);
     Local<FunctionTemplate> templ = FunctionTemplate::New(isolate());
     templ->InstanceTemplate()->SetInternalFieldCount(
         BaseObject::kInternalFieldCount);
-    set_as_callback_data_template(templ);
 
-    Local<Object> obj = MakeBindingCallbackData<NoBindingData>()
-        .ToLocalChecked();
-    set_as_callback_data(obj);
-    set_current_callback_data(obj);
+    set_binding_data_ctor_template(templ);
   }
 
   // Store primordials setup by the per-context script in the environment.
@@ -542,7 +529,6 @@ void Environment::InitializeLibuv(bool start_profiler_idle_notifier) {
       [](uv_async_t* async) {
         Environment* env = ContainerOf(
             &Environment::task_queues_async_, async);
-        env->CleanupFinalizationGroups();
         env->RunAndClearNativeImmediates();
       });
   uv_unref(reinterpret_cast<uv_handle_t*>(&idle_prepare_handle_));
@@ -681,6 +667,8 @@ void Environment::RunCleanup() {
   started_cleanup_ = true;
   TraceEventScope trace_scope(TRACING_CATEGORY_NODE1(environment),
                               "RunCleanup", this);
+  bindings_.clear();
+  initial_base_object_count_ = 0;
   CleanupHandles();
 
   while (!cleanup_hooks_.empty()) {
@@ -746,7 +734,7 @@ void Environment::RunAndClearInterrupts() {
     }
     DebugSealHandleScope seal_handle_scope(isolate());
 
-    while (std::unique_ptr<NativeImmediateCallback> head = queue.Shift())
+    while (auto head = queue.Shift())
       head->Call(this);
   }
 }
@@ -760,20 +748,10 @@ void Environment::RunAndClearNativeImmediates(bool only_refed) {
   // exceptions, so we do not need to handle that.
   RunAndClearInterrupts();
 
-  // It is safe to check .size() first, because there is a causal relationship
-  // between pushes to the threadsafe and this function being called.
-  // For the common case, it's worth checking the size first before establishing
-  // a mutex lock.
-  if (native_immediates_threadsafe_.size() > 0) {
-    Mutex::ScopedLock lock(native_immediates_threadsafe_mutex_);
-    native_immediates_.ConcatMove(std::move(native_immediates_threadsafe_));
-  }
-
-  auto drain_list = [&]() {
+  auto drain_list = [&](NativeImmediateQueue* queue) {
     TryCatchScope try_catch(this);
     DebugSealHandleScope seal_handle_scope(isolate());
-    while (std::unique_ptr<NativeImmediateCallback> head =
-               native_immediates_.Shift()) {
+    while (auto head = queue->Shift()) {
       if (head->is_refed())
         ref_count++;
 
@@ -791,12 +769,26 @@ void Environment::RunAndClearNativeImmediates(bool only_refed) {
     }
     return false;
   };
-  while (drain_list()) {}
+  while (drain_list(&native_immediates_)) {}
 
   immediate_info()->ref_count_dec(ref_count);
 
   if (immediate_info()->ref_count() == 0)
     ToggleImmediateRef(false);
+
+  // It is safe to check .size() first, because there is a causal relationship
+  // between pushes to the threadsafe immediate list and this function being
+  // called. For the common case, it's worth checking the size first before
+  // establishing a mutex lock.
+  // This is intentionally placed after the `ref_count` handling, because when
+  // refed threadsafe immediates are created, they are not counted towards the
+  // count in immediate_info() either.
+  NativeImmediateQueue threadsafe_immediates;
+  if (native_immediates_threadsafe_.size() > 0) {
+    Mutex::ScopedLock lock(native_immediates_threadsafe_mutex_);
+    threadsafe_immediates.ConcatMove(std::move(native_immediates_threadsafe_));
+  }
+  while (drain_list(&threadsafe_immediates)) {}
 }
 
 void Environment::RequestInterruptFromV8() {
@@ -1176,26 +1168,6 @@ void Environment::RunWeakRefCleanup() {
   isolate()->ClearKeptObjects();
 }
 
-void Environment::CleanupFinalizationGroups() {
-  HandleScope handle_scope(isolate());
-  Context::Scope context_scope(context());
-  TryCatchScope try_catch(this);
-
-  while (!cleanup_finalization_groups_.empty() && can_call_into_js()) {
-    Local<FinalizationGroup> fg =
-        cleanup_finalization_groups_.front().Get(isolate());
-    cleanup_finalization_groups_.pop_front();
-    if (!FinalizationGroup::Cleanup(fg).FromMaybe(false)) {
-      if (try_catch.HasCaught() && !try_catch.HasTerminated())
-        errors::TriggerUncaughtException(isolate(), try_catch);
-      // Re-schedule the execution of the remainder of the queue.
-      CHECK(task_queues_async_initialized_);
-      uv_async_send(&task_queues_async_);
-      return;
-    }
-  }
-}
-
 // Not really any better place than env.cc at this moment.
 void BaseObject::DeleteMe(void* data) {
   BaseObject* self = static_cast<BaseObject*>(data);
@@ -1210,29 +1182,6 @@ bool BaseObject::IsDoneInitializing() const { return true; }
 
 Local<Object> BaseObject::WrappedObject() const {
   return object();
-}
-
-bool Environment::KickNextTick() {
-  TickInfo* info = tick_info();
-
-  if (!can_call_into_js()) return true;
-
-  auto weakref_cleanup = OnScopeLeave([&]() { RunWeakRefCleanup(); });
-
-  if (info->has_tick_scheduled() == 0) {
-    //isolate()->RunMicrotasks();
-    v8::MicrotasksScope::PerformCheckpoint(isolate());
-  }
-
-  if (!info->has_tick_scheduled() && !info->has_rejection_to_warn()) {
-    return true;
-  }
-
-  if (!can_call_into_js()) return true;
-  MaybeLocal<v8::Value> ret =
-    tick_callback_function()->Call(context(), process_object(), 0, nullptr);
-
-  return !ret.IsEmpty();
 }
 
 }  // namespace node

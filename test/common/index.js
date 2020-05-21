@@ -112,6 +112,8 @@ const isOpenBSD = process.platform === 'openbsd';
 const isLinux = process.platform === 'linux';
 const isOSX = process.platform === 'darwin';
 
+const isDumbTerminal = process.env.TERM === 'dumb';
+
 const rootDir = isWindows ? 'c:\\' : '/';
 
 const buildType = process.config.target_defaults ?
@@ -307,10 +309,9 @@ function runCallChecks(exitCode) {
     if ('minimum' in context) {
       context.messageSegment = `at least ${context.minimum}`;
       return context.actual < context.minimum;
-    } else {
-      context.messageSegment = `exactly ${context.exact}`;
-      return context.actual !== context.exact;
     }
+    context.messageSegment = `exactly ${context.exact}`;
+    return context.actual !== context.exact;
   });
 
   failed.forEach(function(context) {
@@ -463,9 +464,8 @@ function nodeProcessAborted(exitCode, signal) {
   // the expected exit codes or signals.
   if (signal !== null) {
     return expectedSignals.includes(signal);
-  } else {
-    return expectedExitCodes.includes(exitCode);
   }
+  return expectedExitCodes.includes(exitCode);
 }
 
 function isAlive(pid) {
@@ -653,6 +653,12 @@ function invalidArgTypeHelper(input) {
   return ` Received type ${typeof input} (${inspected})`;
 }
 
+function skipIfDumbTerminal() {
+  if (isDumbTerminal) {
+    skip('skipping - dumb terminal');
+  }
+}
+
 const common = {
   allowGlobals,
   buildType,
@@ -672,6 +678,7 @@ const common = {
   invalidArgTypeHelper,
   isAIX,
   isAlive,
+  isDumbTerminal,
   isFreeBSD,
   isLinux,
   isMainThread,
@@ -692,6 +699,7 @@ const common = {
   runWithInvalidFD,
   skip,
   skipIf32Bits,
+  skipIfDumbTerminal,
   skipIfEslintMissing,
   skipIfInspectorDisabled,
   skipIfWorker,

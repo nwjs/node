@@ -134,10 +134,8 @@ using native_module::NativeModuleEnv;
 using v8::EscapableHandleScope;
 using v8::Function;
 using v8::FunctionCallbackInfo;
-using v8::HandleScope;
 using v8::Isolate;
 using v8::Local;
-using v8::Maybe;
 using v8::MaybeLocal;
 using v8::Object;
 using v8::String;
@@ -190,11 +188,11 @@ MaybeLocal<Value> ExecuteBootstrapper(Environment* env,
   MaybeLocal<Function> maybe_fn =
       NativeModuleEnv::LookupAndCompile(env->context(), id, parameters, env);
 
-  if (maybe_fn.IsEmpty()) {
+  Local<Function> fn;
+  if (!maybe_fn.ToLocal(&fn)) {
     return MaybeLocal<Value>();
   }
 
-  Local<Function> fn = maybe_fn.ToLocalChecked();
   MaybeLocal<Value> result = fn->Call(env->context(),
                                       Undefined(env->isolate()),
                                       arguments->size(),
@@ -248,11 +246,56 @@ int Environment::InitializeInspector(
 }
 #endif  // HAVE_INSPECTOR && NODE_USE_V8_PLATFORM
 
+#define ATOMIC_WAIT_EVENTS(V)                                               \
+  V(kStartWait,           "started")                                        \
+  V(kWokenUp,             "was woken up by another thread")                 \
+  V(kTimedOut,            "timed out")                                      \
+  V(kTerminatedExecution, "was stopped by terminated execution")            \
+  V(kAPIStopped,          "was stopped through the embedder API")           \
+  V(kNotEqual,            "did not wait because the values mismatched")     \
+
+static void AtomicsWaitCallback(Isolate::AtomicsWaitEvent event,
+                                Local<v8::SharedArrayBuffer> array_buffer,
+                                size_t offset_in_bytes, int64_t value,
+                                double timeout_in_ms,
+                                Isolate::AtomicsWaitWakeHandle* stop_handle,
+                                void* data) {
+  Environment* env = static_cast<Environment*>(data);
+
+  const char* message = "(unknown event)";
+  switch (event) {
+#define V(key, msg)                         \
+    case Isolate::AtomicsWaitEvent::key:    \
+      message = msg;                        \
+      break;
+    ATOMIC_WAIT_EVENTS(V)
+#undef V
+  }
+
+  fprintf(stderr,
+          "(node:%d) [Thread %" PRIu64 "] Atomics.wait(%p + %zx, %" PRId64
+              ", %.f) %s\n",
+          static_cast<int>(uv_os_getpid()),
+          env->thread_id(),
+          array_buffer->GetBackingStore()->Data(),
+          offset_in_bytes,
+          value,
+          timeout_in_ms,
+          message);
+}
+
 void Environment::InitializeDiagnostics() {
   isolate_->GetHeapProfiler()->AddBuildEmbedderGraphCallback(
       Environment::BuildEmbedderGraph, this);
   if (options_->trace_uncaught)
     isolate_->SetCaptureStackTraceForUncaughtExceptions(true);
+  if (options_->trace_atomics_wait) {
+    isolate_->SetAtomicsWaitCallback(AtomicsWaitCallback, this);
+    AddCleanupHook([](void* data) {
+      Environment* env = static_cast<Environment*>(data);
+      env->isolate()->SetAtomicsWaitCallback(nullptr, nullptr);
+    }, this);
+  }
 
 #if defined HAVE_DTRACE || defined HAVE_ETW
   InitDTrace(this);
@@ -350,8 +393,7 @@ MaybeLocal<Value> Environment::BootstrapNode() {
 
   Local<String> env_string = FIXED_ONE_BYTE_STRING(isolate_, "env");
   Local<Object> env_var_proxy;
-  if (!CreateEnvVarProxy(context(), isolate_, current_callback_data())
-           .ToLocal(&env_var_proxy) ||
+  if (!CreateEnvVarProxy(context(), isolate_).ToLocal(&env_var_proxy) ||
       process_object()->Set(context(), env_string, env_var_proxy).IsNothing()) {
     return MaybeLocal<Value>();
   }
@@ -1395,11 +1437,13 @@ NODE_EXTERN bool g_is_node_initialized() {
 }
 
 NODE_EXTERN void g_call_tick_callback(node::Environment* env) {
-  v8::HandleScope scope(env->isolate());
+  if (!env->can_call_into_js())
+    return;
+  v8::HandleScope handle_scope(env->isolate());
   v8::Context::Scope context_scope(env->context());
-  env->PushAsyncCallbackScope();
-  env->KickNextTick();
-  env->PopAsyncCallbackScope();
+
+  v8::Local<v8::Object> process = env->process_object();
+  node::InternalCallbackScope scope(env, process, {0, 0});
 }
 
 // copied beginning of Start() until v8::Initialize()

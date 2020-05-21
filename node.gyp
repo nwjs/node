@@ -406,6 +406,9 @@
       'conditions': [
         [ 'error_on_warn=="true"', {
           'cflags': ['-Werror'],
+          'xcode_settings': {
+            'WARNING_CFLAGS': [ '-Werror' ],
+          },
         }],
         [ 'node_intermediate_lib_type=="static_library" and '
             'node_shared=="true" and OS=="aix"', {
@@ -692,6 +695,8 @@
         'src/base_object.h',
         'src/base_object-inl.h',
         'src/base64.h',
+        'src/callback_queue.h',
+        'src/callback_queue-inl.h',
         'src/connect_wrap.h',
         'src/connection_wrap.h',
         'src/debug_utils.h',
@@ -810,6 +815,9 @@
       'conditions': [
         [ 'error_on_warn=="true"', {
           'cflags': ['-Werror'],
+          'xcode_settings': {
+            'WARNING_CFLAGS': [ '-Werror' ],
+          },
         }],
         [ 'node_builtin_modules_path!=""', {
           'defines': [ 'NODE_BUILTIN_MODULES_PATH="<(node_builtin_modules_path)"' ]

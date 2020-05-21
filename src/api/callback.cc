@@ -88,9 +88,13 @@ void InternalCallbackScope::Close() {
   closed_ = true;
 
   if (!env_->can_call_into_js()) return;
-  if (failed_ && !env_->is_main_thread() && env_->is_stopping()) {
-    env_->async_hooks()->clear_async_id_stack();
-  }
+  auto perform_stopping_check = [&]() {
+    if (env_->is_stopping()) {
+      MarkAsFailed();
+      env_->async_hooks()->clear_async_id_stack();
+    }
+  };
+  perform_stopping_check();
 
   if (!failed_ && async_context_.async_id != 0 && !skip_hooks_) {
     AsyncWrap::EmitAfter(env_, async_context_.async_id);
@@ -105,9 +109,44 @@ void InternalCallbackScope::Close() {
     return;
   }
 
-  if (!env_->KickNextTick()) {
+  TickInfo* tick_info = env_->tick_info();
+
+  if (!env_->can_call_into_js()) return;
+
+  auto weakref_cleanup = OnScopeLeave([&]() { env_->RunWeakRefCleanup(); });
+
+  if (!tick_info->has_tick_scheduled()) {
+    MicrotasksScope::PerformCheckpoint(env_->isolate());
+
+    perform_stopping_check();
+  }
+
+  // Make sure the stack unwound properly. If there are nested MakeCallback's
+  // then it should return early and not reach this code.
+  if (env_->async_hooks()->fields()[AsyncHooks::kTotals]) {
+    CHECK_EQ(env_->execution_async_id(), 0);
+    CHECK_EQ(env_->trigger_async_id(), 0);
+  }
+
+  if (!tick_info->has_tick_scheduled() && !tick_info->has_rejection_to_warn()) {
+    return;
+  }
+
+  HandleScope handle_scope(env_->isolate());
+  Local<Object> process = env_->process_object();
+
+  if (!env_->can_call_into_js()) return;
+
+  Local<Function> tick_callback = env_->tick_callback_function();
+
+  // The tick is triggered before JS land calls SetTickCallback
+  // to initializes the tick callback during bootstrap.
+  CHECK(!tick_callback.IsEmpty());
+
+  if (tick_callback->Call(env_->context(), process, 0, nullptr).IsEmpty()) {
     failed_ = true;
   }
+  perform_stopping_check();
 }
 
 MaybeLocal<Value> InternalMakeCallback(Environment* env,

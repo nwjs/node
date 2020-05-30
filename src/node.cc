@@ -1518,8 +1518,12 @@ NODE_EXTERN void g_stop_nw_instance() {
     free(mp);
     mp = mp2;
   }
+  node::NodePlatform* platform = (node::NodePlatform*)tls_ctx->env->isolate_data()->platform();
   node::FreeEnvironment(tls_ctx->env);
+  platform->UnregisterIsolate(tls_ctx->env->isolate());
+  delete platform;
   tls_ctx->env = nullptr;
+
   //std::cerr << "QUIT LOOP" << std::endl;
 }
 
@@ -1545,8 +1549,9 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
     memset(tls_ctx, 0, sizeof(node::thread_ctx_st));
     uv_key_set(&node::thread_ctx_key, tls_ctx);
     node::binding::RegisterBuiltinModules();
-  } 
+  }
   node::NodePlatform* platform = new node::NodePlatform(node::per_process::cli_options->v8_thread_pool_size, new v8::TracingController());
+  platform->RegisterIsolate(isolate, uv_default_loop());
   node::IsolateData* isolate_data = node::CreateIsolateData(isolate, uv_default_loop(), platform);
   node::NewContext(isolate, v8::Local<v8::ObjectTemplate>(), false);
   tls_ctx->env = node::CreateEnvironment(isolate_data, context, argc, argv, 0, nullptr);

@@ -500,7 +500,9 @@ void DLOpen(const FunctionCallbackInfo<Value>& args) {
         return true;
       } else {
         mp = dlib->GetSavedModuleFromGlobalHandleMap();
-        if (mp == nullptr || mp->nm_context_register_func == nullptr) {
+        //NWJS: the checking of context aware module is not needed
+        //since this is supported in NW worker
+        if (mp == nullptr) { // || mp->nm_context_register_func == nullptr) {
           dlib->Close();
           char errmsg[1024];
           snprintf(errmsg,

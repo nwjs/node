@@ -323,13 +323,23 @@ inline Environment* Environment::GetCurrent(v8::Local<v8::Context> context) {
 
 inline Environment* Environment::GetCurrent(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  return GetCurrent(info.GetIsolate()->GetCurrentContext());
+  Environment* ret = GetCurrent(info.GetIsolate()->GetCurrentContext());
+  if (!ret) { //NWJS#7493: access node var directly from another context
+    node::thread_ctx_st* tls_ctx = (node::thread_ctx_st*)uv_key_get(&node::thread_ctx_key);
+    return tls_ctx->env;
+  }
+  return ret;
 }
 
 template <typename T>
 inline Environment* Environment::GetCurrent(
     const v8::PropertyCallbackInfo<T>& info) {
-  return GetCurrent(info.GetIsolate()->GetCurrentContext());
+  Environment* ret = GetCurrent(info.GetIsolate()->GetCurrentContext());
+  if (!ret) {
+    node::thread_ctx_st* tls_ctx = (node::thread_ctx_st*)uv_key_get(&node::thread_ctx_key);
+    return tls_ctx->env;
+  }
+  return ret;
 }
 
 template <typename T, typename U>

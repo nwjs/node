@@ -20,7 +20,6 @@ using v8::HandleScope;
 using v8::Isolate;
 using v8::Local;
 using v8::Locker;
-using v8::Object;
 using v8::SealHandleScope;
 
 extern bool node_is_nwjs;
@@ -41,8 +40,7 @@ NodeMainInstance::NodeMainInstance(Isolate* isolate,
   isolate_data_ =
       std::make_unique<IsolateData>(isolate_, event_loop, platform, nullptr);
 
-  IsolateSettings misc;
-  SetIsolateMiscHandlers(isolate_, misc);
+  SetIsolateMiscHandlers(isolate_, {});
 }
 
 std::unique_ptr<NodeMainInstance> NodeMainInstance::Create(
@@ -195,8 +193,7 @@ NodeMainInstance::CreateMainEnvironment(int* exit_code) {
     context =
         Context::FromSnapshot(isolate_, kNodeContextIndex).ToLocalChecked();
     InitializeContextRuntime(context);
-    IsolateSettings s;
-    SetIsolateErrorHandlers(isolate_, s);
+    SetIsolateErrorHandlers(isolate_, {});
   } else {
     context = NewContext(isolate_);
   }

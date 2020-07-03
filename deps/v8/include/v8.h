@@ -120,6 +120,8 @@ class EscapableHandleScope;
 template<typename T> class ReturnValue;
 
 namespace internal {
+enum class ArgumentsType;
+template <ArgumentsType>
 class Arguments;
 class DeferredHandles;
 class Heap;
@@ -148,11 +150,6 @@ class ConsoleCallArguments;
 }  // namespace debug
 
 // --- Handles ---
-
-#define TYPE_CHECK(T, S)                                       \
-  while (false) {                                              \
-    *(static_cast<T* volatile*>(0)) = static_cast<S*>(0);      \
-  }
 
 /**
  * An object reference managed by the v8 garbage collector.
@@ -197,7 +194,7 @@ class Local {
      * handles. For example, converting from a Local<String> to a
      * Local<Number>.
      */
-    TYPE_CHECK(T, S);
+    static_assert(std::is_base_of<T, S>::value, "type check");
   }
 
   /**
@@ -363,7 +360,7 @@ class MaybeLocal {
   template <class S>
   V8_INLINE MaybeLocal(Local<S> that)
       : val_(reinterpret_cast<T*>(*that)) {
-    TYPE_CHECK(T, S);
+    static_assert(std::is_base_of<T, S>::value, "type check");
   }
 
   V8_INLINE bool IsEmpty() const { return val_ == nullptr; }
@@ -532,11 +529,16 @@ template <class T> class PersistentBase {
   }
 
   /**
-   *  Install a finalization callback on this object.
-   *  NOTE: There is no guarantee as to *when* or even *if* the callback is
-   *  invoked. The invocation is performed solely on a best effort basis.
-   *  As always, GC-based finalization should *not* be relied upon for any
-   *  critical form of resource management!
+   * Install a finalization callback on this object.
+   * NOTE: There is no guarantee as to *when* or even *if* the callback is
+   * invoked. The invocation is performed solely on a best effort basis.
+   * As always, GC-based finalization should *not* be relied upon for any
+   * critical form of resource management!
+   *
+   * The callback is supposed to reset the handle. No further V8 API may be
+   * called in this callback. In case additional work involving V8 needs to be
+   * done, a second callback can be scheduled using
+   * WeakCallbackInfo<void>::SetSecondPassCallback.
    */
   template <typename P>
   V8_INLINE void SetWeak(P* parameter,
@@ -618,11 +620,8 @@ class NonCopyablePersistentTraits {
   template<class S, class M>
   V8_INLINE static void Copy(const Persistent<S, M>& source,
                              NonCopyablePersistent* dest) {
-    Uncompilable<Object>();
-  }
-  // TODO(dcarney): come up with a good compile error here.
-  template<class O> V8_INLINE static void Uncompilable() {
-    TYPE_CHECK(O, Primitive);
+    static_assert(sizeof(S) < 0,
+                  "NonCopyablePersistentTraits::Copy is not instantiable");
   }
 };
 
@@ -665,7 +664,7 @@ template <class T, class M> class Persistent : public PersistentBase<T> {
   template <class S>
   V8_INLINE Persistent(Isolate* isolate, Local<S> that)
       : PersistentBase<T>(PersistentBase<T>::New(isolate, *that)) {
-    TYPE_CHECK(T, S);
+    static_assert(std::is_base_of<T, S>::value, "type check");
   }
   /**
    * Construct a Persistent from a Persistent.
@@ -675,7 +674,7 @@ template <class T, class M> class Persistent : public PersistentBase<T> {
   template <class S, class M2>
   V8_INLINE Persistent(Isolate* isolate, const Persistent<S, M2>& that)
     : PersistentBase<T>(PersistentBase<T>::New(isolate, *that)) {
-    TYPE_CHECK(T, S);
+    static_assert(std::is_base_of<T, S>::value, "type check");
   }
   /**
    * The copy constructors and assignment operator create a Persistent
@@ -760,7 +759,7 @@ class Global : public PersistentBase<T> {
   template <class S>
   V8_INLINE Global(Isolate* isolate, Local<S> that)
       : PersistentBase<T>(PersistentBase<T>::New(isolate, *that)) {
-    TYPE_CHECK(T, S);
+    static_assert(std::is_base_of<T, S>::value, "type check");
   }
 
   /**
@@ -771,7 +770,7 @@ class Global : public PersistentBase<T> {
   template <class S>
   V8_INLINE Global(Isolate* isolate, const PersistentBase<S>& that)
       : PersistentBase<T>(PersistentBase<T>::New(isolate, that.val_)) {
-    TYPE_CHECK(T, S);
+    static_assert(std::is_base_of<T, S>::value, "type check");
   }
 
   /**
@@ -951,7 +950,7 @@ class TracedGlobal : public TracedReferenceBase<T> {
   TracedGlobal(Isolate* isolate, Local<S> that) : TracedReferenceBase<T>() {
     this->val_ = this->New(isolate, that.val_, &this->val_,
                            TracedReferenceBase<T>::kWithDestructor);
-    TYPE_CHECK(T, S);
+    static_assert(std::is_base_of<T, S>::value, "type check");
   }
 
   /**
@@ -1074,7 +1073,7 @@ class TracedReference : public TracedReferenceBase<T> {
   TracedReference(Isolate* isolate, Local<S> that) : TracedReferenceBase<T>() {
     this->val_ = this->New(isolate, that.val_, &this->val_,
                            TracedReferenceBase<T>::kWithoutDestructor);
-    TYPE_CHECK(T, S);
+    static_assert(std::is_base_of<T, S>::value, "type check");
   }
 
   /**
@@ -3176,6 +3175,23 @@ class V8_EXPORT String : public Name {
 
   V8_INLINE static String* Cast(v8::Value* obj);
 
+  /**
+   * Allocates a new string from a UTF-8 literal. This is equivalent to calling
+   * String::NewFromUtf(isolate, "...").ToLocalChecked(), but without the check
+   * overhead.
+   *
+   * When called on a string literal containing '\0', the inferred length is the
+   * length of the input array minus 1 (for the final '\0') and not the value
+   * returned by strlen.
+   **/
+  template <int N>
+  static V8_WARN_UNUSED_RESULT Local<String> NewFromUtf8Literal(
+      Isolate* isolate, const char (&literal)[N],
+      NewStringType type = NewStringType::kNormal) {
+    static_assert(N <= kMaxLength, "String is too long");
+    return NewFromUtf8Literal(isolate, literal, type, N - 1);
+  }
+
   /** Allocates a new string from UTF-8 data. Only returns an empty value when
    * length > kMaxLength. **/
   static V8_WARN_UNUSED_RESULT MaybeLocal<String> NewFromUtf8(
@@ -3310,9 +3326,20 @@ class V8_EXPORT String : public Name {
   ExternalStringResourceBase* GetExternalStringResourceBaseSlow(
       String::Encoding* encoding_out) const;
 
+  static Local<v8::String> NewFromUtf8Literal(Isolate* isolate,
+                                              const char* literal,
+                                              NewStringType type, int length);
+
   static void CheckCast(v8::Value* obj);
 };
 
+// Zero-length string specialization (templated string size includes
+// terminator).
+template <>
+inline V8_WARN_UNUSED_RESULT Local<String> String::NewFromUtf8Literal(
+    Isolate* isolate, const char (&literal)[1], NewStringType type) {
+  return String::Empty(isolate);
+}
 
 /**
  * A JavaScript symbol (ECMA-262 edition 6)
@@ -4020,6 +4047,13 @@ class V8_EXPORT Object : public Value {
   bool IsApiWrapper();
 
   /**
+   * True if this object was created from an object template which was marked
+   * as undetectable. See v8::ObjectTemplate::MarkAsUndetectable for more
+   * information.
+   */
+  bool IsUndetectable();
+
+  /**
    * Call an Object as a function if a callback is set by the
    * ObjectTemplate::SetCallAsFunctionHandler method.
    */
@@ -4175,7 +4209,7 @@ class ReturnValue {
  public:
   template <class S> V8_INLINE ReturnValue(const ReturnValue<S>& that)
       : value_(that.value_) {
-    TYPE_CHECK(T, S);
+    static_assert(std::is_base_of<T, S>::value, "type check");
   }
   // Local setters
   template <typename S>
@@ -4939,6 +4973,25 @@ class V8_EXPORT BackingStore : public v8::internal::BackingStoreBase {
       v8::Isolate* isolate, std::unique_ptr<BackingStore> backing_store,
       size_t byte_length);
 
+  /**
+   * This callback is used only if the memory block for a BackingStore cannot be
+   * allocated with an ArrayBuffer::Allocator. In such cases the destructor of
+   * the BackingStore invokes the callback to free the memory block.
+   */
+  using DeleterCallback = void (*)(void* data, size_t length,
+                                   void* deleter_data);
+
+  /**
+   * If the memory block of a BackingStore is static or is managed manually,
+   * then this empty deleter along with nullptr deleter_data can be passed to
+   * ArrayBuffer::NewBackingStore to indicate that.
+   *
+   * The manually managed case should be used with caution and only when it
+   * is guaranteed that the memory block freeing happens after detaching its
+   * ArrayBuffer.
+   */
+  static void EmptyDeleter(void* data, size_t length, void* deleter_data);
+
  private:
   /**
    * See [Shared]ArrayBuffer::GetBackingStore and
@@ -4947,13 +5000,12 @@ class V8_EXPORT BackingStore : public v8::internal::BackingStoreBase {
   BackingStore();
 };
 
-/**
- * This callback is used only if the memory block for this backing store cannot
- * be allocated with an ArrayBuffer::Allocator. In such cases the destructor
- * of this backing store object invokes the callback to free the memory block.
- */
+#if !defined(V8_IMMINENT_DEPRECATION_WARNINGS)
+// Use v8::BackingStore::DeleterCallback instead.
 using BackingStoreDeleterCallback = void (*)(void* data, size_t length,
                                              void* deleter_data);
+
+#endif
 
 /**
  * An instance of the built-in ArrayBuffer constructor (ES6 draft 15.13.5).
@@ -5142,7 +5194,7 @@ class V8_EXPORT ArrayBuffer : public Object {
    * to the buffer must not be passed again to any V8 API function.
    */
   static std::unique_ptr<BackingStore> NewBackingStore(
-      void* data, size_t byte_length, BackingStoreDeleterCallback deleter,
+      void* data, size_t byte_length, v8::BackingStore::DeleterCallback deleter,
       void* deleter_data);
 
   /**
@@ -5624,7 +5676,7 @@ class V8_EXPORT SharedArrayBuffer : public Object {
    * to the buffer must not be passed again to any V8 functions.
    */
   static std::unique_ptr<BackingStore> NewBackingStore(
-      void* data, size_t byte_length, BackingStoreDeleterCallback deleter,
+      void* data, size_t byte_length, v8::BackingStore::DeleterCallback deleter,
       void* deleter_data);
 
   /**
@@ -5884,14 +5936,15 @@ class V8_EXPORT RegExp : public Object {
 };
 
 /**
- * An instance of the built-in FinalizationGroup constructor.
+ * An instance of the built-in FinalizationRegistry constructor.
  *
- * This API is experimental and may change significantly.
+ * The C++ name is FinalizationGroup for backwards compatibility. This API is
+ * experimental and deprecated.
  */
 class V8_EXPORT FinalizationGroup : public Object {
  public:
   /**
-   * Runs the cleanup callback of the given FinalizationGroup.
+   * Runs the cleanup callback of the given FinalizationRegistry.
    *
    * V8 will inform the embedder that there are finalizer callbacks be
    * called through HostCleanupFinalizationGroupCallback.
@@ -6315,11 +6368,12 @@ class CFunction;
  *    proto_t->Set(isolate, "proto_const", v8::Number::New(isolate, 2));
  *
  *    v8::Local<v8::ObjectTemplate> instance_t = t->InstanceTemplate();
- *    instance_t->SetAccessor(String::NewFromUtf8(isolate, "instance_accessor"),
- *                            InstanceAccessorCallback);
+ *    instance_t->SetAccessor(
+          String::NewFromUtf8Literal(isolate, "instance_accessor"),
+ *        InstanceAccessorCallback);
  *    instance_t->SetHandler(
  *        NamedPropertyHandlerConfiguration(PropertyHandlerCallback));
- *    instance_t->Set(String::NewFromUtf8(isolate, "instance_property"),
+ *    instance_t->Set(String::NewFromUtf8Literal(isolate, "instance_property"),
  *                    Number::New(isolate, 3));
  *
  *    v8::Local<v8::Function> function = t->GetFunction();
@@ -6379,6 +6433,12 @@ class CFunction;
  *   child_instance.instance_accessor calls 'InstanceAccessorCallback'
  *   child_instance.instance_property == 3;
  * \endcode
+ *
+ * The additional 'c_function' parameter refers to a fast API call, which
+ * must not trigger GC or JavaScript execution, or call into V8 in other
+ * ways. For more information how to define them, see
+ * include/v8-fast-api-calls.h. Please note that this feature is still
+ * experimental.
  */
 class V8_EXPORT FunctionTemplate : public Template {
  public:
@@ -6389,7 +6449,7 @@ class V8_EXPORT FunctionTemplate : public Template {
       Local<Signature> signature = Local<Signature>(), int length = 0,
       ConstructorBehavior behavior = ConstructorBehavior::kAllow,
       SideEffectType side_effect_type = SideEffectType::kHasSideEffect,
-      const CFunction* not_available_in_node_v14_yet = nullptr);
+      const CFunction* c_function = nullptr);
 
   /**
    * Creates a function template backed/cached by a private property.
@@ -6416,12 +6476,13 @@ class V8_EXPORT FunctionTemplate : public Template {
   /**
    * Set the call-handler callback for a FunctionTemplate.  This
    * callback is called whenever the function created from this
-   * FunctionTemplate is called.
+   * FunctionTemplate is called. The 'c_function' represents a fast
+   * API call, see the comment above the class declaration.
    */
   void SetCallHandler(
       FunctionCallback callback, Local<Value> data = Local<Value>(),
       SideEffectType side_effect_type = SideEffectType::kHasSideEffect,
-      const CFunction* not_available_in_node_v14_yet = nullptr);
+      const CFunction* c_function = nullptr);
 
   /** Set the predefined length property for the FunctionTemplate. */
   void SetLength(int length);
@@ -7452,7 +7513,7 @@ typedef void (*WasmStreamingCallback)(const FunctionCallbackInfo<Value>&);
 // --- Callback for checking if WebAssembly threads are enabled ---
 typedef bool (*WasmThreadsEnabledCallback)(Local<Context> context);
 
-// --- Callback for loading source map file for WASM profiling support
+// --- Callback for loading source map file for Wasm profiling support
 typedef Local<String> (*WasmLoadSourceMapCallback)(Isolate* isolate,
                                                    const char* name);
 
@@ -8117,7 +8178,6 @@ class V8_EXPORT Isolate {
           embedder_wrapper_type_index(-1),
           embedder_wrapper_object_index(-1) {}
 
-
     /**
      * Allows the host application to provide the address of a function that is
      * notified each time code is added, moved or removed.
@@ -8181,7 +8241,11 @@ class V8_EXPORT Isolate {
      */
     bool only_terminate_in_safe_scope;
 
-    // Not available in Node v14 yet.
+    /**
+     * The following parameters describe the offsets for addressing type info
+     * for wrapped API objects and are used by the fast C API
+     * (for details see v8-fast-api-calls.h).
+     */
     int embedder_wrapper_type_index;
     int embedder_wrapper_object_index;
   };
@@ -8486,12 +8550,12 @@ class V8_EXPORT Isolate {
       AbortOnUncaughtExceptionCallback callback);
 
   /**
-   * This specifies the callback to be called when finalization groups
+   * This specifies the callback to be called when FinalizationRegistries
    * are ready to be cleaned up and require FinalizationGroup::Cleanup()
    * to be called in a future task.
    */
   V8_DEPRECATED(
-      "FinalizationGroup cleanup is automatic if "
+      "FinalizationRegistry cleanup is automatic if "
       "HostCleanupFinalizationGroupCallback is not set")
   void SetHostCleanupFinalizationGroupCallback(
       HostCleanupFinalizationGroupCallback callback);
@@ -9106,7 +9170,7 @@ class V8_EXPORT Isolate {
 
   /**
    * Optional notification that a context has been disposed. V8 uses these
-   * notifications to guide the GC heuristic and cancel FinalizationGroup
+   * notifications to guide the GC heuristic and cancel FinalizationRegistry
    * cleanup tasks. Returns the number of context disposals - including this one
    * - since the last time V8 had a chance to clean up.
    *
@@ -9740,6 +9804,11 @@ class V8_EXPORT V8 {
 
 /**
  * Helper class to create a snapshot data blob.
+ *
+ * The Isolate used by a SnapshotCreator is owned by it, and will be entered
+ * and exited by the constructor and destructor, respectively; The destructor
+ * will also destroy the Isolate. Experimental language features, including
+ * those available by default, are not available while creating a snapshot.
  */
 class V8_EXPORT SnapshotCreator {
  public:
@@ -9768,6 +9837,10 @@ class V8_EXPORT SnapshotCreator {
   SnapshotCreator(const intptr_t* external_references = nullptr,
                   StartupData* existing_blob = nullptr);
 
+  /**
+   * Destroy the snapshot creator, and exit and dispose of the Isolate
+   * associated with it.
+   */
   ~SnapshotCreator();
 
   /**
@@ -10360,6 +10433,18 @@ class V8_EXPORT Context {
   void SetAbortScriptExecution(AbortScriptExecutionCallback callback);
 
   /**
+   * Returns the value that was set or restored by
+   * SetContinuationPreservedEmbedderData(), if any.
+   */
+  Local<Value> GetContinuationPreservedEmbedderData() const;
+
+  /**
+   * Sets a value that will be stored on continuations and reset while the
+   * continuation runs.
+   */
+  void SetContinuationPreservedEmbedderData(Local<Value> context);
+
+  /**
    * Stack-allocated class which sets the execution context for all
    * operations executed within a local scope.
    */
@@ -10645,7 +10730,7 @@ Local<T> Local<T>::New(Isolate* isolate, T* that) {
 template<class T>
 template<class S>
 void Eternal<T>::Set(Isolate* isolate, Local<S> handle) {
-  TYPE_CHECK(T, S);
+  static_assert(std::is_base_of<T, S>::value, "type check");
   val_ = reinterpret_cast<T*>(
       V8::Eternalize(isolate, reinterpret_cast<Value*>(*handle)));
 }
@@ -10689,7 +10774,7 @@ T* PersistentBase<T>::New(Isolate* isolate, T* that) {
 template <class T, class M>
 template <class S, class M2>
 void Persistent<T, M>::Copy(const Persistent<S, M2>& that) {
-  TYPE_CHECK(T, S);
+  static_assert(std::is_base_of<T, S>::value, "type check");
   this->Reset();
   if (that.IsEmpty()) return;
   internal::Address* p = reinterpret_cast<internal::Address*>(that.val_);
@@ -10717,7 +10802,7 @@ void PersistentBase<T>::Reset() {
 template <class T>
 template <class S>
 void PersistentBase<T>::Reset(Isolate* isolate, const Local<S>& other) {
-  TYPE_CHECK(T, S);
+  static_assert(std::is_base_of<T, S>::value, "type check");
   Reset();
   if (other.IsEmpty()) return;
   this->val_ = New(isolate, other.val_);
@@ -10728,7 +10813,7 @@ template <class T>
 template <class S>
 void PersistentBase<T>::Reset(Isolate* isolate,
                               const PersistentBase<S>& other) {
-  TYPE_CHECK(T, S);
+  static_assert(std::is_base_of<T, S>::value, "type check");
   Reset();
   if (other.IsEmpty()) return;
   this->val_ = New(isolate, other.val_);
@@ -10794,7 +10879,7 @@ Global<T>::Global(Global&& other) : PersistentBase<T>(other.val_) {
 template <class T>
 template <class S>
 Global<T>& Global<T>::operator=(Global<S>&& rhs) {
-  TYPE_CHECK(T, S);
+  static_assert(std::is_base_of<T, S>::value, "type check");
   if (this != &rhs) {
     this->Reset();
     if (rhs.val_ != nullptr) {
@@ -10829,7 +10914,7 @@ void TracedReferenceBase<T>::Reset() {
 template <class T>
 template <class S>
 void TracedGlobal<T>::Reset(Isolate* isolate, const Local<S>& other) {
-  TYPE_CHECK(T, S);
+  static_assert(std::is_base_of<T, S>::value, "type check");
   Reset();
   if (other.IsEmpty()) return;
   this->val_ = this->New(isolate, other.val_, &this->val_,
@@ -10839,7 +10924,7 @@ void TracedGlobal<T>::Reset(Isolate* isolate, const Local<S>& other) {
 template <class T>
 template <class S>
 TracedGlobal<T>& TracedGlobal<T>::operator=(TracedGlobal<S>&& rhs) {
-  TYPE_CHECK(T, S);
+  static_assert(std::is_base_of<T, S>::value, "type check");
   *this = std::move(rhs.template As<T>());
   return *this;
 }
@@ -10847,7 +10932,7 @@ TracedGlobal<T>& TracedGlobal<T>::operator=(TracedGlobal<S>&& rhs) {
 template <class T>
 template <class S>
 TracedGlobal<T>& TracedGlobal<T>::operator=(const TracedGlobal<S>& rhs) {
-  TYPE_CHECK(T, S);
+  static_assert(std::is_base_of<T, S>::value, "type check");
   *this = rhs.template As<T>();
   return *this;
 }
@@ -10878,7 +10963,7 @@ TracedGlobal<T>& TracedGlobal<T>::operator=(const TracedGlobal& rhs) {
 template <class T>
 template <class S>
 void TracedReference<T>::Reset(Isolate* isolate, const Local<S>& other) {
-  TYPE_CHECK(T, S);
+  static_assert(std::is_base_of<T, S>::value, "type check");
   Reset();
   if (other.IsEmpty()) return;
   this->val_ = this->New(isolate, other.val_, &this->val_,
@@ -10888,7 +10973,7 @@ void TracedReference<T>::Reset(Isolate* isolate, const Local<S>& other) {
 template <class T>
 template <class S>
 TracedReference<T>& TracedReference<T>::operator=(TracedReference<S>&& rhs) {
-  TYPE_CHECK(T, S);
+  static_assert(std::is_base_of<T, S>::value, "type check");
   *this = std::move(rhs.template As<T>());
   return *this;
 }
@@ -10897,7 +10982,7 @@ template <class T>
 template <class S>
 TracedReference<T>& TracedReference<T>::operator=(
     const TracedReference<S>& rhs) {
-  TYPE_CHECK(T, S);
+  static_assert(std::is_base_of<T, S>::value, "type check");
   *this = rhs.template As<T>();
   return *this;
 }
@@ -10956,7 +11041,7 @@ ReturnValue<T>::ReturnValue(internal::Address* slot) : value_(slot) {}
 template <typename T>
 template <typename S>
 void ReturnValue<T>::Set(const Global<S>& handle) {
-  TYPE_CHECK(T, S);
+  static_assert(std::is_base_of<T, S>::value, "type check");
   if (V8_UNLIKELY(handle.IsEmpty())) {
     *value_ = GetDefaultValue();
   } else {
@@ -10967,7 +11052,7 @@ void ReturnValue<T>::Set(const Global<S>& handle) {
 template <typename T>
 template <typename S>
 void ReturnValue<T>::Set(const TracedReferenceBase<S>& handle) {
-  TYPE_CHECK(T, S);
+  static_assert(std::is_base_of<T, S>::value, "type check");
   if (V8_UNLIKELY(handle.IsEmpty())) {
     *value_ = GetDefaultValue();
   } else {
@@ -10978,7 +11063,8 @@ void ReturnValue<T>::Set(const TracedReferenceBase<S>& handle) {
 template <typename T>
 template <typename S>
 void ReturnValue<T>::Set(const Local<S> handle) {
-  TYPE_CHECK(T, S);
+  static_assert(std::is_void<T>::value || std::is_base_of<T, S>::value,
+                "type check");
   if (V8_UNLIKELY(handle.IsEmpty())) {
     *value_ = GetDefaultValue();
   } else {
@@ -10988,13 +11074,13 @@ void ReturnValue<T>::Set(const Local<S> handle) {
 
 template<typename T>
 void ReturnValue<T>::Set(double i) {
-  TYPE_CHECK(T, Number);
+  static_assert(std::is_base_of<T, Number>::value, "type check");
   Set(Number::New(GetIsolate(), i));
 }
 
 template<typename T>
 void ReturnValue<T>::Set(int32_t i) {
-  TYPE_CHECK(T, Integer);
+  static_assert(std::is_base_of<T, Integer>::value, "type check");
   typedef internal::Internals I;
   if (V8_LIKELY(I::IsValidSmi(i))) {
     *value_ = I::IntToSmi(i);
@@ -11005,7 +11091,7 @@ void ReturnValue<T>::Set(int32_t i) {
 
 template<typename T>
 void ReturnValue<T>::Set(uint32_t i) {
-  TYPE_CHECK(T, Integer);
+  static_assert(std::is_base_of<T, Integer>::value, "type check");
   // Can't simply use INT32_MAX here for whatever reason.
   bool fits_into_int32_t = (i & (1U << 31)) == 0;
   if (V8_LIKELY(fits_into_int32_t)) {
@@ -11017,7 +11103,7 @@ void ReturnValue<T>::Set(uint32_t i) {
 
 template<typename T>
 void ReturnValue<T>::Set(bool value) {
-  TYPE_CHECK(T, Boolean);
+  static_assert(std::is_base_of<T, Boolean>::value, "type check");
   typedef internal::Internals I;
   int root_index;
   if (value) {
@@ -11030,21 +11116,21 @@ void ReturnValue<T>::Set(bool value) {
 
 template<typename T>
 void ReturnValue<T>::SetNull() {
-  TYPE_CHECK(T, Primitive);
+  static_assert(std::is_base_of<T, Primitive>::value, "type check");
   typedef internal::Internals I;
   *value_ = *I::GetRoot(GetIsolate(), I::kNullValueRootIndex);
 }
 
 template<typename T>
 void ReturnValue<T>::SetUndefined() {
-  TYPE_CHECK(T, Primitive);
+  static_assert(std::is_base_of<T, Primitive>::value, "type check");
   typedef internal::Internals I;
   *value_ = *I::GetRoot(GetIsolate(), I::kUndefinedValueRootIndex);
 }
 
 template<typename T>
 void ReturnValue<T>::SetEmptyString() {
-  TYPE_CHECK(T, String);
+  static_assert(std::is_base_of<T, String>::value, "type check");
   typedef internal::Internals I;
   *value_ = *I::GetRoot(GetIsolate(), I::kEmptyStringRootIndex);
 }
@@ -11066,8 +11152,7 @@ Local<Value> ReturnValue<T>::Get() const {
 template <typename T>
 template <typename S>
 void ReturnValue<T>::Set(S* whatever) {
-  // Uncompilable to prevent inadvertent misuse.
-  TYPE_CHECK(S*, Primitive);
+  static_assert(sizeof(S) < 0, "incompilable to prevent inadvertent misuse");
 }
 
 template <typename T>
@@ -11084,14 +11169,24 @@ FunctionCallbackInfo<T>::FunctionCallbackInfo(internal::Address* implicit_args,
 
 template<typename T>
 Local<Value> FunctionCallbackInfo<T>::operator[](int i) const {
+  // values_ points to the first argument (not the receiver).
   if (i < 0 || length_ <= i) return Local<Value>(*Undefined(GetIsolate()));
+#ifdef V8_REVERSE_JSARGS
+  return Local<Value>(reinterpret_cast<Value*>(values_ + i));
+#else
   return Local<Value>(reinterpret_cast<Value*>(values_ - i));
+#endif
 }
 
 
 template<typename T>
 Local<Object> FunctionCallbackInfo<T>::This() const {
+  // values_ points to the first argument (not the receiver).
+#ifdef V8_REVERSE_JSARGS
+  return Local<Object>(reinterpret_cast<Object*>(values_ - 1));
+#else
   return Local<Object>(reinterpret_cast<Object*>(values_ + 1));
+#endif
 }
 
 
@@ -11967,9 +12062,5 @@ size_t SnapshotCreator::AddData(Local<T> object) {
 
 
 }  // namespace v8
-
-
-#undef TYPE_CHECK
-
 
 #endif  // INCLUDE_V8_H_

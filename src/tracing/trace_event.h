@@ -8,8 +8,8 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-value"
 
-#include "node_platform.h"
 #include "v8-platform.h"
+#include "tracing/agent.h"
 #include "trace_event_common.h"
 #include <atomic>
 
@@ -314,15 +314,20 @@ const int kZeroNumArgs = 0;
 const decltype(nullptr) kGlobalScope = nullptr;
 const uint64_t kNoId = 0;
 
-// Extern (for now) because embedders need access to TraceEventHelper.
-// Refs: https://github.com/nodejs/node/pull/28724
-class NODE_EXTERN TraceEventHelper {
+class TraceEventHelper {
  public:
   static v8::TracingController* GetTracingController();
   static void SetTracingController(v8::TracingController* controller);
 
   static Agent* GetAgent();
   static void SetAgent(Agent* agent);
+
+  static inline const uint8_t* GetCategoryGroupEnabled(const char* group) {
+    v8::TracingController* controller = GetTracingController();
+    static const uint8_t disabled = 0;
+    if (UNLIKELY(controller == nullptr)) return &disabled;
+    return controller->GetCategoryGroupEnabled(group);
+  }
 };
 
 // TraceID encapsulates an ID that can either be an integer or pointer. Pointers
@@ -472,6 +477,7 @@ static inline uint64_t AddTraceEventImpl(
   // DCHECK(num_args, 2);
   v8::TracingController* controller =
       node::tracing::TraceEventHelper::GetTracingController();
+  if (controller == nullptr) return 0;
   return controller->AddTraceEvent(phase, category_group_enabled, name, scope, id,
                                    bind_id, num_args, arg_names, arg_types,
                                    arg_values, arg_convertibles, flags);
@@ -494,6 +500,7 @@ static V8_INLINE uint64_t AddTraceEventWithTimestampImpl(
   // DCHECK_LE(num_args, 2);
   v8::TracingController* controller =
       node::tracing::TraceEventHelper::GetTracingController();
+  if (controller == nullptr) return 0;
   return controller->AddTraceEventWithTimestamp(
       phase, category_group_enabled, name, scope, id, bind_id, num_args,
       arg_names, arg_types, arg_values, arg_convertables, flags, timestamp);

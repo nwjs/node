@@ -153,7 +153,8 @@
       'lib/internal/dtrace.js',
       'lib/internal/encoding.js',
       'lib/internal/errors.js',
-      'lib/internal/error-serdes.js',
+      'lib/internal/error_serdes.js',
+      'lib/internal/event_target.js',
       'lib/internal/fixed_queue.js',
       'lib/internal/freelist.js',
       'lib/internal/freeze_intrinsics.js',
@@ -183,6 +184,7 @@
       'lib/internal/main/run_third_party_main.js',
       'lib/internal/main/worker_thread.js',
       'lib/internal/modules/run_main.js',
+      'lib/internal/modules/package_json_reader.js',
       'lib/internal/modules/cjs/helpers.js',
       'lib/internal/modules/cjs/loader.js',
       'lib/internal/modules/esm/loader.js',
@@ -241,6 +243,7 @@
       'lib/internal/vm/module.js',
       'lib/internal/worker.js',
       'lib/internal/worker/io.js',
+      'lib/internal/worker/js_transferable.js',
       'lib/internal/watchdog.js',
       'lib/internal/streams/lazy_transform.js',
       'lib/internal/streams/async_iterator.js',
@@ -618,6 +621,7 @@
         'src/js_native_api_v8_internals.h',
         'src/js_stream.cc',
         'src/json_utils.cc',
+        'src/js_udp_wrap.cc',
         'src/module_wrap.cc',
         'src/node.cc',
         'src/node_snapshot_stub.cc',
@@ -629,7 +633,6 @@
         'src/node_contextify.cc',
         'src/node_credentials.cc',
         'src/node_dir.cc',
-        'src/node_domain.cc',
         'src/node_env_var.cc',
         'src/node_errors.cc',
         'src/node_file.cc',
@@ -690,6 +693,8 @@
         'src/aliased_buffer.h',
         'src/aliased_struct.h',
         'src/aliased_struct-inl.h',
+        'src/allocated_buffer.h',
+        'src/allocated_buffer-inl.h',
         'src/async_wrap.h',
         'src/async_wrap-inl.h',
         'src/base_object.h',
@@ -792,6 +797,7 @@
 
       'variables': {
         'openssl_system_ca_path%': '',
+        'openssl_default_cipher_list%': '',
       },
 
       'defines': [
@@ -813,6 +819,11 @@
       'msvs_disabled_warnings!': [4244],
 
       'conditions': [
+        [ 'openssl_default_cipher_list!=""', {
+          'defines': [
+            'NODE_OPENSSL_DEFAULT_CIPHER_LIST="<(openssl_default_cipher_list)"'
+           ]
+        }],
         [ 'error_on_warn=="true"', {
           'cflags': ['-Werror'],
           'xcode_settings': {

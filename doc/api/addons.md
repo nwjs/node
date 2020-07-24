@@ -1,4 +1,4 @@
-# C++ Addons
+# C++ addons
 
 <!--introduced_in=v0.10.0-->
 <!-- type=misc -->
@@ -65,7 +65,6 @@ namespace demo {
 using v8::FunctionCallbackInfo;
 using v8::Isolate;
 using v8::Local;
-using v8::NewStringType;
 using v8::Object;
 using v8::String;
 using v8::Value;
@@ -73,7 +72,7 @@ using v8::Value;
 void Method(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
   args.GetReturnValue().Set(String::NewFromUtf8(
-      isolate, "world", NewStringType::kNormal).ToLocalChecked());
+      isolate, "world").ToLocalChecked());
 }
 
 void Initialize(Local<Object> exports) {
@@ -226,8 +225,7 @@ NODE_MODULE_INIT(/* exports, module, context */) {
   // per-addon-instance data we created above by passing `external` as the
   // third parameter to the `FunctionTemplate` constructor.
   exports->Set(context,
-               String::NewFromUtf8(isolate, "method", NewStringType::kNormal)
-                  .ToLocalChecked(),
+               String::NewFromUtf8(isolate, "method").ToLocalChecked(),
                FunctionTemplate::New(isolate, Method, external)
                   ->GetFunction(context).ToLocalChecked()).FromJust();
 }
@@ -395,7 +393,7 @@ only the symbols exported by Node.js will be available.
 source image. Using this option, the Addon will have access to the full set of
 dependencies.
 
-### Loading Addons using `require()`
+### Loading addons using `require()`
 
 The filename extension of the compiled Addon binary is `.node` (as opposed
 to `.dll` or `.so`). The [`require()`][require] function is written to look for
@@ -410,7 +408,7 @@ there is a file `addon.js` in the same directory as the binary `addon.node`,
 then [`require('addon')`][require] will give precedence to the `addon.js` file
 and load it instead.
 
-## Native Abstractions for Node.js
+## Native abstractions for Node.js
 
 Each of the examples illustrated in this document make direct use of the
 Node.js and V8 APIs for implementing Addons. The V8 API can, and has, changed
@@ -538,7 +536,6 @@ using v8::Exception;
 using v8::FunctionCallbackInfo;
 using v8::Isolate;
 using v8::Local;
-using v8::NewStringType;
 using v8::Number;
 using v8::Object;
 using v8::String;
@@ -555,8 +552,7 @@ void Add(const FunctionCallbackInfo<Value>& args) {
     // Throw an Error that is passed back to JavaScript
     isolate->ThrowException(Exception::TypeError(
         String::NewFromUtf8(isolate,
-                            "Wrong number of arguments",
-                            NewStringType::kNormal).ToLocalChecked()));
+                            "Wrong number of arguments").ToLocalChecked()));
     return;
   }
 
@@ -564,8 +560,7 @@ void Add(const FunctionCallbackInfo<Value>& args) {
   if (!args[0]->IsNumber() || !args[1]->IsNumber()) {
     isolate->ThrowException(Exception::TypeError(
         String::NewFromUtf8(isolate,
-                            "Wrong arguments",
-                            NewStringType::kNormal).ToLocalChecked()));
+                            "Wrong arguments").ToLocalChecked()));
     return;
   }
 
@@ -614,7 +609,6 @@ using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::Isolate;
 using v8::Local;
-using v8::NewStringType;
 using v8::Null;
 using v8::Object;
 using v8::String;
@@ -627,8 +621,7 @@ void RunCallback(const FunctionCallbackInfo<Value>& args) {
   const unsigned argc = 1;
   Local<Value> argv[argc] = {
       String::NewFromUtf8(isolate,
-                          "hello world",
-                          NewStringType::kNormal).ToLocalChecked() };
+                          "hello world").ToLocalChecked() };
   cb->Call(context, Null(isolate), argc, argv).ToLocalChecked();
 }
 
@@ -676,7 +669,6 @@ using v8::Context;
 using v8::FunctionCallbackInfo;
 using v8::Isolate;
 using v8::Local;
-using v8::NewStringType;
 using v8::Object;
 using v8::String;
 using v8::Value;
@@ -688,8 +680,7 @@ void CreateObject(const FunctionCallbackInfo<Value>& args) {
   Local<Object> obj = Object::New(isolate);
   obj->Set(context,
            String::NewFromUtf8(isolate,
-                               "msg",
-                               NewStringType::kNormal).ToLocalChecked(),
+                               "msg").ToLocalChecked(),
                                args[0]->ToString(context).ToLocalChecked())
            .FromJust();
 
@@ -734,7 +725,6 @@ using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
 using v8::Isolate;
 using v8::Local;
-using v8::NewStringType;
 using v8::Object;
 using v8::String;
 using v8::Value;
@@ -742,7 +732,7 @@ using v8::Value;
 void MyFunction(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
   args.GetReturnValue().Set(String::NewFromUtf8(
-      isolate, "hello world", NewStringType::kNormal).ToLocalChecked());
+      isolate, "hello world").ToLocalChecked());
 }
 
 void CreateFunction(const FunctionCallbackInfo<Value>& args) {
@@ -754,7 +744,7 @@ void CreateFunction(const FunctionCallbackInfo<Value>& args) {
 
   // omit this to make it anonymous
   fn->SetName(String::NewFromUtf8(
-      isolate, "theFunction", NewStringType::kNormal).ToLocalChecked());
+      isolate, "theFunction").ToLocalChecked());
 
   args.GetReturnValue().Set(fn);
 }
@@ -850,7 +840,6 @@ using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
 using v8::Isolate;
 using v8::Local;
-using v8::NewStringType;
 using v8::Number;
 using v8::Object;
 using v8::ObjectTemplate;
@@ -874,8 +863,7 @@ void MyObject::Init(Local<Object> exports) {
 
   // Prepare constructor template
   Local<FunctionTemplate> tpl = FunctionTemplate::New(isolate, New, addon_data);
-  tpl->SetClassName(String::NewFromUtf8(
-      isolate, "MyObject", NewStringType::kNormal).ToLocalChecked());
+  tpl->SetClassName(String::NewFromUtf8(isolate, "MyObject").ToLocalChecked());
   tpl->InstanceTemplate()->SetInternalFieldCount(1);
 
   // Prototype
@@ -884,8 +872,8 @@ void MyObject::Init(Local<Object> exports) {
   Local<Function> constructor = tpl->GetFunction(context).ToLocalChecked();
   addon_data->SetInternalField(0, constructor);
   exports->Set(context, String::NewFromUtf8(
-      isolate, "MyObject", NewStringType::kNormal).ToLocalChecked(),
-               constructor).FromJust();
+      isolate, "MyObject").ToLocalChecked(),
+      constructor).FromJust();
 }
 
 void MyObject::New(const FunctionCallbackInfo<Value>& args) {
@@ -1055,7 +1043,6 @@ using v8::FunctionTemplate;
 using v8::Global;
 using v8::Isolate;
 using v8::Local;
-using v8::NewStringType;
 using v8::Number;
 using v8::Object;
 using v8::String;
@@ -1074,8 +1061,7 @@ MyObject::~MyObject() {
 void MyObject::Init(Isolate* isolate) {
   // Prepare constructor template
   Local<FunctionTemplate> tpl = FunctionTemplate::New(isolate, New);
-  tpl->SetClassName(String::NewFromUtf8(
-      isolate, "MyObject", NewStringType::kNormal).ToLocalChecked());
+  tpl->SetClassName(String::NewFromUtf8(isolate, "MyObject").ToLocalChecked());
   tpl->InstanceTemplate()->SetInternalFieldCount(1);
 
   // Prototype
@@ -1279,7 +1265,6 @@ using v8::FunctionTemplate;
 using v8::Global;
 using v8::Isolate;
 using v8::Local;
-using v8::NewStringType;
 using v8::Object;
 using v8::String;
 using v8::Value;
@@ -1297,8 +1282,7 @@ MyObject::~MyObject() {
 void MyObject::Init(Isolate* isolate) {
   // Prepare constructor template
   Local<FunctionTemplate> tpl = FunctionTemplate::New(isolate, New);
-  tpl->SetClassName(String::NewFromUtf8(
-      isolate, "MyObject", NewStringType::kNormal).ToLocalChecked());
+  tpl->SetClassName(String::NewFromUtf8(isolate, "MyObject").ToLocalChecked());
   tpl->InstanceTemplate()->SetInternalFieldCount(1);
 
   Local<Context> context = isolate->GetCurrentContext();

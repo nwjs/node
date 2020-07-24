@@ -17,7 +17,6 @@ using v8::Isolate;
 using v8::Local;
 using v8::MaybeLocal;
 using v8::MicrotasksScope;
-using v8::NewStringType;
 using v8::Object;
 using v8::String;
 using v8::Value;
@@ -164,12 +163,16 @@ MaybeLocal<Value> InternalMakeCallback(Environment* env,
 
   Local<Function> hook_cb = env->async_hooks_callback_trampoline();
   int flags = InternalCallbackScope::kNoFlags;
-  int hook_count = 0;
+  bool use_async_hooks_trampoline = false;
+  AsyncHooks* async_hooks = env->async_hooks();
   if (!hook_cb.IsEmpty()) {
+    // Use the callback trampoline if there are any before or after hooks, or
+    // we can expect some kind of usage of async_hooks.executionAsyncResource().
     flags = InternalCallbackScope::kSkipAsyncHooks;
-    AsyncHooks* async_hooks = env->async_hooks();
-    hook_count = async_hooks->fields()[AsyncHooks::kBefore] +
-                 async_hooks->fields()[AsyncHooks::kAfter];
+    use_async_hooks_trampoline =
+        async_hooks->fields()[AsyncHooks::kBefore] +
+        async_hooks->fields()[AsyncHooks::kAfter] +
+        async_hooks->fields()[AsyncHooks::kUsesExecutionAsyncResource] > 0;
   }
 
   InternalCallbackScope scope(env, resource, asyncContext, flags);
@@ -179,12 +182,13 @@ MaybeLocal<Value> InternalMakeCallback(Environment* env,
 
   MaybeLocal<Value> ret;
 
-  if (hook_count != 0) {
-    MaybeStackBuffer<Local<Value>, 16> args(2 + argc);
+  if (use_async_hooks_trampoline) {
+    MaybeStackBuffer<Local<Value>, 16> args(3 + argc);
     args[0] = v8::Number::New(env->isolate(), asyncContext.async_id);
-    args[1] = callback;
+    args[1] = resource;
+    args[2] = callback;
     for (int i = 0; i < argc; i++) {
-      args[i + 2] = argv[i];
+      args[i + 3] = argv[i];
     }
     ret = hook_cb->Call(env->context(), recv, args.length(), &args[0]);
   } else {
@@ -213,8 +217,7 @@ MaybeLocal<Value> MakeCallback(Isolate* isolate,
                                Local<Value> argv[],
                                async_context asyncContext) {
   Local<String> method_string =
-      String::NewFromUtf8(isolate, method, NewStringType::kNormal)
-          .ToLocalChecked();
+      String::NewFromUtf8(isolate, method).ToLocalChecked();
   return MakeCallback(isolate, recv, method_string, argc, argv, asyncContext);
 }
 

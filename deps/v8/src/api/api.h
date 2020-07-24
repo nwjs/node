@@ -33,6 +33,7 @@ namespace debug {
 class AccessorPair;
 class GeneratorObject;
 class Script;
+class WasmValue;
 class WeakMap;
 }  // namespace debug
 
@@ -129,6 +130,7 @@ class RegisteredExtension {
   V(debug::Script, Script)                     \
   V(debug::WeakMap, JSWeakMap)                 \
   V(debug::AccessorPair, AccessorPair)         \
+  V(debug::WasmValue, WasmValue)               \
   V(Promise, JSPromise)                        \
   V(Primitive, Object)                         \
   V(PrimitiveArray, FixedArray)                \
@@ -273,16 +275,6 @@ class Utils {
   template <class From, class To>
   static inline v8::internal::Handle<To> OpenHandle(v8::Local<From> handle) {
     return OpenHandle(*handle);
-  }
-
-  static inline CompiledWasmModule Convert(
-      std::shared_ptr<i::wasm::NativeModule> native_module) {
-    return CompiledWasmModule{std::move(native_module)};
-  }
-
-  static inline const std::shared_ptr<i::wasm::NativeModule>& Open(
-      const CompiledWasmModule& compiled_module) {
-    return compiled_module.native_module_;
   }
 
  private:

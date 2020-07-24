@@ -18,15 +18,17 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+
 #include <memory>
 #include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
-#include "v8-internal.h"  // NOLINT(build/include)
-#include "v8-version.h"   // NOLINT(build/include)
-#include "v8config.h"     // NOLINT(build/include)
+#include "cppgc/common.h"
+#include "v8-internal.h"  // NOLINT(build/include_directory)
+#include "v8-version.h"   // NOLINT(build/include_directory)
+#include "v8config.h"     // NOLINT(build/include_directory)
 
 // We reserve the V8_* prefix for macros defined in V8 public API and
 // assume there are no name conflicts with the embedder's code.
@@ -123,19 +125,21 @@ namespace internal {
 enum class ArgumentsType;
 template <ArgumentsType>
 class Arguments;
+template <typename T>
+class CustomArguments;
 class DeferredHandles;
+class FunctionCallbackArguments;
+class GlobalHandles;
 class Heap;
 class HeapObject;
 class ExternalString;
 class Isolate;
 class LocalEmbedderHeapTracer;
 class MicrotaskQueue;
-struct ScriptStreamingData;
-template<typename T> class CustomArguments;
 class PropertyCallbackArguments;
-class FunctionCallbackArguments;
-class GlobalHandles;
+class ReadOnlyHeap;
 class ScopedExternalStringLock;
+struct ScriptStreamingData;
 class ThreadLocalTop;
 
 namespace wasm {
@@ -4764,9 +4768,16 @@ class V8_EXPORT CompiledWasmModule {
    */
   MemorySpan<const uint8_t> GetWireBytesRef();
 
+  /* This is not available on Node v14.x.
+   * const std::string& source_url() const { return source_url_; }
+   */
+
  private:
-  explicit CompiledWasmModule(std::shared_ptr<internal::wasm::NativeModule>);
-  friend class Utils;
+  friend class WasmModuleObject;
+  friend class WasmStreaming;
+
+  explicit CompiledWasmModule(std::shared_ptr<internal::wasm::NativeModule>,
+                              const char* source_url, size_t url_length);
 
   const std::shared_ptr<internal::wasm::NativeModule> native_module_;
 };
@@ -7172,6 +7183,9 @@ class V8_EXPORT Exception {
   static Local<Value> ReferenceError(Local<String> message);
   static Local<Value> SyntaxError(Local<String> message);
   static Local<Value> TypeError(Local<String> message);
+  static Local<Value> WasmCompileError(Local<String> message);
+  static Local<Value> WasmLinkError(Local<String> message);
+  static Local<Value> WasmRuntimeError(Local<String> message);
   static Local<Value> Error(Local<String> message);
 
   /**
@@ -7255,7 +7269,8 @@ typedef MaybeLocal<Promise> (*HostImportModuleDynamicallyCallback)(
 
 /**
  * HostInitializeImportMetaObjectCallback is called the first time import.meta
- * is accessed for a module. Subsequent access will reuse the same value.
+ * is accessed for a module. Subsequent access will reuse the same value. The
+ * callback must not throw.
  *
  * The method combines two implementation-defined abstract operations into one:
  * HostGetImportMetaProperties and HostFinalizeImportMeta.
@@ -7517,6 +7532,9 @@ typedef bool (*WasmThreadsEnabledCallback)(Local<Context> context);
 typedef Local<String> (*WasmLoadSourceMapCallback)(Isolate* isolate,
                                                    const char* name);
 
+// --- Callback for checking if WebAssembly Simd is enabled ---
+typedef bool (*WasmSimdEnabledCallback)(Local<Context> context);
+
 // --- Garbage Collection Callbacks ---
 
 /**
@@ -7594,6 +7612,7 @@ class V8_EXPORT SharedMemoryStatistics {
   size_t read_only_space_physical_size_;
 
   friend class V8;
+  friend class internal::ReadOnlyHeap;
 };
 
 /**
@@ -7873,16 +7892,12 @@ enum class MemoryPressureLevel { kNone, kModerate, kCritical };
  */
 class V8_EXPORT EmbedderHeapTracer {
  public:
+  using EmbedderStackState = cppgc::EmbedderStackState;
+
   enum TraceFlags : uint64_t {
     kNoFlags = 0,
     kReduceMemory = 1 << 0,
-  };
-
-  // Indicator for the stack state of the embedder.
-  enum EmbedderStackState {
-    kUnknown,
-    kNonEmpty,
-    kEmpty,
+    kForced = 1 << 2,
   };
 
   /**
@@ -8445,7 +8460,7 @@ class V8_EXPORT Isolate {
     kOptimizedFunctionWithOneShotBytecode = 71,
     kRegExpMatchIsTrueishOnNonJSRegExp = 72,
     kRegExpMatchIsFalseishOnJSRegExp = 73,
-    kDateGetTimezoneOffset = 74,
+    kDateGetTimezoneOffset = 74,  // Unused.
     kStringNormalize = 75,
     kCallSiteAPIGetFunctionSloppyCall = 76,
     kCallSiteAPIGetThisSloppyCall = 77,
@@ -8461,6 +8476,24 @@ class V8_EXPORT Isolate {
     kDateTimeFormatDateTimeStyle = 87,
     kBreakIteratorTypeWord = 88,
     kBreakIteratorTypeLine = 89,
+    kInvalidatedArrayBufferDetachingProtector = 90,
+    kInvalidatedArrayConstructorProtector = 91,
+    kInvalidatedArrayIteratorLookupChainProtector = 92,
+    kInvalidatedArraySpeciesLookupChainProtector = 93,
+    kInvalidatedIsConcatSpreadableLookupChainProtector = 94,
+    kInvalidatedMapIteratorLookupChainProtector = 95,
+    kInvalidatedNoElementsProtector = 96,
+    kInvalidatedPromiseHookProtector = 97,
+    kInvalidatedPromiseResolveLookupChainProtector = 98,
+    kInvalidatedPromiseSpeciesLookupChainProtector = 99,
+    kInvalidatedPromiseThenLookupChainProtector = 100,
+    kInvalidatedRegExpSpeciesLookupChainProtector = 101,
+    kInvalidatedSetIteratorLookupChainProtector = 102,
+    kInvalidatedStringIteratorLookupChainProtector = 103,
+    kInvalidatedStringLengthOverflowLookupChainProtector = 104,
+    kInvalidatedTypedArraySpeciesLookupChainProtector = 105,
+    kWasmSimdOpcodes = 106,
+    kVarRedeclaredCatchBinding = 107,
 
     // If you add new values here, you'll also need to update Chromium's:
     // web_feature.mojom, use_counter_callback.cc, and enums.xml. V8 changes to
@@ -9374,6 +9407,8 @@ class V8_EXPORT Isolate {
 
   void SetWasmLoadSourceMapCallback(WasmLoadSourceMapCallback callback);
 
+  void SetWasmSimdEnabledCallback(WasmSimdEnabledCallback callback);
+
   /**
   * Check if V8 is dead and therefore unusable.  This is the case after
   * fatal errors such as out-of-memory situations.
@@ -9601,7 +9636,8 @@ class V8_EXPORT V8 {
   V8_INLINE static bool Initialize() {
     const int kBuildConfiguration =
         (internal::PointerCompressionIsEnabled() ? kPointerCompression : 0) |
-        (internal::SmiValuesAre31Bits() ? k31BitSmis : 0);
+        (internal::SmiValuesAre31Bits() ? k31BitSmis : 0) |
+        (internal::HeapSandboxIsEnabled() ? kHeapSandbox : 0);
     return Initialize(kBuildConfiguration);
   }
 
@@ -9740,6 +9776,7 @@ class V8_EXPORT V8 {
   enum BuildConfigurationFeatures {
     kPointerCompression = 1 << 0,
     k31BitSmis = 1 << 1,
+    kHeapSandbox = 1 << 2,
   };
 
   /**
@@ -11381,7 +11418,9 @@ void* Object::GetAlignedPointerFromInternalField(int index) {
                 instance_type == I::kJSApiObjectType ||
                 instance_type == I::kJSSpecialApiObjectType)) {
     int offset = I::kJSObjectHeaderSize + (I::kEmbedderDataSlotSize * index);
-    return I::ReadRawField<void*>(obj, offset);
+    internal::Isolate* isolate = I::GetIsolateForHeapSandbox(obj);
+    A value = I::ReadExternalPointerField(isolate, obj, offset);
+    return reinterpret_cast<void*>(value);
   }
 #endif
   return SlowGetAlignedPointerFromInternalField(index);
@@ -11411,7 +11450,9 @@ String::ExternalStringResource* String::GetExternalStringResource() const {
 
   ExternalStringResource* result;
   if (I::IsExternalTwoByteString(I::GetInstanceType(obj))) {
-    void* value = I::ReadRawField<void*>(obj, I::kStringResourceOffset);
+    internal::Isolate* isolate = I::GetIsolateForHeapSandbox(obj);
+    A value =
+        I::ReadExternalPointerField(isolate, obj, I::kStringResourceOffset);
     result = reinterpret_cast<String::ExternalStringResource*>(value);
   } else {
     result = GetExternalStringResourceSlow();
@@ -11433,8 +11474,10 @@ String::ExternalStringResourceBase* String::GetExternalStringResourceBase(
   ExternalStringResourceBase* resource;
   if (type == I::kExternalOneByteRepresentationTag ||
       type == I::kExternalTwoByteRepresentationTag) {
-    void* value = I::ReadRawField<void*>(obj, I::kStringResourceOffset);
-    resource = static_cast<ExternalStringResourceBase*>(value);
+    internal::Isolate* isolate = I::GetIsolateForHeapSandbox(obj);
+    A value =
+        I::ReadExternalPointerField(isolate, obj, I::kStringResourceOffset);
+    resource = reinterpret_cast<ExternalStringResourceBase*>(value);
   } else {
     resource = GetExternalStringResourceBaseSlow(encoding_out);
   }
@@ -11950,7 +11993,6 @@ MaybeLocal<T> Isolate::GetDataFromSnapshotOnce(size_t index) {
 int64_t Isolate::AdjustAmountOfExternalAllocatedMemory(
     int64_t change_in_bytes) {
   typedef internal::Internals I;
-  constexpr int64_t kMemoryReducerActivationLimit = 32 * 1024 * 1024;
   int64_t* external_memory = reinterpret_cast<int64_t*>(
       reinterpret_cast<uint8_t*>(this) + I::kExternalMemoryOffset);
   int64_t* external_memory_limit = reinterpret_cast<int64_t*>(
@@ -11973,14 +12015,6 @@ int64_t Isolate::AdjustAmountOfExternalAllocatedMemory(
 
   if (change_in_bytes <= 0) return *external_memory;
 
-  int64_t allocation_diff_since_last_mc = static_cast<int64_t>(
-      static_cast<uint64_t>(*external_memory) -
-      static_cast<uint64_t>(*external_memory_low_since_mc));
-  // Only check memory pressure and potentially trigger GC if the amount of
-  // external memory increased.
-  if (allocation_diff_since_last_mc > kMemoryReducerActivationLimit) {
-    CheckMemoryPressure();
-  }
   if (amount > *external_memory_limit) {
     ReportExternalAllocationLimitReached();
   }
@@ -12022,7 +12056,9 @@ void* Context::GetAlignedPointerFromEmbedderData(int index) {
       I::ReadTaggedPointerField(ctx, I::kNativeContextEmbedderDataOffset);
   int value_offset =
       I::kEmbedderDataArrayHeaderSize + (I::kEmbedderDataSlotSize * index);
-  return I::ReadRawField<void*>(embedder_data, value_offset);
+  internal::Isolate* isolate = I::GetIsolateForHeapSandbox(ctx);
+  return reinterpret_cast<void*>(
+      I::ReadExternalPointerField(isolate, embedder_data, value_offset));
 #else
   return SlowGetAlignedPointerFromEmbedderData(index);
 #endif

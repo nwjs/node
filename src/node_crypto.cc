@@ -572,73 +572,65 @@ void SecureContext::Init(const FunctionCallbackInfo<Value>& args) {
     // are still accepted.  They are OpenSSL's way of saying that all known
     // protocols below TLS 1.3 are supported unless explicitly disabled (which
     // we do below for SSLv2 and SSLv3.)
-    if (strcmp(*sslmethod, "SSLv2_method") == 0) {
+    if (sslmethod == "SSLv2_method" ||
+        sslmethod == "SSLv2_server_method" ||
+        sslmethod == "SSLv2_client_method") {
       THROW_ERR_TLS_INVALID_PROTOCOL_METHOD(env, "SSLv2 methods disabled");
       return;
-    } else if (strcmp(*sslmethod, "SSLv2_server_method") == 0) {
-      THROW_ERR_TLS_INVALID_PROTOCOL_METHOD(env, "SSLv2 methods disabled");
-      return;
-    } else if (strcmp(*sslmethod, "SSLv2_client_method") == 0) {
-      THROW_ERR_TLS_INVALID_PROTOCOL_METHOD(env, "SSLv2 methods disabled");
-      return;
-    } else if (strcmp(*sslmethod, "SSLv3_method") == 0) {
+    } else if (sslmethod == "SSLv3_method" ||
+               sslmethod == "SSLv3_server_method" ||
+               sslmethod == "SSLv3_client_method") {
       THROW_ERR_TLS_INVALID_PROTOCOL_METHOD(env, "SSLv3 methods disabled");
       return;
-    } else if (strcmp(*sslmethod, "SSLv3_server_method") == 0) {
-      THROW_ERR_TLS_INVALID_PROTOCOL_METHOD(env, "SSLv3 methods disabled");
-      return;
-    } else if (strcmp(*sslmethod, "SSLv3_client_method") == 0) {
-      THROW_ERR_TLS_INVALID_PROTOCOL_METHOD(env, "SSLv3 methods disabled");
-      return;
-    } else if (strcmp(*sslmethod, "SSLv23_method") == 0) {
+    } else if (sslmethod == "SSLv23_method") {
       max_version = TLS1_2_VERSION;
-    } else if (strcmp(*sslmethod, "SSLv23_server_method") == 0) {
+    } else if (sslmethod == "SSLv23_server_method") {
       max_version = TLS1_2_VERSION;
       method = TLS_server_method();
-    } else if (strcmp(*sslmethod, "SSLv23_client_method") == 0) {
+    } else if (sslmethod == "SSLv23_client_method") {
       max_version = TLS1_2_VERSION;
       method = TLS_client_method();
-    } else if (strcmp(*sslmethod, "TLS_method") == 0) {
+    } else if (sslmethod == "TLS_method") {
       min_version = 0;
       max_version = MAX_SUPPORTED_VERSION;
-    } else if (strcmp(*sslmethod, "TLS_server_method") == 0) {
+    } else if (sslmethod == "TLS_server_method") {
       min_version = 0;
       max_version = MAX_SUPPORTED_VERSION;
       method = TLS_server_method();
-    } else if (strcmp(*sslmethod, "TLS_client_method") == 0) {
+    } else if (sslmethod == "TLS_client_method") {
       min_version = 0;
       max_version = MAX_SUPPORTED_VERSION;
       method = TLS_client_method();
-    } else if (strcmp(*sslmethod, "TLSv1_method") == 0) {
+    } else if (sslmethod == "TLSv1_method") {
       min_version = TLS1_VERSION;
       max_version = TLS1_VERSION;
-    } else if (strcmp(*sslmethod, "TLSv1_server_method") == 0) {
+    } else if (sslmethod == "TLSv1_server_method") {
       min_version = TLS1_VERSION;
       max_version = TLS1_VERSION;
       method = TLS_server_method();
-    } else if (strcmp(*sslmethod, "TLSv1_client_method") == 0) {
+    } else if (sslmethod == "TLSv1_client_method") {
       min_version = TLS1_VERSION;
       max_version = TLS1_VERSION;
       method = TLS_client_method();
-    } else if (strcmp(*sslmethod, "TLSv1_1_method") == 0) {
+    } else if (sslmethod == "TLSv1_1_method") {
       min_version = TLS1_1_VERSION;
       max_version = TLS1_1_VERSION;
-    } else if (strcmp(*sslmethod, "TLSv1_1_server_method") == 0) {
+    } else if (sslmethod == "TLSv1_1_server_method") {
       min_version = TLS1_1_VERSION;
       max_version = TLS1_1_VERSION;
       method = TLS_server_method();
-    } else if (strcmp(*sslmethod, "TLSv1_1_client_method") == 0) {
+    } else if (sslmethod == "TLSv1_1_client_method") {
       min_version = TLS1_1_VERSION;
       max_version = TLS1_1_VERSION;
       method = TLS_client_method();
-    } else if (strcmp(*sslmethod, "TLSv1_2_method") == 0) {
+    } else if (sslmethod == "TLSv1_2_method") {
       min_version = TLS1_2_VERSION;
       max_version = TLS1_2_VERSION;
-    } else if (strcmp(*sslmethod, "TLSv1_2_server_method") == 0) {
+    } else if (sslmethod == "TLSv1_2_server_method") {
       min_version = TLS1_2_VERSION;
       max_version = TLS1_2_VERSION;
       method = TLS_server_method();
-    } else if (strcmp(*sslmethod, "TLSv1_2_client_method") == 0) {
+    } else if (sslmethod == "TLSv1_2_client_method") {
       min_version = TLS1_2_VERSION;
       max_version = TLS1_2_VERSION;
       method = TLS_client_method();
@@ -1756,9 +1748,7 @@ void SSLWrap<Base>::AddMethods(Environment* env, Local<FunctionTemplate> t) {
                                   GetEphemeralKeyInfo);
   env->SetProtoMethodNoSideEffect(t, "getProtocol", GetProtocol);
 
-#ifdef SSL_set_max_send_fragment
   env->SetProtoMethod(t, "setMaxSendFragment", SetMaxSendFragment);
-#endif  // SSL_set_max_send_fragment
 
   env->SetProtoMethodNoSideEffect(t, "getALPNNegotiatedProtocol",
                                   GetALPNNegotiatedProto);
@@ -2117,8 +2107,6 @@ void SSLWrap<Base>::GetEphemeralKeyInfo(
   // ERR_get_error())
 }
 
-
-#ifdef SSL_set_max_send_fragment
 template <class Base>
 void SSLWrap<Base>::SetMaxSendFragment(
     const FunctionCallbackInfo<Value>& args) {
@@ -2132,7 +2120,6 @@ void SSLWrap<Base>::SetMaxSendFragment(
       args[0]->Int32Value(w->ssl_env()->context()).FromJust());
   args.GetReturnValue().Set(rv);
 }
-#endif  // SSL_set_max_send_fragment
 
 
 template <class Base>
@@ -2495,10 +2482,6 @@ void SSLWrap<Base>::CertCbDone(const FunctionCallbackInfo<Value>& args) {
                                  env->sni_context_string()).ToLocalChecked();
   Local<FunctionTemplate> cons = env->secure_context_constructor_template();
 
-  // Not an object, probably undefined or null
-  if (!ctx->IsObject())
-    goto fire_cb;
-
   if (cons->HasInstance(ctx)) {
     SecureContext* sc = Unwrap<SecureContext>(ctx.As<Object>());
     CHECK_NOT_NULL(sc);
@@ -2511,14 +2494,13 @@ void SSLWrap<Base>::CertCbDone(const FunctionCallbackInfo<Value>& args) {
       unsigned long err = ERR_get_error();  // NOLINT(runtime/int)
       return ThrowCryptoError(env, err, "CertCbDone");
     }
-  } else {
+  } else if (ctx->IsObject()) {
     // Failure: incorrect SNI context object
     Local<Value> err = Exception::TypeError(env->sni_context_err_string());
     w->MakeCallback(env->onerror_string(), 1, &err);
     return;
   }
 
- fire_cb:
   CertCb cb;
   void* arg;
 

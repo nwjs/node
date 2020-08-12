@@ -240,18 +240,22 @@ from version 3 with some additions. This means that it is not necessary
 to recompile for new versions of Node.js which are
 listed as supporting a later version.
 
-|       | 1       | 2        | 3        | 4        | 5         | 6         |
-|-------|---------|----------|----------|----------|-----------|-----------|
-| v6.x  |         |          | v6.14.2* |          |           |           |
-| v8.x  | v8.0.0* | v8.10.0* | v8.11.2  | v8.16.0  |           |           |
-| v9.x  | v9.0.0* | v9.3.0*  | v9.11.0* |          |           |           |
-| v10.x | v10.0.0 | v10.0.0  | v10.0.0  | v10.16.0 | v10.17.0  | v10.20.0  |
-| v11.x | v11.0.0 | v11.0.0  | v11.0.0  | v11.8.0  |           |           |
-| v12.x | v12.0.0 | v12.0.0  | v12.0.0  | v12.0.0  | v12.11.0  |           |
-| v13.x | v13.0.0 | v13.0.0  | v13.0.0  | v13.0.0  | v13.0.0   |           |
-| v14.x | v14.0.0 | v14.0.0  | v14.0.0  | v14.0.0  | v14.0.0   | v14.0.0   |
+|       | 1        | 2        | 3        | 4        | 5         | 6         |
+|-------|----------|----------|----------|----------|-----------|-----------|
+| v6.x  |          |          | v6.14.2* |          |           |           |
+| v8.x  | v8.6.0** | v8.10.0* | v8.11.2  | v8.16.0  |           |           |
+| v9.x  | v9.0.0*  | v9.3.0*  | v9.11.0* |          |           |           |
+| v10.x | v10.0.0  | v10.0.0  | v10.0.0  | v10.16.0 | v10.17.0  | v10.20.0  |
+| v11.x | v11.0.0  | v11.0.0  | v11.0.0  | v11.8.0  |           |           |
+| v12.x | v12.0.0  | v12.0.0  | v12.0.0  | v12.0.0  | v12.11.0  | v12.17.0  |
+| v13.x | v13.0.0  | v13.0.0  | v13.0.0  | v13.0.0  | v13.0.0   |           |
+| v14.x | v14.0.0  | v14.0.0  | v14.0.0  | v14.0.0  | v14.0.0   | v14.0.0   |
 
-\* Indicates that the N-API version was released as experimental
+\* N-API was experimental.
+
+\*\* Node.js 8.0.0 included N-API as experimental. It was released as N-API
+version 1 but continued to evolve until Node.js 8.6.0. The API is different in
+versions prior to Node.js 8.6.0. We recommend N-API version 3 or later.
 
 The N-APIs associated strictly with accessing ECMAScript features from native
 code can be found separately in `js_native_api.h` and `js_native_api_types.h`.
@@ -595,6 +599,27 @@ users to manage the lifetimes of JavaScript values, including defining their
 minimum lifetimes explicitly.
 
 For more details, review the [Object lifetime management][].
+
+#### napi_type_tag
+<!-- YAML
+added: v14.8.0
+-->
+
+A 128-bit value stored as two unsigned 64-bit integers. It serves as a UUID
+with which JavaScript objects can be "tagged" in order to ensure that they are
+of a certain type. This is a stronger check than [`napi_instanceof`][], because
+the latter can report a false positive if the object's prototype has been
+manipulated. Type-tagging is most useful in conjunction with [`napi_wrap`][]
+because it ensures that the pointer retrieved from a wrapped object can be
+safely cast to the native type corresponding to the type tag that had been
+previously applied to the JavaScript object.
+
+```c
+typedef struct {
+  uint64_t lower;
+  uint64_t upper;
+} napi_type_tag;
+```
 
 ### N-API callback types
 
@@ -1525,9 +1550,11 @@ and will lead the process to abort.
 The hooks will be called in reverse order, i.e. the most recently added one
 will be called first.
 
-Removing this hook can be done by using `napi_remove_env_cleanup_hook`.
+Removing this hook can be done by using [`napi_remove_env_cleanup_hook`][].
 Typically, that happens when the resource for which this hook was added
 is being torn down anyway.
+
+For asynchronous cleanup, [`napi_add_async_cleanup_hook`][] is available.
 
 #### napi_remove_env_cleanup_hook
 <!-- YAML
@@ -1547,6 +1574,52 @@ need to be exact matches.
 
 The function must have originally been registered
 with `napi_add_env_cleanup_hook`, otherwise the process will abort.
+
+#### napi_add_async_cleanup_hook
+<!-- YAML
+added: v14.8.0
+-->
+
+> Stability: 1 - Experimental
+
+```c
+NAPI_EXTERN napi_status napi_add_async_cleanup_hook(
+    napi_env env,
+    void (*fun)(void* arg, void(* cb)(void*), void* cbarg),
+    void* arg,
+    napi_async_cleanup_hook_handle* remove_handle);
+```
+
+Registers `fun` as a function to be run with the `arg` parameter once the
+current Node.js environment exits. Unlike [`napi_add_env_cleanup_hook`][],
+the hook is allowed to be asynchronous in this case, and must invoke the passed
+`cb()` function with `cbarg` once all asynchronous activity is finished.
+
+Otherwise, behavior generally matches that of [`napi_add_env_cleanup_hook`][].
+
+If `remove_handle` is not `NULL`, an opaque value will be stored in it
+that must later be passed to [`napi_remove_async_cleanup_hook`][],
+regardless of whether the hook has already been invoked.
+Typically, that happens when the resource for which this hook was added
+is being torn down anyway.
+
+#### napi_remove_async_cleanup_hook
+<!-- YAML
+added: v14.8.0
+-->
+
+> Stability: 1 - Experimental
+
+```c
+NAPI_EXTERN napi_status napi_remove_async_cleanup_hook(
+    napi_env env,
+    napi_async_cleanup_hook_handle remove_handle);
+```
+
+Unregisters the cleanup hook corresponding to `remove_handle`. This will prevent
+the hook from being executed, unless it has already started executing.
+This must be called on any `napi_async_cleanup_hook_handle` value retrieved
+from [`napi_add_async_cleanup_hook`][].
 
 ## Module registration
 N-API modules are registered in a manner similar to other modules
@@ -3140,7 +3213,12 @@ Returns `napi_ok` if the API succeeded.
 
 This API represents behavior similar to invoking the `typeof` Operator on
 the object as defined in [Section 12.5.5][] of the ECMAScript Language
-Specification. However, it has support for detecting an External value.
+Specification. However, there are some differences:
+
+1. It has support for detecting an External value.
+2. It detects `null` as a separate type, while ECMAScript `typeof` would detect
+   `object`.
+
 If `value` has a type that is invalid, an error is returned.
 
 ### napi_instanceof
@@ -4276,6 +4354,143 @@ if (is_instance) {
 
 The reference must be freed once it is no longer needed.
 
+There are occasions where `napi_instanceof()` is insufficient for ensuring that
+a JavaScript object is a wrapper for a certain native type. This is the case
+especially when wrapped JavaScript objects are passed back into the addon via
+static methods rather than as the `this` value of prototype methods. In such
+cases there is a chance that they may be unwrapped incorrectly.
+
+```js
+const myAddon = require('./build/Release/my_addon.node');
+
+// `openDatabase()` returns a JavaScript object that wraps a native database
+// handle.
+const dbHandle = myAddon.openDatabase();
+
+// `query()` returns a JavaScript object that wraps a native query handle.
+const queryHandle = myAddon.query(dbHandle, 'Gimme ALL the things!');
+
+// There is an accidental error in the line below. The first parameter to
+// `myAddon.queryHasRecords()` should be the database handle (`dbHandle`), not
+// the query handle (`query`), so the correct condition for the while-loop
+// should be
+//
+// myAddon.queryHasRecords(dbHandle, queryHandle)
+//
+while (myAddon.queryHasRecords(queryHandle, dbHandle)) {
+  // retrieve records
+}
+```
+
+In the above example `myAddon.queryHasRecords()` is a method that accepts two
+arguments. The first is a database handle and the second is a query handle.
+Internally, it unwraps the first argument and casts the resulting pointer to a
+native database handle. It then unwraps the second argument and casts the
+resulting pointer to a query handle. If the arguments are passed in the wrong
+order, the casts will work, however, there is a good chance that the underlying
+database operation will fail, or will even cause an invalid memory access.
+
+To ensure that the pointer retrieved from the first argument is indeed a pointer
+to a database handle and, similarly, that the pointer retrieved from the second
+argument is indeed a pointer to a query handle, the implementation of
+`queryHasRecords()` has to perform a type validation. Retaining the JavaScript
+class constructor from which the database handle was instantiated and the
+constructor from which the query handle was instantiated in `napi_ref`s can
+help, because `napi_instanceof()` can then be used to ensure that the instances
+passed into `queryHashRecords()` are indeed of the correct type.
+
+Unfortunately, `napi_instanceof()` does not protect against prototype
+manipulation. For example, the prototype of the database handle instance can be
+set to the prototype of the constructor for query handle instances. In this
+case, the database handle instance can appear as a query handle instance, and it
+will pass the `napi_instanceof()` test for a query handle instance, while still
+containing a pointer to a database handle.
+
+To this end, N-API provides type-tagging capabilities.
+
+A type tag is a 128-bit integer unique to the addon. N-API provides the
+`napi_type_tag` structure for storing a type tag. When such a value is passed
+along with a JavaScript object stored in a `napi_value` to
+`napi_type_tag_object()`, the JavaScript object will be "marked" with the
+type tag. The "mark" is invisible on the JavaScript side. When a JavaScript
+object arrives into a native binding, `napi_check_object_type_tag()` can be used
+along with the original type tag to determine whether the JavaScript object was
+previously "marked" with the type tag. This creates a type-checking capability
+of a higher fidelity than `napi_instanceof()` can provide, because such type-
+tagging survives prototype manipulation and addon unloading/reloading.
+
+Continuing the above example, the following skeleton addon implementation
+illustrates the use of `napi_type_tag_object()` and
+`napi_check_object_type_tag()`.
+
+```c
+// This value is the type tag for a database handle. The command
+//
+//   uuidgen | sed -r -e 's/-//g' -e 's/(.{16})(.*)/0x\1, 0x\2/'
+//
+// can be used to obtain the two values with which to initialize the structure.
+static const napi_type_tag DatabaseHandleTypeTag = {
+  0x1edf75a38336451d, 0xa5ed9ce2e4c00c38
+};
+
+// This value is the type tag for a query handle.
+static const napi_type_tag QueryHandleTypeTag = {
+  0x9c73317f9fad44a3, 0x93c3920bf3b0ad6a
+};
+
+static napi_value
+openDatabase(napi_env env, napi_callback_info info) {
+  napi_status status;
+  napi_value result;
+
+  // Perform the underlying action which results in a database handle.
+  DatabaseHandle* dbHandle = open_database();
+
+  // Create a new, empty JS object.
+  status = napi_create_object(env, &result);
+  if (status != napi_ok) return NULL;
+
+  // Tag the object to indicate that it holds a pointer to a `DatabaseHandle`.
+  status = napi_type_tag_object(env, result, &DatabaseHandleTypeTag);
+  if (status != napi_ok) return NULL;
+
+  // Store the pointer to the `DatabaseHandle` structure inside the JS object.
+  status = napi_wrap(env, result, dbHandle, NULL, NULL, NULL);
+  if (status != napi_ok) return NULL;
+
+  return result;
+}
+
+// Later when we receive a JavaScript object purporting to be a database handle
+// we can use `napi_check_object_type_tag()` to ensure that it is indeed such a
+// handle.
+
+static napi_value
+query(napi_env env, napi_callback_info info) {
+  napi_status status;
+  size_t argc = 2;
+  napi_value argv[2];
+  bool is_db_handle;
+
+  status = napi_get_cb_info(env, info, &argc, argv, NULL, NULL);
+  if (status != napi_ok) return NULL;
+
+  // Check that the object passed as the first parameter has the previously
+  // applied tag.
+  status = napi_check_object_type_tag(env,
+                                      argv[0],
+                                      &DatabaseHandleTypeTag,
+                                      &is_db_handle);
+  if (status != napi_ok) return NULL;
+
+  // Throw a `TypeError` if it doesn't.
+  if (!is_db_handle) {
+    // Throw a TypeError.
+    return NULL;
+  }
+}
+```
+
 ### napi_define_class
 <!-- YAML
 added: v8.0.0
@@ -4448,6 +4663,60 @@ Retrieves a native instance that was previously wrapped in the JavaScript
 object `js_object` using `napi_wrap()` and removes the wrapping. If a finalize
 callback was associated with the wrapping, it will no longer be called when the
 JavaScript object becomes garbage-collected.
+
+### napi_type_tag_object
+<!-- YAML
+added: v14.8.0
+-->
+
+> Stability: 1 - Experimental
+
+```c
+napi_status napi_type_tag_object(napi_env env,
+                                 napi_value js_object,
+                                 const napi_type_tag* type_tag);
+```
+
+* `[in] env`: The environment that the API is invoked under.
+* `[in] js_object`: The JavaScript object to be marked.
+* `[in] type_tag`: The tag with which the object is to be marked.
+
+Returns `napi_ok` if the API succeeded.
+
+Associates the value of the `type_tag` pointer with the JavaScript object.
+`napi_check_object_type_tag()` can then be used to compare the tag that was
+attached to the object with one owned by the addon to ensure that the object
+has the right type.
+
+If the object already has an associated type tag, this API will return
+`napi_invalid_arg`.
+
+### napi_check_object_type_tag
+<!-- YAML
+added: v14.8.0
+-->
+
+> Stability: 1 - Experimental
+
+```c
+napi_status napi_check_object_type_tag(napi_env env,
+                                       napi_value js_object,
+                                       const napi_type_tag* type_tag,
+                                       bool* result);
+```
+
+* `[in] env`: The environment that the API is invoked under.
+* `[in] js_object`: The JavaScript object whose type tag to examine.
+* `[in] type_tag`: The tag with which to compare any tag found on the object.
+* `[out] result`: Whether the type tag given matched the type tag on the
+object. `false` is also returned if no type tag was found on the object.
+
+Returns `napi_ok` if the API succeeded.
+
+Compares the pointer given as `type_tag` with any that can be found on
+`js_object`. If no tag is found on `js_object` or, if a tag is found but it does
+not match `type_tag`, then `result` is set to `false`. If a tag is found and it
+matches `type_tag`, then `result` is set to `true`.
 
 ### napi_add_finalizer
 
@@ -5483,6 +5752,7 @@ This API may only be called from the main thread.
 [`Worker`]: worker_threads.html#worker_threads_class_worker
 [`global`]: globals.html#globals_global
 [`init` hooks]: async_hooks.html#async_hooks_init_asyncid_type_triggerasyncid_resource
+[`napi_add_async_cleanup_hook`]: #n_api_napi_add_async_cleanup_hook
 [`napi_add_env_cleanup_hook`]: #n_api_napi_add_env_cleanup_hook
 [`napi_add_finalizer`]: #n_api_napi_add_finalizer
 [`napi_async_complete_callback`]: #n_api_napi_async_complete_callback
@@ -5511,6 +5781,7 @@ This API may only be called from the main thread.
 [`napi_get_reference_value`]: #n_api_napi_get_reference_value
 [`napi_get_value_external`]: #n_api_napi_get_value_external
 [`napi_has_property`]: #n_api_napi_has_property
+[`napi_instanceof`]: #n_api_napi_instanceof
 [`napi_is_error`]: #n_api_napi_is_error
 [`napi_is_exception_pending`]: #n_api_napi_is_exception_pending
 [`napi_make_callback`]: #n_api_napi_make_callback
@@ -5522,6 +5793,8 @@ This API may only be called from the main thread.
 [`napi_queue_async_work`]: #n_api_napi_queue_async_work
 [`napi_reference_ref`]: #n_api_napi_reference_ref
 [`napi_reference_unref`]: #n_api_napi_reference_unref
+[`napi_remove_async_cleanup_hook`]: #n_api_napi_remove_async_cleanup_hook
+[`napi_remove_env_cleanup_hook`]: #n_api_napi_remove_env_cleanup_hook
 [`napi_set_instance_data`]: #n_api_napi_set_instance_data
 [`napi_set_property`]: #n_api_napi_set_property
 [`napi_threadsafe_function_call_js`]: #n_api_napi_threadsafe_function_call_js

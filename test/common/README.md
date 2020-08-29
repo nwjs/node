@@ -368,12 +368,6 @@ const { spawn } = require('child_process');
 spawn(...common.pwdCommand, { stdio: ['pipe'] });
 ```
 
-### `rootDir`
-
-* [&lt;string>][]
-
-Path to the 'root' directory. either `/` or `c:\\` (windows)
-
 ### `runWithInvalidFD(func)`
 
 * `func` [&lt;Function>][]
@@ -968,7 +962,7 @@ the original WPT harness, see [the WPT tests README][].
 
 ### Class: WPTRunner
 
-A driver class for running WPT with the WPT harness in a vm.
+A driver class for running WPT with the WPT harness in a worker thread.
 
 See [the WPT tests README][] for details.
 

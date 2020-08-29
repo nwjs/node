@@ -110,7 +110,7 @@ platforms. This is true regardless of entries in the table below.
 | Windows          | x64, x86 (WoW64) | >= Windows 8.1/2012 R2          | Tier 1       | <sup>[4](#fn4),[5](#fn5)</sup>    |
 | Windows          | x86 (native)     | >= Windows 8.1/2012 R2          | Tier 1 (running) / Experimental (compiling) <sup>[6](#fn6)</sup> | |
 | Windows          | x64, x86         | Windows Server 2012 (not R2)    | Experimental |                                   |
-| Windows          | arm64            | >= Windows 10                   | Experimental |                                   |
+| Windows          | arm64            | >= Windows 10                   | Tier 2 (compiling) / Experimental (running) |    |
 | macOS            | x64              | >= 10.11                        | Tier 1       |                                   |
 | SmartOS          | x64              | >= 18                           | Tier 2       |                                   |
 | AIX              | ppc64be >=power7 | >= 7.2 TL02                     | Tier 2       |                                   |
@@ -237,7 +237,7 @@ test with Python 3.
 * GNU Make 3.81 or newer
 * Python (see note above)
   * Python 2.7
-  * Python 3.5, 3.6, 3.7, and 3.8.
+  * Python 3.5, 3.6, 3.7, and 3.8
 
 Installation via Linux package manager can be achieved with:
 
@@ -256,7 +256,7 @@ Python 3 users may also need to install `python3-distutils`.
 * Xcode Command Line Tools >= 10 for macOS
 * Python (see note above)
   * Python 2.7
-  * Python 3.5, 3.6, 3.7, and 3.8.
+  * Python 3.5, 3.6, 3.7, and 3.8
 
 macOS users can install the `Xcode Command Line Tools` by running
 `xcode-select --install`. Alternatively, if you already have the full Xcode
@@ -531,7 +531,7 @@ to run it again before invoking `make -j4`.
   [Visual Studio 2017 or 2019](https://visualstudio.microsoft.com/downloads/) or
   the "Visual C++ build tools" workload from the
   [Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2019),
-  with the default optional components.
+  with the default optional components
 * Basic Unix tools required for some tests,
   [Git for Windows](https://git-scm.com/download/win) includes Git Bash
   and tools which can be included in the global `PATH`.
@@ -545,12 +545,11 @@ Optional requirements to build the MSI installer package:
 * The [WiX Toolset v3.11](https://wixtoolset.org/releases/) and the
   [Wix Toolset Visual Studio 2017 Extension](https://marketplace.visualstudio.com/items?itemName=RobMensching.WixToolsetVisualStudio2017Extension)
   or the [Wix Toolset Visual Studio 2019 Extension](https://marketplace.visualstudio.com/items?itemName=WixToolset.WixToolsetVisualStudio2019Extension).
+* The [WiX Toolset v3.14](https://wixtoolset.org/releases/) if
+  building for Windows 10 on ARM (ARM64)
 
 Optional requirements for compiling for Windows 10 on ARM (ARM64):
 
-* ARM64 Windows build machine
-  * Due to a GYP limitation, this is required to run compiled code
-    generation tools (like V8's builtins and mksnapshot tools)
 * Visual Studio 15.9.0 or newer
 * Visual Studio optional components
   * Visual C++ compilers and libraries for ARM64
@@ -565,7 +564,7 @@ This script will install the following [Chocolatey](https://chocolatey.org/)
 packages:
 
 * [Git for Windows](https://chocolatey.org/packages/git) with the `git` and
-  Unix tools added to the `PATH`.
+  Unix tools added to the `PATH`
 * [Python 3.x](https://chocolatey.org/packages/python) and
   [legacy Python](https://chocolatey.org/packages/python2)
 * [Visual Studio 2019 Build Tools](https://chocolatey.org/packages/visualstudio2019buildtools)

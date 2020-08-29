@@ -44,7 +44,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.12',
+    'v8_embedder_string': '-node.13',
 
     ##### V8 defaults for Node.js #####
 
@@ -62,6 +62,9 @@
     # Enable disassembler for `--print-code` v8 options
     'v8_enable_disassembler': 1,
     'v8_host_byteorder': '<!(python -c "import sys; print sys.byteorder")',
+
+    # Sets -dOBJECT_PRINT.
+    'v8_enable_object_print%': 1,
 
     # https://github.com/nodejs/node/pull/22920/files#r222779926
     'v8_enable_handle_zapping': 0,

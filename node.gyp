@@ -14,6 +14,7 @@
     'node_use_node_snapshot': 'false',
     'node_use_v8_platform%': 'true',
     'force_dynamic_crt%': 0,
+    'ossfuzz' : 'false',
     'node_use_bundled_v8': 'false',
     'node_shared': 'true',
     'v8_enable_inspector': 0,
@@ -229,6 +230,7 @@
       'lib/internal/url.js',
       'lib/internal/util.js',
       'lib/internal/util/comparisons.js',
+      'lib/internal/util/compositekey.js',
       'lib/internal/util/debuglog.js',
       'lib/internal/util/inspect.js',
       'lib/internal/util/inspector.js',
@@ -1179,6 +1181,38 @@
         } ],
       ]
     }, # specialize_node_d
+    { # fuzz_url
+      'target_name': 'fuzz_url',
+      'type': 'executable',
+      'dependencies': [
+        '<(node_lib_target_name)',
+      ],
+      'includes': [
+        'node.gypi'
+      ],
+      'include_dirs': [
+        'src',
+      ],
+      'defines': [
+        'NODE_ARCH="<(target_arch)"',
+        'NODE_PLATFORM="<(OS)"',
+        'NODE_WANT_INTERNALS=1',
+      ],
+      'sources': [
+        'src/node_snapshot_stub.cc',
+        'src/node_code_cache_stub.cc',
+        'test/fuzzers/fuzz_url.cc',
+      ],
+      'conditions': [
+        ['OS=="linux"', {
+          'ldflags': [ '-fsanitize=fuzzer' ]
+        }],
+        # Ensure that ossfuzz flag has been set and that we are on Linux
+        [ 'OS!="linux" or ossfuzz!="true"', {
+          'type': 'none',
+        }],
+      ],
+    }, # fuzz_url
     {
       'target_name': 'cctest',
       'type': 'executable',

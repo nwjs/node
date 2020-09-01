@@ -44,13 +44,14 @@ static void init_process_title_mutex_once(void) {
 
 
 char** uv_setup_args(int argc, char** argv) {
+#if 1
   if (argc > 0) {
     process_title.len = strlen(argv[0]);
     process_title.str = uv__malloc(process_title.len + 1);
     memcpy(process_title.str, argv[0], process_title.len + 1);
   }
   return argv;
-#if 0
+#else
   struct uv__process_title pt;
   char** new_argv;
   size_t size;
@@ -108,9 +109,11 @@ int uv_set_process_title(const char* title) {
   struct uv__process_title* pt;
   size_t len;
 
+#if 0
   /* If uv_setup_args wasn't called or failed, we can't continue. */
   if (args_mem == NULL)
     return UV_ENOBUFS;
+#endif
 
   pt = &process_title;
   len = strlen(title);
@@ -137,10 +140,11 @@ int uv_set_process_title(const char* title) {
 int uv_get_process_title(char* buffer, size_t size) {
   if (buffer == NULL || size == 0)
     return UV_EINVAL;
-
+#if 0
   /* If uv_setup_args wasn't called or failed, we can't continue. */
   if (args_mem == NULL)
     return UV_ENOBUFS;
+#endif
 
   uv_once(&process_title_mutex_once, init_process_title_mutex_once);
   uv_mutex_lock(&process_title_mutex);
@@ -162,6 +166,7 @@ int uv_get_process_title(char* buffer, size_t size) {
 
 
 void uv__process_title_cleanup(void) {
+  if (args_mem)
   uv__free(args_mem);  /* Keep valgrind happy. */
   args_mem = NULL;
 }

@@ -64,9 +64,9 @@ a.type {
   position: relative;
 }
 
-a,
 a:link,
-a:active {
+a:active,
+a:visited {
   color: #43853d;
   text-decoration: none;
   border-radius: 2px;
@@ -204,11 +204,11 @@ ol.version-picker li:last-child a {
 }
 
 .api_stability_1 {
-  background-color: #ec5315;
+  background-color: #ca5010;
 }
 
 .api_stability_2 {
-  background-color: #4eba0f;
+  background-color: #5a8147;
 }
 
 .api_metadata {

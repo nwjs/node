@@ -305,7 +305,7 @@ The `'removeListener'` event is emitted *after* the `listener` is removed.
 ### `EventEmitter.listenerCount(emitter, eventName)`
 <!-- YAML
 added: v0.9.12
-deprecated: v4.0.0
+deprecated: v3.2.0
 -->
 
 > Stability: 0 - Deprecated: Use [`emitter.listenerCount()`][] instead.
@@ -333,7 +333,7 @@ By default, a maximum of `10` listeners can be registered for any single
 event. This limit can be changed for individual `EventEmitter` instances
 using the [`emitter.setMaxListeners(n)`][] method. To change the default
 for *all* `EventEmitter` instances, the `EventEmitter.defaultMaxListeners`
-property can be used. If this value is not a positive number, a `TypeError`
+property can be used. If this value is not a positive number, a `RangeError`
 is thrown.
 
 Take caution when setting the `EventEmitter.defaultMaxListeners` because the
@@ -355,7 +355,7 @@ emitter.once('event', () => {
 });
 ```
 
-The [`--trace-warnings`][] command line flag can be used to display the
+The [`--trace-warnings`][] command-line flag can be used to display the
 stack trace for such warnings.
 
 The emitted warning can be inspected with [`process.on('warning')`][] and will

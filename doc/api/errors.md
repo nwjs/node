@@ -224,7 +224,7 @@ above `constructorOpt`, including `constructorOpt`, will be omitted from the
 generated stack trace.
 
 The `constructorOpt` argument is useful for hiding implementation
-details of error generation from an end user. For instance:
+details of error generation from the user. For instance:
 
 ```js
 function MyError() {
@@ -920,7 +920,7 @@ A `Promise` that was callbackified via `util.callbackify()` was rejected with a
 falsy value.
 
 <a id="ERR_FEATURE_UNAVAILABLE_ON_PLATFORM"></a>
-#### `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM`
+### `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM`
 <!-- YAML
 added: v14.0.0
 -->
@@ -1391,7 +1391,7 @@ An invalid or unknown file encoding was passed.
 <a id="ERR_INVALID_PACKAGE_CONFIG"></a>
 ### `ERR_INVALID_PACKAGE_CONFIG`
 
-An invalid `package.json` file was found which failed parsing.
+An invalid `package.json` file failed parsing.
 
 <a id="ERR_INVALID_PACKAGE_TARGET"></a>
 ### `ERR_INVALID_PACKAGE_TARGET`
@@ -1608,8 +1608,8 @@ is thrown if a required option is missing.
 ### `ERR_MISSING_MESSAGE_PORT_IN_TRANSFER_LIST`
 
 An object that needs to be explicitly listed in the `transferList` argument
-was found in the object passed to a `postMessage()` call, but not provided in
-the `transferList` for that call. Usually, this is a `MessagePort`.
+is in the object passed to a `postMessage()` call, but is not provided
+in the `transferList` for that call. Usually, this is a `MessagePort`.
 
 <a id="ERR_MISSING_PASSPHRASE"></a>
 ### `ERR_MISSING_PASSPHRASE`
@@ -2092,7 +2092,7 @@ import 'package-name'; // supported
 ### `ERR_VALID_PERFORMANCE_ENTRY_TYPE`
 
 While using the Performance Timing API (`perf_hooks`), no valid performance
-entry types were found.
+entry types are found.
 
 <a id="ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING"></a>
 ### `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`

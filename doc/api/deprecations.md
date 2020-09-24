@@ -1726,7 +1726,7 @@ Type: Deprecation revoked
 
 Importing assert directly was not recommended as the exposed functions use
 loose equality checks. The deprecation was revoked because use of the `assert`
-module is not discouraged, and the deprecation caused end user confusion.
+module is not discouraged, and the deprecation caused developer confusion.
 
 ### DEP0090: Invalid GCM authentication tag lengths
 <!-- YAML
@@ -2693,8 +2693,8 @@ The [`crypto.Certificate()` constructor][] is deprecated. Use
 [`response.connection`]: http.html#http_response_connection
 [`response.end()`]: http.html#http_response_end_data_encoding_callback
 [`response.finished`]: http.html#http_response_finished
-[`response.writableFinished`]: #http_response_writablefinished
-[`response.writableEnded`]: #http_response_writableended
+[`response.writableFinished`]: http.html#http_response_writablefinished
+[`response.writableEnded`]: http.html#http_response_writableended
 [`script.createCachedData()`]: vm.html#vm_script_createcacheddata
 [`setInterval()`]: timers.html#timers_setinterval_callback_delay_args
 [`setTimeout()`]: timers.html#timers_settimeout_callback_delay_args

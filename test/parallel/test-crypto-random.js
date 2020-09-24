@@ -34,9 +34,6 @@ const { inspect } = require('util');
 const kMaxUint32 = Math.pow(2, 32) - 1;
 const kMaxPossibleLength = Math.min(kMaxLength, kMaxUint32);
 
-// Bump, we register a lot of exit listeners
-process.setMaxListeners(256);
-
 common.expectWarning('DeprecationWarning',
                      'crypto.pseudoRandomBytes is deprecated.', 'DEP0115');
 
@@ -394,13 +391,13 @@ assert.throws(
     const invalidMinError = {
       code: 'ERR_INVALID_ARG_TYPE',
       name: 'TypeError',
-      message: 'The "min" argument must be safe integer.' +
+      message: 'The "min" argument must be a safe integer.' +
                `${common.invalidArgTypeHelper(i)}`,
     };
     const invalidMaxError = {
       code: 'ERR_INVALID_ARG_TYPE',
       name: 'TypeError',
-      message: 'The "max" argument must be safe integer.' +
+      message: 'The "max" argument must be a safe integer.' +
                `${common.invalidArgTypeHelper(i)}`,
     };
 
@@ -441,7 +438,7 @@ assert.throws(
     {
       code: 'ERR_INVALID_ARG_TYPE',
       name: 'TypeError',
-      message: 'The "min" argument must be safe integer.' +
+      message: 'The "min" argument must be a safe integer.' +
       `${common.invalidArgTypeHelper(minInt - 1)}`,
     }
   );
@@ -451,7 +448,7 @@ assert.throws(
     {
       code: 'ERR_INVALID_ARG_TYPE',
       name: 'TypeError',
-      message: 'The "max" argument must be safe integer.' +
+      message: 'The "max" argument must be a safe integer.' +
       `${common.invalidArgTypeHelper(maxInt + 1)}`,
     }
   );
@@ -462,8 +459,9 @@ assert.throws(
     assert.throws(() => crypto.randomInt(...arg, common.mustNotCall()), {
       code: 'ERR_OUT_OF_RANGE',
       name: 'RangeError',
-      message: 'The value of "max" is out of range. It must be > ' +
-               `${arg[arg.length - 2] || 0}. Received ${arg[arg.length - 1]}`
+      message: 'The value of "max" is out of range. It must be greater than ' +
+      `the value of "min" (${arg[arg.length - 2] || 0}). ` +
+      `Received ${arg[arg.length - 1]}`
     });
   }
 

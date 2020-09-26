@@ -36,7 +36,7 @@ properties:
 The N-API is a C API that ensures ABI stability across Node.js versions
 and different compiler levels. A C++ API can be easier to use.
 To support using C++, the project maintains a
-C++ wrapper module called [node-addon-api][].
+C++ wrapper module called [`node-addon-api`][].
 This wrapper provides an inlineable C++ API. Binaries built
 with `node-addon-api` will depend on the symbols for the N-API C-based
 functions exported by Node.js. `node-addon-api` is a more
@@ -80,7 +80,7 @@ for `node-addon-api`.
 
 The [N-API Resource](https://nodejs.github.io/node-addon-examples/) offers an
 excellent orientation and tips for developers just getting started with N-API
-and node-addon-api.
+and `node-addon-api`.
 
 ## Implications of ABI stability
 
@@ -111,7 +111,7 @@ versions:
     ```
 
 Thus, for an addon to remain ABI-compatible across Node.js major versions, it
-must make use exclusively of N-API by restricting itself to using
+must use N-API exclusively by restricting itself to using
 
 ```c
 #include <node_api.h>
@@ -147,7 +147,7 @@ tools. However, it is not necessary to install the entire Visual Studio
 IDE. The following command installs the necessary toolchain:
 
 ```bash
-npm install --global --production windows-build-tools
+npm install --global windows-build-tools
 ```
 
 The sections below describe the additional tools available for developing
@@ -244,22 +244,110 @@ from version 3 with some additions. This means that it is not necessary
 to recompile for new versions of Node.js which are
 listed as supporting a later version.
 
-|       | 1        | 2        | 3        | 4        | 5         | 6         |
-|-------|----------|----------|----------|----------|-----------|-----------|
-| v6.x  |          |          | v6.14.2* |          |           |           |
-| v8.x  | v8.6.0** | v8.10.0* | v8.11.2  | v8.16.0  |           |           |
-| v9.x  | v9.0.0*  | v9.3.0*  | v9.11.0* |          |           |           |
-| v10.x | v10.0.0  | v10.0.0  | v10.0.0  | v10.16.0 | v10.17.0  | v10.20.0  |
-| v11.x | v11.0.0  | v11.0.0  | v11.0.0  | v11.8.0  |           |           |
-| v12.x | v12.0.0  | v12.0.0  | v12.0.0  | v12.0.0  | v12.11.0  | v12.17.0  |
-| v13.x | v13.0.0  | v13.0.0  | v13.0.0  | v13.0.0  | v13.0.0   |           |
-| v14.x | v14.0.0  | v14.0.0  | v14.0.0  | v14.0.0  | v14.0.0   | v14.0.0   |
+<!-- For accessibility purposes, this table needs row headers. That means we
+     can't do it in markdown. Hence, the raw HTML. -->
+
+<table>
+  <tr>
+    <td></td>
+    <th scope="col">1</th>
+    <th scope="col">2</th>
+    <th scope="col">3</th>
+    <th scope="col">4</th>
+    <th scope="col">5</th>
+    <th scope="col">6</th>
+  </tr>
+  <tr>
+    <th scope="row">v6.x</th>
+    <td></td>
+    <td></td>
+    <td>v6.14.2*</td>
+    <td></td>
+    <td></td>
+    <td></td>
+  </tr>
+  <tr>
+    <th scope="row">v8.x</th>
+    <td>v8.6.0**</td>
+    <td>v8.10.0*</td>
+    <td>v8.11.2</td>
+    <td>v8.16.0</td>
+    <td></td>
+    <td></td>
+  </tr>
+  <tr>
+    <th scope="row">v9.x</th>
+    <td>v9.0.0*</td>
+    <td>v9.3.0*</td>
+    <td>v9.11.0*</td>
+    <td></td>
+    <td></td>
+    <td></td>
+  </tr>
+  <tr>
+    <th scope="row">v10.x</th>
+    <td>v10.0.0</td>
+    <td>v10.0.0</td>
+    <td>v10.0.0</td>
+    <td>v10.16.0</td>
+    <td>v10.17.0</td>
+    <td>v10.20.0</td>
+  </tr>
+  <tr>
+    <th scope="row">v11.x</th>
+    <td>v11.0.0</td>
+    <td>v11.0.0</td>
+    <td>v11.0.0</td>
+    <td>v11.8.0</td>
+    <td></td>
+    <td></td>
+  </tr>
+  <tr>
+    <th scope="row">v12.x</th>
+    <td>v12.0.0</td>
+    <td>v12.0.0</td>
+    <td>v12.0.0</td>
+    <td>v12.0.0</td>
+    <td>v12.11.0</td>
+    <td>v12.17.0</td>
+  </tr>
+  <tr>
+    <th scope="row">v13.x</th>
+    <td>v13.0.0</td>
+    <td>v13.0.0</td>
+    <td>v13.0.0</td>
+    <td>v13.0.0</td>
+    <td>v13.0.0</td>
+    <td></td>
+  </tr>
+  <tr>
+    <th scope="row">v14.x</th>
+    <td>v14.0.0</td>
+    <td>v14.0.0</td>
+    <td>v14.0.0</td>
+    <td>v14.0.0</td>
+    <td>v14.0.0</td>
+    <td>v14.0.0</td>
+  </tr>
+</table>
 
 \* N-API was experimental.
 
 \*\* Node.js 8.0.0 included N-API as experimental. It was released as N-API
 version 1 but continued to evolve until Node.js 8.6.0. The API is different in
 versions prior to Node.js 8.6.0. We recommend N-API version 3 or later.
+
+Each API documented for N-API will have a header named `added in:`, and APIs
+which are stable will have the additional header `N-API version:`.
+APIs are directly usable when using a Node.js version which supports
+the N-API version shown in `N-API version:` or higher.
+When using a Node.js version that does not support the
+`N-API version:` listed or if there is no `N-API version:` listed,
+then the API will only be available if
+`#define NAPI_EXPERIMENTAL` precedes the inclusion of `node_api.h`
+or `js_native_api.h`. If an API appears not to be available on
+a version of Node.js which is later than the one shown in `added in:` then
+this is most likely the reason for the apparent absence.
 
 The N-APIs associated strictly with accessing ECMAScript features from native
 code can be found separately in `js_native_api.h` and `js_native_api_types.h`.
@@ -370,7 +458,7 @@ From the perspective of a native addon this means that the bindings it provides
 may be called multiple times, from multiple contexts, and even concurrently from
 multiple threads.
 
-Native addons may need to allocate global state of which they make use during
+Native addons may need to allocate global state which they use during
 their entire life cycle such that the state must be unique to each instance of
 the addon.
 
@@ -623,6 +711,15 @@ typedef struct {
 } napi_type_tag;
 ```
 
+#### napi_async_cleanup_hook_handle
+<!-- YAML
+added: v14.10.0
+-->
+
+An opaque value returned by [`napi_add_async_cleanup_hook`][]. It must be passed
+to [`napi_remove_async_cleanup_hook`][] when the chain of asynchronous cleanup
+events completes.
+
 ### N-API callback types
 
 #### napi_callback_info
@@ -750,6 +847,30 @@ typedef void (*napi_threadsafe_function_call_js)(napi_env env,
 
 Unless for reasons discussed in [Object Lifetime Management][], creating a
 handle and/or callback scope inside the function body is not necessary.
+
+#### napi_async_cleanup_hook
+<!-- YAML
+added: v14.10.0
+-->
+
+Function pointer used with [`napi_add_async_cleanup_hook`][]. It will be called
+when the environment is being torn down.
+
+Callback functions must satisfy the following signature:
+
+```c
+typedef void (*napi_async_cleanup_hook)(napi_async_cleanup_hook_handle handle,
+                                        void* data);
+```
+
+* `[in] handle`: The handle that must be passed to
+[`napi_remove_async_cleanup_hook`][] after completion of the asynchronous
+cleanup.
+* `[in] data`: The data that was passed to [`napi_add_async_cleanup_hook`][].
+
+The body of the function should initiate the asynchronous cleanup actions at the
+end of which `handle` must be passed in a call to
+[`napi_remove_async_cleanup_hook`][].
 
 ## Error handling
 
@@ -1580,6 +1701,10 @@ with `napi_add_env_cleanup_hook`, otherwise the process will abort.
 #### napi_add_async_cleanup_hook
 <!-- YAML
 added: v14.8.0
+changes:
+  - version: v14.10.0
+    pr-url: https://github.com/nodejs/node/pull/34819
+    description: Changed signature of the `hook` callback.
 -->
 
 > Stability: 1 - Experimental
@@ -1587,15 +1712,22 @@ added: v14.8.0
 ```c
 NAPI_EXTERN napi_status napi_add_async_cleanup_hook(
     napi_env env,
-    void (*fun)(void* arg, void(* cb)(void*), void* cbarg),
+    napi_async_cleanup_hook hook,
     void* arg,
     napi_async_cleanup_hook_handle* remove_handle);
 ```
 
-Registers `fun` as a function to be run with the `arg` parameter once the
-current Node.js environment exits. Unlike [`napi_add_env_cleanup_hook`][],
-the hook is allowed to be asynchronous in this case, and must invoke the passed
-`cb()` function with `cbarg` once all asynchronous activity is finished.
+* `[in] env`: The environment that the API is invoked under.
+* `[in] hook`: The function pointer to call at environment teardown.
+* `[in] arg`: The pointer to pass to `hook` when it gets called.
+* `[out] remove_handle`: Optional handle that refers to the asynchronous cleanup
+hook.
+
+Registers `hook`, which is a function of type [`napi_async_cleanup_hook`][], as
+a function to be run with the `remove_handle` and `arg` parameters once the
+current Node.js environment exits.
+
+Unlike [`napi_add_env_cleanup_hook`][], the hook is allowed to be asynchronous.
 
 Otherwise, behavior generally matches that of [`napi_add_env_cleanup_hook`][].
 
@@ -1608,19 +1740,25 @@ is being torn down anyway.
 #### napi_remove_async_cleanup_hook
 <!-- YAML
 added: v14.8.0
+changes:
+  - version: v14.10.0
+    pr-url: https://github.com/nodejs/node/pull/34819
+    description: Removed `env` parameter.
 -->
 
 > Stability: 1 - Experimental
 
 ```c
 NAPI_EXTERN napi_status napi_remove_async_cleanup_hook(
-    napi_env env,
     napi_async_cleanup_hook_handle remove_handle);
 ```
 
+* `[in] remove_handle`: The handle to an asynchronous cleanup hook that was
+created with [`napi_add_async_cleanup_hook`][].
+
 Unregisters the cleanup hook corresponding to `remove_handle`. This will prevent
 the hook from being executed, unless it has already started executing.
-This must be called on any `napi_async_cleanup_hook_handle` value retrieved
+This must be called on any `napi_async_cleanup_hook_handle` value obtained
 from [`napi_add_async_cleanup_hook`][].
 
 ## Module registration
@@ -1651,8 +1789,16 @@ provided by the addon:
 ```c
 napi_value Init(napi_env env, napi_value exports) {
   napi_status status;
-  napi_property_descriptor desc =
-    {"hello", NULL, Method, NULL, NULL, NULL, napi_default, NULL};
+  napi_property_descriptor desc = {
+    "hello",
+    NULL,
+    Method,
+    NULL,
+    NULL,
+    NULL,
+    napi_writable | napi_enumerable | napi_configurable,
+    NULL
+  };
   status = napi_define_properties(env, exports, 1, &desc);
   if (status != napi_ok) return NULL;
   return exports;
@@ -1679,7 +1825,7 @@ To define a class so that new instances can be created (often used with
 napi_value Init(napi_env env, napi_value exports) {
   napi_status status;
   napi_property_descriptor properties[] = {
-    { "value", NULL, NULL, GetValue, SetValue, NULL, napi_default, NULL },
+    { "value", NULL, NULL, GetValue, SetValue, NULL, napi_writable | napi_configurable, NULL },
     DECLARE_NAPI_METHOD("plusOne", PlusOne),
     DECLARE_NAPI_METHOD("multiply", Multiply),
   };
@@ -2332,8 +2478,8 @@ This API is used to convert from the C `int64_t` type to the JavaScript
 The JavaScript `Number` type is described in [Section 6.1.6][]
 of the ECMAScript Language Specification. Note the complete range of `int64_t`
 cannot be represented with full precision in JavaScript. Integer values
-outside the range of [`Number.MIN_SAFE_INTEGER`][] `-(2^53 - 1)` -
-[`Number.MAX_SAFE_INTEGER`][] `(2^53 - 1)` will lose precision.
+outside the range of [`Number.MIN_SAFE_INTEGER`][] `-(2**53 - 1)` -
+[`Number.MAX_SAFE_INTEGER`][] `(2**53 - 1)` will lose precision.
 
 #### napi_create_double
 <!-- YAML
@@ -2879,7 +3025,7 @@ of the given JavaScript `Number`.
 
 If the number exceeds the range of the 32 bit integer, then the result is
 truncated to the equivalent of the bottom 32 bits. This can result in a large
-positive number becoming a negative number if the value is > 2^31 -1.
+positive number becoming a negative number if the value is > 2<sup>31</sup> - 1.
 
 Non-finite number values (`NaN`, `+Infinity`, or `-Infinity`) set the
 result to zero.
@@ -2908,7 +3054,8 @@ This API returns the C `int64` primitive equivalent of the given JavaScript
 `Number`.
 
 `Number` values outside the range of [`Number.MIN_SAFE_INTEGER`][]
-`-(2^53 - 1)` - [`Number.MAX_SAFE_INTEGER`][] `(2^53 - 1)` will lose precision.
+`-(2**53 - 1)` - [`Number.MAX_SAFE_INTEGER`][] `(2**53 - 1)` will lose
+precision.
 
 Non-finite number values (`NaN`, `+Infinity`, or `-Infinity`) set the
 result to zero.
@@ -3407,9 +3554,9 @@ defined in [Section 7.2.14][] of the ECMAScript Language Specification.
 added:
  - v13.0.0
  - v12.16.0
+ - v10.22.0
+napiVersion: 7
 -->
-
-> Stability: 1 - Experimental
 
 ```c
 napi_status napi_detach_arraybuffer(napi_env env,
@@ -3435,9 +3582,9 @@ defined in [Section 24.1.1.3][] of the ECMAScript Language Specification.
 added:
  - v13.3.0
  - v12.16.0
+ - v10.22.0
+napiVersion: 7
 -->
-
-> Stability: 1 - Experimental
 
 ```c
 napi_status napi_is_detached_arraybuffer(napi_env env,
@@ -3587,8 +3734,8 @@ if (status != napi_ok) return status;
 
 // Set the properties
 napi_property_descriptor descriptors[] = {
-  { "foo", NULL, NULL, NULL, NULL, fooValue, napi_default, NULL },
-  { "bar", NULL, NULL, NULL, NULL, barValue, napi_default, NULL }
+  { "foo", NULL, NULL, NULL, NULL, fooValue, napi_writable | napi_configurable, NULL },
+  { "bar", NULL, NULL, NULL, NULL, barValue, napi_writable | napi_configurable, NULL }
 }
 status = napi_define_properties(env,
                                 obj,
@@ -3599,6 +3746,12 @@ if (status != napi_ok) return status;
 
 ### Structures
 #### napi_property_attributes
+<!-- YAML
+changes:
+ - version: v14.12.0
+   pr-url: https://github.com/nodejs/node/pull/35214
+   description: added `napi_default_method` and `napi_default_property`
+-->
 
 ```c
 typedef enum {
@@ -3610,6 +3763,14 @@ typedef enum {
   // Used with napi_define_class to distinguish static properties
   // from instance properties. Ignored by napi_define_properties.
   napi_static = 1 << 10,
+
+  // Default for class methods.
+  napi_default_method = napi_writable | napi_configurable,
+
+  // Default for object properties, like in JS obj[prop].
+  napi_default_property = napi_writable |
+                          napi_enumerable |
+                          napi_configurable,
 } napi_property_attributes;
 ```
 
@@ -3628,6 +3789,10 @@ They can be one or more of the following bitflags:
 * `napi_static`: The property will be defined as a static property on a class as
   opposed to an instance property, which is the default. This is used only by
   [`napi_define_class`][]. It is ignored by `napi_define_properties`.
+* `napi_default_method`: Like a method in a JS class, the property is
+  configurable and writeable, but not enumerable.
+* `napi_default_property`: Like a property set via assignment in JavaScript, the
+  property is writable, enumerable, and configurable.
 
 #### napi_property_descriptor
 
@@ -5454,7 +5619,7 @@ return status of `napi_closing` in response to a call to
 should be the last API call made in conjunction with a given
 `napi_threadsafe_function`, because after the call completes, there is no
 guarantee that the `napi_threadsafe_function` is still allocated. For the same
-reason, do not make use of a thread-safe function
+reason, do not use a thread-safe function
 after receiving a return value of `napi_closing` in response to a call to
 `napi_call_threadsafe_function`. Data associated with the
 `napi_threadsafe_function` can be freed in its `napi_finalize` callback which
@@ -5477,8 +5642,8 @@ reference count reaches zero. In particular, `napi_call_threadsafe_function()`
 will return `napi_closing`, thus informing the threads that it is no longer
 possible to make asynchronous calls to the thread-safe function. This can be
 used as a criterion for terminating the thread. **Upon receiving a return value
-of `napi_closing` from `napi_call_threadsafe_function()` a thread must make no
-further use of the thread-safe function because it is no longer guaranteed to
+of `napi_closing` from `napi_call_threadsafe_function()` a thread must not use
+the thread-safe function anymore because it is no longer guaranteed to
 be allocated.**
 
 ### Deciding whether to keep the process running
@@ -5757,6 +5922,7 @@ This API may only be called from the main thread.
 [`napi_add_async_cleanup_hook`]: #n_api_napi_add_async_cleanup_hook
 [`napi_add_env_cleanup_hook`]: #n_api_napi_add_env_cleanup_hook
 [`napi_add_finalizer`]: #n_api_napi_add_finalizer
+[`napi_async_cleanup_hook`]: #n_api_napi_async_cleanup_hook
 [`napi_async_complete_callback`]: #n_api_napi_async_complete_callback
 [`napi_async_init`]: #n_api_napi_async_init
 [`napi_callback`]: #n_api_napi_callback
@@ -5806,6 +5972,7 @@ This API may only be called from the main thread.
 [`napi_throw`]: #n_api_napi_throw
 [`napi_unwrap`]: #n_api_napi_unwrap
 [`napi_wrap`]: #n_api_napi_wrap
+[`node-addon-api`]: https://github.com/nodejs/node-addon-api
 [`node_api.h`]: https://github.com/nodejs/node/blob/master/src/node_api.h
 [`process.release`]: process.html#process_process_release
 [`uv_ref`]: https://docs.libuv.org/en/v1.x/handle.html#c.uv_ref
@@ -5815,7 +5982,6 @@ This API may only be called from the main thread.
 [docs]: https://github.com/nodejs/node-addon-api#api-documentation
 [global scope]: globals.html
 [module scope]: modules.html#modules_the_module_scope
-[node-addon-api]: https://github.com/nodejs/node-addon-api
 [node-gyp]: https://github.com/nodejs/node-gyp
 [node-pre-gyp]: https://github.com/mapbox/node-pre-gyp
 [prebuild]: https://github.com/prebuild/prebuild

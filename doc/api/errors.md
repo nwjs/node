@@ -224,7 +224,7 @@ above `constructorOpt`, including `constructorOpt`, will be omitted from the
 generated stack trace.
 
 The `constructorOpt` argument is useful for hiding implementation
-details of error generation from an end user. For instance:
+details of error generation from the user. For instance:
 
 ```js
 function MyError() {
@@ -920,7 +920,7 @@ A `Promise` that was callbackified via `util.callbackify()` was rejected with a
 falsy value.
 
 <a id="ERR_FEATURE_UNAVAILABLE_ON_PLATFORM"></a>
-#### `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM`
+### `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM`
 <!-- YAML
 added: v14.0.0
 -->
@@ -939,6 +939,11 @@ allowed size for a `Buffer`.
 
 An invalid symlink type was passed to the [`fs.symlink()`][] or
 [`fs.symlinkSync()`][] methods.
+
+<a id="ERR_HTTP_REQUEST_TIMEOUT"></a>
+### `ERR_HTTP_REQUEST_TIMEOUT`
+
+The client has not sent the entire request within the allowed time.
 
 <a id="ERR_HTTP_HEADERS_SENT"></a>
 ### `ERR_HTTP_HEADERS_SENT`
@@ -1386,7 +1391,7 @@ An invalid or unknown file encoding was passed.
 <a id="ERR_INVALID_PACKAGE_CONFIG"></a>
 ### `ERR_INVALID_PACKAGE_CONFIG`
 
-An invalid `package.json` file was found which failed parsing.
+An invalid `package.json` file failed parsing.
 
 <a id="ERR_INVALID_PACKAGE_TARGET"></a>
 ### `ERR_INVALID_PACKAGE_TARGET`
@@ -1603,8 +1608,8 @@ is thrown if a required option is missing.
 ### `ERR_MISSING_MESSAGE_PORT_IN_TRANSFER_LIST`
 
 An object that needs to be explicitly listed in the `transferList` argument
-was found in the object passed to a `postMessage()` call, but not provided in
-the `transferList` for that call. Usually, this is a `MessagePort`.
+is in the object passed to a `postMessage()` call, but is not provided
+in the `transferList` for that call. Usually, this is a `MessagePort`.
 
 <a id="ERR_MISSING_PASSPHRASE"></a>
 ### `ERR_MISSING_PASSPHRASE`
@@ -1969,7 +1974,7 @@ An attempt was made to issue Server Name Indication from a TLS server-side
 socket, which is only valid from a client.
 
 <a id="ERR_TLS_PSK_SET_IDENTIY_HINT_FAILED"></a>
-### ERR_TLS_PSK_SET_IDENTIY_HINT_FAILED
+### `ERR_TLS_PSK_SET_IDENTIY_HINT_FAILED`
 
 Failed to set PSK identity hint. Hint may be too long.
 
@@ -2087,7 +2092,7 @@ import 'package-name'; // supported
 ### `ERR_VALID_PERFORMANCE_ENTRY_TYPE`
 
 While using the Performance Timing API (`perf_hooks`), no valid performance
-entry types were found.
+entry types are found.
 
 <a id="ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING"></a>
 ### `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`
@@ -2440,18 +2445,6 @@ cannot be serialized.
 
 This can only happen when native addons create `SharedArrayBuffer`s in
 "externalized" mode, or put existing `SharedArrayBuffer` into externalized mode.
-
-<a id="ERR_UNKNOWN_BUILTIN_MODULE"></a>
-### `ERR_UNKNOWN_BUILTIN_MODULE`
-<!-- YAML
-added: v8.0.0
-removed: v9.0.0
--->
-
-The `'ERR_UNKNOWN_BUILTIN_MODULE'` error code is used to identify a specific
-kind of internal Node.js error that should not typically be triggered by user
-code. Instances of this error point to an internal bug within the Node.js
-binary itself.
 
 <a id="ERR_UNKNOWN_STDIN_TYPE"></a>
 ### `ERR_UNKNOWN_STDIN_TYPE`

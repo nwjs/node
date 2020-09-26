@@ -87,6 +87,19 @@ path.basename('/foo/bar/baz/asdf/quux.html', '.html');
 // Returns: 'quux'
 ```
 
+Although Windows usually treats file names, including file extensions, in a
+case-insensitive manner, this function does not. For example, `C:\\foo.html` and
+`C:\\foo.HTML` refer to the same file, but `basename` treats the extension as a
+case-sensitive string:
+
+```js
+path.win32.basename('C:\\foo.html', '.html');
+// Returns: 'foo'
+
+path.win32.basename('C:\\foo.HTML', '.html');
+// Returns: 'foo.HTML'
+```
+
 A [`TypeError`][] is thrown if `path` is not a string or if `ext` is given
 and is not a string.
 
@@ -482,7 +495,7 @@ For instance, given the sequence of path segments: `/foo`, `/bar`, `baz`,
 calling `path.resolve('/foo', '/bar', 'baz')` would return `/bar/baz`
 because `'baz'` is not an absolute path but `'/bar' + '/' + 'baz'` is.
 
-If after processing all given `path` segments an absolute path has not yet
+If, after processing all given `path` segments, an absolute path has not yet
 been generated, the current working directory is used.
 
 The resulting path is normalized and trailing slashes are removed unless the

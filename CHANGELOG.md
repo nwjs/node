@@ -31,7 +31,11 @@ release.
 </tr>
 <tr>
     <td valign="top">
-<b><a href="doc/changelogs/CHANGELOG_V14.md#14.9.0">14.9.0</a></b><br/>
+<b><a href="doc/changelogs/CHANGELOG_V14.md#14.12.0">14.12.0</a></b><br/>
+<a href="doc/changelogs/CHANGELOG_V14.md#14.11.0">14.11.0</a><br/>
+<a href="doc/changelogs/CHANGELOG_V14.md#14.10.1">14.10.1</a><br/>
+<a href="doc/changelogs/CHANGELOG_V14.md#14.10.0">14.10.0</a><br/>
+<a href="doc/changelogs/CHANGELOG_V14.md#14.9.0">14.9.0</a><br/>
 <a href="doc/changelogs/CHANGELOG_V14.md#14.8.0">14.8.0</a><br/>
 <a href="doc/changelogs/CHANGELOG_V14.md#14.7.0">14.7.0</a><br/>
 <a href="doc/changelogs/CHANGELOG_V14.md#14.6.0">14.6.0</a><br/>
@@ -314,7 +318,7 @@ release.
 
 ## 2015-09-08, Version 4.0.0 (Stable), @rvagg
 
-<a href="doc/changelogs/CHANGELOG_V4.md#4.0.0>Moved to doc/changelogs/CHANGELOG_V6.md#6.0.0</a>.
+<a href="doc/changelogs/CHANGELOG_V4.md#4.0.0">Moved to doc/changelogs/CHANGELOG_V6.md#6.0.0</a>.
 
 ## 2015-09-02, Version 3.3.0, @rvagg
 

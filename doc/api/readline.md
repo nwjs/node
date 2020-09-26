@@ -356,6 +356,10 @@ async function processLineByLine() {
 }
 ```
 
+`readline.createInterface()` will start to consume the input stream once
+invoked. Having asynchronous operations between interface creation and
+asynchronous iteration may result in missed lines.
+
 ### `rl.line`
 <!-- YAML
 added: v0.1.98
@@ -824,7 +828,7 @@ const { createInterface } = require('readline');
   <tr>
     <td><code>ctrl</code> + <code>w</code> or <code>ctrl</code>
     + <code>backspace</code></td>
-    <td>Delete backwards to a word boundary</td>
+    <td>Delete backward to a word boundary</td>
     <td><code>ctrl</code> + <code>backspace</code> Doesn't
     work on Linux, Mac and Windows</td>
   </tr>

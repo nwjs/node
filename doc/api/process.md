@@ -440,16 +440,16 @@ $ node --no-warnings
 The `--trace-warnings` command-line option can be used to have the default
 console output for warnings include the full stack trace of the warning.
 
-Launching Node.js using the `--throw-deprecation` command line flag will
+Launching Node.js using the `--throw-deprecation` command-line flag will
 cause custom deprecation warnings to be thrown as exceptions.
 
-Using the `--trace-deprecation` command line flag will cause the custom
+Using the `--trace-deprecation` command-line flag will cause the custom
 deprecation to be printed to `stderr` along with the stack trace.
 
-Using the `--no-deprecation` command line flag will suppress all reporting
+Using the `--no-deprecation` command-line flag will suppress all reporting
 of the custom deprecation.
 
-The `*-deprecation` command line flags only affect warnings that use the name
+The `*-deprecation` command-line flags only affect warnings that use the name
 `'DeprecationWarning'`.
 
 #### Emitting custom warnings
@@ -616,11 +616,11 @@ added: v0.1.27
 
 * {string[]}
 
-The `process.argv` property returns an array containing the command line
+The `process.argv` property returns an array containing the command-line
 arguments passed when the Node.js process was launched. The first element will
 be [`process.execPath`][]. See `process.argv0` if access to the original value
 of `argv[0]` is needed. The second element will be the path to the JavaScript
-file being executed. The remaining elements will be any additional command line
+file being executed. The remaining elements will be any additional command-line
 arguments.
 
 For example, assuming the following script for `process-args.js`:
@@ -1768,19 +1768,22 @@ tarball.
   builds of Node.js and will be missing on all other platforms._
 * `lts` {string} a string label identifying the [LTS][] label for this release.
   This property only exists for LTS releases and is `undefined` for all other
-  release types, including _Current_ releases. Currently the valid values are:
-  * `'Argon'` for the 4.x LTS line beginning with 4.2.0.
-  * `'Boron'` for the 6.x LTS line beginning with 6.9.0.
-  * `'Carbon'` for the 8.x LTS line beginning with 8.9.1.
+  release types, including _Current_ releases.
+  Valid values include the LTS Release Codenames (including those
+  that are no longer supported). A non-exhaustive example of
+  these codenames includes:
+  * `'Dubnium'` for the 10.x LTS line beginning with 10.13.0.
+  * `'Erbium'` for the 12.x LTS line beginning with 12.13.0.
+  For other LTS Release Codenames, see [Node.js Changelog Archive](https://github.com/nodejs/node/blob/master/doc/changelogs/CHANGELOG_ARCHIVE.md)
 
 <!-- eslint-skip -->
 ```js
 {
   name: 'node',
-  lts: 'Argon',
-  sourceUrl: 'https://nodejs.org/download/release/v4.4.5/node-v4.4.5.tar.gz',
-  headersUrl: 'https://nodejs.org/download/release/v4.4.5/node-v4.4.5-headers.tar.gz',
-  libUrl: 'https://nodejs.org/download/release/v4.4.5/win-x64/node.lib'
+  lts: 'Erbium',
+  sourceUrl: 'https://nodejs.org/download/release/v12.18.1/node-v12.18.1.tar.gz',
+  headersUrl: 'https://nodejs.org/download/release/v12.18.1/node-v12.18.1-headers.tar.gz',
+  libUrl: 'https://nodejs.org/download/release/v12.18.1/win-x64/node.lib'
 }
 ```
 
@@ -2317,7 +2320,7 @@ important ways:
    * Pipes (and sockets): *synchronous* on Windows, *asynchronous* on POSIX
 
 These behaviors are partly for historical reasons, as changing them would
-create backwards incompatibility, but they are also expected by some users.
+create backward incompatibility, but they are also expected by some users.
 
 Synchronous writes avoid problems such as output written with `console.log()` or
 `console.error()` being unexpectedly interleaved, or not written at all if
@@ -2395,7 +2398,7 @@ the current value of `ps`.
 When a new value is assigned, different platforms will impose different maximum
 length restrictions on the title. Usually such restrictions are quite limited.
 For instance, on Linux and macOS, `process.title` is limited to the size of the
-binary name plus the length of the command line arguments because setting the
+binary name plus the length of the command-line arguments because setting the
 `process.title` overwrites the `argv` memory of the process. Node.js v0.8
 allowed for longer process title strings by also overwriting the `environ`
 memory but that was potentially insecure and confusing in some (rather obscure)
@@ -2476,12 +2479,15 @@ added: v0.1.3
 
 * {string}
 
-The `process.version` property returns the Node.js version string in the form of
-`v<major>.<minor>.<patch>`.
+The `process.version` property contains the Node.js version string.
 
 ```js
 console.log(`Version: ${process.version}`);
+// Version: v14.8.0
 ```
+
+To get the version string without the prepended _v_, use
+`process.versions.node`.
 
 ## `process.versions`
 <!-- YAML

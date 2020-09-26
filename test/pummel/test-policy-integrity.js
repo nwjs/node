@@ -13,6 +13,8 @@ const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
+const cpus = require('os').cpus().length;
+
 function hash(algo, body) {
   const values = [];
   {
@@ -82,7 +84,7 @@ function queueSpawn(opts) {
 }
 
 function drainQueue() {
-  if (spawned > 50) {
+  if (spawned > cpus) {
     return;
   }
   if (toSpawn.length) {
@@ -380,11 +382,8 @@ for (const permutation of permutations({
   );
 }
 debug(`spawning ${tests.size} policy integrity permutations`);
-debug(
-  'use NODE_DEBUG=test:policy-integrity:NUMBER to log a specific permutation'
-);
+
 for (const config of tests) {
   const parsed = JSON.parse(config);
-  tests.delete(config);
   queueSpawn(parsed);
 }

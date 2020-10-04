@@ -1523,8 +1523,9 @@ NODE_EXTERN void g_stop_nw_instance() {
     mp = mp2;
   }
   node::NodePlatform* platform = (node::NodePlatform*)tls_ctx->env->isolate_data()->platform();
+  v8::Isolate* isolate = tls_ctx->env->isolate();
   node::FreeEnvironment(tls_ctx->env);
-  platform->UnregisterIsolate(tls_ctx->env->isolate());
+  platform->UnregisterIsolate(isolate);
   delete platform;
   tls_ctx->env = nullptr;
 

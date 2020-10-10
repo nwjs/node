@@ -58,9 +58,10 @@ Performance Timeline. If `name` is provided, removes only the named mark.
 added: v14.10.0
 -->
 
-* `utilization1` {Object} The result of a previous call to `eventLoopUtilization()`
-* `utilization2` {Object} The result of a previous call to `eventLoopUtilization()`
-    prior to `util1`
+* `utilization1` {Object} The result of a previous call to
+    `eventLoopUtilization()`.
+* `utilization2` {Object} The result of a previous call to
+    `eventLoopUtilization()` prior to `utilization1`.
 * Returns {Object}
   * `idle` {number}
   * `active` {number}
@@ -70,9 +71,9 @@ The `eventLoopUtilization()` method returns an object that contains the
 cumulative duration of time the event loop has been both idle and active as a
 high resolution milliseconds timer. The `utilization` value is the calculated
 Event Loop Utilization (ELU). If bootstrapping has not yet finished, the
-properties have the value of 0.
+properties have the value of `0`.
 
-`utilization1` and `utilization2` are optional parameters.
+Both `utilization1` and `utilization2` are optional parameters.
 
 If `utilization1` is passed, then the delta between the current call's `active`
 and `idle` times, as well as the corresponding `utilization` value are
@@ -102,8 +103,8 @@ setImmediate(() => {
 ```
 
 Although the CPU is mostly idle while running this script, the value of
-`utilization` is 1. This is because the call to [`child_process.spawnSync()`][]
-blocks the event loop from proceeding.
+`utilization` is `1`. This is because the call to
+[`child_process.spawnSync()`][] blocks the event loop from proceeding.
 
 Passing in a user-defined object instead of the result of a previous call to
 `eventLoopUtilization()` will lead to undefined behavior. The return values
@@ -752,13 +753,13 @@ obs.observe({ entryTypes: ['function'], buffered: true });
 require('some-module');
 ```
 
-[`'exit'`]: process.html#process_event_exit
-[`process.hrtime()`]: process.html#process_process_hrtime_time
-[`child_process.spawnSync()`]: child_process.html#child_process_child_process_spawnsync_command_args_options
-[`timeOrigin`]: https://w3c.github.io/hr-time/#dom-performance-timeorigin
-[`window.performance`]: https://developer.mozilla.org/en-US/docs/Web/API/Window/performance
-[Async Hooks]: async_hooks.html
+[Async Hooks]: async_hooks.md
 [High Resolution Time]: https://www.w3.org/TR/hr-time-2
 [Performance Timeline]: https://w3c.github.io/performance-timeline/
-[Web Performance APIs]: https://w3c.github.io/perf-timing-primer/
 [User Timing]: https://www.w3.org/TR/user-timing/
+[Web Performance APIs]: https://w3c.github.io/perf-timing-primer/
+[`'exit'`]: process.md#process_event_exit
+[`child_process.spawnSync()`]: child_process.md#child_process_child_process_spawnsync_command_args_options
+[`process.hrtime()`]: process.md#process_process_hrtime_time
+[`timeOrigin`]: https://w3c.github.io/hr-time/#dom-performance-timeorigin
+[`window.performance`]: https://developer.mozilla.org/en-US/docs/Web/API/Window/performance

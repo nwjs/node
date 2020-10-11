@@ -594,6 +594,7 @@
         ],
         'defines': [
           'BUILDING_NW_NODE=1',
+          'V8_REVERSE_JSARGS',
         ],
 
       },
@@ -809,6 +810,7 @@
         # Warn when using deprecated V8 APIs.
         'V8_DEPRECATION_WARNINGS=1',
         'BUILDING_NW_NODE=1',
+        'V8_REVERSE_JSARGS',
         '_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH',
         'V8_SHARED',
         'USING_V8_SHARED',

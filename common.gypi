@@ -409,6 +409,7 @@
     # imminent V8 deprecations, also to sync how dependencies are configured.
     'defines': [
       'V8_DEPRECATION_WARNINGS',
+      'V8_REVERSE_JSARGS',
       #'V8_IMMINENT_DEPRECATION_WARNINGS',
     ],
 

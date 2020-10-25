@@ -40,10 +40,6 @@ import getmoduleversion
 import getnapibuildversion
 from gyp_node import run_gyp
 
-# imports in deps/v8/tools/node
-sys.path.insert(0, os.path.join('deps', 'v8', 'tools', 'node'))
-from fetch_deps import FetchDeps
-
 # parse our options
 parser = optparse.OptionParser()
 
@@ -121,6 +117,11 @@ parser.add_option('--error-on-warn',
     action='store_true',
     dest='error_on_warn',
     help='Turn compiler warnings into errors for node core sources.')
+
+parser.add_option('--experimental-quic',
+    action='store_true',
+    dest='experimental_quic',
+    help='enable experimental quic support')
 
 parser.add_option('--gdb',
     action='store_true',
@@ -268,6 +269,48 @@ shared_optgroup.add_option('--shared-nghttp2-libpath',
     action='store',
     dest='shared_nghttp2_libpath',
     help='a directory to search for the shared nghttp2 DLLs')
+
+shared_optgroup.add_option('--shared-ngtcp2',
+    action='store_true',
+    dest='shared_ngtcp2',
+    help='link to a shared ngtcp2 DLL instead of static linking')
+
+shared_optgroup.add_option('--shared-ngtcp2-includes',
+    action='store',
+    dest='shared_ngtcp2_includes',
+    help='directory containing ngtcp2 header files')
+
+shared_optgroup.add_option('--shared-ngtcp2-libname',
+    action='store',
+    dest='shared_ngtcp2_libname',
+    default='ngtcp2',
+    help='alternative lib name to link to [default: %default]')
+
+shared_optgroup.add_option('--shared-ngtcp2-libpath',
+    action='store',
+    dest='shared_ngtcp2_libpath',
+    help='a directory to search for the shared ngtcp2 DLLs')
+
+shared_optgroup.add_option('--shared-nghttp3',
+    action='store_true',
+    dest='shared_nghttp3',
+    help='link to a shared nghttp3 DLL instead of static linking')
+
+shared_optgroup.add_option('--shared-nghttp3-includes',
+    action='store',
+    dest='shared_nghttp3_includes',
+    help='directory containing nghttp3 header files')
+
+shared_optgroup.add_option('--shared-nghttp3-libname',
+    action='store',
+    dest='shared_nghttp3_libname',
+    default='nghttp3',
+    help='alternative lib name to link to [default: %default]')
+
+shared_optgroup.add_option('--shared-nghttp3-libpath',
+    action='store',
+    dest='shared_nghttp3_libpath',
+    help='a directory to search for the shared nghttp3 DLLs')
 
 shared_optgroup.add_option('--shared-openssl',
     action='store_true',
@@ -639,12 +682,6 @@ parser.add_option('--without-bundled-v8',
     default=False,
     help='do not use V8 includes from the bundled deps folder. ' +
          '(This mode is not officially supported for regular applications)')
-
-parser.add_option('--build-v8-with-gn',
-    action='store_true',
-    dest='build_v8_with_gn',
-    default=False,
-    help='build V8 using GN instead of gyp')
 
 parser.add_option('--verbose',
     action='store_true',
@@ -1199,6 +1236,14 @@ def configure_node(o):
   else:
     o['variables']['debug_nghttp2'] = 'false'
 
+  if options.experimental_quic:
+    if options.shared_openssl:
+      raise Exception('QUIC requires a modified version of OpenSSL and '
+                      'cannot be enabled when using --shared-openssl.')
+    o['variables']['experimental_quic'] = 1
+  else:
+    o['variables']['experimental_quic'] = 'false'
+
   o['variables']['node_no_browser_globals'] = b(options.no_browser_globals)
 
   o['variables']['node_shared'] = b(options.shared)
@@ -1300,14 +1345,6 @@ def configure_v8(o):
     o['variables']['test_isolation_mode'] = 'noop'  # Needed by d8.gyp.
   if options.without_bundled_v8 and options.enable_d8:
     raise Exception('--enable-d8 is incompatible with --without-bundled-v8.')
-  if options.without_bundled_v8 and options.build_v8_with_gn:
-    raise Exception(
-        '--build-v8-with-gn is incompatible with --without-bundled-v8.')
-  if options.build_v8_with_gn:
-    v8_path = os.path.join('deps', 'v8')
-    print('Fetching dependencies to build V8 with GN')
-    options.build_v8_with_gn = FetchDeps(v8_path)
-  o['variables']['build_v8_with_gn'] = b(options.build_v8_with_gn)
 
 
 def configure_openssl(o):
@@ -1331,6 +1368,8 @@ def configure_openssl(o):
       without_ssl_error('--openssl-fips')
     if options.openssl_default_cipher_list:
       without_ssl_error('--openssl-default-cipher-list')
+    if options.experimental_quic:
+      without_ssl_error('--experimental-quic')
     return
 
   if options.use_openssl_ca_store:

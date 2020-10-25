@@ -75,15 +75,19 @@
 
 #include "large_pages/node_large_page.h"
 
-#if defined(__APPLE__) || defined(__linux__)
+#if defined(__APPLE__) || defined(__linux__) || defined(_WIN32)
 #define NODE_USE_V8_WASM_TRAP_HANDLER 1
 #else
 #define NODE_USE_V8_WASM_TRAP_HANDLER 0
 #endif
 
 #if NODE_USE_V8_WASM_TRAP_HANDLER
+#if defined(_WIN32)
+#include "v8-wasm-trap-handler-win.h"
+#else
 #include <atomic>
 #include "v8-wasm-trap-handler-posix.h"
+#endif
 #endif  // NODE_USE_V8_WASM_TRAP_HANDLER
 
 // ========== global C headers ==========
@@ -167,6 +171,10 @@ bool v8_initialized = false;
 // node_internals.h
 // process-relative uptime base in nanoseconds, initialized in node::Start()
 uint64_t node_start_time;
+
+#if NODE_USE_V8_WASM_TRAP_HANDLER && defined(_WIN32)
+PVOID old_vectored_exception_handler;
+#endif
 
 // node_v8_platform-inl.h
 struct V8Platform v8_platform;
@@ -369,6 +377,7 @@ MaybeLocal<Value> Environment::BootstrapNode() {
     return scope.EscapeMaybe(result);
   }
 
+  // TODO(joyeecheung): skip these in the snapshot building for workers.
   auto thread_switch_id =
       is_main_thread() ? "internal/bootstrap/switches/is_main_thread"
                        : "internal/bootstrap/switches/is_not_main_thread";
@@ -478,13 +487,6 @@ MaybeLocal<Value> StartExecution(Environment* env, StartExecutionCallback cb) {
     return scope.EscapeMaybe(cb(info));
   }
 
-  // To allow people to extend Node in different ways, this hook allows
-  // one to drop a file lib/_third_party_main.js into the build
-  // directory which will be executed instead of Node's normal loading.
-  if (NativeModuleEnv::Exists("_third_party_main")) {
-    return StartExecution(env, "internal/main/run_third_party_main");
-  }
-
   if (env->worker_context() != nullptr) {
     return StartExecution(env, "internal/main/worker_thread");
   }
@@ -494,7 +496,7 @@ MaybeLocal<Value> StartExecution(Environment* env, StartExecutionCallback cb) {
     first_argv = env->argv()[1];
   }
 
-  if (first_argv == "inspect" || first_argv == "debug") {
+  if (first_argv == "inspect") {
     return StartExecution(env, "internal/main/inspect");
   }
 
@@ -531,6 +533,14 @@ MaybeLocal<Value> StartExecution(Environment* env, StartExecutionCallback cb) {
 typedef void (*sigaction_cb)(int signo, siginfo_t* info, void* ucontext);
 #endif
 #if NODE_USE_V8_WASM_TRAP_HANDLER
+#if defined(_WIN32)
+static LONG TrapWebAssemblyOrContinue(EXCEPTION_POINTERS* exception) {
+  if (v8::TryHandleWebAssemblyTrapWindows(exception)) {
+    return EXCEPTION_CONTINUE_EXECUTION;
+  }
+  return EXCEPTION_CONTINUE_SEARCH;
+}
+#else
 static std::atomic<sigaction_cb> previous_sigsegv_action;
 
 void TrapWebAssemblyOrContinue(int signo, siginfo_t* info, void* ucontext) {
@@ -550,6 +560,7 @@ void TrapWebAssemblyOrContinue(int signo, siginfo_t* info, void* ucontext) {
     }
   }
 }
+#endif  // defined(_WIN32)
 #endif  // NODE_USE_V8_WASM_TRAP_HANDLER
 
 #ifdef __POSIX__
@@ -572,7 +583,6 @@ void RegisterSignalHandler(int signal,
   sigfillset(&sa.sa_mask);
   CHECK_EQ(sigaction(signal, &sa, nullptr), 0);
 }
-
 #endif  // __POSIX__
 
 #ifdef __POSIX__
@@ -655,6 +665,13 @@ inline void PlatformInit() {
   RegisterSignalHandler(SIGTERM, SignalExit, true);
 
 #if NODE_USE_V8_WASM_TRAP_HANDLER
+#if defined(_WIN32)
+  {
+    constexpr ULONG first = TRUE;
+    per_process::old_vectored_exception_handler =
+        AddVectoredExceptionHandler(first, TrapWebAssemblyOrContinue);
+  }
+#else
   // Tell V8 to disable emitting WebAssembly
   // memory bounds checks. This means that we have
   // to catch the SIGSEGV in TrapWebAssemblyOrContinue
@@ -666,6 +683,7 @@ inline void PlatformInit() {
     sa.sa_flags = SA_SIGINFO;
     CHECK_EQ(sigaction(SIGSEGV, &sa, nullptr), 0);
   }
+#endif  // defined(_WIN32)
   V8::EnableWebAssemblyTrapHandler(false);
 #endif  // NODE_USE_V8_WASM_TRAP_HANDLER
 
@@ -1201,6 +1219,10 @@ void TearDownOncePerProcess() {
   per_process::v8_initialized = false;
   V8::Dispose();
 
+#if NODE_USE_V8_WASM_TRAP_HANDLER && defined(_WIN32)
+  RemoveVectoredExceptionHandler(per_process::old_vectored_exception_handler);
+#endif
+
   // uv_run cannot be called from the time before the beforeExit callback
   // runs until the program exits unless the event loop has any referenced
   // handles after beforeExit terminates. This prevents unrefed timers
@@ -1219,19 +1241,15 @@ int Start(int argc, char** argv) {
   {
     Isolate::CreateParams params;
     const std::vector<size_t>* indexes = nullptr;
-    std::vector<intptr_t> external_references;
-
+    const EnvSerializeInfo* env_info = nullptr;
     bool force_no_snapshot =
         per_process::cli_options->per_isolate->no_node_snapshot;
     if (!force_no_snapshot) {
       v8::StartupData* blob = NodeMainInstance::GetEmbeddedSnapshotBlob();
       if (blob != nullptr) {
-        // TODO(joyeecheung): collect external references and set it in
-        // params.external_references.
-        external_references.push_back(reinterpret_cast<intptr_t>(nullptr));
-        params.external_references = external_references.data();
         params.snapshot_blob = blob;
         indexes = NodeMainInstance::GetIsolateDataIndexes();
+        env_info = NodeMainInstance::GetEnvSerializeInfo();
       }
     }
     uv_loop_configure(uv_default_loop(), UV_METRICS_IDLE_TIME);
@@ -1242,7 +1260,7 @@ int Start(int argc, char** argv) {
                                    result.args,
                                    result.exec_args,
                                    indexes);
-    result.exit_code = main_instance.Run();
+    result.exit_code = main_instance.Run(env_info);
   }
 
   TearDownOncePerProcess();
@@ -1610,7 +1628,7 @@ NODE_EXTERN void g_run_at_exit(node::Environment* env) {
 }
 
 NODE_EXTERN void g_promise_reject_callback(v8::PromiseRejectMessage* data) {
-  node::task_queue::PromiseRejectCallback(*data);
+  node::PromiseRejectCallback(*data);
 }
 
 NODE_EXTERN void g_uv_init_nw(int worker) {

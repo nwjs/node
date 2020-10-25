@@ -48,6 +48,13 @@ Additionally, this module includes the utility functions
 [`stream.pipeline()`][], [`stream.finished()`][] and
 [`stream.Readable.from()`][].
 
+### Streams Promises API
+
+The `stream/promises` API provides an alternative set of asynchronous utility
+functions for streams that return `Promise` objects rather than using
+callbacks. The API is accessible via `require('stream/promises')`
+or `require('stream').promises`.
+
 ### Object mode
 
 All streams created by Node.js APIs operate exclusively on strings and `Buffer`
@@ -416,6 +423,9 @@ Is `true` after [`writable.destroy()`][writable-destroy] has been called.
 <!-- YAML
 added: v0.9.4
 changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/34101
+    description: The `callback` is invoked before 'finish' or on error.
   - version: v14.0.0
     pr-url: https://github.com/nodejs/node/pull/29747
     description: The `callback` is invoked if 'finish' or 'error' is emitted.
@@ -432,15 +442,13 @@ changes:
   `Uint8Array`. For object mode streams, `chunk` may be any JavaScript value
   other than `null`.
 * `encoding` {string} The encoding if `chunk` is a string
-* `callback` {Function} Optional callback for when the stream finishes
-  or errors
+* `callback` {Function} Callback for when the stream is finished.
 * Returns: {this}
 
 Calling the `writable.end()` method signals that no more data will be written
 to the [`Writable`][]. The optional `chunk` and `encoding` arguments allow one
 final additional chunk of data to be written immediately before closing the
-stream. If provided, the optional `callback` function is attached as a listener
-for the [`'finish'`][] and the `'error'` event.
+stream.
 
 Calling the [`stream.write()`][stream-write] method after calling
 [`stream.end()`][stream-end] will raise an error.
@@ -556,8 +564,7 @@ added: v9.3.0
 
 * {number}
 
-Return the value of `highWaterMark` passed when constructing this
-`Writable`.
+Return the value of `highWaterMark` passed when creating this `Writable`.
 
 ##### `writable.writableLength`
 <!-- YAML
@@ -597,7 +604,7 @@ changes:
   `Uint8Array`. For object mode streams, `chunk` may be any JavaScript value
   other than `null`.
 * `encoding` {string} The encoding, if `chunk` is a string. **Default:** `'utf8'`
-* `callback` {Function} Callback for when this chunk of data is flushed
+* `callback` {Function} Callback for when this chunk of data is flushed.
 * Returns: {boolean} `false` if the stream wishes for the calling code to
   wait for the `'drain'` event to be emitted before continuing to write
   additional data; otherwise `true`.
@@ -1127,7 +1134,7 @@ buffer will be returned.
 If the `size` argument is not specified, all of the data contained in the
 internal buffer will be returned.
 
-The `size` argument must be less than or equal to 1 GB.
+The `size` argument must be less than or equal to 1 GiB.
 
 The `readable.read()` method should only be called on `Readable` streams
 operating in paused mode. In flowing mode, `readable.read()` is called
@@ -1234,8 +1241,7 @@ added: v9.3.0
 
 * {number}
 
-Returns the value of `highWaterMark` passed when constructing this
-`Readable`.
+Returns the value of `highWaterMark` passed when creating this `Readable`.
 
 ##### `readable.readableLength`
 <!-- YAML
@@ -1610,10 +1616,10 @@ Especially useful in error handling scenarios where a stream is destroyed
 prematurely (like an aborted HTTP request), and will not emit `'end'`
 or `'finish'`.
 
-The `finished` API is promisify-able as well;
+The `finished` API provides promise version:
 
 ```js
-const finished = util.promisify(stream.finished);
+const { finished } = require('stream/promises');
 
 const rs = fs.createReadStream('archive.tar');
 
@@ -1645,15 +1651,15 @@ const cleanup = finished(rs, (err) => {
 <!-- YAML
 added: v10.0.0
 changes:
-  - version: v13.10.0
-    pr-url: https://github.com/nodejs/node/pull/31223
-    description: Add support for async generators.
   - version: v14.0.0
     pr-url: https://github.com/nodejs/node/pull/32158
     description: The `pipeline(..., cb)` will wait for the `'close'` event
                  before invoking the callback. The implementation tries to
                  detect legacy streams and only apply this behavior to streams
                  which are expected to emit `'close'`.
+  - version: v13.10.0
+    pr-url: https://github.com/nodejs/node/pull/31223
+    description: Add support for async generators.
 -->
 
 * `streams` {Stream[]|Iterable[]|AsyncIterable[]|Function[]}
@@ -1697,10 +1703,10 @@ pipeline(
 );
 ```
 
-The `pipeline` API is promisify-able as well:
+The `pipeline` API provides promise version:
 
 ```js
-const pipeline = util.promisify(stream.pipeline);
+const { pipeline } = require('stream/promises');
 
 async function run() {
   await pipeline(
@@ -1717,7 +1723,7 @@ run().catch(console.error);
 The `pipeline` API also supports async generators:
 
 ```js
-const pipeline = util.promisify(stream.pipeline);
+const { pipeline } = require('stream/promises');
 const fs = require('fs');
 
 async function run() {
@@ -1839,7 +1845,7 @@ expectations.
 added: v1.2.0
 -->
 
-For many simple cases, it is possible to construct a stream without relying on
+For many simple cases, it is possible to create a stream without relying on
 inheritance. This can be accomplished by directly creating instances of the
 `stream.Writable`, `stream.Readable`, `stream.Duplex` or `stream.Transform`
 objects and passing appropriate methods as constructor options.
@@ -1848,8 +1854,14 @@ objects and passing appropriate methods as constructor options.
 const { Writable } = require('stream');
 
 const myWritable = new Writable({
+  construct(callback) {
+    // Initialize state and load resources...
+  },
   write(chunk, encoding, callback) {
     // ...
+  },
+  destroy() {
+    // Free resources...
   }
 });
 ```
@@ -1908,6 +1920,8 @@ changes:
     [`stream._destroy()`][writable-_destroy] method.
   * `final` {Function} Implementation for the
     [`stream._final()`][stream-_final] method.
+  * `construct` {Function} Implementation for the
+    [`stream._construct()`][writable-_construct] method.
   * `autoDestroy` {boolean} Whether this stream should automatically call
     `.destroy()` on itself after ending. **Default:** `true`.
 
@@ -2201,15 +2215,15 @@ constructor and implement the [`readable._read()`][] method.
 #### `new stream.Readable([options])`
 <!-- YAML
 changes:
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/30623
+    description: Change `autoDestroy` option default to `true`.
   - version:
      - v11.2.0
      - v10.16.0
     pr-url: https://github.com/nodejs/node/pull/22795
     description: Add `autoDestroy` option to automatically `destroy()` the
                  stream when it emits `'end'` or errors.
-  - version: v14.0.0
-    pr-url: https://github.com/nodejs/node/pull/30623
-    description: Change `autoDestroy` option default to `true`.
 -->
 
 * `options` {Object}
@@ -2227,6 +2241,8 @@ changes:
     method.
   * `destroy` {Function} Implementation for the
     [`stream._destroy()`][readable-_destroy] method.
+  * `construct` {Function} Implementation for the
+    [`stream._construct()`][readable-_construct] method.
   * `autoDestroy` {boolean} Whether this stream should automatically call
     `.destroy()` on itself after ending. **Default:** `true`.
 
@@ -2585,6 +2601,46 @@ const myDuplex = new Duplex({
 });
 ```
 
+When using pipeline:
+
+```js
+const { Transform, pipeline } = require('stream');
+const fs = require('fs');
+
+pipeline(
+  fs.createReadStream('object.json')
+    .setEncoding('utf-8'),
+  new Transform({
+    decodeStrings: false, // Accept string input rather than Buffers
+    construct(callback) {
+      this.data = '';
+      callback();
+    },
+    transform(chunk, encoding, callback) {
+      this.data += chunk;
+      callback();
+    },
+    flush(callback) {
+      try {
+        // Make sure is valid json.
+        JSON.parse(this.data);
+        this.push(this.data);
+      } catch (err) {
+        callback(err);
+      }
+    }
+  }),
+  fs.createWriteStream('valid-object.json'),
+  (err) => {
+    if (err) {
+      console.error('failed', err);
+    } else {
+      console.log('completed');
+    }
+  }
+);
+```
+
 #### An example duplex stream
 
 The following illustrates a simple example of a `Duplex` stream that wraps a
@@ -2868,8 +2924,8 @@ unhandled post-destroy errors.
 
 #### Creating readable streams with async generators
 
-We can construct a Node.js readable stream from an asynchronous generator
-using the `Readable.from()` utility method:
+A Node.js readable stream can be created from an asynchronous generator using
+the `Readable.from()` utility method:
 
 ```js
 const { Readable } = require('stream');
@@ -2894,9 +2950,9 @@ handling of backpressure and errors. [`stream.pipeline()`][] abstracts away
 the handling of backpressure and backpressure-related errors:
 
 ```js
-const { pipeline } = require('stream');
-const util = require('util');
 const fs = require('fs');
+const { pipeline } = require('stream');
+const { pipeline: pipelinePromise } = require('stream/promises');
 
 const writable = fs.createWriteStream('./file');
 
@@ -2910,7 +2966,6 @@ pipeline(iterator, writable, (err, value) => {
 });
 
 // Promise Pattern
-const pipelinePromise = util.promisify(pipeline);
 pipelinePromise(iterator, writable)
   .then((value) => {
     console.log(value, 'value returned');
@@ -3075,6 +3130,7 @@ contain multi-byte characters.
 [http-incoming-message]: http.md#http_class_http_incomingmessage
 [hwm-gotcha]: #stream_highwatermark_discrepancy_after_calling_readable_setencoding
 [object-mode]: #stream_object_mode
+[readable-_construct]: #stream_readable_construct_callback
 [readable-_destroy]: #stream_readable_destroy_err_callback
 [readable-destroy]: #stream_readable_destroy_error
 [stream-_final]: #stream_writable_final_callback
@@ -3091,6 +3147,7 @@ contain multi-byte characters.
 [stream-uncork]: #stream_writable_uncork
 [stream-write]: #stream_writable_write_chunk_encoding_callback
 [Three states]: #stream_three_states
+[writable-_construct]: #stream_writable_construct_callback
 [writable-_destroy]: #stream_writable_destroy_err_callback
 [writable-destroy]: #stream_writable_destroy_error
 [writable-new]: #stream_new_stream_writable_options

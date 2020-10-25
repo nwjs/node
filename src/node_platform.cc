@@ -619,6 +619,4 @@ std::queue<std::unique_ptr<T>> TaskQueue<T>::PopAll() {
   return result;
 }
 
-void MultiIsolatePlatform::CancelPendingDelayedTasks(Isolate* isolate) {}
-
 }  // namespace node

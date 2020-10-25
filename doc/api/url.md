@@ -244,6 +244,13 @@ If the value assigned to the `href` property is not a valid URL, a `TypeError`
 will be thrown.
 
 #### `url.origin`
+<!-- YAML
+changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/33325
+    description: The scheme "gopher" is no longer special and `url.origin` now
+                 returns `'null'` for it.
+-->
 
 * {string}
 
@@ -307,6 +314,12 @@ to percent-encode may vary somewhat from what the [`url.parse()`][] and
 [`url.format()`][] methods would produce.
 
 #### `url.port`
+<!-- YAML
+changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/33325
+    description: The scheme "gopher" is no longer special.
+-->
 
 * {string}
 
@@ -324,7 +337,6 @@ the protocol/scheme:
 | -------- | ---- |
 | "ftp"    | 21   |
 | "file"   |      |
-| "gopher" | 70   |
 | "http"   | 80   |
 | "https"  | 443  |
 | "ws"     | 80   |
@@ -409,6 +421,12 @@ console.log(myURL.href);
 Invalid URL protocol values assigned to the `protocol` property are ignored.
 
 ##### Special schemes
+<!-- YAML
+changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/33325
+    description: The scheme "gopher" is no longer special.
+-->
 
 The [WHATWG URL Standard][] considers a handful of URL protocol schemes to be
 _special_ in terms of how they are parsed and serialized. When a URL is
@@ -446,7 +464,7 @@ console.log(u.href);
 ```
 
 According to the WHATWG URL Standard, special protocol schemes are `ftp`,
-`file`, `gopher`, `http`, `https`, `ws`, and `wss`.
+`file`, `http`, `https`, `ws`, and `wss`.
 
 #### `url.search`
 
@@ -1268,7 +1286,9 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/8215
     description: The `auth` fields are now kept intact when `from` and `to`
                  refer to the same host.
-  - version: v6.5.0, v4.6.2
+  - version:
+    - v6.5.0
+    - v4.6.2
     pr-url: https://github.com/nodejs/node/pull/8214
     description: The `port` field is copied correctly now.
   - version: v6.0.0

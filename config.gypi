@@ -38,4 +38,5 @@
                  'v8_optimized_debug': 0,
                  'v8_random_seed': 0,
                  'v8_use_snapshot': 'true',
+                 'experimental_quic': 0,
                  'want_separate_host_toolset': 0}}

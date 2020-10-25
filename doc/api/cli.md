@@ -82,7 +82,9 @@ $ source node_bash_completion
 
 ### `--conditions=condition`
 <!-- YAML
-added: v14.9.0
+added:
+  - v14.9.0
+  - v12.19.0
 -->
 
 > Stability: 1 - Experimental
@@ -160,8 +162,10 @@ Affects the default output directory of:
 * [--redirect-warnings](#cli_redirect_warnings_file)
 
 ### `--disable-proto=mode`
-<!--YAML
-added: v13.12.0
+<!-- YAML
+added:
+ - v13.12.0
+ - v12.17.0
 -->
 
 Disable the `Object.prototype.__proto__` property. If `mode` is `delete`, the
@@ -196,6 +200,18 @@ Enable experimental Source Map v3 support for stack traces.
 
 Currently, overriding `Error.prepareStackTrace` is ignored when the
 `--enable-source-maps` flag is set.
+
+### `--experimental-abortcontroller`
+<!-- YAML
+added: v15.0.0
+changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/33527
+    description: --experimental-abortcontroller is no longer required.
+-->
+
+Experimental `AbortController` and `AbortSignal` support is enabled by default.
+Use of this command-line flag is no longer required.
 
 ### `--experimental-import-meta-resolve`
 <!-- YAML
@@ -274,7 +290,7 @@ changes:
   - version: v13.6.0
     pr-url: https://github.com/nodejs/node/pull/30980
     description: changed from `--experimental-wasi-unstable-preview0` to
-                 `--experimental-wasi-unstable-preview1`
+                 `--experimental-wasi-unstable-preview1`.
 -->
 
 Enable experimental WebAssembly System Interface (WASI) support.
@@ -494,7 +510,7 @@ added:
  - v11.6.0
  - v10.15.0
 changes:
-  - version: v14.0.0
+  - version: v13.13.0
     pr-url: https://github.com/nodejs/node/pull/32520
     description: Change maximum default size of HTTP headers from 8KB to 16KB.
 -->
@@ -529,6 +545,14 @@ added: v6.0.0
 -->
 
 Silence all process warnings (including deprecations).
+
+### `--node-memory-debug`
+<!-- YAML
+added: v15.0.0
+-->
+
+Enable extra debug checks for memory leaks in Node.js internals. This is
+usually only useful for developers debugging Node.js itself.
 
 ### `--openssl-config=file`
 <!-- YAML
@@ -657,7 +681,9 @@ will be written to is controlled by the
 
 ### `--report-compact`
 <!-- YAML
-added: v13.12.0
+added:
+ - v13.12.0
+ - v12.17.0
 -->
 
 Write reports in a compact format, single-line JSON, more easily consumable
@@ -668,13 +694,15 @@ human consumption.
 <!-- YAML
 added: v11.8.0
 changes:
-  - version: v13.12.0
+  - version:
+     - v13.12.0
+     - v12.17.0
     pr-url: https://github.com/nodejs/node/pull/32242
     description: This option is no longer experimental.
   - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/27312
     description: Changed from `--diagnostic-report-directory` to
-                 `--report-directory`
+                 `--report-directory`.
 -->
 
 Location at which the report will be generated.
@@ -683,13 +711,15 @@ Location at which the report will be generated.
 <!-- YAML
 added: v11.8.0
 changes:
-  - version: v13.12.0
+  - version:
+     - v13.12.0
+     - v12.17.0
     pr-url: https://github.com/nodejs/node/pull/32242
     description: This option is no longer experimental.
   - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/27312
     description: changed from `--diagnostic-report-filename` to
-                 `--report-filename`
+                 `--report-filename`.
 -->
 
 Name of the file to which the report will be written.
@@ -698,13 +728,16 @@ Name of the file to which the report will be written.
 <!-- YAML
 added: v11.8.0
 changes:
-  - version: v14.0.0
+  - version:
+    - v14.0.0
+    - v13.14.0
+    - v12.17.0
     pr-url: https://github.com/nodejs/node/pull/32496
     description: This option is no longer experimental.
   - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/27312
     description: changed from `--diagnostic-report-on-fatalerror` to
-                 `--report-on-fatalerror`
+                 `--report-on-fatalerror`.
 -->
 
 Enables the report to be triggered on fatal errors (internal errors within
@@ -717,13 +750,15 @@ error.
 <!-- YAML
 added: v11.8.0
 changes:
-  - version: v13.12.0
+  - version:
+     - v13.12.0
+     - v12.17.0
     pr-url: https://github.com/nodejs/node/pull/32242
     description: This option is no longer experimental.
   - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/27312
     description: changed from `--diagnostic-report-on-signal` to
-                 `--report-on-signal`
+                 `--report-on-signal`.
 -->
 
 Enables report to be generated upon receiving the specified (or predefined)
@@ -734,13 +769,15 @@ specified through `--report-signal`.
 <!-- YAML
 added: v11.8.0
 changes:
-  - version: v13.12.0
+  - version:
+     - v13.12.0
+     - v12.17.0
     pr-url: https://github.com/nodejs/node/pull/32242
     description: This option is no longer experimental.
   - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/27312
     description: changed from `--diagnostic-report-signal` to
-                 `--report-signal`
+                 `--report-signal`.
 -->
 
 Sets or resets the signal for report generation (not supported on Windows).
@@ -750,13 +787,15 @@ Default signal is `SIGUSR2`.
 <!-- YAML
 added: v11.8.0
 changes:
-  - version: v13.12.0
+  - version:
+     - v13.12.0
+     - v12.17.0
     pr-url: https://github.com/nodejs/node/pull/32242
     description: This option is no longer experimental.
   - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/27312
     description: changed from `--diagnostic-report-uncaught-exception` to
-                 `--report-uncaught-exception`
+                 `--report-uncaught-exception`.
 -->
 
 Enables report to be generated on uncaught exceptions. Useful when inspecting
@@ -922,7 +961,9 @@ i.e. invoking `process.exit()`.
 
 ### `--trace-sigint`
 <!-- YAML
-added: v13.9.0
+added:
+ - v13.9.0
+ - v12.17.0
 -->
 
 Prints a stack trace on SIGINT.
@@ -976,15 +1017,11 @@ added:
  - v10.17.0
 -->
 
-By default all unhandled rejections trigger a warning plus a deprecation warning
-for the very first unhandled rejection in case no [`unhandledRejection`][] hook
-is used.
-
 Using this flag allows to change what should happen when an unhandled rejection
 occurs. One of the following modes can be chosen:
 
 * `throw`: Emit [`unhandledRejection`][]. If this hook is not set, raise the
-  unhandled rejection as an uncaught exception.
+  unhandled rejection as an uncaught exception. This is the default.
 * `strict`: Raise the unhandled rejection as an uncaught exception.
 * `warn`: Always trigger a warning, no matter if the [`unhandledRejection`][]
   hook is set or not but do not print the deprecation warning.
@@ -1014,7 +1051,9 @@ See `SSL_CERT_DIR` and `SSL_CERT_FILE`.
 
 ### `--use-largepages=mode`
 <!-- YAML
-added: v13.6.0
+added:
+ - v13.6.0
+ - v12.17.0
 -->
 
 Re-map the Node.js static code to large memory pages at startup. If supported on
@@ -1222,6 +1261,7 @@ Node.js options that are allowed are:
 * `--disable-proto`
 * `--enable-fips`
 * `--enable-source-maps`
+* `--experimental-abortcontroller`
 * `--experimental-import-meta-resolve`
 * `--experimental-json-modules`
 * `--experimental-loader`
@@ -1250,6 +1290,7 @@ Node.js options that are allowed are:
 * `--no-deprecation`
 * `--no-force-async-hooks-checks`
 * `--no-warnings`
+* `--node-memory-debug`
 * `--openssl-config`
 * `--pending-deprecation`
 * `--policy-integrity`

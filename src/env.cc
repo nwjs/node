@@ -21,7 +21,9 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cinttypes>
 #include <cstdio>
+#include <iostream>
 #include <memory>
 
 namespace node {
@@ -308,28 +310,35 @@ std::string GetExecPath(const std::vector<std::string>& argv) {
 }
 
 Environment::Environment(IsolateData* isolate_data,
-                         Local<Context> context,
+                         Isolate* isolate,
                          const std::vector<std::string>& args,
                          const std::vector<std::string>& exec_args,
+                         const EnvSerializeInfo* env_info,
                          EnvironmentFlags::Flags flags,
                          ThreadId thread_id)
-    : isolate_(context->GetIsolate()),
+    : isolate_(isolate),
       isolate_data_(isolate_data),
-      immediate_info_(context->GetIsolate()),
-      tick_info_(context->GetIsolate()),
+      async_hooks_(isolate, MAYBE_FIELD_PTR(env_info, async_hooks)),
+      immediate_info_(isolate, MAYBE_FIELD_PTR(env_info, immediate_info)),
+      tick_info_(isolate, MAYBE_FIELD_PTR(env_info, tick_info)),
       timer_base_(uv_now(isolate_data->event_loop())),
       exec_argv_(exec_args),
       argv_(args),
       exec_path_(GetExecPath(args)),
-      should_abort_on_uncaught_toggle_(isolate_, 1),
-      stream_base_state_(isolate_, StreamBase::kNumStreamBaseStateFields),
+      should_abort_on_uncaught_toggle_(
+          isolate_,
+          1,
+          MAYBE_FIELD_PTR(env_info, should_abort_on_uncaught_toggle)),
+      stream_base_state_(isolate_,
+                         StreamBase::kNumStreamBaseStateFields,
+                         MAYBE_FIELD_PTR(env_info, stream_base_state)),
+      environment_start_time_(PERFORMANCE_NOW()),
       flags_(flags),
-      thread_id_(thread_id.id == static_cast<uint64_t>(-1) ?
-          AllocateEnvironmentThreadId().id : thread_id.id),
-      context_(context->GetIsolate(), context) {
+      thread_id_(thread_id.id == static_cast<uint64_t>(-1)
+                     ? AllocateEnvironmentThreadId().id
+                     : thread_id.id) {
   // We'll be creating new objects so make sure we've entered the context.
-  HandleScope handle_scope(isolate());
-  Context::Scope context_scope(context);
+  HandleScope handle_scope(isolate);
 
   // Set some flags if only kDefaultFlags was passed. This can make API version
   // transitions easier for embedders.
@@ -340,6 +349,8 @@ Environment::Environment(IsolateData* isolate_data,
   }
 
   set_env_vars(per_process::system_environment);
+  // TODO(joyeecheung): pass Isolate* and env_vars to it instead of the entire
+  // env
   enabled_debug_list_.Parse(this);
 
   // We create new copies of the per-Environment option sets, so that it is
@@ -359,8 +370,6 @@ Environment::Environment(IsolateData* isolate_data,
   inspector_agent_ = std::make_unique<inspector::Agent>(this);
 #endif
 
-  AssignToContext(context, ContextInfo(""));
-
   static uv_once_t init_once = UV_ONCE_INIT;
   uv_once(&init_once, InitThreadLocalOnce);
   uv_key_set(&thread_local_env, this);
@@ -375,16 +384,9 @@ Environment::Environment(IsolateData* isolate_data,
 
   destroy_async_id_list_.reserve(512);
 
-  performance_state_ =
-      std::make_unique<performance::PerformanceState>(isolate());
+  performance_state_ = std::make_unique<performance::PerformanceState>(
+      isolate, MAYBE_FIELD_PTR(env_info, performance_state));
 #if 0
-  performance_state_->Mark(
-      performance::NODE_PERFORMANCE_MILESTONE_ENVIRONMENT);
-  performance_state_->Mark(performance::NODE_PERFORMANCE_MILESTONE_NODE_START,
-                           per_process::node_start_time);
-  performance_state_->Mark(
-      performance::NODE_PERFORMANCE_MILESTONE_V8_START,
-      performance::performance_v8_start);
 
   if (*TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
           TRACING_CATEGORY_NODE1(environment)) != 0) {
@@ -401,19 +403,52 @@ Environment::Environment(IsolateData* isolate_data,
                                       "args",
                                       std::move(traced_value));
   }
-
 #endif
+  // This adjusts the return value of base_object_count() so that tests that
+  // check the count do not have to account for internally created BaseObjects.
+  initial_base_object_count_ = base_object_count();
+}
 
-  // By default, always abort when --abort-on-uncaught-exception was passed.
-  should_abort_on_uncaught_toggle_[0] = 1;
+Environment::Environment(IsolateData* isolate_data,
+                         Local<Context> context,
+                         const std::vector<std::string>& args,
+                         const std::vector<std::string>& exec_args,
+                         const EnvSerializeInfo* env_info,
+                         EnvironmentFlags::Flags flags,
+                         ThreadId thread_id)
+    : Environment(isolate_data,
+                  context->GetIsolate(),
+                  args,
+                  exec_args,
+                  env_info,
+                  flags,
+                  thread_id) {
+  InitializeMainContext(context, env_info);
+}
+
+void Environment::InitializeMainContext(Local<Context> context,
+                                        const EnvSerializeInfo* env_info) {
+  context_.Reset(context->GetIsolate(), context);
+  AssignToContext(context, ContextInfo(""));
+  if (env_info != nullptr) {
+    DeserializeProperties(env_info);
+  } else {
+    CreateProperties();
+  }
 
   if (options_->no_force_async_hooks_checks) {
     async_hooks_.no_force_checks();
   }
 
-  // TODO(joyeecheung): deserialize when the snapshot covers the environment
-  // properties.
-  CreateProperties();
+  // By default, always abort when --abort-on-uncaught-exception was passed.
+  should_abort_on_uncaught_toggle_[0] = 1;
+
+  performance_state_->Mark(performance::NODE_PERFORMANCE_MILESTONE_ENVIRONMENT,
+                           environment_start_time_);
+  performance_state_->Mark(performance::NODE_PERFORMANCE_MILESTONE_NODE_START,
+                           per_process::node_start_time);
+  performance_state_->Mark(performance::NODE_PERFORMANCE_MILESTONE_V8_START,
+                           performance::performance_v8_start);
 
   // This adjusts the return value of base_object_count() so that tests that
   // check the count do not have to account for internally created BaseObjects.
@@ -460,8 +495,8 @@ Environment::~Environment() {
   inspector_agent_.reset();
 #endif
 
-  context()->SetAlignedPointerInEmbedderData(
-      ContextEmbedderIndex::kEnvironment, nullptr);
+  context()->SetAlignedPointerInEmbedderData(ContextEmbedderIndex::kEnvironment,
+                                             nullptr);
 
   if (trace_state_observer_) {
     tracing::AgentWriterHandle* writer = GetTracingAgentWriter();
@@ -943,12 +978,152 @@ void Environment::CollectUVExceptionInfo(Local<Value> object,
                              syscall, message, path, dest);
 }
 
+ImmediateInfo::ImmediateInfo(v8::Isolate* isolate, const SerializeInfo* info)
+    : fields_(isolate, kFieldsCount, MAYBE_FIELD_PTR(info, fields)) {}
+
+ImmediateInfo::SerializeInfo ImmediateInfo::Serialize(
+    v8::Local<v8::Context> context, v8::SnapshotCreator* creator) {
+  return {fields_.Serialize(context, creator)};
+}
+
+void ImmediateInfo::Deserialize(Local<Context> context) {
+  fields_.Deserialize(context);
+}
+
+std::ostream& operator<<(std::ostream& output,
+                         const ImmediateInfo::SerializeInfo& i) {
+  output << "{ " << i.fields << " }";
+  return output;
+}
+
 void ImmediateInfo::MemoryInfo(MemoryTracker* tracker) const {
   tracker->TrackField("fields", fields_);
 }
 
+TickInfo::SerializeInfo TickInfo::Serialize(v8::Local<v8::Context> context,
+                                            v8::SnapshotCreator* creator) {
+  return {fields_.Serialize(context, creator)};
+}
+
+void TickInfo::Deserialize(Local<Context> context) {
+  fields_.Deserialize(context);
+}
+
+std::ostream& operator<<(std::ostream& output,
+                         const TickInfo::SerializeInfo& i) {
+  output << "{ " << i.fields << " }";
+  return output;
+}
+
 void TickInfo::MemoryInfo(MemoryTracker* tracker) const {
   tracker->TrackField("fields", fields_);
+}
+
+TickInfo::TickInfo(v8::Isolate* isolate, const SerializeInfo* info)
+    : fields_(
+          isolate, kFieldsCount, info == nullptr ? nullptr : &(info->fields)) {}
+
+AsyncHooks::AsyncHooks(v8::Isolate* isolate, const SerializeInfo* info)
+    : async_ids_stack_(isolate, 16 * 2, MAYBE_FIELD_PTR(info, async_ids_stack)),
+      fields_(isolate, kFieldsCount, MAYBE_FIELD_PTR(info, fields)),
+      async_id_fields_(
+          isolate, kUidFieldsCount, MAYBE_FIELD_PTR(info, async_id_fields)),
+      info_(info) {
+  v8::HandleScope handle_scope(isolate);
+  if (info == nullptr) {
+    clear_async_id_stack();
+
+    // Always perform async_hooks checks, not just when async_hooks is enabled.
+    // TODO(AndreasMadsen): Consider removing this for LTS releases.
+    // See discussion in https://github.com/nodejs/node/pull/15454
+    // When removing this, do it by reverting the commit. Otherwise the test
+    // and flag changes won't be included.
+    fields_[kCheck] = 1;
+
+    // kDefaultTriggerAsyncId should be -1, this indicates that there is no
+    // specified default value and it should fallback to the executionAsyncId.
+    // 0 is not used as the magic value, because that indicates a missing
+    // context which is different from a default context.
+    async_id_fields_[AsyncHooks::kDefaultTriggerAsyncId] = -1;
+
+    // kAsyncIdCounter should start at 1 because that'll be the id the execution
+    // context during bootstrap (code that runs before entering uv_run()).
+    async_id_fields_[AsyncHooks::kAsyncIdCounter] = 1;
+  }
+}
+
+void AsyncHooks::Deserialize(Local<Context> context) {
+  async_ids_stack_.Deserialize(context);
+  fields_.Deserialize(context);
+  async_id_fields_.Deserialize(context);
+  if (info_->js_execution_async_resources != 0) {
+    v8::Local<v8::Array> arr = context
+                                   ->GetDataFromSnapshotOnce<v8::Array>(
+                                       info_->js_execution_async_resources)
+                                   .ToLocalChecked();
+    js_execution_async_resources_.Reset(context->GetIsolate(), arr);
+  }
+
+  native_execution_async_resources_.resize(
+      info_->native_execution_async_resources.size());
+  for (size_t i = 0; i < info_->native_execution_async_resources.size(); ++i) {
+    v8::Local<v8::Object> obj =
+        context
+            ->GetDataFromSnapshotOnce<v8::Object>(
+                info_->native_execution_async_resources[i])
+            .ToLocalChecked();
+    native_execution_async_resources_[i].Reset(context->GetIsolate(), obj);
+  }
+  info_ = nullptr;
+}
+
+std::ostream& operator<<(std::ostream& output,
+                         const std::vector<SnapshotIndex>& v) {
+  output << "{ ";
+  for (const SnapshotIndex i : v) {
+    output << i << ", ";
+  }
+  output << " }";
+  return output;
+}
+
+std::ostream& operator<<(std::ostream& output,
+                         const AsyncHooks::SerializeInfo& i) {
+  output << "{\n"
+         << "  " << i.async_ids_stack << ",  // async_ids_stack\n"
+         << "  " << i.fields << ",  // fields\n"
+         << "  " << i.async_id_fields << ",  // async_id_fields\n"
+         << "  " << i.js_execution_async_resources
+         << ",  // js_execution_async_resources\n"
+         << "  " << i.native_execution_async_resources
+         << ",  // native_execution_async_resources\n"
+         << "}";
+  return output;
+}
+
+AsyncHooks::SerializeInfo AsyncHooks::Serialize(Local<Context> context,
+                                                SnapshotCreator* creator) {
+  SerializeInfo info;
+  info.async_ids_stack = async_ids_stack_.Serialize(context, creator);
+  info.fields = fields_.Serialize(context, creator);
+  info.async_id_fields = async_id_fields_.Serialize(context, creator);
+  if (!js_execution_async_resources_.IsEmpty()) {
+    info.js_execution_async_resources = creator->AddData(
+        context, js_execution_async_resources_.Get(context->GetIsolate()));
+    CHECK_NE(info.js_execution_async_resources, 0);
+  } else {
+    info.js_execution_async_resources = 0;
+  }
+
+  info.native_execution_async_resources.resize(
+      native_execution_async_resources_.size());
+  for (size_t i = 0; i < native_execution_async_resources_.size(); i++) {
+    info.native_execution_async_resources[i] = creator->AddData(
+        context,
+        native_execution_async_resources_[i].Get(context->GetIsolate()));
+  }
+
+  return info;
 }
 
 void AsyncHooks::MemoryInfo(MemoryTracker* tracker) const {
@@ -1022,6 +1197,214 @@ void Environment::RemoveUnmanagedFd(int fd) {
     ProcessEmitWarning(
         this, "File descriptor %d closed but not opened in unmanaged mode", fd);
   }
+}
+
+void Environment::PrintAllBaseObjects() {
+  size_t i = 0;
+  std::cout << "BaseObjects\n";
+  ForEachBaseObject([&](BaseObject* obj) {
+    std::cout << "#" << i++ << " " << obj << ": " <<
+      obj->MemoryInfoName() << "\n";
+  });
+}
+
+void Environment::VerifyNoStrongBaseObjects() {
+  // When a process exits cleanly, i.e. because the event loop ends up without
+  // things to wait for, the Node.js objects that are left on the heap should
+  // be:
+  //
+  //   1. weak, i.e. ready for garbage collection once no longer referenced, or
+  //   2. detached, i.e. scheduled for destruction once no longer referenced, or
+  //   3. an unrefed libuv handle, i.e. does not keep the event loop alive, or
+  //   4. an inactive libuv handle (essentially the same here)
+  //
+  // There are a few exceptions to this rule, but generally, if there are
+  // C++-backed Node.js objects on the heap that do not fall into the above
+  // categories, we may be looking at a potential memory leak. Most likely,
+  // the cause is a missing MakeWeak() call on the corresponding object.
+  //
+  // In order to avoid this kind of problem, we check the list of BaseObjects
+  // for these criteria. Currently, we only do so when explicitly instructed to
+  // or when in debug mode (where --verify-base-objects is always-on).
+
+  if (!options()->verify_base_objects) return;
+
+  ForEachBaseObject([](BaseObject* obj) {
+    if (obj->IsNotIndicativeOfMemoryLeakAtExit()) return;
+    fprintf(stderr, "Found bad BaseObject during clean exit: %s\n",
+            obj->MemoryInfoName().c_str());
+    fflush(stderr);
+    ABORT();
+  });
+}
+
+EnvSerializeInfo Environment::Serialize(SnapshotCreator* creator) {
+  EnvSerializeInfo info;
+  Local<Context> ctx = context();
+
+  // Currently all modules are compiled without cache in builtin snapshot
+  // builder.
+  info.native_modules = std::vector<std::string>(
+      native_modules_without_cache.begin(), native_modules_without_cache.end());
+
+  info.async_hooks = async_hooks_.Serialize(ctx, creator);
+  info.immediate_info = immediate_info_.Serialize(ctx, creator);
+  info.tick_info = tick_info_.Serialize(ctx, creator);
+  info.performance_state = performance_state_->Serialize(ctx, creator);
+  info.stream_base_state = stream_base_state_.Serialize(ctx, creator);
+  info.should_abort_on_uncaught_toggle =
+      should_abort_on_uncaught_toggle_.Serialize(ctx, creator);
+
+  size_t id = 0;
+#define V(PropertyName, TypeName)                                              \
+  do {                                                                         \
+    Local<TypeName> field = PropertyName();                                    \
+    if (!field.IsEmpty()) {                                                    \
+      size_t index = creator->AddData(field);                                  \
+      info.persistent_templates.push_back({#PropertyName, id, index});         \
+    }                                                                          \
+    id++;                                                                      \
+  } while (0);
+  ENVIRONMENT_STRONG_PERSISTENT_TEMPLATES(V)
+#undef V
+
+  id = 0;
+#define V(PropertyName, TypeName)                                              \
+  do {                                                                         \
+    Local<TypeName> field = PropertyName();                                    \
+    if (!field.IsEmpty()) {                                                    \
+      size_t index = creator->AddData(ctx, field);                             \
+      info.persistent_values.push_back({#PropertyName, id, index});            \
+    }                                                                          \
+    id++;                                                                      \
+  } while (0);
+  ENVIRONMENT_STRONG_PERSISTENT_VALUES(V)
+#undef V
+
+  info.context = creator->AddData(ctx, context());
+  return info;
+}
+
+std::ostream& operator<<(std::ostream& output,
+                         const std::vector<PropInfo>& vec) {
+  output << "{\n";
+  for (const auto& info : vec) {
+    output << "  { \"" << info.name << "\", " << std::to_string(info.id) << ", "
+           << std::to_string(info.index) << " },\n";
+  }
+  output << "}";
+  return output;
+}
+
+std::ostream& operator<<(std::ostream& output,
+                         const std::vector<std::string>& vec) {
+  output << "{\n";
+  for (const auto& info : vec) {
+    output << "  \"" << info << "\",\n";
+  }
+  output << "}";
+  return output;
+}
+
+std::ostream& operator<<(std::ostream& output, const EnvSerializeInfo& i) {
+  output << "{\n"
+         << "// -- native_modules begins --\n"
+         << i.native_modules << ",\n"
+         << "// -- native_modules ends --\n"
+         << "// -- async_hooks begins --\n"
+         << i.async_hooks << ",\n"
+         << "// -- async_hooks ends --\n"
+         << i.tick_info << ",  // tick_info\n"
+         << i.immediate_info << ",  // immediate_info\n"
+         << "// -- performance_state begins --\n"
+         << i.performance_state << ",\n"
+         << "// -- performance_state ends --\n"
+         << i.stream_base_state << ",  // stream_base_state\n"
+         << i.should_abort_on_uncaught_toggle
+         << ",  // should_abort_on_uncaught_toggle\n"
+         << "// -- persistent_templates begins --\n"
+         << i.persistent_templates << ",\n"
+         << "// persistent_templates ends --\n"
+         << "// -- persistent_values begins --\n"
+         << i.persistent_values << ",\n"
+         << "// -- persistent_values ends --\n"
+         << i.context << ",  // context\n"
+         << "}";
+  return output;
+}
+
+void Environment::DeserializeProperties(const EnvSerializeInfo* info) {
+  Local<Context> ctx = context();
+
+  native_modules_in_snapshot = info->native_modules;
+  async_hooks_.Deserialize(ctx);
+  immediate_info_.Deserialize(ctx);
+  tick_info_.Deserialize(ctx);
+  performance_state_->Deserialize(ctx);
+  stream_base_state_.Deserialize(ctx);
+  should_abort_on_uncaught_toggle_.Deserialize(ctx);
+
+  if (enabled_debug_list_.enabled(DebugCategory::MKSNAPSHOT)) {
+    fprintf(stderr, "deserializing...\n");
+    std::cerr << *info << "\n";
+  }
+
+  const std::vector<PropInfo>& templates = info->persistent_templates;
+  size_t i = 0;  // index to the array
+  size_t id = 0;
+#define V(PropertyName, TypeName)                                              \
+  do {                                                                         \
+    if (templates.size() > i && id == templates[i].id) {                       \
+      const PropInfo& d = templates[i];                                        \
+      DCHECK_EQ(d.name, #PropertyName);                                        \
+      MaybeLocal<TypeName> maybe_field =                                       \
+          isolate_->GetDataFromSnapshotOnce<TypeName>(d.index);                \
+      Local<TypeName> field;                                                   \
+      if (!maybe_field.ToLocal(&field)) {                                      \
+        fprintf(stderr,                                                        \
+                "Failed to deserialize environment template " #PropertyName    \
+                "\n");                                                         \
+      }                                                                        \
+      set_##PropertyName(field);                                               \
+      i++;                                                                     \
+    }                                                                          \
+  } while (0);                                                                 \
+  id++;
+  ENVIRONMENT_STRONG_PERSISTENT_TEMPLATES(V);
+#undef V
+
+  i = 0;  // index to the array
+  id = 0;
+  const std::vector<PropInfo>& values = info->persistent_values;
+#define V(PropertyName, TypeName)                                              \
+  do {                                                                         \
+    if (values.size() > i && id == values[i].id) {                             \
+      const PropInfo& d = values[i];                                           \
+      DCHECK_EQ(d.name, #PropertyName);                                        \
+      MaybeLocal<TypeName> maybe_field =                                       \
+          ctx->GetDataFromSnapshotOnce<TypeName>(d.index);                     \
+      Local<TypeName> field;                                                   \
+      if (!maybe_field.ToLocal(&field)) {                                      \
+        fprintf(stderr,                                                        \
+                "Failed to deserialize environment value " #PropertyName       \
+                "\n");                                                         \
+      }                                                                        \
+      set_##PropertyName(field);                                               \
+      i++;                                                                     \
+    }                                                                          \
+  } while (0);                                                                 \
+  id++;
+  ENVIRONMENT_STRONG_PERSISTENT_VALUES(V);
+#undef V
+
+  MaybeLocal<Context> maybe_ctx_from_snapshot =
+      ctx->GetDataFromSnapshotOnce<Context>(info->context);
+  Local<Context> ctx_from_snapshot;
+  if (!maybe_ctx_from_snapshot.ToLocal(&ctx_from_snapshot)) {
+    fprintf(stderr,
+            "Failed to deserialize context back reference from the snapshot\n");
+  }
+  CHECK_EQ(ctx_from_snapshot, ctx);
 }
 
 void Environment::BuildEmbedderGraph(Isolate* isolate,
@@ -1114,6 +1497,10 @@ Local<FunctionTemplate> BaseObject::GetConstructorTemplate(Environment* env) {
     env->set_base_object_ctor_template(tmpl);
   }
   return tmpl;
+}
+
+bool BaseObject::IsNotIndicativeOfMemoryLeakAtExit() const {
+  return IsWeakOrDetached();
 }
 
 }  // namespace node

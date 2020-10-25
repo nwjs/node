@@ -40,6 +40,7 @@
 #include "src/flags/flags.h"
 #include "src/heap/factory.h"
 #include "src/init/v8.h"
+#include "src/objects/js-function.h"
 #include "src/objects/objects.h"
 #include "src/zone/accounting-allocator.h"
 
@@ -140,6 +141,9 @@ class CcTest {
   static void CollectAllGarbage(i::Isolate* isolate = nullptr);
   static void CollectAllAvailableGarbage(i::Isolate* isolate = nullptr);
   static void PreciseCollectAllGarbage(i::Isolate* isolate = nullptr);
+
+  static i::Handle<i::String> MakeString(const char* str);
+  static i::Handle<i::String> MakeName(const char* str, int suffix);
 
   static v8::base::RandomNumberGenerator* random_number_generator();
 
@@ -610,7 +614,7 @@ class InitializedHandleScope {
 
 class HandleAndZoneScope : public InitializedHandleScope {
  public:
-  HandleAndZoneScope();
+  explicit HandleAndZoneScope(bool support_zone_compression = false);
   ~HandleAndZoneScope();
 
   // Prefixing the below with main_ reduces a lot of naming clashes.
@@ -704,11 +708,11 @@ class TestPlatform : public v8::Platform {
     old_platform_->CallDelayedOnWorkerThread(std::move(task), delay_in_seconds);
   }
 
-  // std::unique_ptr<v8::JobHandle> PostJob(
-  //     v8::TaskPriority priority,
-  //     std::unique_ptr<v8::JobTask> job_task) override {
-  //   return old_platform_->PostJob(priority, std::move(job_task));
-  // }
+  std::unique_ptr<v8::JobHandle> PostJob(
+      v8::TaskPriority priority,
+      std::unique_ptr<v8::JobTask> job_task) override {
+    return old_platform_->PostJob(priority, std::move(job_task));
+  }
 
   double MonotonicallyIncreasingTime() override {
     return old_platform_->MonotonicallyIncreasingTime();

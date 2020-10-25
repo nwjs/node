@@ -93,6 +93,7 @@ void NativeModuleLoader::InitializeModuleCategories() {
 
 #if !HAVE_OPENSSL
       "crypto",
+      "crypto/promises",
       "https",
       "http2",
       "tls",
@@ -104,7 +105,10 @@ void NativeModuleLoader::InitializeModuleCategories() {
       "internal/process/policy",
       "internal/streams/lazy_transform",
 #endif  // !HAVE_OPENSSL
-
+#if !NODE_EXPERIMENTAL_QUIC
+      "internal/quic/core",
+      "internal/quic/util",
+#endif
       "sys",  // Deprecated.
       "wasi",  // Experimental.
       "internal/test/binding",
@@ -257,7 +261,7 @@ MaybeLocal<Function> NativeModuleLoader::LookupAndCompile(
     return {};
   }
 
-  std::string filename_s = id + std::string(".js");
+  std::string filename_s = std::string("node:") + id;
   Local<String> filename =
       OneByteString(isolate, filename_s.c_str(), filename_s.size());
   Local<Integer> line_offset = Integer::New(isolate, 0);

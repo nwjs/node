@@ -111,7 +111,7 @@ platforms. This is true regardless of entries in the table below.
 | Windows          | x86 (native)     | >= Windows 8.1/2012 R2          | Tier 1 (running) / Experimental (compiling) <sup>[6](#fn6)</sup> | |
 | Windows          | x64, x86         | Windows Server 2012 (not R2)    | Experimental |                                   |
 | Windows          | arm64            | >= Windows 10                   | Tier 2 (compiling) / Experimental (running) |    |
-| macOS            | x64              | >= 10.11                        | Tier 1       |                                   |
+| macOS            | x64              | >= 10.13                        | Tier 1       |                                   |
 | SmartOS          | x64              | >= 18                           | Tier 2       |                                   |
 | AIX              | ppc64be >=power7 | >= 7.2 TL02                     | Tier 2       |                                   |
 | FreeBSD          | x64              | >= 11                           | Experimental | Downgraded as of Node.js 12  <sup>[7](#fn7)</sup>     |
@@ -159,7 +159,7 @@ Depending on the host platform, the selection of toolchains may vary.
 | Operating System | Compiler Versions                                              |
 | ---------------- | -------------------------------------------------------------- |
 | Linux            | GCC >= 6.3                                                     |
-| Windows          | Visual Studio >= 2017 with the Windows 10 SDK on a 64-bit host |
+| Windows          | Visual Studio >= 2019 with the Windows 10 SDK on a 64-bit host |
 | macOS            | Xcode >= 10 (Apple LLVM >= 10)                                 |
 
 ### Official binary platforms and toolchains
@@ -538,7 +538,7 @@ to run it again before invoking `make -j4`.
 
 * [Python 3.8](https://www.python.org/downloads/)
 * The "Desktop development with C++" workload from
-  [Visual Studio 2017 or 2019](https://visualstudio.microsoft.com/downloads/) or
+  [Visual Studio 2019](https://visualstudio.microsoft.com/downloads/) or
   the "Visual C++ build tools" workload from the
   [Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2019),
   with the default optional components
@@ -553,8 +553,7 @@ to run it again before invoking `make -j4`.
 Optional requirements to build the MSI installer package:
 
 * The [WiX Toolset v3.11](https://wixtoolset.org/releases/) and the
-  [Wix Toolset Visual Studio 2017 Extension](https://marketplace.visualstudio.com/items?itemName=RobMensching.WixToolsetVisualStudio2017Extension)
-  or the [Wix Toolset Visual Studio 2019 Extension](https://marketplace.visualstudio.com/items?itemName=WixToolset.WixToolsetVisualStudio2019Extension).
+  [Wix Toolset Visual Studio 2019 Extension](https://marketplace.visualstudio.com/items?itemName=WixToolset.WixToolsetVisualStudio2019Extension)
 * The [WiX Toolset v3.14](https://wixtoolset.org/releases/) if
   building for Windows 10 on ARM (ARM64)
 
@@ -578,7 +577,7 @@ packages:
 * [Python 3.x](https://chocolatey.org/packages/python) and
   [legacy Python](https://chocolatey.org/packages/python2)
 * [Visual Studio 2019 Build Tools](https://chocolatey.org/packages/visualstudio2019buildtools)
-  with [Visual C++ workload](https://chocolatey.org/packages/visualstudio2017-workload-vctools)
+  with [Visual C++ workload](https://chocolatey.org/packages/visualstudio2019-workload-vctools)
 * [NetWide Assembler](https://chocolatey.org/packages/nasm)
 
 To install Node.js prerequisites using

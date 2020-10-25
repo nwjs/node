@@ -30,7 +30,7 @@ if (process.argv[2] === 'wasi-child') {
     const { instance } = await WebAssembly.instantiate(buffer, importObject);
 
     wasi.start(instance);
-  })();
+  })().then(common.mustCall());
 } else {
   const assert = require('assert');
   const cp = require('child_process');
@@ -51,7 +51,6 @@ if (process.argv[2] === 'wasi-child') {
 
     const child = cp.spawnSync(process.execPath, [
       '--experimental-wasi-unstable-preview1',
-      '--experimental-wasm-bigint',
       __filename,
       'wasi-child',
       options.test

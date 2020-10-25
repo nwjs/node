@@ -55,6 +55,86 @@ net.createServer().listen(
   path.join('\\\\?\\pipe', process.cwd(), 'myctl'));
 ```
 
+## Class: `net.BlockList`
+<!-- YAML
+added: v15.0.0
+-->
+
+The `BlockList` object can be used with some network APIs to specify rules for
+disabling inbound or outbound access to specific IP addresses, IP ranges, or
+IP subnets.
+
+### `blockList.addAddress(address[, type])`
+<!-- YAML
+added: v15.0.0
+-->
+
+* `address` {string} An IPv4 or IPv6 address.
+* `type` {string} Either `'ipv4'` or `'ipv6'`. **Default**: `'ipv4'`.
+
+Adds a rule to block the given IP address.
+
+### `blockList.addRange(start, end[, type])`
+<!-- YAML
+added: v15.0.0
+-->
+
+* `start` {string} The starting IPv4 or IPv6 address in the range.
+* `end` {string} The ending IPv4 or IPv6 address in the range.
+* `type` {string} Either `'ipv4'` or `'ipv6'`. **Default**: `'ipv4'`.
+
+Adds a rule to block a range of IP addresses from `start` (inclusive) to
+`end` (inclusive).
+
+### `blockList.addSubnet(net, prefix[, type])`
+<!-- YAML
+added: v15.0.0
+-->
+
+* `net` {string} The network IPv4 or IPv6 address.
+* `prefix` {number} The number of CIDR prefix bits. For IPv4, this
+  must be a value between `0` and `32`. For IPv6, this must be between
+  `0` and `128`.
+* `type` {string} Either `'ipv4'` or `'ipv6'`. **Default**: `'ipv4'`.
+
+Adds a rule to block a range of IP addresses specified as a subnet mask.
+
+### `blockList.check(address[, type])`
+<!-- YAML
+added: v15.0.0
+-->
+
+* `address` {string} The IP address to check
+* `type` {string} Either `'ipv4'` or `'ipv6'`. **Default**: `'ipv4'`.
+* Returns: {boolean}
+
+Returns `true` if the given IP address matches any of the rules added to the
+`BlockList`.
+
+```js
+const blockList = new net.BlockList();
+blockList.addAddress('123.123.123.123');
+blockList.addRange('10.0.0.1', '10.0.0.10');
+blockList.addSubnet('8592:757c:efae:4e45::', 64, 'ipv6');
+
+console.log(blockList.check('123.123.123.123'));  // Prints: true
+console.log(blockList.check('10.0.0.3'));  // Prints: true
+console.log(blockList.check('222.111.111.222'));  // Prints: false
+
+// IPv6 notation for IPv4 addresses works:
+console.log(blockList.check('::ffff:7b7b:7b7b', 'ipv6')); // Prints: true
+console.log(blockList.check('::ffff:123.123.123.123', 'ipv6')); // Prints: true
+```
+
+### `blockList.rules`
+<!-- YAML
+added: v15.0.0
+-->
+
+* Type: {string[]}
+
+The list of rules added to the blocklist.
+
 ## Class: `net.Server`
 <!-- YAML
 added: v0.1.90
@@ -157,22 +237,6 @@ when all connections are ended and the server emits a [`'close'`][] event.
 The optional `callback` will be called once the `'close'` event occurs. Unlike
 that event, it will be called with an `Error` as its only argument if the server
 was not open when it was closed.
-
-### `server.connections`
-<!-- YAML
-added: v0.2.0
-deprecated: v0.9.7
--->
-
-> Stability: 0 - Deprecated: Use [`server.getConnections()`][] instead.
-
-* {integer|null}
-
-The number of concurrent connections on the server.
-
-This becomes `null` when sending a socket to a child with
-[`child_process.fork()`][]. To poll forks and get current number of active
-connections, use asynchronous [`server.getConnections()`][] instead.
 
 ### `server.getConnections(callback)`
 <!-- YAML
@@ -1141,6 +1205,14 @@ immediately initiates connection with
 [`socket.connect(port[, host][, connectListener])`][`socket.connect(port)`],
 then returns the `net.Socket` that starts the connection.
 
+## `net.createQuicSocket([options])`
+<!-- YAML
+added: v15.0.0
+-->
+
+Creates and returns a new `QuicSocket`. Please refer to the [QUIC documentation][]
+for details.
+
 ## `net.createServer([options][, connectionListener])`
 <!-- YAML
 added: v0.5.0
@@ -1248,6 +1320,7 @@ Returns `true` if input is a version 6 IP address, otherwise returns `false`.
 
 [IPC]: #net_ipc_support
 [Identifying paths for IPC connections]: #net_identifying_paths_for_ipc_connections
+[QUIC documentation]: quic.md
 [Readable Stream]: stream.md#stream_class_stream_readable
 [`'close'`]: #net_event_close
 [`'connect'`]: #net_event_connect
@@ -1276,7 +1349,6 @@ Returns `true` if input is a version 6 IP address, otherwise returns `false`.
 [`new net.Socket(options)`]: #net_new_net_socket_options
 [`readable.setEncoding()`]: stream.md#stream_readable_setencoding_encoding
 [`server.close()`]: #net_server_close_callback
-[`server.getConnections()`]: #net_server_getconnections_callback
 [`server.listen()`]: #net_server_listen
 [`server.listen(handle)`]: #net_server_listen_handle_backlog_callback
 [`server.listen(options)`]: #net_server_listen_options_callback

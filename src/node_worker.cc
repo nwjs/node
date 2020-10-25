@@ -2,6 +2,7 @@
 #include "debug_utils-inl.h"
 #include "memory_tracker-inl.h"
 #include "node_errors.h"
+#include "node_external_reference.h"
 #include "node_buffer.h"
 #include "node_options-inl.h"
 #include "node_perf.h"
@@ -26,6 +27,7 @@ using v8::Integer;
 using v8::Isolate;
 using v8::Local;
 using v8::Locker;
+using v8::Maybe;
 using v8::MaybeLocal;
 using v8::Null;
 using v8::Number;
@@ -277,10 +279,6 @@ void Worker::Run() {
         this->env_ = nullptr;
       }
 
-      // TODO(addaleax): Try moving DisallowJavascriptExecutionScope into
-      // FreeEnvironment().
-      Isolate::DisallowJavascriptExecutionScope disallow_js(isolate_,
-          Isolate::DisallowJavascriptExecutionScope::THROW_ON_FAILURE);
       env_.reset();
     });
 
@@ -341,42 +339,14 @@ void Worker::Run() {
 
         Debug(this, "Loaded environment for worker %llu", thread_id_.id);
       }
-
-      if (is_stopped()) return;
-      {
-        SealHandleScope seal(isolate_);
-        bool more;
-        env_->performance_state()->Mark(
-            node::performance::NODE_PERFORMANCE_MILESTONE_LOOP_START);
-        do {
-          if (is_stopped()) break;
-          uv_run(&data.loop_, UV_RUN_DEFAULT);
-          if (is_stopped()) break;
-
-          platform_->DrainTasks(isolate_);
-
-          more = uv_loop_alive(&data.loop_);
-          if (more && !is_stopped()) continue;
-
-          EmitBeforeExit(env_.get());
-
-          // Emit `beforeExit` if the loop became alive either after emitting
-          // event, or after running some callbacks.
-          more = uv_loop_alive(&data.loop_);
-        } while (more == true && !is_stopped());
-        env_->performance_state()->Mark(
-            node::performance::NODE_PERFORMANCE_MILESTONE_LOOP_EXIT);
-      }
     }
 
     {
-      int exit_code;
-      bool stopped = is_stopped();
-      if (!stopped)
-        exit_code = EmitExit(env_.get());
+      Maybe<int> exit_code = SpinEventLoop(env_.get());
       Mutex::ScopedLock lock(mutex_);
-      if (exit_code_ == 0 && !stopped)
-        exit_code_ = exit_code;
+      if (exit_code_ == 0 && exit_code.IsJust()) {
+        exit_code_ = exit_code.FromJust();
+      }
 
       Debug(this, "Exiting thread for worker %llu with exit code %d",
             thread_id_.id, exit_code_);
@@ -724,6 +694,12 @@ void Worker::MemoryInfo(MemoryTracker* tracker) const {
   tracker->TrackField("parent_port", parent_port_);
 }
 
+bool Worker::IsNotIndicativeOfMemoryLeakAtExit() const {
+  // Worker objects always stay alive as long as the child thread, regardless
+  // of whether they are being referenced in the parent thread.
+  return true;
+}
+
 class WorkerHeapSnapshotTaker : public AsyncWrap {
  public:
   WorkerHeapSnapshotTaker(Environment* env, Local<Object> obj)
@@ -861,9 +837,20 @@ void InitWorker(Local<Object> target,
   NODE_DEFINE_CONSTANT(target, kTotalResourceLimitCount);
 }
 
-}  // anonymous namespace
+void RegisterExternalReferences(ExternalReferenceRegistry* registry) {
+  registry->Register(GetEnvMessagePort);
+  registry->Register(Worker::New);
+  registry->Register(Worker::StartThread);
+  registry->Register(Worker::StopThread);
+  registry->Register(Worker::Ref);
+  registry->Register(Worker::Unref);
+  registry->Register(Worker::GetResourceLimits);
+  registry->Register(Worker::TakeHeapSnapshot);
+}
 
+}  // anonymous namespace
 }  // namespace worker
 }  // namespace node
 
 NODE_MODULE_CONTEXT_AWARE_INTERNAL(worker, node::worker::InitWorker)
+NODE_MODULE_EXTERNAL_REFERENCE(worker, node::worker::RegisterExternalReferences)

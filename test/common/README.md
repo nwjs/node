@@ -21,6 +21,7 @@ This directory contains modules used to test the Node.js implementation.
 * [Report module](#report-module)
 * [tick module](#tick-module)
 * [tmpdir module](#tmpdir-module)
+* [UDP pair helper](#udp-pair-helper)
 * [WPT module](#wpt-module)
 
 ## Benchmark Module
@@ -312,6 +313,15 @@ If `fn` is not provided, an empty function will be used.
 
 Returns a function that triggers an `AssertionError` if it is invoked. `msg` is
 used as the error message for the `AssertionError`.
+
+### `mustSucceed([fn])`
+
+* `fn` [&lt;Function>][] default = () => {}
+* return [&lt;Function>][]
+
+Returns a function that accepts arguments `(err, ...args)`. If `err` is not
+`undefined` or `null`, it triggers an `AssertionError`. Otherwise, it calls
+`fn(...args)`.
 
 ### `nodeProcessAborted(exitCode, signal)`
 

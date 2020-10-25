@@ -281,6 +281,8 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             "experimental Source Map V3 support",
             &EnvironmentOptions::enable_source_maps,
             kAllowedInEnvironment);
+  AddOption("--experimental-abortcontroller", "",
+            NoOp{}, kAllowedInEnvironment);
   AddOption("--experimental-json-modules",
             "experimental JSON interop support for the ES Module loader",
             &EnvironmentOptions::experimental_json_modules,
@@ -472,6 +474,10 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             "define unhandled rejections behavior. Options are 'strict' (raise "
             "an error), 'warn' (enforce warnings) or 'none' (silence warnings)",
             &EnvironmentOptions::unhandled_rejections,
+            kAllowedInEnvironment);
+  AddOption("--verify-base-objects",
+            "", /* undocumented, only for debugging */
+            &EnvironmentOptions::verify_base_objects,
             kAllowedInEnvironment);
 
   AddOption("--check",
@@ -756,6 +762,13 @@ PerProcessOptionsParser::PerProcessOptionsParser(
             kAllowedInEnvironment);
 
   //Insert(iop, &PerProcessOptions::get_per_isolate_options);
+#if 0
+  AddOption("--node-memory-debug",
+            "Run with extra debug checks for memory leaks in Node.js itself",
+            NoOp{}, kAllowedInEnvironment);
+  Implies("--node-memory-debug", "--debug-arraybuffer-allocations");
+  Implies("--node-memory-debug", "--verify-base-objects");
+#endif
 }
 
 inline std::string RemoveBrackets(const std::string& host) {

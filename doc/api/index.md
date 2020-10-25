@@ -46,6 +46,7 @@
 * [Process](process.md)
 * [Punycode](punycode.md)
 * [Query strings](querystring.md)
+* [QUIC](quic.md)
 * [Readline](readline.md)
 * [REPL](repl.md)
 * [Report](report.md)
@@ -61,6 +62,7 @@
 * [V8](v8.md)
 * [VM](vm.md)
 * [WASI](wasi.md)
+* [Web Crypto API](webcrypto.md)
 * [Worker threads](worker_threads.md)
 * [Zlib](zlib.md)
 

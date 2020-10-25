@@ -652,18 +652,6 @@ The `server.close()` method stops the server from accepting new connections.
 This function operates asynchronously. The `'close'` event will be emitted
 when the server has no more open connections.
 
-### `server.connections`
-<!-- YAML
-added: v0.3.2
-deprecated: v0.9.7
--->
-
-> Stability: 0 - Deprecated: Use [`server.getConnections()`][] instead.
-
-* {number}
-
-Returns the current number of concurrent connections on the server.
-
 ### `server.getTicketKeys()`
 <!-- YAML
 added: v3.0.0
@@ -1175,7 +1163,9 @@ for more information.
 
 ### `tlsSocket.exportKeyingMaterial(length, label[, context])`
 <!-- YAML
-added: v13.10.0
+added:
+ - v13.10.0
+ - v12.17.0
 -->
 
 * `length` {number} number of bytes to retrieve from keying material
@@ -1353,7 +1343,9 @@ being issued by trusted CA (`options.ca`).
 <!-- YAML
 added: v0.11.3
 changes:
-  - version: v14.1.0
+  - version:
+    - v14.1.0
+    - v13.14.0
     pr-url: https://github.com/nodejs/node/pull/32786
     description: The `highWaterMark` option is accepted now.
   - version:
@@ -1382,7 +1374,9 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/11984
     description: The `ALPNProtocols` option can be a `TypedArray` or
      `DataView` now.
-  - version: v5.3.0, v4.7.0
+  - version:
+    - v5.3.0
+    - v4.7.0
     pr-url: https://github.com/nodejs/node/pull/4246
     description: The `secureContext` option is supported now.
   - version: v5.0.0
@@ -2015,7 +2009,6 @@ added: v11.4.0
 [`net.Socket`]: net.md#net_class_net_socket
 [`net.createServer()`]: net.md#net_net_createserver_options_connectionlistener
 [`server.addContext()`]: #tls_server_addcontext_hostname_context
-[`server.getConnections()`]: net.md#net_server_getconnections_callback
 [`server.getTicketKeys()`]: #tls_server_getticketkeys
 [`server.listen()`]: net.md#net_server_listen
 [`server.setTicketKeys()`]: #tls_server_setticketkeys_keys

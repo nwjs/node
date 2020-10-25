@@ -324,7 +324,7 @@ changes:
   - version: v2.0.0
     pr-url: https://github.com/nodejs/node/pull/747
     description: This function is now cross-platform consistent and no longer
-                 returns a path with a trailing slash on any platform
+                 returns a path with a trailing slash on any platform.
 -->
 
 * Returns: {string}
@@ -393,7 +393,9 @@ Throws a [`SystemError`][] if a user has no `username` or `homedir`.
 
 ## `os.version()`
 <!-- YAML
-added: v13.11.0
+added:
+ - v13.11.0
+ - v12.17.0
 -->
 
 * Returns {string}
@@ -434,7 +436,7 @@ The following signal constants are exported by `os.constants.signals`.
   <tr>
     <td><code>SIGINT</code></td>
     <td>Sent to indicate when a user wishes to interrupt a process
-    (<code>(Ctrl+C)</code>).</td>
+    (<kbd>Ctrl</kbd>+<kbd>C</kbd>).</td>
   </tr>
   <tr>
     <td><code>SIGQUIT</code></td>

@@ -268,6 +268,8 @@ but important side effect: any *additional* listeners registered to the same
 listener that is in the process of being added.
 
 ```js
+class MyEmitter extends EventEmitter {}
+
 const myEmitter = new MyEmitter();
 // Only do this once so we don't loop forever
 myEmitter.once('newListener', (event, listener) => {
@@ -291,7 +293,9 @@ myEmitter.emit('event');
 <!-- YAML
 added: v0.9.3
 changes:
-  - version: v6.1.0, v4.7.0
+  - version:
+    - v6.1.0
+    - v4.7.0
     pr-url: https://github.com/nodejs/node/pull/6394
     description: For listeners attached using `.once()`, the `listener` argument
                  now yields the original listener function.
@@ -317,7 +321,7 @@ A class method that returns the number of listeners for the given `eventName`
 registered on the given `emitter`.
 
 ```js
-const myEmitter = new MyEmitter();
+const myEmitter = new EventEmitter();
 myEmitter.on('event', () => {});
 myEmitter.on('event', () => {});
 console.log(EventEmitter.listenerCount(myEmitter, 'event'));
@@ -368,7 +372,7 @@ Its `name` property is set to `'MaxListenersExceededWarning'`.
 <!-- YAML
 added:
  - v13.6.0
- - v12.16.0
+ - v12.17.0
 -->
 
 This symbol shall be used to install a listener for only monitoring `'error'`
@@ -825,7 +829,7 @@ class MyClass extends EventEmitter {
 }
 ```
 
-## `events.once(emitter, name)`
+## `events.once(emitter, name[, options])`
 <!-- YAML
 added:
  - v11.13.0
@@ -834,6 +838,8 @@ added:
 
 * `emitter` {EventEmitter}
 * `name` {string}
+* `options` {Object}
+  * `signal` {AbortSignal} Can be used to cancel waiting for the event.
 * Returns: {Promise}
 
 Creates a `Promise` that is fulfilled when the `EventEmitter` emits the given
@@ -890,6 +896,32 @@ once(ee, 'error')
 ee.emit('error', new Error('boom'));
 
 // Prints: ok boom
+```
+
+An {AbortSignal} can be used to cancel waiting for the event:
+
+```js
+const { EventEmitter, once } = require('events');
+
+const ee = new EventEmitter();
+const ac = new AbortController();
+
+async function foo(emitter, event, signal) {
+  try {
+    await once(emitter, event, { signal });
+    console.log('event emitted!');
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      console.error('Waiting for the event was canceled!');
+    } else {
+      console.error('There was an error', error.message);
+    }
+  }
+}
+
+foo(ee, 'foo', ac.signal);
+ac.abort(); // Abort waiting for the event
+ee.emit('foo'); // Prints: Waiting for the event was canceled!
 ```
 
 ### Awaiting multiple events emitted on `process.nextTick()`
@@ -972,7 +1004,7 @@ Value: `Symbol.for('nodejs.rejection')`
 
 See how to write a custom [rejection handler][rejection].
 
-## `events.on(emitter, eventName)`
+## `events.on(emitter, eventName[, options])`
 <!-- YAML
 added:
  - v13.6.0
@@ -981,6 +1013,8 @@ added:
 
 * `emitter` {EventEmitter}
 * `eventName` {string|symbol} The name of the event being listened for
+* `options` {Object}
+  * `signal` {AbortSignal} Can be used to cancel awaiting events.
 * Returns: {AsyncIterator} that iterates `eventName` events emitted by the `emitter`
 
 ```js
@@ -1010,9 +1044,42 @@ if the `EventEmitter` emits `'error'`. It removes all listeners when
 exiting the loop. The `value` returned by each iteration is an array
 composed of the emitted event arguments.
 
+An {AbortSignal} can be used to cancel waiting on events:
+
+```js
+const { on, EventEmitter } = require('events');
+const ac = new AbortController();
+
+(async () => {
+  const ee = new EventEmitter();
+
+  // Emit later on
+  process.nextTick(() => {
+    ee.emit('foo', 'bar');
+    ee.emit('foo', 42);
+  });
+
+  for await (const event of on(ee, 'foo', { signal: ac.signal })) {
+    // The execution of this inner block is synchronous and it
+    // processes one event at a time (even with await). Do not use
+    // if concurrent execution is required.
+    console.log(event); // prints ['bar'] [42]
+  }
+  // Unreachable here
+})();
+
+process.nextTick(() => ac.abort());
+```
+
+<a id="event-target-and-event-api"></a>
 ## `EventTarget` and `Event` API
 <!-- YAML
 added: v14.5.0
+changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/35496
+    description:
+      The `EventTarget` and `Event` classes are now available as globals.
 -->
 
 > Stability: 1 - Experimental
@@ -1023,7 +1090,7 @@ Neither the `EventTarget` nor `Event` classes are available for end
 user code to create.
 
 ```js
-const target = getEventTargetSomehow();
+const target = new EventTarget();
 
 target.addEventListener('foo', (event) => {
   console.log('foo event happened!');
@@ -1109,7 +1176,7 @@ const handler4 = {
   }
 };
 
-const target = getEventTargetSomehow();
+const target = new EventTarget();
 
 target.addEventListener('foo', handler1);
 target.addEventListener('foo', handler2);
@@ -1130,6 +1197,10 @@ The `EventTarget` does not implement any special default handling for
 ### Class: `Event`
 <!-- YAML
 added: v14.5.0
+changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/35496
+    description: The `Event` class is now available through the global object.
 -->
 
 The `Event` object is an adaptation of the [`Event` Web API][]. Instances
@@ -1282,6 +1353,11 @@ The event type identifier.
 ### Class: `EventTarget`
 <!-- YAML
 added: v14.5.0
+changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/35496
+    description:
+      The `EventTarget` class is now available through the global object.
 -->
 
 #### `eventTarget.addEventListener(type, listener[, options])`
@@ -1315,7 +1391,7 @@ a `listener`. Any individual `listener` may be added once with
 ```js
 function handler(event) {}
 
-const target = getEventTargetSomehow();
+const target = new EventTarget();
 target.addEventListener('foo', handler, { capture: true });  // first
 target.addEventListener('foo', handler, { capture: false }); // second
 
@@ -1352,10 +1428,12 @@ added: v14.5.0
 
 Removes the `listener` from the list of handlers for event `type`.
 
-### Class: `NodeEventTarget extends EventTarget`
+### Class: `NodeEventTarget`
 <!-- YAML
 added: v14.5.0
 -->
+
+* Extends: {EventTarget}
 
 The `NodeEventTarget` is a Node.js-specific extension to `EventTarget`
 that emulates a subset of the `EventEmitter` API.

@@ -27,19 +27,20 @@ using v8::Object;
 using v8::ObjectTemplate;
 using v8::Private;
 using v8::PropertyDescriptor;
+using v8::SealHandleScope;
 using v8::String;
 using v8::Value;
 
 extern bool node_is_nwjs;
 
-static bool AllowWasmCodeGenerationCallback(Local<Context> context,
-                                            Local<String>) {
+bool AllowWasmCodeGenerationCallback(Local<Context> context,
+                                     Local<String>) {
   Local<Value> wasm_code_gen =
       context->GetEmbedderData(ContextEmbedderIndex::kAllowWasmCodeGeneration);
   return wasm_code_gen->IsUndefined() || wasm_code_gen->IsTrue();
 }
 
-static bool ShouldAbortOnUncaughtException(Isolate* isolate) {
+bool ShouldAbortOnUncaughtException(Isolate* isolate) {
   DebugSealHandleScope scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
   return env != nullptr &&
@@ -49,9 +50,9 @@ static bool ShouldAbortOnUncaughtException(Isolate* isolate) {
          !env->inside_should_not_abort_on_uncaught_scope();
 }
 
-static MaybeLocal<Value> PrepareStackTraceCallback(Local<Context> context,
-                                      Local<Value> exception,
-                                      Local<Array> trace) {
+MaybeLocal<Value> PrepareStackTraceCallback(Local<Context> context,
+                                            Local<Value> exception,
+                                            Local<Array> trace) {
   Environment* env = Environment::GetCurrent(context);
   if (env == nullptr) {
     return exception->ToString(context).FromMaybe(Local<Value>());
@@ -218,6 +219,8 @@ void SetIsolateCreateParamsForNode(Isolate::CreateParams* params) {
     // heap based on the actual physical memory.
     params->constraints.ConfigureDefaults(total_memory, 0);
   }
+  params->embedder_wrapper_object_index = BaseObject::InternalFields::kSlot;
+  params->embedder_wrapper_type_index = std::numeric_limits<int>::max();
 }
 
 void SetIsolateErrorHandlers(v8::Isolate* isolate, const IsolateSettings& s) {
@@ -251,7 +254,7 @@ void SetIsolateMiscHandlers(v8::Isolate* isolate, const IsolateSettings& s) {
 #if 0
   if ((s.flags & SHOULD_NOT_SET_PROMISE_REJECTION_CALLBACK) == 0) {
     auto* promise_reject_cb = s.promise_reject_callback ?
-      s.promise_reject_callback : task_queue::PromiseRejectCallback;
+      s.promise_reject_callback : PromiseRejectCallback;
     isolate->SetPromiseRejectCallback(promise_reject_cb);
   }
 #endif
@@ -362,13 +365,7 @@ Environment* CreateEnvironment(
   // TODO(addaleax): This is a much better place for parsing per-Environment
   // options than the global parse call.
   Environment* env = new Environment(
-      isolate_data,
-      context,
-      args,
-      exec_args,
-      flags,
-      thread_id);
-
+      isolate_data, context, args, exec_args, nullptr, flags, thread_id);
 #if HAVE_INSPECTOR
   if (inspector_parent_handle) {
     env->InitializeInspector(
@@ -388,10 +385,13 @@ Environment* CreateEnvironment(
 }
 
 void FreeEnvironment(Environment* env) {
+  Isolate::DisallowJavascriptExecutionScope disallow_js(env->isolate(),
+      Isolate::DisallowJavascriptExecutionScope::THROW_ON_FAILURE);
   {
-    // TODO(addaleax): This should maybe rather be in a SealHandleScope.
-    HandleScope handle_scope(env->isolate());
+    HandleScope handle_scope(env->isolate());  // For env->context().
     Context::Scope context_scope(env->context());
+    SealHandleScope seal_handle_scope(env->isolate());
+
     env->set_stopping(true);
     env->stop_sub_worker_contexts();
     env->RunCleanup();

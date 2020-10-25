@@ -698,7 +698,6 @@ Module {
   id: '.',
   path: '/absolute/path/to',
   exports: {},
-  parent: null,
   filename: '/absolute/path/to/entry.js',
   loaded: false,
   children: [],
@@ -902,7 +901,9 @@ loading.
 ### `module.parent`
 <!-- YAML
 added: v0.1.16
-deprecated: v14.6.0
+deprecated:
+  - v14.6.0
+  - v12.19.0
 -->
 
 > Stability: 0 - Deprecated: Please use [`require.main`][] and

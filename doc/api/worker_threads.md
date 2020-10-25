@@ -84,7 +84,9 @@ if (isMainThread) {
 
 ## `worker.markAsUntransferable(object)`
 <!-- YAML
-added: v14.5.0
+added:
+  - v14.5.0
+  - v12.19.0
 -->
 
 Mark an object as not transferable. If `object` occurs in the transfer list of
@@ -344,7 +346,9 @@ to `postMessage()` and no further arguments.
 
 ### Event: `'messageerror'`
 <!-- YAML
-added: v14.5.0
+added:
+  - v14.5.0
+  - v12.19.0
 -->
 
 * `error` {Error} An Error object
@@ -367,10 +371,14 @@ are part of the channel.
 <!-- YAML
 added: v10.5.0
 changes:
-  - version: v14.5.0
+  - version:
+    - v14.5.0
+    - v12.19.0
     pr-url: https://github.com/nodejs/node/pull/33360
     description: Added `KeyObject` to the list of cloneable types.
-  - version: v14.5.0
+  - version:
+    - v14.5.0
+    - v12.19.0
     pr-url: https://github.com/nodejs/node/pull/33772
     description: Added `FileHandle` to the list of transferable types.
 -->
@@ -630,25 +638,30 @@ changes:
     description: The `trackUnmanagedFds` option was set to `true` by default.
   - version:
     - v14.6.0
+    - v12.19.0
     pr-url: https://github.com/nodejs/node/pull/34303
     description: The `trackUnmanagedFds` option was introduced.
-  - version: v14.0.0
+  - version:
+     - v13.13.0
+     - v12.17.0
     pr-url: https://github.com/nodejs/node/pull/32278
     description: The `transferList` option was introduced.
-  - version: v13.12.0
+  - version:
+     - v13.12.0
+     - v12.17.0
     pr-url: https://github.com/nodejs/node/pull/31664
     description: The `filename` parameter can be a WHATWG `URL` object using
                  `file:` protocol.
-  - version:
-     - v13.2.0
-     - v12.16.0
-    pr-url: https://github.com/nodejs/node/pull/26628
-    description: The `resourceLimits` option was introduced.
   - version:
      - v13.4.0
      - v12.16.0
     pr-url: https://github.com/nodejs/node/pull/30559
     description: The `argv` option was introduced.
+  - version:
+     - v13.2.0
+     - v12.16.0
+    pr-url: https://github.com/nodejs/node/pull/26628
+    description: The `resourceLimits` option was introduced.
 -->
 
 * `filename` {string|URL} The path to the Worker’s main script or module. Must
@@ -694,7 +707,7 @@ changes:
     [`fs.close()`][], and close them when the Worker exits, similar to other
     resources like network sockets or file descriptors managed through
     the [`FileHandle`][] API. This option is automatically inherited by all
-    nested `Worker`s. **Default**: `false`.
+    nested `Worker`s. **Default**: `true`.
   * `transferList` {Object[]} If one or more `MessagePort`-like objects
     are passed in `workerData`, a `transferList` is required for those
     items or [`ERR_MISSING_MESSAGE_PORT_IN_TRANSFER_LIST`][] will be thrown.
@@ -752,7 +765,9 @@ All messages sent from the worker thread will be emitted before the
 
 ### Event: `'messageerror'`
 <!-- YAML
-added: v14.5.0
+added:
+  - v14.5.0
+  - v12.19.0
 -->
 
 * `error` {Error} An Error object
@@ -769,7 +784,9 @@ JavaScript code.
 
 ### `worker.getHeapSnapshot()`
 <!-- YAML
-added: v13.9.0
+added:
+ - v13.9.0
+ - v12.17.0
 -->
 
 * Returns: {Promise} A promise for a Readable Stream containing

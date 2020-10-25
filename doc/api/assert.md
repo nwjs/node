@@ -13,9 +13,13 @@ invariants.
 <!-- YAML
 added: v9.9.0
 changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/34001
+    description: Exposed as `require('assert/strict')`.
   - version:
       - v13.9.0
       - v12.16.2
+    pr-url: https://github.com/nodejs/node/pull/31635
     description: Changed "strict mode" to "strict assertion mode" and "legacy
                  mode" to "legacy assertion mode" to avoid confusion with the
                  more usual meaning of "strict mode".
@@ -38,6 +42,9 @@ To use strict assertion mode:
 
 ```js
 const assert = require('assert').strict;
+```
+```js
+const assert = require('assert/strict');
 ```
 
 Example error diff:
@@ -153,7 +160,9 @@ try {
 
 ## Class: `assert.CallTracker`
 <!-- YAML
-added: v14.2.0
+added:
+  - v14.2.0
+  - v12.19.0
 -->
 
 > Stability: 1 - Experimental
@@ -162,7 +171,9 @@ This feature is currently experimental and behavior might still change.
 
 ### `new assert.CallTracker()`
 <!-- YAML
-added: v14.2.0
+added:
+  - v14.2.0
+  - v12.19.0
 -->
 
 Creates a new [`CallTracker`][] object which can be used to track if functions
@@ -191,7 +202,9 @@ process.on('exit', () => {
 
 ### `tracker.calls([fn][, exact])`
 <!-- YAML
-added: v14.2.0
+added:
+  - v14.2.0
+  - v12.19.0
 -->
 
 * `fn` {Function} **Default** A no-op function.
@@ -218,7 +231,9 @@ const callsfunc = tracker.calls(func);
 
 ### `tracker.report()`
 <!-- YAML
-added: v14.2.0
+added:
+  - v14.2.0
+  - v12.19.0
 -->
 
 * Returns: {Array} of objects containing information about the wrapper functions
@@ -264,7 +279,9 @@ tracker.report();
 
 ### `tracker.verify()`
 <!-- YAML
-added: v14.2.0
+added:
+  - v14.2.0
+  - v12.19.0
 -->
 
 Iterates through the list of functions passed to
@@ -313,17 +330,23 @@ changes:
                  minor comparison adjustments to make the check less surprising.
   - version: v9.0.0
     pr-url: https://github.com/nodejs/node/pull/15001
-    description: The `Error` names and messages are now properly compared
+    description: The `Error` names and messages are now properly compared.
   - version: v8.0.0
     pr-url: https://github.com/nodejs/node/pull/12142
-    description: The `Set` and `Map` content is also compared
-  - version: v6.4.0, v4.7.1
+    description: The `Set` and `Map` content is also compared.
+  - version:
+    - v6.4.0
+    - v4.7.1
     pr-url: https://github.com/nodejs/node/pull/8002
     description: Typed array slices are handled correctly now.
-  - version: v6.1.0, v4.5.0
+  - version:
+    - v6.1.0
+    - v4.5.0
     pr-url: https://github.com/nodejs/node/pull/6432
     description: Objects with circular references can be used as inputs now.
-  - version: v5.10.1, v4.4.3
+  - version:
+    - v5.10.1
+    - v4.4.3
     pr-url: https://github.com/nodejs/node/pull/5910
     description: Handle non-`Uint8Array` typed arrays correctly.
 -->
@@ -433,17 +456,21 @@ changes:
               comparison.
   - version: v8.5.0
     pr-url: https://github.com/nodejs/node/pull/15001
-    description: The `Error` names and messages are now properly compared
+    description: The `Error` names and messages are now properly compared.
   - version: v8.0.0
     pr-url: https://github.com/nodejs/node/pull/12142
-    description: The `Set` and `Map` content is also compared
-  - version: v6.4.0, v4.7.1
+    description: The `Set` and `Map` content is also compared.
+  - version:
+    - v6.4.0
+    - v4.7.1
     pr-url: https://github.com/nodejs/node/pull/8002
     description: Typed array slices are handled correctly now.
   - version: v6.1.0
     pr-url: https://github.com/nodejs/node/pull/6432
     description: Objects with circular references can be used as inputs now.
-  - version: v5.10.1, v4.4.3
+  - version:
+    - v5.10.1
+    - v4.4.3
     pr-url: https://github.com/nodejs/node/pull/5910
     description: Handle non-`Uint8Array` typed arrays correctly.
 -->
@@ -665,7 +692,9 @@ assert.doesNotReject(Promise.reject(new TypeError('Wrong value')))
 <!-- YAML
 added: v0.1.21
 changes:
-  - version: v5.11.0, v4.4.5
+  - version:
+    - v5.11.0
+    - v4.4.5
     pr-url: https://github.com/nodejs/node/pull/2407
     description: The `message` parameter is respected now.
   - version: v4.2.0
@@ -970,17 +999,23 @@ changes:
                  NaN.
   - version: v9.0.0
     pr-url: https://github.com/nodejs/node/pull/15001
-    description: The `Error` names and messages are now properly compared
+    description: The `Error` names and messages are now properly compared.
   - version: v8.0.0
     pr-url: https://github.com/nodejs/node/pull/12142
-    description: The `Set` and `Map` content is also compared
-  - version: v6.4.0, v4.7.1
+    description: The `Set` and `Map` content is also compared.
+  - version:
+    - v6.4.0
+    - v4.7.1
     pr-url: https://github.com/nodejs/node/pull/8002
     description: Typed array slices are handled correctly now.
-  - version: v6.1.0, v4.5.0
+  - version:
+    - v6.1.0
+    - v4.5.0
     pr-url: https://github.com/nodejs/node/pull/6432
     description: Objects with circular references can be used as inputs now.
-  - version: v5.10.1, v4.4.3
+  - version:
+    - v5.10.1
+    - v4.4.3
     pr-url: https://github.com/nodejs/node/pull/5910
     description: Handle non-`Uint8Array` typed arrays correctly.
 -->
@@ -1052,17 +1087,21 @@ changes:
               comparison.
   - version: v9.0.0
     pr-url: https://github.com/nodejs/node/pull/15001
-    description: The `Error` names and messages are now properly compared
+    description: The `Error` names and messages are now properly compared.
   - version: v8.0.0
     pr-url: https://github.com/nodejs/node/pull/12142
-    description: The `Set` and `Map` content is also compared
-  - version: v6.4.0, v4.7.1
+    description: The `Set` and `Map` content is also compared.
+  - version:
+    - v6.4.0
+    - v4.7.1
     pr-url: https://github.com/nodejs/node/pull/8002
     description: Typed array slices are handled correctly now.
   - version: v6.1.0
     pr-url: https://github.com/nodejs/node/pull/6432
     description: Objects with circular references can be used as inputs now.
-  - version: v5.10.1, v4.4.3
+  - version:
+    - v5.10.1
+    - v4.4.3
     pr-url: https://github.com/nodejs/node/pull/5910
     description: Handle non-`Uint8Array` typed arrays correctly.
 -->
@@ -1137,7 +1176,7 @@ added: v0.1.21
 changes:
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/17003
-    description: Used comparison changed from Strict Equality to `Object.is()`
+    description: Used comparison changed from Strict Equality to `Object.is()`.
 -->
 
 * `actual` {any}
@@ -1316,7 +1355,7 @@ added: v0.1.21
 changes:
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/17003
-    description: Used comparison changed from Strict Equality to `Object.is()`
+    description: Used comparison changed from Strict Equality to `Object.is()`.
 -->
 
 * `actual` {any}

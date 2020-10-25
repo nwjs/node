@@ -331,6 +331,11 @@ constexpr size_t arraysize(const T (&)[N]) {
   return N;
 }
 
+template <typename T, size_t N>
+constexpr size_t strsize(const T (&)[N]) {
+  return N - 1;
+}
+
 // Allocates an array of member type T. For up to kStackStorageSize items,
 // the stack is used, otherwise malloc().
 template <typename T, size_t kStackStorageSize = 1024>
@@ -568,6 +573,11 @@ struct MallocedBuffer {
     size = new_size;
   }
 
+  void Realloc(size_t new_size) {
+    Truncate(new_size);
+    data = UncheckedRealloc(data, new_size);
+  }
+
   inline bool is_empty() const { return data == nullptr; }
 
   MallocedBuffer() : data(nullptr), size(0) {}
@@ -799,6 +809,7 @@ std::unique_ptr<T> static_unique_pointer_cast(std::unique_ptr<U>&& ptr) {
   return std::unique_ptr<T>(static_cast<T*>(ptr.release()));
 }
 
+#define MAYBE_FIELD_PTR(ptr, field) ptr == nullptr ? nullptr : &(ptr->field)
 }  // namespace node
 
 #endif  // defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS

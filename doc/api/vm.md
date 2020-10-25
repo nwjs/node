@@ -54,14 +54,14 @@ executed in specific contexts.
 <!-- YAML
 added: v0.3.1
 changes:
+  - version: v10.6.0
+    pr-url: https://github.com/nodejs/node/pull/20300
+    description: The `produceCachedData` is deprecated in favour of
+                 `script.createCachedData()`.
   - version: v5.7.0
     pr-url: https://github.com/nodejs/node/pull/4777
     description: The `cachedData` and `produceCachedData` options are
                  supported now.
-  - version: v10.6.0
-    pr-url: https://github.com/nodejs/node/pull/20300
-    description: The `produceCachedData` is deprecated in favour of
-                 `script.createCachedData()`
 -->
 
 * `code` {string} The JavaScript code to compile.
@@ -87,10 +87,10 @@ changes:
   * `importModuleDynamically` {Function} Called during evaluation of this module
     when `import()` is called. If this option is not specified, calls to
     `import()` will reject with [`ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`][].
-    This option is part of the experimental modules API, and should not be
-    considered stable.
+    This option is part of the experimental modules API. We do not recommend
+    using it in a production environment.
     * `specifier` {string} specifier passed to `import()`
-    * `module` {vm.Module}
+    * `script` {vm.Script}
     * Returns: {Module Namespace Object|vm.Module} Returning a `vm.Module` is
       recommended in order to take advantage of error tracking, and to avoid
       issues with namespaces that contain `then` function exports.
@@ -705,7 +705,9 @@ const contextifiedObject = vm.createContext({ secret: 42 });
 
 ### `sourceTextModule.createCachedData()`
 <!-- YAML
-added: v13.7.0
+added:
+ - v13.7.0
+ - v12.17.0
 -->
 
 * Returns: {Buffer}
@@ -811,12 +813,15 @@ const vm = require('vm');
 <!-- YAML
 added: v10.10.0
 changes:
-  - version: v14.1.0
-    pr-url: https://github.com/nodejs/node/pull/32985
-    description: The `importModuleDynamically` option is now supported.
   - version: v14.3.0
     pr-url: https://github.com/nodejs/node/pull/33364
-    description: Removal of `importModuleDynamically` due to compatibility issues
+    description: Removal of `importModuleDynamically` due to compatibility
+                 issues.
+  - version:
+    - v14.1.0
+    - v13.14.0
+    pr-url: https://github.com/nodejs/node/pull/32985
+    description: The `importModuleDynamically` option is now supported.
 -->
 
 * `code` {string} The body of the function to compile.
@@ -976,10 +981,10 @@ changes:
   * `importModuleDynamically` {Function} Called during evaluation of this module
     when `import()` is called. If this option is not specified, calls to
     `import()` will reject with [`ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`][].
-    This option is part of the experimental modules API, and should not be
-    considered stable.
+    This option is part of the experimental modules API. We do not recommend
+    using it in a production environment.
     * `specifier` {string} specifier passed to `import()`
-    * `module` {vm.Module}
+    * `script` {vm.Script}
     * Returns: {Module Namespace Object|vm.Module} Returning a `vm.Module` is
       recommended in order to take advantage of error tracking, and to avoid
       issues with namespaces that contain `then` function exports.
@@ -1074,10 +1079,10 @@ changes:
   * `importModuleDynamically` {Function} Called during evaluation of this module
     when `import()` is called. If this option is not specified, calls to
     `import()` will reject with [`ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`][].
-    This option is part of the experimental modules API, and should not be
-    considered stable.
+    This option is part of the experimental modules API. We do not recommend
+    using it in a production environment.
     * `specifier` {string} specifier passed to `import()`
-    * `module` {vm.Module}
+    * `script` {vm.Script}
     * Returns: {Module Namespace Object|vm.Module} Returning a `vm.Module` is
       recommended in order to take advantage of error tracking, and to avoid
       issues with namespaces that contain `then` function exports.
@@ -1153,10 +1158,10 @@ changes:
   * `importModuleDynamically` {Function} Called during evaluation of this module
     when `import()` is called. If this option is not specified, calls to
     `import()` will reject with [`ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`][].
-    This option is part of the experimental modules API, and should not be
-    considered stable.
+    This option is part of the experimental modules API. We do not recommend
+    using it in a production environment.
     * `specifier` {string} specifier passed to `import()`
-    * `module` {vm.Module}
+    * `script` {vm.Script}
     * Returns: {Module Namespace Object|vm.Module} Returning a `vm.Module` is
       recommended in order to take advantage of error tracking, and to avoid
       issues with namespaces that contain `then` function exports.

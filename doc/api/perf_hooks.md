@@ -55,7 +55,9 @@ Performance Timeline. If `name` is provided, removes only the named mark.
 
 ### `performance.eventLoopUtilization([utilization1[, utilization2]])`
 <!-- YAML
-added: v14.10.0
+added:
+ - v14.10.0
+ - v12.19.0
 -->
 
 * `utilization1` {Object} The result of a previous call to
@@ -127,7 +129,9 @@ to mark specific significant moments in the Performance Timeline.
 <!-- YAML
 added: v8.5.0
 changes:
-  - version: v14.0.0
+  - version:
+      - v13.13.0
+      - v12.16.3
     pr-url: https://github.com/nodejs/node/pull/32651
     description: Make `startMark` and `endMark` parameters optional.
 -->
@@ -312,10 +316,12 @@ added: v8.5.0
 The high resolution millisecond timestamp marking the starting time of the
 Performance Entry.
 
-## Class: `PerformanceNodeTiming extends PerformanceEntry`
+## Class: `PerformanceNodeTiming`
 <!-- YAML
 added: v8.5.0
 -->
+
+* Extends: {PerformanceEntry}
 
 _This property is an extension by Node.js. It is not available in Web browsers._
 
@@ -345,7 +351,9 @@ initialized.
 
 ### `performanceNodeTiming.idleTime`
 <!-- YAML
-added: v14.10.0
+added:
+  - v14.10.0
+  - v12.19.0
 -->
 
 * {number}

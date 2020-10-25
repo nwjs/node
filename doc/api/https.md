@@ -13,13 +13,13 @@ separate module.
 <!-- YAML
 added: v0.4.5
 changes:
+  - version: v5.3.0
+    pr-url: https://github.com/nodejs/node/pull/4252
+    description: support `0` `maxCachedSessions` to disable TLS session caching.
   - version: v2.5.0
     pr-url: https://github.com/nodejs/node/pull/2228
     description: parameter `maxCachedSessions` added to `options` for TLS
                  sessions reuse.
-  - version: v5.3.0
-    pr-url: https://github.com/nodejs/node/pull/4252
-    description: support `0` `maxCachedSessions` to disable TLS session caching.
 -->
 
 An [`Agent`][] object for HTTPS similar to [`http.Agent`][]. See
@@ -251,7 +251,9 @@ Global instance of [`https.Agent`][] for all HTTPS client requests.
 <!-- YAML
 added: v0.3.6
 changes:
-  - version: v14.1.0
+  - version:
+    - v14.1.0
+    - v13.14.0
     pr-url: https://github.com/nodejs/node/pull/32786
     description: The `highWaterMark` option is accepted now.
   - version: v10.9.0

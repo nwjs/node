@@ -1,11 +1,10 @@
 import { strictEqual, deepEqual } from 'assert';
 
-import m, { π, z } from './exports-cases.js';
+import m, { π } from './exports-cases.js';
 import * as ns from './exports-cases.js';
 
 deepEqual(Object.keys(ns), ['default', 'isObject', 'z', 'π']);
 strictEqual(π, 'yes');
-strictEqual(z, 'yes');
 strictEqual(typeof m.isObject, 'undefined');
 strictEqual(m.π, 'yes');
 strictEqual(m.z, 'yes');

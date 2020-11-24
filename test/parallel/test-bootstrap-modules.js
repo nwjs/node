@@ -92,6 +92,7 @@ const expectedModules = new Set([
   'NativeModule internal/util',
   'NativeModule internal/util/debuglog',
   'NativeModule internal/util/inspect',
+  'NativeModule internal/util/iterable_weak_map',
   'NativeModule internal/util/types',
   'NativeModule internal/validators',
   'NativeModule internal/vm/module',
@@ -108,6 +109,7 @@ const expectedModules = new Set([
 if (!common.isMainThread) {
   [
     'Internal Binding messaging',
+    'Internal Binding performance',
     'Internal Binding symbols',
     'Internal Binding worker',
     'NativeModule internal/streams/duplex',

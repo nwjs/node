@@ -179,7 +179,7 @@ WebCryptoKeyExportStatus RSA_JWK_Export(
     KeyObjectData* key_data,
     const RSAKeyExportConfig& params,
     ByteSource* out) {
-  return WebCryptoKeyExportStatus::ERR_FAILED;
+  return WebCryptoKeyExportStatus::FAILED;
 }
 
 template <PublicKeyCipher::EVP_PKEY_cipher_init_t init,
@@ -196,16 +196,16 @@ WebCryptoCipherStatus RSA_Cipher(
       EVP_PKEY_CTX_new(key_data->GetAsymmetricKey().get(), nullptr));
 
   if (!ctx || init(ctx.get()) <= 0)
-    return WebCryptoCipherStatus::ERR_FAILED;
+    return WebCryptoCipherStatus::FAILED;
 
   if (EVP_PKEY_CTX_set_rsa_padding(ctx.get(), params.padding) <= 0) {
-    return WebCryptoCipherStatus::ERR_FAILED;
+    return WebCryptoCipherStatus::FAILED;
   }
 
   if (params.digest != nullptr &&
       (EVP_PKEY_CTX_set_rsa_oaep_md(ctx.get(), params.digest) <= 0 ||
        EVP_PKEY_CTX_set_rsa_mgf1_md(ctx.get(), params.digest) <= 0)) {
-    return WebCryptoCipherStatus::ERR_FAILED;
+    return WebCryptoCipherStatus::FAILED;
   }
 
   size_t label_len = params.label.size();
@@ -214,7 +214,7 @@ WebCryptoCipherStatus RSA_Cipher(
     CHECK_NOT_NULL(label);
     if (EVP_PKEY_CTX_set0_rsa_oaep_label(ctx.get(), label, label_len) <= 0) {
       OPENSSL_free(label);
-      return WebCryptoCipherStatus::ERR_FAILED;
+      return WebCryptoCipherStatus::FAILED;
     }
   }
 
@@ -225,7 +225,7 @@ WebCryptoCipherStatus RSA_Cipher(
           &out_len,
           in.data<unsigned char>(),
           in.size()) <= 0) {
-    return WebCryptoCipherStatus::ERR_FAILED;
+    return WebCryptoCipherStatus::FAILED;
   }
 
   char* data = MallocOpenSSL<char>(out_len);
@@ -238,13 +238,13 @@ WebCryptoCipherStatus RSA_Cipher(
           &out_len,
           in.data<unsigned char>(),
           in.size()) <= 0) {
-    return WebCryptoCipherStatus::ERR_FAILED;
+    return WebCryptoCipherStatus::FAILED;
   }
 
   buf.Resize(out_len);
 
   *out = std::move(buf);
-  return WebCryptoCipherStatus::ERR_OK;
+  return WebCryptoCipherStatus::OK;
 }
 }  // namespace
 
@@ -268,16 +268,16 @@ WebCryptoKeyExportStatus RSAKeyExportTraits::DoExport(
   switch (format) {
     case kWebCryptoKeyFormatRaw:
       // Not supported for RSA keys of either type
-      return WebCryptoKeyExportStatus::ERR_FAILED;
+      return WebCryptoKeyExportStatus::FAILED;
     case kWebCryptoKeyFormatJWK:
       return RSA_JWK_Export(key_data.get(), params, out);
     case kWebCryptoKeyFormatPKCS8:
       if (key_data->GetKeyType() != kKeyTypePrivate)
-        return WebCryptoKeyExportStatus::ERR_INVALID_KEY_TYPE;
+        return WebCryptoKeyExportStatus::INVALID_KEY_TYPE;
       return PKEY_PKCS8_Export(key_data.get(), out);
     case kWebCryptoKeyFormatSPKI:
       if (key_data->GetKeyType() != kKeyTypePublic)
-        return WebCryptoKeyExportStatus::ERR_INVALID_KEY_TYPE;
+        return WebCryptoKeyExportStatus::INVALID_KEY_TYPE;
       return PKEY_SPKI_Export(key_data.get(), out);
     default:
       UNREACHABLE();
@@ -356,7 +356,7 @@ WebCryptoCipherStatus RSACipherTraits::DoCipher(
       return RSA_Cipher<EVP_PKEY_decrypt_init, EVP_PKEY_decrypt>(
           env, key_data.get(), params, in, out);
   }
-  return WebCryptoCipherStatus::ERR_FAILED;
+  return WebCryptoCipherStatus::FAILED;
 }
 
 Maybe<bool> ExportJWKRsaKey(

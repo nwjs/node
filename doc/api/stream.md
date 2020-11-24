@@ -49,6 +49,9 @@ Additionally, this module includes the utility functions
 [`stream.Readable.from()`][].
 
 ### Streams Promises API
+<!-- YAML
+added: v15.0.0
+-->
 
 The `stream/promises` API provides an alternative set of asynchronous utility
 functions for streams that return `Promise` objects rather than using
@@ -577,6 +580,15 @@ This property contains the number of bytes (or objects) in the queue
 ready to be written. The value provides introspection data regarding
 the status of the `highWaterMark`.
 
+##### `writable.writableNeedDrain`
+<!-- YAML
+added: v15.2.0
+-->
+
+* {boolean}
+
+Is `true` if the stream's buffer has been full and stream will emit `'drain'`.
+
 ##### `writable.writableObjectMode`
 <!-- YAML
 added: v12.3.0
@@ -603,7 +615,7 @@ changes:
   not operating in object mode, `chunk` must be a string, `Buffer` or
   `Uint8Array`. For object mode streams, `chunk` may be any JavaScript value
   other than `null`.
-* `encoding` {string} The encoding, if `chunk` is a string. **Default:** `'utf8'`
+* `encoding` {string|null} The encoding, if `chunk` is a string. **Default:** `'utf8'`
 * `callback` {Function} Callback for when this chunk of data is flushed.
 * Returns: {boolean} `false` if the stream wishes for the calling code to
   wait for the `'drain'` event to be emitted before continuing to write
@@ -1969,7 +1981,7 @@ const myWritable = new Writable({
 
 #### `writable._construct(callback)`
 <!-- YAML
-added: v14.13.1
+added: v15.0.0
 -->
 
 * `callback` {Function} Call this function (optionally with an error
@@ -2287,7 +2299,7 @@ const myReadable = new Readable({
 
 #### `readable._construct(callback)`
 <!-- YAML
-added: v14.13.1
+added: v15.0.0
 -->
 
 * `callback` {Function} Call this function (optionally with an error
@@ -2313,7 +2325,7 @@ class ReadStream extends Readable {
     this.fd = null;
   }
   _construct(callback) {
-    fs.open(this.filename, (fd, err) => {
+    fs.open(this.filename, (err, fd) => {
       if (err) {
         callback(err);
       } else {

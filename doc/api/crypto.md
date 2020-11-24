@@ -1458,6 +1458,11 @@ changes:
   - version: v15.0.0
     pr-url: https://github.com/nodejs/node/pull/35093
     description: The privateKey can also be an ArrayBuffer and CryptoKey.
+  - version:
+     - v13.2.0
+     - v12.16.0
+    pr-url: https://github.com/nodejs/node/pull/29292
+    description: This function now supports IEEE-P1363 DSA and ECDSA signatures.
   - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/26960
     description: This function now supports RSA-PSS keys.
@@ -1576,6 +1581,11 @@ changes:
   - version: v15.0.0
     pr-url: https://github.com/nodejs/node/pull/35093
     description: The object can also be an ArrayBuffer and CryptoKey.
+  - version:
+     - v13.2.0
+     - v12.16.0
+    pr-url: https://github.com/nodejs/node/pull/29292
+    description: This function now supports IEEE-P1363 DSA and ECDSA signatures.
   - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/26960
     description: This function now supports RSA-PSS keys.
@@ -2147,8 +2157,9 @@ added: v11.6.0
 changes:
   - version: v15.0.0
     pr-url: https://github.com/nodejs/node/pull/35093
-    description: The key can also be an ArrayBuffer. The encoding argument was
-                 added. The key cannot contain more than 2 ** 32 - 1 bytes.
+    description: The key can also be an ArrayBuffer or string. The encoding
+                 argument was added. The key cannot contain more than
+                 2 ** 32 - 1 bytes.
 -->
 
 * `key` {string|ArrayBuffer|Buffer|TypedArray|DataView}
@@ -3313,6 +3324,12 @@ Throws an error if FIPS mode is not available.
 ### `crypto.sign(algorithm, data, key)`
 <!-- YAML
 added: v12.0.0
+changes:
+  - version:
+     - v13.2.0
+     - v12.16.0
+    pr-url: https://github.com/nodejs/node/pull/29292
+    description: This function now supports IEEE-P1363 DSA and ECDSA signatures.
 -->
 
 <!--lint disable maximum-line-length remark-lint-->
@@ -3379,6 +3396,11 @@ changes:
   - version: v15.0.0
     pr-url: https://github.com/nodejs/node/pull/35093
     description: The data, key, and signature arguments can also be ArrayBuffer.
+  - version:
+     - v13.2.0
+     - v12.16.0
+    pr-url: https://github.com/nodejs/node/pull/29292
+    description: This function now supports IEEE-P1363 DSA and ECDSA signatures.
 -->
 
 <!--lint disable maximum-line-length remark-lint-->

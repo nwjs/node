@@ -826,6 +826,10 @@ added: v0.1.10
 
 Returns `true` if the `fs.Stats` object describes a file system directory.
 
+If the `fs.Stats` object was obtained from [`fs.lstat()`][], this method will
+always return `false`. This is because [`fs.lstat()`][] returns information
+about a symbolic link itself and not the path it resolves to.
+
 ### `stats.isFIFO()`
 <!-- YAML
 added: v0.1.10
@@ -1511,16 +1515,16 @@ the permissions for the file owner. The middle digit (`6` in the example),
 specifies permissions for the group. The right-most digit (`5` in the example),
 specifies the permissions for others.
 
-| Number  |       Description        |
-| ------- | ------------------------ |
-|   `7`   | read, write, and execute |
-|   `6`   | read and write           |
-|   `5`   | read and execute         |
-|   `4`   | read only                |
-|   `3`   | write and execute        |
-|   `2`   | write only               |
-|   `1`   | execute only             |
-|   `0`   | no permission            |
+| Number | Description              |
+| ------ | ------------------------ |
+| `7`    | read, write, and execute |
+| `6`    | read and write           |
+| `5`    | read and execute         |
+| `4`    | read only                |
+| `3`    | write and execute        |
+| `2`    | write only               |
+| `1`    | execute only             |
+| `0`    | no permission            |
 
 For example, the octal value `0o765` means:
 
@@ -3031,6 +3035,10 @@ If `options.withFileTypes` is set to `true`, the result will contain
 <!-- YAML
 added: v0.1.29
 changes:
+  - version: v15.2.0
+    pr-url: https://github.com/nodejs/node/pull/35911
+    description: The options argument may include an AbortSignal to abort an
+                 ongoing readFile request.
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/12562
     description: The `callback` parameter is no longer optional. Not passing
@@ -3056,6 +3064,7 @@ changes:
 * `options` {Object|string}
   * `encoding` {string|null} **Default:** `null`
   * `flag` {string} See [support of file system `flags`][]. **Default:** `'r'`.
+  * `signal` {AbortSignal} allows aborting an in-progress readFile
 * `callback` {Function}
   * `err` {Error}
   * `data` {string|Buffer}
@@ -3097,8 +3106,24 @@ fs.readFile('<directory>', (err, data) => {
 });
 ```
 
+It is possible to abort an ongoing request using an `AbortSignal`. If a
+request is aborted the callback is called with an `AbortError`:
+
+```js
+const controller = new AbortController();
+const signal = controller.signal;
+fs.readFile(fileInfo[0].name, { signal }, (err, buf) => {
+  // ...
+});
+// When you want to abort the request
+controller.abort();
+```
+
 The `fs.readFile()` function buffers the entire file. To minimize memory costs,
 when possible prefer streaming via `fs.createReadStream()`.
+
+Aborting an ongoing request does not abort individual operating
+system requests but rather the internal buffering `fs.readFile` performs.
 
 ### File descriptors
 
@@ -4360,6 +4385,10 @@ details.
 <!-- YAML
 added: v0.1.29
 changes:
+  - version: v15.2.0
+    pr-url: https://github.com/nodejs/node/pull/35993
+    description: The options argument may include an AbortSignal to abort an
+                 ongoing writeFile request.
   - version: v14.12.0
     pr-url: https://github.com/nodejs/node/pull/34993
     description: The `data` parameter will stringify an object with an
@@ -4394,6 +4423,7 @@ changes:
   * `encoding` {string|null} **Default:** `'utf8'`
   * `mode` {integer} **Default:** `0o666`
   * `flag` {string} See [support of file system `flags`][]. **Default:** `'w'`.
+  * `signal` {AbortSignal} allows aborting an in-progress writeFile
 * `callback` {Function}
   * `err` {Error}
 
@@ -4424,6 +4454,28 @@ fs.writeFile('message.txt', 'Hello Node.js', 'utf8', callback);
 It is unsafe to use `fs.writeFile()` multiple times on the same file without
 waiting for the callback. For this scenario, [`fs.createWriteStream()`][] is
 recommended.
+
+Similarly to `fs.readFile` - `fs.writeFile` is a convenience method that
+performs multiple `write` calls internally to write the buffer passed to it.
+For performance sensitive code consider using [`fs.createWriteStream()`][].
+
+It is possible to use an {AbortSignal} to cancel an `fs.writeFile()`.
+Cancelation is "best effort", and some amount of data is likely still
+to be written.
+
+```js
+const controller = new AbortController();
+const { signal } = controller;
+const data = new Uint8Array(Buffer.from('Hello Node.js'));
+fs.writeFile('message.txt', data, { signal }, (err) => {
+  // When a request is aborted - the callback is called with an AbortError
+});
+// When the request should be aborted
+controller.abort();
+```
+
+Aborting an ongoing request does not abort individual operating
+system requests but rather the internal buffering `fs.writeFile` performs.
 
 ### Using `fs.writeFile()` with file descriptors
 
@@ -4594,6 +4646,21 @@ For detailed information, see the documentation of the asynchronous version of
 this API: [`fs.writev()`][].
 
 ## `fs` Promises API
+<!-- YAML
+added: v10.0.0
+changes:
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/31553
+    description: Exposed as `require('fs/promises')`.
+  - version:
+    - v11.14.0
+    - v10.17.0
+    pr-url: https://github.com/nodejs/node/pull/26581
+    description: This API is no longer experimental.
+  - version: v10.1.0
+    pr-url: https://github.com/nodejs/node/pull/20504
+    description: The API is accessible via `require('fs').promises` only.
+-->
 
 The `fs.promises` API provides an alternative set of asynchronous file system
 methods that return `Promise` objects rather than using callbacks. The
@@ -4756,6 +4823,7 @@ added: v10.0.0
 
 * `options` {Object|string}
   * `encoding` {string|null} **Default:** `null`
+  * `signal` {AbortSignal} allows aborting an in-progress readFile
 * Returns: {Promise}
 
 Asynchronously reads the entire contents of a file.
@@ -5423,12 +5491,18 @@ print('./').catch(console.error);
 ### `fsPromises.readFile(path[, options])`
 <!-- YAML
 added: v10.0.0
+changes:
+  - version: v15.2.0
+    pr-url: https://github.com/nodejs/node/pull/35911
+    description: The options argument may include an AbortSignal to abort an
+                 ongoing readFile request.
 -->
 
 * `path` {string|Buffer|URL|FileHandle} filename or `FileHandle`
 * `options` {Object|string}
   * `encoding` {string|null} **Default:** `null`
   * `flag` {string} See [support of file system `flags`][]. **Default:** `'r'`.
+  * `signal` {AbortSignal} allows aborting an in-progress readFile
 * Returns: {Promise}
 
 Asynchronously reads the entire contents of a file.
@@ -5443,6 +5517,20 @@ When the `path` is a directory, the behavior of `fsPromises.readFile()` is
 platform-specific. On macOS, Linux, and Windows, the promise will be rejected
 with an error. On FreeBSD, a representation of the directory's contents will be
 returned.
+
+It is possible to abort an ongoing `readFile` using an `AbortSignal`. If a
+request is aborted the promise returned is rejected with an `AbortError`:
+
+```js
+const controller = new AbortController();
+const signal = controller.signal;
+readFile(fileName, { signal }).then((file) => { /* ... */ });
+// Abort the request
+controller.abort();
+```
+
+Aborting an ongoing request does not abort individual operating
+system requests but rather the internal buffering `fs.readFile` performs.
 
 Any specified `FileHandle` has to support reading.
 
@@ -5550,7 +5638,7 @@ that represent files will be deleted. The permissive behavior of the
 `recursive` option is deprecated, `ENOTDIR` and `ENOENT` will be thrown in
 the future.
 
-## `fsPromises.rm(path[, options])`
+### `fsPromises.rm(path[, options])`
 <!-- YAML
 added: v14.14.0
 -->
@@ -5656,6 +5744,10 @@ The `atime` and `mtime` arguments follow these rules:
 <!-- YAML
 added: v10.0.0
 changes:
+  - version: v15.2.0
+    pr-url: https://github.com/nodejs/node/pull/35993
+    description: The options argument may include an AbortSignal to abort an
+                 ongoing writeFile request.
   - version: v14.12.0
     pr-url: https://github.com/nodejs/node/pull/34993
     description: The `data` parameter will stringify an object with an
@@ -5672,6 +5764,7 @@ changes:
   * `encoding` {string|null} **Default:** `'utf8'`
   * `mode` {integer} **Default:** `0o666`
   * `flag` {string} See [support of file system `flags`][]. **Default:** `'w'`.
+  * `signal` {AbortSignal} allows aborting an in-progress writeFile
 * Returns: {Promise}
 
 Asynchronously writes data to a file, replacing the file if it already exists.
@@ -5685,7 +5778,34 @@ If `options` is a string, then it specifies the encoding.
 Any specified `FileHandle` has to support writing.
 
 It is unsafe to use `fsPromises.writeFile()` multiple times on the same file
-without waiting for the `Promise` to be resolved (or rejected).
+without waiting for the `Promise` to be fulfilled (or rejected).
+
+Similarly to `fsPromises.readFile` - `fsPromises.writeFile` is a convenience
+method that performs multiple `write` calls internally to write the buffer
+passed to it. For performance sensitive code consider using
+[`fs.createWriteStream()`][].
+
+It is possible to use an {AbortSignal} to cancel an `fsPromises.writeFile()`.
+Cancelation is "best effort", and some amount of data is likely still
+to be written.
+
+```js
+const controller = new AbortController();
+const { signal } = controller;
+const data = new Uint8Array(Buffer.from('Hello Node.js'));
+(async () => {
+  try {
+    await fs.writeFile('message.txt', data, { signal });
+  } catch (err) {
+  // When a request is aborted - err is an AbortError
+  }
+})();
+// When the request should be aborted
+controller.abort();
+```
+
+Aborting an ongoing request does not abort individual operating
+system requests but rather the internal buffering `fs.writeFile` performs.
 
 ## FS constants
 

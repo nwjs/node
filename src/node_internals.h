@@ -366,8 +366,13 @@ class DiagnosticFilename {
   std::string filename_;
 };
 
+namespace heap {
+bool WriteSnapshot(v8::Isolate* isolate, const char* filename);
+}
+
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-private-field"
+
 class TraceEventScope {
  public:
   TraceEventScope(const char* category,

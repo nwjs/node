@@ -829,6 +829,40 @@ class MyClass extends EventEmitter {
 }
 ```
 
+## `events.getEventListeners(emitterOrTarget, eventName)`
+<!-- YAML
+added:
+ - v15.2.0
+-->
+* `emitterOrTarget` {EventEmitter|EventTarget}
+* `eventName` {string|symbol}
+* Returns: {Function[]}
+
+Returns a copy of the array of listeners for the event named `eventName`.
+
+For `EventEmitter`s this behaves exactly the same as calling `.listeners` on
+the emitter.
+
+For `EventTarget`s this is the only way to get the event listeners for the
+event target. This is useful for debugging and diagnostic purposes.
+
+```js
+const { getEventListeners, EventEmitter } = require('events');
+
+{
+  const ee = new EventEmitter();
+  const listener = () => console.log('Events are fun');
+  ee.on('foo', listener);
+  getEventListeners(ee, 'foo'); // [listener]
+}
+{
+  const et = new EventTarget();
+  const listener = () => console.log('Events are fun');
+  et.addEventListener('foo', listener);
+  getEventListeners(et, 'foo'); // [listener]
+}
+```
+
 ## `events.once(emitter, name[, options])`
 <!-- YAML
 added:
@@ -1282,9 +1316,10 @@ This is not used in Node.js and is provided purely for completeness.
 added: v14.5.0
 -->
 
-* Type: {boolean} Always returns `false`.
+* Type: {boolean} True for Node.js internal events, false otherwise.
 
-This is not used in Node.js and is provided purely for completeness.
+Currently only `AbortSignal`s' `"abort"` event is fired with `isTrusted`
+set to `true`.
 
 #### `event.preventDefault()`
 <!-- YAML
@@ -1524,6 +1559,8 @@ added: v14.5.0
 -->
 
 * `type` {string}
+
+* Returns: {EventTarget} this
 
 Node.js-specific extension to the `EventTarget` class. If `type` is specified,
 removes all registered listeners for `type`, otherwise removes all registered

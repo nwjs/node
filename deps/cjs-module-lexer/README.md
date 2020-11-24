@@ -19,7 +19,9 @@ npm install cjs-module-lexer
 For use in CommonJS:
 
 ```js
-const parse = require('cjs-module-lexer');
+const { parse } = require('cjs-module-lexer');
+
+// `init` return a promise for parity with the ESM API, but you do not have to call it
 
 const { exports, reexports } = parse(`
   // named exports detection
@@ -70,29 +72,37 @@ STRING_LITERAL: A `"` or `'` bounded ECMA-262 string literal.
 
 IDENTIFIER_STRING: ( `"` IDENTIFIER `"` | `'` IDENTIFIER `'` )
 
-COMMENT_SPACE: Any ECMA-262 whitespace, ECMA-262 block comment or ECMA-262 line comment
-
-MODULE_EXPORTS: `module` COMMENT_SPACE `.` COMMENT_SPACE `exports`
+MODULE_EXPORTS: `module` `.` `exports`
 
 EXPORTS_IDENTIFIER: MODULE_EXPORTS_IDENTIFIER | `exports`
 
-EXPORTS_DOT_ASSIGN: EXPORTS_IDENTIFIER COMMENT_SPACE `.` COMMENT_SPACE IDENTIFIER COMMENT_SPACE `=`
+EXPORTS_DOT_ASSIGN: EXPORTS_IDENTIFIER `.` IDENTIFIER `=`
 
-EXPORTS_LITERAL_COMPUTED_ASSIGN: EXPORTS_IDENTIFIER COMMENT_SPACE `[` COMMENT_SPACE IDENTIFIER_STRING COMMENT_SPACE `]` COMMENT_SPACE `=`
+EXPORTS_LITERAL_COMPUTED_ASSIGN: EXPORTS_IDENTIFIER `[` IDENTIFIER_STRING `]` `=`
 
-EXPORTS_LITERAL_PROP: (IDENTIFIER (COMMENT_SPACE `:` COMMENT_SPACE IDENTIFIER)?) | (IDENTIFIER_STRING COMMENT_SPACE `:` COMMENT_SPACE IDENTIFIER)
+EXPORTS_LITERAL_PROP: (IDENTIFIER  `:` IDENTIFIER)?) | (IDENTIFIER_STRING `:` IDENTIFIER)
+
+EXPORTS_SPREAD: `...` (IDENTIFIER | REQUIRE)
 
 EXPORTS_MEMBER: EXPORTS_DOT_ASSIGN | EXPORTS_LITERAL_COMPUTED_ASSIGN
 
-EXPORTS_DEFINE: `Object` COMMENT_SPACE `.` COMMENT_SPACE `defineProperty COMMENT_SPACE `(` EXPORTS_IDENTIFIER COMMENT_SPACE `,` COMMENT_SPACE IDENTIFIER_STRING
+EXPORTS_DEFINE: `Object` `.` `defineProperty `(` EXPORTS_IDENFITIER `,` IDENTIFIER_STRING
 
-EXPORTS_LITERAL: MODULE_EXPORTS COMMENT_SPACE `=` COMMENT_SPACE `{` COMMENT_SPACE (EXPORTS_LITERAL_PROP COMMENT_SPACE `,` COMMENT_SPACE)+ `}`
+EXPORTS_DEFINE_VALUE: EXPORTS_DEFINE `, {`
+  (`enumerable: true,`)?
+  (
+    `value:` |
+    `get` (`: function` IDENTIFIER? )?  `()` {` return IDENTIFIER (`.` IDENTIFIER | `[` IDENTIFIER_STRING `]`)? `;`? `}`
+  )
+  `})`
 
-REQUIRE: `require` COMMENT_SPACE `(` COMMENT_SPACE STRING_LITERAL COMMENT_SPACE `)`
+EXPORTS_LITERAL: MODULE_EXPORTS `=` `{` (EXPORTS_LITERAL_PROP | EXPORTS_SPREAD) `,`)+ `}`
+
+REQUIRE: `require` `(` STRING_LITERAL `)`
 
 EXPORTS_ASSIGN: (`var` | `const` | `let`) IDENTIFIER `=` REQUIRE
 
-MODULE_EXPORTS_ASSIGN: MODULE_EXPORTS COMMENT_SPACE `=` COMMENT_SPACE REQUIRE
+MODULE_EXPORTS_ASSIGN: MODULE_EXPORTS `=` REQUIRE
 
 EXPORT_STAR: (`__export` | `__exportStar`) `(` REQUIRE
 
@@ -102,14 +112,23 @@ EXPORT_STAR_LIB: `Object.keys(` IDENTIFIER$1 `).forEach(function (` IDENTIFIER$2
     `if (` IDENTIFIER$2 `!==` ( `'default'` | `"default"` ) `)`
   )
   (
+    `if (` IDENTIFIER$2 `in` EXPORTS_IDENTIFIER `&&` EXPORTS_IDENTIFIER `[` IDENTIFIER$2 `] ===` IDENTIFIER$1 `[` IDENTIFIER$2 `]) return` `;`?
+  )?
+  (
     EXPORTS_IDENTIFIER `[` IDENTIFIER$2 `] =` IDENTIFIER$1 `[` IDENTIFIER$2 `]` `;`? |
     `Object.defineProperty(` EXPORTS_IDENTIFIER `, ` IDENTIFIER$2 `, { enumerable: true, get: function () { return ` IDENTIFIER$1 `[` IDENTIFIER$2 `]` `;`? } })` `;`?
   )
   `})`
 ```
 
-* The returned export names are the matched `IDENTIFIER` and `IDENTIFIER_STRING` slots for all `EXPORTS_MEMBER`, `EXPORTS_DEFINE` and `EXPORTS_LITERAL` matches.
-* The reexport specifiers are taken to be the `STRING_LITERAL` slots of all `MODULE_EXPORTS_ASSIGN` as well as all _top-level_ `EXPORT_STAR` `REQUIRE` matches and `EXPORTS_ASSIGN` matches whose `IDENTIFIER` also matches the first `IDENTIFIER` in `EXPORT_STAR_LIB`.
+Spacing between tokens is taken to be any ECMA-262 whitespace, ECMA-262 block comment or ECMA-262 line comment.
+
+* The returned export names are taken to be the combination of:
+  1. All `IDENTIFIER` and `IDENTIFIER_STRING` slots for `EXPORTS_MEMBER` and `EXPORTS_LITERAL` matches.
+  2. The first `IDENTIFIER_STRING` slot for all `EXPORTS_DEFINE_VALUE` matches where that same string is not an `EXPORTS_DEFINE` match that is not also an `EXPORTS_DEFINE_VALUE` match.
+* The reexport specifiers are taken to be the the combination of:
+  1. The `REQUIRE` matches of the last matched of either `MODULE_EXPORTS_ASSIGN` or `EXPORTS_LITERAL`.
+  2. All _top-level_ `EXPORT_STAR` `REQUIRE` matches and `EXPORTS_ASSIGN` matches whose `IDENTIFIER` also matches the first `IDENTIFIER` in `EXPORT_STAR_LIB`.
 
 ### Parsing Examples
 
@@ -118,11 +137,10 @@ EXPORT_STAR_LIB: `Object.keys(` IDENTIFIER$1 `).forEach(function (` IDENTIFIER$2
 The basic matching rules for named exports are `exports.name`, `exports['name']` or `Object.defineProperty(exports, 'name', ...)`. This matching is done without scope analysis and regardless of the expression position:
 
 ```js
-// DETECTS EXPORTS: a, b, c
+// DETECTS EXPORTS: a, b
 (function (exports) {
   exports.a = 'a'; 
   exports['b'] = 'b';
-  Object.defineProperty(exports, 'c', { value: 'c' });
 })(exports);
 ```
 
@@ -134,7 +152,7 @@ Because there is no scope analysis, the above detection may overclassify:
   exports.a = 'a';
   exports['b'] = 'b';
   if (false)
-    Object.defineProperty(exports, 'c', { value: 'c' });
+    exports.c = 'c';
 })(NOT_EXPORTS, NOT_OBJECT);
 ```
 
@@ -142,12 +160,92 @@ It will in turn underclassify in cases where the identifiers are renamed:
 
 ```js
 // DETECTS: NO EXPORTS
-(function (e, defineProperty) {
+(function (e) {
   e.a = 'a';
   e['b'] = 'b';
-  defineProperty(e, 'c', { value: 'c' });
-})(exports, defineProperty);
+})(exports);
 ```
+
+#### Getter Exports Parsing
+
+`Object.defineProperty` is detected for specifically value and getter forms returning an identifier or member expression:
+
+```js
+// DETECTS: a, b, c, d, __esModule
+Object.defineProperty(exports, 'a', {
+  enumerable: true,
+  get: function () {
+    return q.p;
+  }
+});
+Object.defineProperty(exports, 'b', {
+  enumerable: true,
+  get: function () {
+    return q['p'];
+  }
+});
+Object.defineProperty(exports, 'c', {
+  enumerable: true,
+  get () {
+    return b;
+  }
+});
+Object.defineProperty(exports, 'd', { value: 'd' });
+Object.defineProperty(exports, '__esModule', { value: true });
+```
+
+To avoid matching getters that have side effects, any getter for an export name that does not support the forms above will
+opt-out of the getter matching:
+
+```js
+// DETECTS: NO EXPORTS
+Object.defineProperty(exports, 'a', {
+  value: 'no problem'
+});
+
+if (false) {
+  Object.defineProperty(module.exports, 'a', {
+    get () {
+      return dynamic();
+    }
+  })
+}
+```
+
+Alternative object definition structures or getter function bodies are not detected:
+
+```js
+// DETECTS: NO EXPORTS
+Object.defineProperty(exports, 'a', {
+  enumerable: false,
+  get () {
+    return p;
+  }
+});
+Object.defineProperty(exports, 'b', {
+  configurable: true,
+  get () {
+    return p;
+  }
+});
+Object.defineProperty(exports, 'c', {
+  get: () => p
+});
+Object.defineProperty(exports, 'd', {
+  enumerable: true,
+  get: function () {
+    return dynamic();
+  }
+});
+Object.defineProperty(exports, 'e', {
+  enumerable: true,
+  get () {
+    return 'str';
+  }
+});
+```
+
+`Object.defineProperties` is also not supported.
 
 #### Exports Object Assignment
 
@@ -160,17 +258,19 @@ Simple object definitions are supported:
 // DETECTS EXPORTS: a, b, c
 module.exports = {
   a,
-  b: 'c',
-  c: c
+  'b': b,
+  c: c,
+  ...d
 };
 ```
 
-Object properties that are not identifiers or string expressions will bail out of the object detection:
+Object properties that are not identifiers or string expressions will bail out of the object detection, while spreads are ignored:
 
 ```js
 // DETECTS EXPORTS: a, b
 module.exports = {
   a,
+  ...d,
   b: require('c'),
   c: "not detected since require('c') above bails the object detection"
 }
@@ -180,16 +280,27 @@ module.exports = {
 
 #### module.exports reexport assignment
 
-Any `module.exports = require('mod')` assignment is detected as a reexport:
+Any `module.exports = require('mod')` assignment is detected as a reexport, but only the last one is returned:
 
 ```js
-// DETECTS REEXPORTS: a, b, c
+// DETECTS REEXPORTS: c
 module.exports = require('a');
 (module => module.exports = require('b'))(NOT_MODULE);
 if (false) module.exports = require('c');
 ```
 
-As a result, the total list of exports would be inferred as the union of all of these reexported modules, which can lead to possible over-classification.
+This is to avoid over-classification in Webpack bundles with externals which include `module.exports = require('external')` in their source for every external dependency.
+
+In exports object assignment, any spread of `require()` are detected as multiple separate reexports:
+
+```js
+// DETECTS REEXPORTS: a, b
+module.exports = require('ignored');
+module.exports = {
+  ...require('a'),
+  ...require('b')
+};
+```
 
 #### Transpiler Re-exports
 
@@ -250,70 +361,70 @@ JS Build:
 
 ```
 Module load time
-> 2ms
+> 4ms
 Cold Run, All Samples
 test/samples/*.js (3635 KiB)
-> 333ms
+> 299ms
 
 Warm Runs (average of 25 runs)
 test/samples/angular.js (1410 KiB)
-> 16.48ms
+> 13.96ms
 test/samples/angular.min.js (303 KiB)
-> 5.36ms
+> 4.72ms
 test/samples/d3.js (553 KiB)
-> 8.32ms
+> 6.76ms
 test/samples/d3.min.js (250 KiB)
-> 4.28ms
+> 4ms
 test/samples/magic-string.js (34 KiB)
-> 1ms
+> 0.64ms
 test/samples/magic-string.min.js (20 KiB)
-> 0.36ms
+> 0ms
 test/samples/rollup.js (698 KiB)
-> 10.48ms
+> 8.48ms
 test/samples/rollup.min.js (367 KiB)
-> 6.64ms
+> 5.36ms
 
 Warm Runs, All Samples (average of 25 runs)
 test/samples/*.js (3635 KiB)
-> 49.28ms
+> 40.28ms
 ```
 
 Wasm Build:
 ```
 Module load time
-> 11ms
+> 10ms
 Cold Run, All Samples
 test/samples/*.js (3635 KiB)
-> 48ms
+> 43ms
 
 Warm Runs (average of 25 runs)
 test/samples/angular.js (1410 KiB)
-> 12.32ms
+> 9.32ms
 test/samples/angular.min.js (303 KiB)
-> 3.76ms
+> 3.16ms
 test/samples/d3.js (553 KiB)
-> 6.08ms
+> 5ms
 test/samples/d3.min.js (250 KiB)
-> 3ms
+> 2.32ms
 test/samples/magic-string.js (34 KiB)
-> 0.24ms
+> 0.16ms
 test/samples/magic-string.min.js (20 KiB)
 > 0ms
 test/samples/rollup.js (698 KiB)
-> 7.2ms
+> 6.28ms
 test/samples/rollup.min.js (367 KiB)
-> 4.2ms
+> 3.6ms
 
 Warm Runs, All Samples (average of 25 runs)
 test/samples/*.js (3635 KiB)
-> 33.6ms
+> 27.76ms
 ```
 
 ### Wasm Build Steps
 
-To build download the WASI SDK from https://github.com/CraneStation/wasi-sdk/releases.
+To build download the WASI SDK from https://github.com/WebAssembly/wasi-sdk/releases.
 
-The Makefile assumes the existence of "wasi-sdk-10.0", "binaryen" and "wabt" (both optional) as sibling folders to this project.
+The Makefile assumes the existence of "wasi-sdk-11.0" and "wabt" (optional) as sibling folders to this project.
 
 The build through the Makefile is then run via `make lib/lexer.wasm`, which can also be triggered via `npm run build-wasm` to create `dist/lexer.js`.
 

@@ -63,7 +63,10 @@ using PublicKeyEncodingConfig = AsymmetricKeyEncodingConfig;
 
 struct PrivateKeyEncodingConfig : public AsymmetricKeyEncodingConfig {
   const EVP_CIPHER* cipher_;
-  ByteSource passphrase_;
+  // The ByteSource alone is not enough to distinguish between "no passphrase"
+  // and a zero-length passphrase (which can be a null pointer), therefore, we
+  // use a NonCopyableMaybe.
+  NonCopyableMaybe<ByteSource> passphrase_;
 };
 
 // This uses the built-in reference counter of OpenSSL to manage an EVP_PKEY
@@ -262,9 +265,9 @@ enum WebCryptoKeyFormat {
 };
 
 enum class WebCryptoKeyExportStatus {
-  ERR_OK,
-  ERR_INVALID_KEY_TYPE,
-  ERR_FAILED
+  OK,
+  INVALID_KEY_TYPE,
+  FAILED
 };
 
 template <typename KeyExportTraits>
@@ -336,13 +339,13 @@ class KeyExportJob final : public CryptoJob<KeyExportTraits> {
                 format_,
                 *CryptoJob<KeyExportTraits>::params(),
                 &out_)) {
-      case WebCryptoKeyExportStatus::ERR_OK:
+      case WebCryptoKeyExportStatus::OK:
         // Success!
         break;
-      case WebCryptoKeyExportStatus::ERR_INVALID_KEY_TYPE:
+      case WebCryptoKeyExportStatus::INVALID_KEY_TYPE:
         // Fall through
         // TODO(@jasnell): Separate error for this
-      case WebCryptoKeyExportStatus::ERR_FAILED: {
+      case WebCryptoKeyExportStatus::FAILED: {
         CryptoErrorVector* errors = CryptoJob<KeyExportTraits>::errors();
         errors->Capture();
         if (errors->empty())

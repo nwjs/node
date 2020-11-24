@@ -1179,6 +1179,9 @@ And `process.argv`:
 ['/usr/local/bin/node', 'script.js', '--version']
 ```
 
+Refer to [`Worker` constructor][] for the detailed behavior of worker
+threads with this property.
+
 ## `process.execPath`
 <!-- YAML
 added: v0.1.100
@@ -1901,7 +1904,7 @@ present.
 
 ```js
 const data = process.report.getReport();
-console.log(data.header.nodeJsVersion);
+console.log(data.header.nodejsVersion);
 
 // Similar to process.report.writeReport()
 const fs = require('fs');
@@ -2210,7 +2213,18 @@ The `process.setgroups()` method sets the supplementary group IDs for the
 Node.js process. This is a privileged operation that requires the Node.js
 process to have `root` or the `CAP_SETGID` capability.
 
-The `groups` array can contain numeric group IDs, group names or both.
+The `groups` array can contain numeric group IDs, group names, or both.
+
+```js
+if (process.getgroups && process.setgroups) {
+  try {
+    process.setgroups([501]);
+    console.log(process.getgroups()); // new groups
+  } catch (err) {
+    console.log(`Failed to set groups: ${err}`);
+  }
+}
+```
 
 This function is only available on POSIX platforms (i.e. not Windows or
 Android).
@@ -2258,7 +2272,8 @@ exception value itself as its first argument.
 If such a function is set, the [`'uncaughtException'`][] event will
 not be emitted. If `--abort-on-uncaught-exception` was passed from the
 command line or set through [`v8.setFlagsFromString()`][], the process will
-not abort.
+not abort. Actions configured to take place on exceptions such as report
+generations will be affected too
 
 To unset the capture function,
 `process.setUncaughtExceptionCaptureCallback(null)` may be used. Calling this
@@ -2643,6 +2658,7 @@ cases:
 [`NODE_OPTIONS`]: cli.md#cli_node_options_options
 [`Promise.race()`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/race
 [`Worker`]: worker_threads.md#worker_threads_class_worker
+[`Worker` constructor]: worker_threads.md#worker_threads_new_worker_filename_options
 [`console.error()`]: console.md#console_console_error_data_args
 [`console.log()`]: console.md#console_console_log_data_args
 [`domain`]: domain.md

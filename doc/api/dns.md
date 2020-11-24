@@ -117,6 +117,27 @@ added: v8.3.0
 Cancel all outstanding DNS queries made by this resolver. The corresponding
 callbacks will be called with an error with code `ECANCELLED`.
 
+### `resolver.setLocalAddress([ipv4][, ipv6])`
+<!-- YAML
+added: v15.1.0
+-->
+
+* `ipv4` {string} A string representation of an IPv4 address.
+  **Default:** `'0.0.0.0'`
+* `ipv6` {string} A string representation of an IPv6 address.
+  **Default:** `'::0'`
+
+The resolver instance will send its requests from the specified IP address.
+This allows programs to specify outbound interfaces when used on multi-homed
+systems.
+
+If a v4 or v6 address is not specified, it is set to the default, and the
+operating system will choose a local address automatically.
+
+The resolver will use the v4 local address when making requests to IPv4 DNS
+servers, and the v6 local address when making requests to IPv6 DNS servers.
+The `rrtype` of resolution requests has no impact on the local address used.
+
 ## `dns.getServers()`
 <!-- YAML
 added: v0.11.3
@@ -578,10 +599,12 @@ be an array of objects with the following properties:
 added: v0.1.27
 -->
 
+<!--lint disable no-undefined-references list-item-bullet-indent-->
 * `hostname` {string}
 * `callback` {Function}
   * `err` {Error}
   * `records` <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type" class="type">&lt;string[][]&gt;</a>
+<!--lint enable no-undefined-references list-item-bullet-indent-->
 
 Uses the DNS protocol to resolve text queries (`TXT` records) for the
 `hostname`. The `records` argument passed to the `callback` function is a
@@ -643,6 +666,18 @@ subsequent servers provided. Fallback DNS servers will only be used if the
 earlier ones time out or result in some other error.
 
 ## DNS promises API
+<!-- YAML
+added: v10.6.0
+changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/32953
+    description: Exposed as `require('dns/promises')`.
+  - version:
+    - v11.14.0
+    - v10.17.0
+    pr-url: https://github.com/nodejs/node/pull/26592
+    description: This API is no longer experimental.
+-->
 
 The `dns.promises` API provides an alternative set of asynchronous DNS methods
 that return `Promise` objects rather than using callbacks. The API is accessible
@@ -915,7 +950,7 @@ Here is an example of the result object:
     minttl: 60 } ]
 ```
 
-## `dnsPromises.resolveCaa(hostname)`
+### `dnsPromises.resolveCaa(hostname)`
 <!-- YAML
 added: v15.0.0
 -->

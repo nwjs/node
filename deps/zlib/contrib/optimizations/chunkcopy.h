@@ -29,6 +29,7 @@
 #include <arm_neon.h>
 typedef uint8x16_t z_vec128i_t;
 #elif defined(INFLATE_CHUNK_SIMD_SSE2)
+#pragma GCC target ("sse2")
 #include <emmintrin.h>
 typedef __m128i z_vec128i_t;
 #else
@@ -404,6 +405,27 @@ static inline unsigned char FAR* chunkcopy_lapped_safe(
     return out;
   }
   return chunkcopy_lapped_relaxed(out, dist, len);
+}
+
+/* TODO(cavalcanti): see crbug.com/1110083. */
+static inline unsigned char FAR* chunkcopy_safe_ugly(unsigned char FAR* out,
+                                                     unsigned dist,
+                                                     unsigned len,
+                                                     unsigned char FAR* limit) {
+#if defined(__GNUC__) && !defined(__clang__)
+  /* Speed is the same as using chunkcopy_safe
+     w/ GCC on ARM (tested gcc 6.3 and 7.5) and avoids
+     undefined behavior.
+  */
+  out = chunkcopy_core_safe(out, out - dist, len, limit);
+#elif defined(__clang__) && defined(ARMV8_OS_ANDROID) && !defined(__aarch64__)
+  /* Seems to perform better on 32bit (i.e. Android). */
+  out = chunkcopy_core_safe(out, out - dist, len, limit);
+#elif defined(__clang__)
+  /* Seems to perform better on 64bit. */
+  out = chunkcopy_lapped_safe(out, dist, len, limit);
+#endif
+  return out;
 }
 
 /*

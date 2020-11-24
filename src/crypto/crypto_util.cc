@@ -74,13 +74,13 @@ bool EntropySource(unsigned char* buffer, size_t length) {
 }
 
 int PasswordCallback(char* buf, int size, int rwflag, void* u) {
-  const char* passphrase = static_cast<char*>(u);
+  const ByteSource* passphrase = *static_cast<const ByteSource**>(u);
   if (passphrase != nullptr) {
     size_t buflen = static_cast<size_t>(size);
-    size_t len = strlen(passphrase);
+    size_t len = passphrase->size();
     if (buflen < len)
       return -1;
-    memcpy(buf, passphrase, len);
+    memcpy(buf, passphrase->get(), len);
     return len;
   }
 
@@ -236,7 +236,9 @@ ByteSource& ByteSource::operator=(ByteSource&& other) noexcept {
 }
 
 std::unique_ptr<BackingStore> ByteSource::ReleaseToBackingStore() {
-  CHECK_NOT_NULL(allocated_data_);
+  // It's ok for allocated_data_ to be nullptr but
+  // only if size_ is zero.
+  CHECK_IMPLIES(size_ > 0, allocated_data_ != nullptr);
   std::unique_ptr<BackingStore> ptr = ArrayBuffer::NewBackingStore(
       allocated_data_,
       size(),

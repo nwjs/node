@@ -252,8 +252,6 @@ absolute subpath of the package such as
 
 ### Subpath exports
 
-> Stability: 1 - Experimental
-
 When using the [`"exports"`][] field, custom subpaths can be defined along
 with the main entry point by treating the main entry point as the
 `"."` subpath:
@@ -283,8 +281,6 @@ import submodule from 'es-module-package/private-module.js';
 ```
 
 ### Subpath imports
-
-> Stability: 1 - Experimental
 
 In addition to the [`"exports"`][] field, it is possible to define internal
 package import maps that only apply to import specifiers from within the package
@@ -369,9 +365,46 @@ treating the right hand side target pattern as a `**` glob against the list of
 files within the package. Because `node_modules` paths are forbidden in exports
 targets, this expansion is dependent on only the files of the package itself.
 
-### Exports sugar
+### Subpath folder mappings
+<!-- YAML
+changes:
+  - version: v15.1.0
+    pr-url: https://github.com/nodejs/node/pull/35746
+    description: Runtime deprecation.
+  - version: v14.13.0
+    pr-url: https://github.com/nodejs/node/pull/34718
+    description: Documentation-only deprecation.
+-->
 
-> Stability: 1 - Experimental
+> Stability: 0 - Deprecated: Use subpath patterns instead.
+
+Before subpath patterns were supported, a trailing `"/"` suffix was used to
+support folder mappings:
+
+```json
+{
+  "exports": {
+    "./features/": "./features/"
+  }
+}
+```
+
+_This feature will be removed in a future release._
+
+Instead, use direct [subpath patterns][]:
+
+```json
+{
+  "exports": {
+    "./features/*": "./features/*.js"
+  }
+}
+```
+
+The benefit of patterns over folder exports is that packages can always be
+imported by consumers without subpath file extensions being necessary.
+
+### Exports sugar
 
 If the `"."` export is the only export, the [`"exports"`][] field provides sugar
 for this case being the direct [`"exports"`][] field value.
@@ -396,8 +429,6 @@ can be written:
 ```
 
 ### Conditional exports
-
-> Stability: 1 - Experimental
 
 Conditional exports provide a way to map to different paths depending on
 certain conditions. They are supported for both CommonJS and ES module imports.
@@ -476,8 +507,6 @@ order to support packages with conditional exports. For this reason, using
 `"node"` and `"browser"` condition branches.
 
 ### Nested conditions
-
-> Stability: 1 - Experimental
 
 In addition to direct mappings, Node.js also supports nested condition objects.
 
@@ -834,12 +863,12 @@ The following fields in `package.json` files are used in Node.js:
 
 * [`"name"`][] - Relevant when using named imports within a package. Also used
   by package managers as the name of the package.
+* [`"main"`][] - The default module when loading the package, if exports is not
+  specified, and in versions of Node.js prior to the introduction of exports.
 * [`"type"`][] - The package type determining whether to load `.js` files as
   CommonJS or ES modules.
 * [`"exports"`][] - Package exports and conditional exports. When present,
   limits which submodules can be loaded from within the package.
-* [`"main"`][] - The default module when loading the package, if exports is not
-  specified, and in versions of Node.js prior to the introduction of exports.
 * [`"imports"`][] - Package imports, for use by modules within the package
   itself.
 
@@ -870,6 +899,30 @@ _npm_ registry requires a name that satisfies
 
 The `"name"` field can be used in addition to the [`"exports"`][] field to
 [self-reference][] a package using its name.
+
+### `"main"`
+<!-- YAML
+added: v0.4.0
+-->
+
+* Type: {string}
+
+```json
+{
+  "main": "./main.js"
+}
+```
+
+The `"main"` field defines the script that is used when the [package directory
+is loaded via `require()`](modules.md#modules_folders_as_modules). Its value
+is a path.
+
+```js
+require('./path/to/directory'); // This resolves to ./path/to/directory/main.js.
+```
+
+When a package has an [`"exports"`][] field, this will take precedence over the
+`"main"` field when importing the package by name.
 
 ### `"type"`
 <!-- YAML
@@ -969,36 +1022,10 @@ referenced via `require` or via `import`.
 All paths defined in the `"exports"` must be relative file URLs starting with
 `./`.
 
-### `"main"`
-<!-- YAML
-added: v0.4.0
--->
-
-* Type: {string}
-
-```json
-{
-  "main": "./main.js"
-}
-```
-
-The `"main"` field defines the script that is used when the [package directory
-is loaded via `require()`](modules.md#modules_folders_as_modules). Its value
-is interpreted as a path.
-
-```js
-require('./path/to/directory'); // This resolves to ./path/to/directory/main.js.
-```
-
-When a package has an [`"exports"`][] field, this will take precedence over the
-`"main"` field when importing the package by name.
-
 ### `"imports"`
 <!-- YAML
 added: v14.6.0
 -->
-
-> Stability: 1 - Experimental
 
 * Type: {Object}
 
@@ -1040,5 +1067,6 @@ This field defines [subpath imports][] for the current package.
 [self-reference]: #packages_self_referencing_a_package_using_its_name
 [subpath exports]: #packages_subpath_exports
 [subpath imports]: #packages_subpath_imports
+[subpath patterns]: #packages_subpath_patterns
 [the full specifier path]: esm.md#esm_mandatory_file_extensions
 [the dual CommonJS/ES module packages section]: #packages_dual_commonjs_es_module_packages

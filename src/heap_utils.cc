@@ -315,7 +315,9 @@ inline void TakeSnapshot(Isolate* isolate, v8::OutputStream* out) {
 #endif
 }
 
-inline bool WriteSnapshot(Isolate* isolate, const char* filename) {
+}  // namespace
+
+bool WriteSnapshot(Isolate* isolate, const char* filename) {
   FILE* fp = fopen(filename, "w");
   if (fp == nullptr)
     return false;
@@ -324,8 +326,6 @@ inline bool WriteSnapshot(Isolate* isolate, const char* filename) {
   fclose(fp);
   return true;
 }
-
-}  // namespace
 
 void DeleteHeapSnapshot(const HeapSnapshot* snapshot) {
   const_cast<HeapSnapshot*>(snapshot)->Delete();

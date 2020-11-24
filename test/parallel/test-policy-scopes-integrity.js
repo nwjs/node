@@ -4,6 +4,7 @@
 const common = require('../common');
 
 if (!common.hasCrypto) common.skip('missing crypto');
+common.requireNoPackageJSONAbove();
 
 const Manifest = require('internal/policy/manifest').Manifest;
 const assert = require('assert');
@@ -280,3 +281,36 @@ const assert = require('assert');
   }
 }
 // #endregion
+// #startonerror
+{
+  const manifest = new Manifest({
+    scopes: {
+      'file:///': {
+        integrity: true
+      }
+    },
+    onerror: 'throw'
+  });
+  assert.throws(
+    () => {
+      manifest.assertIntegrity('http://example.com');
+    },
+    /ERR_MANIFEST_ASSERT_INTEGRITY/
+  );
+}
+{
+  assert.throws(
+    () => {
+      new Manifest({
+        scopes: {
+          'file:///': {
+            integrity: true
+          }
+        },
+        onerror: 'unknown'
+      });
+    },
+    /ERR_MANIFEST_UNKNOWN_ONERROR/
+  );
+}
+// #endonerror

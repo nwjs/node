@@ -11,14 +11,15 @@ See [test/wpt](../../wpt/README.md) for information on how these tests are run.
 Last update:
 
 - console: https://github.com/web-platform-tests/wpt/tree/3b1f72e99a/console
-- encoding: https://github.com/web-platform-tests/wpt/tree/d7f9e16c9a/encoding
-- url: https://github.com/web-platform-tests/wpt/tree/33e4ac0902/url
+- encoding: https://github.com/web-platform-tests/wpt/tree/1821fb5f77/encoding
+- url: https://github.com/web-platform-tests/wpt/tree/54c6d64be0/url
 - resources: https://github.com/web-platform-tests/wpt/tree/1d14e821b9/resources
 - interfaces: https://github.com/web-platform-tests/wpt/tree/15e47f779c/interfaces
 - html/webappapis/microtask-queuing: https://github.com/web-platform-tests/wpt/tree/2c5c3c4c27/html/webappapis/microtask-queuing
 - html/webappapis/timers: https://github.com/web-platform-tests/wpt/tree/264f12bc7b/html/webappapis/timers
 - hr-time: https://github.com/web-platform-tests/wpt/tree/a5d1774ecf/hr-time
 - common: https://github.com/web-platform-tests/wpt/tree/4dacb6e2ff/common
+- dom/abort: https://github.com/web-platform-tests/wpt/tree/7caa3de747/dom/abort
 
 [Web Platform Tests]: https://github.com/web-platform-tests/wpt
 [`git node wpt`]: https://github.com/nodejs/node-core-utils/blob/master/docs/git-node.md#git-node-wpt

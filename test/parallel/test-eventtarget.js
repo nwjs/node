@@ -2,11 +2,7 @@
 'use strict';
 
 const common = require('../common');
-const {
-  Event,
-  EventTarget,
-  defineEventHandler
-} = require('internal/event_target');
+const { defineEventHandler } = require('internal/event_target');
 
 const {
   ok,
@@ -414,6 +410,7 @@ let asyncTest = Promise.resolve();
 }
 
 {
+  // Event Statics
   strictEqual(Event.NONE, 0);
   strictEqual(Event.CAPTURING_PHASE, 1);
   strictEqual(Event.AT_TARGET, 2);
@@ -424,6 +421,8 @@ let asyncTest = Promise.resolve();
     strictEqual(e.eventPhase, Event.AT_TARGET);
   }), { once: true });
   target.dispatchEvent(new Event('foo'));
+  // Event is a function
+  strictEqual(Event.length, 1);
 }
 
 {
@@ -478,4 +477,58 @@ let asyncTest = Promise.resolve();
     throws(() => eventTarget.addEventListener('foo', false), TypeError);
     throws(() => eventTarget.addEventListener('foo', Symbol()), TypeError);
   });
+}
+{
+  const eventTarget = new EventTarget();
+  const event = new Event('foo');
+  eventTarget.dispatchEvent(event);
+  strictEqual(event.target, eventTarget);
+}
+{
+  // Event target exported keys
+  const eventTarget = new EventTarget();
+  deepStrictEqual(Object.keys(eventTarget), []);
+  deepStrictEqual(Object.getOwnPropertyNames(eventTarget), []);
+  const parentKeys = Object.keys(Object.getPrototypeOf(eventTarget)).sort();
+  const keys = ['addEventListener', 'dispatchEvent', 'removeEventListener'];
+  deepStrictEqual(parentKeys, keys);
+}
+{
+  // Subclassing
+  class SubTarget extends EventTarget {}
+  const target = new SubTarget();
+  target.addEventListener('foo', common.mustCall());
+  target.dispatchEvent(new Event('foo'));
+}
+{
+  // Test event order
+  const target = new EventTarget();
+  let state = 0;
+  target.addEventListener('foo', common.mustCall(() => {
+    strictEqual(state, 0);
+    state++;
+  }));
+  target.addEventListener('foo', common.mustCall(() => {
+    strictEqual(state, 1);
+  }));
+  target.dispatchEvent(new Event('foo'));
+}
+{
+  const target = new EventTarget();
+  defineEventHandler(target, 'foo');
+  const descriptor = Object.getOwnPropertyDescriptor(target, 'onfoo');
+  strictEqual(descriptor.configurable, true);
+  strictEqual(descriptor.enumerable, true);
+}
+{
+  const target = new EventTarget();
+  defineEventHandler(target, 'foo');
+  const output = [];
+  target.addEventListener('foo', () => output.push(1));
+  target.onfoo = common.mustNotCall();
+  target.addEventListener('foo', () => output.push(3));
+  target.onfoo = () => output.push(2);
+  target.addEventListener('foo', () => output.push(4));
+  target.dispatchEvent(new Event('foo'));
+  deepStrictEqual(output, [1, 2, 3, 4]);
 }

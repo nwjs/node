@@ -1395,6 +1395,7 @@ class Environment : public MemoryRetainer {
   inline void ThrowError(v8::Local<v8::Value> (*fun)(v8::Local<v8::String>),
                          const char* errmsg);
 
+  bool uv_initialized_ = false;
   std::list<binding::DLib> loaded_addons_;
   v8::Isolate* const isolate_;
   IsolateData* const isolate_data_;

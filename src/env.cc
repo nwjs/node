@@ -533,6 +533,7 @@ Environment::~Environment() {
 void Environment::InitializeLibuv() {
   HandleScope handle_scope(isolate());
   Context::Scope context_scope(context());
+  uv_initialized_ = true;
 
   CHECK_EQ(0, uv_timer_init(event_loop(), timer_handle()));
   uv_unref(reinterpret_cast<uv_handle_t*>(timer_handle()));
@@ -903,7 +904,7 @@ void Environment::CheckImmediate(uv_check_t* handle) {
 }
 
 void Environment::ToggleImmediateRef(bool ref) {
-  if (started_cleanup_) return;
+  if (started_cleanup_|| !uv_initialized_) return;
 
   if (ref) {
     // Idle handle is needed only to stop the event loop from blocking in poll.

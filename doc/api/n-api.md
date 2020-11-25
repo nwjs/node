@@ -864,8 +864,8 @@ typedef void (*napi_async_cleanup_hook)(napi_async_cleanup_hook_handle handle,
 ```
 
 * `[in] handle`: The handle that must be passed to
-[`napi_remove_async_cleanup_hook`][] after completion of the asynchronous
-cleanup.
+  [`napi_remove_async_cleanup_hook`][] after completion of the asynchronous
+  cleanup.
 * `[in] data`: The data that was passed to [`napi_add_async_cleanup_hook`][].
 
 The body of the function should initiate the asynchronous cleanup actions at the
@@ -945,7 +945,7 @@ napi_get_last_error_info(napi_env env,
 
 * `[in] env`: The environment that the API is invoked under.
 * `[out] result`: The `napi_extended_error_info` structure with more
-information about the error.
+  information about the error.
 
 Returns `napi_ok` if the API succeeded.
 
@@ -1725,7 +1725,7 @@ NAPI_EXTERN napi_status napi_add_async_cleanup_hook(
 * `[in] hook`: The function pointer to call at environment teardown.
 * `[in] arg`: The pointer to pass to `hook` when it gets called.
 * `[out] remove_handle`: Optional handle that refers to the asynchronous cleanup
-hook.
+  hook.
 
 Registers `hook`, which is a function of type [`napi_async_cleanup_hook`][], as
 a function to be run with the `remove_handle` and `arg` parameters once the
@@ -1762,7 +1762,7 @@ NAPI_EXTERN napi_status napi_remove_async_cleanup_hook(
 ```
 
 * `[in] remove_handle`: The handle to an asynchronous cleanup hook that was
-created with [`napi_add_async_cleanup_hook`][].
+  created with [`napi_add_async_cleanup_hook`][].
 
 Unregisters the cleanup hook corresponding to `remove_handle`. This will prevent
 the hook from being executed, unless it has already started executing.
@@ -3372,7 +3372,7 @@ napi_status napi_typeof(napi_env env, napi_value value, napi_valuetype* result)
 Returns `napi_ok` if the API succeeded.
 
 * `napi_invalid_arg` if the type of `value` is not a known ECMAScript type and
- `value` is not an External value.
+  `value` is not an External value.
 
 This API represents behavior similar to invoking the `typeof` Operator on
 the object as defined in [Section 12.5.5][] of the ECMAScript Language
@@ -3902,11 +3902,11 @@ napi_get_all_property_names(napi_env env,
 * `[in] object`: The object from which to retrieve the properties.
 * `[in] key_mode`: Whether to retrieve prototype properties as well.
 * `[in] key_filter`: Which properties to retrieve
-(enumerable/readable/writable).
+  (enumerable/readable/writable).
 * `[in] key_conversion`: Whether to convert numbered property keys to strings.
 * `[out] result`: A `napi_value` representing an array of JavaScript values
-that represent the property names of the object. [`napi_get_array_length`][] and
-[`napi_get_element`][] can be used to iterate over `result`.
+  that represent the property names of the object. [`napi_get_array_length`][]
+  and [`napi_get_element`][] can be used to iterate over `result`.
 
 Returns `napi_ok` if the API succeeded.
 
@@ -4738,14 +4738,15 @@ napi_status napi_define_class(napi_env env,
 ```
 
 * `[in] env`: The environment that the API is invoked under.
-* `[in] utf8name`: Name of the JavaScript constructor function; this is
-  not required to be the same as the C++ class name, though it is recommended
-  for clarity.
+* `[in] utf8name`: Name of the JavaScript constructor function; When wrapping a
+  C++ class, we recommend for clarity that this name be the same as that of
+  the C++ class.
 * `[in] length`: The length of the `utf8name` in bytes, or `NAPI_AUTO_LENGTH`
   if it is null-terminated.
 * `[in] constructor`: Callback function that handles constructing instances
-  of the class. This should be a static method on the class, not an actual
-  C++ constructor function. [`napi_callback`][] provides more details.
+  of the class. When wrapping a C++ class, this method must be a static member
+  with the [`napi_callback`][] signature. A C++ class constructor cannot be
+  used. [`napi_callback`][] provides more details.
 * `[in] data`: Optional data to be passed to the constructor callback as
   the `data` property of the callback info.
 * `[in] property_count`: Number of items in the `properties` array argument.
@@ -4757,27 +4758,33 @@ napi_status napi_define_class(napi_env env,
 
 Returns `napi_ok` if the API succeeded.
 
-Defines a JavaScript class that corresponds to a C++ class, including:
+Defines a JavaScript class, including:
 
-* A JavaScript constructor function that has the class name and invokes the
-  provided C++ constructor callback.
-* Properties on the constructor function corresponding to _static_ data
-  properties, accessors, and methods of the C++ class (defined by
-  property descriptors with the `napi_static` attribute).
-* Properties on the constructor function's `prototype` object corresponding to
-  _non-static_ data properties, accessors, and methods of the C++ class
-  (defined by property descriptors without the `napi_static` attribute).
+* A JavaScript constructor function that has the class name. When wrapping a
+  corresponding C++ class, the callback passed via `constructor` can be used to
+  instantiate a new C++ class instance, which can then be placed inside the
+  JavaScript object instance being constructed using [`napi_wrap`][].
+* Properties on the constructor function whose implementation can call
+  corresponding _static_ data properties, accessors, and methods of the C++
+  class (defined by property descriptors with the `napi_static` attribute).
+* Properties on the constructor function's `prototype` object. When wrapping a
+  C++ class, _non-static_ data properties, accessors, and methods of the C++
+  class can be called from the static functions given in the property
+  descriptors without the `napi_static` attribute after retrieving the C++ class
+  instance placed inside the JavaScript object instance by using
+  [`napi_unwrap`][].
 
-The C++ constructor callback should be a static method on the class that calls
-the actual class constructor, then wraps the new C++ instance in a JavaScript
-object, and returns the wrapper object. See `napi_wrap()` for details.
+When wrapping a C++ class, the C++ constructor callback passed via `constructor`
+should be a static method on the class that calls the actual class constructor,
+then wraps the new C++ instance in a JavaScript object, and returns the wrapper
+object. See [`napi_wrap`][] for details.
 
 The JavaScript constructor function returned from [`napi_define_class`][] is
-often saved and used later, to construct new instances of the class from native
-code, and/or check whether provided values are instances of the class. In that
-case, to prevent the function value from being garbage-collected, create a
-persistent reference to it using [`napi_create_reference`][] and ensure the
-reference count is kept >= 1.
+often saved and used later to construct new instances of the class from native
+code, and/or to check whether provided values are instances of the class. In
+that case, to prevent the function value from being garbage-collected, a
+strong persistent reference to it can be created using
+[`napi_create_reference`][], ensuring that the reference count is kept >= 1.
 
 Any non-`NULL` data which is passed to this API via the `data` parameter or via
 the `data` field of the `napi_property_descriptor` array items can be associated
@@ -4942,7 +4949,7 @@ napi_status napi_check_object_type_tag(napi_env env,
 * `[in] js_object`: The JavaScript object whose type tag to examine.
 * `[in] type_tag`: The tag with which to compare any tag found on the object.
 * `[out] result`: Whether the type tag given matched the type tag on the
-object. `false` is also returned if no type tag was found on the object.
+  object. `false` is also returned if no type tag was found on the object.
 
 Returns `napi_ok` if the API succeeded.
 

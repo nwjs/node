@@ -45,7 +45,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.17',
+    'v8_embedder_string': '-node.22',
 
     ##### V8 defaults for Node.js #####
 
@@ -119,7 +119,7 @@
         'obj_dir%': '<(PRODUCT_DIR)/obj.target',
         #'v8_base': '<(PRODUCT_DIR)/obj.target/tools/v8_gypfiles/libv8_snapshot.a',
       }],
-      ['target_arch=="x64"', {
+      ['target_arch=="x64" or target_arch=="arm64"', {
         'v8_enable_pointer_compression': 1,
         'v8_enable_31bit_smis_on_64bit_arch': 1,
       }],

@@ -525,10 +525,8 @@ process.on('SIGTERM', handle);
 * `'SIGSTOP'` cannot have a listener installed.
 * `'SIGBUS'`, `'SIGFPE'`, `'SIGSEGV'` and `'SIGILL'`, when not raised
    artificially using kill(2), inherently leave the process in a state from
-   which it is not safe to attempt to call JS listeners. Doing so might lead to
-   the process hanging in an endless loop, since listeners attached using
-   `process.on()` are called asynchronously and therefore unable to correct the
-   underlying problem.
+   which it is not safe to call JS listeners. Doing so might cause the process
+   to stop responding.
 * `0` can be sent to test for the existence of a process, it has no effect if
    the process exists, but will throw an error if the process does not exist.
 
@@ -885,31 +883,29 @@ changes:
 * `filename` {string}
 * `flags` {os.constants.dlopen} **Default:** `os.constants.dlopen.RTLD_LAZY`
 
-The `process.dlopen()` method allows to dynamically load shared
-objects. It is primarily used by `require()` to load
-C++ Addons, and should not be used directly, except in special
-cases. In other words, [`require()`][] should be preferred over
-`process.dlopen()`, unless there are specific reasons.
+The `process.dlopen()` method allows dynamically loading shared objects. It is
+primarily used by `require()` to load C++ Addons, and should not be used
+directly, except in special cases. In other words, [`require()`][] should be
+preferred over `process.dlopen()` unless there are specific reasons such as
+custom dlopen flags or loading from ES modules.
 
 The `flags` argument is an integer that allows to specify dlopen
 behavior. See the [`os.constants.dlopen`][] documentation for details.
 
-If there are specific reasons to use `process.dlopen()` (for instance,
-to specify dlopen flags), it's often useful to use [`require.resolve()`][]
-to look up the module's path.
+An important requirement when calling `process.dlopen()` is that the `module`
+instance must be passed. Functions exported by the C++ Addon are then
+accessible via `module.exports`.
 
-An important drawback when calling `process.dlopen()` is that the `module`
-instance must be passed. Functions exported by the C++ Addon will be accessible
-via `module.exports`.
-
-The example below shows how to load a C++ Addon, named as `binding`,
-that exports a `foo` function. All the symbols will be loaded before
+The example below shows how to load a C++ Addon, named `local.node`,
+that exports a `foo` function. All the symbols are loaded before
 the call returns, by passing the `RTLD_NOW` constant. In this example
 the constant is assumed to be available.
 
 ```js
 const os = require('os');
-process.dlopen(module, require.resolve('binding'),
+const path = require('path');
+const module = { exports: {} };
+process.dlopen(module, path.join(__dirname, 'local.node'),
                os.constants.dlopen.RTLD_NOW);
 module.exports.foo();
 ```
@@ -2678,7 +2674,6 @@ cases:
 [`readable.read()`]: stream.md#stream_readable_read_size
 [`require()`]: globals.md#globals_require
 [`require.main`]: modules.md#modules_accessing_the_main_module
-[`require.resolve()`]: modules.md#modules_require_resolve_request_options
 [`subprocess.kill()`]: child_process.md#child_process_subprocess_kill_signal
 [`v8.setFlagsFromString()`]: v8.md#v8_v8_setflagsfromstring_flags
 [debugger]: debugger.md

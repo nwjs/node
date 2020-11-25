@@ -1678,13 +1678,13 @@ OR of two or more values (e.g.
 `fs.constants.COPYFILE_EXCL | fs.constants.COPYFILE_FICLONE`).
 
 * `fs.constants.COPYFILE_EXCL`: The copy operation will fail if `dest` already
-exists.
+  exists.
 * `fs.constants.COPYFILE_FICLONE`: The copy operation will attempt to create a
-copy-on-write reflink. If the platform does not support copy-on-write, then a
-fallback copy mechanism is used.
+  copy-on-write reflink. If the platform does not support copy-on-write, then a
+  fallback copy mechanism is used.
 * `fs.constants.COPYFILE_FICLONE_FORCE`: The copy operation will attempt to
-create a copy-on-write reflink. If the platform does not support copy-on-write,
-then the operation will fail.
+  create a copy-on-write reflink. If the platform does not support
+  copy-on-write, then the operation will fail.
 
 ```js
 const fs = require('fs');
@@ -1727,13 +1727,13 @@ OR of two or more values (e.g.
 `fs.constants.COPYFILE_EXCL | fs.constants.COPYFILE_FICLONE`).
 
 * `fs.constants.COPYFILE_EXCL`: The copy operation will fail if `dest` already
-exists.
+  exists.
 * `fs.constants.COPYFILE_FICLONE`: The copy operation will attempt to create a
-copy-on-write reflink. If the platform does not support copy-on-write, then a
-fallback copy mechanism is used.
+  copy-on-write reflink. If the platform does not support copy-on-write, then a
+  fallback copy mechanism is used.
 * `fs.constants.COPYFILE_FICLONE_FORCE`: The copy operation will attempt to
-create a copy-on-write reflink. If the platform does not support copy-on-write,
-then the operation will fail.
+  create a copy-on-write reflink. If the platform does not support
+  copy-on-write, then the operation will fail.
 
 ```js
 const fs = require('fs');
@@ -1780,7 +1780,7 @@ changes:
 * `path` {string|Buffer|URL}
 * `options` {string|Object}
   * `flags` {string} See [support of file system `flags`][]. **Default:**
-  `'r'`.
+    `'r'`.
   * `encoding` {string} **Default:** `null`
   * `fd` {integer} **Default:** `null`
   * `mode` {integer} **Default:** `0o666`
@@ -1885,7 +1885,7 @@ changes:
 * `path` {string|Buffer|URL}
 * `options` {string|Object}
   * `flags` {string} See [support of file system `flags`][]. **Default:**
-  `'w'`.
+    `'w'`.
   * `encoding` {string} **Default:** `'utf8'`
   * `fd` {integer} **Default:** `null`
   * `mode` {integer} **Default:** `0o666`
@@ -2568,6 +2568,9 @@ changes:
 * `options` {Object}
   * `bigint` {boolean} Whether the numeric values in the returned
     [`fs.Stats`][] object should be `bigint`. **Default:** `false`.
+  * `throwIfNoEntry` {boolean} Whether an exception will be thrown
+    if no file system entry exists, rather than returning `undefined`.
+    **Default:** `true`.
 * Returns: {fs.Stats}
 
 Synchronous lstat(2).
@@ -3129,11 +3132,11 @@ system requests but rather the internal buffering `fs.readFile` performs.
 
 1. Any specified file descriptor has to support reading.
 2. If a file descriptor is specified as the `path`, it will not be closed
-automatically.
+   automatically.
 3. The reading will begin at the current position. For example, if the file
-already had `'Hello World`' and six bytes are read with the file descriptor,
-the call to `fs.readFile()` with the same file descriptor, would give
-`'World'`, rather than `'Hello World'`.
+   already had `'Hello World`' and six bytes are read with the file descriptor,
+   the call to `fs.readFile()` with the same file descriptor, would give
+   `'World'`, rather than `'Hello World'`.
 
 ## `fs.readFileSync(path[, options])`
 <!-- YAML
@@ -3810,6 +3813,9 @@ changes:
 * `options` {Object}
   * `bigint` {boolean} Whether the numeric values in the returned
     [`fs.Stats`][] object should be `bigint`. **Default:** `false`.
+  * `throwIfNoEntry` {boolean} Whether an exception will be thrown
+    if no file system entry exists, rather than returning `undefined`.
+    **Default:** `true`.
 * Returns: {fs.Stats}
 
 Synchronous stat(2).
@@ -5227,13 +5233,13 @@ OR of two or more values (e.g.
 `fs.constants.COPYFILE_EXCL | fs.constants.COPYFILE_FICLONE`).
 
 * `fs.constants.COPYFILE_EXCL`: The copy operation will fail if `dest` already
-exists.
+  exists.
 * `fs.constants.COPYFILE_FICLONE`: The copy operation will attempt to create a
-copy-on-write reflink. If the platform does not support copy-on-write, then a
-fallback copy mechanism is used.
+  copy-on-write reflink. If the platform does not support copy-on-write, then a
+  fallback copy mechanism is used.
 * `fs.constants.COPYFILE_FICLONE_FORCE`: The copy operation will attempt to
-create a copy-on-write reflink. If the platform does not support copy-on-write,
-then the operation will fail.
+  create a copy-on-write reflink. If the platform does not support
+  copy-on-write, then the operation will fail.
 
 ```js
 const {
@@ -5607,8 +5613,6 @@ changes:
     description: The `recursive`, `maxBusyTries`, and `emfileWait` options are
                   now supported.
 -->
-
-> Stability: 1 - Recursive removal is experimental.
 
 * `path` {string|Buffer|URL}
 * `options` {Object}
@@ -6133,7 +6137,7 @@ string.
 * `'wx'`: Like `'w'` but fails if the path exists.
 
 * `'w+'`: Open file for reading and writing.
-The file is created (if it does not exist) or truncated (if it exists).
+  The file is created (if it does not exist) or truncated (if it exists).
 
 * `'wx+'`: Like `'w+'` but fails if the path exists.
 

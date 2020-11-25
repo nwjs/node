@@ -78,7 +78,7 @@ added: v0.11.3
 * `section` {string} A string identifying the portion of the application for
   which the `debuglog` function is being created.
 * `callback` {Function} A callback invoked the first time the logging function
-is called with a function argument that is a more optimized logging function.
+  is called with a function argument that is a more optimized logging function.
 * Returns: {Function} The logging function
 
 The `util.debuglog()` method is used to create a function that conditionally
@@ -1073,7 +1073,7 @@ changes:
 -->
 
 * {symbol} that can be used to declare custom promisified variants of functions,
-see [Custom promisified functions][].
+  see [Custom promisified functions][].
 
 In addition to being accessible through `util.promisify.custom`, this
 symbol is [registered globally][global symbol registry] and can be
@@ -1290,6 +1290,10 @@ The encoding supported by the `TextEncoder` instance. Always set to `'utf-8'`.
 ## `util.types`
 <!-- YAML
 added: v10.0.0
+changes:
+  - version: v15.3.0
+    pr-url: https://github.com/nodejs/node/pull/34055
+    description: Exposed as `require('util/types')`.
 -->
 
 `util.types` provides type checks for different kinds of built-in objects.
@@ -1300,6 +1304,8 @@ their prototype), and usually have the overhead of calling into C++.
 The result generally does not make any guarantees about what kinds of
 properties or behavior a value exposes in JavaScript. They are primarily
 useful for addon developers who prefer to do type checking in JavaScript.
+
+The API is accessible via `require('util').types` or `require('util/types')`.
 
 ### `util.types.isAnyArrayBuffer(value)`
 <!-- YAML

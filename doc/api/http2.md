@@ -2,6 +2,9 @@
 <!-- YAML
 added: v8.4.0
 changes:
+  - version: v15.3.0
+    pr-url: https://github.com/nodejs/node/pull/36070
+    description: It is possible to abort a request with an AbortSignal.
   - version: v15.0.0
     pr-url: https://github.com/nodejs/node/pull/34664
     description: Requests with the `host` header (with or without
@@ -519,6 +522,29 @@ added: v8.4.0
 A prototype-less object describing the current remote settings of this
 `Http2Session`. The remote settings are set by the *connected* HTTP/2 peer.
 
+#### `http2session.setLocalWindowSize(windowSize)`
+<!-- YAML
+added: v15.3.0
+-->
+
+* `windowSize` {number}
+
+Sets the local endpoint's window size.
+The `windowSize` is the total window size to set, not
+the delta.
+
+```js
+const http2 = require('http2');
+
+const server = http2.createServer();
+const expectedWindowSize = 2 ** 20;
+server.on('connect', (session) => {
+
+  // Set local window size to be 2 ** 20
+  session.setLocalWindowSize(expectedWindowSize);
+});
+```
+
 #### `http2session.setTimeout(msecs, callback)`
 <!-- YAML
 added: v8.4.0
@@ -823,6 +849,8 @@ added: v8.4.0
     and `256` (inclusive).
   * `waitForTrailers` {boolean} When `true`, the `Http2Stream` will emit the
     `'wantTrailers'` event after the final `DATA` frame has been sent.
+  * `signal` {AbortSignal} An AbortSignal that may be used to abort an ongoing
+    request.
 
 * Returns: {ClientHttp2Stream}
 
@@ -858,6 +886,10 @@ When `options.waitForTrailers` is set, the `Http2Stream` will not automatically
 close when the final `DATA` frame is transmitted. User code must call either
 `http2stream.sendTrailers()` or `http2stream.close()` to close the
 `Http2Stream`.
+
+When `options.signal` is set with an `AbortSignal` and then `abort` on the
+corresponding `AbortController` is called, the request will emit an `'error'`
+event with an `AbortError` error.
 
 The `:method` and `:path` pseudo-headers are not specified within `headers`,
 they respectively default to:
@@ -1406,7 +1438,7 @@ added: v8.4.0
   * `err` {Error}
   * `pushStream` {ServerHttp2Stream} The returned `pushStream` object.
   * `headers` {HTTP/2 Headers Object} Headers object the `pushStream` was
-  initiated with.
+    initiated with.
 
 Initiates a push stream. The callback is invoked with the new `Http2Stream`
 instance created for the push stream passed as the second argument, or an
@@ -2521,7 +2553,7 @@ console.log(packed.toString('base64'));
 added: v8.4.0
 -->
 
-* `buf` {Buffer|Uint8Array} The packed settings.
+* `buf` {Buffer|TypedArray} The packed settings.
 * Returns: {HTTP/2 Settings Object}
 
 Returns a [HTTP/2 Settings Object][] containing the deserialized settings from

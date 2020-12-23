@@ -26,12 +26,12 @@ involving knowledge of several components and APIs:
   serves as a cross-platform abstraction library, giving easy, POSIX-like
   access across all major operating systems to many common system tasks, such
   as interacting with the filesystem, sockets, timers, and system events. libuv
-  also provides a pthreads-like threading abstraction that may be used to
-  power more sophisticated asynchronous addons that need to move beyond the
-  standard event loop. Addon authors are encouraged to think about how to
+  also provides a threading abstraction similar to POSIX threads for
+  more sophisticated asynchronous addons that need to move beyond the
+  standard event loop. Addon authors should
   avoid blocking the event loop with I/O or other time-intensive tasks by
-  off-loading work via libuv to non-blocking system operations, worker threads
-  or a custom use of libuv's threads.
+  offloading work via libuv to non-blocking system operations, worker threads,
+  or a custom use of libuv threads.
 
 * Internal Node.js libraries. Node.js itself exports C++ APIs that addons can
   use, the most important of which is the `node::ObjectWrap` class.
@@ -111,8 +111,8 @@ There are environments in which Node.js addons may need to be loaded multiple
 times in multiple contexts. For example, the [Electron][] runtime runs multiple
 instances of Node.js in a single process. Each instance will have its own
 `require()` cache, and thus each instance will need a native addon to behave
-correctly when loaded via `require()`. From the addon's perspective, this means
-that it must support multiple initializations.
+correctly when loaded via `require()`. This means that the addon
+must support multiple initializations.
 
 A context-aware addon can be constructed by using the macro
 `NODE_MODULE_INITIALIZER`, which expands to the name of a function which Node.js

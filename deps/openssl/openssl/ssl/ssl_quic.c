@@ -93,9 +93,7 @@ OSSL_ENCRYPTION_LEVEL SSL_quic_write_level(const SSL *ssl)
 int SSL_provide_quic_data(SSL *ssl, OSSL_ENCRYPTION_LEVEL level,
                           const uint8_t *data, size_t len)
 {
-    size_t l;
-    uint8_t mt;
-    QUIC_DATA *qd;
+    size_t l, offset;
 
     if (!SSL_IS_QUIC(ssl)) {
         SSLerr(SSL_F_SSL_PROVIDE_QUIC_DATA, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
@@ -104,77 +102,61 @@ int SSL_provide_quic_data(SSL *ssl, OSSL_ENCRYPTION_LEVEL level,
 
     /* Level can be different than the current read, but not less */
     if (level < ssl->quic_read_level
-            || (ssl->quic_input_data_tail != NULL && level < ssl->quic_input_data_tail->level)) {
+            || (ssl->quic_input_data_tail != NULL && level < ssl->quic_input_data_tail->level)
+            || level < ssl->quic_latest_level_received) {
         SSLerr(SSL_F_SSL_PROVIDE_QUIC_DATA, SSL_R_WRONG_ENCRYPTION_LEVEL_RECEIVED);
         return 0;
     }
 
-    if (len == 0) {
-      return 1;
-    }
-
-    /* Check for an incomplete block */
-    qd = ssl->quic_input_data_tail;
-    if (qd != NULL) {
-        l = qd->length - qd->offset;
-        if (l != 0) {
-            /* we still need to copy `l` bytes into the last data block */
-            if (l > len)
-                l = len;
-            memcpy((char *)(qd + 1) + qd->offset, data, l);
-            qd->offset += l;
-            len -= l;
-            data += l;
-        }
-    }
-
-    /* Split the QUIC messages up, if necessary */
-    while (len > 0) {
-        const uint8_t *p;
-        uint8_t *dst;
-
-        if (ssl->quic_msg_hd_offset != 0) {
-            /* If we have already buffered premature message header,
-               try to add new data to it to form complete message
-               header. */
-            size_t nread =
-                SSL3_HM_HEADER_LENGTH - ssl->quic_msg_hd_offset;
-
-            if (len < nread)
-                nread = len;
-            memcpy(ssl->quic_msg_hd + ssl->quic_msg_hd_offset, data, nread);
-            ssl->quic_msg_hd_offset += nread;
-
-            if (ssl->quic_msg_hd_offset < SSL3_HM_HEADER_LENGTH) {
-                /* We still have premature message header. */
-                break;
-            }
-            data += nread;
-            len -= nread;
-            /* TLS Handshake message header has 1-byte type and 3-byte length */
-            mt = *ssl->quic_msg_hd;
-            p = ssl->quic_msg_hd + 1;
-            n2l3(p, l);
-        } else if (len < SSL3_HM_HEADER_LENGTH) {
-            /* We don't get complete message header.  Just buffer the
-               received data and wait for the next data to arrive. */
-            memcpy(ssl->quic_msg_hd, data, len);
-            ssl->quic_msg_hd_offset += len;
-            break;
-        } else {
-            /* We have complete message header in data. */
-            /* TLS Handshake message header has 1-byte type and 3-byte length */
-            mt = *data;
-            p = data + 1;
-            n2l3(p, l);
-        }
-        l += SSL3_HM_HEADER_LENGTH;
-        if (mt == SSL3_MT_KEY_UPDATE) {
-            SSLerr(SSL_F_SSL_PROVIDE_QUIC_DATA, SSL_R_UNEXPECTED_MESSAGE);
+    if (ssl->quic_buf == NULL) {
+        BUF_MEM *buf;
+        if ((buf = BUF_MEM_new()) == NULL) {
+            SSLerr(SSL_F_SSL_PROVIDE_QUIC_DATA, SSL_R_INTERNAL_ERROR);
             return 0;
         }
+        if (!BUF_MEM_grow(buf, SSL3_RT_MAX_PLAIN_LENGTH)) {
+            SSLerr(SSL_F_SSL_PROVIDE_QUIC_DATA, SSL_R_INTERNAL_ERROR);
+            BUF_MEM_free(buf);
+            return 0;
+        }
+        ssl->quic_buf = buf;
+        /* We preallocated storage, but there's still no *data*. */
+        ssl->quic_buf->length = 0;
+        buf = NULL;
+    }
 
-        qd = OPENSSL_zalloc(sizeof(QUIC_DATA) + l);
+    /* A TLS message must not cross an encryption level boundary */
+    if (ssl->quic_buf->length != ssl->quic_next_record_start
+            && level != ssl->quic_latest_level_received) {
+        SSLerr(SSL_F_SSL_PROVIDE_QUIC_DATA,
+               SSL_R_WRONG_ENCRYPTION_LEVEL_RECEIVED);
+        return 0;
+    }
+    ssl->quic_latest_level_received = level;
+
+    offset = ssl->quic_buf->length;
+    if (!BUF_MEM_grow(ssl->quic_buf, offset + len)) {
+        SSLerr(SSL_F_SSL_PROVIDE_QUIC_DATA, SSL_R_INTERNAL_ERROR);
+        return 0;
+    }
+    memcpy(ssl->quic_buf->data + offset, data, len);
+
+    /* Split on handshake message boundaries */
+    while (ssl->quic_buf->length > ssl->quic_next_record_start
+                                   + SSL3_HM_HEADER_LENGTH) {
+        QUIC_DATA *qd;
+        const uint8_t *p;
+
+        /* TLS Handshake message header has 1-byte type and 3-byte length */
+        p = (const uint8_t *)ssl->quic_buf->data
+            + ssl->quic_next_record_start + 1;
+        n2l3(p, l);
+        l += SSL3_HM_HEADER_LENGTH;
+        /* Don't allocate a QUIC_DATA if we don't have a full record */
+        if (l > ssl->quic_buf->length - ssl->quic_next_record_start)
+            break;
+
+        qd = OPENSSL_zalloc(sizeof(*qd));
         if (qd == NULL) {
             SSLerr(SSL_F_SSL_PROVIDE_QUIC_DATA, SSL_R_INTERNAL_ERROR);
             return 0;
@@ -182,34 +164,15 @@ int SSL_provide_quic_data(SSL *ssl, OSSL_ENCRYPTION_LEVEL level,
 
         qd->next = NULL;
         qd->length = l;
+        qd->start = ssl->quic_next_record_start;
         qd->level = level;
 
-        dst = (uint8_t *)(qd + 1);
-        if (ssl->quic_msg_hd_offset) {
-            memcpy(dst, ssl->quic_msg_hd, ssl->quic_msg_hd_offset);
-            dst += ssl->quic_msg_hd_offset;
-            l -= SSL3_HM_HEADER_LENGTH;
-            if (l > len)
-                l = len;
-            qd->offset = SSL3_HM_HEADER_LENGTH + l;
-            memcpy(dst, data, l);
-        } else {
-            /* partial data received? */
-            if (l > len)
-                l = len;
-            qd->offset = l;
-            memcpy(dst, data, l);
-        }
         if (ssl->quic_input_data_tail != NULL)
             ssl->quic_input_data_tail->next = qd;
         else
             ssl->quic_input_data_head = qd;
         ssl->quic_input_data_tail = qd;
-
-        data += l;
-        len -= l;
-
-        ssl->quic_msg_hd_offset = 0;
+        ssl->quic_next_record_start += l;
     }
 
     return 1;

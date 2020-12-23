@@ -1084,9 +1084,8 @@ typedef struct cert_pkey_st CERT_PKEY;
 struct quic_data_st {
     struct quic_data_st *next;
     OSSL_ENCRYPTION_LEVEL level;
-    size_t offset;
+    size_t start;       /* offset into quic_buf->data */
     size_t length;
-    /* char data[]; should be here but C90 VLAs not allowed here */
 };
 typedef struct quic_data_st QUIC_DATA;
 int quic_set_encryption_secrets(SSL *ssl, OSSL_ENCRYPTION_LEVEL level);
@@ -1408,10 +1407,11 @@ struct ssl_st {
 #ifndef OPENSSL_NO_QUIC
     OSSL_ENCRYPTION_LEVEL quic_read_level;
     OSSL_ENCRYPTION_LEVEL quic_write_level;
+    OSSL_ENCRYPTION_LEVEL quic_latest_level_received;
+    BUF_MEM *quic_buf;          /* buffer incoming handshake messages */
     QUIC_DATA *quic_input_data_head;
     QUIC_DATA *quic_input_data_tail;
-    uint8_t quic_msg_hd[SSL3_HM_HEADER_LENGTH];
-    size_t quic_msg_hd_offset;
+    size_t quic_next_record_start;
     const SSL_QUIC_METHOD *quic_method;
 #endif
     /*

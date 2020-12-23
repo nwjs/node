@@ -324,7 +324,8 @@ class NODE_EXTERN MultiIsolatePlatform : public v8::Platform {
 enum IsolateSettingsFlags {
   MESSAGE_LISTENER_WITH_ERROR_LEVEL = 1 << 0,
   DETAILED_SOURCE_POSITIONS_FOR_PROFILING = 1 << 1,
-  SHOULD_NOT_SET_PROMISE_REJECTION_CALLBACK = 1 << 2
+  SHOULD_NOT_SET_PROMISE_REJECTION_CALLBACK = 1 << 2,
+  SHOULD_NOT_SET_PREPARE_STACK_TRACE_CALLBACK = 1 << 3
 };
 
 struct IsolateSettings {
@@ -487,6 +488,8 @@ NODE_EXTERN void DefaultProcessExitHandler(Environment* env, int exit_code);
 
 // This may return nullptr if context is not associated with a Node instance.
 NODE_EXTERN Environment* GetCurrentEnvironment(v8::Local<v8::Context> context);
+NODE_EXTERN IsolateData* GetEnvironmentIsolateData(Environment* env);
+NODE_EXTERN ArrayBufferAllocator* GetArrayBufferAllocator(IsolateData* data);
 
 NODE_EXTERN void OnFatalError(const char* location, const char* message);
 NODE_EXTERN void PromiseRejectCallback(v8::PromiseRejectMessage message);

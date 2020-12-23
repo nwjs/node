@@ -34,6 +34,7 @@ The Node.js project uses an [open governance model](./GOVERNANCE.md). The
   * [TSC (Technical Steering Committee)](#tsc-technical-steering-committee)
   * [Collaborators](#collaborators)
   * [Release Keys](#release-keys)
+* [License](#license)
 
 ## Support
 
@@ -284,8 +285,6 @@ For information about the governance of the Node.js project, see
 **Danielle Adams** &lt;adamzdanielle@gmail.com&gt; (she/her)
 * [davisjam](https://github.com/davisjam) -
 **Jamie Davis** &lt;davisjam@vt.edu&gt; (he/him)
-* [DerekNonGeneric](https://github.com/DerekNonGeneric) -
-**Derek Lewis** &lt;DerekNonGeneric@inf.is&gt; (he/him)
 * [devnexen](https://github.com/devnexen) -
 **David Carlier** &lt;devnexen@gmail.com&gt;
 * [devsnek](https://github.com/devsnek) -
@@ -372,6 +371,8 @@ For information about the governance of the Node.js project, see
 **Ali Ijaz Sheikh** &lt;ofrobots@google.com&gt; (he/him)
 * [oyyd](https://github.com/oyyd) -
 **Ouyang Yadong** &lt;oyydoibh@gmail.com&gt; (he/him)
+* [PoojaDurgad](https://github.com/PoojaDurgad) -
+**Pooja D P** &lt;Pooja.D.P@ibm.com&gt; (she/her)
 * [psmarshall](https://github.com/psmarshall) -
 **Peter Marshall** &lt;petermarshall@chromium.org&gt; (he/him)
 * [puzpuzpuz](https://github.com/puzpuzpuz) -
@@ -459,6 +460,8 @@ For information about the governance of the Node.js project, see
 **Claudio Rodriguez** &lt;cjrodr@yahoo.com&gt;
 * [DavidCai1993](https://github.com/DavidCai1993) -
 **David Cai** &lt;davidcai1993@yahoo.com&gt; (he/him)
+* [DerekNonGeneric](https://github.com/DerekNonGeneric) -
+**Derek Lewis** &lt;DerekNonGeneric@inf.is&gt; (he/him)
 * [digitalinfinity](https://github.com/digitalinfinity) -
 **Hitesh Kanwathirtha** &lt;digitalinfinity@gmail.com&gt; (he/him)
 * [eljefedelrodeodeljefe](https://github.com/eljefedelrodeodeljefe) -
@@ -574,6 +577,8 @@ maintaining the Node.js project.
 
 * [PoojaDurgad](https://github.com/PoojaDurgad) -
 **Pooja Durgad** &lt;Pooja.D.P@ibm.com&gt;
+* [RaisinTen](https://github.com/RaisinTen) -
+**Darshan Sen** &lt;raisinten@gmail.com&gt;
 
 ### Release Keys
 
@@ -640,6 +645,14 @@ Other keys used to sign some previous releases:
 `114F43EE0176B71C7BC219DD50A3051F888C628D`
 * **Timothy J Fontaine** &lt;tjfontaine@gmail.com&gt;
 `7937DFD2AB06298B2293C3187D33FF9D0246406D`
+
+## License
+
+Node.js is available under the
+[MIT license](https://opensource.org/licenses/MIT). Node.js also includes
+external libraries that are available under a variety of licenses.  See
+[LICENSE](https://github.com/nodejs/node/blob/master/LICENSE) for the full
+license text.
 
 [Code of Conduct]: https://github.com/nodejs/admin/blob/master/CODE_OF_CONDUCT.md
 [Contributing to the project]: CONTRIBUTING.md

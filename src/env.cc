@@ -213,10 +213,7 @@ void IsolateData::MemoryInfo(MemoryTracker* tracker) const {
 #define V(PropertyName, StringValue)                                           \
   tracker->TrackField(#PropertyName, PropertyName());
   PER_ISOLATE_SYMBOL_PROPERTIES(V)
-#undef V
 
-#define V(PropertyName, StringValue)                                           \
-  tracker->TrackField(#PropertyName, PropertyName());
   PER_ISOLATE_STRING_PROPERTIES(V)
 #undef V
 
@@ -553,6 +550,8 @@ void Environment::InitializeLibuv() {
       [](uv_async_t* async) {
         Environment* env = ContainerOf(
             &Environment::task_queues_async_, async);
+        HandleScope handle_scope(env->isolate());
+        Context::Scope context_scope(env->context());
         env->RunAndClearNativeImmediates();
       });
   uv_unref(reinterpret_cast<uv_handle_t*>(&task_queues_async_));

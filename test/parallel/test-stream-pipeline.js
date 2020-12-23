@@ -628,9 +628,7 @@ const net = require('net');
     await Promise.resolve();
     yield 'hello';
   }, async function*(source) {
-    for await (const chunk of source) {
-      chunk;
-    }
+    for await (const chunk of source) {}
   }, common.mustCall((err) => {
     assert.strictEqual(err, undefined);
   }));
@@ -646,9 +644,7 @@ const net = require('net');
     await Promise.resolve();
     throw new Error('kaboom');
   }, async function*(source) {
-    for await (const chunk of source) {
-      chunk;
-    }
+    for await (const chunk of source) {}
   }, common.mustCall((err) => {
     assert.strictEqual(err.message, 'kaboom');
   }));
@@ -704,7 +700,6 @@ const net = require('net');
     yield 'world';
   }, s, async function(source) {
     for await (const chunk of source) {
-      chunk;
       throw new Error('kaboom');
     }
   }, common.mustCall((err, val) => {
@@ -719,7 +714,6 @@ const net = require('net');
     return ['hello', 'world'];
   }, s, async function*(source) {
     for await (const chunk of source) {
-      chunk;
       throw new Error('kaboom');
     }
   }, common.mustCall((err) => {
@@ -1290,4 +1284,20 @@ const net = require('net');
     assert.strictEqual(pipelined.destroyed, true);
   });
   const pipelined = addAbortSignal(ac.signal, pipeline([r, w], cb));
+}
+
+{
+  pipeline([1, 2, 3], PassThrough({ objectMode: true }),
+           common.mustSucceed(() => {}));
+
+  let res = '';
+  const w = new Writable({
+    write(chunk, encoding, callback) {
+      res += chunk;
+      callback();
+    },
+  });
+  pipeline(['1', '2', '3'], w, common.mustSucceed(() => {
+    assert.strictEqual(res, '123');
+  }));
 }

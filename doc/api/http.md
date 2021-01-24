@@ -113,6 +113,9 @@ http.get({
 <!-- YAML
 added: v0.3.4
 changes:
+  - version: v15.6.0
+    pr-url: https://github.com/nodejs/node/pull/36685
+    description: Change the default scheduling from 'fifo' to 'lifo'.
   - version:
     - v14.5.0
     - v12.19.0
@@ -159,7 +162,7 @@ changes:
     In case of a high rate of request per second,
     the `'fifo'` scheduling will maximize the number of open sockets,
     while the `'lifo'` scheduling will keep it as low as possible.
-    **Default:** `'fifo'`.
+    **Default:** `'lifo'`.
   * `timeout` {number} Socket timeout in milliseconds.
     This will set the timeout when the socket is created.
 
@@ -1892,6 +1895,10 @@ the request body should be sent.
 <!-- YAML
 added: v0.1.17
 changes:
+  - version: v15.5.0
+    pr-url: https://github.com/nodejs/node/pull/33035
+    description: The `destroyed` value returns `true` after the incoming data
+                 is consumed.
   - version:
      - v13.1.0
      - v12.16.0
@@ -1905,6 +1912,11 @@ An `IncomingMessage` object is created by [`http.Server`][] or
 [`http.ClientRequest`][] and passed as the first argument to the [`'request'`][]
 and [`'response'`][] event respectively. It may be used to access response
 status, headers and data.
+
+Different from it's `socket` value which is a subclass of {stream.Duplex}, the
+`IncomingMessage` itself extends {stream.Readable} and is created separately to
+parse and emit the incoming HTTP headers and payload, as the underlying socket
+may be reused multiple times in case of keep-alive.
 
 ### Event: `'aborted'`
 <!-- YAML
@@ -1980,6 +1992,12 @@ as an argument to any listeners on the event.
 ### `message.headers`
 <!-- YAML
 added: v0.1.5
+changes:
+  - version: v15.1.0
+    pr-url: https://github.com/nodejs/node/pull/35281
+    description: >-
+      `message.headers` is now lazily computed using an accessor property
+      on the prototype.
 -->
 
 * {Object}

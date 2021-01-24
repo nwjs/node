@@ -1645,6 +1645,259 @@ thrown.
 Because public keys can be derived from private keys, a private key may
 be passed instead of a public key.
 
+## Class: `X509Certificate`
+<!-- YAML
+added: v15.6.0
+-->
+
+Encapsulates an X509 certificate and provides read-only access to
+it's information.
+
+```js
+const { X509Certificate } = require('crypto');
+
+const x509 = new X509Certificate('{... pem encoded cert ...}');
+
+console.log(x509.subject);
+```
+
+### `new X509Certificate(buffer)`
+<!-- YAML
+added: v15.6.0
+-->
+
+* `buffer` {string|TypedArray|Buffer|DataView} A PEM or DER encoded
+  X509 Certificate.
+
+### `x509.ca`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Type: {boolean} Will be `true` if this is a Certificate Authority (ca)
+  certificate.
+
+### `x509.checkEmail(email[, options])`
+<!-- YAML
+added: v15.6.0
+-->
+
+* `email` {string}
+* `options` {Object}
+  * `subject` {string} `'always'` or `'never'`. **Defaults**: `'always'`.
+  * `wildcards` {boolean} **Defaults**: `true`.
+  * `partialWildcards` {boolean} **Defaults**: `true`.
+  * `multiLabelWildcards` {boolean} **Defaults**: `false`.
+  * `singleLabelSubdomains` {boolean} **Defaults**: `false`.
+* Returns: {string|undefined} Returns `email` if the certificate matches,
+  `undefined` if it does not.
+
+Checks whether the certificate matches the given email address.
+
+### `x509.checkHost(name[, options])`
+<!-- YAML
+added: v15.6.0
+-->
+
+* `name` {string}
+* `options` {Object}
+  * `subject` {string} `'always'` or `'never'`. **Defaults**: `'always'`.
+  * `wildcards` {boolean} **Defaults**: `true`.
+  * `partialWildcards` {boolean} **Defaults**: `true`.
+  * `multiLabelWildcards` {boolean} **Defaults**: `false`.
+  * `singleLabelSubdomains` {boolean} **Defaults**: `false`.
+* Returns: {string|undefined} Returns `name` if the certificate matches,
+  `undefined` if it does not.
+
+Checks whether the certificate matches the given host name.
+
+### `x509.checkIP(ip[, options])`
+<!-- YAML
+added: v15.6.0
+-->
+
+* `ip` {string}
+* `options` {Object}
+  * `subject` {string} `'always'` or `'never'`. **Defaults**: `'always'`.
+  * `wildcards` {boolean} **Defaults**: `true`.
+  * `partialWildcards` {boolean} **Defaults**: `true`.
+  * `multiLabelWildcards` {boolean} **Defaults**: `false`.
+  * `singleLabelSubdomains` {boolean} **Defaults**: `false`.
+* Returns: {string|undefined} Returns `ip` if the certificate matches,
+  `undefined` if it does not.
+
+Checks whether the certificate matches the given IP address (IPv4 or IPv6).
+
+### `x509.checkIssued(otherCert)`
+<!-- YAML
+added: v15.6.0
+-->
+
+* `otherCert` {X509Certificate}
+* Returns: {boolean}
+
+Checks whether this certificate was issued by the given `otherCert`.
+
+### `x509.checkPrivateKey(privateKey)`
+<!-- YAML
+added: v15.6.0
+-->
+
+* `privateKey` {KeyObject} A private key.
+* Returns: {boolean}
+
+Checks whether the public key for this certificate is consistent with
+the given private key.
+
+### `x509.fingerprint`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Type: {string}
+
+The SHA-1 fingerprint of this certificate.
+
+### `x509.fingerprint256`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Type: {string}
+
+The SHA-256 fingerprint of this certificate.
+
+### `x509.infoAccess`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Type: {string}
+
+The information access content of this certificate.
+
+### `x509.issuer`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Type: {string}
+
+The issuer identification included in this certificate.
+
+### `x509.keyUsage`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Type: {string[]}
+
+An array detailing the key usages for this certificate.
+
+### `x509.publicKey`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Type: {KeyObject}
+
+The public key {KeyObject} for this certificate.
+
+### `x509.raw`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Type: {Buffer}
+
+A `Buffer` containing the DER encoding of this certificate.
+
+### `x509.serialNumber`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Type: {string}
+
+The serial number of this certificate.
+
+### `x509.subject`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Type: {string}
+
+The complete subject of this certificate.
+
+### `x509.subjectAltName`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Type: {string}
+
+The subject alternative name specified for this certificate.
+
+### `x509.toJSON()`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Type: {string}
+
+There is no standard JSON encoding for X509 certificates. The
+`toJSON()` method returns a string containing the PEM encoded
+certificate.
+
+### `x509.toLegacyObject()`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Type: {Object}
+
+Returns information about this certificate using the legacy
+[certificate object][] encoding.
+
+### `x509.toString()`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Type: {string}
+
+Returns the PEM-encoded certificate.
+
+### `x509.validFrom`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Type: {string}
+
+The date/time from which this certificate is considered valid.
+
+### `x509.validTo`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Type: {string}
+
+The date/time until which this certificate is considered valid.
+
+### `x509.verify(publicKey)`
+<!-- YAML
+added: v15.6.0
+-->
+
+* `publicKey` {KeyObject} A public key.
+* Returns: {boolean}
+
+Verifies that this certificate was signed by the given public key.
+Does not perform any other validation checks on the certificate.
+
 ## `crypto` module methods and properties
 
 ### `crypto.constants`
@@ -3160,6 +3413,21 @@ const n = crypto.randomInt(1, 7);
 console.log(`The dice rolled: ${n}`);
 ```
 
+### `crypto.randomUUID([options])`
+<!-- YAML
+added: v15.6.0
+-->
+
+* `options` {Object}
+  * `disableEntropyCache` {boolean} By default, to improve performance,
+    Node.js generates and caches enough
+    random data to generate up to 128 random UUIDs. To generate a UUID
+    without using the cache, set `disableEntropyCache` to `true`.
+    **Defaults**: `false`.
+* Returns: {string}
+
+Generates a random [RFC 4122][] Version 4 UUID.
+
 ### `crypto.scrypt(password, salt, keylen[, options], callback)`
 <!-- YAML
 added: v10.5.0
@@ -3276,6 +3544,21 @@ console.log(key1.toString('hex'));  // '3745e48...08d59ae'
 const key2 = crypto.scryptSync('password', 'salt', 64, { N: 1024 });
 console.log(key2.toString('hex'));  // '3745e48...aa39b34'
 ```
+
+### `crypto.secureHeapUsed()`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Returns: {Object}
+  * `total` {number} The total allocated secure heap size as specified
+    using the `--secure-heap=n` command-line flag.
+  * `min` {number} The minimum allocation from the secure heap as
+    specified using the `--secure-heap-min` command-line flag.
+  * `used` {number} The total number of bytes currently allocated from
+    the secure heap.
+  * `utilization` {number} The calculated ratio of `used` to `total`
+    allocated bytes.
 
 ### `crypto.setEngine(engine[, flags])`
 <!-- YAML
@@ -3929,6 +4212,7 @@ See the [list of SSL OP Flags][] for details.
 [RFC 3526]: https://www.rfc-editor.org/rfc/rfc3526.txt
 [RFC 3610]: https://www.rfc-editor.org/rfc/rfc3610.txt
 [RFC 4055]: https://www.rfc-editor.org/rfc/rfc4055.txt
+[RFC 4122]: https://www.rfc-editor.org/rfc/rfc4122.txt
 [RFC 5208]: https://www.rfc-editor.org/rfc/rfc5208.txt
 [Web Crypto API documentation]: webcrypto.md
 [`Buffer`]: buffer.md
@@ -3981,6 +4265,7 @@ See the [list of SSL OP Flags][] for details.
 [`util.promisify()`]: util.md#util_util_promisify_original
 [`verify.update()`]: #crypto_verify_update_data_inputencoding
 [`verify.verify()`]: #crypto_verify_verify_object_signature_signatureencoding
+[certificate object]: tls.md#tls_certificate_object
 [encoding]: buffer.md#buffer_buffers_and_character_encodings
 [initialization vector]: https://en.wikipedia.org/wiki/Initialization_vector
 [list of SSL OP Flags]: https://wiki.openssl.org/index.php/List_of_SSL_OP_Flags#Table_of_Options

@@ -2011,6 +2011,11 @@ assert.strictEqual(util.inspect('"\'${a}'), "'\"\\'${a}'");
     rest[rest.length - 1] = rest[rest.length - 1].slice(0, -1);
     rest.length = 1;
   }
+  Object.setPrototypeOf(clazz, Map.prototype);
+  assert.strictEqual(
+    util.inspect(clazz),
+    ['[class', name, '[Map]', ...rest].join(' ') + ']'
+  );
   Object.setPrototypeOf(clazz, null);
   assert.strictEqual(
     util.inspect(clazz),
@@ -3053,4 +3058,23 @@ assert.strictEqual(
   // Reset so we don't pollute other tests
   Object.setPrototypeOf(generatorPrototype, originalProtoOfProto);
   assert.strictEqual(getProtoOfProto(), originalProtoOfProto);
+}
+
+{
+  // Test for when breakLength results in a single column.
+  const obj = Array(9).fill('fhqwhgadshgnsdhjsdbkhsdabkfabkveybvf');
+  assert.strictEqual(
+    util.inspect(obj, { breakLength: 256 }),
+    '[\n' +
+    "  'fhqwhgadshgnsdhjsdbkhsdabkfabkveybvf',\n" +
+    "  'fhqwhgadshgnsdhjsdbkhsdabkfabkveybvf',\n" +
+    "  'fhqwhgadshgnsdhjsdbkhsdabkfabkveybvf',\n" +
+    "  'fhqwhgadshgnsdhjsdbkhsdabkfabkveybvf',\n" +
+    "  'fhqwhgadshgnsdhjsdbkhsdabkfabkveybvf',\n" +
+    "  'fhqwhgadshgnsdhjsdbkhsdabkfabkveybvf',\n" +
+    "  'fhqwhgadshgnsdhjsdbkhsdabkfabkveybvf',\n" +
+    "  'fhqwhgadshgnsdhjsdbkhsdabkfabkveybvf',\n" +
+    "  'fhqwhgadshgnsdhjsdbkhsdabkfabkveybvf'\n" +
+    ']'
+  );
 }

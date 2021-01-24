@@ -53,7 +53,7 @@ Looking for help? Check out the
 * **LTS**: Releases that receive Long-term Support, with a focus on stability
   and security. Every even-numbered major version will become an LTS release.
   LTS releases receive 12 months of _Active LTS_ support and a further 18 months
-  of _Maintenance_. LTS release lines have alphabetically-ordered codenames,
+  of _Maintenance_. LTS release lines have alphabetically-ordered code names,
   beginning with v4 Argon. There are no breaking changes or feature additions,
   except in some special circumstances.
 * **Nightly**: Code from the Current branch built every 24-hours when there are
@@ -289,6 +289,8 @@ For information about the governance of the Node.js project, see
 **David Carlier** &lt;devnexen@gmail.com&gt;
 * [devsnek](https://github.com/devsnek) -
 **Gus Caplan** &lt;me@gus.host&gt; (they/them)
+* [dnlup](https://github.com/dnlup)
+**Daniele Belardi** &lt;dwon.dnl@gmail.com&gt; (he/him)
 * [edsadr](https://github.com/edsadr) -
 **Adrian Estrada** &lt;edsadr@gmail.com&gt; (he/him)
 * [eugeneo](https://github.com/eugeneo) -
@@ -371,6 +373,8 @@ For information about the governance of the Node.js project, see
 **Ali Ijaz Sheikh** &lt;ofrobots@google.com&gt; (he/him)
 * [oyyd](https://github.com/oyyd) -
 **Ouyang Yadong** &lt;oyydoibh@gmail.com&gt; (he/him)
+* [panva](https://github.com/panva) -
+**Filip Skokan** &lt;panva.ip@gmail.com&gt;
 * [PoojaDurgad](https://github.com/PoojaDurgad) -
 **Pooja D P** &lt;Pooja.D.P@ibm.com&gt; (she/her)
 * [psmarshall](https://github.com/psmarshall) -
@@ -431,6 +435,8 @@ For information about the governance of the Node.js project, see
 **Thomas Watson** &lt;w@tson.dk&gt;
 * [XadillaX](https://github.com/XadillaX) -
 **Khaidi Chu** &lt;i@2333.moe&gt; (he/him)
+* [yashLadha](https://github.com/yashLadha) -
+**Yash Ladha** &lt;yash@yashladha.in&gt; (he/him)
 * [yhwang](https://github.com/yhwang) -
 **Yihong Wang** &lt;yh.wang@ibm.com&gt;
 * [yorkie](https://github.com/yorkie) -
@@ -589,7 +595,7 @@ Primary GPG keys for Node.js Releasers (some Releasers sign with subkeys):
 * **Colin Ihrig** &lt;cjihrig@gmail.com&gt;
 `94AE36675C464D64BAFA68DD7434390BDBE9B9C5`
 * **Danielle Adams** &lt;adamzdanielle@gmail.com&gt;
-`1C050899334244A8AF75E53792EF661D867B9DFA`
+`74F12602B6F1C4E913FAA37AD3A89613643B6201`
 * **James M Snell** &lt;jasnell@keybase.io&gt;
 `71DCFD284A79C3B38668286BC97EC7A07EDE3FC1`
 * **Michaël Zasso** &lt;targos@protonmail.com&gt;
@@ -613,7 +619,7 @@ to sign releases):
 ```bash
 gpg --keyserver pool.sks-keyservers.net --recv-keys 4ED778F539E3634C779C87C6D7062848A1AB005C
 gpg --keyserver pool.sks-keyservers.net --recv-keys 94AE36675C464D64BAFA68DD7434390BDBE9B9C5
-gpg --keyserver pool.sks-keyservers.net --recv-keys 1C050899334244A8AF75E53792EF661D867B9DFA
+gpg --keyserver pool.sks-keyservers.net --recv-keys 74F12602B6F1C4E913FAA37AD3A89613643B6201
 gpg --keyserver pool.sks-keyservers.net --recv-keys 71DCFD284A79C3B38668286BC97EC7A07EDE3FC1
 gpg --keyserver pool.sks-keyservers.net --recv-keys 8FCCA13FEF1D0C2E91008E09770F7A9A5AE15600
 gpg --keyserver pool.sks-keyservers.net --recv-keys C4F0DFFF4E8C1A8236409D08E73BC641CC11F4C8
@@ -631,6 +637,8 @@ Other keys used to sign some previous releases:
 
 * **Chris Dickinson** &lt;christopher.s.dickinson@gmail.com&gt;
 `9554F04D7259F04124DE6B476D5A82AC7E37093B`
+* **Danielle Adams** &lt;adamzdanielle@gmail.com&gt;
+`1C050899334244A8AF75E53792EF661D867B9DFA`
 * **Evan Lucas** &lt;evanlucas@me.com&gt;
 `B9AE9905FFD7803F25714661B63B535A4C206CA9`
 * **Gibson Fahnestock** &lt;gibfahn@gmail.com&gt;

@@ -63,8 +63,8 @@ asyncHook.disable();
 function init(asyncId, type, triggerAsyncId, resource) { }
 
 // Before is called just before the resource's callback is called. It can be
-// called 0-N times for handles (e.g. TCPWrap), and will be called exactly 1
-// time for requests (e.g. FSReqCallback).
+// called 0-N times for handles (such as TCPWrap), and will be called exactly 1
+// time for requests (such as FSReqCallback).
 function before(asyncId) { }
 
 // After is called just after the resource's callback has finished.
@@ -571,7 +571,7 @@ const server = net.createServer((conn) => {
   async_hooks.executionAsyncId();
 
 }).listen(port, () => {
-  // Returns the ID of a TickObject (i.e. process.nextTick()) because all
+  // Returns the ID of a TickObject (process.nextTick()) because all
   // callbacks passed to .listen() are wrapped in a nextTick().
   async_hooks.executionAsyncId();
 });
@@ -839,9 +839,19 @@ class WorkerPool extends EventEmitter {
     this.numThreads = numThreads;
     this.workers = [];
     this.freeWorkers = [];
+    this.tasks = [];
 
     for (let i = 0; i < numThreads; i++)
       this.addNewWorker();
+
+    // Any time the kWorkerFreedEvent is emitted, dispatch
+    // the next task pending in the queue, if any.
+    this.on(kWorkerFreedEvent, () => {
+      if (this.tasks.length > 0) {
+        const { task, callback } = this.tasks.shift();
+        this.runTask(task, callback);
+      }
+    });
   }
 
   addNewWorker() {
@@ -875,7 +885,7 @@ class WorkerPool extends EventEmitter {
   runTask(task, callback) {
     if (this.freeWorkers.length === 0) {
       // No free threads, wait until a worker thread becomes free.
-      this.once(kWorkerFreedEvent, () => this.runTask(task, callback));
+      this.tasks.push({ task, callback });
       return;
     }
 
@@ -1000,7 +1010,7 @@ added:
 -->
 
 Creates a new instance of `AsyncLocalStorage`. Store is only provided within a
-`run` method call.
+`run()` call or after an `enterWith()` call.
 
 ### `asyncLocalStorage.disable()`
 <!-- YAML
@@ -1009,9 +1019,9 @@ added:
  - v12.17.0
 -->
 
-This method disables the instance of `AsyncLocalStorage`. All subsequent calls
+Disables the instance of `AsyncLocalStorage`. All subsequent calls
 to `asyncLocalStorage.getStore()` will return `undefined` until
-`asyncLocalStorage.run()` is called again.
+`asyncLocalStorage.run()` or `asyncLocalStorage.enterWith()` is called again.
 
 When calling `asyncLocalStorage.disable()`, all current contexts linked to the
 instance will be exited.
@@ -1021,7 +1031,7 @@ Calling `asyncLocalStorage.disable()` is required before the
 provided by the `asyncLocalStorage`, as those objects are garbage collected
 along with the corresponding async resources.
 
-This method is to be used when the `asyncLocalStorage` is not in use anymore
+Use this method when the `asyncLocalStorage` is not in use anymore
 in the current process.
 
 ### `asyncLocalStorage.getStore()`
@@ -1033,9 +1043,10 @@ added:
 
 * Returns: {any}
 
-This method returns the current store.
-If this method is called outside of an asynchronous context initialized by
-calling `asyncLocalStorage.run`, it will return `undefined`.
+Returns the current store.
+If called outside of an asynchronous context initialized by
+calling `asyncLocalStorage.run()` or `asyncLocalStorage.enterWith()`, it
+returns `undefined`.
 
 ### `asyncLocalStorage.enterWith(store)`
 <!-- YAML
@@ -1046,14 +1057,15 @@ added:
 
 * `store` {any}
 
-Calling `asyncLocalStorage.enterWith(store)` will transition into the context
-for the remainder of the current synchronous execution and will persist
-through any following asynchronous calls.
+Transitions into the context for the remainder of the current
+synchronous execution and then persists the store through any following
+asynchronous calls.
 
 Example:
 
 ```js
 const store = { id: 1 };
+// Replaces previous store with the given store object
 asyncLocalStorage.enterWith(store);
 asyncLocalStorage.getStore(); // Returns the store object
 someAsyncOperation(() => {
@@ -1064,7 +1076,9 @@ someAsyncOperation(() => {
 This transition will continue for the _entire_ synchronous execution.
 This means that if, for example, the context is entered within an event
 handler subsequent event handlers will also run within that context unless
-specifically bound to another context with an `AsyncResource`.
+specifically bound to another context with an `AsyncResource`. That is why
+`run()` should be preferred over `enterWith()` unless there are strong reasons
+to use the latter method.
 
 ```js
 const store = { id: 1 };
@@ -1092,16 +1106,14 @@ added:
 * `callback` {Function}
 * `...args` {any}
 
-This methods runs a function synchronously within a context and return its
+Runs a function synchronously within a context and returns its
 return value. The store is not accessible outside of the callback function or
 the asynchronous operations created within the callback.
 
-Optionally, arguments can be passed to the function. They will be passed to
-the callback function.
+The optional `args` are passed to the callback function.
 
-If the callback function throws an error, it will be thrown by `run` too.
-The stacktrace will not be impacted by this call and the context will
-be exited.
+If the callback function throws an error, the error is thrown by `run()` too.
+The stacktrace is not impacted by this call and the context is exited.
 
 Example:
 
@@ -1128,16 +1140,15 @@ added:
 * `callback` {Function}
 * `...args` {any}
 
-This methods runs a function synchronously outside of a context and return its
+Runs a function synchronously outside of a context and returns its
 return value. The store is not accessible within the callback function or
-the asynchronous operations created within the callback.
+the asynchronous operations created within the callback. Any `getStore()`
+call done within the callback function will always return `undefined`.
 
-Optionally, arguments can be passed to the function. They will be passed to
-the callback function.
+The optional `args` are passed to the callback function.
 
-If the callback function throws an error, it will be thrown by `exit` too.
-The stacktrace will not be impacted by this call and
-the context will be re-entered.
+If the callback function throws an error, the error is thrown by `exit()` too.
+The stacktrace is not impacted by this call and the context is re-entered.
 
 Example:
 

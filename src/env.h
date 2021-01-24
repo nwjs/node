@@ -343,6 +343,7 @@ constexpr size_t kFsStatsBufferLength =
   V(options_string, "options")                                                 \
   V(order_string, "order")                                                     \
   V(output_string, "output")                                                   \
+  V(overlapped_string, "overlapped")                                           \
   V(parse_error_string, "Parse Error")                                         \
   V(password_string, "password")                                               \
   V(path_string, "path")                                                       \
@@ -476,6 +477,7 @@ constexpr size_t kFsStatsBufferLength =
   V(tty_constructor_template, v8::FunctionTemplate)                            \
   V(write_wrap_template, v8::ObjectTemplate)                                   \
   V(worker_heap_snapshot_taker_template, v8::ObjectTemplate)                   \
+  V(x509_constructor_template, v8::FunctionTemplate)                           \
   QUIC_ENVIRONMENT_STRONG_PERSISTENT_TEMPLATES(V)
 
 #if defined(NODE_EXPERIMENTAL_QUIC) && NODE_EXPERIMENTAL_QUIC
@@ -1236,6 +1238,14 @@ class Environment : public MemoryRetainer {
   inline void SetProtoMethodNoSideEffect(v8::Local<v8::FunctionTemplate> that,
                                          const char* name,
                                          v8::FunctionCallback callback);
+
+  inline void SetConstructorFunction(v8::Local<v8::Object> that,
+                          const char* name,
+                          v8::Local<v8::FunctionTemplate> tmpl);
+
+  inline void SetConstructorFunction(v8::Local<v8::Object> that,
+                          v8::Local<v8::String> name,
+                          v8::Local<v8::FunctionTemplate> tmpl);
 
   void AtExit(void (*cb)(void* arg), void* arg);
   void RunAtExitCallbacks();

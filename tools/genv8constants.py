@@ -14,7 +14,7 @@ import sys
 import errno
 
 if len(sys.argv) != 3:
-  print("usage: objsym.py outfile libv8_base.a")
+  print("Usage: genv8constants.py outfile libv8_base.a")
   sys.exit(2)
 
 outfile = open(sys.argv[1], 'w')
@@ -95,7 +95,7 @@ for line in pipe:
       curr_octet += 1
 
   match = pattern.match(line)
-  if match == None:
+  if match is None:
     continue
 
   # Print previous symbol
@@ -113,3 +113,5 @@ outfile.write("""
 
 #endif /* V8_CONSTANTS_H */
 """)
+
+outfile.close()

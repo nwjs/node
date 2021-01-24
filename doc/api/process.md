@@ -462,6 +462,29 @@ The `*-deprecation` command-line flags only affect warnings that use the name
 See the [`process.emitWarning()`][process_emit_warning] method for issuing
 custom or application-specific warnings.
 
+#### Node.js warning names
+
+There are no strict guidelines for warning types (as identified by the `name`
+property) emitted by Node.js. New types of warnings can be added at any time.
+A few of the warning types that are most common include:
+
+* `'DeprecationWarning'` - Indicates use of a deprecated Node.js API or feature.
+  Such warnings must include a `'code'` property identifying the
+  [deprecation code][].
+* `'ExperimentalWarning'` - Indicates use of an experimental Node.js API or
+  feature. Such features must be used with caution as they may change at any
+  time and are not subject to the same strict semantic-versioning and long-term
+  support policies as supported features.
+* `'MaxListenersExceededWarning'` - Indicates that too many listeners for a
+  given event have been registered on either an `EventEmitter` or `EventTarget`.
+  This is often an indication of a memory leak.
+* `'TimeoutOverflowWarning'` - Indicates that a numeric value that cannot fit
+  within a 32-bit signed integer has been provided to either the `setTimeout()`
+  or `setInterval()` functions.
+* `'UnsupportedWarning'` - Indicates use of an unsupported option or feature
+  that will be ignored rather than treated as an error. One example is use of
+  the HTTP response status message when using the HTTP/2 compatibility API.
+
 ### Signal events
 
 <!--type=event-->
@@ -1552,26 +1575,19 @@ changes:
   * `external` {integer}
   * `arrayBuffers` {integer}
 
-The `process.memoryUsage()` method returns an object describing the memory usage
-of the Node.js process measured in bytes.
-
-For example, the code:
+Returns an object describing the memory usage of the Node.js process measured in
+bytes.
 
 ```js
 console.log(process.memoryUsage());
-```
-
-Will generate:
-
-<!-- eslint-skip -->
-```js
-{
-  rss: 4935680,
-  heapTotal: 1826816,
-  heapUsed: 650472,
-  external: 49879,
-  arrayBuffers: 9386
-}
+// Prints:
+// {
+//  rss: 4935680,
+//  heapTotal: 1826816,
+//  heapUsed: 650472,
+//  external: 49879,
+//  arrayBuffers: 9386
+// }
 ```
 
 * `heapTotal` and `heapUsed` refer to V8's memory usage.
@@ -1588,6 +1604,32 @@ Will generate:
 
 When using [`Worker`][] threads, `rss` will be a value that is valid for the
 entire process, while the other fields will only refer to the current thread.
+
+The `process.memoryUsage()` method iterates over each page to gather
+information about memory usage which might be slow depending on the
+program memory allocations.
+
+## `process.memoryUsage.rss()`
+<!-- YAML
+added: v15.6.0
+-->
+
+* Returns: {integer}
+
+The `process.memoryUsage.rss()` method returns an integer representing the
+Resident Set Size (RSS) in bytes.
+
+The Resident Set Size, is the amount of space occupied in the main
+memory device (that is a subset of the total allocated memory) for the
+process, including all C++ and JavaScript objects and code.
+
+This is the same value as the `rss` property provided by `process.memoryUsage()`
+but `process.memoryUsage.rss()` is faster.
+
+```js
+console.log(process.memoryUsage.rss());
+// 35655680
+```
 
 ## `process.nextTick(callback[, ...args])`
 <!-- YAML
@@ -1782,12 +1824,11 @@ tarball.
 * `lts` {string} a string label identifying the [LTS][] label for this release.
   This property only exists for LTS releases and is `undefined` for all other
   release types, including _Current_ releases.
-  Valid values include the LTS Release Codenames (including those
-  that are no longer supported). A non-exhaustive example of
-  these codenames includes:
+  Valid values include the LTS Release code names (including those
+  that are no longer supported).
   * `'Dubnium'` for the 10.x LTS line beginning with 10.13.0.
   * `'Erbium'` for the 12.x LTS line beginning with 12.13.0.
-  For other LTS Release Codenames, see [Node.js Changelog Archive](https://github.com/nodejs/node/blob/master/doc/changelogs/CHANGELOG_ARCHIVE.md)
+  For other LTS Release code names, see [Node.js Changelog Archive](https://github.com/nodejs/node/blob/master/doc/changelogs/CHANGELOG_ARCHIVE.md)
 
 <!-- eslint-skip -->
 ```js
@@ -2677,6 +2718,7 @@ cases:
 [`subprocess.kill()`]: child_process.md#child_process_subprocess_kill_signal
 [`v8.setFlagsFromString()`]: v8.md#v8_v8_setflagsfromstring_flags
 [debugger]: debugger.md
+[deprecation code]: deprecations.md
 [note on process I/O]: process.md#process_a_note_on_process_i_o
 [process.cpuUsage]: #process_process_cpuusage_previousvalue
 [process_emit_warning]: #process_process_emitwarning_warning_type_code_ctor

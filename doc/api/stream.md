@@ -75,8 +75,7 @@ object mode is not safe.
 <!--type=misc-->
 
 Both [`Writable`][] and [`Readable`][] streams will store data in an internal
-buffer that can be retrieved using `writable.writableBuffer` or
-`readable.readableBuffer`, respectively.
+buffer.
 
 The amount of data potentially buffered depends on the `highWaterMark` option
 passed into the stream's constructor. For normal streams, the `highWaterMark`
@@ -119,6 +118,11 @@ consumption of data received *from* the socket and whose `Writable` side allows
 writing data *to* the socket. Because data may be written to the socket at a
 faster or slower rate than data is received, each side should
 operate (and buffer) independently of the other.
+
+The mechanics of the internal buffering are an internal implementation detail
+and may be changed at any time. However, for certain advanced implementations,
+the internal buffers can be retrieved using `writable.writableBuffer` or
+`readable.readableBuffer`. Use of these undocumented properties is discouraged.
 
 ## API for stream consumers
 
@@ -2078,10 +2082,9 @@ class WriteStream extends Writable {
   constructor(filename) {
     super();
     this.filename = filename;
-    this.fd = fd;
   }
   _construct(callback) {
-    fs.open(this.filename, (fd, err) => {
+    fs.open(this.filename, (err, fd) => {
       if (err) {
         callback(err);
       } else {
@@ -2159,8 +2162,14 @@ user programs.
 
 #### `writable._writev(chunks, callback)`
 
-* `chunks` {Object[]} The chunks to be written. Each chunk has following
-  format: `{ chunk: ..., encoding: ... }`.
+* `chunks` {Object[]} The data to be written. The value is an array of {Object}
+  that each represent a discreet chunk of data to write. The properties of
+  these objects are:
+  * `chunk` {Buffer|string} A buffer instance or string containing the data to
+    be written. The `chunk` will be a string if the `Writable` was created with
+    the `decodeStrings` option set to `false` and a string was passed to `write()`.
+  * `encoding` {string} The character encoding of the `chunk`. If `chunk` is
+    a `Buffer`, the `encoding` will be `'buffer`.
 * `callback` {Function} A callback function (optionally with an error
   argument) to be invoked when processing is complete for the supplied chunks.
 

@@ -545,7 +545,7 @@ MaybeLocal<Object> GetPerContextExports(Local<Context> context) {
 // call NewContext and so they will experience breakages.
 Local<Context> NewContext(Isolate* isolate,
                           Local<ObjectTemplate> object_template, bool create) {
-  auto context = create ? Context::New(isolate, nullptr, object_template) : isolate->GetEnteredContext();
+  auto context = create ? Context::New(isolate, nullptr, object_template) : isolate->GetEnteredOrMicrotaskContext();
   if (context.IsEmpty()) return context;
 
   if (!InitializeContext(context)) {

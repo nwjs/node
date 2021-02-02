@@ -1651,7 +1651,7 @@ NODE_EXTERN bool g_nw_enter_dom() {
   if (tls_ctx && tls_ctx->env) {
     v8::Isolate* isolate = tls_ctx->env->isolate();
     v8::HandleScope handleScope(isolate);
-    v8::Local<v8::Context> context = isolate->GetEnteredContext();
+    v8::Local<v8::Context> context = isolate->GetEnteredOrMicrotaskContext();
     if (context == tls_ctx->env->context()) {
       context->Exit();
       return true;

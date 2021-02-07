@@ -2568,6 +2568,10 @@ not the file that it refers to.
 <!-- YAML
 added: v0.1.30
 changes:
+  - version: v15.3.0
+    pr-url: https://github.com/nodejs/node/pull/33716
+    description: Accepts a `throwIfNoEntry` option to specify whether
+                 an exception should be thrown if the entry does not exist.
   - version: v10.5.0
     pr-url: https://github.com/nodejs/node/pull/20220
     description: Accepts an additional `options` object to specify whether
@@ -2628,6 +2632,8 @@ Asynchronously creates a directory.
 
 The callback is given a possible exception and, if `recursive` is `true`, the
 first directory path created, `(err, [path])`.
+`path` can still be `undefined` when `recursive` is `true`, if no directory was
+created.
 
 The optional `options` argument can be an integer specifying `mode` (permission
 and sticky bits), or an object with a `mode` property and a `recursive`
@@ -2921,7 +2927,7 @@ changes:
 * `buffer` {Buffer|TypedArray|DataView}
 * `offset` {integer}
 * `length` {integer}
-* `position` {integer}
+* `position` {integer|bigint}
 * `callback` {Function}
   * `err` {Error}
   * `bytesRead` {integer}
@@ -2966,7 +2972,7 @@ changes:
   * `buffer` {Buffer|TypedArray|DataView} **Default:** `Buffer.alloc(16384)`
   * `offset` {integer} **Default:** `0`
   * `length` {integer} **Default:** `buffer.length`
-  * `position` {integer} **Default:** `null`
+  * `position` {integer|bigint} **Default:** `null`
 * `callback` {Function}
   * `err` {Error}
   * `bytesRead` {integer}
@@ -3152,6 +3158,28 @@ system requests but rather the internal buffering `fs.readFile` performs.
    the call to `fs.readFile()` with the same file descriptor, would give
    `'World'`, rather than `'Hello World'`.
 
+### Performance Considerations
+
+The `fs.readFile()` method asynchronously reads the contents of a file into
+memory one chunk at a time, allowing the event loop to turn between each chunk.
+This allows the read operation to have less impact on other activity that may
+be using the underlying libuv thread pool but means that it will take longer
+to read a complete file into memory.
+
+The additional read overhead can vary broadly on different systems and depends
+on the type of file being read. If the file type is not a regular file (a pipe
+for instance) and Node.js is unable to determine an actual file size, each read
+operation will load on 64kb of data. For regular files, each read will process
+512kb of data.
+
+For applications that require as-fast-as-possible reading of file contents, it
+is better to use `fs.read()` directly and for application code to manage
+reading the full contents of the file itself.
+
+The Node.js GitHub issue [#25741][] provides more information and a detailed
+analysis on the performance of `fs.readFile()` for multiple file sizes in
+different Node.js versions.
+
 ## `fs.readFileSync(path[, options])`
 <!-- YAML
 added: v0.1.8
@@ -3263,7 +3291,7 @@ changes:
 * `buffer` {Buffer|TypedArray|DataView}
 * `offset` {integer}
 * `length` {integer}
-* `position` {integer}
+* `position` {integer|bigint}
 * Returns: {number}
 
 Returns the number of `bytesRead`.
@@ -3290,7 +3318,7 @@ changes:
 * `options` {Object}
   * `offset` {integer} **Default:** `0`
   * `length` {integer} **Default:** `buffer.length`
-  * `position` {integer} **Default:** `null`
+  * `position` {integer|bigint} **Default:** `null`
 * Returns: {number}
 
 Returns the number of `bytesRead`.
@@ -3813,6 +3841,10 @@ Stats {
 <!-- YAML
 added: v0.1.21
 changes:
+  - version: v15.3.0
+    pr-url: https://github.com/nodejs/node/pull/33716
+    description: Accepts a `throwIfNoEntry` option to specify whether
+                 an exception should be thrown if the entry does not exist.
   - version: v10.5.0
     pr-url: https://github.com/nodejs/node/pull/20220
     description: Accepts an additional `options` object to specify whether
@@ -6204,6 +6236,7 @@ through `fs.open()` or `fs.writeFile()` or `fsPromises.open()`) will fail with
 A call to `fs.ftruncate()` or `filehandle.truncate()` can be used to reset
 the file contents.
 
+[#25741]: https://github.com/nodejs/node/issues/25741
 [Caveats]: #fs_caveats
 [Common System Errors]: errors.md#errors_common_system_errors
 [FS constants]: #fs_fs_constants_1

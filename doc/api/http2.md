@@ -1769,7 +1769,7 @@ the request body.
 When this event is emitted and handled, the [`'request'`][] event will
 not be emitted.
 
-### Event: `'connection'`
+#### Event: `'connection'`
 <!-- YAML
 added: v8.4.0
 -->
@@ -1957,7 +1957,7 @@ the request body.
 When this event is emitted and handled, the [`'request'`][] event will
 not be emitted.
 
-### Event: `'connection'`
+#### Event: `'connection'`
 <!-- YAML
 added: v8.4.0
 -->
@@ -3437,6 +3437,15 @@ Removes a header that has been queued for implicit sending.
 response.removeHeader('Content-Encoding');
 ```
 
+### `response.req`
+<!-- YAML
+added: v15.7.0
+-->
+
+* {http2.Http2ServerRequest}
+
+A reference to the original HTTP2 `request` object.
+
 #### `response.sendDate`
 <!-- YAML
 added: v8.4.0
@@ -3666,7 +3675,8 @@ will be emitted.
 const body = 'hello world';
 response.writeHead(200, {
   'Content-Length': Buffer.byteLength(body),
-  'Content-Type': 'text/plain; charset=utf-8' });
+  'Content-Type': 'text/plain; charset=utf-8',
+});
 ```
 
 `Content-Length` is given in bytes not characters. The

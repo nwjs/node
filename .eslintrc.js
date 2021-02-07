@@ -18,6 +18,7 @@ const hacks = [
   'eslint-plugin-markdown',
   '@babel/eslint-parser',
   '@babel/plugin-syntax-class-properties',
+  '@babel/plugin-syntax-top-level-await',
 ];
 Module._findPath = (request, paths, isMain) => {
   const r = ModuleFindPath(request, paths, isMain);
@@ -41,7 +42,10 @@ module.exports = {
   parser: '@babel/eslint-parser',
   parserOptions: {
     babelOptions: {
-      plugins: [Module._findPath('@babel/plugin-syntax-class-properties')],
+      plugins: [
+        Module._findPath('@babel/plugin-syntax-class-properties'),
+        Module._findPath('@babel/plugin-syntax-top-level-await'),
+      ],
     },
     requireConfigFile: false,
     sourceType: 'script',
@@ -53,6 +57,7 @@ module.exports = {
         'doc/api/module.md',
         'doc/api/modules.md',
         'doc/api/packages.md',
+        'doc/api/wasi.md',
         'test/es-module/test-esm-type-flag.js',
         'test/es-module/test-esm-type-flag-alias.js',
         '*.mjs',
@@ -253,6 +258,7 @@ module.exports = {
     'no-void': 'error',
     'no-whitespace-before-property': 'error',
     'no-with': 'error',
+    'object-curly-newline': 'error',
     'object-curly-spacing': ['error', 'always'],
     'one-var': ['error', { initialized: 'never' }],
     'one-var-declaration-per-line': 'error',

@@ -40,6 +40,8 @@ const customTypesMap = {
   'WebAssembly.Instance':
     `${jsDocPrefix}Reference/Global_Objects/WebAssembly/Instance`,
 
+  'Blob': 'buffer.html#buffer_class_blob',
+
   'BroadcastChannel':
     'worker_threads.html#worker_threads_class_broadcastchannel_' +
     'extends_eventtarget',
@@ -112,6 +114,10 @@ const customTypesMap = {
   'NodeScryptImportParams':
     'webcrypto.html#webcrypto_class_nodescryptimportparams',
   'NodeScryptParams': 'webcrypto.html#webcrypto_class_nodescryptparams',
+  'NodeEdKeyImportParams':
+    'webcrypto.html#webcrypto_class_nodeedkeyimportparams',
+  'NodeEdKeyGenParams':
+    'webcrypto.html#webcrypto_class_nodeedkeygenparams',
 
   'dgram.Socket': 'dgram.html#dgram_class_dgram_socket',
 
@@ -183,10 +189,6 @@ const customTypesMap = {
     'perf_hooks.html#perf_hooks_class_perf_hooks_performanceobserver',
   'PerformanceObserverEntryList':
     'perf_hooks.html#perf_hooks_class_performanceobserverentrylist',
-  'QuicEndpoint': 'quic.html#quic_class_quicendpoint',
-  'QuicSession': 'quic.html#quic_class_quicserversession_extends_quicsession',
-  'QuicSocket': 'quic.html#quic_net_createquicsocket_options',
-  'QuicStream': 'quic.html#quic_class_quicstream_extends_stream_duplex',
 
   'readline.Interface': 'readline.html#readline_class_interface',
 

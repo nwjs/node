@@ -1284,6 +1284,25 @@ passing keys as strings or `Buffer`s due to improved security features.
 The receiver obtains a cloned `KeyObject`, and the `KeyObject` does not need to
 be listed in the `transferList` argument.
 
+### `keyObject.asymmetricKeyDetails`
+<!-- YAML
+added: v15.7.0
+-->
+
+* {Object}
+  * `modulusLength`: {number} Key size in bits (RSA, DSA).
+  * `publicExponent`: {bigint} Public exponent (RSA).
+  * `divisorLength`: {number} Size of `q` in bits (DSA).
+  * `namedCurve`: {string} Name of the curve (EC).
+
+This property exists only on asymmetric keys. Depending on the type of the key,
+this object contains information about the key. None of the information obtained
+through this property can be used to uniquely identify a key or to compromise
+the security of the key.
+
+RSA-PSS parameters, DH, or any future key type details might be exposed via this
+API using additional attributes.
+
 ### `keyObject.asymmetricKeyType`
 <!-- YAML
 added: v11.6.0
@@ -1651,7 +1670,7 @@ added: v15.6.0
 -->
 
 Encapsulates an X509 certificate and provides read-only access to
-it's information.
+its information.
 
 ```js
 const { X509Certificate } = require('crypto');
@@ -1941,6 +1960,48 @@ is currently in use. Setting to true requires a FIPS build of Node.js.
 
 This property is deprecated. Please use `crypto.setFips()` and
 `crypto.getFips()` instead.
+
+### `crypto.checkPrime(candidate[, options, [callback]])`
+<!-- YAML
+added: v15.8.0
+-->
+
+* `candidate` {ArrayBuffer|SharedArrayBuffer|TypedArray|Buffer|DataView|bigint}
+  A possible prime encoded as a sequence of big endian octets of arbitrary
+  length.
+* `options` {Object}
+  * `checks` {number} The number of Miller-Rabin probabilistic primality
+    iterations to perform. When the value is `0` (zero), a number of checks
+    is used that yields a false positive rate of at most 2<sup>-64</sup> for
+    random input. Care must be used when selecting a number of checks. Refer
+    to the OpenSSL documentation for the [`BN_is_prime_ex`][] function `nchecks`
+    options for more details. **Defaults**: `0`
+* `callback` {Function}
+  * `err` {Error} Set to an {Error} object if an error occured during check.
+  * `result` {boolean} `true` if the candidate is a prime with an error
+    probability less than `0.25 ** options.checks`.
+
+Checks the primality of the `candidate`.
+
+### `crypto.checkPrimeSync(candidate[, options])`
+<!-- YAML
+added: v15.8.0
+-->
+
+* `candidate` {ArrayBuffer|SharedArrayBuffer|TypedArray|Buffer|DataView|bigint}
+  A possible prime encoded as a sequence of big endian octets of arbitrary
+  length.
+* `options` {Object}
+  * `checks` {number} The number of Miller-Rabin probabilistic primality
+    iterations to perform. When the value is `0` (zero), a number of checks
+    is used that yields a false positive rate of at most 2<sup>-64</sup> for
+    random input. Care must be used when selecting a number of checks. Refer
+    to the OpenSSL documentation for the [`BN_is_prime_ex`][] function `nchecks`
+    options for more details. **Defaults**: `0`
+* Returns: {boolean} `true` if the candidate is a prime with an error
+  probability less than `0.25 ** options.checks`.
+
+Checks the primality of the `candidate`.
 
 ### `crypto.createCipher(algorithm, password[, options])`
 <!-- YAML
@@ -2490,7 +2551,7 @@ added: v15.0.0
     * If `type` is `'hmac'`, the minimum is 1, and the maximum length is
       2<sup>31</sup>-1. If the value is not a multiple of 8, the generated
       key will be truncated to `Math.floor(length / 8)`.
-    * If `type` is `'aes'`, the length must be one of `128` or `256`.
+    * If `type` is `'aes'`, the length must be one of `128`, `192`, or `256`.
 * `callback`: {Function}
   * `err`: {Error}
   * `key`: {KeyObject}
@@ -2519,7 +2580,7 @@ added: v15.0.0
     * If `type` is `'hmac'`, the minimum is 1, and the maximum length is
       2<sup>31</sup>-1. If the value is not a multiple of 8, the generated
       key will be truncated to `Math.floor(length / 8)`.
-    * If `type` is `'aes'`, the length must be one of `128` or `256`.
+    * If `type` is `'aes'`, the length must be one of `128`, `192`, or `256`.
 * Returns: {KeyObject}
 
 Synchronously generates a new random secret key of the given `length`. The
@@ -2674,6 +2735,88 @@ const { publicKey, privateKey } = generateKeyPairSync('rsa', {
 The return value `{ publicKey, privateKey }` represents the generated key pair.
 When PEM encoding was selected, the respective key will be a string, otherwise
 it will be a buffer containing the data encoded as DER.
+
+### `crypto.generatePrime(size[, options[, callback]])`
+<!-- YAML
+added: v15.8.0
+-->
+
+* `size` {number} The size (in bits) of the prime to generate.
+* `options` {Object}
+  * `add` {ArrayBuffer|SharedArrayBuffer|TypedArray|Buffer|DataView|bigint}
+  * `rem` {ArrayBuffer|SharedArrayBuffer|TypedArray|Buffer|DataView|bigint}
+  * `safe` {boolean} **Defaults**: `false`.
+  * `bigint` {boolean} When `true`, the generated prime is returned
+    as a `bigint`.
+* `callback` {Function}
+  * `err` {Error}
+  * `prime` {ArrayBuffer|bigint}
+
+Generates a pseudo-random prime of `size` bits.
+
+If `options.safe` is `true`, the prime will be a safe prime -- that is,
+`(prime - 1) / 2` will also be a prime.
+
+The `options.add` and `options.rem` parameters can be used to enforce additional
+requirements, e.g., for Diffie-Hellman:
+
+* If `options.add` and `options.rem` are both set, the prime will satisfy the
+  condition that `prime % add = rem`.
+* If only `options.add` is set and `options.safe` is not `true`, the prime will
+  satisfy the condition that `prime % add = 1`.
+* If only `options.add` is set and `options.safe` is set to `true`, the prime
+  will instead satisfy the condition that `prime % add = 3`. This is necessary
+  because `prime % add = 1` for `options.add > 2` would contradict the condition
+  enforced by `options.safe`.
+* `options.rem` is ignored if `options.add` is not given.
+
+Both `options.add` and `options.rem` must be encoded as big-endian sequences
+if given as an `ArrayBuffer`, `SharedArrayBuffer`, `TypedArray`, `Buffer`, or
+`DataView`.
+
+By default, the prime is encoded as a big-endian sequence of octets
+in an {ArrayBuffer}. If the `bigint` option is `true`, then a {bigint}
+is provided.
+
+### `crypto.generatePrimeSync(size[, options])`
+<!-- YAML
+added: v15.8.0
+-->
+
+* `size` {number} The size (in bits) of the prime to generate.
+* `options` {Object}
+  * `add` {ArrayBuffer|SharedArrayBuffer|TypedArray|Buffer|DataView|bigint}
+  * `rem` {ArrayBuffer|SharedArrayBuffer|TypedArray|Buffer|DataView|bigint}
+  * `safe` {boolean} **Defaults**: `false`.
+  * `bigint` {boolean} When `true`, the generated prime is returned
+    as a `bigint`.
+* Returns: {ArrayBuffer|bigint}
+
+Generates a pseudo-random prime of `size` bits.
+
+If `options.safe` is `true`, the prime will be a safe prime -- that is,
+`(prime - 1) / 2` will also be a prime.
+
+The `options.add` and `options.rem` parameters can be used to enforce additional
+requirements, e.g., for Diffie-Hellman:
+
+* If `options.add` and `options.rem` are both set, the prime will satisfy the
+  condition that `prime % add = rem`.
+* If only `options.add` is set and `options.safe` is not `true`, the prime will
+  satisfy the condition that `prime % add = 1`.
+* If only `options.add` is set and `options.safe` is set to `true`, the prime
+  will instead satisfy the condition that `prime % add = 3`. This is necessary
+  because `prime % add = 1` for `options.add > 2` would contradict the condition
+  enforced by `options.safe`.
+* `options.rem` is ignored if `options.add` is not given.
+
+Both `options.add` and `options.rem` must be encoded as big-endian sequences
+if given as an `ArrayBuffer`, `SharedArrayBuffer`, `TypedArray`, `Buffer`, or
+`DataView`.
+
+By default, the prime is encoded as a big-endian sequence of octets
+in an {ArrayBuffer}. If the `bigint` option is `true`, then a {bigint}
+is provided.
 
 ### `crypto.getCiphers()`
 <!-- YAML
@@ -4215,6 +4358,7 @@ See the [list of SSL OP Flags][] for details.
 [RFC 4122]: https://www.rfc-editor.org/rfc/rfc4122.txt
 [RFC 5208]: https://www.rfc-editor.org/rfc/rfc5208.txt
 [Web Crypto API documentation]: webcrypto.md
+[`BN_is_prime_ex`]: https://www.openssl.org/docs/man1.1.1/man3/BN_is_prime_ex.html
 [`Buffer`]: buffer.md
 [`EVP_BytesToKey`]: https://www.openssl.org/docs/man1.1.0/crypto/EVP_BytesToKey.html
 [`KeyObject`]: #crypto_class_keyobject

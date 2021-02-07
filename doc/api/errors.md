@@ -967,6 +967,14 @@ An unknown cipher was specified.
 An unknown Diffie-Hellman group name was given. See
 [`crypto.getDiffieHellman()`][] for a list of valid group names.
 
+<a id="ERR_CRYPTO_UNSUPPORTED_OPERATION"></a>
+### `ERR_CRYPTO_UNSUPPORTED_OPERATION`
+<!-- YAML
+added: v15.0.0
+-->
+
+An attempt to invoke an unsupported crypto operation was made.
+
 <a id="ERR_DLOPEN_FAILED"></a>
 ### `ERR_DLOPEN_FAILED`
 <!-- YAML
@@ -979,14 +987,6 @@ A call to `process.dlopen()` failed.
 ### `ERR_DIR_CLOSED`
 
 The [`fs.Dir`][] was previously closed.
-
-<a id"ERR_CRYPTO_UNSUPPORTED_OPERATION"></a>
-### `ERR_CRYPTO_UNSUPPORTED_OPERATION`
-<!-- YAML
-added: v15.0.0
--->
-
-An attempt to invoke an unsupported crypto operation was made.
 
 <a id="ERR_DIR_CONCURRENT_OPERATION"></a>
 ### `ERR_DIR_CONCURRENT_OPERATION`
@@ -1568,8 +1568,8 @@ which is not supported.
 <a id="ERR_INVALID_REPL_INPUT"></a>
 ### `ERR_INVALID_REPL_INPUT`
 
-The input may not be used in the [`REPL`][]. All prohibited inputs are
-documented in the [`REPL`][]'s documentation.
+The input may not be used in the [`REPL`][]. The conditions under which this
+error is used are described in the [`REPL`][] documentation.
 
 <a id="ERR_INVALID_RETURN_PROPERTY"></a>
 ### `ERR_INVALID_RETURN_PROPERTY`
@@ -1898,37 +1898,6 @@ Accessing `Object.prototype.__proto__` has been forbidden using
 [`--disable-proto=throw`][]. [`Object.getPrototypeOf`][] and
 [`Object.setPrototypeOf`][] should be used to get and set the prototype of an
 object.
-
-<a id="ERR_QUIC_FAILED_TO_CREATE_SESSION"></a>
-### `ERR_QUIC_FAILED_TO_CREATE_SESSION`
-
-> Stability: 1 - Experimental
-
-An unspecified failure occured trying to initialize a new `QuicClientSession`.
-
-<a id="ERR_QUIC_INVALID_REMOTE_TRANSPORT_PARAMS"></a>
-### `ERR_QUIC_INVALID_REMOTE_TRANSPORT_PARAMS`
-
-> Stability: 1 - Experimental
-
-An attempt to resume a `QuicClientSession` using remembered remote transport
-parameters failed because the transport parameters were invalid.
-
-<a id="ERR_QUIC_INVALID_TLS_SESSION_TICKET"></a>
-### `ERR_QUIC_INVALID_TLS_SESSION_TICKET`
-
-> Stability: 1 - Experimental
-
-An attempt resume a `QuicClientSession` using a remembered TLS session ticket
-failed because the session ticket was invalid.
-
-<a id="ERR_QUIC_VERSION_NEGOTIATION"></a>
-### `ERR_QUIC_VERSION_NEGOTIATION`
-
-> Stability: 1 - Experimental
-
-A `QuicClientSession` received a version negotiation request from the
-server and was shutdown accordingly.
 
 <a id="ERR_REQUIRE_ESM"></a>
 ### `ERR_REQUIRE_ESM`

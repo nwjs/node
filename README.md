@@ -325,6 +325,8 @@ For information about the governance of the Node.js project, see
 **Zeyu Yang** &lt;himself65@outlook.com&gt; (he/him)
 * [hiroppy](https://github.com/hiroppy) -
 **Yuta Hiroto** &lt;hello@hiroppy.me&gt; (he/him)
+* [iansu](https://github.com/iansu) -
+**Ian Sutherland** &lt;ian@iansutherland.ca&gt;
 * [indutny](https://github.com/indutny) -
 **Fedor Indutny** &lt;fedor.indutny@gmail.com&gt;
 * [JacksonTian](https://github.com/JacksonTian) -
@@ -353,12 +355,16 @@ For information about the governance of the Node.js project, see
 **Luigi Pinca** &lt;luigipinca@gmail.com&gt; (he/him)
 * [lundibundi](https://github.com/lundibundi) -
 **Denys Otrishko** &lt;shishugi@gmail.com&gt; (he/him)
+* [Lxxyx](https://github.com/Lxxyx) -
+**Zijian Liu** &lt;lxxyxzj@gmail.com&gt; (he/him)
 * [mafintosh](https://github.com/mafintosh) -
 **Mathias Buus** &lt;mathiasbuus@gmail.com&gt; (he/him)
 * [mcollina](https://github.com/mcollina) -
 **Matteo Collina** &lt;matteo.collina@gmail.com&gt; (he/him)
 * [mhdawson](https://github.com/mhdawson) -
 **Michael Dawson** &lt;midawson@redhat.com&gt; (he/him)
+* [miladfarca](https://github.com/miladfarca) -
+**Milad Fa** &lt;mfarazma@redhat.com&gt; (he/him)
 * [mildsunrise](https://github.com/mildsunrise) -
 **Alba Mendez** &lt;me@alba.sh&gt; (she/her)
 * [misterdjules](https://github.com/misterdjules) -
@@ -383,6 +389,8 @@ For information about the governance of the Node.js project, see
 **Andrey Pechkurov** &lt;apechkurov@gmail.com&gt; (he/him)
 * [Qard](https://github.com/Qard) -
 **Stephen Belanger** &lt;admin@stephenbelanger.com&gt; (he/him)
+* [RaisinTen](https://github.com/RaisinTen) -
+**Darshan Sen** &lt;raisinten@gmail.com&gt; (he/him)
 * [refack](https://github.com/refack) -
 **Refael Ackermann (רפאל פלחי)** &lt;refack@gmail.com&gt; (he/him/הוא/אתה)
 * [rexagod](https://github.com/rexagod) -

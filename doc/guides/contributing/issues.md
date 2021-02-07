@@ -1,27 +1,9 @@
 # Issues
 
-* [How to Contribute in Issues](#how-to-contribute-in-issues)
 * [Asking for General Help](#asking-for-general-help)
 * [Discussing non-technical topics](#discussing-non-technical-topics)
 * [Submitting a Bug Report](#submitting-a-bug-report)
 * [Triaging a Bug Report](#triaging-a-bug-report)
-* [Resolving a Bug Report](#resolving-a-bug-report)
-
-## How to Contribute in Issues
-
-For any issue, there are fundamentally three ways an individual can
-contribute:
-
-1. By opening the issue for discussion: For instance, if you believe that you
-   have uncovered a bug in Node.js, creating a new issue in the `nodejs/node`
-   issue tracker is the way to report it.
-2. By helping to triage the issue: This can be done either by providing
-   supporting details (a test case that demonstrates a bug), or providing
-   suggestions on how to address the issue.
-3. By helping to resolve the issue: Typically this is done either in the form
-   of demonstrating that the issue reported is not a problem after all, or more
-   often, by opening a Pull Request that changes some bit of something in
-   `nodejs/node` in a concrete and reviewable manner.
 
 ## Asking for General Help
 
@@ -37,37 +19,10 @@ should be directed to the [Technical Steering Committee (TSC) repository][].
 ## Submitting a Bug Report
 
 When opening a new issue in the `nodejs/node` issue tracker, users will be
-presented with a basic template that should be filled in.
-
-```markdown
-<!--
-Thank you for reporting an issue.
-
-This issue tracker is for bugs and issues found within Node.js core.
-If you require more general support please file an issue on our help
-repo. https://github.com/nodejs/help
-
-
-Please fill in as much of the template below as you're able.
-
-Version: output of `node -v`
-Platform: output of `uname -a` (UNIX), or version and 32 or 64-bit (Windows)
-Subsystem: if known, please specify affected core module name
-
-If possible, please provide code that demonstrates the problem, keeping it as
-simple and free of external dependencies as you are able.
--->
-
-* **Version**:
-* **Platform**:
-* **Subsystem**:
-
-<!-- Enter your issue details below this comment. -->
-```
-
-If you believe that you have uncovered a bug in Node.js, please fill out this
-form, following the template to the best of your ability. Do not worry if you
-cannot answer every detail, just fill in what you can.
+presented with a choice of issue templates. If you believe that you have
+uncovered a bug in Node.js, please fill out the `Bug Report` template to the
+best of your ability. Do not worry if you cannot answer every detail; just fill
+in what you can.
 
 The two most important pieces of information we need in order to properly
 evaluate the report is a description of the behavior you are seeing and a simple
@@ -104,14 +59,6 @@ The triage role enables the ability to carry out the most common triage
 activities, such as applying labels and closing/reopening/assigning issues.
 For more information on the roles and permissions, see ["Permission levels for
 repositories owned by an organization"](https://docs.github.com/en/github/setting-up-and-managing-organizations-and-teams/repository-permission-levels-for-an-organization#permission-levels-for-repositories-owned-by-an-organization).
-
-## Resolving a Bug Report
-
-In the vast majority of cases, issues are resolved by opening a Pull Request.
-The process for opening and reviewing a Pull Request is similar to that of
-opening and triaging issues, but carries with it a necessary review and approval
-workflow that ensures that the proposed changes meet the minimal quality and
-functional guidelines of the Node.js project.
 
 [Node.js help repository]: https://github.com/nodejs/help/issues
 [Technical Steering Committee (TSC) repository]: https://github.com/nodejs/TSC/issues

@@ -13,3 +13,5 @@ openssl-binding/test: PASS,FLAKY
 [$system==ibmi]
 openssl-binding/test: SKIP
 zlib-binding/test: SKIP
+# https://github.com/nodejs/node/issues/34410
+register-signal-handler/test: PASS,FLAKY

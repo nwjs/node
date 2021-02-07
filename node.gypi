@@ -201,24 +201,6 @@
       'libraries': [ '<(PRODUCT_DIR)/../nw/v8.dll.lib' ]
     }],
 
-    [
-      'experimental_quic==1', {
-      'conditions': [
-        [
-          'node_shared_ngtcp2=="false"', {
-          'dependencies': [
-            'deps/ngtcp2/ngtcp2.gyp:ngtcp2',
-          ]}
-        ],
-        [
-          'node_shared_nghttp3=="false"', {
-          'dependencies': [
-            'deps/nghttp3/nghttp3.gyp:nghttp3'
-          ]}
-        ]
-      ]}
-    ],
-
     [ 'node_shared_brotli=="false"', {
       'dependencies': [ 'deps/brotli/brotli.gyp:brotli' ],
     }],

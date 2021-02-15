@@ -114,7 +114,10 @@ void InternalCallbackScope::Close() {
   auto weakref_cleanup = OnScopeLeave([&]() { env_->RunWeakRefCleanup(); });
 
   if (!tick_info->has_tick_scheduled()) {
-    env_->context()->GetMicrotaskQueue()->PerformCheckpoint(env_->isolate());
+    if (env_ && !env_->context().IsEmpty() && env_->context()->GetMicrotaskQueue())
+      env_->context()->GetMicrotaskQueue()->PerformCheckpoint(env_->isolate());
+    else
+      v8::MicrotasksScope::PerformCheckpoint(env_->isolate());
 
     perform_stopping_check();
   }

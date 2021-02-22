@@ -18,7 +18,7 @@ The Node.js project uses an [open governance model](./GOVERNANCE.md). The
 
 **This project is bound by a [Code of Conduct][].**
 
-# Table of Contents
+# Table of contents
 
 * [Support](#support)
 * [Release Types](#release-types)
@@ -41,11 +41,11 @@ The Node.js project uses an [open governance model](./GOVERNANCE.md). The
 Looking for help? Check out the
 [instructions for getting support](.github/SUPPORT.md).
 
-## Release Types
+## Release types
 
 * **Current**: Under active development. Code for the Current release is in the
   branch for its major version number (for example,
-  [v10.x](https://github.com/nodejs/node/tree/v10.x)). Node.js releases a new
+  [v15.x](https://github.com/nodejs/node/tree/v15.x)). Node.js releases a new
   major version every 6 months, allowing for breaking changes. This happens in
   April and October every year. Releases appearing each October have a support
   life of 8 months. Releases appearing each April convert to LTS (see below)
@@ -69,29 +69,29 @@ For more information, see the
 Binaries, installers, and source tarballs are available at
 <https://nodejs.org/en/download/>.
 
-#### Current and LTS Releases
+#### Current and LTS releases
 <https://nodejs.org/download/release/>
 
 The [latest](https://nodejs.org/download/release/latest/) directory is an
 alias for the latest Current release. The latest-_codename_ directory is an
 alias for the latest release from an LTS line. For example, the
-[latest-carbon](https://nodejs.org/download/release/latest-carbon/) directory
-contains the latest Carbon (Node.js 8) release.
+[latest-fermium](https://nodejs.org/download/release/latest-fermium/) directory
+contains the latest Fermium (Node.js 14) release.
 
-#### Nightly Releases
+#### Nightly releases
 <https://nodejs.org/download/nightly/>
 
 Each directory name and filename contains a date (in UTC) and the commit
 SHA at the HEAD of the release.
 
-#### API Documentation
+#### API documentation
 
 Documentation for the latest Current release is at <https://nodejs.org/api/>.
 Version-specific documentation is available in each release directory in the
 _docs_ subdirectory. Version-specific documentation is also at
 <https://nodejs.org/download/docs/>.
 
-### Verifying Binaries
+### Verifying binaries
 
 Download directories contain a `SHASUMS256.txt` file with SHA checksums for the
 files.
@@ -111,7 +111,7 @@ $ grep node-vx.y.z.tar.gz SHASUMS256.txt | sha256sum -c -
 
 For Current and LTS, the GPG detached signature of `SHASUMS256.txt` is in
 `SHASUMS256.txt.sig`. You can use it with `gpg` to verify the integrity of
-`SHASUM256.txt`. You will first need to import
+`SHASUMS256.txt`. You will first need to import
 [the GPG keys of individuals authorized to create releases](#release-keys). To
 import the keys:
 
@@ -147,7 +147,7 @@ For information on reporting security vulnerabilities in Node.js, see
 * [Strategic Initiatives][]
 * [Technical values and prioritization][]
 
-## Current Project Team Members
+## Current project team members
 
 For information about the governance of the Node.js project, see
 [GOVERNANCE.md](./GOVERNANCE.md).
@@ -194,7 +194,7 @@ For information about the governance of the Node.js project, see
 * [Trott](https://github.com/Trott) -
 **Rich Trott** &lt;rtrott@gmail.com&gt; (he/him)
 
-### TSC Emeriti
+### TSC emeriti
 
 * [addaleax](https://github.com/addaleax) -
 **Anna Henningsen** &lt;anna@addaleax.net&gt; (she/her)
@@ -289,6 +289,8 @@ For information about the governance of the Node.js project, see
 **David Carlier** &lt;devnexen@gmail.com&gt;
 * [devsnek](https://github.com/devsnek) -
 **Gus Caplan** &lt;me@gus.host&gt; (they/them)
+* [dmabupt](https://github.com/dmabupt) -
+**Xu Meng** &lt;dmabupt@gmail.com&gt; (he/him)
 * [dnlup](https://github.com/dnlup)
 **Daniele Belardi** &lt;dwon.dnl@gmail.com&gt; (he/him)
 * [edsadr](https://github.com/edsadr) -
@@ -454,7 +456,7 @@ For information about the governance of the Node.js project, see
 * [ZYSzys](https://github.com/ZYSzys) -
 **Yongsheng Zhang** &lt;zyszys98@gmail.com&gt; (he/him)
 
-### Collaborator Emeriti
+### Collaborator emeriti
 
 * [andrasq](https://github.com/andrasq) -
 **Andras** &lt;andras@kinvey.com&gt;
@@ -594,7 +596,7 @@ maintaining the Node.js project.
 * [RaisinTen](https://github.com/RaisinTen) -
 **Darshan Sen** &lt;raisinten@gmail.com&gt;
 
-### Release Keys
+### Release keys
 
 Primary GPG keys for Node.js Releasers (some Releasers sign with subkeys):
 

@@ -173,7 +173,7 @@ changes:
     description: A deprecation code has been assigned.
   - version: v0.11.14
     description: Runtime deprecation.
-  - version: v0.5.11
+  - version: v0.5.10
     description: Documentation-only deprecation.
 -->
 
@@ -2480,7 +2480,7 @@ called, not whether `'finish'` has been emitted and the underlying data
 is flushed.
 
 Use [`response.writableFinished`][] or [`response.writableEnded`][]
-accordingly instead to avoid the ambigiuty.
+accordingly instead to avoid the ambiguity.
 
 To maintain existing behaviour `response.finished` should be replaced with
 `response.writableEnded`.
@@ -2681,7 +2681,7 @@ Use `fs.rm(path, { recursive: true, force: true })` instead.
 <!-- YAML
 changes:
   - version: v15.1.0
-    pr-url: https://github.com/nodejs/node/pull/35746
+    pr-url: https://github.com/nodejs/node/pull/35747
     description: Runtime deprecation.
   - version: v14.13.0
     pr-url: https://github.com/nodejs/node/pull/34718

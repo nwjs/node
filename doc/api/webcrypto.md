@@ -14,12 +14,13 @@ const { subtle } = require('crypto').webcrypto;
 (async function() {
 
   const key = await subtle.generateKey({
-    name: 'hmac',
-    length: 123
+    name: 'HMAC',
+    hash: 'SHA-256',
+    length: 256
   }, true, ['sign', 'verify']);
 
   const digest = await subtle.sign({
-    name: 'hmac'
+    name: 'HMAC'
   }, key, 'I love cupcakes');
 
 })();
@@ -604,13 +605,17 @@ The algorithms currently supported include:
 ### `subtle.exportKey(format, key)`
 <!-- YAML
 added: v15.0.0
+changes:
+  - version: v15.9.0
+    pr-url: https://github.com/nodejs/node/pull/37203
+    description: Removed `'NODE-DSA'` JWK export.
 -->
 
 * `format`: {string} Must be one of `'raw'`, `'pkcs8'`, `'spki'`, `'jwk'`, or
-  `node.keyObject`.
+  `'node.keyObject'`.
 * `key`: {CryptoKey}
 * Returns: {Promise} containing {ArrayBuffer}, or, if `format` is
-  `node.keyObject`, a {KeyObject}.
+  `'node.keyObject'`, a {KeyObject}.
 
 Exports the given key into the specified format, if supported.
 
@@ -641,7 +646,7 @@ extension that allows converting a {CryptoKey} into a Node.js {KeyObject}.
 | `'RSA-OAEP'`          | ✔ | ✔ | ✔ |   |
 | `'RSA-PSS'`           | ✔ | ✔ | ✔ |   |
 | `'RSASSA-PKCS1-v1_5'` | ✔ | ✔ | ✔ |   |
-| `'NODE-DSA'` <sup>1</sup> | ✔ | ✔ | ✔ |   |
+| `'NODE-DSA'` <sup>1</sup> | ✔ | ✔ |   |   |
 | `'NODE-DH'` <sup>1</sup> | ✔ | ✔ |   |   |
 | `'NODE-SCRYPT'` <sup>1</sup> |   |   |   |   |
 | `'NODE-ED25519'` <sup>1</sup> | ✔ | ✔ | ✔ | ✔ |
@@ -691,10 +696,14 @@ The {CryptoKey} (secret key) generating algorithms supported include:
 ### `subtle.importKey(format, keyData, algorithm, extractable, keyUsages)`
 <!-- YAML
 added: v15.0.0
+changes:
+  - version: v15.9.0
+    pr-url: https://github.com/nodejs/node/pull/37203
+    description: Removed `'NODE-DSA'` JWK import.
 -->
 
 * `format`: {string} Must be one of `'raw'`, `'pkcs8'`, `'spki'`, `'jwk'`, or
-  `node.keyObject`.
+  `'node.keyObject'`.
 * `keyData`: {ArrayBuffer|TypedArray|DataView|Buffer|KeyObject}
 <!--lint disable maximum-line-length remark-lint-->
 * `algorithm`: {RsaHashedImportParams|EcKeyImportParams|HmacImportParams|AesImportParams|Pbkdf2ImportParams|NodeDsaImportParams|NodeDhImportParams|NodeScryptImportParams|NodeEdKeyImportParams}
@@ -729,7 +738,7 @@ The algorithms currently supported include:
 | `'RSA-OAEP'`          | ✔ | ✔ | ✔ |   |
 | `'RSA-PSS'`           | ✔ | ✔ | ✔ |   |
 | `'RSASSA-PKCS1-v1_5'` | ✔ | ✔ | ✔ |   |
-| `'NODE-DSA'` <sup>1</sup> | ✔ | ✔ | ✔ |   |
+| `'NODE-DSA'` <sup>1</sup> | ✔ | ✔ |   |   |
 | `'NODE-DH'` <sup>1</sup> | ✔ | ✔ |   |   |
 | `'NODE-SCRYPT'` <sup>1</sup> |   |   |   | ✔ |
 | `'NODE-ED25519'` <sup>1</sup> | ✔ | ✔ | ✔ | ✔ |
@@ -1464,7 +1473,7 @@ added: v15.0.0
 
 The Node.js Web Crypto API extends various aspects of the Web Crypto API.
 These extensions are consistently identified by prepending names with the
-`node.` prefix. For instance, the `node.keyObject` key format can be
+`node.` prefix. For instance, the `'node.keyObject'` key format can be
 used with the `subtle.exportKey()` and `subtle.importKey()` methods to
 convert between a WebCrypto {CryptoKey} object and a Node.js {KeyObject}.
 

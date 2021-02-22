@@ -104,27 +104,19 @@ Maybe<bool> RandomPrimeTraits::AdditionalConfig(
   bool safe = args[offset + 1]->IsTrue();
 
   if (!args[offset + 2]->IsUndefined()) {
-    params->add.reset(BN_secure_new());
+    ArrayBufferOrViewContents<unsigned char> add(args[offset + 2]);
+    params->add.reset(BN_bin2bn(add.data(), add.size(), nullptr));
     if (!params->add) {
       THROW_ERR_CRYPTO_OPERATION_FAILED(env, "could not generate prime");
-      return Nothing<bool>();
-    }
-    ArrayBufferOrViewContents<unsigned char> add(args[offset + 2]);
-    if (BN_bin2bn(add.data(), add.size(), params->add.get()) == nullptr) {
-      THROW_ERR_INVALID_ARG_VALUE(env, "invalid options.add");
       return Nothing<bool>();
     }
   }
 
   if (!args[offset + 3]->IsUndefined()) {
-    params->rem.reset(BN_secure_new());
+    ArrayBufferOrViewContents<unsigned char> rem(args[offset + 3]);
+    params->rem.reset(BN_bin2bn(rem.data(), rem.size(), nullptr));
     if (!params->rem) {
       THROW_ERR_CRYPTO_OPERATION_FAILED(env, "could not generate prime");
-      return Nothing<bool>();
-    }
-    ArrayBufferOrViewContents<unsigned char> rem(args[offset + 3]);
-    if (BN_bin2bn(rem.data(), rem.size(), params->rem.get()) == nullptr) {
-      THROW_ERR_INVALID_ARG_VALUE(env, "invalid options.rem");
       return Nothing<bool>();
     }
   }
@@ -133,6 +125,26 @@ Maybe<bool> RandomPrimeTraits::AdditionalConfig(
   if (bits < 0) {
     THROW_ERR_OUT_OF_RANGE(env, "invalid size");
     return Nothing<bool>();
+  }
+
+  if (params->add) {
+    if (BN_num_bits(params->add.get()) > bits) {
+      // If we allowed this, the best case would be returning a static prime
+      // that wasn't generated randomly. The worst case would be an infinite
+      // loop within OpenSSL, blocking the main thread or one of the threads
+      // in the thread pool.
+      THROW_ERR_OUT_OF_RANGE(env, "invalid options.add");
+      return Nothing<bool>();
+    }
+
+    if (params->rem) {
+      if (BN_cmp(params->add.get(), params->rem.get()) != 1) {
+        // This would definitely lead to an infinite loop if allowed since
+        // OpenSSL does not check this condition.
+        THROW_ERR_OUT_OF_RANGE(env, "invalid options.rem");
+        return Nothing<bool>();
+      }
+    }
   }
 
   params->bits = bits;

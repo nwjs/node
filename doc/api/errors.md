@@ -919,6 +919,18 @@ added: v15.0.0
 
 Initialization of an asynchronous crypto operation failed.
 
+<a id="ERR_CRYPTO_JWK_UNSUPPORTED_CURVE"></a>
+### `ERR_CRYPTO_JWK_UNSUPPORTED_CURVE`
+
+Key's Elliptic Curve is not registered for use in the
+[JSON Web Key Elliptic Curve Registry][].
+
+<a id="ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE"></a>
+### `ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE`
+
+Key's Asymmetric Key Type is not registered for use in the
+[JSON Web Key Types Registry][].
+
 <a id="ERR_CRYPTO_OPERATION_FAILED"></a>
 ### `ERR_CRYPTO_OPERATION_FAILED`
 <!-- YAML
@@ -1811,7 +1823,7 @@ would be possible by calling a callback more than once.
 <a id="ERR_NAPI_CONS_FUNCTION"></a>
 ### `ERR_NAPI_CONS_FUNCTION`
 
-While using `N-API`, a constructor passed was not a function.
+While using `Node-API`, a constructor passed was not a function.
 
 <a id="ERR_NAPI_INVALID_DATAVIEW_ARGS"></a>
 ### `ERR_NAPI_INVALID_DATAVIEW_ARGS`
@@ -2547,7 +2559,7 @@ added: v9.0.0
 removed: v10.0.0
 -->
 
-Used by the `N-API` when `Constructor.prototype` is not an object.
+Used by the `Node-API` when `Constructor.prototype` is not an object.
 
 <a id="ERR_NO_LONGER_SUPPORTED"></a>
 ### `ERR_NO_LONGER_SUPPORTED`
@@ -2716,6 +2728,8 @@ The native call from `process.cpuUsage` could not be processed.
 
 [ES Module]: esm.md
 [ICU]: intl.md#intl_internationalization_support
+[JSON Web Key Elliptic Curve Registry]: https://www.iana.org/assignments/jose/jose.xhtml#web-key-elliptic-curve
+[JSON Web Key Types Registry]: https://www.iana.org/assignments/jose/jose.xhtml#web-key-types
 [Node.js error codes]: #nodejs-error-codes
 [RFC 7230 Section 3]: https://tools.ietf.org/html/rfc7230#section-3
 [Subresource Integrity specification]: https://www.w3.org/TR/SRI/#the-integrity-attribute

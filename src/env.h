@@ -253,6 +253,7 @@ constexpr size_t kFsStatsBufferLength =
   V(fd_string, "fd")                                                           \
   V(fields_string, "fields")                                                   \
   V(file_string, "file")                                                       \
+  V(filename_string, "filename")                                               \
   V(fingerprint256_string, "fingerprint256")                                   \
   V(fingerprint_string, "fingerprint")                                         \
   V(flags_string, "flags")                                                     \
@@ -448,11 +449,12 @@ constexpr size_t kFsStatsBufferLength =
   V(filehandlereadwrap_template, v8::ObjectTemplate)                           \
   V(fsreqpromise_constructor_template, v8::ObjectTemplate)                     \
   V(handle_wrap_ctor_template, v8::FunctionTemplate)                           \
-  V(histogram_instance_template, v8::ObjectTemplate)                           \
+  V(histogram_ctor_template, v8::FunctionTemplate)                             \
   V(http2settings_constructor_template, v8::ObjectTemplate)                    \
   V(http2stream_constructor_template, v8::ObjectTemplate)                      \
   V(http2ping_constructor_template, v8::ObjectTemplate)                        \
   V(i18n_converter_template, v8::ObjectTemplate)                               \
+  V(intervalhistogram_constructor_template, v8::FunctionTemplate)              \
   V(libuv_stream_wrap_ctor_template, v8::FunctionTemplate)                     \
   V(message_port_constructor_template, v8::FunctionTemplate)                   \
   V(microtask_queue_ctor_template, v8::FunctionTemplate)                       \
@@ -1133,7 +1135,7 @@ class Environment : public MemoryRetainer {
   inline void add_refs(int64_t diff);
 
   inline bool has_run_bootstrapping_code() const;
-  inline void set_has_run_bootstrapping_code(bool has_run_bootstrapping_code);
+  inline void DoneBootstrapping();
 
   inline bool has_serialized_options() const;
   inline void set_has_serialized_options(bool has_serialized_options);
@@ -1319,6 +1321,7 @@ class Environment : public MemoryRetainer {
   // no memory leaks caused by BaseObjects staying alive longer than expected
   // (in particular, no circular BaseObjectPtr references).
   inline void modify_base_object_count(int64_t delta);
+  inline int64_t base_object_created_after_bootstrap() const;
   inline int64_t base_object_count() const;
 
   inline int32_t stack_trace_limit() const { return 10; }
@@ -1513,7 +1516,7 @@ class Environment : public MemoryRetainer {
   bool started_cleanup_ = false;
 
   int64_t base_object_count_ = 0;
-  int64_t initial_base_object_count_ = 0;
+  int64_t base_object_created_by_bootstrap_ = 0;
   std::atomic_bool is_stopping_ { false };
 
   std::unordered_set<int> unmanaged_fds_;

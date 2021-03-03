@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2020 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2021 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  * Copyright 2005 Nokia. All rights reserved.
  *
@@ -909,14 +909,6 @@ int ossl_statem_client_construct_message(SSL *s, WPACKET *pkt,
         break;
 
     case TLS_ST_CW_END_OF_EARLY_DATA:
-#ifndef OPENSSL_NO_QUIC
-        /* QUIC does not send EndOfEarlyData, draft-ietf-quic-tls-24 S8.3 */
-        if (s->quic_method != NULL) {
-            *confunc = NULL;
-            *mt = SSL3_MT_DUMMY;
-            break;
-        }
-#endif
         *confunc = tls_construct_end_of_early_data;
         *mt = SSL3_MT_END_OF_EARLY_DATA;
         break;
@@ -1968,7 +1960,6 @@ MSG_PROCESS_RETURN tls_process_server_certificate(SSL *s, PACKET *pkt)
             goto err;
         }
     }
-    s->session->peer_type = certidx;
 
     X509_free(s->session->peer);
     X509_up_ref(x);

@@ -173,7 +173,7 @@ changes:
     description: A deprecation code has been assigned.
   - version: v0.11.14
     description: Runtime deprecation.
-  - version: v0.5.11
+  - version: v0.5.10
     description: Documentation-only deprecation.
 -->
 
@@ -2480,7 +2480,7 @@ called, not whether `'finish'` has been emitted and the underlying data
 is flushed.
 
 Use [`response.writableFinished`][] or [`response.writableEnded`][]
-accordingly instead to avoid the ambigiuty.
+accordingly instead to avoid the ambiguity.
 
 To maintain existing behaviour `response.finished` should be replaced with
 `response.writableEnded`.
@@ -2681,7 +2681,7 @@ Use `fs.rm(path, { recursive: true, force: true })` instead.
 <!-- YAML
 changes:
   - version: v15.1.0
-    pr-url: https://github.com/nodejs/node/pull/35746
+    pr-url: https://github.com/nodejs/node/pull/35747
     description: Runtime deprecation.
   - version: v14.13.0
     pr-url: https://github.com/nodejs/node/pull/34718
@@ -2699,10 +2699,28 @@ resolutions not in `node_modules`. This means there will not be deprecation
 warnings for `"exports"` in dependencies. With `--pending-deprecation`, a
 runtime warning results no matter where the `"exports"` usage occurs.
 
+### DEP0151: Main index lookup and extension searching
+<!-- YAML
+changes:
+  - version: v15.8.0
+    pr-url: https://github.com/nodejs/node/pull/36918
+    description: Documentation-only deprecation
+                 with `--pending-deprecation` support.
+-->
+
+Type: Documentation-only (supports [`--pending-deprecation`][])
+
+Previously, `index.js` and extension searching lookups would apply to
+`import 'pkg'` main entry point resolution, even when resolving ES modules.
+
+With this deprecation, all ES module main entry point resolutions require
+an explicit [`"exports"` or `"main"` entry][] with the exact file extension.
+
 [Legacy URL API]: url.md#url_legacy_url_api
 [NIST SP 800-38D]: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf
 [RFC 6066]: https://tools.ietf.org/html/rfc6066#section-3
 [WHATWG URL API]: url.md#url_the_whatwg_url_api
+[`"exports"` or `"main"` entry]: packages.md#packages_main_entry_point_export
 [`--pending-deprecation`]: cli.md#cli_pending_deprecation
 [`--throw-deprecation`]: cli.md#cli_throw_deprecation
 [`--unhandled-rejections`]: cli.md#cli_unhandled_rejections_mode
@@ -2823,7 +2841,7 @@ runtime warning results no matter where the `"exports"` usage occurs.
 [from_string_encoding]: buffer.md#buffer_static_method_buffer_from_string_encoding
 [legacy `urlObject`]: url.md#url_legacy_urlobject
 [static methods of `crypto.Certificate()`]: crypto.md#crypto_class_certificate
-[subpath exports]: #packages_subpath_exports
-[subpath folder mappings]: #packages_subpath_folder_mappings
-[subpath imports]: #packages_subpath_imports
-[subpath patterns]: #packages_subpath_patterns
+[subpath exports]: packages.md#packages_subpath_exports
+[subpath folder mappings]: packages.md#packages_subpath_folder_mappings
+[subpath imports]: packages.md#packages_subpath_imports
+[subpath patterns]: packages.md#packages_subpath_patterns

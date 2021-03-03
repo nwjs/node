@@ -15,20 +15,15 @@ tmpdir.refresh();
 
 const fileInfo = [
   { name: path.join(tmpdir.path, `${prefix}-1K.txt`),
-    len: 1024,
-  },
+    len: 1024 },
   { name: path.join(tmpdir.path, `${prefix}-64K.txt`),
-    len: 64 * 1024,
-  },
+    len: 64 * 1024 },
   { name: path.join(tmpdir.path, `${prefix}-64KLessOne.txt`),
-    len: (64 * 1024) - 1,
-  },
+    len: (64 * 1024) - 1 },
   { name: path.join(tmpdir.path, `${prefix}-1M.txt`),
-    len: 1 * 1024 * 1024,
-  },
+    len: 1 * 1024 * 1024 },
   { name: path.join(tmpdir.path, `${prefix}-1MPlusOne.txt`),
-    len: (1 * 1024 * 1024) + 1,
-  },
+    len: (1 * 1024 * 1024) + 1 },
 ];
 
 // Populate each fileInfo (and file) with unique fill.
@@ -74,4 +69,12 @@ for (const e of fileInfo) {
     assert.strictEqual(err.name, 'AbortError');
   }));
   process.nextTick(() => controller.abort());
+}
+{
+  // Verify that if something different than Abortcontroller.signal
+  // is passed, ERR_INVALID_ARG_TYPE is thrown
+  assert.throws(() => {
+    const callback = common.mustNotCall(() => {});
+    fs.readFile(fileInfo[0].name, { signal: 'hello' }, callback);
+  }, { code: 'ERR_INVALID_ARG_TYPE', name: 'TypeError' });
 }

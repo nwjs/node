@@ -368,7 +368,7 @@ inline T* Environment::GetBindingData(v8::Local<v8::Context> context) {
       context->GetAlignedPointerFromEmbedderData(
           ContextEmbedderIndex::kBindingListIndex));
   DCHECK_NOT_NULL(map);
-  auto it = map->find(T::binding_data_name);
+  auto it = map->find(T::type_name);
   if (UNLIKELY(it == map->end())) return nullptr;
   T* result = static_cast<T*>(it->second.get());
   DCHECK_NOT_NULL(result);
@@ -387,7 +387,7 @@ inline T* Environment::AddBindingData(
       context->GetAlignedPointerFromEmbedderData(
           ContextEmbedderIndex::kBindingListIndex));
   DCHECK_NOT_NULL(map);
-  auto result = map->emplace(T::binding_data_name, item);
+  auto result = map->emplace(T::type_name, item);
   CHECK(result.second);
   DCHECK_EQ(GetBindingData<T>(context), item.get());
   return item.get();
@@ -794,8 +794,12 @@ inline bool Environment::has_run_bootstrapping_code() const {
   return has_run_bootstrapping_code_;
 }
 
-inline void Environment::set_has_run_bootstrapping_code(bool value) {
-  has_run_bootstrapping_code_ = value;
+inline void Environment::DoneBootstrapping() {
+  has_run_bootstrapping_code_ = true;
+  // This adjusts the return value of base_object_created_after_bootstrap() so
+  // that tests that check the count do not have to account for internally
+  // created BaseObjects.
+  base_object_created_by_bootstrap_ = base_object_count_;
 }
 
 inline bool Environment::has_serialized_options() const {
@@ -1099,8 +1103,12 @@ void Environment::modify_base_object_count(int64_t delta) {
   base_object_count_ += delta;
 }
 
+int64_t Environment::base_object_created_after_bootstrap() const {
+  return base_object_count_ - base_object_created_by_bootstrap_;
+}
+
 int64_t Environment::base_object_count() const {
-  return base_object_count_ - initial_base_object_count_;
+  return base_object_count_;
 }
 
 void Environment::set_main_utf16(std::unique_ptr<v8::String::Value> str) {

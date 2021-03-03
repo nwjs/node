@@ -8,7 +8,7 @@ If you can reproduce a test failure, search for it in the
 [Node.js issue tracker](https://github.com/nodejs/node/issues) or
 file a new issue.
 
-## Table of Contents
+## Table of contents
 
 * [Supported platforms](#supported-platforms)
   * [Input](#input)
@@ -218,10 +218,9 @@ Supported platforms and toolchains change with each major version of Node.js.
 This document is only valid for the current major version of Node.js.
 Consult previous versions of this document for older versions of Node.js:
 
-* [Node.js 13](https://github.com/nodejs/node/blob/v13.x/BUILDING.md)
+* [Node.js 14](https://github.com/nodejs/node/blob/v14.x/BUILDING.md)
 * [Node.js 12](https://github.com/nodejs/node/blob/v12.x/BUILDING.md)
 * [Node.js 10](https://github.com/nodejs/node/blob/v10.x/BUILDING.md)
-* [Node.js 8](https://github.com/nodejs/node/blob/v8.x/BUILDING.md)
 
 ## Building Node.js on supported platforms
 
@@ -310,7 +309,7 @@ To install this version of Node.js into a system directory:
 [sudo] make install
 ```
 
-#### Running Tests
+#### Running tests
 
 To verify the build:
 
@@ -380,7 +379,7 @@ You can use
 [node-code-ide-configs](https://github.com/nodejs/node-code-ide-configs)
 to run/debug tests, if your IDE configs are present.
 
-#### Running Coverage
+#### Running coverage
 
 It's good practice to ensure any code you add or change is covered by tests.
 You can do so by running the test suite with coverage enabled:

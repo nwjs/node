@@ -1,6 +1,9 @@
 # Modules: `module` API
 
-<!--introduced_in=v0.3.7-->
+<!--introduced_in=v12.20.0-->
+<!-- YAML
+added: v0.3.7
+-->
 
 ## The `Module` object
 
@@ -75,14 +78,6 @@ const requireUtil = createRequireFromPath('../src/utils/');
 // Require `../src/utils/some-tool`
 requireUtil('./some-tool');
 ```
-
-### `module.isPreloading`
-<!-- YAML
-added: v15.4.0
--->
-
-* Type: {boolean} `true` if the module is running during the Node.js preload
-  phase.
 
 ### `module.syncBuiltinESMExports()`
 <!-- YAML

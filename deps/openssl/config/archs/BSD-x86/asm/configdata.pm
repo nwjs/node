@@ -60,9 +60,9 @@ our %config = (
   openssl_thread_defines => [ "OPENSSL_THREADS" ],
   openssldir => "",
   options => "enable-ssl-trace no-afalgeng no-asan no-buildtest-c++ no-comp no-crypto-mdebug no-crypto-mdebug-backtrace no-dynamic-engine no-ec_nistp_64_gcc_128 no-egd no-external-tests no-fuzz-afl no-fuzz-libfuzzer no-heartbeats no-md2 no-msan no-rc5 no-sctp no-shared no-ssl3 no-ssl3-method no-ubsan no-unit-test no-weak-ssl-ciphers no-zlib no-zlib-dynamic",
-  perl_archname => "x86_64-linux-gnu-thread-multi",
+  perl_archname => "x86_64-linux-thread-multi",
   perl_cmd => "/usr/bin/perl",
-  perl_version => "5.30.0",
+  perl_version => "5.30.3",
   perlargv => [ "no-comp", "no-shared", "no-afalgeng", "enable-ssl-trace", "BSD-x86" ],
   perlenv => {
       "AR" => undef,
@@ -111,8 +111,8 @@ our %config = (
   sourcedir => ".",
   target => "BSD-x86",
   tdirs => [ "ossl_shim" ],
-  version => "1.1.1i",
-  version_num => "0x1010109fL",
+  version => "1.1.1j",
+  version_num => "0x101010afL",
 );
 
 our %target = (
@@ -268,7 +268,6 @@ our @disablables = (
   "poly1305",
   "posix-io",
   "psk",
-  "quic",
   "rc2",
   "rc4",
   "rc5",
@@ -3169,7 +3168,6 @@ our %unified_info = (
                             "ssl/ssl_init.o",
                             "ssl/ssl_lib.o",
                             "ssl/ssl_mcnf.o",
-                            "ssl/ssl_quic.o",
                             "ssl/ssl_rsa.o",
                             "ssl/ssl_sess.o",
                             "ssl/ssl_stat.o",
@@ -3220,7 +3218,6 @@ our %unified_info = (
                             "ssl/statem/statem_clnt.o",
                             "ssl/statem/statem_dtls.o",
                             "ssl/statem/statem_lib.o",
-                            "ssl/statem/statem_quic.o",
                             "ssl/statem/statem_srvr.o",
                         ],
                     "products" =>
@@ -8536,11 +8533,6 @@ our %unified_info = (
                     ".",
                     "include",
                 ],
-            "ssl/ssl_quic.o" =>
-                [
-                    ".",
-                    "include",
-                ],
             "ssl/ssl_rsa.o" =>
                 [
                     ".",
@@ -8602,11 +8594,6 @@ our %unified_info = (
                     "include",
                 ],
             "ssl/statem/statem_lib.o" =>
-                [
-                    ".",
-                    "include",
-                ],
-            "ssl/statem/statem_quic.o" =>
                 [
                     ".",
                     "include",
@@ -9011,7 +8998,6 @@ our %unified_info = (
             "test/cmactest.o" =>
                 [
                     "include",
-                    "apps/include",
                 ],
             "test/cmsapitest.o" =>
                 [
@@ -13391,7 +13377,6 @@ our %unified_info = (
                     "ssl/ssl_init.o",
                     "ssl/ssl_lib.o",
                     "ssl/ssl_mcnf.o",
-                    "ssl/ssl_quic.o",
                     "ssl/ssl_rsa.o",
                     "ssl/ssl_sess.o",
                     "ssl/ssl_stat.o",
@@ -13405,7 +13390,6 @@ our %unified_info = (
                     "ssl/statem/statem_clnt.o",
                     "ssl/statem/statem_dtls.o",
                     "ssl/statem/statem_lib.o",
-                    "ssl/statem/statem_quic.o",
                     "ssl/statem/statem_srvr.o",
                     "ssl/t1_enc.o",
                     "ssl/t1_lib.o",
@@ -13513,10 +13497,6 @@ our %unified_info = (
                 [
                     "ssl/ssl_mcnf.c",
                 ],
-            "ssl/ssl_quic.o" =>
-                [
-                    "ssl/ssl_quic.c",
-                ],
             "ssl/ssl_rsa.o" =>
                 [
                     "ssl/ssl_rsa.c",
@@ -13568,10 +13548,6 @@ our %unified_info = (
             "ssl/statem/statem_lib.o" =>
                 [
                     "ssl/statem/statem_lib.c",
-                ],
-            "ssl/statem/statem_quic.o" =>
-                [
-                    "ssl/statem/statem_quic.c",
                 ],
             "ssl/statem/statem_srvr.o" =>
                 [
@@ -15305,19 +15281,22 @@ _____
         }
         print "\nEnabled features:\n\n";
         foreach my $what (@disablables) {
-            print "    $what\n" unless $disabled{$what};
+            print "    $what\n"
+                unless grep { $_ =~ /^${what}$/ } keys %disabled;
         }
         print "\nDisabled features:\n\n";
         foreach my $what (@disablables) {
-            if ($disabled{$what}) {
-                print "    $what", ' ' x ($longest - length($what) + 1),
-                    "[$disabled{$what}]", ' ' x ($longest2 - length($disabled{$what}) + 1);
-                print $disabled_info{$what}->{macro}
-                    if $disabled_info{$what}->{macro};
+            my @what2 = grep { $_ =~ /^${what}$/ } keys %disabled;
+            my $what3 = $what2[0];
+            if ($what3) {
+                print "    $what3", ' ' x ($longest - length($what3) + 1),
+                    "[$disabled{$what3}]", ' ' x ($longest2 - length($disabled{$what3}) + 1);
+                print $disabled_info{$what3}->{macro}
+                    if $disabled_info{$what3}->{macro};
                 print ' (skip ',
-                    join(', ', @{$disabled_info{$what}->{skipped}}),
+                    join(', ', @{$disabled_info{$what3}->{skipped}}),
                     ')'
-                    if $disabled_info{$what}->{skipped};
+                    if $disabled_info{$what3}->{skipped};
                 print "\n";
             }
         }

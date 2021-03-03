@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2020 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2016-2021 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -56,10 +56,6 @@ static int final_sig_algs(SSL *s, unsigned int context, int sent);
 static int final_early_data(SSL *s, unsigned int context, int sent);
 static int final_maxfragmentlen(SSL *s, unsigned int context, int sent);
 static int init_post_handshake_auth(SSL *s, unsigned int context);
-#ifndef OPENSSL_NO_QUIC
-static int init_quic_transport_params(SSL *s, unsigned int context);
-static int final_quic_transport_params(SSL *s, unsigned int context, int sent);
-#endif
 
 /* Structure to define a built-in extension */
 typedef struct extensions_definition_st {
@@ -377,19 +373,6 @@ static const EXTENSION_DEFINITION ext_defs[] = {
         tls_construct_certificate_authorities,
         tls_construct_certificate_authorities, NULL,
     },
-#ifndef OPENSSL_NO_QUIC
-    {
-        TLSEXT_TYPE_quic_transport_parameters,
-        SSL_EXT_CLIENT_HELLO | SSL_EXT_TLS1_3_ENCRYPTED_EXTENSIONS
-        | SSL_EXT_TLS_IMPLEMENTATION_ONLY | SSL_EXT_TLS1_3_ONLY,
-        init_quic_transport_params,
-        tls_parse_ctos_quic_transport_params, tls_parse_stoc_quic_transport_params,
-        tls_construct_stoc_quic_transport_params, tls_construct_ctos_quic_transport_params,
-        final_quic_transport_params,
-    },
-#else
-    INVALID_EXTENSION,
-#endif
     {
         /* Must be immediately before pre_shared_key */
         TLSEXT_TYPE_padding,
@@ -983,7 +966,8 @@ static int final_server_name(SSL *s, unsigned int context, int sent)
      * context, to avoid the confusing situation of having sess_accept_good
      * exceed sess_accept (zero) for the new context.
      */
-    if (SSL_IS_FIRST_HANDSHAKE(s) && s->ctx != s->session_ctx) {
+    if (SSL_IS_FIRST_HANDSHAKE(s) && s->ctx != s->session_ctx
+		    && s->hello_retry_request == SSL_HRR_NONE) {
         tsan_counter(&s->ctx->stats.sess_accept);
         tsan_decr(&s->session_ctx->stats.sess_accept);
     }
@@ -1730,15 +1714,3 @@ static int init_post_handshake_auth(SSL *s, unsigned int context)
 
     return 1;
 }
-
-#ifndef OPENSSL_NO_QUIC
-static int init_quic_transport_params(SSL *s, unsigned int context)
-{
-    return 1;
-}
-
-static int final_quic_transport_params(SSL *s, unsigned int context, int sent)
-{
-    return 1;
-}
-#endif

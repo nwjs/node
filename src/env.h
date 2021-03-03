@@ -253,6 +253,7 @@ constexpr size_t kFsStatsBufferLength =
   V(fd_string, "fd")                                                           \
   V(fields_string, "fields")                                                   \
   V(file_string, "file")                                                       \
+  V(filename_string, "filename")                                               \
   V(fingerprint256_string, "fingerprint256")                                   \
   V(fingerprint_string, "fingerprint")                                         \
   V(flags_string, "flags")                                                     \
@@ -280,6 +281,7 @@ constexpr size_t kFsStatsBufferLength =
   V(isclosing_string, "isClosing")                                             \
   V(issuer_string, "issuer")                                                   \
   V(issuercert_string, "issuerCertificate")                                    \
+  V(jwk_crv_string, "crv")                                                     \
   V(jwk_d_string, "d")                                                         \
   V(jwk_dp_string, "dp")                                                       \
   V(jwk_dq_string, "dq")                                                       \
@@ -294,6 +296,7 @@ constexpr size_t kFsStatsBufferLength =
   V(jwk_kty_string, "kty")                                                     \
   V(jwk_n_string, "n")                                                         \
   V(jwk_oct_string, "oct")                                                     \
+  V(jwk_okp_string, "OKP")                                                     \
   V(jwk_rsa_string, "RSA")                                                     \
   V(jwk_x_string, "x")                                                         \
   V(jwk_y_string, "y")                                                         \
@@ -364,7 +367,6 @@ constexpr size_t kFsStatsBufferLength =
   V(pubkey_string, "pubkey")                                                   \
   V(public_exponent_string, "publicExponent")                                  \
   V(query_string, "query")                                                     \
-  V(http3_alpn_string, "h3-29")                                                \
   V(rate_string, "rate")                                                       \
   V(raw_string, "raw")                                                         \
   V(read_host_object_string, "_readHostObject")                                \
@@ -433,21 +435,12 @@ constexpr size_t kFsStatsBufferLength =
   V(x_forwarded_string, "x-forwarded-for")                                     \
   V(zero_return_string, "ZERO_RETURN")
 
-#if defined(NODE_EXPERIMENTAL_QUIC) && NODE_EXPERIMENTAL_QUIC
-# define QUIC_ENVIRONMENT_STRONG_PERSISTENT_TEMPLATES(V)                       \
-  V(quicclientsession_instance_template, v8::ObjectTemplate)                   \
-  V(quicserversession_instance_template, v8::ObjectTemplate)                   \
-  V(quicserverstream_instance_template, v8::ObjectTemplate)                    \
-  V(quicsocketsendwrap_instance_template, v8::ObjectTemplate)
-#else
-# define QUIC_ENVIRONMENT_STRONG_PERSISTENT_TEMPLATES(V)
-#endif
-
 #define ENVIRONMENT_STRONG_PERSISTENT_TEMPLATES(V)                             \
   V(async_wrap_ctor_template, v8::FunctionTemplate)                            \
   V(async_wrap_object_ctor_template, v8::FunctionTemplate)                     \
   V(base_object_ctor_template, v8::FunctionTemplate)                           \
   V(binding_data_ctor_template, v8::FunctionTemplate)                          \
+  V(blob_constructor_template, v8::FunctionTemplate)                           \
   V(blocklist_instance_template, v8::ObjectTemplate)                           \
   V(compiled_fn_entry_template, v8::ObjectTemplate)                            \
   V(dir_instance_template, v8::ObjectTemplate)                                 \
@@ -456,11 +449,12 @@ constexpr size_t kFsStatsBufferLength =
   V(filehandlereadwrap_template, v8::ObjectTemplate)                           \
   V(fsreqpromise_constructor_template, v8::ObjectTemplate)                     \
   V(handle_wrap_ctor_template, v8::FunctionTemplate)                           \
-  V(histogram_instance_template, v8::ObjectTemplate)                           \
+  V(histogram_ctor_template, v8::FunctionTemplate)                             \
   V(http2settings_constructor_template, v8::ObjectTemplate)                    \
   V(http2stream_constructor_template, v8::ObjectTemplate)                      \
   V(http2ping_constructor_template, v8::ObjectTemplate)                        \
   V(i18n_converter_template, v8::ObjectTemplate)                               \
+  V(intervalhistogram_constructor_template, v8::FunctionTemplate)              \
   V(libuv_stream_wrap_ctor_template, v8::FunctionTemplate)                     \
   V(message_port_constructor_template, v8::FunctionTemplate)                   \
   V(microtask_queue_ctor_template, v8::FunctionTemplate)                       \
@@ -477,34 +471,7 @@ constexpr size_t kFsStatsBufferLength =
   V(tty_constructor_template, v8::FunctionTemplate)                            \
   V(write_wrap_template, v8::ObjectTemplate)                                   \
   V(worker_heap_snapshot_taker_template, v8::ObjectTemplate)                   \
-  V(x509_constructor_template, v8::FunctionTemplate)                           \
-  QUIC_ENVIRONMENT_STRONG_PERSISTENT_TEMPLATES(V)
-
-#if defined(NODE_EXPERIMENTAL_QUIC) && NODE_EXPERIMENTAL_QUIC
-# define QUIC_ENVIRONMENT_STRONG_PERSISTENT_VALUES(V)                          \
-  V(quic_on_socket_close_function, v8::Function)                               \
-  V(quic_on_socket_server_busy_function, v8::Function)                         \
-  V(quic_on_session_cert_function, v8::Function)                               \
-  V(quic_on_session_client_hello_function, v8::Function)                       \
-  V(quic_on_session_close_function, v8::Function)                              \
-  V(quic_on_session_handshake_function, v8::Function)                          \
-  V(quic_on_session_keylog_function, v8::Function)                             \
-  V(quic_on_session_path_validation_function, v8::Function)                    \
-  V(quic_on_session_use_preferred_address_function, v8::Function)              \
-  V(quic_on_session_qlog_function, v8::Function)                               \
-  V(quic_on_session_ready_function, v8::Function)                              \
-  V(quic_on_session_status_function, v8::Function)                             \
-  V(quic_on_session_ticket_function, v8::Function)                             \
-  V(quic_on_session_version_negotiation_function, v8::Function)                \
-  V(quic_on_stream_close_function, v8::Function)                               \
-  V(quic_on_stream_error_function, v8::Function)                               \
-  V(quic_on_stream_ready_function, v8::Function)                               \
-  V(quic_on_stream_reset_function, v8::Function)                               \
-  V(quic_on_stream_headers_function, v8::Function)                             \
-  V(quic_on_stream_blocked_function, v8::Function)
-#else
-# define QUIC_ENVIRONMENT_STRONG_PERSISTENT_VALUES(V)
-#endif
+  V(x509_constructor_template, v8::FunctionTemplate)
 
 #define ENVIRONMENT_STRONG_PERSISTENT_VALUES(V)                                \
   V(async_hooks_after_function, v8::Function)                                  \
@@ -548,6 +515,10 @@ constexpr size_t kFsStatsBufferLength =
   V(prepare_stack_trace_callback, v8::Function)                                \
   V(process_object, v8::Object)                                                \
   V(primordials, v8::Object)                                                   \
+  V(primordials_safe_map_prototype_object, v8::Object)                         \
+  V(primordials_safe_set_prototype_object, v8::Object)                         \
+  V(primordials_safe_weak_map_prototype_object, v8::Object)                    \
+  V(primordials_safe_weak_set_prototype_object, v8::Object)                    \
   V(promise_hook_handler, v8::Function)                                        \
   V(promise_reject_callback, v8::Function)                                     \
   V(script_data_constructor_function, v8::Function)                            \
@@ -557,8 +528,7 @@ constexpr size_t kFsStatsBufferLength =
   V(tls_wrap_constructor_function, v8::Function)                               \
   V(trace_category_state_function, v8::Function)                               \
   V(udp_constructor_function, v8::Function)                                    \
-  V(url_constructor_function, v8::Function)                                    \
-  QUIC_ENVIRONMENT_STRONG_PERSISTENT_VALUES(V)
+  V(url_constructor_function, v8::Function)
 
 class Environment;
 struct AllocatedBuffer;
@@ -1165,7 +1135,7 @@ class Environment : public MemoryRetainer {
   inline void add_refs(int64_t diff);
 
   inline bool has_run_bootstrapping_code() const;
-  inline void set_has_run_bootstrapping_code(bool has_run_bootstrapping_code);
+  inline void DoneBootstrapping();
 
   inline bool has_serialized_options() const;
   inline void set_has_serialized_options(bool has_serialized_options);
@@ -1351,6 +1321,7 @@ class Environment : public MemoryRetainer {
   // no memory leaks caused by BaseObjects staying alive longer than expected
   // (in particular, no circular BaseObjectPtr references).
   inline void modify_base_object_count(int64_t delta);
+  inline int64_t base_object_created_after_bootstrap() const;
   inline int64_t base_object_count() const;
 
   inline int32_t stack_trace_limit() const { return 10; }
@@ -1545,7 +1516,7 @@ class Environment : public MemoryRetainer {
   bool started_cleanup_ = false;
 
   int64_t base_object_count_ = 0;
-  int64_t initial_base_object_count_ = 0;
+  int64_t base_object_created_by_bootstrap_ = 0;
   std::atomic_bool is_stopping_ { false };
 
   std::unordered_set<int> unmanaged_fds_;

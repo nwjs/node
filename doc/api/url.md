@@ -566,7 +566,7 @@ with [`JSON.stringify()`][].
 ```js
 const myURLs = [
   new URL('https://www.example.com'),
-  new URL('https://test.example.org')
+  new URL('https://test.example.org'),
 ];
 console.log(JSON.stringify(myURLs));
 // Prints ["https://www.example.com/","https://test.example.org/"]
@@ -703,7 +703,7 @@ let params;
 params = new URLSearchParams([
   ['user', 'abc'],
   ['query', 'first'],
-  ['query', 'second']
+  ['query', 'second'],
 ]);
 console.log(params.toString());
 // Prints 'user=abc&query=first&query=second'
@@ -728,7 +728,7 @@ console.log(params.toString());
 
 // Each key-value pair must have exactly two elements
 new URLSearchParams([
-  ['user', 'abc', 'error']
+  ['user', 'abc', 'error'],
 ]);
 // Throws TypeError [ERR_INVALID_TUPLE]:
 //        Each query pair must be an iterable [name, value] tuple
@@ -1360,6 +1360,24 @@ const url = require('url');
 url.resolve('/one/two/three', 'four');         // '/one/two/four'
 url.resolve('http://example.com/', '/one');    // 'http://example.com/one'
 url.resolve('http://example.com/one', '/two'); // 'http://example.com/two'
+```
+
+You can achieve the same result using the WHATWG URL API:
+
+```js
+function resolve(from, to) {
+  const resolvedUrl = new URL(to, new URL(from, 'resolve://'));
+  if (resolvedUrl.protocol === 'resolve:') {
+    // `from` is a relative URL.
+    const { pathname, search, hash } = resolvedUrl;
+    return pathname + search + hash;
+  }
+  return resolvedUrl.toString();
+}
+
+resolve('/one/two/three', 'four');         // '/one/two/four'
+resolve('http://example.com/', '/one');    // 'http://example.com/one'
+resolve('http://example.com/one', '/two'); // 'http://example.com/two'
 ```
 
 <a id="whatwg-percent-encoding"></a>

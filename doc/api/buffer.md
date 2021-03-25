@@ -307,7 +307,7 @@ added: v15.7.0
   any mix of such objects, that will be stored within the `Blob`.
 * `options` {Object}
   * `encoding` {string} The character encoding to use for string sources.
-    **Default**: `'utf8'`.
+    **Default:** `'utf8'`.
   * `type` {string} The Blob content-type. The intent is for `type` to convey
     the MIME media type of the data, however no validation of the type format
     is performed.
@@ -2647,7 +2647,6 @@ buf.writeFloatBE(0xcafebabe, 0);
 
 console.log(buf);
 // Prints: <Buffer 4f 4a fe bb>
-
 ```
 
 ### `buf.writeFloatLE(value[, offset])`
@@ -2856,7 +2855,6 @@ buf.writeIntBE(0x1234567890ab, 0, 6);
 
 console.log(buf);
 // Prints: <Buffer 12 34 56 78 90 ab>
-
 ```
 
 ### `buf.writeIntLE(value, offset, byteLength)`

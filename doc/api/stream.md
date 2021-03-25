@@ -1578,6 +1578,9 @@ further errors except from `_destroy()` may be emitted as `'error'`.
 <!-- YAML
 added: v10.0.0
 changes:
+  - version: v15.11.0
+    pr-url: https://github.com/nodejs/node/pull/37354
+    description: The `signal` option was added.
   - version: v14.0.0
     pr-url: https://github.com/nodejs/node/pull/32158
     description: The `finished(stream, cb)` will wait for the `'close'` event
@@ -1597,13 +1600,17 @@ changes:
 * `stream` {Stream} A readable and/or writable stream.
 * `options` {Object}
   * `error` {boolean} If set to `false`, then a call to `emit('error', err)` is
-    not treated as finished. **Default**: `true`.
+    not treated as finished. **Default:** `true`.
   * `readable` {boolean} When set to `false`, the callback will be called when
     the stream ends even though the stream might still be readable.
-    **Default**: `true`.
+    **Default:** `true`.
   * `writable` {boolean} When set to `false`, the callback will be called when
     the stream ends even though the stream might still be writable.
-    **Default**: `true`.
+    **Default:** `true`.
+  * `signal` {AbortSignal} allows aborting the wait for the stream finish. The
+    underlying stream will *not* be aborted if the signal is aborted. The
+    callback will get called with an `AbortError`. All registered
+    listeners added by this function will also be removed.
 * `callback` {Function} A callback function that takes an optional error
   argument.
 * Returns: {Function} A cleanup function which removes all registered
@@ -1719,7 +1726,11 @@ pipeline(
 );
 ```
 
-The `pipeline` API provides promise version:
+The `pipeline` API provides a promise version, which can also
+receive an options argument as the last parameter with a
+`signal` {AbortSignal} property. When the signal is aborted,
+`destroy` will be called on the underlying pipeline, with an
+`AbortError`.
 
 ```js
 const { pipeline } = require('stream/promises');
@@ -1734,6 +1745,30 @@ async function run() {
 }
 
 run().catch(console.error);
+```
+
+To use an `AbortSignal`, pass it inside an options object,
+as the last argument:
+
+```js
+const { pipeline } = require('stream/promises');
+
+async function run() {
+  const ac = new AbortController();
+  const options = {
+    signal: ac.signal,
+  };
+
+  setTimeout(() => ac.abort(), 1);
+  await pipeline(
+    fs.createReadStream('archive.tar'),
+    zlib.createGzip(),
+    fs.createWriteStream('archive.tar.gz'),
+    options,
+  );
+}
+
+run().catch(console.error); // AbortError
 ```
 
 The `pipeline` API also supports async generators:
@@ -2055,7 +2090,6 @@ const myWritable = new Writable({
 });
 // Later, abort the operation closing the stream
 controller.abort();
-
 ```
 #### `writable._construct(callback)`
 <!-- YAML

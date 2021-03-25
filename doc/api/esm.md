@@ -431,13 +431,13 @@ import { readFile } from 'fs/promises';
 const json = JSON.parse(await readFile(new URL('./dat.json', import.meta.url)));
 ```
 
-Alterantively `module.createRequire()` can be used.
+Alternatively `module.createRequire()` can be used.
 
 #### No Native Module Loading
 
 Native modules are not currently supported with ES module imports.
 
-The can instead be loaded with [`module.createRequire()`][] or
+They can instead be loaded with [`module.createRequire()`][] or
 [`process.dlopen`][].
 
 #### No `require.resolve`
@@ -1324,7 +1324,7 @@ success!
 [`transformSource` hook]: #esm_transformsource_source_context_defaulttransformsource
 [`string`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String
 [`util.TextDecoder`]: util.md#util_class_util_textdecoder
-[cjs-module-lexer]: https://github.com/guybedford/cjs-module-lexer/tree/1.0.0
+[cjs-module-lexer]: https://github.com/guybedford/cjs-module-lexer/tree/1.1.0
 [custom https loader]: #esm_https_loader
 [special scheme]: https://url.spec.whatwg.org/#special-scheme
 [the official standard format]: https://tc39.github.io/ecma262/#sec-modules

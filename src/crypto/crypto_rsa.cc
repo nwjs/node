@@ -371,11 +371,11 @@ Maybe<bool> ExportJWKRsaKey(
 
   // TODO(tniessen): Remove the "else" branch once we drop support for OpenSSL
   // versions older than 1.1.1e via FIPS / dynamic linking.
-  RSA* rsa;
+  const RSA* rsa;
   if (OpenSSL_version_num() >= 0x1010105fL) {
     rsa = EVP_PKEY_get0_RSA(m_pkey.get());
   } else {
-    rsa = static_cast<RSA*>(EVP_PKEY_get0(m_pkey.get()));
+    rsa = static_cast<const RSA*>(EVP_PKEY_get0(m_pkey.get()));
   }
   CHECK_NOT_NULL(rsa);
 
@@ -520,11 +520,11 @@ Maybe<bool> GetRsaKeyDetail(
 
   // TODO(tniessen): Remove the "else" branch once we drop support for OpenSSL
   // versions older than 1.1.1e via FIPS / dynamic linking.
-  RSA* rsa;
+  const RSA* rsa;
   if (OpenSSL_version_num() >= 0x1010105fL) {
     rsa = EVP_PKEY_get0_RSA(m_pkey.get());
   } else {
-    rsa = static_cast<RSA*>(EVP_PKEY_get0(m_pkey.get()));
+    rsa = static_cast<const RSA*>(EVP_PKEY_get0(m_pkey.get()));
   }
   CHECK_NOT_NULL(rsa);
 
@@ -532,10 +532,12 @@ Maybe<bool> GetRsaKeyDetail(
 
   size_t modulus_length = BN_num_bytes(n) * CHAR_BIT;
 
-  if (target->Set(
-          env->context(),
-          env->modulus_length_string(),
-          Number::New(env->isolate(), modulus_length)).IsNothing()) {
+  if (target
+          ->Set(
+              env->context(),
+              env->modulus_length_string(),
+              Number::New(env->isolate(), static_cast<double>(modulus_length)))
+          .IsNothing()) {
     return Nothing<bool>();
   }
 

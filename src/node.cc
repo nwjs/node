@@ -1188,11 +1188,15 @@ InitializationResult InitializeOncePerProcess(int argc, char** argv) {
     if (credentials::SafeGetenv("NODE_EXTRA_CA_CERTS", &extra_ca_certs))
       crypto::UseExtraCaCerts(extra_ca_certs);
   }
-#ifdef NODE_FIPS_MODE
   // In the case of FIPS builds we should make sure
   // the random source is properly initialized first.
-  OPENSSL_init();
-#endif  // NODE_FIPS_MODE
+#if OPENSSL_VERSION_MAJOR >= 3
+  if (EVP_default_properties_is_fips_enabled(nullptr)) {
+#else
+  if (FIPS_mode()) {
+    OPENSSL_init();
+#endif
+  }
   // V8 on Windows doesn't have a good source of entropy. Seed it from
   // OpenSSL's pool.
   V8::SetEntropySource(crypto::EntropySource);

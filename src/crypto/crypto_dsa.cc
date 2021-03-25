@@ -138,7 +138,7 @@ Maybe<bool> GetDsaKeyDetail(
   int type = EVP_PKEY_id(m_pkey.get());
   CHECK(type == EVP_PKEY_DSA);
 
-  DSA* dsa = EVP_PKEY_get0_DSA(m_pkey.get());
+  const DSA* dsa = EVP_PKEY_get0_DSA(m_pkey.get());
   CHECK_NOT_NULL(dsa);
 
   DSA_get0_pqg(dsa, &p, &q, nullptr);
@@ -146,14 +146,18 @@ Maybe<bool> GetDsaKeyDetail(
   size_t modulus_length = BN_num_bytes(p) * CHAR_BIT;
   size_t divisor_length = BN_num_bytes(q) * CHAR_BIT;
 
-  if (target->Set(
-          env->context(),
-          env->modulus_length_string(),
-          Number::New(env->isolate(), modulus_length)).IsNothing() ||
-      target->Set(
-          env->context(),
-          env->divisor_length_string(),
-          Number::New(env->isolate(), divisor_length)).IsNothing()) {
+  if (target
+          ->Set(
+              env->context(),
+              env->modulus_length_string(),
+              Number::New(env->isolate(), static_cast<double>(modulus_length)))
+          .IsNothing() ||
+      target
+          ->Set(
+              env->context(),
+              env->divisor_length_string(),
+              Number::New(env->isolate(), static_cast<double>(divisor_length)))
+          .IsNothing()) {
     return Nothing<bool>();
   }
 

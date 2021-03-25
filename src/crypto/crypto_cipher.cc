@@ -342,13 +342,14 @@ void CipherBase::Init(const char* cipher_type,
                       unsigned int auth_tag_len) {
   HandleScope scope(env()->isolate());
   MarkPopErrorOnReturn mark_pop_error_on_return;
-
-#ifdef NODE_FIPS_MODE
+#if OPENSSL_VERSION_MAJOR >= 3
+  if (EVP_default_properties_is_fips_enabled(nullptr)) {
+#else
   if (FIPS_mode()) {
+#endif
     return THROW_ERR_CRYPTO_UNSUPPORTED_OPERATION(env(),
         "crypto.createCipher() is not supported in FIPS mode.");
   }
-#endif  // NODE_FIPS_MODE
 
   const EVP_CIPHER* const cipher = EVP_get_cipherbyname(cipher_type);
   if (cipher == nullptr)
@@ -528,14 +529,18 @@ bool CipherBase::InitAuthenticated(
       return false;
     }
 
-#ifdef NODE_FIPS_MODE
     // TODO(tniessen) Support CCM decryption in FIPS mode
+
+#if OPENSSL_VERSION_MAJOR >= 3
+    if (mode == EVP_CIPH_CCM_MODE && kind_ == kDecipher &&
+        EVP_default_properties_is_fips_enabled(nullptr)) {
+#else
     if (mode == EVP_CIPH_CCM_MODE && kind_ == kDecipher && FIPS_mode()) {
+#endif
       THROW_ERR_CRYPTO_UNSUPPORTED_OPERATION(env(),
           "CCM encryption not supported in FIPS mode");
       return false;
     }
-#endif
 
     // Tell OpenSSL about the desired length.
     if (!EVP_CIPHER_CTX_ctrl(ctx_.get(), EVP_CTRL_AEAD_SET_TAG, auth_tag_len,

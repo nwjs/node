@@ -61,6 +61,38 @@ Worker threads inherit non-process-specific options by default. Refer to
 [`Worker constructor options`][] to know how to customize worker thread options,
 specifically `argv` and `execArgv` options.
 
+## `worker.getEnvironmentData(key)`
+<!-- YAML
+added: v15.12.0
+-->
+
+> Stability: 1 - Experimental
+
+* `key` {any} Any arbitrary, cloneable JavaScript value that can be used as a
+  {Map} key.
+* Returns: {any}
+
+Within a worker thread, `worker.getEnvironmentData()` returns a clone
+of data passed to the spawning thread's `worker.setEnvironmentData()`.
+Every new `Worker` receives its own copy of the environment data
+automatically.
+
+```js
+const {
+  Worker,
+  isMainThread,
+  setEnvironmentData,
+  getEnvironmentData,
+} = require('worker_threads');
+
+if (isMainThread) {
+  setEnvironmentData('Hello', 'World!');
+  const worker = new Worker(__filename);
+} else {
+  console.log(getEnvironmentData('Hello'));  // Prints 'World!'.
+}
+```
+
 ## `worker.isMainThread`
 <!-- YAML
 added: v10.5.0
@@ -179,9 +211,13 @@ if (isMainThread) {
 ## `worker.receiveMessageOnPort(port)`
 <!-- YAML
 added: v12.3.0
+changes:
+  - version: v15.12.0
+    pr-url: https://github.com/nodejs/node/pull/37535
+    description: The port argument can also refer to a `BroadcastChannel` now.
 -->
 
-* `port` {MessagePort}
+* `port` {MessagePort|BroadcastChannel}
 
 * Returns: {Object|undefined}
 
@@ -241,6 +277,23 @@ new Worker('process.env.SET_IN_WORKER = "foo"', { eval: true, env: SHARE_ENV })
     console.log(process.env.SET_IN_WORKER);  // Prints 'foo'.
   });
 ```
+
+## `worker.setEnvironmentData(key[, value])`
+<!--YAML
+added: v15.12.0
+-->
+
+> Stability: 1 - Experimental
+
+* `key` {any} Any arbitrary, cloneable JavaScript value that can be used as a
+  {Map} key.
+* `value` {any} Any arbitrary, cloneable JavaScript value that will be cloned
+  and passed automatically to all new `Worker` instances. If `value` is passed
+  as `undefined`, any previously set value for the `key` will be deleted.
+
+The `worker.setEnvironmentData()` API sets the content of
+`worker.getEnvironmentData()` in the current thread and all new `Worker`
+instances spawned from the current context.
 
 ## `worker.threadId`
 <!-- YAML
@@ -862,7 +915,7 @@ changes:
     [`fs.close()`][], and closes them when the Worker exits, similar to other
     resources like network sockets or file descriptors managed through
     the [`FileHandle`][] API. This option is automatically inherited by all
-    nested `Worker`s. **Default**: `true`.
+    nested `Worker`s. **Default:** `true`.
   * `transferList` {Object[]} If one or more `MessagePort`-like objects
     are passed in `workerData`, a `transferList` is required for those
     items or [`ERR_MISSING_MESSAGE_PORT_IN_TRANSFER_LIST`][] is thrown.
@@ -1126,6 +1179,17 @@ added: v10.5.0
 Calling `unref()` on a worker allows the thread to exit if this is the only
 active handle in the event system. If the worker is already `unref()`ed calling
 `unref()` again has no effect.
+
+## Notes
+
+### Launching worker threads from preload scripts
+
+Take care when launching worker threads from preload scripts (scripts loaded
+and run using the `-r` command line flag). Unless the `execArgv` option is
+explicitly set, new Worker threads automatically inherit the command line flags
+from the running process and will preload the same preload scripts as the main
+thread. If the preload script unconditionally launches a worker thread, every
+thread spawned will spawn another until the application crashes.
 
 [Addons worker support]: addons.md#addons_worker_support
 [ECMAScript module loader]: esm.md#esm_data_imports

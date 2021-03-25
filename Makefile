@@ -588,6 +588,11 @@ test-doc: doc-only lint-md ## Builds, lints, and verifies the docs.
 	fi
 	$(NODE) tools/doc/checkLinks.js .
 
+.PHONY: test-doc-ci
+test-doc-ci: doc-only
+	$(PYTHON) tools/test.py --shell $(NODE) $(TEST_CI_ARGS) $(PARALLEL_ARGS) doctool
+	$(NODE) tools/doc/checkLinks.js .
+
 test-known-issues: all
 	$(PYTHON) tools/test.py $(PARALLEL_ARGS) known_issues
 
@@ -1204,7 +1209,7 @@ lint-md: lint-js-doc | tools/.mdlintstamp
 LINT_JS_TARGETS = .eslintrc.js benchmark doc lib test tools
 
 run-lint-js = tools/node_modules/eslint/bin/eslint.js --cache \
-	--report-unused-disable-directives --ext=$(EXTENSIONS) $(LINT_JS_TARGETS)
+	--report-unused-disable-directives $(LINT_JS_TARGETS)
 run-lint-js-fix = $(run-lint-js) --fix
 
 .PHONY: lint-js-fix
@@ -1215,8 +1220,7 @@ lint-js-fix:
 .PHONY: lint-js-doc
 # Note that on the CI `lint-js-ci` is run instead.
 # Lints the JavaScript code with eslint.
-lint-js lint-js-fix: EXTENSIONS=.js,.mjs,.md
-lint-js-doc: EXTENSIONS=.md
+lint-js-doc: LINT_JS_TARGETS=doc
 lint-js lint-js-doc:
 	@if [ "$(shell $(node_use_openssl))" != "true" ]; then \
 		echo "Skipping $@ (no crypto)"; \
@@ -1229,7 +1233,7 @@ jslint: lint-js
 	$(warning Please use lint-js instead of jslint)
 
 run-lint-js-ci = tools/node_modules/eslint/bin/eslint.js \
-  --report-unused-disable-directives --ext=.js,.mjs,.md -f tap \
+  --report-unused-disable-directives -f tap \
 	-o test-eslint.tap $(LINT_JS_TARGETS)
 
 .PHONY: lint-js-ci

@@ -529,10 +529,9 @@ Maybe<bool> GetSecretKeyDetail(
   // converted to bits.
 
   size_t length = key->GetSymmetricKeySize() * CHAR_BIT;
-  return target->Set(
-      env->context(),
-      env->length_string(),
-      Number::New(env->isolate(), length));
+  return target->Set(env->context(),
+                     env->length_string(),
+                     Number::New(env->isolate(), static_cast<double>(length)));
 }
 
 Maybe<bool> GetAsymmetricKeyDetail(
@@ -560,6 +559,8 @@ ManagedEVPPKey::ManagedEVPPKey(const ManagedEVPPKey& that) {
 }
 
 ManagedEVPPKey& ManagedEVPPKey::operator=(const ManagedEVPPKey& that) {
+  Mutex::ScopedLock lock(*that.mutex_);
+
   pkey_.reset(that.get());
 
   if (pkey_)

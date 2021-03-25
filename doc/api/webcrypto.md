@@ -187,7 +187,7 @@ const { subtle } = require('crypto').webcrypto;
 async function generateAndWrapHmacKey(format = 'jwk', hash = 'SHA-512') {
   const [
     key,
-    wrappingKey
+    wrappingKey,
   ] = await Promise.all([
     subtle.generateKey({
       name: 'HMAC', hash
@@ -195,7 +195,7 @@ async function generateAndWrapHmacKey(format = 'jwk', hash = 'SHA-512') {
     subtle.generateKey({
       name: 'AES-KW',
       length: 256
-    }, true, ['wrapKey', 'unwrapKey'])
+    }, true, ['wrapKey', 'unwrapKey']),
   ]);
 
   const wrappedKey = await subtle.wrapKey(format, key, wrappingKey, 'AES-KW');
@@ -773,7 +773,7 @@ The algorithms currently supported include:
 * `'NODE-ED25519'`<sup>1</sup>
 * `'NODE-ED448'`<sup>1</sup>
 
-<sup>1</sup> Non-standadrd Node.js extension
+<sup>1</sup> Non-standard Node.js extension
 
 ### `subtle.unwrapKey(format, wrappedKey, unwrappingKey, unwrapAlgo, unwrappedKeyAlgo, extractable, keyUsages)`
 <!-- YAML
@@ -985,7 +985,7 @@ added: v15.0.0
 
 * Type: {number} The size in bits of the generated authentication tag.
   This values must be one of `32`, `64`, `96`, `104`, `112`, `120`, or
-  `128`. **Default**: `128`.
+  `128`. **Default:** `128`.
 
 ### Class: `AesImportParams`
 <!-- YAML
@@ -1697,8 +1697,8 @@ added: v15.8.0
 
 * Type: {boolean}
 
-The `public` parameter is used to specify that the key is to be interpreted
-as a public key.
+The `public` parameter is used to specify that the `'raw'` format key is to be
+interpreted as a public key. **Default:** `false`.
 
 ### `NODE-SCRYPT` Algorithm
 <!-- YAML
@@ -1746,21 +1746,21 @@ added: v15.0.0
 -->
 
 * Type: {number} The CPU/memory cost parameter. Must e a power of two
-  greater than 1. **Default** `16384`.
+  greater than 1. **Default:** `16384`.
 
 ##### `nodeScryptParams.p`
 <!-- YAML
 added: v15.0.0
 -->
 
-* Type: {number} Parallelization parameter. **Default** `1`.
+* Type: {number} Parallelization parameter. **Default:** `1`.
 
 ##### `nodeScryptParams.r`
 <!-- YAML
 added: v15.0.0
 -->
 
-* Type: {number} Block size parameter. **Default**: `8`.
+* Type: {number} Block size parameter. **Default:** `8`.
 
 ##### `nodeScryptParams.salt`
 <!-- YAML

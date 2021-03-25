@@ -33,7 +33,7 @@ $ node -p process.versions
 }
 ```
 
-### Time Zone Data
+### Time zone data
 
 Time zone data files are updated independently of ICU CLDR data.  ICU and its
 main data files do not need to be upgraded in order to apply time zone data file
@@ -44,13 +44,13 @@ and announces them on the [`tz-announce`](https://mm.icann.org/pipermail/tz-anno
 mailing list.
 
 The Unicode project takes new releases and publishes
-[updated time zone data files](https://github.com/unicode-org/icu-data/tree/master/tzdata/icunew)
+[updated time zone data files](https://github.com/unicode-org/icu-data/tree/HEAD/tzdata/icunew)
 in the icu/icu-data repository.
 
 All modern versions of Node.js use the version 44 ABI of the time zone data
 files.
 
-#### Example: Updating the ICU `.dat` File
+#### Example: updating the ICU `.dat` file
 
 * Decompress `deps/icu/source/data/in/icudt##l.dat.bz2`, where `##` is
   the ICU major version number.
@@ -68,7 +68,7 @@ files.
 * Build, test, verifying `process.versions.tz` matches the desired version.
 * Create a new minor version release.
 
-## Release Schedule
+## Release schedule
 
 ICU typically has >1 release a year, particularly coinciding with a major
 release of [Unicode][]. The current release schedule is available on the [ICU][]
@@ -237,7 +237,7 @@ You should see a message such as:
 INFO: Using floating patch "tools/icu/patches/63/source/tools/toolutil/pkg_genc.cpp" from "tools/icu"
 ```
 
-### Clean Up
+### Clean up
 
 Any patches older than the minimum version given in `tools/icu/icu_versions.json`
 ought to be deleted, because they will never be used.

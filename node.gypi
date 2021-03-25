@@ -389,9 +389,6 @@
     [ 'node_use_openssl=="true"', {
       'defines': [ 'HAVE_OPENSSL=1' ],
       'conditions': [
-        ['openssl_fips != "" or openssl_is_fips=="true"', {
-          'defines': [ 'NODE_FIPS_MODE' ],
-        }],
         [ 'node_shared_openssl=="false"', {
           'dependencies': [
             './deps/openssl/openssl.gyp:openssl',
@@ -434,7 +431,11 @@
               ],
             }],
           ],
-        }]]
+        }, {
+          # Set 1.0.0 as the API compability level to avoid the
+          # deprecation warnings when using OpenSSL 3.0.
+	  'defines': ['OPENSSL_API_COMPAT=0x10000000L'],
+	}]]
 
     }, {
       'defines': [ 'HAVE_OPENSSL=0' ]

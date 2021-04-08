@@ -544,6 +544,9 @@ the current position of the cursor down.
 <!-- YAML
 added: v0.1.98
 changes:
+  - version: v15.14.0
+    pr-url: https://github.com/nodejs/node/pull/37932
+    description: The `signal` option is supported now.
   - version: v15.8.0
     pr-url: https://github.com/nodejs/node/pull/33662
     description: The `history` option is supported now.
@@ -601,6 +604,8 @@ changes:
     **Default:** `500`.
   * `tabSize` {integer} The number of spaces a tab is equal to (minimum 1).
     **Default:** `8`.
+  * `signal` {AbortSignal} Allows closing the interface using an AbortSignal.
+    Aborting the signal will internally call `close` on the interface.
 * Returns: {readline.Interface}
 
 The `readline.createInterface()` method creates a new `readline.Interface`
@@ -627,6 +632,17 @@ If `terminal` is `true` for this instance then the `output` stream will get
 the best compatibility if it defines an `output.columns` property and emits
 a `'resize'` event on the `output` if or when the columns ever change
 ([`process.stdout`][] does this automatically when it is a TTY).
+
+When creating a `readline.Interface` using `stdin` as input, the program
+will not terminate until it receives `EOF` (<kbd>Ctrl</kbd>+<kbd>D</kbd> on
+Linux/macOS, <kbd>Ctrl</kbd>+<kbd>Z</kbd> followed by <kbd>Return</kbd> on
+Windows).
+If you want your application to exit without waiting for user input, you can
+[`unref`][] the standard input stream:
+
+```js
+process.stdin.unref();
+```
 
 ### Use of the `completer` function
 
@@ -963,3 +979,4 @@ const { createInterface } = require('readline');
 [`process.stdout`]: process.md#process_process_stdout
 [`rl.close()`]: #readline_rl_close
 [reading files]: #readline_example_read_file_stream_line_by_line
+[`unref`]: net.md#net_socket_unref

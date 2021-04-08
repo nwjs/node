@@ -521,9 +521,7 @@ const net = require('net');
   // Check pre-aborted signal
   const pipelinePromise = promisify(pipeline);
   async function run() {
-    const ac = new AbortController();
-    const { signal } = ac;
-    ac.abort();
+    const signal = AbortSignal.abort();
     async function* producer() {
       yield '5';
       await Promise.resolve();
@@ -1371,5 +1369,21 @@ const net = require('net');
   });
   pipeline(['1', '2', '3'], w, common.mustSucceed(() => {
     assert.strictEqual(res, '123');
+  }));
+}
+
+{
+  const content = 'abc';
+  pipeline(Buffer.from(content), PassThrough({ objectMode: true }),
+           common.mustSucceed(() => {}));
+
+  let res = '';
+  pipeline(Buffer.from(content), async function*(previous) {
+    for await (const val of previous) {
+      res += String.fromCharCode(val);
+      yield val;
+    }
+  }, common.mustSucceed(() => {
+    assert.strictEqual(res, content);
   }));
 }

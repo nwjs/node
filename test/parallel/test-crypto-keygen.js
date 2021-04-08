@@ -12,6 +12,7 @@ const {
   createVerify,
   generateKeyPair,
   generateKeyPairSync,
+  getCurves,
   publicEncrypt,
   privateDecrypt,
   sign,
@@ -389,20 +390,20 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
 {
   // Test async DSA key object generation.
   generateKeyPair('dsa', {
-    modulusLength: 512,
+    modulusLength: common.hasOpenSSL3 ? 2048 : 512,
     divisorLength: 256
   }, common.mustSucceed((publicKey, privateKey) => {
     assert.strictEqual(publicKey.type, 'public');
     assert.strictEqual(publicKey.asymmetricKeyType, 'dsa');
     assert.deepStrictEqual(publicKey.asymmetricKeyDetails, {
-      modulusLength: 512,
+      modulusLength: common.hasOpenSSL3 ? 2048 : 512,
       divisorLength: 256
     });
 
     assert.strictEqual(privateKey.type, 'private');
     assert.strictEqual(privateKey.asymmetricKeyType, 'dsa');
     assert.deepStrictEqual(privateKey.asymmetricKeyDetails, {
-      modulusLength: 512,
+      modulusLength: common.hasOpenSSL3 ? 2048 : 512,
       divisorLength: 256
     });
   }));
@@ -1312,5 +1313,35 @@ if (!common.hasOpenSSL3) {
         message: 'Invalid EC curve name'
       }
     );
+  }
+}
+
+{
+  // This test creates EC key pairs on curves without associated OIDs.
+  // Specifying a key encoding should not crash.
+
+  if (process.versions.openssl >= '1.1.1i') {
+    for (const namedCurve of ['Oakley-EC2N-3', 'Oakley-EC2N-4']) {
+      if (!getCurves().includes(namedCurve))
+        continue;
+
+      const params = {
+        namedCurve,
+        publicKeyEncoding: {
+          format: 'der',
+          type: 'spki'
+        }
+      };
+
+      assert.throws(() => {
+        generateKeyPairSync('ec', params);
+      }, {
+        code: 'ERR_OSSL_EC_MISSING_OID'
+      });
+
+      generateKeyPair('ec', params, common.mustCall((err) => {
+        assert.strictEqual(err.code, 'ERR_OSSL_EC_MISSING_OID');
+      }));
+    }
   }
 }

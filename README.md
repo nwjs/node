@@ -285,6 +285,8 @@ For information about the governance of the Node.js project, see
 **Danielle Adams** &lt;adamzdanielle@gmail.com&gt; (she/her)
 * [davisjam](https://github.com/davisjam) -
 **Jamie Davis** &lt;davisjam@vt.edu&gt; (he/him)
+* [DerekNonGeneric](https://github.com/DerekNonGeneric) -
+**Derek Lewis** &lt;DerekNonGeneric@inf.is&gt; (he/him)
 * [devnexen](https://github.com/devnexen) -
 **David Carlier** &lt;devnexen@gmail.com&gt;
 * [devsnek](https://github.com/devsnek) -
@@ -353,6 +355,8 @@ For information about the governance of the Node.js project, see
 **Chengzhong Wu** &lt;legendecas@gmail.com&gt; (he/him)
 * [Leko](https://github.com/Leko) -
 **Shingo Inoue** &lt;leko.noor@gmail.com&gt; (he/him)
+* [linkgoron](https://github.com/linkgoron) -
+**Nitzan Uziely** &lt;linkgoron@gmail.com&gt;
 * [lpinca](https://github.com/lpinca) -
 **Luigi Pinca** &lt;luigipinca@gmail.com&gt; (he/him)
 * [lundibundi](https://github.com/lundibundi) -
@@ -385,8 +389,6 @@ For information about the governance of the Node.js project, see
 **Filip Skokan** &lt;panva.ip@gmail.com&gt;
 * [PoojaDurgad](https://github.com/PoojaDurgad) -
 **Pooja D P** &lt;Pooja.D.P@ibm.com&gt; (she/her)
-* [psmarshall](https://github.com/psmarshall) -
-**Peter Marshall** &lt;petermarshall@chromium.org&gt; (he/him)
 * [puzpuzpuz](https://github.com/puzpuzpuz) -
 **Andrey Pechkurov** &lt;apechkurov@gmail.com&gt; (he/him)
 * [Qard](https://github.com/Qard) -
@@ -476,8 +478,6 @@ For information about the governance of the Node.js project, see
 **Claudio Rodriguez** &lt;cjrodr@yahoo.com&gt;
 * [DavidCai1993](https://github.com/DavidCai1993) -
 **David Cai** &lt;davidcai1993@yahoo.com&gt; (he/him)
-* [DerekNonGeneric](https://github.com/DerekNonGeneric) -
-**Derek Lewis** &lt;DerekNonGeneric@inf.is&gt; (he/him)
 * [digitalinfinity](https://github.com/digitalinfinity) -
 **Hitesh Kanwathirtha** &lt;digitalinfinity@gmail.com&gt; (he/him)
 * [eljefedelrodeodeljefe](https://github.com/eljefedelrodeodeljefe) -
@@ -548,6 +548,8 @@ For information about the governance of the Node.js project, see
 **Minqi Pan** &lt;pmq2001@gmail.com&gt;
 * [princejwesley](https://github.com/princejwesley) -
 **Prince John Wesley** &lt;princejohnwesley@gmail.com&gt;
+* [psmarshall](https://github.com/psmarshall) -
+**Peter Marshall** &lt;petermarshall@chromium.org&gt; (he/him)
 * [rlidwka](https://github.com/rlidwka) -
 **Alex Kocharin** &lt;alex@kocharin.ru&gt;
 * [rmg](https://github.com/rmg) -
@@ -591,6 +593,8 @@ maintaining the Node.js project.
 
 ### Triagers
 
+* [Ayase-252](https://github.com/Ayase-252) -
+**Qingyu Deng** &lt;i@ayase-lab.com&gt;
 * [marsonya](https://github.com/marsonya) -
 **Akhil Marsonya** &lt;akhil.marsonya27@gmail.com&gt; (he/him)
 * [PoojaDurgad](https://github.com/PoojaDurgad) -

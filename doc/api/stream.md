@@ -2197,7 +2197,7 @@ user programs.
 #### `writable._writev(chunks, callback)`
 
 * `chunks` {Object[]} The data to be written. The value is an array of {Object}
-  that each represent a discreet chunk of data to write. The properties of
+  that each represent a discrete chunk of data to write. The properties of
   these objects are:
   * `chunk` {Buffer|string} A buffer instance or string containing the data to
     be written. The `chunk` will be a string if the `Writable` was created with
@@ -2759,7 +2759,7 @@ const fs = require('fs');
 
 pipeline(
   fs.createReadStream('object.json')
-    .setEncoding('utf-8'),
+    .setEncoding('utf8'),
   new Transform({
     decodeStrings: false, // Accept string input rather than Buffers
     construct(callback) {

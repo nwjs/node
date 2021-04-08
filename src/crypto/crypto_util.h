@@ -159,13 +159,18 @@ void Decode(const v8::FunctionCallbackInfo<v8::Value>& args,
   }
 }
 
+#define NODE_CRYPTO_ERROR_CODES_MAP(V)                                        \
+    V(CIPHER_JOB_FAILED, "Cipher job failed")                                 \
+    V(DERIVING_BITS_FAILED, "Deriving bits failed")                           \
+    V(ENGINE_NOT_FOUND, "Engine \"%s\" was not found")                        \
+    V(INVALID_KEY_TYPE, "Invalid key type")                                   \
+    V(KEY_GENERATION_JOB_FAILED, "Key generation job failed")                 \
+    V(OK, "Ok")                                                               \
+
 enum class NodeCryptoError {
-  CIPHER_JOB_FAILED,
-  DERIVING_BITS_FAILED,
-  ENGINE_NOT_FOUND,
-  INVALID_KEY_TYPE,
-  KEY_GENERATION_JOB_FAILED,
-  OK
+#define V(CODE, DESCRIPTION) CODE,
+  NODE_CRYPTO_ERROR_CODES_MAP(V)
+#undef V
 };
 
 // Utility struct used to harvest error information from openssl's error stack
@@ -194,24 +199,10 @@ template <typename... Args>
 void CryptoErrorStore::Insert(const NodeCryptoError error, Args&&... args) {
   const char* error_string = nullptr;
   switch (error) {
-    case NodeCryptoError::CIPHER_JOB_FAILED:
-      error_string = "Cipher job failed";
-      break;
-    case NodeCryptoError::DERIVING_BITS_FAILED:
-      error_string = "Deriving bits failed";
-      break;
-    case NodeCryptoError::ENGINE_NOT_FOUND:
-      error_string = "Engine \"%s\" was not found";
-      break;
-    case NodeCryptoError::INVALID_KEY_TYPE:
-      error_string = "Invalid key type";
-      break;
-    case NodeCryptoError::KEY_GENERATION_JOB_FAILED:
-      error_string = "Key generation failed";
-      break;
-    case NodeCryptoError::OK:
-      error_string = "Ok";
-      break;
+#define V(CODE, DESCRIPTION) \
+    case NodeCryptoError::CODE: error_string = DESCRIPTION; break;
+    NODE_CRYPTO_ERROR_CODES_MAP(V)
+#undef V
   }
   errors_.emplace_back(SPrintF(error_string,
                                std::forward<Args>(args)...));
@@ -358,9 +349,27 @@ class CryptoJob : public AsyncWrap, public ThreadPoolWork {
     if (status == UV_ECANCELED) return;
     v8::HandleScope handle_scope(env->isolate());
     v8::Context::Scope context_scope(env->context());
+
+    // TODO(tniessen): Remove the exception handling logic here as soon as we
+    // can verify that no code path in ToResult will ever throw an exception.
+    v8::Local<v8::Value> exception;
     v8::Local<v8::Value> args[2];
-    if (ptr->ToResult(&args[0], &args[1]).FromJust())
+    {
+      node::errors::TryCatchScope try_catch(env);
+      v8::Maybe<bool> ret = ptr->ToResult(&args[0], &args[1]);
+      if (!ret.IsJust()) {
+        CHECK(try_catch.HasCaught());
+        exception = try_catch.Exception();
+      } else if (!ret.FromJust()) {
+        return;
+      }
+    }
+
+    if (exception.IsEmpty()) {
       ptr->MakeCallback(env->ondone_string(), arraysize(args), args);
+    } else {
+      ptr->MakeCallback(env->ondone_string(), 1, &exception);
+    }
   }
 
   virtual v8::Maybe<bool> ToResult(
@@ -393,7 +402,8 @@ class CryptoJob : public AsyncWrap, public ThreadPoolWork {
     v8::Local<v8::Value> ret[2];
     env->PrintSyncTrace();
     job->DoThreadPoolWork();
-    if (job->ToResult(&ret[0], &ret[1]).FromJust()) {
+    v8::Maybe<bool> result = job->ToResult(&ret[0], &ret[1]);
+    if (result.IsJust() && result.FromJust()) {
       args.GetReturnValue().Set(
           v8::Array::New(env->isolate(), ret, arraysize(ret)));
     }

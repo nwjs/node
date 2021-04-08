@@ -829,6 +829,7 @@ bool SignTraits::DeriveBits(
     Environment* env,
     const SignConfiguration& params,
     ByteSource* out) {
+  ClearErrorOnReturn clear_error_on_return;
   EVPMDPointer context(EVP_MD_CTX_new());
   EVP_PKEY_CTX* ctx = nullptr;
 
@@ -847,7 +848,7 @@ bool SignTraits::DeriveBits(
       }
       break;
     case SignConfiguration::kVerify:
-      CHECK_EQ(params.key->GetKeyType(), kKeyTypePublic);
+      CHECK_NE(params.key->GetKeyType(), kKeyTypeSecret);
       if (!EVP_DigestVerifyInit(
               context.get(),
               &ctx,

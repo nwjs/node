@@ -420,9 +420,6 @@ added: v10.0.0
 Change the file system timestamps of the object referenced by the {FileHandle}
 then resolves the promise with no arguments upon success.
 
-This function does not work on AIX versions before 7.1, it will reject the
-promise with an error using code `UV_ENOSYS`.
-
 #### `filehandle.write(buffer[, offset[, length[, position]]])`
 <!-- YAML
 added: v10.0.0
@@ -1244,6 +1241,9 @@ All the [caveats][] for `fs.watch()` also apply to `fsPromises.watch()`.
 <!-- YAML
 added: v10.0.0
 changes:
+  - version: v15.14.0
+    pr-url: https://github.com/nodejs/node/pull/37490
+    description: The `data` argument supports `AsyncIterable`, `Iterable` & `Stream`.
   - version: v15.2.0
     pr-url: https://github.com/nodejs/node/pull/35993
     description: The options argument may include an AbortSignal to abort an
@@ -1259,7 +1259,8 @@ changes:
 -->
 
 * `file` {string|Buffer|URL|FileHandle} filename or `FileHandle`
-* `data` {string|Buffer|Uint8Array|Object}
+* `data` {string|Buffer|Uint8Array|Object|AsyncIterable|Iterable
+  |Stream}
 * `options` {Object|string}
   * `encoding` {string|null} **Default:** `'utf8'`
   * `mode` {integer} **Default:** `0o666`
@@ -2325,9 +2326,6 @@ changes:
 
 Change the file system timestamps of the object referenced by the supplied file
 descriptor. See [`fs.utimes()`][].
-
-This function does not work on AIX versions before 7.1, it will return the
-error `UV_ENOSYS`.
 
 ### `fs.lchmod(path, mode, callback)`
 <!-- YAML

@@ -258,6 +258,7 @@ constexpr size_t kFsStatsBufferLength =
   V(fingerprint256_string, "fingerprint256")                                   \
   V(fingerprint_string, "fingerprint")                                         \
   V(flags_string, "flags")                                                     \
+  V(flowlabel_string, "flowlabel")                                             \
   V(fragment_string, "fragment")                                               \
   V(function_string, "function")                                               \
   V(get_data_clone_error_string, "_getDataCloneError")                         \
@@ -442,7 +443,7 @@ constexpr size_t kFsStatsBufferLength =
   V(base_object_ctor_template, v8::FunctionTemplate)                           \
   V(binding_data_ctor_template, v8::FunctionTemplate)                          \
   V(blob_constructor_template, v8::FunctionTemplate)                           \
-  V(blocklist_instance_template, v8::ObjectTemplate)                           \
+  V(blocklist_constructor_template, v8::FunctionTemplate)                      \
   V(compiled_fn_entry_template, v8::ObjectTemplate)                            \
   V(dir_instance_template, v8::ObjectTemplate)                                 \
   V(fd_constructor_template, v8::ObjectTemplate)                               \
@@ -466,6 +467,7 @@ constexpr size_t kFsStatsBufferLength =
   V(script_context_constructor_template, v8::FunctionTemplate)                 \
   V(secure_context_constructor_template, v8::FunctionTemplate)                 \
   V(shutdown_wrap_template, v8::ObjectTemplate)                                \
+  V(socketaddress_constructor_template, v8::FunctionTemplate)                  \
   V(streambaseoutputstream_constructor_template, v8::ObjectTemplate)           \
   V(qlogoutputstream_constructor_template, v8::ObjectTemplate)                 \
   V(tcp_constructor_template, v8::FunctionTemplate)                            \
@@ -1058,6 +1060,8 @@ class Environment : public MemoryRetainer {
   inline void AssignToContext(v8::Local<v8::Context> context,
                               const ContextInfo& info);
 
+  void StartProfilerIdleNotifier();
+
   inline v8::Isolate* isolate() const;
   inline uv_loop_t* event_loop() const;
   inline void TryLoadAddon(
@@ -1230,13 +1234,22 @@ class Environment : public MemoryRetainer {
                                          const char* name,
                                          v8::FunctionCallback callback);
 
+  enum class SetConstructorFunctionFlag {
+    NONE,
+    SET_CLASS_NAME,
+  };
+
   inline void SetConstructorFunction(v8::Local<v8::Object> that,
                           const char* name,
-                          v8::Local<v8::FunctionTemplate> tmpl);
+                          v8::Local<v8::FunctionTemplate> tmpl,
+                          SetConstructorFunctionFlag flag =
+                              SetConstructorFunctionFlag::SET_CLASS_NAME);
 
   inline void SetConstructorFunction(v8::Local<v8::Object> that,
                           v8::Local<v8::String> name,
-                          v8::Local<v8::FunctionTemplate> tmpl);
+                          v8::Local<v8::FunctionTemplate> tmpl,
+                          SetConstructorFunctionFlag flag =
+                              SetConstructorFunctionFlag::SET_CLASS_NAME);
 
   void AtExit(void (*cb)(void* arg), void* arg);
   void RunAtExitCallbacks();
@@ -1410,6 +1423,8 @@ class Environment : public MemoryRetainer {
   uv_timer_t timer_handle_;
   uv_check_t immediate_check_handle_;
   uv_idle_t immediate_idle_handle_;
+  uv_prepare_t idle_prepare_handle_;
+  uv_check_t idle_check_handle_;
   uv_async_t task_queues_async_;
   int64_t task_queues_async_refs_ = 0;
 

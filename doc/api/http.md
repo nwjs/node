@@ -763,6 +763,24 @@ const cookie = request.getHeader('Cookie');
 // 'cookie' is of type string[]
 ```
 
+### `request.getRawHeaderNames()`
+<!-- YAML
+added: v15.13.0
+-->
+
+* Returns: {string[]}
+
+Returns an array containing the unique names of the current outgoing raw
+headers. Header names are returned with their exact casing being set.
+
+```js
+request.setHeader('Foo', 'bar');
+request.setHeader('Set-Cookie', ['foo=bar', 'bar=baz']);
+
+const headerNames = request.getRawHeaderNames();
+// headerNames === ['Foo', 'Set-Cookie']
+```
+
 ### `request.maxHeadersCount`
 
 * {number} **Default:** `2000`
@@ -2305,7 +2323,7 @@ changes:
 -->
 
 * `chunk` {string | Buffer}
-* `encoding` {string} Optional, **Default**: `utf-8`
+* `encoding` {string} Optional, **Default**: `utf8`
 * `callback` {Function} Optional
 * Returns: {this}
 
@@ -2547,7 +2565,7 @@ changes:
 -->
 
 * `chunk` {string | Buffer}
-* `encoding` {string} **Default**: `utf-8`
+* `encoding` {string} **Default**: `utf8`
 * `callback` {Function}
 * Returns {boolean}
 
@@ -2571,7 +2589,7 @@ This method handles the raw body of the HTTP message and has nothing to do
 with higher-level multi-part body encodings that may be used.
 
 If it is the first call to this method of a message, it will send the
-buffered header first, then flush the the `chunk` as described above.
+buffered header first, then flush the `chunk` as described above.
 
 The second and successive calls to this method will assume the data
 will be streamed and send the new data separately. It means that the response

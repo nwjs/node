@@ -412,6 +412,7 @@
       'V8_DEPRECATION_WARNINGS',
       'V8_REVERSE_JSARGS',
       #'V8_IMMINENT_DEPRECATION_WARNINGS',
+      '_LIBCPP_HAS_NO_VENDOR_AVAILABILITY_ANNOTATIONS',
     ],
 
     # Forcibly disable -Werror.  We support a wide range of compilers, it's

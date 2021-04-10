@@ -1134,15 +1134,12 @@ void GetZeroFillToggle(const FunctionCallbackInfo<Value>& args) {
     ab = ArrayBuffer::New(env->isolate(), sizeof(uint32_t));
   } else {
     uint32_t* zero_fill_field = allocator->zero_fill_field();
-#if 0
     std::unique_ptr<BackingStore> backing =
         ArrayBuffer::NewBackingStore(zero_fill_field,
                                      sizeof(*zero_fill_field),
                                      [](void*, size_t, void*) {},
                                      nullptr);
-#endif
-    ab = ArrayBuffer::NewNode(env->isolate(), zero_fill_field,
-			sizeof(*zero_fill_field));
+    ab = ArrayBuffer::NewNode(env->isolate(), std::move(backing));
   }
 
   ab->SetPrivate(

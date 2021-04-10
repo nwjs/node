@@ -104,6 +104,7 @@
     }],
     ['clang==1', {
       'cflags': ['-Wno-error=missing-declarations', '-Wno-error=array-bounds'],
+      'defines': [ '_LIBCPP_HAS_NO_VENDOR_AVAILABILITY_ANNOTATIONS' ],
     }],
     [ 'v8_enable_i18n_support==1', {
       'defines': [ 'NODE_HAVE_I18N_SUPPORT=1' ],

@@ -7,10 +7,12 @@ added: v8.5.0
 changes:
   - version:
     - v15.3.0
+    - v12.22.0
     pr-url: https://github.com/nodejs/node/pull/35781
     description: Stabilize modules implementation.
   - version:
     - v14.13.0
+    - v12.20.0
     pr-url: https://github.com/nodejs/node/pull/35249
     description: Support for detection of CommonJS named exports.
   - version: v14.8.0
@@ -19,6 +21,7 @@ changes:
   - version:
     - v14.0.0
     - v13.14.0
+    - v12.20.0
     pr-url: https://github.com/nodejs/node/pull/31974
     description: Remove experimental modules warning.
   - version:
@@ -199,7 +202,13 @@ import _ from 'data:application/json,"world!"';
 #### `node:` Imports
 
 <!-- YAML
-added: v14.13.1
+added:
+  - v14.13.1
+  - v12.20.0
+changes:
+  - version: v16.0.0
+    pr-url: https://github.com/nodejs/node/pull/37246
+    description: Added `node:` import support to `require(...)`.
 -->
 
 `node:` URLs are supported as an alternative means to load Node.js builtin
@@ -273,6 +282,9 @@ const buffer = readFileSync(new URL('./data.proto', import.meta.url));
 ### `import.meta.resolve(specifier[, parent])`
 
 > Stability: 1 - Experimental
+
+This feature is only available with the `--experimental-import-meta-resolve`
+command flag enabled.
 
 * `specifier` {string} The module specifier to resolve relative to `parent`.
 * `parent` {string|URL} The absolute parent module URL to resolve from. If none

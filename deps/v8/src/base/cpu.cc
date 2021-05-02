@@ -4,6 +4,10 @@
 
 #include "src/base/cpu.h"
 
+#if defined(STARBOARD)
+#include "starboard/cpu_features.h"
+#endif
+
 #if V8_LIBC_MSVCRT
 #include <intrin.h>  // __cpuid()
 #endif
@@ -37,9 +41,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include <algorithm>
 
 #include "src/base/logging.h"
+#include "src/base/platform/wrappers.h"
 #if V8_OS_WIN
 #include "src/base/win32-headers.h"  // NOLINT
 #endif
@@ -160,7 +166,7 @@ static uint32_t ReadELFHWCaps() {
   result = static_cast<uint32_t>(getauxval(AT_HWCAP));
 #else
   // Read the ELF HWCAP flags by parsing /proc/self/auxv.
-  FILE* fp = fopen("/proc/self/auxv", "r");
+  FILE* fp = base::Fopen("/proc/self/auxv", "r");
   if (fp != nullptr) {
     struct {
       uint32_t tag;
@@ -176,7 +182,7 @@ static uint32_t ReadELFHWCaps() {
         break;
       }
     }
-    fclose(fp);
+    base::Fclose(fp);
   }
 #endif
   return result;
@@ -234,7 +240,7 @@ class CPUInfo final {
     // required because files under /proc do not always return a valid size
     // when using fseek(0, SEEK_END) + ftell(). Nor can the be mmap()-ed.
     static const char PATHNAME[] = "/proc/cpuinfo";
-    FILE* fp = fopen(PATHNAME, "r");
+    FILE* fp = base::Fopen(PATHNAME, "r");
     if (fp != nullptr) {
       for (;;) {
         char buffer[256];
@@ -244,12 +250,12 @@ class CPUInfo final {
         }
         datalen_ += n;
       }
-      fclose(fp);
+      base::Fclose(fp);
     }
 
     // Read the contents of the cpuinfo file.
     data_ = new char[datalen_ + 1];
-    fp = fopen(PATHNAME, "r");
+    fp = base::Fopen(PATHNAME, "r");
     if (fp != nullptr) {
       for (size_t offset = 0; offset < datalen_; ) {
         size_t n = fread(data_ + offset, 1, datalen_ - offset, fp);
@@ -258,7 +264,7 @@ class CPUInfo final {
         }
         offset += n;
       }
-      fclose(fp);
+      base::Fclose(fp);
     }
 
     // Zero-terminate the data.
@@ -307,7 +313,7 @@ class CPUInfo final {
     size_t len = q - p;
     char* result = new char[len + 1];
     if (result != nullptr) {
-      memcpy(result, p, len);
+      base::Memcpy(result, p, len);
       result[len] = '\0';
     }
     return result;
@@ -347,6 +353,55 @@ static bool HasListItem(const char* list, const char* item) {
 #endif  // V8_HOST_ARCH_ARM || V8_HOST_ARCH_ARM64 ||
         // V8_HOST_ARCH_MIPS || V8_HOST_ARCH_MIPS64
 
+#if defined(STARBOARD)
+
+bool CPU::StarboardDetectCPU() {
+#if (SB_API_VERSION >= 11)
+  SbCPUFeatures features;
+  if (!SbCPUFeaturesGet(&features)) {
+    return false;
+  }
+  architecture_ = features.arm.architecture_generation;
+  switch (features.architecture) {
+    case kSbCPUFeaturesArchitectureArm:
+    case kSbCPUFeaturesArchitectureArm64:
+      has_neon_ = features.arm.has_neon;
+      has_thumb2_ = features.arm.has_thumb2;
+      has_vfp_ = features.arm.has_vfp;
+      has_vfp3_ = features.arm.has_vfp3;
+      has_vfp3_d32_ = features.arm.has_vfp3_d32;
+      has_idiva_ = features.arm.has_idiva;
+      break;
+    case kSbCPUFeaturesArchitectureX86:
+    case kSbCPUFeaturesArchitectureX86_64:
+      // Following flags are mandatory for V8
+      has_cmov_ = features.x86.has_cmov;
+      has_sse2_ = features.x86.has_sse2;
+      // These flags are optional
+      has_sse3_ = features.x86.has_sse3;
+      has_ssse3_ = features.x86.has_ssse3;
+      has_sse41_ = features.x86.has_sse41;
+      has_sahf_ = features.x86.has_sahf;
+      has_avx_ = features.x86.has_avx;
+      has_avx2_ = features.x86.has_avx2;
+      has_fma3_ = features.x86.has_fma3;
+      has_bmi1_ = features.x86.has_bmi1;
+      has_bmi2_ = features.x86.has_bmi2;
+      has_lzcnt_ = features.x86.has_lzcnt;
+      has_popcnt_ = features.x86.has_popcnt;
+      break;
+    default:
+      return false;
+  }
+
+  return true;
+#else  // SB_API_VERSION >= 11
+  return false;
+#endif
+}
+
+#endif
+
 CPU::CPU()
     : stepping_(0),
       model_(0),
@@ -373,6 +428,7 @@ CPU::CPU()
       is_atom_(false),
       has_osxsave_(false),
       has_avx_(false),
+      has_avx2_(false),
       has_fma3_(false),
       has_bmi1_(false),
       has_bmi2_(false),
@@ -388,7 +444,14 @@ CPU::CPU()
       is_fp64_mode_(false),
       has_non_stop_time_stamp_counter_(false),
       has_msa_(false) {
-  memcpy(vendor_, "Unknown", 8);
+  base::Memcpy(vendor_, "Unknown", 8);
+
+#if defined(STARBOARD)
+  if (StarboardDetectCPU()) {
+    return;
+  }
+#endif
+
 #if V8_HOST_ARCH_IA32 || V8_HOST_ARCH_X64
   int cpu_info[4];
 
@@ -402,12 +465,18 @@ CPU::CPU()
   __cpuid(cpu_info, 0);
   unsigned num_ids = cpu_info[0];
   std::swap(cpu_info[2], cpu_info[3]);
-  memcpy(vendor_, cpu_info + 1, 12);
+  base::Memcpy(vendor_, cpu_info + 1, 12);
   vendor_[12] = '\0';
 
   // Interpret CPU feature information.
   if (num_ids > 0) {
     __cpuid(cpu_info, 1);
+
+    int cpu_info7[4] = {0};
+    if (num_ids >= 7) {
+      __cpuid(cpu_info7, 7);
+    }
+
     stepping_ = cpu_info[0] & 0xF;
     model_ = ((cpu_info[0] >> 4) & 0xF) + ((cpu_info[0] >> 12) & 0xF0);
     family_ = (cpu_info[0] >> 8) & 0xF;
@@ -426,6 +495,7 @@ CPU::CPU()
     has_popcnt_ = (cpu_info[2] & 0x00800000) != 0;
     has_osxsave_ = (cpu_info[2] & 0x08000000) != 0;
     has_avx_ = (cpu_info[2] & 0x10000000) != 0;
+    has_avx2_ = (cpu_info7[1] & 0x00000020) != 0;
     has_fma3_ = (cpu_info[2] & 0x00001000) != 0;
 
     if (family_ == 0x6) {
@@ -670,6 +740,9 @@ CPU::CPU()
     has_jscvt_ = HasListItem(features, "jscvt");
     delete[] features;
   }
+#elif V8_OS_MACOSX
+  // ARM64 Macs always have JSCVT.
+  has_jscvt_ = true;
 #endif  // V8_OS_WIN
 
 #elif V8_HOST_ARCH_PPC || V8_HOST_ARCH_PPC64
@@ -678,7 +751,7 @@ CPU::CPU()
 #if V8_OS_LINUX
   // Read processor info from /proc/self/auxv.
   char* auxv_cpu_type = nullptr;
-  FILE* fp = fopen("/proc/self/auxv", "r");
+  FILE* fp = base::Fopen("/proc/self/auxv", "r");
   if (fp != nullptr) {
 #if V8_TARGET_ARCH_PPC64
     Elf64_auxv_t entry;
@@ -702,7 +775,7 @@ CPU::CPU()
           break;
       }
     }
-    fclose(fp);
+    base::Fclose(fp);
   }
 
   part_ = -1;

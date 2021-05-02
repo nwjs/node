@@ -8,13 +8,15 @@
 #include "src/objects/fixed-array.h"
 #include "src/objects/js-objects.h"
 #include "src/objects/struct.h"
-#include "torque-generated/field-offsets-tq.h"
+#include "torque-generated/field-offsets.h"
 
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
 
 namespace v8 {
 namespace internal {
+
+#include "torque-generated/src/objects/arguments-tq.inc"
 
 // Superclass for all objects with instance type {JS_ARGUMENTS_OBJECT_TYPE}
 class JSArgumentsObject

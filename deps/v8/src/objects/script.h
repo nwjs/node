@@ -11,7 +11,7 @@
 #include "src/objects/fixed-array.h"
 #include "src/objects/objects.h"
 #include "src/objects/struct.h"
-#include "torque-generated/bit-fields-tq.h"
+#include "torque-generated/bit-fields.h"
 
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
@@ -19,6 +19,8 @@
 namespace v8 {
 
 namespace internal {
+
+#include "torque-generated/src/objects/script-tq.inc"
 
 // Script describes a script which has been added to the VM.
 class Script : public TorqueGeneratedScript<Script, Struct> {
@@ -105,6 +107,13 @@ class Script : public TorqueGeneratedScript<Script, Struct> {
   inline bool is_repl_mode() const;
   inline void set_is_repl_mode(bool value);
 
+  // [break_on_entry] (wasm only): whether an instrumentation breakpoint is set
+  // for this script; this information will be transferred to existing and
+  // future instances to make sure that we stop before executing any code in
+  // this wasm module.
+  inline bool break_on_entry() const;
+  inline void set_break_on_entry(bool value);
+
   // [origin_options]: optional attributes set by the embedder via ScriptOrigin,
   // and used by the embedder to make decisions about the script. V8 just passes
   // this through. Encoded in the 'flags' field.
@@ -172,11 +181,12 @@ class Script : public TorqueGeneratedScript<Script, Struct> {
   class V8_EXPORT_PRIVATE Iterator {
    public:
     explicit Iterator(Isolate* isolate);
+    Iterator(const Iterator&) = delete;
+    Iterator& operator=(const Iterator&) = delete;
     Script Next();
 
    private:
     WeakArrayList::Iterator iterator_;
-    DISALLOW_COPY_AND_ASSIGN(Iterator);
   };
 
   // Dispatched behavior.

@@ -63,7 +63,7 @@ VARIABLES = {ALWAYS: True}
 for var in ["debug", "release", "big", "little", "android",
             "arm", "arm64", "ia32", "mips", "mipsel", "mips64", "mips64el",
             "x64", "ppc", "ppc64", "s390", "s390x", "macos", "windows",
-            "linux", "aix", "r1", "r2", "r3", "r5", "r6"]:
+            "linux", "aix", "r1", "r2", "r3", "r5", "r6", "riscv64"]:
   VARIABLES[var] = var
 
 # Allow using variants as keywords.
@@ -76,6 +76,7 @@ class StatusFile(object):
     _rules:        {variant: {test name: [rule]}}
     _prefix_rules: {variant: {test name prefix: [rule]}}
     """
+    self.variables = variables
     with open(path) as f:
       self._rules, self._prefix_rules = ReadStatusFile(f.read(), variables)
 

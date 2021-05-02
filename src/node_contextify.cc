@@ -48,7 +48,6 @@ using v8::FunctionTemplate;
 using v8::HandleScope;
 using v8::IndexedPropertyHandlerConfiguration;
 using v8::Int32;
-using v8::Integer;
 using v8::Isolate;
 using v8::Local;
 using v8::Maybe;
@@ -212,7 +211,8 @@ MaybeLocal<Context> ContextifyContext::CreateV8Context(
     return MaybeLocal<Context>();
   }
 
-  ctx->SetSecurityToken(env->context()->GetSecurityToken());
+  Local<Context> context = env->context();
+  ctx->SetSecurityToken(context->GetSecurityToken());
 
   // We need to tie the lifetime of the sandbox object with the lifetime of
   // newly created context. We do this by making them hold references to each
@@ -226,7 +226,7 @@ MaybeLocal<Context> ContextifyContext::CreateV8Context(
     ctx->SetAlignedPointerInEmbedderData(2, data);
     ctx->SetAlignedPointerInEmbedderData(50, (void*)0x08110800);
   }
-  sandbox_obj->SetPrivate(env->context(),
+  sandbox_obj->SetPrivate(context,
                           env->contextify_global_private_symbol(),
                           ctx->Global());
 
@@ -401,16 +401,17 @@ void ContextifyContext::PropertySetterCallback(
   if (ctx->context_.IsEmpty())
     return;
 
+  Local<Context> context = ctx->context();
   auto attributes = PropertyAttribute::None;
   bool is_declared_on_global_proxy = ctx->global_proxy()
-      ->GetRealNamedPropertyAttributes(ctx->context(), property)
+      ->GetRealNamedPropertyAttributes(context, property)
       .To(&attributes);
   bool read_only =
       static_cast<int>(attributes) &
       static_cast<int>(PropertyAttribute::ReadOnly);
 
   bool is_declared_on_sandbox = ctx->sandbox()
-      ->GetRealNamedPropertyAttributes(ctx->context(), property)
+      ->GetRealNamedPropertyAttributes(context, property)
       .To(&attributes);
   read_only = read_only ||
       (static_cast<int>(attributes) &
@@ -448,7 +449,7 @@ void ContextifyContext::PropertySetterCallback(
     args.GetReturnValue().Set(false);
   }
 
-  USE(ctx->sandbox()->Set(ctx->context(), property, value));
+  USE(ctx->sandbox()->Set(context, property, value));
 }
 
 // static
@@ -489,7 +490,7 @@ void ContextifyContext::PropertyDefinerCallback(
 
   auto attributes = PropertyAttribute::None;
   bool is_declared =
-      ctx->global_proxy()->GetRealNamedPropertyAttributes(ctx->context(),
+      ctx->global_proxy()->GetRealNamedPropertyAttributes(context,
                                                           property)
           .To(&attributes);
   bool read_only =
@@ -663,8 +664,10 @@ void ContextifyScript::Init(Environment* env, Local<Object> target) {
   env->SetProtoMethod(script_tmpl, "runInContext", RunInContext);
   env->SetProtoMethod(script_tmpl, "runInThisContext", RunInThisContext);
 
-  target->Set(env->context(), class_name,
-      script_tmpl->GetFunction(env->context()).ToLocalChecked()).Check();
+  Local<Context> context = env->context();
+
+  target->Set(context, class_name,
+      script_tmpl->GetFunction(context).ToLocalChecked()).Check();
   env->set_script_context_constructor_template(script_tmpl);
 }
 
@@ -684,8 +687,8 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[1]->IsString());
   Local<String> filename = args[1].As<String>();
 
-  Local<Integer> line_offset;
-  Local<Integer> column_offset;
+  int line_offset = 0;
+  int column_offset = 0;
   Local<ArrayBufferView> cached_data_buf;
   bool produce_cached_data = false;
   Local<Context> parsing_context = context;
@@ -695,9 +698,9 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
     //                      cachedData, produceCachedData, parsingContext)
     CHECK_EQ(argc, 7);
     CHECK(args[2]->IsNumber());
-    line_offset = args[2].As<Integer>();
+    line_offset = args[2].As<Int32>()->Value();
     CHECK(args[3]->IsNumber());
-    column_offset = args[3].As<Integer>();
+    column_offset = args[3].As<Int32>()->Value();
     if (!args[4]->IsUndefined()) {
       CHECK(args[4]->IsArrayBufferView());
       cached_data_buf = args[4].As<ArrayBufferView>();
@@ -712,9 +715,6 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
       CHECK_NOT_NULL(sandbox);
       parsing_context = sandbox->context();
     }
-  } else {
-    line_offset = Integer::New(isolate, 0);
-    column_offset = Integer::New(isolate, 0);
   }
 
   ContextifyScript* contextify_script =
@@ -747,15 +747,16 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
   host_defined_options->Set(isolate, loader::HostDefinedOptions::kID,
                             Number::New(isolate, contextify_script->id()));
 
-  ScriptOrigin origin(filename,
+  ScriptOrigin origin(isolate,
+                      filename,
                       line_offset,                          // line offset
                       column_offset,                        // column offset
-                      True(isolate),                        // is cross origin
-                      Local<Integer>(),                     // script id
+                      true,                                 // is cross origin
+                      -1,                                   // script id
                       Local<Value>(),                       // source map URL
-                      False(isolate),                       // is opaque (?)
-                      False(isolate),                       // is WASM
-                      False(isolate),                       // is ES Module
+                      false,                                // is opaque (?)
+                      false,                                // is WASM
+                      false,                                // is ES Module
                       host_defined_options);
   ScriptCompiler::Source source(code, origin, cached_data);
   ScriptCompiler::CompileOptions compile_options =
@@ -786,9 +787,10 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
   }
   contextify_script->script_.Reset(isolate, v8_script.ToLocalChecked());
 
+  Local<Context> env_context = env->context();
   if (compile_options == ScriptCompiler::kConsumeCodeCache) {
     args.This()->Set(
-        env->context(),
+        env_context,
         env->cached_data_rejected_string(),
         Boolean::New(isolate, source.GetCachedData()->rejected)).Check();
   } else if (produce_cached_data) {
@@ -800,12 +802,12 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
           env,
           reinterpret_cast<const char*>(cached_data->data),
           cached_data->length);
-      args.This()->Set(env->context(),
+      args.This()->Set(env_context,
                        env->cached_data_string(),
                        buf.ToLocalChecked()).Check();
     }
     args.This()->Set(
-        env->context(),
+        env_context,
         env->cached_data_produced_string(),
         Boolean::New(isolate, cached_data_produced)).Check();
   }
@@ -897,7 +899,8 @@ void ContextifyScript::RunInContext(const FunctionCallbackInfo<Value>& args) {
       ContextifyContext::ContextFromContextifiedSandbox(env, sandbox);
   CHECK_NOT_NULL(contextify_context);
 
-  if (contextify_context->context().IsEmpty())
+  Local<Context> context = contextify_context->context();
+  if (context.IsEmpty())
     return;
 
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
@@ -916,7 +919,7 @@ void ContextifyScript::RunInContext(const FunctionCallbackInfo<Value>& args) {
   bool break_on_first_line = args[4]->IsTrue();
 
   // Do the eval within the context
-  Context::Scope context_scope(contextify_context->context());
+  Context::Scope context_scope(context);
   EvalMachine(contextify_context->env(),
               timeout,
               display_errors,
@@ -1047,11 +1050,11 @@ void ContextifyContext::CompileFunction(
 
   // Argument 3: line offset
   CHECK(args[2]->IsNumber());
-  Local<Integer> line_offset = args[2].As<Integer>();
+  int line_offset = args[2].As<Int32>()->Value();
 
   // Argument 4: column offset
   CHECK(args[3]->IsNumber());
-  Local<Integer> column_offset = args[3].As<Integer>();
+  int column_offset = args[3].As<Int32>()->Value();
 
   // Argument 5: cached data (optional)
   Local<ArrayBufferView> cached_data_buf;
@@ -1113,15 +1116,16 @@ void ContextifyContext::CompileFunction(
   host_defined_options->Set(
       isolate, loader::HostDefinedOptions::kID, Number::New(isolate, id));
 
-  ScriptOrigin origin(filename,
+  ScriptOrigin origin(isolate,
+                      filename,
                       line_offset,       // line offset
                       column_offset,     // column offset
-                      True(isolate),     // is cross origin
-                      Local<Integer>(),  // script id
+                      true,              // is cross origin
+                      -1,                // script id
                       Local<Value>(),    // source map URL
-                      False(isolate),    // is opaque (?)
-                      False(isolate),    // is WASM
-                      False(isolate),    // is ES Module
+                      false,             // is opaque (?)
+                      false,             // is WASM
+                      false,             // is ES Module
                       host_defined_options);
 
   ScriptCompiler::Source source(code, origin, cached_data);

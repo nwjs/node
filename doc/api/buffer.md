@@ -350,7 +350,7 @@ added: v15.7.0
 * `type` {string} The content-type for the new `Blob`
 
 Creates and returns a new `Blob` containing a subset of this `Blob` objects
-data. The original `Blob` is not alterered.
+data. The original `Blob` is not altered.
 
 ### `blob.text()`
 <!-- YAML
@@ -3286,6 +3286,8 @@ accessed using `require('buffer')`.
 added: v15.13.0
 -->
 
+> Stability: 3 - Legacy. Use `Buffer.from(data, 'base64')` instead.
+
 * `data` {any} The Base64-encoded input string.
 
 Decodes a string of Base64-encoded data into bytes, and encodes those bytes
@@ -3304,6 +3306,8 @@ and binary data should be performed using `Buffer.from(str, 'base64')` and
 <!-- YAML
 added: v15.13.0
 -->
+
+> Stability: 3 - Legacy. Use `buf.toString('base64')` instead.
 
 * `data` {any} An ASCII (Latin1) string.
 
@@ -3406,12 +3410,24 @@ added: v8.2.0
 #### `buffer.constants.MAX_LENGTH`
 <!-- YAML
 added: v8.2.0
+changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/35415
+    description: Value is changed to 2<sup>32</sup> on 64-bit
+      architectures.
+  - version: v14.0.0
+    pr-url: https://github.com/nodejs/node/pull/32116
+    description: Value is changed from 2<sup>31</sup> - 1 to
+      2<sup>32</sup> - 1 on 64-bit architectures.
 -->
 
 * {integer} The largest size allowed for a single `Buffer` instance.
 
 On 32-bit architectures, this value currently is 2<sup>30</sup> - 1 (~1GB).
-On 64-bit architectures, this value currently is 2<sup>31</sup> - 1 (~2GB).
+
+On 64-bit architectures, this value currently is 2<sup>32</sup> (~4GB).
+
+It reflects [`v8::TypedArray::kMaxLength`][] under the hood.
 
 This value is also available as [`buffer.kMaxLength`][].
 
@@ -3581,6 +3597,7 @@ introducing security vulnerabilities into an application.
 [`buffer.constants.MAX_STRING_LENGTH`]: #buffer_buffer_constants_max_string_length
 [`buffer.kMaxLength`]: #buffer_buffer_kmaxlength
 [`util.inspect()`]: util.md#util_util_inspect_object_options
+[`v8::TypedArray::kMaxLength`]: https://v8.github.io/api/head/classv8_1_1TypedArray.html#a54a48f4373da0850663c4393d843b9b0
 [base64url]: https://tools.ietf.org/html/rfc4648#section-5
 [binary strings]: https://developer.mozilla.org/en-US/docs/Web/API/DOMString/Binary
 [endianness]: https://en.wikipedia.org/wiki/Endianness

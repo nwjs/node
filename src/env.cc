@@ -228,10 +228,6 @@ void IsolateData::MemoryInfo(MemoryTracker* tracker) const {
   // TODO(joyeecheung): implement MemoryRetainer in the option classes.
 }
 
-void InitThreadLocalOnce() {
-  CHECK_EQ(0, uv_key_create(&Environment::thread_local_env));
-}
-
 void TrackingTraceStateObserver::UpdateTraceCategoryState() {
   if (!env_->owns_process_state() || !env_->can_call_into_js()) {
     // Ideally, we’d have a consistent story that treats all threads/Environment
@@ -395,10 +391,6 @@ Environment::Environment(IsolateData* isolate_data,
   // We can only create the inspector agent after having cloned the options.
   inspector_agent_ = std::make_unique<inspector::Agent>(this);
 #endif
-
-  static uv_once_t init_once = UV_ONCE_INIT;
-  uv_once(&init_once, InitThreadLocalOnce);
-  uv_key_set(&thread_local_env, this);
 
 #if 0
   if (tracing::AgentWriterHandle* writer = GetTracingAgentWriter()) {
@@ -1191,8 +1183,6 @@ void AsyncHooks::grow_async_ids_stack() {
       async_ids_stack_.GetJSArray()).Check();
 }
 
-uv_key_t Environment::thread_local_env = {};
-
 void Environment::Exit(int exit_code) {
   if (options()->trace_exit) {
     HandleScope handle_scope(isolate());
@@ -1246,6 +1236,25 @@ void Environment::RemoveUnmanagedFd(int fd) {
   if (removed_count == 0) {
     ProcessEmitWarning(
         this, "File descriptor %d closed but not opened in unmanaged mode", fd);
+  }
+}
+
+void Environment::PrintInfoForSnapshotIfDebug() {
+  if (enabled_debug_list()->enabled(DebugCategory::MKSNAPSHOT)) {
+    fprintf(stderr, "BaseObjects at the exit of the Environment:\n");
+    PrintAllBaseObjects();
+    fprintf(stderr, "\nNative modules without cache:\n");
+    for (const auto& s : native_modules_without_cache) {
+      fprintf(stderr, "%s\n", s.c_str());
+    }
+    fprintf(stderr, "\nNative modules with cache:\n");
+    for (const auto& s : native_modules_with_cache) {
+      fprintf(stderr, "%s\n", s.c_str());
+    }
+    fprintf(stderr, "\nStatic bindings (need to be registered):\n");
+    for (const auto mod : internal_bindings) {
+      fprintf(stderr, "%s:%s\n", mod->nm_filename, mod->nm_modname);
+    }
   }
 }
 

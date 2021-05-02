@@ -8,13 +8,15 @@
 #include "src/objects/fixed-array.h"
 #include "src/objects/objects.h"
 #include "src/objects/struct.h"
-#include "torque-generated/bit-fields-tq.h"
+#include "torque-generated/bit-fields.h"
 
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
 
 namespace v8 {
 namespace internal {
+
+#include "torque-generated/src/objects/prototype-info-tq.inc"
 
 // Container for metadata stored on each prototype map.
 class PrototypeInfo

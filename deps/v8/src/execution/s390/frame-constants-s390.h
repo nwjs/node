@@ -14,8 +14,8 @@ namespace internal {
 
 class EntryFrameConstants : public AllStatic {
  public:
-  static constexpr int kCallerFPOffset =
-      -(StandardFrameConstants::kFixedFrameSizeFromFp + kSystemPointerSize);
+  static constexpr int kCallerFPOffset = -3 * kSystemPointerSize;
+
   // Stack offsets for arguments passed to JSEntry.
   static constexpr int kArgvOffset = 20 * kSystemPointerSize;
 };
@@ -30,11 +30,14 @@ class WasmCompileLazyFrameConstants : public TypedFrameConstants {
 #endif
 
   // FP-relative.
+  // The instance is pushed as part of the saved registers. Being in {r6}, it is
+  // the first register pushed (highest register code in
+  // {wasm::kGpParamRegisters}).
   static constexpr int kWasmInstanceOffset = TYPED_FRAME_PUSHED_VALUE_OFFSET(0);
   static constexpr int kFixedFrameSizeFromFp =
       TypedFrameConstants::kFixedFrameSizeFromFp +
       kNumberOfSavedGpParamRegs * kSystemPointerSize +
-      kNumberOfSavedFpParamRegs * kDoubleSize;
+      kNumberOfSavedFpParamRegs * kSimd128Size;
 };
 
 // Frame constructed by the {WasmDebugBreak} builtin.

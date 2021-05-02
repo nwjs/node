@@ -7,7 +7,7 @@
   # config names (where each config name is a key in the 'configs' dict,
   # below). MB uses this dict to look up which config to use for a given bot.
   # Bots are ordered by appearance on waterfall.
-  'masters': {
+  'builder_groups': {
     'developer_default': {
       'android.arm.debug': 'default_debug_android_arm',
       'android.arm.optdebug': 'default_optdebug_android_arm',
@@ -33,6 +33,12 @@
       'ppc64.debug.sim': 'default_debug_ppc64_sim',
       'ppc64.optdebug.sim': 'default_optdebug_ppc64_sim',
       'ppc64.release.sim': 'default_release_ppc64_sim',
+      'riscv64.debug': 'default_debug_riscv64',
+      'riscv64.optdebug': 'default_optdebug_riscv64',
+      'riscv64.release': 'default_release_riscv64',
+      'riscv64.debug.sim': 'default_debug_riscv64_sim',
+      'riscv64.optdebug.sim': 'default_optdebug_riscv64_sim',
+      'riscv64.release.sim': 'default_release_riscv64_sim',
       's390x.debug': 'default_debug_s390x',
       's390x.optdebug': 'default_optdebug_s390x',
       's390x.release': 'default_release_s390x',
@@ -57,32 +63,40 @@
       # Linux64.
       'V8 Linux64 - builder': 'release_x64',
       'V8 Linux64 - debug builder': 'debug_x64',
+      'V8 Linux64 - dict tracking - debug - builder': 'debug_x64_dict_tracking_trybot',
       'V8 Linux64 - custom snapshot - debug builder': 'debug_x64_custom',
       'V8 Linux64 - internal snapshot': 'release_x64_internal',
       'V8 Linux64 - debug - header includes': 'debug_x64_header_includes',
       'V8 Linux64 - shared': 'release_x64_shared_verify_heap',
       'V8 Linux64 - verify csa': 'release_x64_verify_csa',
+      'V8 Linux64 - no wasm - builder': 'release_x64_webassembly_disabled',
       # Windows.
       'V8 Win32 - builder': 'release_x86_minimal_symbols',
       'V8 Win32 - debug builder': 'debug_x86_minimal_symbols',
       # TODO(machenbach): Remove after switching to x64 on infra side.
       'V8 Win64 ASAN': 'release_x64_asan_no_lsan',
       'V8 Win64': 'release_x64_minimal_symbols',
+      'V8 Win64 - dev image': 'release_x64_minimal_symbols',
       'V8 Win64 - debug': 'debug_x64_minimal_symbols',
       'V8 Win64 - msvc': 'release_x64_msvc',
       # Mac.
       'V8 Mac64': 'release_x64',
       'V8 Mac64 - debug': 'debug_x64',
+      'V8 Official Mac ARM64': 'release_arm64',
+      'V8 Official Mac ARM64 Debug': 'debug_arm64',
       'V8 Mac64 GC Stress': 'debug_x64',
       'V8 Mac64 ASAN': 'release_x64_asan_no_lsan',
+      'V8 Mac - arm64 - release builder': 'release_arm64',
+      'V8 Mac - arm64 - sim - debug builder': 'debug_simulate_arm64',
+      'V8 Mac - arm64 - sim - release builder': 'release_simulate_arm64',
       # Sanitizers.
       'V8 Linux64 ASAN': 'release_x64_asan',
       'V8 Linux64 TSAN - builder': 'release_x64_tsan',
+      'V8 Linux64 TSAN - no-concurrent-marking - builder': 'release_x64_tsan_no_cm',
       'V8 Linux - arm64 - sim - CFI': 'release_simulate_arm64_cfi',
       'V8 Linux - arm64 - sim - MSAN': 'release_simulate_arm64_msan',
       # Misc.
       'V8 Linux gcc': 'release_x86_gcc',
-      'V8 Linux64 gcc - debug': 'debug_x64_gcc',
       # FYI.
       'V8 iOS - sim': 'release_x64_ios_simulator',
       'V8 Linux64 - debug - perfetto - builder': 'debug_x64_perfetto',
@@ -91,10 +105,10 @@
           'release_x64_pointer_compression_without_dchecks',
       'V8 Linux64 - arm64 - sim - pointer compression - builder':
           'release_simulate_arm64_pointer_compression',
+      'V8 Linux64 gcc - debug': 'debug_x64_gcc',
       'V8 Fuchsia - builder': 'release_x64_fuchsia',
       'V8 Fuchsia - debug builder': 'debug_x64_fuchsia',
       'V8 Linux64 - cfi': 'release_x64_cfi',
-      'V8 Linux64 - reverse jsargs': 'debug_x64_reverse_jsargs',
       'V8 Linux64 UBSan': 'release_x64_ubsan',
       'V8 Linux - vtunejit': 'debug_x86_vtunejit',
       'V8 Linux64 - gcov coverage': 'release_x64_gcc_coverage',
@@ -166,38 +180,8 @@
       # IBM.
       'V8 Linux - ppc64 - sim': 'release_simulate_ppc64',
       'V8 Linux - s390x - sim': 'release_simulate_s390x',
-    },
-    'client.v8.branches': {
-      'V8 Linux - previous branch': 'release_x86',
-      'V8 Linux - previous branch - debug': 'debug_x86',
-      'V8 Linux - beta branch': 'release_x86',
-      'V8 Linux - beta branch - debug': 'debug_x86',
-      'V8 Linux - stable branch': 'release_x86',
-      'V8 Linux - stable branch - debug': 'debug_x86',
-      'V8 Linux64 - previous branch': 'release_x64',
-      'V8 Linux64 - previous branch - debug': 'debug_x64',
-      'V8 Linux64 - beta branch': 'release_x64',
-      'V8 Linux64 - beta branch - debug': 'debug_x64',
-      'V8 Linux64 - stable branch': 'release_x64',
-      'V8 Linux64 - stable branch - debug': 'debug_x64',
-      'V8 arm - sim - previous branch': 'release_simulate_arm',
-      'V8 arm - sim - previous branch - debug': 'debug_simulate_arm',
-      'V8 arm - sim - beta branch': 'release_simulate_arm',
-      'V8 arm - sim - beta branch - debug': 'debug_simulate_arm',
-      'V8 arm - sim - stable branch': 'release_simulate_arm',
-      'V8 arm - sim - stable branch - debug': 'debug_simulate_arm',
-      'V8 mips64el - sim - previous branch': 'release_simulate_mips64el',
-      'V8 mips64el - sim - beta branch': 'release_simulate_mips64el',
-      'V8 mips64el - sim - stable branch': 'release_simulate_mips64el',
-      'V8 mipsel - sim - previous branch': 'release_simulate_mipsel',
-      'V8 mipsel - sim - beta branch': 'release_simulate_mipsel',
-      'V8 mipsel - sim - stable branch': 'release_simulate_mipsel',
-      'V8 ppc64 - sim - previous branch': 'release_simulate_ppc64',
-      'V8 ppc64 - sim - beta branch': 'release_simulate_ppc64',
-      'V8 ppc64 - sim - stable branch': 'release_simulate_ppc64',
-      'V8 s390x - sim - previous branch': 'release_simulate_s390x',
-      'V8 s390x - sim - beta branch': 'release_simulate_s390x',
-      'V8 s390x - sim - stable branch': 'release_simulate_s390x',
+      # RISC-V
+      'V8 Linux - riscv64 - sim - builder': 'release_simulate_riscv64',
     },
     'tryserver.v8': {
       'v8_android_arm_compile_rel': 'release_android_arm',
@@ -220,6 +204,7 @@
       'v8_linux64_arm64_pointer_compression_rel_ng':
           'release_simulate_arm64_pointer_compression',
       'v8_linux64_dbg_ng': 'debug_x64_trybot',
+      'v8_linux64_dict_tracking_dbg_ng': 'debug_x64_dict_tracking_trybot',
       'v8_linux64_gc_stress_custom_snapshot_dbg_ng': 'debug_x64_trybot_custom',
       'v8_linux64_gcc_compile_dbg': 'debug_x64_gcc',
       'v8_linux64_header_includes_dbg': 'debug_x64_header_includes',
@@ -228,14 +213,16 @@
       'v8_linux64_perfetto_dbg_ng': 'debug_x64_perfetto',
       'v8_linux64_pointer_compression_rel_ng': 'release_x64_pointer_compression',
       'v8_linux64_rel_ng': 'release_x64_test_features_trybot',
-      'v8_linux64_reverse_jsargs_dbg_ng': 'debug_x64_reverse_jsargs',
       'v8_linux64_shared_compile_rel': 'release_x64_shared_verify_heap',
+      'v8_linux64_no_wasm_compile_rel': 'release_x64_webassembly_disabled',
       'v8_linux64_verify_csa_rel_ng': 'release_x64_verify_csa',
       'v8_linux64_asan_rel_ng': 'release_x64_asan_minimal_symbols',
       'v8_linux64_cfi_rel_ng': 'release_x64_cfi',
       'v8_linux64_fuzzilli_ng': 'release_x64_fuzzilli',
       'v8_linux64_msan_rel_ng': 'release_simulate_arm64_msan_minimal_symbols',
+      'v8_linux64_riscv64_rel_ng': 'release_simulate_riscv64',
       'v8_linux64_tsan_rel_ng': 'release_x64_tsan_minimal_symbols',
+      'v8_linux64_tsan_no_cm_rel_ng': 'release_x64_tsan_no_cm',
       'v8_linux64_tsan_isolates_rel_ng':
           'release_x64_tsan_minimal_symbols',
       'v8_linux64_ubsan_rel_ng': 'release_x64_ubsan_minimal_symbols',
@@ -253,6 +240,10 @@
       'v8_mac_arm64_rel_ng': 'release_arm64',
       'v8_mac_arm64_dbg_ng': 'debug_arm64',
       'v8_mac_arm64_full_dbg_ng': 'full_debug_arm64',
+      'v8_mac_arm64_compile_rel': 'release_arm64',
+      'v8_mac_arm64_sim_rel_ng': 'release_simulate_arm64_trybot',
+      'v8_mac_arm64_sim_dbg_ng': 'debug_simulate_arm64',
+      'v8_mac_arm64_sim_nodcheck_rel_ng': 'release_simulate_arm64',
       'v8_mac64_gc_stress_dbg_ng': 'debug_x64_trybot',
       'v8_mac64_rel_ng': 'release_x64_trybot',
       'v8_mac64_dbg': 'debug_x64',
@@ -308,6 +299,18 @@
       'debug', 'simulate_mips64el', 'v8_enable_slow_dchecks'],
     'default_release_mips64el': [
       'release', 'simulate_mips64el'],
+    'default_debug_riscv64': [
+      'debug', 'riscv64', 'gcc', 'v8_enable_slow_dchecks', 'v8_full_debug'],
+    'default_optdebug_riscv64': [
+      'debug', 'riscv64', 'gcc', 'v8_enable_slow_dchecks'],
+    'default_release_riscv64': [
+      'release', 'riscv64', 'gcc'],
+    'default_debug_riscv64_sim': [
+      'debug', 'simulate_riscv64', 'v8_enable_slow_dchecks', 'v8_full_debug'],
+    'default_optdebug_riscv64_sim': [
+      'debug', 'simulate_riscv64', 'v8_enable_slow_dchecks'],
+    'default_release_riscv64_sim': [
+      'release', 'simulate_riscv64'],
     'default_debug_ppc64': [
       'debug', 'ppc64', 'gcc', 'v8_enable_slow_dchecks', 'v8_full_debug'],
     'default_optdebug_ppc64': [
@@ -395,6 +398,8 @@
       'release_bot', 'simulate_mips64el'],
     'release_simulate_ppc64': [
       'release_bot', 'simulate_ppc64'],
+    'release_simulate_riscv64': [
+      'release_bot', 'simulate_riscv64'],
     'release_simulate_s390x': [
       'release_bot', 'simulate_s390x'],
 
@@ -424,15 +429,15 @@
 
     # Official configs for arm
     'official_arm': [
-      'release_bot', 'arm', 'hard_float', 'official'],
+      'release_bot', 'arm', 'hard_float', 'official', 'disable_pgo'],
     'official_arm64': [
-      'release_bot', 'arm64', 'hard_float', 'official'],
+      'release_bot', 'arm64', 'hard_float', 'official', 'disable_pgo'],
     'official_android_arm': [
       'release_bot', 'arm', 'android', 'minimal_symbols',
-      'android_strip_outputs', 'official'],
+      'android_strip_outputs', 'official', 'disable_pgo'],
     'official_android_arm64': [
       'release_bot', 'arm64', 'android', 'minimal_symbols',
-      'android_strip_outputs', 'official'],
+      'android_strip_outputs', 'official', 'disable_pgo'],
 
     # Release configs for x64.
     'release_x64': [
@@ -488,6 +493,8 @@
       'release_trybot', 'x64', 'v8_enable_test_features'],
     'release_x64_tsan': [
       'release_bot', 'x64', 'tsan'],
+    'release_x64_tsan_no_cm': [
+      'release_bot', 'x64', 'tsan', 'disable_concurrent_marking'],
     'release_x64_tsan_minimal_symbols': [
       'release_bot', 'x64', 'tsan', 'minimal_symbols'],
     'release_x64_ubsan': [
@@ -501,10 +508,12 @@
     'release_x64_verify_csa': [
       'release_bot', 'x64', 'dcheck_always_on',
       'v8_enable_slow_dchecks', 'v8_verify_csa'],
+    'release_x64_webassembly_disabled': [
+      'release_bot', 'x64', 'webassembly_disabled'],
 
     # Official configs for x64.
     'official_x64': [
-      'release_bot', 'x64', 'official'],
+      'release_bot', 'x64', 'official', 'disable_pgo'],
 
     # Debug configs for x64.
     'debug_x64': [
@@ -528,8 +537,8 @@
       'debug_bot', 'x64', 'perfetto'],
     'debug_x64_trybot': [
       'debug_trybot', 'x64'],
-    'debug_x64_reverse_jsargs': [
-      'debug_bot', 'x64', 'reverse_jsargs'],
+    'debug_x64_dict_tracking_trybot': [
+      'debug_trybot', 'x64', 'v8_enable_dict_property_const_tracking'],
     'debug_x64_trybot_custom': [
       'debug_trybot', 'x64', 'v8_snapshot_custom'],
     'full_debug_x64': [
@@ -550,8 +559,6 @@
       'debug', 'x86', 'goma', 'v8_enable_slow_dchecks', 'v8_full_debug'],
 
     # Release configs for x86.
-    'release_x86': [
-      'release_bot', 'x86'],
     'release_x86_gcc': [
       'release_bot_no_goma', 'x86', 'gcc', 'v8_check_header_includes'],
     'release_x86_gcc_minimal_symbols': [
@@ -577,7 +584,7 @@
 
     # Official configs for x86.
     'official_x86': [
-        'release_bot', 'x86', 'official'],
+        'release_bot', 'x86', 'official', 'disable_pgo'],
 
     # Torque compare test
     'torque_compare': [
@@ -586,7 +593,7 @@
 
   'mixins': {
     'android': {
-      'gn_args': 'target_os="android" v8_android_log_stdout=true',
+      'gn_args': 'target_os="android" v8_android_log_stdout=true default_min_sdk_version=19',
     },
 
     'android_strip_outputs': {
@@ -650,6 +657,20 @@
       'mixins': ['debug_bot', 'minimal_symbols'],
     },
 
+    'disable_concurrent_marking': {
+      # Disable concurrent marking and atomic object field writes in order to
+      # increase the TSAN coverage for background tasks. We need to keep the 
+      # atomic marking state enabled because that is needed for the concurrent
+      # write-barrier used by background compilation.
+      'gn_args': 'v8_enable_concurrent_marking=false '
+                 'v8_enable_atomic_object_field_writes=false '
+                 'v8_enable_atomic_marking_state=true ',
+    },
+
+    'disable_pgo': {
+      'gn_args': 'chrome_pgo_phase=0',
+    },
+
     'fuchsia': {
       'gn_args': 'target_os="fuchsia"',
     },
@@ -676,7 +697,7 @@
     },
 
     'ios_simulator': {
-      'gn_args': 'target_cpu="x64" target_os="ios" ios_use_goma_rbe=true',
+      'gn_args': 'target_cpu="x64" target_os="ios"',
     },
 
     'lsan': {
@@ -734,10 +755,6 @@
       'mixins': ['release_bot', 'minimal_symbols', 'dcheck_always_on'],
     },
 
-    'reverse_jsargs': {
-      'gn_args': 'v8_enable_reverse_jsargs=true',
-    },
-
     'official': {
       'gn_args': 'is_official_build=true',
     },
@@ -765,6 +782,10 @@
 
     'simulate_ppc64': {
       'gn_args': 'target_cpu="x64" v8_target_cpu="ppc64"',
+    },
+
+    'simulate_riscv64': {
+      'gn_args': 'target_cpu="x64" v8_target_cpu="riscv64"',
     },
 
     'simulate_s390x': {
@@ -820,6 +841,14 @@
       'gn_args': 'v8_enable_slow_dchecks=true',
     },
 
+    'webassembly_disabled': {
+      'gn_args': 'v8_enable_webassembly=false',
+    },
+
+    'v8_enable_dict_property_const_tracking': {
+      'gn_args': 'v8_dict_property_const_tracking=true',
+    },
+
     'v8_disable_pointer_compression': {
       'gn_args': 'v8_enable_pointer_compression=false',
     },
@@ -871,6 +900,10 @@
 
     'ppc64': {
       'gn_args': 'target_cpu="ppc64" use_custom_libcxx=false',
+    },
+
+    'riscv64': {
+      'gn_args': 'target_cpu="riscv64" use_custom_libcxx=false',
     },
 
     'x64': {

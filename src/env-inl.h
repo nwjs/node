@@ -393,10 +393,6 @@ inline T* Environment::AddBindingData(
   return item.get();
 }
 
-inline Environment* Environment::GetThreadLocalEnv() {
-  return static_cast<Environment*>(uv_key_get(&thread_local_env));
-}
-
 inline v8::Isolate* Environment::isolate() const {
   return isolate_;
 }
@@ -899,11 +895,6 @@ inline const Mutex& Environment::extra_linked_bindings_mutex() const {
 
 inline performance::PerformanceState* Environment::performance_state() {
   return performance_state_.get();
-}
-
-inline std::unordered_map<std::string, uint64_t>*
-    Environment::performance_marks() {
-  return &performance_marks_;
 }
 
 inline IsolateData* Environment::isolate_data() const {

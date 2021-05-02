@@ -4208,7 +4208,9 @@ specification).
 
 #### napi_object_freeze
 <!-- YAML
-added: v14.14.0
+added:
+  - v14.14.0
+  - v12.20.0
 napiVersion: 8
 -->
 
@@ -4232,7 +4234,9 @@ ECMA-262 specification.
 
 #### napi_object_seal
 <!-- YAML
-added: v14.14.0
+added:
+  - v14.14.0
+  - v12.20.0
 napiVersion: 8
 -->
 
@@ -5953,7 +5957,9 @@ This API may only be called from the main thread.
 ## node_api_get_module_file_name
 
 <!-- YAML
-added: v15.9.0
+added:
+  - v15.9.0
+  - v12.22.0
 -->
 
 > Stability: 1 - Experimental

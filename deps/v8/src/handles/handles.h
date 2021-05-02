@@ -32,6 +32,7 @@ class RootVisitor;
 class SmallOrderedHashMap;
 class SmallOrderedHashSet;
 class SmallOrderedNameDictionary;
+class SwissNameDictionary;
 class WasmExportedFunctionData;
 
 // ----------------------------------------------------------------------------
@@ -44,14 +45,7 @@ class HandleBase {
   V8_INLINE explicit HandleBase(Address object, LocalHeap* local_heap);
 
   // Check if this handle refers to the exact same object as the other handle.
-  V8_INLINE bool is_identical_to(const HandleBase that) const {
-    SLOW_DCHECK((this->location_ == nullptr || this->IsDereferenceAllowed()) &&
-                (that.location_ == nullptr || that.IsDereferenceAllowed()));
-    if (this->location_ == that.location_) return true;
-    if (this->location_ == nullptr || that.location_ == nullptr) return false;
-    return *this->location_ == *that.location_;
-  }
-
+  V8_INLINE bool is_identical_to(const HandleBase that) const;
   V8_INLINE bool is_null() const { return location_ == nullptr; }
 
   // Returns the raw address where this handle is stored. This should only be
@@ -59,6 +53,8 @@ class HandleBase {
   V8_INLINE Address address() const { return bit_cast<Address>(location_); }
 
   // Returns the address to where the raw pointer is stored.
+  // TODO(leszeks): This should probably be a const Address*, to encourage using
+  // PatchValue for modifying the handle's value.
   V8_INLINE Address* location() const {
     SLOW_DCHECK(location_ == nullptr || IsDereferenceAllowed());
     return location_;
@@ -154,6 +150,13 @@ class Handle final : public HandleBase {
   // Location equality.
   bool equals(Handle<T> other) const { return address() == other.address(); }
 
+  // Patches this Handle's value, in-place, with a new value. All handles with
+  // the same location will see this update.
+  void PatchValue(T new_value) {
+    SLOW_DCHECK(location_ != nullptr && IsDereferenceAllowed());
+    *location_ = new_value.ptr();
+  }
+
   // Provide function object for location equality comparison.
   struct equal_to {
     V8_INLINE bool operator()(Handle<T> lhs, Handle<T> rhs) const {
@@ -193,10 +196,12 @@ inline std::ostream& operator<<(std::ostream& os, Handle<T> handle);
 // garbage collector will no longer track the object stored in the
 // handle and may deallocate it.  The behavior of accessing a handle
 // for which the handle scope has been deleted is undefined.
-class HandleScope {
+class V8_NODISCARD HandleScope {
  public:
   explicit inline HandleScope(Isolate* isolate);
   inline HandleScope(HandleScope&& other) V8_NOEXCEPT;
+  HandleScope(const HandleScope&) = delete;
+  HandleScope& operator=(const HandleScope&) = delete;
 
   // Allow placement new.
   void* operator new(size_t size, void* storage) {
@@ -262,9 +267,8 @@ class HandleScope {
   friend class HandleScopeImplementer;
   friend class Isolate;
   friend class LocalHandles;
+  friend class LocalHandleScope;
   friend class PersistentHandles;
-
-  DISALLOW_COPY_AND_ASSIGN(HandleScope);
 };
 
 // Forward declarations for CanonicalHandleScope.
@@ -280,7 +284,7 @@ using CanonicalHandlesMap = IdentityMap<Address*, ZoneAllocationPolicy>;
 // This does not apply to nested inner HandleScopes unless a nested
 // CanonicalHandleScope is introduced. Handles are only canonicalized within
 // the same CanonicalHandleScope, but not across nested ones.
-class V8_EXPORT_PRIVATE CanonicalHandleScope final {
+class V8_EXPORT_PRIVATE V8_NODISCARD CanonicalHandleScope final {
  public:
   // If we passed a compilation info as parameter, we created the
   // CanonicalHandlesMap on said compilation info's zone(). If so, in the
@@ -313,7 +317,7 @@ class V8_EXPORT_PRIVATE CanonicalHandleScope final {
 
 // Seal off the current HandleScope so that new handles can only be created
 // if a new HandleScope is entered.
-class SealHandleScope final {
+class V8_NODISCARD SealHandleScope final {
  public:
 #ifndef DEBUG
   explicit SealHandleScope(Isolate* isolate) {}

@@ -53,6 +53,12 @@ macro TransitionToMegamorphic(implicit context: Context)(
 macro CollectCallFeedback(
     maybeTarget: JSAny, context: Context,
     maybeFeedbackVector: Undefined|FeedbackVector, slotId: uintptr): void {
+  // TODO(v8:9891): Remove this assert once all callers are ported to Torque.
+  // This assert ensures correctness of maybeFeedbackVector's type which can
+  // be easily broken for calls from CSA.
+  assert(
+      IsUndefined(maybeFeedbackVector) ||
+      Is<FeedbackVector>(maybeFeedbackVector));
   const feedbackVector =
       Cast<FeedbackVector>(maybeFeedbackVector) otherwise return;
   IncrementCallCount(feedbackVector, slotId);
@@ -97,6 +103,12 @@ macro CollectCallFeedback(
 macro CollectInstanceOfFeedback(
     maybeTarget: JSAny, context: Context,
     maybeFeedbackVector: Undefined|FeedbackVector, slotId: uintptr): void {
+  // TODO(v8:9891): Remove this assert once all callers are ported to Torque.
+  // This assert ensures correctness of maybeFeedbackVector's type which can
+  // be easily broken for calls from CSA.
+  assert(
+      IsUndefined(maybeFeedbackVector) ||
+      Is<FeedbackVector>(maybeFeedbackVector));
   const feedbackVector =
       Cast<FeedbackVector>(maybeFeedbackVector) otherwise return;
   // Note: The call count is not incremented.
@@ -129,13 +141,36 @@ macro BothTaggedEqualArrayFunction(implicit context: Context)(
 extern macro CreateAllocationSiteInFeedbackVector(
     FeedbackVector, uintptr): AllocationSite;
 
+macro CastFeedbackVector(
+    maybeFeedbackVector: Undefined|FeedbackVector,
+    updateFeedbackMode: constexpr UpdateFeedbackMode):
+    FeedbackVector labels Fallback {
+  if constexpr (updateFeedbackMode == UpdateFeedbackMode::kGuaranteedFeedback) {
+    return UnsafeCast<FeedbackVector>(maybeFeedbackVector);
+  } else if constexpr (
+      updateFeedbackMode == UpdateFeedbackMode::kOptionalFeedback) {
+    return Cast<FeedbackVector>(maybeFeedbackVector) otherwise goto Fallback;
+  } else {
+    unreachable;
+  }
+}
+
 macro CollectConstructFeedback(implicit context: Context)(
     target: JSAny, newTarget: JSAny,
-    maybeFeedbackVector: Undefined|FeedbackVector,
-    slotId: uintptr): never labels ConstructGeneric,
+    maybeFeedbackVector: Undefined|FeedbackVector, slotId: uintptr,
+    updateFeedbackMode: constexpr UpdateFeedbackMode):
+    never labels ConstructGeneric,
     ConstructArray(AllocationSite) {
-  const feedbackVector = Cast<FeedbackVector>(maybeFeedbackVector)
-      otherwise goto ConstructGeneric;
+  // TODO(v8:9891): Remove this assert once all callers are ported to Torque.
+  // This assert ensures correctness of maybeFeedbackVector's type which can
+  // be easily broken for calls from CSA.
+  assert(
+      IsUndefined(maybeFeedbackVector) ||
+      Is<FeedbackVector>(maybeFeedbackVector));
+
+  const feedbackVector = CastFeedbackVector(
+      maybeFeedbackVector, updateFeedbackMode) otherwise goto ConstructGeneric;
+
   IncrementCallCount(feedbackVector, slotId);
 
   try {

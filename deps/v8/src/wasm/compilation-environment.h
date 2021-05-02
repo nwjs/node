@@ -24,6 +24,7 @@ namespace wasm {
 
 class NativeModule;
 class WasmCode;
+class WasmEngine;
 class WasmError;
 
 enum RuntimeExceptionSupport : bool {
@@ -52,16 +53,20 @@ struct CompilationEnv {
 
   // The smallest size of any memory that could be used with this module, in
   // bytes.
-  const uint64_t min_memory_size;
+  const uintptr_t min_memory_size;
 
   // The largest size of any memory that could be used with this module, in
   // bytes.
-  const uint64_t max_memory_size;
+  const uintptr_t max_memory_size;
 
   // Features enabled for this compilation.
   const WasmFeatures enabled_features;
 
   const LowerSimd lower_simd;
+
+  static constexpr uint32_t kMaxMemoryPagesAtRuntime =
+      std::min(kV8MaxWasmMemoryPages,
+               std::numeric_limits<uintptr_t>::max() / kWasmPageSize);
 
   constexpr CompilationEnv(const WasmModule* module,
                            UseTrapHandler use_trap_handler,
@@ -71,12 +76,16 @@ struct CompilationEnv {
       : module(module),
         use_trap_handler(use_trap_handler),
         runtime_exception_support(runtime_exception_support),
-        min_memory_size(module ? module->initial_pages * uint64_t{kWasmPageSize}
-                               : 0),
-        max_memory_size((module && module->has_maximum_pages
-                             ? module->maximum_pages
-                             : max_initial_mem_pages()) *
+        // During execution, the memory can never be bigger than what fits in a
+        // uintptr_t.
+        min_memory_size(std::min(kMaxMemoryPagesAtRuntime,
+                                 module ? module->initial_pages : 0) *
                         uint64_t{kWasmPageSize}),
+        max_memory_size(static_cast<uintptr_t>(
+            std::min(kMaxMemoryPagesAtRuntime,
+                     module && module->has_maximum_pages ? module->maximum_pages
+                                                         : max_mem_pages()) *
+            uint64_t{kWasmPageSize})),
         enabled_features(enabled_features),
         lower_simd(lower_simd) {}
 };
@@ -94,6 +103,7 @@ class WireBytesStorage {
 // order. If tier up is off, both events are delivered right after each other.
 enum class CompilationEvent : uint8_t {
   kFinishedBaselineCompilation,
+  kFinishedExportWrappers,
   kFinishedTopTierCompilation,
   kFailedCompilation,
   kFinishedRecompilation
@@ -107,6 +117,8 @@ class V8_EXPORT_PRIVATE CompilationState {
 
   ~CompilationState();
 
+  void InitCompileJob(WasmEngine*);
+
   void CancelCompilation();
 
   void SetError();
@@ -119,16 +131,18 @@ class V8_EXPORT_PRIVATE CompilationState {
 
   void InitializeAfterDeserialization();
 
-  // Wait until baseline compilation finished, or compilation failed.
-  void WaitForBaselineFinished();
-
   // Wait until top tier compilation finished, or compilation failed.
   void WaitForTopTierFinished();
+
+  // Set a higher priority for the compilation job.
+  void SetHighPriority();
 
   bool failed() const;
   bool baseline_compilation_finished() const;
   bool top_tier_compilation_finished() const;
   bool recompilation_finished() const;
+
+  void set_compilation_id(int compilation_id);
 
   // Override {operator delete} to avoid implicit instantiation of {operator
   // delete} with {size_t} argument. The {size_t} argument would be incorrect.

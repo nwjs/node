@@ -177,19 +177,20 @@ class MinimorphicLoadPropertyAccessFeedback : public ProcessedFeedback {
  public:
   MinimorphicLoadPropertyAccessFeedback(NameRef const& name,
                                         FeedbackSlotKind slot_kind,
-                                        bool is_monomorphic,
                                         Handle<Object> handler,
+                                        ZoneVector<Handle<Map>> const& maps,
                                         bool has_migration_target_maps);
 
   NameRef const& name() const { return name_; }
-  bool is_monomorphic() const { return is_monomorphic_; }
+  bool is_monomorphic() const { return maps_.size() == 1; }
   Handle<Object> handler() const { return handler_; }
+  ZoneVector<Handle<Map>> const& maps() const { return maps_; }
   bool has_migration_target_maps() const { return has_migration_target_maps_; }
 
  private:
   NameRef const name_;
-  bool const is_monomorphic_;
   Handle<Object> const handler_;
+  ZoneVector<Handle<Map>> const maps_;
   bool const has_migration_target_maps_;
 };
 
@@ -245,7 +246,7 @@ class LiteralFeedback
 };
 
 class RegExpLiteralFeedback
-    : public SingleValueFeedback<JSRegExpRef,
+    : public SingleValueFeedback<RegExpBoilerplateDescriptionRef,
                                  ProcessedFeedback::kRegExpLiteral> {
   using SingleValueFeedback::SingleValueFeedback;
 };

@@ -111,7 +111,7 @@ const int kMmapFd = VM_MAKE_TAG(255);
 const int kMmapFd = -1;
 #endif  // !V8_OS_MACOSX
 
-#if defined(__APPLE__) && V8_TARGET_ARCH_ARM64
+#if defined(V8_TARGET_OS_MACOSX) && V8_HOST_ARCH_ARM64
 // During snapshot generation in cross builds, sysconf() runs on the Intel
 // host and returns host page size, while the snapshot needs to use the
 // target page size.
@@ -244,21 +244,18 @@ int OS::ActivationFrameAlignment() {
 
 // static
 size_t OS::AllocatePageSize() {
-#if defined(__APPLE__) && V8_TARGET_ARCH_ARM64
+#if defined(V8_TARGET_OS_MACOSX) && V8_HOST_ARCH_ARM64
   return kAppleArmPageSize;
 #else
-  return static_cast<size_t>(sysconf(_SC_PAGESIZE));
+  static size_t page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+  return page_size;
 #endif
 }
 
 // static
 size_t OS::CommitPageSize() {
-#if defined(__APPLE__) && V8_TARGET_ARCH_ARM64
-  static size_t page_size = kAppleArmPageSize;
-#else
-  static size_t page_size = getpagesize();
-#endif
-  return page_size;
+  // Commit and allocate page size are the same on posix.
+  return OS::AllocatePageSize();
 }
 
 // static
@@ -276,9 +273,13 @@ void* OS::GetRandomMmapAddr() {
     MutexGuard guard(rng_mutex.Pointer());
     GetPlatformRandomNumberGenerator()->NextBytes(&raw_addr, sizeof(raw_addr));
   }
-#if defined(__APPLE__) && V8_TARGET_ARCH_ARM64
+#if V8_HOST_ARCH_ARM64
+#if defined(V8_TARGET_OS_MACOSX)
   DCHECK_EQ(1 << 14, AllocatePageSize());
-  raw_addr = RoundDown(raw_addr, 1 << 14);
+#endif
+  // Keep the address page-aligned, AArch64 supports 4K, 16K and 64K
+  // configurations.
+  raw_addr = RoundDown(raw_addr, AllocatePageSize());
 #endif
 #if defined(V8_USE_ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER) || \
     defined(THREAD_SANITIZER) || defined(LEAK_SANITIZER)
@@ -320,6 +321,10 @@ void* OS::GetRandomMmapAddr() {
 #elif V8_TARGET_ARCH_MIPS64
   // 42 bits of virtual addressing. Truncate to 40 bits to allow kernel chance
   // to fulfill request.
+  raw_addr &= uint64_t{0xFFFFFF0000};
+#elif V8_TARGET_ARCH_RISCV64
+  // TODO(RISCV): We need more information from the kernel to correctly mask
+  // this address for RISC-V. https://github.com/v8-riscv/v8/issues/375
   raw_addr &= uint64_t{0xFFFFFF0000};
 #else
   raw_addr &= 0x3FFFF000;
@@ -519,6 +524,8 @@ void OS::DebugBreak() {
 #elif V8_HOST_ARCH_S390
   // Software breakpoint instruction is 0x0001
   asm volatile(".word 0x0001");
+#elif V8_HOST_ARCH_RISCV64
+  asm("ebreak");
 #else
 #error Unsupported host architecture.
 #endif
@@ -691,9 +698,7 @@ FILE* OS::OpenTemporaryFile() {
   return tmpfile();
 }
 
-
-const char* const OS::LogFileOpenMode = "w";
-
+const char* const OS::LogFileOpenMode = "w+";
 
 void OS::Print(const char* format, ...) {
   va_list args;
@@ -1014,7 +1019,7 @@ void Thread::SetThreadLocal(LocalStorageKey key, void* value) {
     !defined(V8_OS_SOLARIS)
 
 // static
-void* Stack::GetStackStart() {
+Stack::StackSlot Stack::GetStackStart() {
   pthread_attr_t attr;
   int error = pthread_getattr_np(pthread_self(), &attr);
   if (!error) {
@@ -1025,7 +1030,6 @@ void* Stack::GetStackStart() {
     pthread_attr_destroy(&attr);
     return reinterpret_cast<uint8_t*>(base) + size;
   }
-  pthread_attr_destroy(&attr);
 
 #if defined(V8_LIBC_GLIBC)
   // pthread_getattr_np can fail for the main thread. In this case
@@ -1041,7 +1045,9 @@ void* Stack::GetStackStart() {
         // !defined(_AIX) && !defined(V8_OS_SOLARIS)
 
 // static
-void* Stack::GetCurrentStackPosition() { return __builtin_frame_address(0); }
+Stack::StackSlot Stack::GetCurrentStackPosition() {
+  return __builtin_frame_address(0);
+}
 
 #undef LOG_TAG
 #undef MAP_ANONYMOUS

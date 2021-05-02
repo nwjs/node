@@ -6,7 +6,7 @@
 #define V8_OBJECTS_JS_WEAK_REFS_H_
 
 #include "src/objects/js-objects.h"
-#include "torque-generated/bit-fields-tq.h"
+#include "torque-generated/bit-fields.h"
 
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
@@ -16,6 +16,8 @@ namespace internal {
 
 class NativeContext;
 class WeakCell;
+
+#include "torque-generated/src/objects/js-weak-refs-tq.inc"
 
 // FinalizationRegistry object from the JS Weak Refs spec proposal:
 // https://github.com/tc39/proposal-weakrefs

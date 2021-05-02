@@ -18,6 +18,8 @@
 namespace v8 {
 namespace internal {
 
+enum class StackLimitKind { kInterruptStackLimit, kRealStackLimit };
+
 // ----------------------------------------------------------------------------
 // Static helper functions
 
@@ -237,6 +239,10 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
     StoreP(src1, MemOperand(sp, 4 * kSystemPointerSize));
   }
 
+  enum PushArrayOrder { kNormal, kReverse };
+  void PushArray(Register array, Register size, Register scratch,
+                 Register scratch2, PushArrayOrder order = kNormal);
+
   void Pop(Register dst) { pop(dst); }
 
   // Pop two registers. Pops rightmost register first (from lower address).
@@ -291,6 +297,9 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
 
   void MultiPushDoubles(RegList dregs, Register location = sp);
   void MultiPopDoubles(RegList dregs, Register location = sp);
+
+  void MultiPushV128(RegList dregs, Register location = sp);
+  void MultiPopV128(RegList dregs, Register location = sp);
 
   // Calculate how much stack space (in bytes) are required to store caller
   // registers excluding those specified in the arguments.
@@ -434,11 +443,13 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void LoadEntryFromBuiltinIndex(Register builtin_index);
   void LoadCodeObjectEntry(Register destination, Register code_object) override;
   void CallCodeObject(Register code_object) override;
-  void JumpCodeObject(Register code_object) override;
+  void JumpCodeObject(Register code_object,
+                      JumpMode jump_mode = JumpMode::kJump) override;
 
   void CallBuiltinByIndex(Register builtin_index) override;
-  void CallForDeoptimization(Address target, int deopt_id, Label* exit,
-                             DeoptimizeKind kind);
+  void CallForDeoptimization(Builtins::Name target, int deopt_id, Label* exit,
+                             DeoptimizeKind kind, Label* ret,
+                             Label* jump_deoptimization_entry_label);
 
   // Emit code to discard a non-negative number of pointer-sized elements
   // from the stack, clobbering only the sp register.
@@ -593,6 +604,8 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void JumpIfEqual(Register x, int32_t y, Label* dest);
   void JumpIfLessThan(Register x, int32_t y, Label* dest);
 
+  void LoadMap(Register destination, Register object);
+
 #if V8_TARGET_ARCH_PPC64
   inline void TestIfInt32(Register value, Register scratch,
                           CRegister cr = cr7) {
@@ -710,7 +723,7 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
                            bool has_function_descriptor);
   void CallRecordWriteStub(Register object, Register address,
                            RememberedSetAction remembered_set_action,
-                           SaveFPRegsMode fp_mode, Handle<Code> code_target,
+                           SaveFPRegsMode fp_mode, int builtin_index,
                            Address wasm_target);
 };
 
@@ -718,6 +731,18 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
 class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
  public:
   using TurboAssembler::TurboAssembler;
+
+  // It assumes that the arguments are located below the stack pointer.
+  // argc is the number of arguments not including the receiver.
+  // TODO(victorgomes): Remove this function once we stick with the reversed
+  // arguments order.
+  void LoadReceiver(Register dest, Register argc) {
+    LoadP(dest, MemOperand(sp, 0));
+  }
+
+  void StoreReceiver(Register rec, Register argc, Register scratch) {
+    StoreP(rec, MemOperand(sp, 0));
+  }
 
   // ---------------------------------------------------------------------------
   // GC Support
@@ -753,8 +778,6 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
   // remove in a register (or no_reg, if there is nothing to remove).
   void LeaveExitFrame(bool save_doubles, Register argument_count,
                       bool argument_count_is_length = false);
-
-  void LoadMap(Register destination, Register object);
 
   // Load the global proxy from the current context.
   void LoadGlobalProxy(Register dst) {
@@ -854,6 +877,14 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
   // sets the flags and leaves the object type in the type_reg register.
   void CompareInstanceType(Register map, Register type_reg, InstanceType type);
 
+  // Compare instance type ranges for a map (lower_limit and higher_limit
+  // inclusive).
+  //
+  // Always use unsigned comparisons: ls for a positive result.
+  void CompareInstanceTypeRange(Register map, Register type_reg,
+                                InstanceType lower_limit,
+                                InstanceType higher_limit);
+
   // Compare the object in a register to a value from the root list.
   // Uses the ip register as scratch.
   void CompareRoot(Register obj, RootIndex index);
@@ -929,6 +960,13 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
                         Register scratch2);
   void DecrementCounter(StatsCounter* counter, int value, Register scratch1,
                         Register scratch2);
+
+  // ---------------------------------------------------------------------------
+  // Stack limit utilities
+
+  void StackOverflowCheck(Register num_args, Register scratch,
+                          Label* stack_overflow);
+  void LoadStackLimit(Register destination, StackLimitKind kind);
 
   // ---------------------------------------------------------------------------
   // Smi utilities

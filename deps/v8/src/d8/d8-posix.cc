@@ -16,6 +16,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "src/base/platform/wrappers.h"
 #include "src/d8/d8.h"
 
 namespace v8 {
@@ -316,7 +317,7 @@ static Local<Value> GetStdout(Isolate* isolate, int child_fd,
               .ToLocalChecked();
       accumulator = String::Concat(isolate, accumulator, addition);
       fullness = bytes_read + fullness - length;
-      memcpy(buffer, buffer + length, fullness);
+      base::Memcpy(buffer, buffer + length, fullness);
     }
   } while (bytes_read != 0);
   return accumulator;
@@ -422,7 +423,7 @@ void Shell::System(const v8::FunctionCallbackInfo<v8::Value>& args) {
           args.GetIsolate(), "system: Argument 2 must be an array"));
       return;
     }
-    command_args = Local<Array>::Cast(args[1]);
+    command_args = args[1].As<Array>();
   } else {
     command_args = Array::New(args.GetIsolate(), 0);
   }
@@ -677,7 +678,7 @@ char* Shell::ReadCharsFromTcpPort(const char* name, int* size_out) {
   if (connect(sockfd, reinterpret_cast<sockaddr*>(&serv_addr),
               sizeof(serv_addr)) < 0) {
     fprintf(stderr, "Failed to connect to localhost:%d\n",
-            Shell::options.read_from_tcp_port);
+            Shell::options.read_from_tcp_port.get());
     close(sockfd);
     return nullptr;
   }
@@ -705,7 +706,7 @@ char* Shell::ReadCharsFromTcpPort(const char* name, int* size_out) {
     ssize_t sent_now = send(sockfd, name + sent_len, name_len - sent_len, 0);
     if (sent_now < 0) {
       fprintf(stderr, "Failed to send %s to localhost:%d\n", name,
-              Shell::options.read_from_tcp_port);
+              Shell::options.read_from_tcp_port.get());
       close(sockfd);
       return nullptr;
     }
@@ -722,7 +723,7 @@ char* Shell::ReadCharsFromTcpPort(const char* name, int* size_out) {
   // We need those 4 bytes to read off the file length.
   if (received < 4) {
     fprintf(stderr, "Failed to receive %s's length from localhost:%d\n", name,
-            Shell::options.read_from_tcp_port);
+            Shell::options.read_from_tcp_port.get());
     close(sockfd);
     return nullptr;
   }
@@ -731,7 +732,7 @@ char* Shell::ReadCharsFromTcpPort(const char* name, int* size_out) {
 
   if (file_length < 0) {
     fprintf(stderr, "Received length %d for %s from localhost:%d\n",
-            file_length, name, Shell::options.read_from_tcp_port);
+            file_length, name, Shell::options.read_from_tcp_port.get());
     close(sockfd);
     return nullptr;
   }
@@ -746,7 +747,7 @@ char* Shell::ReadCharsFromTcpPort(const char* name, int* size_out) {
         recv(sockfd, chars + total_received, file_length - total_received, 0);
     if (received < 0) {
       fprintf(stderr, "Failed to receive %s from localhost:%d\n", name,
-              Shell::options.read_from_tcp_port);
+              Shell::options.read_from_tcp_port.get());
       close(sockfd);
       delete[] chars;
       return nullptr;

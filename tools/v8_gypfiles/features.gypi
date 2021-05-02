@@ -73,11 +73,6 @@
     # Sets -DV8_ENABLE_FUTURE.
     'v8_enable_future%': 0,
 
-    # Lite mode disables a number of performance optimizations to reduce memory
-    # at the cost of performance.
-    # Sets --DV8_LITE_MODE.
-    'v8_enable_lite_mode%': 0,
-
     # Sets -DVERIFY_HEAP.
     'v8_enable_verify_heap%': 0,
 
@@ -145,9 +140,6 @@
 
     # Sets -dV8_TRACE_FEEDBACK_UPDATES.
     'v8_enable_trace_feedback_updates%': 0,
-
-    # Sets -dV8_CONCURRENT_MARKING
-    'v8_enable_concurrent_marking%': 1,
 
     # Enables various testing features.
     'v8_enable_test_features%': 0,
@@ -220,11 +212,27 @@
     # Requires use_rtti = true
     'v8_enable_precise_zone_stats%': 0,
 
+    # Experimental feature for tracking constness of properties in non-global
+    # dictionaries. Enabling this also always keeps prototypes in dict mode,
+    # meaning that they are not switched to fast mode.
+    # Sets -DV8_DICT_PROPERTY_CONST_TRACKING
+    'v8_dict_property_const_tracking%': 0,
+
     # Variables from v8.gni
 
     # Enable ECMAScript Internationalization API. Enabling this feature will
     # add a dependency on the ICU library.
     'v8_enable_i18n_support%': 1,
+
+    # Lite mode disables a number of performance optimizations to reduce memory
+    # at the cost of performance.
+    # Sets --DV8_LITE_MODE.
+    'v8_enable_lite_mode%': 0,
+
+    # Include support for WebAssembly. If disabled, the 'WebAssembly' global
+    # will not be available, and embedder APIs to generate WebAssembly modules
+    # will fail.
+    'v8_enable_webassembly%': 1,
   },
 
   'target_defaults': {
@@ -322,9 +330,6 @@
       ['v8_enable_third_party_heap==1', {
         'defines': ['V8_ENABLE_THIRD_PARTY_HEAP',],
       }],
-      ['v8_enable_concurrent_marking==1', {
-        'defines': ['V8_CONCURRENT_MARKING',],
-      }],
       ['v8_enable_lazy_source_positions==1', {
         'defines': ['V8_ENABLE_LAZY_SOURCE_POSITIONS',],
       }],
@@ -360,6 +365,12 @@
       }],
       ['v8_enable_precise_zone_stats==1', {
         'defines': ['V8_ENABLE_PRECISE_ZONE_STATS',],
+      }],
+      ['v8_enable_webassembly==1', {
+        'defines': ['V8_ENABLE_WEBASSEMBLY',],
+      }],
+      ['v8_dict_property_const_tracking==1', {
+        'defines': ['V8_DICT_PROPERTY_CONST_TRACKING',],
       }],
     ],  # conditions
     'defines': [

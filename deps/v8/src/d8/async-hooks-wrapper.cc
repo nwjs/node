@@ -52,7 +52,7 @@ static AsyncHooksWrap* UnwrapHook(
     return nullptr;
   }
 
-  Local<External> wrap = Local<External>::Cast(hook->GetInternalField(0));
+  Local<External> wrap = hook->GetInternalField(0).As<External>();
   void* ptr = wrap->Value();
   return static_cast<AsyncHooksWrap*>(ptr);
 }
@@ -196,11 +196,9 @@ void AsyncHooks::Initialize() {
                           async_hook_ctor.Get(isolate_)->InstanceTemplate());
   async_hooks_templ.Get(isolate_)->SetInternalFieldCount(1);
   async_hooks_templ.Get(isolate_)->Set(
-      String::NewFromUtf8Literal(isolate_, "enable"),
-      FunctionTemplate::New(isolate_, EnableHook));
+      isolate_, "enable", FunctionTemplate::New(isolate_, EnableHook));
   async_hooks_templ.Get(isolate_)->Set(
-      String::NewFromUtf8Literal(isolate_, "disable"),
-      FunctionTemplate::New(isolate_, DisableHook));
+      isolate_, "disable", FunctionTemplate::New(isolate_, DisableHook));
 
   async_id_smb.Reset(isolate_, Private::New(isolate_));
   trigger_id_smb.Reset(isolate_, Private::New(isolate_));

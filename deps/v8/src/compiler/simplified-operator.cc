@@ -289,19 +289,26 @@ CheckMapsParameters const& CheckMapsParametersOf(Operator const* op) {
 
 bool operator==(DynamicCheckMapsParameters const& lhs,
                 DynamicCheckMapsParameters const& rhs) {
-  return lhs.handler().address() == rhs.handler().address() &&
-         lhs.feedback() == rhs.feedback() && lhs.state() == rhs.state();
+  // FeedbackSource is sufficient as an equality check. FeedbackSource uniquely
+  // determines all other properties (handler, flags and the monomorphic map
+  DCHECK_IMPLIES(lhs.feedback() == rhs.feedback(),
+                 lhs.flags() == rhs.flags() && lhs.state() == rhs.state() &&
+                     lhs.handler().address() == rhs.handler().address() &&
+                     lhs.maps() == rhs.maps());
+  return lhs.feedback() == rhs.feedback();
 }
 
 size_t hash_value(DynamicCheckMapsParameters const& p) {
   FeedbackSource::Hash feedback_hash;
-  return base::hash_combine(p.handler().address(), feedback_hash(p.feedback()),
-                            p.state());
+  // FeedbackSource is sufficient for hashing. FeedbackSource uniquely
+  // determines all other properties (handler, flags and the monomorphic map
+  return base::hash_combine(feedback_hash(p.feedback()));
 }
 
 std::ostream& operator<<(std::ostream& os,
                          DynamicCheckMapsParameters const& p) {
-  return os << p.handler() << ", " << p.feedback() << "," << p.state();
+  return os << p.handler() << ", " << p.feedback() << "," << p.state() << ","
+            << p.flags() << "," << p.maps();
 }
 
 DynamicCheckMapsParameters const& DynamicCheckMapsParametersOf(
@@ -554,8 +561,6 @@ std::ostream& operator<<(std::ostream& os, NumberOperationHint hint) {
       return os << "SignedSmall";
     case NumberOperationHint::kSignedSmallInputs:
       return os << "SignedSmallInputs";
-    case NumberOperationHint::kSigned32:
-      return os << "Signed32";
     case NumberOperationHint::kNumber:
       return os << "Number";
     case NumberOperationHint::kNumberOrBoolean:
@@ -967,13 +972,6 @@ struct SimplifiedOperatorGlobalCache final {
   FindOrderedHashMapEntryForInt32KeyOperator
       kFindOrderedHashMapEntryForInt32Key;
 
-  struct ArgumentsFrameOperator final : public Operator {
-    ArgumentsFrameOperator()
-        : Operator(IrOpcode::kArgumentsFrame, Operator::kPure, "ArgumentsFrame",
-                   0, 0, 0, 1, 0, 0) {}
-  };
-  ArgumentsFrameOperator kArgumentsFrame;
-
   template <CheckForMinusZeroMode kMode>
   struct ChangeFloat64ToTaggedOperator final
       : public Operator1<CheckForMinusZeroMode> {
@@ -1181,7 +1179,6 @@ struct SimplifiedOperatorGlobalCache final {
       k##Name##SignedSmallOperator;                                         \
   Name##Operator<NumberOperationHint::kSignedSmallInputs>                   \
       k##Name##SignedSmallInputsOperator;                                   \
-  Name##Operator<NumberOperationHint::kSigned32> k##Name##Signed32Operator; \
   Name##Operator<NumberOperationHint::kNumber> k##Name##NumberOperator;     \
   Name##Operator<NumberOperationHint::kNumberOrOddball>                     \
       k##Name##NumberOrOddballOperator;
@@ -1202,8 +1199,6 @@ struct SimplifiedOperatorGlobalCache final {
   };
   SpeculativeToNumberOperator<NumberOperationHint::kSignedSmall>
       kSpeculativeToNumberSignedSmallOperator;
-  SpeculativeToNumberOperator<NumberOperationHint::kSigned32>
-      kSpeculativeToNumberSigned32Operator;
   SpeculativeToNumberOperator<NumberOperationHint::kNumber>
       kSpeculativeToNumberNumberOperator;
   SpeculativeToNumberOperator<NumberOperationHint::kNumberOrOddball>
@@ -1223,7 +1218,6 @@ SimplifiedOperatorBuilder::SimplifiedOperatorBuilder(Zone* zone)
 PURE_OP_LIST(GET_FROM_CACHE)
 EFFECT_DEPENDENT_OP_LIST(GET_FROM_CACHE)
 CHECKED_OP_LIST(GET_FROM_CACHE)
-GET_FROM_CACHE(ArgumentsFrame)
 GET_FROM_CACHE(FindOrderedHashMapEntry)
 GET_FROM_CACHE(FindOrderedHashMapEntryForInt32Key)
 GET_FROM_CACHE(LoadFieldByIndex)
@@ -1313,6 +1307,12 @@ const Operator* SimplifiedOperatorBuilder::UpdateInterruptBudget(int delta) {
   return zone()->New<Operator1<int>>(
       IrOpcode::kUpdateInterruptBudget, Operator::kNoThrow | Operator::kNoDeopt,
       "UpdateInterruptBudget", 1, 1, 1, 0, 1, 0, delta);
+}
+
+const Operator* SimplifiedOperatorBuilder::TierUpCheck() {
+  return zone()->New<Operator>(IrOpcode::kTierUpCheck,
+                               Operator::kNoThrow | Operator::kNoDeopt,
+                               "TierUpCheck", 5, 1, 1, 0, 1, 0);
 }
 
 const Operator* SimplifiedOperatorBuilder::AssertType(Type type) {
@@ -1475,10 +1475,8 @@ const Operator* SimplifiedOperatorBuilder::CheckMaps(
 
 const Operator* SimplifiedOperatorBuilder::DynamicCheckMaps(
     CheckMapsFlags flags, Handle<Object> handler,
-    const FeedbackSource& feedback,
-    DynamicCheckMapsParameters::ICState ic_state) {
-  DynamicCheckMapsParameters const parameters(flags, handler, feedback,
-                                              ic_state);
+    ZoneHandleSet<Map> const& maps, const FeedbackSource& feedback) {
+  DynamicCheckMapsParameters const parameters(flags, handler, maps, feedback);
   return zone()->New<Operator1<DynamicCheckMapsParameters>>(  // --
       IrOpcode::kDynamicCheckMaps,                            // opcode
       Operator::kNoThrow | Operator::kNoWrite,                // flags
@@ -1584,8 +1582,6 @@ const Operator* SimplifiedOperatorBuilder::SpeculativeToNumber(
         return &cache_.kSpeculativeToNumberSignedSmallOperator;
       case NumberOperationHint::kSignedSmallInputs:
         break;
-      case NumberOperationHint::kSigned32:
-        return &cache_.kSpeculativeToNumberSigned32Operator;
       case NumberOperationHint::kNumber:
         return &cache_.kSpeculativeToNumberNumberOperator;
       case NumberOperationHint::kNumberOrBoolean:
@@ -1633,14 +1629,12 @@ const Operator* SimplifiedOperatorBuilder::TransitionElementsKind(
       transition);                                    // parameter
 }
 
-const Operator* SimplifiedOperatorBuilder::ArgumentsLength(
-    int formal_parameter_count) {
-  return zone()->New<Operator1<int>>(  // --
-      IrOpcode::kArgumentsLength,      // opcode
-      Operator::kPure,                 // flags
-      "ArgumentsLength",               // name
-      1, 0, 0, 1, 0, 0,                // counts
-      formal_parameter_count);         // parameter
+const Operator* SimplifiedOperatorBuilder::ArgumentsLength() {
+  return zone()->New<Operator>(    // --
+      IrOpcode::kArgumentsLength,  // opcode
+      Operator::kPure,             // flags
+      "ArgumentsLength",           // name
+      0, 0, 0, 1, 0, 0);           // counts
 }
 
 const Operator* SimplifiedOperatorBuilder::RestLength(
@@ -1649,7 +1643,7 @@ const Operator* SimplifiedOperatorBuilder::RestLength(
       IrOpcode::kRestLength,           // opcode
       Operator::kPure,                 // flags
       "RestLength",                    // name
-      1, 0, 0, 1, 0, 0,                // counts
+      0, 0, 0, 1, 0, 0,                // counts
       formal_parameter_count);         // parameter
 }
 
@@ -1771,7 +1765,7 @@ const Operator* SimplifiedOperatorBuilder::NewArgumentsElements(
       IrOpcode::kNewArgumentsElements,                            // opcode
       Operator::kEliminatable,                                    // flags
       "NewArgumentsElements",                                     // name
-      2, 1, 0, 1, 1, 0,                                           // counts
+      1, 1, 0, 1, 1, 0,                                           // counts
       NewArgumentsElementsParameters(type,
                                      formal_parameter_count));  // parameter
 }
@@ -1826,8 +1820,6 @@ const Operator* SimplifiedOperatorBuilder::AllocateRaw(
         return &cache_.k##Name##SignedSmallOperator;                          \
       case NumberOperationHint::kSignedSmallInputs:                           \
         return &cache_.k##Name##SignedSmallInputsOperator;                    \
-      case NumberOperationHint::kSigned32:                                    \
-        return &cache_.k##Name##Signed32Operator;                             \
       case NumberOperationHint::kNumber:                                      \
         return &cache_.k##Name##NumberOperator;                               \
       case NumberOperationHint::kNumberOrBoolean:                             \
@@ -1850,8 +1842,6 @@ const Operator* SimplifiedOperatorBuilder::SpeculativeNumberEqual(
       return &cache_.kSpeculativeNumberEqualSignedSmallOperator;
     case NumberOperationHint::kSignedSmallInputs:
       return &cache_.kSpeculativeNumberEqualSignedSmallInputsOperator;
-    case NumberOperationHint::kSigned32:
-      return &cache_.kSpeculativeNumberEqualSigned32Operator;
     case NumberOperationHint::kNumber:
       return &cache_.kSpeculativeNumberEqualNumberOperator;
     case NumberOperationHint::kNumberOrBoolean:
@@ -1948,6 +1938,11 @@ const Operator* SimplifiedOperatorBuilder::FastApiCall(
       IrOpcode::kFastApiCall, Operator::kNoThrow, "FastApiCall",
       value_input_count, 1, 1, 1, 1, 0,
       FastApiCallParameters(signature, feedback, descriptor));
+}
+
+int FastApiCallNode::FastCallExtraInputCount() const {
+  return kFastTargetInputCount + kEffectAndControlInputCount +
+         (Parameters().signature()->HasOptions() ? 1 : 0);
 }
 
 int FastApiCallNode::FastCallArgumentCount() const {

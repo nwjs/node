@@ -121,7 +121,9 @@ changes:
     - v12.19.0
     pr-url: https://github.com/nodejs/node/pull/33617
     description: Add `maxTotalSockets` option to agent constructor.
-  - version: v14.5.0
+  - version:
+      - v14.5.0
+      - v12.20.0
     pr-url: https://github.com/nodejs/node/pull/33278
     description: Add `scheduling` option to specify the free socket
                  scheduling strategy.
@@ -269,6 +271,10 @@ terminates them.
 ### `agent.freeSockets`
 <!-- YAML
 added: v0.11.4
+changes:
+  - version: v16.0.0
+    pr-url: https://github.com/nodejs/node/pull/36409
+    description: The property now has a `null` prototype.
 -->
 
 * {Object}
@@ -335,6 +341,10 @@ can have open. Unlike `maxSockets`, this parameter applies across all origins.
 ### `agent.requests`
 <!-- YAML
 added: v0.5.9
+changes:
+  - version: v16.0.0
+    pr-url: https://github.com/nodejs/node/pull/36409
+    description: The property now has a `null` prototype.
 -->
 
 * {Object}
@@ -345,6 +355,10 @@ sockets. Do not modify.
 ### `agent.sockets`
 <!-- YAML
 added: v0.3.6
+changes:
+  - version: v16.0.0
+    pr-url: https://github.com/nodejs/node/pull/36409
+    description: The property now has a `null` prototype.
 -->
 
 * {Object}
@@ -2003,6 +2017,16 @@ const req = http.request({
 });
 ```
 
+### `message.connection`
+<!-- YAML
+added: v0.1.90
+deprecated: v16.0.0
+ -->
+
+> Stability: 0 - Deprecated. Use [`message.socket`][].
+
+Alias for [`message.socket`][].
+
 ### `message.destroy([error])`
 <!-- YAML
 added: v0.3.0
@@ -2696,7 +2720,7 @@ The `callback` is invoked with a single argument that is an instance of
 JSON fetching example:
 
 ```js
-http.get('http://nodejs.org/dist/index.json', (res) => {
+http.get('http://localhost:8000/', (res) => {
   const { statusCode } = res;
   const contentType = res.headers['content-type'];
 
@@ -2731,6 +2755,16 @@ http.get('http://nodejs.org/dist/index.json', (res) => {
 }).on('error', (e) => {
   console.error(`Got error: ${e.message}`);
 });
+
+// Create a local server to receive data from
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    data: 'Hello World!'
+  }));
+});
+
+server.listen(8000);
 ```
 
 ## `http.globalAgent`
@@ -3137,6 +3171,7 @@ try {
 [`net.Socket`]: net.md#net_class_net_socket
 [`net.createConnection()`]: net.md#net_net_createconnection_options_connectlistener
 [`new URL()`]: url.md#url_new_url_input_base
+[`message.socket`]: #http_message_socket
 [`outgoingMessage.socket`]: #http_outgoingMessage.socket
 [`removeHeader(name)`]: #http_request_removeheader_name
 [`request.end()`]: #http_request_end_data_encoding_callback

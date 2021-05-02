@@ -141,6 +141,7 @@ module.exports = {
       code: 80,
       ignorePattern: '^// Flags:',
       ignoreRegExpLiterals: true,
+      ignoreTemplateLiterals: true,
       ignoreUrls: true,
       tabWidth: 2,
     }],
@@ -329,5 +330,8 @@ module.exports = {
     TextDecoder: 'readable',
     queueMicrotask: 'readable',
     globalThis: 'readable',
+    btoa: 'readable',
+    atob: 'readable',
+    performance: 'readable',
   },
 };

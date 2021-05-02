@@ -387,8 +387,8 @@ added:
 
 > Stability: 1 - Experimental
 
-*This feature is only available with the `--experimental-vm-modules` command
-flag enabled.*
+This feature is only available with the `--experimental-vm-modules` command
+flag enabled.
 
 The `vm.Module` class provides a low-level interface for using
 ECMAScript modules in VM contexts. It is the counterpart of the `vm.Script`
@@ -617,6 +617,16 @@ The identifier of the current module, as set in the constructor.
     import foo from 'foo';
     //              ^^^^^ the module specifier
     ```
+  * `extra` {Object}
+    * `assert` {Object} The data from the assertion:
+      <!-- eslint-skip -->
+      ```js
+      import foo from 'foo' assert { name: 'value' };
+      //                           ^^^^^^^^^^^^^^^^^ the assertion
+      ```
+      Per ECMA-262, hosts are expected to ignore assertions that they do not
+      support, as opposed to, for example, triggering an error if an
+      unsupported assertion is present.
 
   * `referencingModule` {vm.Module} The `Module` object `link()` is called on.
   * Returns: {vm.Module|Promise}
@@ -699,8 +709,8 @@ added: v9.6.0
 
 > Stability: 1 - Experimental
 
-*This feature is only available with the `--experimental-vm-modules` command
-flag enabled.*
+This feature is only available with the `--experimental-vm-modules` command
+flag enabled.
 
 * Extends: {vm.Module}
 
@@ -831,8 +841,8 @@ added:
 
 > Stability: 1 - Experimental
 
-*This feature is only available with the `--experimental-vm-modules` command
-flag enabled.*
+This feature is only available with the `--experimental-vm-modules` command
+flag enabled.
 
 * Extends: {vm.Module}
 
@@ -1051,7 +1061,7 @@ added: v0.11.7
 * `object` {Object}
 * Returns: {boolean}
 
-Returns `true` if the given `oject` object has been [contextified][] using
+Returns `true` if the given `object` object has been [contextified][] using
 [`vm.createContext()`][].
 
 ## `vm.runInContext(code, contextifiedObject[, options])`

@@ -178,14 +178,16 @@ let asyncTest = Promise.resolve();
 }
 
 {
-  const uncaughtException = common.mustCall((err, event) => {
+  const uncaughtException = common.mustCall((err, origin) => {
     strictEqual(err.message, 'boom');
-    strictEqual(event.type, 'foo');
+    strictEqual(origin, 'uncaughtException');
   }, 4);
 
-  // Whether or not the handler function is async or not, errors
-  // are routed to uncaughtException
-  process.on('error', uncaughtException);
+  // Make sure that we no longer call 'error' on error.
+  process.on('error', common.mustNotCall());
+  // Don't call rejection even for async handlers.
+  process.on('unhandledRejection', common.mustNotCall());
+  process.on('uncaughtException', uncaughtException);
 
   const eventTarget = new EventTarget();
 
@@ -231,7 +233,7 @@ let asyncTest = Promise.resolve();
     {},  // No type event
     undefined,
     1,
-    false
+    false,
   ].forEach((i) => {
     throws(() => target.dispatchEvent(i), {
       code: 'ERR_INVALID_ARG_TYPE',
@@ -252,7 +254,7 @@ let asyncTest = Promise.resolve();
     'foo',
     1,
     {},  // No handleEvent function
-    false
+    false,
   ].forEach((i) => throws(() => target.addEventListener('foo', i), err(i)));
 }
 
@@ -396,7 +398,7 @@ let asyncTest = Promise.resolve();
     undefined,
     false,
     Symbol(),
-    /a/
+    /a/,
   ].forEach((i) => {
     throws(() => target.dispatchEvent.call(i, event), {
       code: 'ERR_INVALID_THIS'

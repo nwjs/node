@@ -27,6 +27,16 @@ proposal_flags = [{
                     'flags': ['--experimental-wasm-return-call',
                               '--wasm-staging']
                   },
+                  {
+                    'name': 'simd',
+                    'flags': ['--experimental-wasm-simd',
+                              '--wasm-staging']
+                  },
+                  {
+                    'name': 'memory64',
+                    'flags': ['--experimental-wasm-memory64',
+                              '--wasm-staging']
+                  },
                   ]
 
 class TestLoader(testsuite.JSTestLoader):

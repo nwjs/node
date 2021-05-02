@@ -196,6 +196,9 @@ class AsmJsCompilationJob final : public UnoptimizedCompilationJob {
         compile_time_(0),
         module_source_size_(0) {}
 
+  AsmJsCompilationJob(const AsmJsCompilationJob&) = delete;
+  AsmJsCompilationJob& operator=(const AsmJsCompilationJob&) = delete;
+
  protected:
   Status ExecuteJobImpl() final;
   Status FinalizeJobImpl(Handle<SharedFunctionInfo> shared_info,
@@ -217,8 +220,6 @@ class AsmJsCompilationJob final : public UnoptimizedCompilationJob {
 
   double compile_time_;     // Time (milliseconds) taken to execute step [2].
   int module_source_size_;  // Module source size in bytes.
-
-  DISALLOW_COPY_AND_ASSIGN(AsmJsCompilationJob);
 };
 
 UnoptimizedCompilationJob::Status AsmJsCompilationJob::ExecuteJobImpl() {
@@ -297,7 +298,7 @@ inline bool IsValidAsmjsMemorySize(size_t size) {
   // Enforce asm.js spec minimum size.
   if (size < (1u << 12u)) return false;
   // Enforce engine-limited and flag-limited maximum allocation size.
-  if (size > wasm::max_initial_mem_pages() * uint64_t{wasm::kWasmPageSize}) {
+  if (size > wasm::max_mem_pages() * uint64_t{wasm::kWasmPageSize}) {
     return false;
   }
   // Enforce power-of-2 sizes for 2^12 - 2^24.

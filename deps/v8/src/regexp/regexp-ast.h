@@ -59,7 +59,7 @@ class Interval {
     else if (from_ == kNone)
       return that;
     else
-      return Interval(Min(from_, that.from_), Max(to_, that.to_));
+      return Interval(std::min(from_, that.from_), std::max(to_, that.to_));
   }
 
   bool Contains(int value) { return (from_ <= value) && (value <= to_); }
@@ -443,11 +443,12 @@ class RegExpQuantifier final : public RegExpTree {
   bool IsQuantifier() override;
   int min_match() override { return min_match_; }
   int max_match() override { return max_match_; }
-  int min() { return min_; }
-  int max() { return max_; }
-  bool is_possessive() { return quantifier_type_ == POSSESSIVE; }
+  int min() const { return min_; }
+  int max() const { return max_; }
+  QuantifierType quantifier_type() const { return quantifier_type_; }
+  bool is_possessive() const { return quantifier_type_ == POSSESSIVE; }
   bool is_non_greedy() { return quantifier_type_ == NON_GREEDY; }
-  bool is_greedy() { return quantifier_type_ == GREEDY; }
+  bool is_greedy() const { return quantifier_type_ == GREEDY; }
   RegExpTree* body() { return body_; }
 
  private:

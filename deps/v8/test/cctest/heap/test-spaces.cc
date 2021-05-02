@@ -50,13 +50,16 @@ namespace internal {
 namespace heap {
 
 // Temporarily sets a given allocator in an isolate.
-class TestMemoryAllocatorScope {
+class V8_NODISCARD TestMemoryAllocatorScope {
  public:
   TestMemoryAllocatorScope(Isolate* isolate, size_t max_capacity,
                            size_t code_range_size,
                            PageAllocator* page_allocator = nullptr)
       : isolate_(isolate),
         old_allocator_(std::move(isolate->heap()->memory_allocator_)) {
+    // Save the code pages for restoring them later on because the constructor
+    // of MemoryAllocator will change them.
+    isolate->GetCodePages()->swap(code_pages_);
     isolate->heap()->memory_allocator_.reset(
         new MemoryAllocator(isolate, max_capacity, code_range_size));
     if (page_allocator != nullptr) {
@@ -69,17 +72,20 @@ class TestMemoryAllocatorScope {
   ~TestMemoryAllocatorScope() {
     isolate_->heap()->memory_allocator()->TearDown();
     isolate_->heap()->memory_allocator_.swap(old_allocator_);
+    isolate_->GetCodePages()->swap(code_pages_);
   }
+
+  TestMemoryAllocatorScope(const TestMemoryAllocatorScope&) = delete;
+  TestMemoryAllocatorScope& operator=(const TestMemoryAllocatorScope&) = delete;
 
  private:
   Isolate* isolate_;
   std::unique_ptr<MemoryAllocator> old_allocator_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestMemoryAllocatorScope);
+  std::vector<MemoryRange> code_pages_;
 };
 
 // Temporarily sets a given code page allocator in an isolate.
-class TestCodePageAllocatorScope {
+class V8_NODISCARD TestCodePageAllocatorScope {
  public:
   TestCodePageAllocatorScope(Isolate* isolate,
                              v8::PageAllocator* code_page_allocator)
@@ -94,12 +100,13 @@ class TestCodePageAllocatorScope {
     isolate_->heap()->memory_allocator()->code_page_allocator_ =
         old_code_page_allocator_;
   }
+  TestCodePageAllocatorScope(const TestCodePageAllocatorScope&) = delete;
+  TestCodePageAllocatorScope& operator=(const TestCodePageAllocatorScope&) =
+      delete;
 
  private:
   Isolate* isolate_;
   v8::PageAllocator* old_code_page_allocator_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestCodePageAllocatorScope);
 };
 
 static void VerifyMemoryChunk(Isolate* isolate, Heap* heap,
@@ -321,6 +328,16 @@ TEST(OldLargeObjectSpace) {
 
   CHECK(lo->Contains(ho));
 
+  CHECK_EQ(0, Heap::GetFillToAlign(ho.address(), kWordAligned));
+  // All large objects have the same alignment because they start at the
+  // same offset within a page. Fixed double arrays have the most strict
+  // alignment requirements.
+  CHECK_EQ(
+      0, Heap::GetFillToAlign(
+             ho.address(),
+             HeapObject::RequiredAlignment(
+                 ReadOnlyRoots(CcTest::i_isolate()).fixed_double_array_map())));
+
   while (true) {
     {
       AllocationResult allocation = lo->AllocateRaw(lo_size);
@@ -340,6 +357,7 @@ TEST(OldLargeObjectSpace) {
 // messages are also not stable if files are moved and modified during the build
 // process (jumbo builds).
 TEST(SizeOfInitialHeap) {
+  ManualGCScope manual_gc_scope;
   if (i::FLAG_always_opt) return;
   // Bootstrapping without a snapshot causes more allocations.
   CcTest::InitializeVM();
@@ -370,26 +388,16 @@ TEST(SizeOfInitialHeap) {
   // Freshly initialized VM gets by with the snapshot size (which is below
   // kMaxInitialSizePerSpace per space).
   Heap* heap = isolate->heap();
-  int page_count[LAST_GROWABLE_PAGED_SPACE + 1] = {0, 0, 0, 0};
   for (int i = FIRST_GROWABLE_PAGED_SPACE; i <= LAST_GROWABLE_PAGED_SPACE;
        i++) {
     // Debug code can be very large, so skip CODE_SPACE if we are generating it.
     if (i == CODE_SPACE && i::FLAG_debug_code) continue;
 
-    page_count[i] = heap->paged_space(i)->CountTotalPages();
     // Check that the initial heap is also below the limit.
     CHECK_LE(heap->paged_space(i)->CommittedMemory(), kMaxInitialSizePerSpace);
   }
 
-  // Executing the empty script gets by with the same number of pages, i.e.,
-  // requires no extra space.
   CompileRun("/*empty*/");
-  for (int i = FIRST_GROWABLE_PAGED_SPACE; i <= LAST_GROWABLE_PAGED_SPACE;
-       i++) {
-    // Skip CODE_SPACE, since we had to generate code even for an empty script.
-    if (i == CODE_SPACE) continue;
-    CHECK_EQ(page_count[i], isolate->heap()->paged_space(i)->CountTotalPages());
-  }
 
   // No large objects required to perform the above steps.
   CHECK_EQ(initial_lo_space,
@@ -565,6 +573,7 @@ UNINITIALIZED_TEST(InlineAllocationObserverCadence) {
 }
 
 HEAP_TEST(Regress777177) {
+  FLAG_stress_concurrent_allocation = false;  // For SimulateFullSpace.
   CcTest::InitializeVM();
   Isolate* isolate = CcTest::i_isolate();
   Heap* heap = isolate->heap();
@@ -613,9 +622,7 @@ HEAP_TEST(Regress791582) {
   Heap* heap = isolate->heap();
   HandleScope scope(isolate);
   NewSpace* new_space = heap->new_space();
-  if (new_space->TotalCapacity() < new_space->MaximumCapacity()) {
-    new_space->Grow();
-  }
+  GrowNewSpace(heap);
 
   int until_page_end = static_cast<int>(new_space->limit() - new_space->top());
 
@@ -650,6 +657,7 @@ HEAP_TEST(Regress791582) {
 
 TEST(ShrinkPageToHighWaterMarkFreeSpaceEnd) {
   FLAG_stress_incremental_marking = false;
+  FLAG_stress_concurrent_allocation = false;  // For SealCurrentObjects.
   CcTest::InitializeVM();
   Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
@@ -678,6 +686,7 @@ TEST(ShrinkPageToHighWaterMarkFreeSpaceEnd) {
 }
 
 TEST(ShrinkPageToHighWaterMarkNoFiller) {
+  FLAG_stress_concurrent_allocation = false;  // For SealCurrentObjects.
   CcTest::InitializeVM();
   Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
@@ -700,6 +709,7 @@ TEST(ShrinkPageToHighWaterMarkNoFiller) {
 }
 
 TEST(ShrinkPageToHighWaterMarkOneWordFiller) {
+  FLAG_stress_concurrent_allocation = false;  // For SealCurrentObjects.
   CcTest::InitializeVM();
   Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
@@ -727,6 +737,7 @@ TEST(ShrinkPageToHighWaterMarkOneWordFiller) {
 }
 
 TEST(ShrinkPageToHighWaterMarkTwoWordFiller) {
+  FLAG_stress_concurrent_allocation = false;  // For SealCurrentObjects.
   CcTest::InitializeVM();
   Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
@@ -798,7 +809,7 @@ namespace {
 // cannot take an argument. Since these tests create ReadOnlySpaces not attached
 // to the Heap directly, they need to be destroyed to ensure the
 // MemoryAllocator's stats are all 0 at exit.
-class ReadOnlySpaceScope {
+class V8_NODISCARD ReadOnlySpaceScope {
  public:
   explicit ReadOnlySpaceScope(Heap* heap) : ro_space_(heap) {}
   ~ReadOnlySpaceScope() {

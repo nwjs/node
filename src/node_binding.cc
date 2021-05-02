@@ -607,6 +607,7 @@ void GetInternalBinding(const FunctionCallbackInfo<Value>& args) {
   node_module* mod = FindModule(tls_ctx->modlist_internal, *module_v, NM_F_INTERNAL);
   if (mod != nullptr) {
     exports = InitModule(env, mod, module);
+    env->internal_bindings.insert(mod);
   } else if (!strcmp(*module_v, "constants")) {
     exports = Object::New(env->isolate());
     CHECK(

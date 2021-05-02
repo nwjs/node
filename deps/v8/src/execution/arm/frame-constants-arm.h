@@ -7,21 +7,52 @@
 
 #include "src/base/bits.h"
 #include "src/base/macros.h"
+#include "src/codegen/arm/register-arm.h"
 #include "src/execution/frame-constants.h"
 
 namespace v8 {
 namespace internal {
 
+// The layout of an EntryFrame is as follows:
+//            TOP OF THE STACK     LOWEST ADDRESS
+//         +---------------------+-----------------------
+//   0     |   saved fp (r11)    |  <-- frame ptr
+//         |- - - - - - - - - - -|
+//   1     |   saved lr (r14)    |
+//         |- - - - - - - - - - -|
+//  2..3   | saved register d8   |
+//  ...    |        ...          |
+//  16..17 | saved register d15  |
+//         |- - - - - - - - - - -|
+//  18     | saved register r4   |
+//  ...    |        ...          |
+//  24     | saved register r10  |
+//    -----+---------------------+-----------------------
+//           BOTTOM OF THE STACK   HIGHEST ADDRESS
 class EntryFrameConstants : public AllStatic {
  public:
   // This is the offset to where JSEntry pushes the current value of
   // Isolate::c_entry_fp onto the stack.
-  static constexpr int kCallerFPOffset =
-      -(StandardFrameConstants::kFixedFrameSizeFromFp + kPointerSize);
+  static constexpr int kCallerFPOffset = -3 * kSystemPointerSize;
 
   // Stack offsets for arguments passed to JSEntry.
   static constexpr int kArgcOffset = +0 * kSystemPointerSize;
   static constexpr int kArgvOffset = +1 * kSystemPointerSize;
+
+  // These offsets refer to the immediate caller (i.e a native frame).
+  static constexpr int kDirectCallerFPOffset = 0;
+  static constexpr int kDirectCallerPCOffset =
+      kDirectCallerFPOffset + 1 * kSystemPointerSize;
+  static constexpr int kDirectCallerGeneralRegistersOffset =
+      kDirectCallerPCOffset +
+      /* saved caller PC */
+      kSystemPointerSize +
+      /* d8...d15 */
+      kNumDoubleCalleeSaved * kDoubleSize;
+  static constexpr int kDirectCallerSPOffset =
+      kDirectCallerGeneralRegistersOffset +
+      /* r4...r10 (i.e. callee saved without fp) */
+      (kNumCalleeSaved - 1) * kSystemPointerSize;
 };
 
 class WasmCompileLazyFrameConstants : public TypedFrameConstants {
@@ -30,7 +61,10 @@ class WasmCompileLazyFrameConstants : public TypedFrameConstants {
   static constexpr int kNumberOfSavedFpParamRegs = 8;
 
   // FP-relative.
-  static constexpr int kWasmInstanceOffset = TYPED_FRAME_PUSHED_VALUE_OFFSET(0);
+  // The instance is pushed as part of the saved registers. Being in {r3}, it is
+  // at position 1 in the list [r0, r2, r3, r6] (kGpParamRegisters sorted by
+  // number and indexed zero-based from the back).
+  static constexpr int kWasmInstanceOffset = TYPED_FRAME_PUSHED_VALUE_OFFSET(1);
   static constexpr int kFixedFrameSizeFromFp =
       TypedFrameConstants::kFixedFrameSizeFromFp +
       kNumberOfSavedGpParamRegs * kPointerSize +

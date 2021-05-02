@@ -250,7 +250,8 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
     // TODO(mips): Implement.
     UNIMPLEMENTED();
   }
-  void JumpCodeObject(Register code_object) override {
+  void JumpCodeObject(Register code_object,
+                      JumpMode jump_mode = JumpMode::kJump) override {
     // TODO(mips): Implement.
     UNIMPLEMENTED();
   }
@@ -260,8 +261,9 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   // The return address on the stack is used by frame iteration.
   void StoreReturnAddressAndCall(Register target);
 
-  void CallForDeoptimization(Address target, int deopt_id, Label* exit,
-                             DeoptimizeKind kind);
+  void CallForDeoptimization(Builtins::Name target, int deopt_id, Label* exit,
+                             DeoptimizeKind kind, Label* ret,
+                             Label* jump_deoptimization_entry_label);
 
   void Ret(COND_ARGS);
   inline void Ret(BranchDelaySlot bd, Condition cond = al,
@@ -275,8 +277,7 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void Drop(int count, Condition cond = cc_always, Register reg = no_reg,
             const Operand& op = Operand(no_reg));
 
-  // Trivial case of DropAndRet that utilizes the delay slot and only emits
-  // 2 instructions.
+  // Trivial case of DropAndRet that utilizes the delay slot.
   void DropAndRet(int drop);
 
   void DropAndRet(int drop, Condition cond, Register reg, const Operand& op);
@@ -334,6 +335,10 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
     Sd(src, MemOperand(sp, 0));
   }
 
+  enum PushArrayOrder { kNormal, kReverse };
+  void PushArray(Register array, Register size, Register scratch,
+                 Register scratch2, PushArrayOrder order = kNormal);
+
   void SaveRegisters(RegList registers);
   void RestoreRegisters(RegList registers);
 
@@ -351,6 +356,7 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   // saved in higher memory addresses.
   void MultiPush(RegList regs);
   void MultiPushFPU(RegList regs);
+  void MultiPushMSA(RegList regs);
 
   // Calculate how much stack space (in bytes) are required to store caller
   // registers excluding those specified in the arguments.
@@ -398,6 +404,7 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   // registers specified in regs. Pop order is the opposite as in MultiPush.
   void MultiPop(RegList regs);
   void MultiPopFPU(RegList regs);
+  void MultiPopMSA(RegList regs);
 
 #define DEFINE_INSTRUCTION(instr)                          \
   void instr(Register rd, Register rs, const Operand& rt); \
@@ -737,6 +744,8 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void LoadRoot(Register destination, RootIndex index, Condition cond,
                 Register src1, const Operand& src2);
 
+  void LoadMap(Register destination, Register object);
+
   // If the value is a NaN, canonicalize the value else, do nothing.
   void FPUCanonicalizeNaN(const DoubleRegister dst, const DoubleRegister src);
 
@@ -786,6 +795,17 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void Round_s_s(FPURegister fd, FPURegister fs);
   void Floor_s_s(FPURegister fd, FPURegister fs);
   void Ceil_s_s(FPURegister fd, FPURegister fs);
+
+  void LoadLane(MSASize sz, MSARegister dst, uint8_t laneidx, MemOperand src);
+  void StoreLane(MSASize sz, MSARegister src, uint8_t laneidx, MemOperand dst);
+  void ExtMulLow(MSADataType type, MSARegister dst, MSARegister src1,
+                 MSARegister src2);
+  void ExtMulHigh(MSADataType type, MSARegister dst, MSARegister src1,
+                  MSARegister src2);
+  void LoadSplat(MSASize sz, MSARegister dst, MemOperand src);
+  void ExtAddPairwise(MSADataType type, MSARegister dst, MSARegister src);
+  void MSARoundW(MSARegister dst, MSARegister src, FPURoundingMode mode);
+  void MSARoundD(MSARegister dst, MSARegister src, FPURoundingMode mode);
 
   // Jump the register contains a smi.
   void JumpIfSmi(Register value, Label* smi_label, Register scratch = at,
@@ -900,7 +920,7 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
 
   void CallRecordWriteStub(Register object, Register address,
                            RememberedSetAction remembered_set_action,
-                           SaveFPRegsMode fp_mode, Handle<Code> code_target,
+                           SaveFPRegsMode fp_mode, int builtin_index,
                            Address wasm_target);
 };
 
@@ -908,6 +928,18 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
 class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
  public:
   using TurboAssembler::TurboAssembler;
+
+  // It assumes that the arguments are located below the stack pointer.
+  // argc is the number of arguments not including the receiver.
+  // TODO(victorgomes): Remove this function once we stick with the reversed
+  // arguments order.
+  void LoadReceiver(Register dest, Register argc) {
+    Ld(dest, MemOperand(sp, 0));
+  }
+
+  void StoreReceiver(Register rec, Register argc, Register scratch) {
+    Sd(rec, MemOperand(sp, 0));
+  }
 
   bool IsNear(Label* L, Condition cond, int rs_reg);
 
@@ -999,17 +1031,6 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
   void BranchShortMSA(MSABranchDF df, Label* target, MSABranchCondition cond,
                       MSARegister wt, BranchDelaySlot bd = PROTECT);
 
-  // Truncates a double using a specific rounding mode, and writes the value
-  // to the result register.
-  // The except_flag will contain any exceptions caused by the instruction.
-  // If check_inexact is kDontCheckForInexactConversion, then the inexact
-  // exception is masked.
-  void EmitFPUTruncate(
-      FPURoundingMode rounding_mode, Register result,
-      DoubleRegister double_input, Register scratch,
-      DoubleRegister double_scratch, Register except_flag,
-      CheckForInexactConversion check_inexact = kDontCheckForInexactConversion);
-
   // Enter exit frame.
   // argc - argument count to be dropped by LeaveExitFrame.
   // save_doubles - saves FPU registers on stack, currently disabled.
@@ -1021,8 +1042,6 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
   void LeaveExitFrame(bool save_doubles, Register arg_count,
                       bool do_return = NO_EMIT_RETURN,
                       bool argument_count_is_length = false);
-
-  void LoadMap(Register destination, Register object);
 
   // Make sure the stack is aligned. Only emits code in debug mode.
   void AssertStackIsAligned();
@@ -1077,6 +1096,9 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
 
   void GetObjectType(Register function, Register map, Register type_reg);
 
+  void GetInstanceTypeRange(Register map, Register type_reg,
+                            InstanceType lower_limit, Register range);
+
   // -------------------------------------------------------------------------
   // Runtime calls.
 
@@ -1121,6 +1143,14 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
                         Register scratch2);
 
   // -------------------------------------------------------------------------
+  // Stack limit utilities
+
+  enum StackLimitKind { kInterruptStackLimit, kRealStackLimit };
+  void LoadStackLimit(Register destination, StackLimitKind kind);
+  void StackOverflowCheck(Register num_args, Register scratch1,
+                          Register scratch2, Label* stack_overflow);
+
+  // ---------------------------------------------------------------------------
   // Smi utilities.
 
   void SmiTag(Register dst, Register src) {
@@ -1199,7 +1229,7 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
 
   // Needs access to SafepointRegisterStackIndex for compiled frame
   // traversal.
-  friend class StandardFrame;
+  friend class CommonFrame;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(MacroAssembler);
 };

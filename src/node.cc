@@ -969,51 +969,6 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
   return 0;
 }
 
-// TODO(addaleax): Deprecate and eventually remove this.
-void Init(int* argc,
-          const char** argv,
-          int* exec_argc,
-          const char*** exec_argv) {
-  std::vector<std::string> argv_(argv, argv + *argc);  // NOLINT
-  std::vector<std::string> exec_argv_;
-  std::vector<std::string> errors;
-
-  // This (approximately) duplicates some logic that has been moved to
-  // node::Start(), with the difference that here we explicitly call `exit()`.
-  int exit_code = InitializeNodeWithArgs(&argv_, &exec_argv_, &errors);
-
-  for (const std::string& error : errors)
-    fprintf(stderr, "%s: %s\n", argv_.at(0).c_str(), error.c_str());
-  if (exit_code != 0) exit(exit_code);
-
-  if (per_process::cli_options->print_version) {
-    printf("%s\n", NODE_VERSION);
-    exit(0);
-  }
-
-  if (per_process::cli_options->print_bash_completion) {
-    std::string completion = options_parser::GetBashCompletion();
-    printf("%s\n", completion.c_str());
-    exit(0);
-  }
-
-  if (per_process::cli_options->print_v8_help) {
-    V8::SetFlagsFromString("--help", static_cast<size_t>(6));
-    exit(0);
-  }
-
-  *argc = argv_.size();
-  *exec_argc = exec_argv_.size();
-  // These leak memory, because, in the original code of this function, no
-  // extra allocations were visible. This should be okay because this function
-  // is only supposed to be called once per process, though.
-  *exec_argv = Malloc<const char*>(*exec_argc);
-  for (int i = 0; i < *exec_argc; ++i)
-    (*exec_argv)[i] = strdup(exec_argv_[i].c_str());
-  for (int i = 0; i < *argc; ++i)
-    argv[i] = strdup(argv_[i].c_str());
-}
-
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
 // Helper class to load the startup data files from disk.
 //
@@ -1587,7 +1542,9 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
   platform->RegisterIsolate(isolate, uv_default_loop());
   node::IsolateData* isolate_data = node::CreateIsolateData(isolate, uv_default_loop(), platform);
   node::NewContext(isolate, v8::Local<v8::ObjectTemplate>(), false);
-  tls_ctx->env = node::CreateEnvironment(isolate_data, context, argc, argv, 0, nullptr);
+  std::vector<std::string> args(argv, argv + argc);
+  std::vector<std::string> exec_args;
+  tls_ctx->env = node::CreateEnvironment(isolate_data, context, args, exec_args);
   isolate->SetFatalErrorHandler(node::OnFatalError);
   isolate->AddMessageListener(node::errors::PerIsolateMessageListener);
   //isolate->SetAutorunMicrotasks(false);
@@ -1601,7 +1558,7 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
           v8::Object::New(isolate),
           { 1, 0 },
           node::InternalCallbackScope::kSkipAsyncHooks);
-    node::LoadEnvironment(tls_ctx->env);
+    node::LoadEnvironment(tls_ctx->env, node::StartExecutionCallback{});
   }
 }
 

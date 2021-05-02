@@ -221,8 +221,8 @@ class V8_EXPORT_PRIVATE AccessBuilder final
   // Provides access to Module::regular_imports() field.
   static FieldAccess ForModuleRegularImports();
 
-  // Provides access to Name::hash_field() field.
-  static FieldAccess ForNameHashField();
+  // Provides access to Name::raw_hash_field() field.
+  static FieldAccess ForNameRawHashField();
 
   // Provides access to String::length() field.
   static FieldAccess ForStringLength();
@@ -293,6 +293,7 @@ class V8_EXPORT_PRIVATE AccessBuilder final
 
   // Provides access to WeakFixedArray elements.
   static ElementAccess ForWeakFixedArrayElement();
+  static FieldAccess ForWeakFixedArraySlot(int index);
 
   // Provides access to FixedArray elements.
   static ElementAccess ForFixedArrayElement();
@@ -343,6 +344,8 @@ class V8_EXPORT_PRIVATE AccessBuilder final
   static FieldAccess ForFeedbackCellInterruptBudget();
 
   // Provides access to a FeedbackVector fields.
+  static FieldAccess ForFeedbackVectorInvocationCount();
+  static FieldAccess ForFeedbackVectorFlags();
   static FieldAccess ForFeedbackVectorClosureFeedbackCellArray();
 
  private:

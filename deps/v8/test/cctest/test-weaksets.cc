@@ -165,13 +165,14 @@ TEST(WeakSet_Shrinking) {
 TEST(WeakSet_Regress2060a) {
   if (i::FLAG_never_compact) return;
   FLAG_always_compact = true;
+  FLAG_stress_concurrent_allocation = false;  // For SimulateFullSpace.
   LocalContext context;
   Isolate* isolate = GetIsolateFrom(&context);
   Factory* factory = isolate->factory();
   Heap* heap = isolate->heap();
   HandleScope scope(isolate);
   Handle<JSFunction> function =
-      factory->NewFunctionForTest(factory->function_string());
+      factory->NewFunctionForTesting(factory->function_string());
   Handle<JSObject> key = factory->NewJSObject(function);
   Handle<JSWeakSet> weakset = AllocateJSWeakSet(isolate);
 
@@ -206,6 +207,7 @@ TEST(WeakSet_Regress2060b) {
 #ifdef VERIFY_HEAP
   FLAG_verify_heap = true;
 #endif
+  FLAG_stress_concurrent_allocation = false;  // For SimulateFullSpace.
 
   LocalContext context;
   Isolate* isolate = GetIsolateFrom(&context);
@@ -213,7 +215,7 @@ TEST(WeakSet_Regress2060b) {
   Heap* heap = isolate->heap();
   HandleScope scope(isolate);
   Handle<JSFunction> function =
-      factory->NewFunctionForTest(factory->function_string());
+      factory->NewFunctionForTesting(factory->function_string());
 
   // Start second old-space page so that keys land on evacuation candidate.
   Page* first_page = heap->old_space()->first_page();

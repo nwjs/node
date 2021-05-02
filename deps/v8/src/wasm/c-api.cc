@@ -19,15 +19,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "src/wasm/c-api.h"
+
 #include <cstring>
 #include <iostream>
 
-#include "src/wasm/c-api.h"
-
-#include "third_party/wasm-api/wasm.h"
-
 #include "include/libplatform/libplatform.h"
 #include "src/api/api-inl.h"
+#include "src/base/platform/wrappers.h"
 #include "src/compiler/wasm-compiler.h"
 #include "src/objects/js-collection-inl.h"
 #include "src/objects/managed.h"
@@ -39,6 +38,7 @@
 #include "src/wasm/wasm-objects.h"
 #include "src/wasm/wasm-result.h"
 #include "src/wasm/wasm-serialization.h"
+#include "third_party/wasm-api/wasm.h"
 
 #ifdef WASM_API_DEBUG
 #error "WASM_API_DEBUG is unsupported"
@@ -63,16 +63,16 @@ auto ReadLebU64(const byte_t** pos) -> uint64_t {
 
 ValKind V8ValueTypeToWasm(i::wasm::ValueType v8_valtype) {
   switch (v8_valtype.kind()) {
-    case i::wasm::ValueType::kI32:
+    case i::wasm::kI32:
       return I32;
-    case i::wasm::ValueType::kI64:
+    case i::wasm::kI64:
       return I64;
-    case i::wasm::ValueType::kF32:
+    case i::wasm::kF32:
       return F32;
-    case i::wasm::ValueType::kF64:
+    case i::wasm::kF64:
       return F64;
-    case i::wasm::ValueType::kRef:
-    case i::wasm::ValueType::kOptRef:
+    case i::wasm::kRef:
+    case i::wasm::kOptRef:
       switch (v8_valtype.heap_representation()) {
         case i::wasm::HeapType::kFunc:
           return FUNCREF;
@@ -209,8 +209,7 @@ auto seal(const typename implement<C>::type* x) -> const C* {
 
 // Configuration
 
-struct ConfigImpl {
-};
+struct ConfigImpl {};
 
 template <>
 struct implement<Config> {
@@ -257,7 +256,6 @@ void Engine::operator delete(void* p) { ::operator delete(p); }
 auto Engine::make(own<Config>&& config) -> own<Engine> {
   i::FLAG_expose_gc = true;
   i::FLAG_experimental_wasm_reftypes = true;
-  i::FLAG_experimental_wasm_bigint = true;
   i::FLAG_experimental_wasm_mv = true;
   auto engine = new (std::nothrow) EngineImpl;
   if (!engine) return own<Engine>();
@@ -888,13 +886,13 @@ own<Instance> GetInstance(StoreImpl* store,
 
 own<Frame> CreateFrameFromInternal(i::Handle<i::FixedArray> frames, int index,
                                    i::Isolate* isolate, StoreImpl* store) {
-  i::Handle<i::StackTraceFrame> frame(i::StackTraceFrame::cast(frames->get(0)),
-                                      isolate);
-  i::Handle<i::WasmInstanceObject> instance =
-      i::StackTraceFrame::GetWasmInstance(frame);
-  uint32_t func_index = i::StackTraceFrame::GetWasmFunctionIndex(frame);
-  size_t func_offset = i::StackTraceFrame::GetFunctionOffset(frame);
-  size_t module_offset = i::StackTraceFrame::GetColumnNumber(frame);
+  i::Handle<i::StackFrameInfo> frame(
+      i::StackFrameInfo::cast(frames->get(index)), isolate);
+  i::Handle<i::WasmInstanceObject> instance(frame->GetWasmInstance(), isolate);
+  uint32_t func_index = frame->GetWasmFunctionIndex();
+  size_t module_offset = i::StackFrameInfo::GetSourcePosition(frame);
+  size_t func_offset = module_offset - i::wasm::GetWasmFunctionOffset(
+                                           instance->module(), func_index);
   return own<Frame>(seal<Frame>(new (std::nothrow) FrameImpl(
       GetInstance(store, instance), func_index, func_offset, module_offset)));
 }
@@ -1380,12 +1378,13 @@ i::Address CallTargetFromCache(i::Object cached_call_target) {
 
 void PrepareFunctionData(i::Isolate* isolate,
                          i::Handle<i::WasmExportedFunctionData> function_data,
-                         const i::wasm::FunctionSig* sig) {
+                         const i::wasm::FunctionSig* sig,
+                         const i::wasm::WasmModule* module) {
   // If the data is already populated, return immediately.
   if (!function_data->c_wrapper_code().IsSmi()) return;
   // Compile wrapper code.
   i::Handle<i::Code> wrapper_code =
-      i::compiler::CompileCWasmEntry(isolate, sig);
+      i::compiler::CompileCWasmEntry(isolate, sig, module);
   function_data->set_c_wrapper_code(*wrapper_code);
   // Compute packed args size.
   function_data->set_packed_args_size(
@@ -1403,31 +1402,32 @@ void PushArgs(const i::wasm::FunctionSig* sig, const Val args[],
   for (size_t i = 0; i < sig->parameter_count(); i++) {
     i::wasm::ValueType type = sig->GetParam(i);
     switch (type.kind()) {
-      case i::wasm::ValueType::kI32:
+      case i::wasm::kI32:
         packer->Push(args[i].i32());
         break;
-      case i::wasm::ValueType::kI64:
+      case i::wasm::kI64:
         packer->Push(args[i].i64());
         break;
-      case i::wasm::ValueType::kF32:
+      case i::wasm::kF32:
         packer->Push(args[i].f32());
         break;
-      case i::wasm::ValueType::kF64:
+      case i::wasm::kF64:
         packer->Push(args[i].f64());
         break;
-      case i::wasm::ValueType::kRef:
-      case i::wasm::ValueType::kOptRef:
+      case i::wasm::kRef:
+      case i::wasm::kOptRef:
         // TODO(7748): Make sure this works for all heap types.
         packer->Push(WasmRefToV8(store->i_isolate(), args[i].ref())->ptr());
         break;
-      case i::wasm::ValueType::kRtt:
-      case i::wasm::ValueType::kS128:
+      case i::wasm::kRtt:
+      case i::wasm::kRttWithDepth:
+      case i::wasm::kS128:
         // TODO(7748): Implement.
         UNIMPLEMENTED();
-      case i::wasm::ValueType::kI8:
-      case i::wasm::ValueType::kI16:
-      case i::wasm::ValueType::kStmt:
-      case i::wasm::ValueType::kBottom:
+      case i::wasm::kI8:
+      case i::wasm::kI16:
+      case i::wasm::kStmt:
+      case i::wasm::kBottom:
         UNREACHABLE();
         break;
     }
@@ -1440,34 +1440,35 @@ void PopArgs(const i::wasm::FunctionSig* sig, Val results[],
   for (size_t i = 0; i < sig->return_count(); i++) {
     i::wasm::ValueType type = sig->GetReturn(i);
     switch (type.kind()) {
-      case i::wasm::ValueType::kI32:
+      case i::wasm::kI32:
         results[i] = Val(packer->Pop<int32_t>());
         break;
-      case i::wasm::ValueType::kI64:
+      case i::wasm::kI64:
         results[i] = Val(packer->Pop<int64_t>());
         break;
-      case i::wasm::ValueType::kF32:
+      case i::wasm::kF32:
         results[i] = Val(packer->Pop<float>());
         break;
-      case i::wasm::ValueType::kF64:
+      case i::wasm::kF64:
         results[i] = Val(packer->Pop<double>());
         break;
-      case i::wasm::ValueType::kRef:
-      case i::wasm::ValueType::kOptRef: {
+      case i::wasm::kRef:
+      case i::wasm::kOptRef: {
         // TODO(7748): Make sure this works for all heap types.
         i::Address raw = packer->Pop<i::Address>();
         i::Handle<i::Object> obj(i::Object(raw), store->i_isolate());
         results[i] = Val(V8RefValueToWasm(store, obj));
         break;
       }
-      case i::wasm::ValueType::kRtt:
-      case i::wasm::ValueType::kS128:
+      case i::wasm::kRtt:
+      case i::wasm::kRttWithDepth:
+      case i::wasm::kS128:
         // TODO(7748): Implement.
         UNIMPLEMENTED();
-      case i::wasm::ValueType::kI8:
-      case i::wasm::ValueType::kI16:
-      case i::wasm::ValueType::kStmt:
-      case i::wasm::ValueType::kBottom:
+      case i::wasm::kI8:
+      case i::wasm::kI16:
+      case i::wasm::kStmt:
+      case i::wasm::kBottom:
         UNREACHABLE();
         break;
     }
@@ -1510,7 +1511,8 @@ auto Func::call(const Val args[], Val results[]) const -> own<Trap> {
   auto store = func->store();
   auto isolate = store->i_isolate();
   i::HandleScope handle_scope(isolate);
-  i::Object raw_function_data = func->v8_object()->shared().function_data();
+  i::Object raw_function_data =
+      func->v8_object()->shared().function_data(v8::kAcquireLoad);
 
   // WasmCapiFunctions can be called directly.
   if (raw_function_data.IsWasmCapiFunctionData()) {
@@ -1526,7 +1528,7 @@ auto Func::call(const Val args[], Val results[]) const -> own<Trap> {
   // Caching {sig} would give a ~10% reduction in overhead.
   const i::wasm::FunctionSig* sig =
       instance->module()->functions[function_index].sig;
-  PrepareFunctionData(isolate, function_data, sig);
+  PrepareFunctionData(isolate, function_data, sig, instance->module());
   i::Handle<i::Code> wrapper_code = i::Handle<i::Code>(
       i::Code::cast(function_data->c_wrapper_code()), isolate);
   i::Address call_target =
@@ -1543,7 +1545,7 @@ auto Func::call(const Val args[], Val results[]) const -> own<Trap> {
     if (object_ref->IsTuple2()) {
       i::JSFunction jsfunc =
           i::JSFunction::cast(i::Tuple2::cast(*object_ref).value2());
-      i::Object data = jsfunc.shared().function_data();
+      i::Object data = jsfunc.shared().function_data(v8::kAcquireLoad);
       if (data.IsWasmCapiFunctionData()) {
         return CallWasmCapiFunction(i::WasmCapiFunctionData::cast(data), args,
                                     results);
@@ -1686,7 +1688,8 @@ auto Global::make(Store* store_abs, const GlobalType* type, const Val& val)
   bool is_mutable = (type->mutability() == VAR);
   const int32_t offset = 0;
   i::Handle<i::WasmGlobalObject> obj =
-      i::WasmGlobalObject::New(isolate, i::MaybeHandle<i::JSArrayBuffer>(),
+      i::WasmGlobalObject::New(isolate, i::Handle<i::WasmInstanceObject>(),
+                               i::MaybeHandle<i::JSArrayBuffer>(),
                                i::MaybeHandle<i::FixedArray>(), i_type, offset,
                                is_mutable)
           .ToHandleChecked();
@@ -1707,29 +1710,30 @@ auto Global::type() const -> own<GlobalType> {
 auto Global::get() const -> Val {
   i::Handle<i::WasmGlobalObject> v8_global = impl(this)->v8_object();
   switch (v8_global->type().kind()) {
-    case i::wasm::ValueType::kI32:
+    case i::wasm::kI32:
       return Val(v8_global->GetI32());
-    case i::wasm::ValueType::kI64:
+    case i::wasm::kI64:
       return Val(v8_global->GetI64());
-    case i::wasm::ValueType::kF32:
+    case i::wasm::kF32:
       return Val(v8_global->GetF32());
-    case i::wasm::ValueType::kF64:
+    case i::wasm::kF64:
       return Val(v8_global->GetF64());
-    case i::wasm::ValueType::kRef:
-    case i::wasm::ValueType::kOptRef: {
+    case i::wasm::kRef:
+    case i::wasm::kOptRef: {
       // TODO(7748): Make sure this works for all heap types.
       StoreImpl* store = impl(this)->store();
       i::HandleScope scope(store->i_isolate());
       return Val(V8RefValueToWasm(store, v8_global->GetRef()));
     }
-    case i::wasm::ValueType::kRtt:
-    case i::wasm::ValueType::kS128:
+    case i::wasm::kRtt:
+    case i::wasm::kRttWithDepth:
+    case i::wasm::kS128:
       // TODO(7748): Implement these.
       UNIMPLEMENTED();
-    case i::wasm::ValueType::kI8:
-    case i::wasm::ValueType::kI16:
-    case i::wasm::ValueType::kStmt:
-    case i::wasm::ValueType::kBottom:
+    case i::wasm::kI8:
+    case i::wasm::kI16:
+    case i::wasm::kStmt:
+    case i::wasm::kBottom:
       UNREACHABLE();
   }
 }
@@ -1808,7 +1812,8 @@ auto Table::make(Store* store_abs, const TableType* type, const Ref* ref)
 
   i::Handle<i::FixedArray> backing_store;
   i::Handle<i::WasmTableObject> table_obj = i::WasmTableObject::New(
-      isolate, i_type, minimum, has_maximum, maximum, &backing_store);
+      isolate, i::Handle<i::WasmInstanceObject>(), i_type, minimum, has_maximum,
+      maximum, &backing_store);
 
   if (ref) {
     i::Handle<i::JSReceiver> init = impl(ref)->v8_object();
@@ -1899,8 +1904,8 @@ auto Memory::make(Store* store_abs, const MemoryType* type) -> own<Memory> {
 
   const Limits& limits = type->limits();
   uint32_t minimum = limits.min;
-  // The max_initial_mem_pages limit is only spec'ed for JS embeddings,
-  // so we'll directly use the maximum pages limit here.
+  // The max_mem_pages limit is only spec'ed for JS embeddings, so we'll
+  // directly use the maximum pages limit here.
   if (minimum > i::wasm::kSpecMaxMemoryPages) return nullptr;
   uint32_t maximum = limits.max;
   if (maximum != Limits(0).max) {
@@ -2209,22 +2214,22 @@ struct borrowed_vec {
   }
 
 // Vectors with no ownership management of elements
-#define WASM_DEFINE_VEC_PLAIN(name, Name)                           \
-  WASM_DEFINE_VEC_BASE(name, Name,                                  \
-                       wasm::vec, ) /* NOLINT(whitespace/parens) */ \
-                                                                    \
-  void wasm_##name##_vec_new(wasm_##name##_vec_t* out, size_t size, \
-                             const wasm_##name##_t data[]) {        \
-    auto v2 = wasm::vec<Name>::make_uninitialized(size);            \
-    if (v2.size() != 0) {                                           \
-      memcpy(v2.get(), data, size * sizeof(wasm_##name##_t));       \
-    }                                                               \
-    *out = release_##name##_vec(std::move(v2));                     \
-  }                                                                 \
-                                                                    \
-  void wasm_##name##_vec_copy(wasm_##name##_vec_t* out,             \
-                              wasm_##name##_vec_t* v) {             \
-    wasm_##name##_vec_new(out, v->size, v->data);                   \
+#define WASM_DEFINE_VEC_PLAIN(name, Name)                               \
+  WASM_DEFINE_VEC_BASE(name, Name,                                      \
+                       wasm::vec, ) /* NOLINT(whitespace/parens) */     \
+                                                                        \
+  void wasm_##name##_vec_new(wasm_##name##_vec_t* out, size_t size,     \
+                             const wasm_##name##_t data[]) {            \
+    auto v2 = wasm::vec<Name>::make_uninitialized(size);                \
+    if (v2.size() != 0) {                                               \
+      v8::base::Memcpy(v2.get(), data, size * sizeof(wasm_##name##_t)); \
+    }                                                                   \
+    *out = release_##name##_vec(std::move(v2));                         \
+  }                                                                     \
+                                                                        \
+  void wasm_##name##_vec_copy(wasm_##name##_vec_t* out,                 \
+                              wasm_##name##_vec_t* v) {                 \
+    wasm_##name##_vec_new(out, v->size, v->data);                       \
   }
 
 // Vectors that own their elements

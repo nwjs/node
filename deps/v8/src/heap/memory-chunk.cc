@@ -5,6 +5,7 @@
 #include "src/heap/memory-chunk.h"
 
 #include "src/base/platform/platform.h"
+#include "src/base/platform/wrappers.h"
 #include "src/heap/code-object-registry.h"
 #include "src/heap/memory-allocator.h"
 #include "src/heap/memory-chunk-inl.h"
@@ -154,6 +155,10 @@ MemoryChunk* MemoryChunk::Initialize(BasicMemoryChunk* basic_chunk, Heap* heap,
   }
 
   chunk->possibly_empty_buckets_.Initialize();
+
+#ifdef V8_ENABLE_CONSERVATIVE_STACK_SCANNING
+  chunk->object_start_bitmap_ = ObjectStartBitmap(chunk->area_start());
+#endif
 
 #ifdef DEBUG
   ValidateOffsets(chunk);
@@ -374,12 +379,13 @@ bool MemoryChunk::RegisteredObjectWithInvalidatedSlots(HeapObject object) {
 
 void MemoryChunk::AllocateYoungGenerationBitmap() {
   DCHECK_NULL(young_generation_bitmap_);
-  young_generation_bitmap_ = static_cast<Bitmap*>(calloc(1, Bitmap::kSize));
+  young_generation_bitmap_ =
+      static_cast<Bitmap*>(base::Calloc(1, Bitmap::kSize));
 }
 
 void MemoryChunk::ReleaseYoungGenerationBitmap() {
   DCHECK_NOT_NULL(young_generation_bitmap_);
-  free(young_generation_bitmap_);
+  base::Free(young_generation_bitmap_);
   young_generation_bitmap_ = nullptr;
 }
 

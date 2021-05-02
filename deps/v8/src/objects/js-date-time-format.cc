@@ -432,10 +432,12 @@ std::string CanonicalizeTimeZoneID(const std::string& input) {
       }
     } else if (memcmp(upper.c_str(), "US/", 3) == 0) {
       std::string title = ToTitleCaseTimezoneLocation(input);
-      // Change "Us/" to "US/"
-      title[1] = 'S';
+      if (title.length() >= 2) {
+        // Change "Us/" to "US/"
+        title[1] = 'S';
+      }
       return title;
-    } else if (memcmp(upper.c_str(), "SYSTEMV/", 8) == 0) {
+    } else if (strncmp(upper.c_str(), "SYSTEMV/", 8) == 0) {
       upper.replace(0, 8, "SystemV/");
       return upper;
     }
@@ -508,7 +510,11 @@ MaybeHandle<JSObject> JSDateTimeFormat::ResolvedOptions(
   // and
   // http://www.unicode.org/repos/cldr/tags/latest/common/bcp47/calendar.xml
   if (calendar_str == "gregorian") {
-    calendar_str = "gregory";
+    if (date_time_format->iso8601()) {
+      calendar_str = "iso8601";
+    } else {
+      calendar_str = "gregory";
+    }
   } else if (calendar_str == "ethiopic-amete-alem") {
     calendar_str = "ethioaa";
   }
@@ -568,8 +574,8 @@ MaybeHandle<JSObject> JSDateTimeFormat::ResolvedOptions(
   //    [[Hour]]             "hour"
   //    [[Minute]]           "minute"
   //    [[Second]]           "second"
-  //    [[TimeZoneName]]     "timeZoneName"
   //    [[FractionalSecondDigits]]     "fractionalSecondDigits"
+  //    [[TimeZoneName]]     "timeZoneName"
   Maybe<bool> maybe_create_locale = JSReceiver::CreateDataProperty(
       isolate, options, factory->locale_string(), locale, Just(kDontThrow));
   DCHECK(maybe_create_locale.FromJust());
@@ -636,6 +642,18 @@ MaybeHandle<JSObject> JSDateTimeFormat::ResolvedOptions(
   if (date_time_format->date_style() == DateTimeStyle::kUndefined &&
       date_time_format->time_style() == DateTimeStyle::kUndefined) {
     for (const auto& item : GetPatternItems()) {
+      // fractionalSecondsDigits need to be added before timeZoneName
+      if (item.property == "timeZoneName") {
+        int fsd = FractionalSecondDigitsFromPattern(pattern);
+        if (fsd > 0) {
+          Maybe<bool> maybe_create_fractional_seconds_digits =
+              JSReceiver::CreateDataProperty(
+                  isolate, options, factory->fractionalSecondDigits_string(),
+                  factory->NewNumberFromInt(fsd), Just(kDontThrow));
+          DCHECK(maybe_create_fractional_seconds_digits.FromJust());
+          USE(maybe_create_fractional_seconds_digits);
+        }
+      }
       for (const auto& pair : item.pairs) {
         if (pattern.find(pair.pattern) != std::string::npos) {
           Maybe<bool> maybe_create_property = JSReceiver::CreateDataProperty(
@@ -648,15 +666,6 @@ MaybeHandle<JSObject> JSDateTimeFormat::ResolvedOptions(
           break;
         }
       }
-    }
-    int fsd = FractionalSecondDigitsFromPattern(pattern);
-    if (fsd > 0) {
-      Maybe<bool> maybe_create_fractional_seconds_digits =
-          JSReceiver::CreateDataProperty(
-              isolate, options, factory->fractionalSecondDigits_string(),
-              factory->NewNumberFromInt(fsd), Just(kDontThrow));
-      DCHECK(maybe_create_fractional_seconds_digits.FromJust());
-      USE(maybe_create_fractional_seconds_digits);
     }
   }
 
@@ -765,16 +774,16 @@ MaybeHandle<String> JSDateTimeFormat::ToLocaleDateTime(
     return factory->Invalid_Date_string();
   }
 
-  // We only cache the instance when both locales and options are undefined,
-  // as that is the only case when the specified side-effects of examining
-  // those arguments are unobservable.
-  bool can_cache =
-      locales->IsUndefined(isolate) && options->IsUndefined(isolate);
+  // We only cache the instance when locales is a string/undefined and
+  // options is undefined, as that is the only case when the specified
+  // side-effects of examining those arguments are unobservable.
+  bool can_cache = (locales->IsString() || locales->IsUndefined(isolate)) &&
+                   options->IsUndefined(isolate);
   if (can_cache) {
     // Both locales and options are undefined, check the cache.
     icu::SimpleDateFormat* cached_icu_simple_date_format =
         static_cast<icu::SimpleDateFormat*>(
-            isolate->get_cached_icu_object(cache_type));
+            isolate->get_cached_icu_object(cache_type, locales));
     if (cached_icu_simple_date_format != nullptr) {
       return FormatDateTime(isolate, *cached_icu_simple_date_format, x);
     }
@@ -802,8 +811,9 @@ MaybeHandle<String> JSDateTimeFormat::ToLocaleDateTime(
 
   if (can_cache) {
     isolate->set_icu_object_in_cache(
-        cache_type, std::static_pointer_cast<icu::UMemory>(
-                        date_time_format->icu_simple_date_format().get()));
+        cache_type, locales,
+        std::static_pointer_cast<icu::UMemory>(
+            date_time_format->icu_simple_date_format().get()));
   }
   // 5. Return FormatDateTime(dateFormat, x).
   icu::SimpleDateFormat* format =
@@ -1097,6 +1107,7 @@ icu::UnicodeString ReplaceHourCycleInPattern(icu::UnicodeString pattern,
   }
   bool replace = true;
   icu::UnicodeString result;
+  char16_t last = u'\0';
   for (int32_t i = 0; i < pattern.length(); i++) {
     char16_t ch = pattern.charAt(i);
     switch (ch) {
@@ -1111,12 +1122,17 @@ icu::UnicodeString ReplaceHourCycleInPattern(icu::UnicodeString pattern,
       case 'K':
         V8_FALLTHROUGH;
       case 'k':
+        // If the previous field is a day, add a space before the hour.
+        if (replace && last == u'd') {
+          result.append(' ');
+        }
         result.append(replace ? replacement : ch);
         break;
       default:
         result.append(ch);
         break;
     }
+    last = ch;
   }
   return result;
 }
@@ -1557,6 +1573,7 @@ MaybeHandle<JSDateTimeFormat> JSDateTimeFormat::New(
     icu_locale.setUnicodeKeywordValue("ca", calendar_str.get(), status);
     DCHECK(U_SUCCESS(status));
   }
+  bool iso8601 = strstr(icu_locale.getName(), "calendar=iso8601") != nullptr;
 
   if (numbering_system_str != nullptr &&
       Intl::IsValidNumberingSystem(numbering_system_str.get())) {
@@ -1653,6 +1670,19 @@ MaybeHandle<JSDateTimeFormat> JSDateTimeFormat::New(
   bool has_hour_option = false;
   std::string skeleton;
   for (const PatternData& item : GetPatternData(hc)) {
+    // Need to read fractionalSecondDigits before reading the timeZoneName
+    if (item.property == "timeZoneName") {
+      // Let _value_ be ? GetNumberOption(options, "fractionalSecondDigits", 1,
+      // 3, *undefined*). The *undefined* is represented by value 0 here.
+      Maybe<int> maybe_fsd = Intl::GetNumberOption(
+          isolate, options, factory->fractionalSecondDigits_string(), 1, 3, 0);
+      MAYBE_RETURN(maybe_fsd, MaybeHandle<JSDateTimeFormat>());
+      // Convert fractionalSecondDigits to skeleton.
+      int fsd = maybe_fsd.FromJust();
+      for (int i = 0; i < fsd; i++) {
+        skeleton += "S";
+      }
+    }
     std::unique_ptr<char[]> input;
     // i. Let prop be the name given in the Property column of the row.
     // ii. Let value be ? GetOption(options, prop, "string", « the strings
@@ -1669,16 +1699,6 @@ MaybeHandle<JSDateTimeFormat> JSDateTimeFormat::New(
       // iii. Set opt.[[<prop>]] to value.
       skeleton += item.map.find(input.get())->second;
     }
-  }
-  // Let _value_ be ? GetNumberOption(options, "fractionalSecondDigits", 1, 3,
-  // *undefined*). The *undefined* is represented by value 0 here.
-  Maybe<int> maybe_fsd = Intl::GetNumberOption(
-      isolate, options, factory->fractionalSecondDigits_string(), 1, 3, 0);
-  MAYBE_RETURN(maybe_fsd, MaybeHandle<JSDateTimeFormat>());
-  // Convert fractionalSecondDigits to skeleton.
-  int fsd = maybe_fsd.FromJust();
-  for (int i = 0; i < fsd; i++) {
-    skeleton += "S";
   }
 
   // 29. Let matcher be ? GetOption(options, "formatMatcher", "string", «
@@ -1738,13 +1758,32 @@ MaybeHandle<JSDateTimeFormat> JSDateTimeFormat::New(
     //  iii. If p is not undefined, then
     //      1. Throw a TypeError exception.
     if (skeleton.length() > 0) {
-      THROW_NEW_ERROR(isolate,
-                      NewTypeError(MessageTemplate::kInvalid,
-                                   factory->NewStringFromStaticChars("option"),
-                                   date_style != DateTimeStyle::kUndefined
-                                       ? factory->dateStyle_string()
-                                       : factory->timeStyle_string()),
-                      JSDateTimeFormat);
+      std::string prop;
+      for (const auto& item : GetPatternItems()) {
+        for (const auto& pair : item.pairs) {
+          if (skeleton.find(pair.pattern) != std::string::npos) {
+            prop.assign(item.property);
+            break;
+          }
+        }
+        if (!prop.empty()) {
+          break;
+        }
+      }
+      if (prop.empty() && skeleton.find("S") != std::string::npos) {
+        prop.assign("fractionalSecondDigits");
+      }
+      if (!prop.empty()) {
+        THROW_NEW_ERROR(
+            isolate,
+            NewTypeError(MessageTemplate::kCantSetOptionXWhenYIsUsed,
+                         factory->NewStringFromAsciiChecked(prop.c_str()),
+                         date_style != DateTimeStyle::kUndefined
+                             ? factory->dateStyle_string()
+                             : factory->timeStyle_string()),
+            JSDateTimeFormat);
+      }
+      UNREACHABLE();
     }
     // b. Let pattern be DateTimeStylePattern(dateStyle, timeStyle,
     // dataLocaleData, hc).
@@ -1833,7 +1872,7 @@ MaybeHandle<JSDateTimeFormat> JSDateTimeFormat::New(
   // Now all properties are ready, so we can allocate the result object.
   Handle<JSDateTimeFormat> date_time_format = Handle<JSDateTimeFormat>::cast(
       isolate->factory()->NewFastOrSlowJSObjectFromMap(map));
-  DisallowHeapAllocation no_gc;
+  DisallowGarbageCollection no_gc;
   date_time_format->set_flags(0);
   if (date_style != DateTimeStyle::kUndefined) {
     date_time_format->set_date_style(date_style);
@@ -1842,6 +1881,7 @@ MaybeHandle<JSDateTimeFormat> JSDateTimeFormat::New(
     date_time_format->set_time_style(time_style);
   }
   date_time_format->set_hour_cycle(dateTimeFormatHourCycle);
+  date_time_format->set_iso8601(iso8601);
   date_time_format->set_locale(*locale_str);
   date_time_format->set_icu_locale(*managed_locale);
   date_time_format->set_icu_simple_date_format(*managed_format);

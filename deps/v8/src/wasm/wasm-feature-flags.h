@@ -10,21 +10,6 @@
 
 // Experimental features (disabled by default).
 #define FOREACH_WASM_EXPERIMENTAL_FEATURE_FLAG(V) /*     (force 80 columns) */ \
-  /* Exception handling proposal. */                                           \
-  /* https://github.com/WebAssembly/exception-handling */                      \
-  /* V8 side owner: clemensb */                                                \
-  V(eh, "exception handling opcodes", false)                                   \
-                                                                               \
-  /* Fixed-width SIMD operations. */                                           \
-  /* https://github.com/webassembly/simd */                                    \
-  /* V8 side owner: gdeepti */                                                 \
-  V(simd, "SIMD opcodes", false)                                               \
-                                                                               \
-  /* Tail call / return call proposal. */                                      \
-  /* https://github.com/webassembly/tail-call */                               \
-  /* V8 side owner: fgm */                                                     \
-  V(return_call, "return call opcodes", false)                                 \
-                                                                               \
   /* No official proposal (yet?). */                                           \
   /* V8 side owner: clemensb */                                                \
   V(compilation_hints, "compilation hints section", false)                     \
@@ -37,8 +22,13 @@
                                                                                \
   /* Typed function references proposal. */                                    \
   /* Official proposal: https://github.com/WebAssembly/function-references */  \
-  /* V8 side owner: ahaas */                                                   \
-  V(typed_funcref, "typed function references", false)
+  /* V8 side owner: manoskouk */                                               \
+  V(typed_funcref, "typed function references", false)                         \
+                                                                               \
+  /* Memory64 proposal. */                                                     \
+  /* https://github.com/WebAssembly/memory64 */                                \
+  /* V8 side owner: clemensb */                                                \
+  V(memory64, "memory64", false)
 
 // #############################################################################
 // Staged features (disabled by default, but enabled via --wasm-staging (also
@@ -49,11 +39,29 @@
 // be shipped with enough lead time to the next branch to allow for
 // stabilization.
 #define FOREACH_WASM_STAGING_FEATURE_FLAG(V) /*          (force 80 columns) */ \
+  /* Exception handling proposal. */                                           \
+  /* https://github.com/WebAssembly/exception-handling */                      \
+  /* V8 side owner: thibaudm */                                                \
+  /* Staged in v8.9 */                                                         \
+  V(eh, "exception handling opcodes", false)                                   \
+                                                                               \
   /* Reference Types, a.k.a. reftypes proposal. */                             \
   /* https://github.com/WebAssembly/reference-types */                         \
   /* V8 side owner: ahaas */                                                   \
   /* Staged in v7.8. */                                                        \
   V(reftypes, "reference type opcodes", false)                                 \
+                                                                               \
+  /* Tail call / return call proposal. */                                      \
+  /* https://github.com/webassembly/tail-call */                               \
+  /* V8 side owner: thibaudm */                                                \
+  /* Staged in v8.7 * */                                                       \
+  V(return_call, "return call opcodes", false)                                 \
+                                                                               \
+  /* Fixed-width SIMD operations. */                                           \
+  /* https://github.com/webassembly/simd */                                    \
+  /* V8 side owner: gdeepti, zhin */                                           \
+  /* Staged in v8.7 * */                                                       \
+  V(simd, "SIMD opcodes", false)                                               \
                                                                                \
   /* Threads proposal. */                                                      \
   /* https://github.com/webassembly/threads */                                 \
@@ -73,21 +81,6 @@
 // Shipped features (enabled by default). Remove the feature flag once they hit
 // stable and are expected to stay enabled.
 #define FOREACH_WASM_SHIPPED_FEATURE_FLAG(V) /*          (force 80 columns) */ \
-  /* JS BigInt to wasm i64 integration. */                                     \
-  /* https://github.com/WebAssembly/JS-BigInt-integration */                   \
-  /* V8 side owner: ahaas, ssauleau@igalia.com */                              \
-  /* Shipped in v8.5. */                                                       \
-  /* ITS: https://groups.google.com/a/chromium.org/g/blink-dev/c/           */ \
-  /*              g4QKRUQV1-0/m/jdWjD1uZAAAJ                                */ \
-  V(bigint, "JS BigInt support", true)                                         \
-                                                                               \
-  /* Bulk memory operations. */                                                \
-  /* https://github.com/webassembly/bulk-memory-operations */                  \
-  /* V8 side owner: binji */                                                   \
-  /* Shipped in v7.5. */                                                       \
-  /* ITS: https://groups.google.com/forum/#!topic/v8-users/zM05lYEBVog */      \
-  V(bulk_memory, "bulk memory opcodes", true)                                  \
-                                                                               \
   /* Multi-value proposal. */                                                  \
   /* https://github.com/WebAssembly/multi-value */                             \
   /* V8 side owner: thibaudm */                                                \

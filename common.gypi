@@ -45,7 +45,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.28',
+    'v8_embedder_string': '-node.10',
 
     ##### V8 defaults for Node.js #####
 
@@ -412,6 +412,7 @@
       'V8_DEPRECATION_WARNINGS',
       'V8_REVERSE_JSARGS',
       #'V8_IMMINENT_DEPRECATION_WARNINGS',
+      '_GLIBCXX_USE_CXX11_ABI=1',
       '_LIBCPP_HAS_NO_VENDOR_AVAILABILITY_ANNOTATIONS',
     ],
 
@@ -680,8 +681,7 @@
           ['_type!="static_library"', {
             'xcode_settings': {
               'OTHER_LDFLAGS': [
-                '-Wl,-no_pie',
-                '-Wl,-search_paths_first',
+                '-Wl,-search_paths_first'
               ],
             },
           }],

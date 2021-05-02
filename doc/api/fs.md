@@ -265,18 +265,20 @@ added: v10.0.0
 added: v10.0.0
 -->
 
-* `buffer` {Buffer|Uint8Array} A buffer that will be filled with the file
-  data read.
+* `buffer` {Buffer|TypedArray|DataView} A buffer that will be filled with the
+  file data read.
 * `offset` {integer} The location in the buffer at which to start filling.
   **Default:** `0`
-* `length` {integer} The number of bytes to read. **Default:** `buffer.length`
+* `length` {integer} The number of bytes to read. **Default:**
+  `buffer.byteLength`
 * `position` {integer} The location where to begin reading data from the
   file. If `null`, data will be read from the current file position, and
   the position will be updated. If `position` is an integer, the current
   file position will remain unchanged.
 * Returns: {Promise} Fulfills upon success with an object with two properties:
   * `bytesRead` {integer} The number of bytes read
-  * `buffer` {Buffer|Uint8Array} A reference to the passed in `buffer` argument.
+  * `buffer` {Buffer|TypedArray|DataView} A reference to the passed in `buffer`
+    argument.
 
 Reads data from the file and stores that in the given buffer.
 
@@ -290,19 +292,20 @@ added:
  - v12.17.0
 -->
 * `options` {Object}
-  * `buffer` {Buffer|Uint8Array} A buffer that will be filled with the file
-    data read. **Default:** `Buffer.alloc(16384)`
+  * `buffer` {Buffer|TypedArray|DataView} A buffer that will be filled with the
+    file data read. **Default:** `Buffer.alloc(16384)`
   * `offset` {integer} The location in the buffer at which to start filling.
     **Default:** `0`
-  * `length` {integer} The number of bytes to read. **Default:** `buffer.length`
+  * `length` {integer} The number of bytes to read. **Default:**
+    `buffer.byteLength`
   * `position` {integer} The location where to begin reading data from the
     file. If `null`, data will be read from the current file position, and
     the position will be updated. If `position` is an integer, the current
     file position will remain unchanged. **Default:**: `null`
 * Returns: {Promise} Fulfills upon success with an object with two properties:
   * `bytesRead` {integer} The number of bytes read
-  * `buffer` {Buffer|Uint8Array} A reference to the passed in `buffer`
-  argument.
+  * `buffer` {Buffer|TypedArray|DataView} A reference to the passed in `buffer`
+    argument.
 
 Reads data from the file and stores that in the given buffer.
 
@@ -434,10 +437,11 @@ changes:
                  buffers anymore.
 -->
 
-* `buffer` {Buffer|Uint8Array|string|Object}
+* `buffer` {Buffer|TypedArray|DataView|string|Object}
 * `offset` {integer} The start position from within `buffer` where the data
-  to write begins.
-* `length` {integer} The number of bytes from `buffer` to write.
+  to write begins. **Default:** `0`
+* `length` {integer} The number of bytes from `buffer` to write. **Default:**
+  `buffer.byteLength`
 * `position` {integer} The offset from the beginning of the file where the
   data from `buffer` should be written. If `position` is not a `number`,
   the data will be written at the current position. See the POSIX pwrite(2)
@@ -449,8 +453,8 @@ Write `buffer` to the file.
 The promise is resolved with an object containing two properties:
 
 * `bytesWritten` {integer} the number of bytes written
-* `buffer` {Buffer|Uint8Array|string|Object} a reference to the `buffer`
-  written.
+* `buffer` {Buffer|TypedArray|DataView|string|Object} a reference to the
+  `buffer` written.
 
 It is unsafe to use `filehandle.write()` multiple times on the same file
 without waiting for the promise to be resolved (or rejected). For this
@@ -512,7 +516,7 @@ changes:
                  strings anymore.
 -->
 
-* `data` {string|Buffer|Uint8Array|Object}
+* `data` {string|Buffer|TypedArray|DataView|Object}
 * `options` {Object|string}
   * `encoding` {string|null} The expected character encoding when `data` is a
     string. **Default:** `'utf8'`
@@ -928,7 +932,7 @@ import { readdir } from 'fs/promises';
 
 try {
   const files = await readdir(path);
-  for await (const file of files)
+  for (const file of files)
     console.log(file);
 } catch (err) {
   console.error(err);
@@ -1045,6 +1049,20 @@ Renames `oldPath` to `newPath`.
 <!-- YAML
 added: v10.0.0
 changes:
+  - version: v16.0.0
+    pr-url: https://github.com/nodejs/node/pull/37216
+    description: "Using `fsPromises.rmdir(path, { recursive: true })` on a `path`
+                 that is a file is no longer permitted and results in an
+                 `ENOENT` error on Windows and an `ENOTDIR` error on POSIX."
+  - version: v16.0.0
+    pr-url: https://github.com/nodejs/node/pull/37216
+    description: "Using `fsPromises.rmdir(path, { recursive: true })` on a `path`
+                 that does not exist is no longer permitted and results in a
+                 `ENOENT` error."
+  - version: v16.0.0
+    pr-url: https://github.com/nodejs/node/pull/37302
+    description: The `recursive` option is deprecated, using it triggers a
+                 deprecation warning.
   - version:
      - v13.3.0
      - v12.16.0
@@ -1068,8 +1086,8 @@ changes:
     represents the number of retries. This option is ignored if the `recursive`
     option is not `true`. **Default:** `0`.
   * `recursive` {boolean} If `true`, perform a recursive directory removal. In
-    recursive mode, errors are not reported if `path` does not exist, and
-    operations are retried on failure. **Default:** `false`.
+    recursive mode, operations are retried on failure. **Default:** `false`.
+    **Deprecated**.
   * `retryDelay` {integer} The amount of time in milliseconds to wait between
     retries. This option is ignored if the `recursive` option is not `true`.
     **Default:** `100`.
@@ -1081,11 +1099,8 @@ Using `fsPromises.rmdir()` on a file (not a directory) results in the
 promise being rejected with an `ENOENT` error on Windows and an `ENOTDIR`
 error on POSIX.
 
-Setting `recursive` to `true` results in behavior similar to the Unix command
-`rm -rf`: an error will not be raised for paths that do not exist, and paths
-that represent files will be deleted. The permissive behavior of the
-`recursive` option is deprecated, `ENOTDIR` and `ENOENT` will be thrown in
-the future.
+To get a behavior similar to the `rm -rf` Unix command, use
+[`fsPromises.rm()`][] with options `{ recursive: true, force: true }`.
 
 ### `fsPromises.rm(path[, options])`
 <!-- YAML
@@ -1259,7 +1274,7 @@ changes:
 -->
 
 * `file` {string|Buffer|URL|FileHandle} filename or `FileHandle`
-* `data` {string|Buffer|Uint8Array|Object|AsyncIterable|Iterable
+* `data` {string|Buffer|TypedArray|DataView|Object|AsyncIterable|Iterable
   |Stream}
 * `options` {Object|string}
   * `encoding` {string|null} **Default:** `'utf8'`
@@ -2331,6 +2346,10 @@ descriptor. See [`fs.utimes()`][].
 <!-- YAML
 deprecated: v0.4.7
 changes:
+  - version: v16.0.0
+    pr-url: https://github.com/nodejs/node/pull/37460
+    description: The error returned may be an `AggregateError` if more than one
+                 error is returned.
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/12562
     description: The `callback` parameter is no longer optional. Not passing
@@ -2344,7 +2363,7 @@ changes:
 * `path` {string|Buffer|URL}
 * `mode` {integer}
 * `callback` {Function}
-  * `err` {Error}
+  * `err` {Error|AggregateError}
 
 Changes the permissions on a symbolic link. No arguments other than a possible
 exception are given to the completion callback.
@@ -2462,7 +2481,7 @@ changes:
   * `stats` {fs.Stats}
 
 Retrieves the {fs.Stats} for the symbolic link referred to by the path.
-The callback gets two arguments `(err, stats)` where `stats` is a {`fs.Stats}
+The callback gets two arguments `(err, stats)` where `stats` is a {fs.Stats}
 object. `lstat()` is identical to `stat()`, except that if `path` is a symbolic
 link, then the link itself is stat-ed, not the file that it refers to.
 
@@ -2707,9 +2726,11 @@ changes:
 
 * `fd` {integer}
 * `buffer` {Buffer|TypedArray|DataView} The buffer that the data will be
-  written to.
-* `offset` {integer} The position in `buffer` to write the data to.
-* `length` {integer}  The number of bytes to read.
+  written to. **Default:** `Buffer.alloc(16384)`
+* `offset` {integer} The position in `buffer` to write the data to. **Default:**
+  `0`
+* `length` {integer} The number of bytes to read. **Default:**
+  `buffer.byteLength`
 * `position` {integer|bigint} Specifies where to begin reading from in the
   file. If `position` is `null` or `-1 `, data will be read from the current
   file position, and the file position will be updated. If `position` is an
@@ -2746,16 +2767,16 @@ changes:
 * `options` {Object}
   * `buffer` {Buffer|TypedArray|DataView} **Default:** `Buffer.alloc(16384)`
   * `offset` {integer} **Default:** `0`
-  * `length` {integer} **Default:** `buffer.length`
+  * `length` {integer} **Default:** `buffer.byteLength`
   * `position` {integer|bigint} **Default:** `null`
 * `callback` {Function}
   * `err` {Error}
   * `bytesRead` {integer}
   * `buffer` {Buffer}
 
-Similar to the `fs.read90` function, this version takes an optional `options`
-object. If no `options` object is specified, it will default with the above
-values.
+Similar to the [`fs.read()`][] function, this version takes an optional
+`options` object. If no `options` object is specified, it will default with the
+above values.
 
 ### `fs.readdir(path[, options], callback)`
 <!-- YAML
@@ -2807,6 +2828,10 @@ If `options.withFileTypes` is set to `true`, the `files` array will contain
 <!-- YAML
 added: v0.1.29
 changes:
+  - version: v16.0.0
+    pr-url: https://github.com/nodejs/node/pull/37460
+    description: The error returned may be an `AggregateError` if more than one
+                 error is returned.
   - version: v15.2.0
     pr-url: https://github.com/nodejs/node/pull/35911
     description: The options argument may include an AbortSignal to abort an
@@ -2838,7 +2863,7 @@ changes:
   * `flag` {string} See [support of file system `flags`][]. **Default:** `'r'`.
   * `signal` {AbortSignal} allows aborting an in-progress readFile
 * `callback` {Function}
-  * `err` {Error}
+  * `err` {Error|AggregateError}
   * `data` {string|Buffer}
 
 Asynchronously reads the entire contents of a file.
@@ -3133,6 +3158,20 @@ rename('oldFile.txt', 'newFile.txt', (err) => {
 <!-- YAML
 added: v0.0.2
 changes:
+  - version: v16.0.0
+    pr-url: https://github.com/nodejs/node/pull/37216
+    description: "Using `fs.rmdir(path, { recursive: true })` on a `path` that is
+                 a file is no longer permitted and results in an `ENOENT` error
+                 on Windows and an `ENOTDIR` error on POSIX."
+  - version: v16.0.0
+    pr-url: https://github.com/nodejs/node/pull/37216
+    description: "Using `fs.rmdir(path, { recursive: true })` on a `path` that
+                 does not exist is no longer permitted and results in a `ENOENT`
+                 error."
+  - version: v16.0.0
+    pr-url: https://github.com/nodejs/node/pull/37302
+    description: The `recursive` option is deprecated, using it triggers a
+                 deprecation warning.
   - version:
      - v13.3.0
      - v12.16.0
@@ -3168,8 +3207,8 @@ changes:
     represents the number of retries. This option is ignored if the `recursive`
     option is not `true`. **Default:** `0`.
   * `recursive` {boolean} If `true`, perform a recursive directory removal. In
-    recursive mode, errors are not reported if `path` does not exist, and
-    operations are retried on failure. **Default:** `false`.
+    recursive mode, operations are retried on failure. **Default:** `false`.
+    **Deprecated**.
   * `retryDelay` {integer} The amount of time in milliseconds to wait between
     retries. This option is ignored if the `recursive` option is not `true`.
     **Default:** `100`.
@@ -3182,11 +3221,8 @@ to the completion callback.
 Using `fs.rmdir()` on a file (not a directory) results in an `ENOENT` error on
 Windows and an `ENOTDIR` error on POSIX.
 
-Setting `recursive` to `true` results in behavior similar to the Unix command
-`rm -rf`: an error will not be raised for paths that do not exist, and paths
-that represent files will be deleted. The permissive behavior of the
-`recursive` option is deprecated, `ENOTDIR` and `ENOENT` will be thrown in
-the future.
+To get a behavior similar to the `rm -rf` Unix command, use [`fs.rm()`][]
+with options `{ recursive: true, force: true }`.
 
 ### `fs.rm(path[, options], callback)`
 <!-- YAML
@@ -3382,6 +3418,10 @@ example/
 <!-- YAML
 added: v0.8.6
 changes:
+  - version: v16.0.0
+    pr-url: https://github.com/nodejs/node/pull/37460
+    description: The error returned may be an `AggregateError` if more than one
+                 error is returned.
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/12562
     description: The `callback` parameter is no longer optional. Not passing
@@ -3395,7 +3435,7 @@ changes:
 * `path` {string|Buffer|URL}
 * `len` {integer} **Default:** `0`
 * `callback` {Function}
-  * `err` {Error}
+  * `err` {Error|AggregateError}
 
 Truncates the file. No arguments other than a possible exception are
 given to the completion callback. A file descriptor can also be passed as the
@@ -3835,6 +3875,10 @@ details.
 <!-- YAML
 added: v0.1.29
 changes:
+  - version: v16.0.0
+    pr-url: https://github.com/nodejs/node/pull/37460
+    description: The error returned may be an `AggregateError` if more than one
+                 error is returned.
   - version: v15.2.0
     pr-url: https://github.com/nodejs/node/pull/35993
     description: The options argument may include an AbortSignal to abort an
@@ -3875,7 +3919,7 @@ changes:
   * `flag` {string} See [support of file system `flags`][]. **Default:** `'w'`.
   * `signal` {AbortSignal} allows aborting an in-progress writeFile
 * `callback` {Function}
-  * `err` {Error}
+  * `err` {Error|AggregateError}
 
 When `file` is a filename, asynchronously writes data to the file, replacing the
 file if it already exists. `data` can be a string or a buffer.
@@ -4651,7 +4695,7 @@ changes:
 * `buffer` {Buffer|TypedArray|DataView}
 * `options` {Object}
   * `offset` {integer} **Default:** `0`
-  * `length` {integer} **Default:** `buffer.length`
+  * `length` {integer} **Default:** `buffer.byteLength`
   * `position` {integer|bigint} **Default:** `null`
 * Returns: {number}
 
@@ -4753,6 +4797,20 @@ See the POSIX rename(2) documentation for more details.
 <!-- YAML
 added: v0.1.21
 changes:
+  - version: v16.0.0
+    pr-url: https://github.com/nodejs/node/pull/37216
+    description: "Using `fs.rmdirSync(path, { recursive: true })` on a `path`
+                 that is a file is no longer permitted and results in an
+                 `ENOENT` error on Windows and an `ENOTDIR` error on POSIX."
+  - version: v16.0.0
+    pr-url: https://github.com/nodejs/node/pull/37216
+    description: "Using `fs.rmdirSync(path, { recursive: true })` on a `path`
+                 that does not exist is no longer permitted and results in a
+                 `ENOENT` error."
+  - version: v16.0.0
+    pr-url: https://github.com/nodejs/node/pull/37302
+    description: The `recursive` option is deprecated, using it triggers a
+                 deprecation warning.
   - version:
      - v13.3.0
      - v12.16.0
@@ -4780,8 +4838,8 @@ changes:
     represents the number of retries. This option is ignored if the `recursive`
     option is not `true`. **Default:** `0`.
   * `recursive` {boolean} If `true`, perform a recursive directory removal. In
-    recursive mode, errors are not reported if `path` does not exist, and
-    operations are retried on failure. **Default:** `false`.
+    recursive mode, operations are retried on failure. **Default:** `false`.
+    **Deprecated**.
   * `retryDelay` {integer} The amount of time in milliseconds to wait between
     retries. This option is ignored if the `recursive` option is not `true`.
     **Default:** `100`.
@@ -4791,11 +4849,8 @@ Synchronous rmdir(2). Returns `undefined`.
 Using `fs.rmdirSync()` on a file (not a directory) results in an `ENOENT` error
 on Windows and an `ENOTDIR` error on POSIX.
 
-Setting `recursive` to `true` results in behavior similar to the Unix command
-`rm -rf`: an error will not be raised for paths that do not exist, and paths
-that represent files will be deleted. The permissive behavior of the
-`recursive` option is deprecated, `ENOTDIR` and `ENOENT` will be thrown in
-the future.
+To get a behavior similar to the `rm -rf` Unix command, use [`fs.rmSync()`][]
+with options `{ recursive: true, force: true }`.
 
 ### `fs.rmSync(path[, options])`
 <!-- YAML
@@ -6643,6 +6698,8 @@ the file contents.
 [`fs.readdirSync()`]: #fs_fs_readdirsync_path_options
 [`fs.readv()`]: #fs_fs_readv_fd_buffers_position_callback
 [`fs.realpath()`]: #fs_fs_realpath_path_options_callback
+[`fs.rm()`]: #fs_fs_rm_path_options_callback
+[`fs.rmSync()`]: #fs_fs_rmsync_path_options
 [`fs.rmdir()`]: #fs_fs_rmdir_path_options_callback
 [`fs.stat()`]: #fs_fs_stat_path_options_callback
 [`fs.symlink()`]: #fs_fs_symlink_target_path_type_callback
@@ -6654,6 +6711,7 @@ the file contents.
 [`fs.writev()`]: #fs_fs_writev_fd_buffers_position_callback
 [`fsPromises.open()`]: #fs_fspromises_open_path_flags_mode
 [`fsPromises.opendir()`]: #fs_fspromises_opendir_path_options
+[`fsPromises.rm()`]: #fs_fspromises_rm_path_options
 [`fsPromises.utimes()`]: #fs_fspromises_utimes_path_atime_mtime
 [`inotify(7)`]: https://man7.org/linux/man-pages/man7/inotify.7.html
 [`kqueue(2)`]: https://www.freebsd.org/cgi/man.cgi?query=kqueue&sektion=2

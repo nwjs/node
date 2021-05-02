@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "src/wasm/wasm-module.h"
+
 #include <functional>
 #include <memory>
 
 #include "src/api/api-inl.h"
+#include "src/base/platform/wrappers.h"
 #include "src/codegen/assembler-inl.h"
 #include "src/compiler/wasm-compiler.h"
 #include "src/debug/interface-types.h"
@@ -19,7 +22,6 @@
 #include "src/wasm/module-decoder.h"
 #include "src/wasm/wasm-code-manager.h"
 #include "src/wasm/wasm-js.h"
-#include "src/wasm/wasm-module.h"
 #include "src/wasm/wasm-objects-inl.h"
 #include "src/wasm/wasm-result.h"
 
@@ -41,29 +43,6 @@ WireBytesRef LazilyGeneratedNames::LookupFunctionName(
   }
   auto it = function_names_->find(function_index);
   if (it == function_names_->end()) return WireBytesRef();
-  return it->second;
-}
-
-std::pair<WireBytesRef, WireBytesRef>
-LazilyGeneratedNames::LookupNameFromImportsAndExports(
-    ImportExportKindCode kind, uint32_t index,
-    Vector<const WasmImport> import_table,
-    Vector<const WasmExport> export_table) const {
-  base::MutexGuard lock(&mutex_);
-  DCHECK(kind == kExternalGlobal || kind == kExternalMemory ||
-         kind == kExternalTable);
-  auto& names = kind == kExternalGlobal
-                    ? global_names_
-                    : kind == kExternalMemory ? memory_names_ : table_names_;
-  if (!names) {
-    names.reset(
-        new std::unordered_map<uint32_t,
-                               std::pair<WireBytesRef, WireBytesRef>>());
-    GenerateNamesFromImportsAndExports(kind, import_table, export_table,
-                                       names.get());
-  }
-  auto it = names->find(index);
-  if (it == names->end()) return {};
   return it->second;
 }
 
@@ -137,7 +116,7 @@ void LazilyGeneratedNames::AddForTesting(int function_index,
 
 AsmJsOffsetInformation::AsmJsOffsetInformation(
     Vector<const byte> encoded_offsets)
-    : encoded_offsets_(OwnedVector<uint8_t>::Of(encoded_offsets)) {}
+    : encoded_offsets_(OwnedVector<const uint8_t>::Of(encoded_offsets)) {}
 
 AsmJsOffsetInformation::~AsmJsOffsetInformation() = default;
 
@@ -218,16 +197,7 @@ std::ostream& operator<<(std::ostream& os, const WasmFunctionName& name) {
 }
 
 WasmModule::WasmModule(std::unique_ptr<Zone> signature_zone)
-    : signature_zone(std::move(signature_zone)),
-      subtyping_cache(this->signature_zone.get() == nullptr
-                          ? nullptr
-                          : new ZoneUnorderedSet<std::pair<uint32_t, uint32_t>>(
-                                this->signature_zone.get())),
-      type_equivalence_cache(
-          this->signature_zone.get() == nullptr
-              ? nullptr
-              : new ZoneUnorderedSet<std::pair<uint32_t, uint32_t>>(
-                    this->signature_zone.get())) {}
+    : signature_zone(std::move(signature_zone)) {}
 
 bool IsWasmCodegenAllowed(Isolate* isolate, Handle<Context> context) {
   // TODO(wasm): Once wasm has its own CSP policy, we should introduce a
@@ -333,9 +303,7 @@ Handle<JSObject> GetTypeForTable(Isolate* isolate, ValueType type,
     // place and then use that constant everywhere.
     element = factory->InternalizeUtf8String("anyfunc");
   } else {
-    DCHECK(WasmFeatures::FromFlags().has_reftypes() &&
-           type.is_reference_to(HeapType::kExtern));
-    element = factory->InternalizeUtf8String("externref");
+    element = factory->InternalizeUtf8String(VectorOf(type.name()));
   }
 
   Handle<JSFunction> object_function = isolate->object_function();
@@ -579,9 +547,9 @@ Handle<JSArray> GetCustomSections(Isolate* isolate,
       thrower->RangeError("out of memory allocating custom section data");
       return Handle<JSArray>();
     }
-    memcpy(array_buffer->backing_store(),
-           wire_bytes.begin() + section.payload.offset(),
-           section.payload.length());
+    base::Memcpy(array_buffer->backing_store(),
+                 wire_bytes.begin() + section.payload.offset(),
+                 section.payload.length());
 
     matching_sections.push_back(array_buffer);
   }
@@ -629,10 +597,11 @@ size_t EstimateStoredSize(const WasmModule* module) {
          (module->signature_zone ? module->signature_zone->allocation_size()
                                  : 0) +
          VectorSize(module->types) + VectorSize(module->type_kinds) +
-         VectorSize(module->signature_ids) + VectorSize(module->functions) +
-         VectorSize(module->data_segments) + VectorSize(module->tables) +
-         VectorSize(module->import_table) + VectorSize(module->export_table) +
-         VectorSize(module->exceptions) + VectorSize(module->elem_segments);
+         VectorSize(module->canonicalized_type_ids) +
+         VectorSize(module->functions) + VectorSize(module->data_segments) +
+         VectorSize(module->tables) + VectorSize(module->import_table) +
+         VectorSize(module->export_table) + VectorSize(module->exceptions) +
+         VectorSize(module->elem_segments);
 }
 
 size_t PrintSignature(Vector<char> buffer, const wasm::FunctionSig* sig,

@@ -34,6 +34,18 @@ void RecordWriteDescriptor::InitializePlatformSpecific(
   data->InitializePlatformSpecific(kParameterCount, default_stub_registers);
 }
 
+void DynamicCheckMapsDescriptor::InitializePlatformSpecific(
+    CallInterfaceDescriptorData* data) {
+  Register default_stub_registers[] = {r0, r1, r2, r3, cp};
+
+  data->RestrictAllocatableRegisters(default_stub_registers,
+                                     arraysize(default_stub_registers));
+
+  CHECK_LE(static_cast<size_t>(kParameterCount),
+           arraysize(default_stub_registers));
+  data->InitializePlatformSpecific(kParameterCount, default_stub_registers);
+}
+
 void EphemeronKeyBarrierDescriptor::InitializePlatformSpecific(
     CallInterfaceDescriptorData* data) {
   const Register default_stub_registers[] = {r0, r1, r2, r3, r4};
@@ -52,6 +64,11 @@ const Register LoadDescriptor::SlotRegister() { return r0; }
 
 const Register LoadWithVectorDescriptor::VectorRegister() { return r3; }
 
+const Register
+LoadWithReceiverAndVectorDescriptor::LookupStartObjectRegister() {
+  return r4;
+}
+
 const Register StoreDescriptor::ReceiverRegister() { return r1; }
 const Register StoreDescriptor::NameRegister() { return r2; }
 const Register StoreDescriptor::ValueRegister() { return r0; }
@@ -68,6 +85,15 @@ const Register ApiGetterDescriptor::CallbackRegister() { return r3; }
 
 const Register GrowArrayElementsDescriptor::ObjectRegister() { return r0; }
 const Register GrowArrayElementsDescriptor::KeyRegister() { return r3; }
+
+const Register BaselineLeaveFrameDescriptor::ParamsSizeRegister() {
+  // TODO(v8:11421): Implement on this platform.
+  UNREACHABLE();
+}
+const Register BaselineLeaveFrameDescriptor::WeightRegister() {
+  // TODO(v8:11421): Implement on this platform.
+  UNREACHABLE();
+}
 
 // static
 const Register TypeConversionDescriptor::ArgumentRegister() { return r0; }
@@ -192,21 +218,22 @@ void CompareDescriptor::InitializePlatformSpecific(
   data->InitializePlatformSpecific(arraysize(registers), registers);
 }
 
+void Compare_BaselineDescriptor::InitializePlatformSpecific(
+    CallInterfaceDescriptorData* data) {
+  // TODO(v8:11421): Implement on this platform.
+  InitializePlatformUnimplemented(data, kParameterCount);
+}
+
 void BinaryOpDescriptor::InitializePlatformSpecific(
     CallInterfaceDescriptorData* data) {
   Register registers[] = {r1, r0};
   data->InitializePlatformSpecific(arraysize(registers), registers);
 }
 
-void ArgumentsAdaptorDescriptor::InitializePlatformSpecific(
+void BinaryOp_BaselineDescriptor::InitializePlatformSpecific(
     CallInterfaceDescriptorData* data) {
-  Register registers[] = {
-      r1,  // JSFunction
-      r3,  // the new target
-      r0,  // actual number of arguments
-      r2,  // expected number of arguments
-  };
-  data->InitializePlatformSpecific(arraysize(registers), registers);
+  // TODO(v8:11421): Implement on this platform.
+  InitializePlatformUnimplemented(data, kParameterCount);
 }
 
 void ApiCallbackDescriptor::InitializePlatformSpecific(
@@ -271,54 +298,6 @@ void RunMicrotasksEntryDescriptor::InitializePlatformSpecific(
     CallInterfaceDescriptorData* data) {
   Register registers[] = {r0, r1};
   data->InitializePlatformSpecific(arraysize(registers), registers);
-}
-
-void BinaryOp_WithFeedbackDescriptor::InitializePlatformSpecific(
-    CallInterfaceDescriptorData* data) {
-  // TODO(v8:8888): Implement on this platform.
-  DefaultInitializePlatformSpecific(data, 4);
-}
-
-void CallTrampoline_WithFeedbackDescriptor::InitializePlatformSpecific(
-    CallInterfaceDescriptorData* data) {
-  // TODO(v8:8888): Implement on this platform.
-  DefaultInitializePlatformSpecific(data, 4);
-}
-
-void CallWithArrayLike_WithFeedbackDescriptor::InitializePlatformSpecific(
-    CallInterfaceDescriptorData* data) {
-  // TODO(v8:8888): Implement on this platform.
-  DefaultInitializePlatformSpecific(data, 4);
-}
-
-void CallWithSpread_WithFeedbackDescriptor::InitializePlatformSpecific(
-    CallInterfaceDescriptorData* data) {
-  // TODO(v8:8888): Implement on this platform.
-  DefaultInitializePlatformSpecific(data, 4);
-}
-
-void ConstructWithArrayLike_WithFeedbackDescriptor::InitializePlatformSpecific(
-    CallInterfaceDescriptorData* data) {
-  // TODO(v8:8888): Implement on this platform.
-  DefaultInitializePlatformSpecific(data, 4);
-}
-
-void ConstructWithSpread_WithFeedbackDescriptor::InitializePlatformSpecific(
-    CallInterfaceDescriptorData* data) {
-  // TODO(v8:8888): Implement on this platform.
-  DefaultInitializePlatformSpecific(data, 4);
-}
-
-void Compare_WithFeedbackDescriptor::InitializePlatformSpecific(
-    CallInterfaceDescriptorData* data) {
-  // TODO(v8:8888): Implement on this platform.
-  DefaultInitializePlatformSpecific(data, 4);
-}
-
-void UnaryOp_WithFeedbackDescriptor::InitializePlatformSpecific(
-    CallInterfaceDescriptorData* data) {
-  // TODO(v8:8888): Implement on this platform.
-  DefaultInitializePlatformSpecific(data, 3);
 }
 
 }  // namespace internal

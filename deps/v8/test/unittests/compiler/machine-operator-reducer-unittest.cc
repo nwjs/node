@@ -34,7 +34,8 @@ class MachineOperatorReducerTest : public GraphTest {
         javascript_(zone()),
         jsgraph_(isolate(), graph(), &common_, &javascript_, nullptr,
                  &machine_),
-        graph_reducer_(zone(), graph(), tick_counter(), jsgraph_.Dead()) {}
+        graph_reducer_(zone(), graph(), tick_counter(), broker(),
+                       jsgraph_.Dead()) {}
 
  protected:
   Reduction Reduce(Node* node) {
@@ -835,6 +836,16 @@ TEST_F(MachineOperatorReducerTest, Word32AndWithBitFields) {
                         IsInt32Constant(7 | (1 << 4) | (1 << 6) | (3 << 10))),
             IsInt32Constant(5 | (1 << 4) | (2 << 10))));
   }
+}
+
+TEST_F(MachineOperatorReducerTest, Word32AndWithIncorrectBitField) {
+  Reduction const r = Reduce(graph()->NewNode(
+      machine()->Word32And(), Parameter(0),
+      graph()->NewNode(machine()->Word32Equal(),
+                       graph()->NewNode(machine()->Word32And(), Parameter(0),
+                                        Int32Constant(4)),
+                       Parameter(0))));
+  ASSERT_FALSE(r.Changed());
 }
 
 // -----------------------------------------------------------------------------
@@ -2416,18 +2427,19 @@ TEST_F(MachineOperatorReducerTest, Float64Atan2WithConstant) {
 
 TEST_F(MachineOperatorReducerTest, Float64Atan2WithNaN) {
   Node* const p0 = Parameter(0);
-  Node* const nan = Float64Constant(std::numeric_limits<double>::quiet_NaN());
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  Node* const nan_node = Float64Constant(nan);
   {
     Reduction const r =
-        Reduce(graph()->NewNode(machine()->Float64Atan2(), p0, nan));
+        Reduce(graph()->NewNode(machine()->Float64Atan2(), p0, nan_node));
     ASSERT_TRUE(r.Changed());
-    EXPECT_EQ(nan, r.replacement());
+    EXPECT_THAT(r.replacement(), IsFloat64Constant(NanSensitiveDoubleEq(nan)));
   }
   {
     Reduction const r =
-        Reduce(graph()->NewNode(machine()->Float64Atan2(), nan, p0));
+        Reduce(graph()->NewNode(machine()->Float64Atan2(), nan_node, p0));
     ASSERT_TRUE(r.Changed());
-    EXPECT_EQ(nan, r.replacement());
+    EXPECT_THAT(r.replacement(), IsFloat64Constant(NanSensitiveDoubleEq(nan)));
   }
 }
 

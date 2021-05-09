@@ -291,7 +291,7 @@ import submodule from 'es-module-package/private-module.js';
 ```
 
 ### Subpath imports
-<!--YAML
+<!-- YAML
 added:
   - v14.6.0
   - v12.19.0
@@ -333,10 +333,10 @@ The resolution rules for the imports field are otherwise
 analogous to the exports field.
 
 ### Subpath patterns
-<!--YAML
+<!-- YAML
 added:
   - v14.13.0
-  - v12.19.0
+  - v12.20.0
 -->
 
 For packages with a small number of exports or imports, we recommend
@@ -428,7 +428,7 @@ The benefit of patterns over folder exports is that packages can always be
 imported by consumers without subpath file extensions being necessary.
 
 ### Exports sugar
-<!--YAML
+<!-- YAML
 added: v12.11.0
 -->
 
@@ -455,7 +455,7 @@ can be written:
 ```
 
 ### Conditional exports
-<!--YAML
+<!-- YAML
 added:
   - v13.2.0
   - v12.16.0
@@ -630,7 +630,7 @@ The above definitions may be moved to a dedicated conditions registry in due
 course.
 
 ### Self-referencing a package using its name
-<!--YAML
+<!-- YAML
 added:
   - v13.1.0
   - v12.16.0
@@ -1076,6 +1076,7 @@ added: v12.7.0
 changes:
   - version:
     - v14.13.0
+    - v12.20.0
     pr-url: https://github.com/nodejs/node/pull/34718
     description: Add support for `"exports"` patterns.
   - version:
@@ -1118,7 +1119,9 @@ All paths defined in the `"exports"` must be relative file URLs starting with
 
 ### `"imports"`
 <!-- YAML
-added: v14.6.0
+added:
+ - v14.6.0
+ - v12.19.0
 -->
 
 * Type: {Object}

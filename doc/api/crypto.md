@@ -1114,8 +1114,10 @@ module):
 added: v0.7.5
 -->
 
-The `DiffieHellmanGroup` class takes a well-known modp group as its argument but
-otherwise works the same as `DiffieHellman`.
+The `DiffieHellmanGroup` class takes a well-known modp group as its argument.
+It works the same as `DiffieHellman`, except that it does not allow changing
+its keys after creation. In other words, it does not implement `setPublicKey()`
+or `setPrivateKey()` methods.
 
 ```mjs
 const { createDiffieHellmanGroup } = await import('crypto');
@@ -1399,7 +1401,7 @@ Example (obtaining a shared secret):
 const {
   createECDH,
   createHash,
-} = await crypto('crypto');
+} = await import('crypto');
 
 const alice = createECDH('secp256k1');
 const bob = createECDH('secp256k1');

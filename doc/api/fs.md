@@ -775,7 +775,8 @@ changes:
 * Returns: {Promise}  Fulfills with the {fs.Stats} object for the given
   symbolic link `path`.
 
-Equivalent to `fsPromises.stats()` when `path` refers to a symbolic link.
+Equivalent to [`fsPromises.stat()`][] unless `path` refers to a symbolic link,
+in which case the link itself is stat-ed, not the file that it refers to.
 Refer to the POSIX lstat(2) document for more detail.
 
 ### `fsPromises.mkdir(path[, options])`
@@ -979,12 +980,15 @@ import { readFile } from 'fs/promises';
 
 try {
   const controller = new AbortController();
-  const signal = controller.signal;
-  readFile(fileName, { signal });
+  const { signal } = controller;
+  const promise = readFile(fileName, { signal });
 
-  // Abort the request
+  // Abort the request before the promise settles.
   controller.abort();
+
+  await promise;
 } catch (err) {
+  // When a request is aborted - err is an AbortError
   console.error(err);
 }
 ```
@@ -998,7 +1002,6 @@ Any specified {FileHandle} has to support reading.
 <!-- YAML
 added: v10.0.0
 -->
-
 * `path` {string|Buffer|URL}
 * `options` {string|Object}
   * `encoding` {string} **Default:** `'utf8'`
@@ -1315,8 +1318,12 @@ try {
   const controller = new AbortController();
   const { signal } = controller;
   const data = new Uint8Array(Buffer.from('Hello Node.js'));
-  writeFile('message.txt', data, { signal });
+  const promise = writeFile('message.txt', data, { signal });
+
+  // Abort the request before the promise settles.
   controller.abort();
+
+  await promise;
 } catch (err) {
   // When a request is aborted - err is an AbortError
   console.error(err);
@@ -3628,7 +3635,7 @@ to be notified of filesystem changes.
   directories.
 * On SunOS systems (including Solaris and SmartOS), this uses [`event ports`][].
 * On Windows systems, this feature depends on [`ReadDirectoryChangesW`][].
-* On Aix systems, this feature depends on [`AHAFS`][], which must be enabled.
+* On AIX systems, this feature depends on [`AHAFS`][], which must be enabled.
 * On IBM i systems, this feature is not supported.
 
 If the underlying functionality is not available for some reason, then
@@ -4532,7 +4539,7 @@ and cleaning up the directory.
 The `encoding` option sets the encoding for the `path` while opening the
 directory and subsequent read operations.
 
-### `fs.openSync(path[, flags, mode])`
+### `fs.openSync(path[, flags[, mode]])`
 <!-- YAML
 added: v0.1.21
 changes:
@@ -5947,6 +5954,18 @@ added: v0.4.7
 The number of bytes written so far. Does not include data that is still queued
 for writing.
 
+#### `writeStream.close([callback])`
+<!-- YAML
+added: v0.9.4
+-->
+
+* `callback` {Function}
+  * `err` {Error}
+
+Closes `writeStream`. Optionally accepts a
+callback that will be executed once the `writeStream`
+is closed.
+
 #### `writeStream.path`
 <!-- YAML
 added: v0.1.93
@@ -6672,7 +6691,7 @@ the file contents.
 [Readable Stream]: stream.md#stream_class_stream_readable
 [Writable Stream]: stream.md#stream_class_stream_writable
 [caveats]: #fs_caveats
-[`AHAFS`]: https://www.ibm.com/developerworks/aix/library/au-aix_event_infrastructure/
+[`AHAFS`]: https://developer.ibm.com/articles/au-aix_event_infrastructure/
 [`Buffer.byteLength`]: buffer.md#buffer_static_method_buffer_bytelength_string_encoding
 [`FSEvents`]: https://developer.apple.com/documentation/coreservices/file_system_events
 [`Number.MAX_SAFE_INTEGER`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER
@@ -6718,6 +6737,7 @@ the file contents.
 [`fsPromises.open()`]: #fs_fspromises_open_path_flags_mode
 [`fsPromises.opendir()`]: #fs_fspromises_opendir_path_options
 [`fsPromises.rm()`]: #fs_fspromises_rm_path_options
+[`fsPromises.stat()`]: #fs_fspromises_stat_path_options
 [`fsPromises.utimes()`]: #fs_fspromises_utimes_path_atime_mtime
 [`inotify(7)`]: https://man7.org/linux/man-pages/man7/inotify.7.html
 [`kqueue(2)`]: https://www.freebsd.org/cgi/man.cgi?query=kqueue&sektion=2

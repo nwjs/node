@@ -86,6 +86,8 @@ using DsaSigPointer = DeleteFnPtr<DSA_SIG, DSA_SIG_free>;
 // callback has been made.
 extern int VerifyCallback(int preverify_ok, X509_STORE_CTX* ctx);
 
+bool ProcessFipsOptions();
+
 void InitCryptoOnce();
 
 void InitCrypto(v8::Local<v8::Object> target);
@@ -188,8 +190,8 @@ struct CryptoErrorStore final : public MemoryRetainer {
       v8::Local<v8::String> exception_string = v8::Local<v8::String>()) const;
 
   SET_NO_MEMORY_INFO()
-  SET_MEMORY_INFO_NAME(CryptoErrorStore);
-  SET_SELF_SIZE(CryptoErrorStore);
+  SET_MEMORY_INFO_NAME(CryptoErrorStore)
+  SET_SELF_SIZE(CryptoErrorStore)
 
  private:
   std::vector<std::string> errors_;
@@ -502,7 +504,7 @@ class DeriveBitsJob final : public CryptoJob<DeriveBitsTraits> {
     return v8::Just(errors->ToException(env).ToLocal(err));
   }
 
-  SET_SELF_SIZE(DeriveBitsJob);
+  SET_SELF_SIZE(DeriveBitsJob)
   void MemoryInfo(MemoryTracker* tracker) const override {
     tracker->TrackFieldWithSize("out", out_.size());
     CryptoJob<DeriveBitsTraits>::MemoryInfo(tracker);

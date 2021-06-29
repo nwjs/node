@@ -1027,11 +1027,11 @@ added: v0.1.29
 * `callback` {Function}
 * Returns: {boolean}
 
-Sends a chunk of the body. By calling this method
-many times, a request body can be sent to a
-server. In that case, it is suggested to use the
-`['Transfer-Encoding', 'chunked']` header line when
-creating the request.
+Sends a chunk of the body. This method can be called multiple times. If no
+`Content-Length` is set, data will automatically be encoded in HTTP Chunked
+transfer encoding, so that server knows when the data ends. The
+`Transfer-Encoding: chunked` header is added. Calling [`request.end()`][]
+is necessary to finish sending the request.
 
 The `encoding` argument is optional and only applies when `chunk` is a string.
 Defaults to `'utf8'`.
@@ -2892,7 +2892,9 @@ class. The `ClientRequest` instance is a writable stream. If one needs to
 upload a file with a POST request, then write to the `ClientRequest` object.
 
 ```js
-const postData = querystring.stringify({
+const http = require('http');
+
+const postData = JSON.stringify({
   'msg': 'Hello World!'
 });
 
@@ -2902,7 +2904,7 @@ const options = {
   path: '/upload',
   method: 'POST',
   headers: {
-    'Content-Type': 'application/x-www-form-urlencoded',
+    'Content-Type': 'application/json',
     'Content-Length': Buffer.byteLength(postData)
   }
 };

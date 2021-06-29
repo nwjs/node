@@ -6,7 +6,7 @@
 #include "memory_tracker-inl.h"
 #include "node_buffer.h"
 #include "node_internals.h"
-#include "node_process.h"
+#include "node_process-inl.h"
 #include "v8.h"
 
 namespace node {
@@ -62,7 +62,7 @@ void GetCipherInfo(const FunctionCallbackInfo<Value>& args) {
     cipher = EVP_get_cipherbyname(*name);
   } else {
     int nid = args[1].As<Int32>()->Value();
-    cipher = EVP_get_cipherbyname(OBJ_nid2sn(nid));
+    cipher = EVP_get_cipherbynid(nid);
   }
 
   if (cipher == nullptr)
@@ -145,10 +145,14 @@ void GetCipherInfo(const FunctionCallbackInfo<Value>& args) {
     return;
   }
 
+  // OBJ_nid2sn(EVP_CIPHER_nid(cipher)) is used here instead of
+  // EVP_CIPHER_name(cipher) for compatibility with BoringSSL.
   if (info->Set(
           env->context(),
           env->name_string(),
-          OneByteString(env->isolate(), EVP_CIPHER_name(cipher))).IsNothing()) {
+          OneByteString(
+            env->isolate(),
+            OBJ_nid2sn(EVP_CIPHER_nid(cipher)))).IsNothing()) {
     return;
   }
 
@@ -906,7 +910,7 @@ bool PublicKeyCipher::Cipher(
     void* label = OPENSSL_memdup(oaep_label.data(), oaep_label.size());
     CHECK_NOT_NULL(label);
     if (0 >= EVP_PKEY_CTX_set0_rsa_oaep_label(ctx.get(),
-                reinterpret_cast<unsigned char*>(label),
+                     static_cast<unsigned char*>(label),
                                       oaep_label.size())) {
       OPENSSL_free(label);
       return false;

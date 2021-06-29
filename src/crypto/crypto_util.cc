@@ -14,11 +14,11 @@
 
 #include "math.h"
 
-#ifdef OPENSSL_FIPS
 #if OPENSSL_VERSION_MAJOR >= 3
 #include "openssl/provider.h"
 #endif
-#endif
+
+#include <openssl/rand.h>
 
 namespace node {
 
@@ -105,15 +105,36 @@ int NoPasswordCallback(char* buf, int size, int rwflag, void* u) {
   return 0;
 }
 
+bool ProcessFipsOptions() {
+  /* Override FIPS settings in configuration file, if needed. */
+  if (per_process::cli_options->enable_fips_crypto ||
+      per_process::cli_options->force_fips_crypto) {
+#if OPENSSL_VERSION_MAJOR >= 3
+    OSSL_PROVIDER* fips_provider = OSSL_PROVIDER_load(nullptr, "fips");
+    if (fips_provider == nullptr)
+      return false;
+    OSSL_PROVIDER_unload(fips_provider);
+
+    return EVP_default_properties_enable_fips(nullptr, 1) &&
+           EVP_default_properties_is_fips_enabled(nullptr);
+#else
+    return FIPS_mode() == 0 && FIPS_mode_set(1);
+#endif
+  }
+  return true;
+}
+
 void InitCryptoOnce() {
 #ifndef OPENSSL_IS_BORINGSSL
   OPENSSL_INIT_SETTINGS* settings = OPENSSL_INIT_new();
 
+#if OPENSSL_VERSION_MAJOR < 3
   // --openssl-config=...
   if (!per_process::cli_options->openssl_config.empty()) {
     const char* conf = per_process::cli_options->openssl_config.c_str();
     OPENSSL_INIT_set_config_filename(settings, conf);
   }
+#endif
 
   OPENSSL_init_ssl(0, settings);
   OPENSSL_INIT_free(settings);
@@ -138,25 +159,6 @@ void InitCryptoOnce() {
     }
   }
 #endif
-
-  /* Override FIPS settings in cnf file, if needed. */
-  unsigned long err = 0;  // NOLINT(runtime/int)
-  if (per_process::cli_options->enable_fips_crypto ||
-      per_process::cli_options->force_fips_crypto) {
-#if OPENSSL_VERSION_MAJOR >= 3
-    if (0 == EVP_default_properties_is_fips_enabled(nullptr) &&
-        !EVP_default_properties_enable_fips(nullptr, 1)) {
-#else
-    if (0 == FIPS_mode() && !FIPS_mode_set(1)) {
-#endif
-      err = ERR_get_error();
-    }
-  }
-  if (0 != err) {
-    auto* isolate = Isolate::GetCurrent();
-    auto* env = Environment::GetCurrent(isolate);
-    return ThrowCryptoError(env, err);
-  }
 
   // Turn off compression. Saves memory and protects against CRIME attacks.
   // No-op with OPENSSL_NO_COMP builds of OpenSSL.

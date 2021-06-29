@@ -1518,9 +1518,7 @@ hash.end();
 Example: Using `Hash` and piped streams:
 
 ```mjs
-const {
-  createReadStream,
-} = require('fs');
+import { createReadStream } from 'fs';
 
 const {
   createHash,
@@ -1551,7 +1549,7 @@ Example: Using the [`hash.update()`][] and [`hash.digest()`][] methods:
 ```mjs
 const {
   createHash,
-} = require('crypto');
+} = await import('crypto');
 
 const hash = createHash('sha256');
 
@@ -1596,7 +1594,7 @@ its [`hash.digest()`][] method has been called.
 // Calculate a rolling hash.
 const {
   createHash,
-} = require('crypto');
+} = await import('crypto');
 
 const hash = createHash('sha256');
 
@@ -1691,7 +1689,7 @@ Example: Using `Hmac` objects as streams:
 ```mjs
 const {
   createHmac,
-} = require('crypto');
+} = await import('crypto');
 
 const hmac = createHmac('sha256', 'a secret');
 
@@ -3865,7 +3863,7 @@ The supplied `callback` function is called with two arguments: `err` and
 `derivedKey`. If an errors occurs while deriving the key, `err` will be set;
 otherwise `err` will be `null`. The successfully generated `derivedKey` will
 be passed to the callback as an {ArrayBuffer}. An error will be thrown if any
-of the input aguments specify invalid values or types.
+of the input arguments specify invalid values or types.
 
 ```mjs
 const {
@@ -3913,7 +3911,7 @@ given `key`, `salt` and `info` are used with the `digest` to derive a key of
 
 The successfully generated `derivedKey` will be returned as an {ArrayBuffer}.
 
-An error will be thrown if any of the input aguments specify invalid values or
+An error will be thrown if any of the input arguments specify invalid values or
 types, or if the derived key cannot be generated.
 
 ```mjs

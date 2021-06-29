@@ -6,6 +6,7 @@
 
 #include "src/common/assert-scope.h"
 #include "src/common/globals.h"
+#include "src/execution/isolate-utils.h"
 #include "src/execution/thread-id.h"
 #include "src/handles/handles-inl.h"
 #include "src/heap/heap-inl.h"
@@ -171,7 +172,7 @@ bool String::MakeExternal(v8::String::ExternalStringResource* resource) {
   }
 
   base::SharedMutexGuard<base::kExclusive> shared_mutex_guard(
-      isolate->string_access());
+      isolate->internalized_string_access());
   // Morph the string to an external string by replacing the map and
   // reinitializing the fields.  This won't work if the space the existing
   // string occupies is too small for a regular external string.  Instead, we
@@ -249,7 +250,7 @@ bool String::MakeExternal(v8::String::ExternalOneByteStringResource* resource) {
   }
 
   base::SharedMutexGuard<base::kExclusive> shared_mutex_guard(
-      isolate->string_access());
+      isolate->internalized_string_access());
   // Morph the string to an external string by replacing the map and
   // reinitializing the fields.  This won't work if the space the existing
   // string occupies is too small for a regular external string.  Instead, we
@@ -1285,7 +1286,10 @@ Object String::LastIndexOf(Isolate* isolate, Handle<Object> receiver,
 }
 
 bool String::HasOneBytePrefix(Vector<const char> str) {
-  return IsEqualTo<EqualityType::kPrefix>(str);
+  DCHECK(!SharedStringAccessGuardIfNeeded::IsNeeded(*this));
+  return IsEqualToImpl<EqualityType::kPrefix>(
+      str, GetPtrComprCageBase(*this),
+      SharedStringAccessGuardIfNeeded::NotNeeded());
 }
 
 namespace {

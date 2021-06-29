@@ -60,9 +60,11 @@ InternalCallbackScope::InternalCallbackScope(Environment* env,
     return;
   }
 
-  HandleScope handle_scope(env->isolate());
+  Isolate* isolate = env->isolate();
+
+  HandleScope handle_scope(isolate);
   // If you hit this assertion, you forgot to enter the v8::Context first.
-  CHECK_EQ(Environment::GetCurrent(env->isolate()), env);
+  CHECK_EQ(Environment::GetCurrent(isolate), env);
 
   env->isolate()->SetIdle(false);
 
@@ -87,7 +89,8 @@ void InternalCallbackScope::Close() {
   if (closed_) return;
   closed_ = true;
 
-  auto idle = OnScopeLeave([&]() { env_->isolate()->SetIdle(true); });
+  Isolate* isolate = env_->isolate();
+  auto idle = OnScopeLeave([&]() { isolate->SetIdle(true); });
 
   if (!env_->can_call_into_js()) return;
   auto perform_stopping_check = [&]() {
@@ -126,6 +129,7 @@ void InternalCallbackScope::Close() {
     perform_stopping_check();
   }
 
+  Local<Context> context = env_->context();
   // Make sure the stack unwound properly. If there are nested MakeCallback's
   // then it should return early and not reach this code.
   if (env_->async_hooks()->fields()[AsyncHooks::kTotals]) {
@@ -137,7 +141,7 @@ void InternalCallbackScope::Close() {
     return;
   }
 
-  HandleScope handle_scope(env_->isolate());
+  HandleScope handle_scope(isolate);
   Local<Object> process = env_->process_object();
 
   if (!env_->can_call_into_js()) return;
@@ -148,7 +152,7 @@ void InternalCallbackScope::Close() {
   // to initializes the tick callback during bootstrap.
   CHECK(!tick_callback.IsEmpty());
 
-  if (tick_callback->Call(env_->context(), process, 0, nullptr).IsEmpty()) {
+  if (tick_callback->Call(context, process, 0, nullptr).IsEmpty()) {
     failed_ = true;
   }
   perform_stopping_check();
@@ -188,6 +192,7 @@ MaybeLocal<Value> InternalMakeCallback(Environment* env,
 
   MaybeLocal<Value> ret;
 
+  Local<Context> context = env->context();
   if (use_async_hooks_trampoline) {
     MaybeStackBuffer<Local<Value>, 16> args(3 + argc);
     args[0] = v8::Number::New(env->isolate(), asyncContext.async_id);
@@ -196,9 +201,9 @@ MaybeLocal<Value> InternalMakeCallback(Environment* env,
     for (int i = 0; i < argc; i++) {
       args[i + 3] = argv[i];
     }
-    ret = hook_cb->Call(env->context(), recv, args.length(), &args[0]);
+    ret = hook_cb->Call(context, recv, args.length(), &args[0]);
   } else {
-    ret = callback->Call(env->context(), recv, argc, argv);
+    ret = callback->Call(context, recv, argc, argv);
   }
 
   if (ret.IsEmpty()) {
@@ -275,7 +280,7 @@ MaybeLocal<Value> MakeCallback(Isolate* isolate,
   if (ret.IsEmpty() && env->async_callback_scope_depth() == 0) {
     // This is only for legacy compatibility and we may want to look into
     // removing/adjusting it.
-    return Undefined(env->isolate());
+    return Undefined(isolate);
   }
   return ret;
 }
@@ -294,11 +299,12 @@ MaybeLocal<Value> MakeSyncCallback(Isolate* isolate,
   CHECK_NOT_NULL(env);
   if (!env->can_call_into_js()) return Local<Value>();
 
-  Context::Scope context_scope(env->context());
+  Local<Context> context = env->context();
+  Context::Scope context_scope(context);
   if (env->async_callback_scope_depth()) {
     // There's another MakeCallback() on the stack, piggy back on it.
     // In particular, retain the current async_context.
-    return callback->Call(env->context(), recv, argc, argv);
+    return callback->Call(context, recv, argc, argv);
   }
 
   // This is a toplevel invocation and the caller (intentionally)

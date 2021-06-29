@@ -1940,7 +1940,7 @@ class V8_EXPORT ScriptCompiler {
    */
   class V8_EXPORT StreamedSource {
    public:
-    enum Encoding { ONE_BYTE, TWO_BYTE, UTF8 };
+    enum Encoding { ONE_BYTE, TWO_BYTE, UTF8, WINDOWS_1252 };
 
 #if defined(_MSC_VER) && _MSC_VER >= 1910 /* Disable on VS2015 */
     V8_DEPRECATED(
@@ -2013,7 +2013,8 @@ class V8_EXPORT ScriptCompiler {
    *
    * Note that when producing cached data, the source must point to NULL for
    * cached data. When consuming cached data, the cached data must have been
-   * produced by the same version of V8.
+   * produced by the same version of V8, and the embedder needs to ensure the
+   * cached data is the correct one for the given script.
    *
    * \param source Script source code.
    * \return Compiled script object (context independent; for running it must be
@@ -2173,6 +2174,8 @@ class V8_EXPORT Message {
    */
   Isolate* GetIsolate() const;
 
+  V8_WARN_UNUSED_RESULT MaybeLocal<String> GetSource(
+      Local<Context> context) const;
   V8_WARN_UNUSED_RESULT MaybeLocal<String> GetSourceLine(
       Local<Context> context) const;
 
@@ -2346,6 +2349,17 @@ class V8_EXPORT StackFrame {
    * deprecated //@ sourceURL=... string.
    */
   Local<String> GetScriptNameOrSourceURL() const;
+
+  /**
+   * Returns the source of the script for the function for this StackFrame.
+   */
+  Local<String> GetScriptSource() const;
+
+  /**
+   * Returns the source mapping URL (if one is present) of the script for
+   * the function for this StackFrame.
+   */
+  Local<String> GetScriptSourceMappingURL() const;
 
   /**
    * Returns the name of the function associated with this stack frame.
@@ -3252,6 +3266,11 @@ class V8_EXPORT String : public Name {
    * A zero length string.
    */
   V8_INLINE static Local<String> Empty(Isolate* isolate);
+
+  /**
+   * Returns true if the string is external.
+   */
+  bool IsExternal() const;
 
   /**
    * Returns true if the string is both external and two-byte.
@@ -9551,6 +9570,11 @@ class V8_EXPORT Isolate {
   void SetRAILMode(RAILMode rail_mode);
 
   /**
+   * Update load start time of the RAIL mode
+   */
+  void UpdateLoadStartTime();
+
+  /**
    * Optional notification to tell V8 the current isolate is used for debugging
    * and requires higher heap limit.
    */
@@ -9714,6 +9738,13 @@ class V8_EXPORT Isolate {
   void SetWasmSimdEnabledCallback(WasmSimdEnabledCallback callback);
 
   void SetWasmExceptionsEnabledCallback(WasmExceptionsEnabledCallback callback);
+
+  /**
+   * This function can be called by the embedder to signal V8 that the dynamic
+   * enabling of features has finished. V8 can now set up dynamically added
+   * features.
+   */
+  void InstallConditionalFeatures(Local<Context> context);
 
   /**
   * Check if V8 is dead and therefore unusable.  This is the case after

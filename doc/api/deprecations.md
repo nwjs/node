@@ -2497,7 +2497,7 @@ is flushed.
 Use [`response.writableFinished`][] or [`response.writableEnded`][]
 accordingly instead to avoid the ambiguity.
 
-To maintain existing behaviour `response.finished` should be replaced with
+To maintain existing behavior `response.finished` should be replaced with
 `response.writableEnded`.
 
 ### DEP0137: Closing fs.FileHandle on garbage collection
@@ -2802,7 +2802,7 @@ deprecated and should no longer be used.
 [`SlowBuffer`]: buffer.md#buffer_class_slowbuffer
 [`WriteStream.open()`]: fs.md#fs_class_fs_writestream
 [`assert`]: assert.md
-[`asyncResource.runInAsyncScope()`]: async_hooks.md#async_hooks_asyncresource_runinasyncscope_fn_thisarg_args
+[`asyncResource.runInAsyncScope()`]: async_context.md#async_context_asyncresource_runinasyncscope_fn_thisarg_args
 [`child_process`]: child_process.md
 [`clearInterval()`]: timers.md#timers_clearinterval_timeout
 [`clearTimeout()`]: timers.md#timers_cleartimeout_timeout

@@ -49,6 +49,7 @@ class ExternalReferenceRegistry {
 #define EXTERNAL_REFERENCE_BINDING_LIST_BASE(V)                                \
   V(async_wrap)                                                                \
   V(binding)                                                                   \
+  V(blob)                                                                      \
   V(buffer)                                                                    \
   V(contextify)                                                                \
   V(credentials)                                                               \
@@ -61,6 +62,7 @@ class ExternalReferenceRegistry {
   V(heap_utils)                                                                \
   V(messaging)                                                                 \
   V(native_module)                                                             \
+  V(performance)                                                               \
   V(process_methods)                                                           \
   V(process_object)                                                            \
   V(task_queue)                                                                \

@@ -361,6 +361,16 @@ filled with random values, and a reference to `typedArray` is returned.
 
 An error will be thrown if the given `typedArray` is larger than 65,536 bytes.
 
+### `crypto.randomUUID()`
+<!-- YAML
+added: v16.7.0
+-->
+
+* Returns: {string}
+
+Generates a random [RFC 4122][] version 4 UUID. The UUID is generated using a
+cryptographic pseudorandom number generator.
+
 ## Class: `CryptoKey`
 <!-- YAML
 added: v15.0.0
@@ -1268,7 +1278,7 @@ added: v15.0.0
 added: v15.0.0
 -->
 
-* Type: {string} Must be `'HMAC`.
+* Type: {string} Must be `'HMAC'`.
 
 ### Class: `Pbkdf2ImportParams`
 <!-- YAML
@@ -1771,4 +1781,5 @@ added: v15.0.0
 
 [JSON Web Key]: https://tools.ietf.org/html/rfc7517
 [Key usages]: #webcrypto_cryptokey_usages
+[RFC 4122]: https://www.rfc-editor.org/rfc/rfc4122.txt
 [Web Crypto API]: https://www.w3.org/TR/WebCryptoAPI/

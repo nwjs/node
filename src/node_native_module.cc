@@ -1,5 +1,6 @@
 #include "node_native_module.h"
 #include "util-inl.h"
+#include "debug_utils-inl.h"
 
 namespace node {
 namespace native_module {
@@ -69,6 +70,7 @@ void NativeModuleLoader::InitializeModuleCategories() {
   std::vector<std::string> prefixes = {
 #if !HAVE_OPENSSL
     "internal/crypto/",
+    "internal/debugger/",
 #endif  // !HAVE_OPENSSL
 
     "internal/bootstrap/",
@@ -98,7 +100,9 @@ void NativeModuleLoader::InitializeModuleCategories() {
       "tls",
       "_tls_common",
       "_tls_wrap",
-      "internal/tls",
+      "internal/tls/secure-pair",
+      "internal/tls/parse-cert-string",
+      "internal/tls/secure-context",
       "internal/http2/core",
       "internal/http2/compat",
       "internal/policy/manifest",
@@ -220,7 +224,10 @@ MaybeLocal<String> NativeModuleLoader::LoadBuiltinModuleSource(Isolate* isolate,
       isolate, contents.c_str(), v8::NewStringType::kNormal, contents.length());
 #else
   const auto source_it = source_.find(id);
-  CHECK_NE(source_it, source_.end());
+  if (UNLIKELY(source_it == source_.end())) {
+    fprintf(stderr, "Cannot find native builtin: \"%s\".\n", id);
+    ABORT();
+  }
   return source_it->second.ToStringChecked(isolate);
 #endif  // NODE_BUILTIN_MODULES_PATH
 }

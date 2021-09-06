@@ -12,13 +12,14 @@
     'msvs_multi_core_compile': '0',   # we do enable multicore compiles, but not using the V8 way
     'enable_pgo_generate%': '0',
     'enable_pgo_use%': '0',
-    'python%': 'python',
+    'python%': 'python3',
 
     'node_shared%': 'true',
     'force_dynamic_crt%': 0,
     'node_use_v8_platform%': 'true',
     'node_use_bundled_v8%': 'true',
     'node_debug_lib': 'false',
+    'node_shared_libuv': 'false',
     'node_module_version%': '',
     'node_with_ltcg%': '',
     'node_shared_openssl%': 'false',
@@ -45,7 +46,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.14',
+    'v8_embedder_string': '-node.20',
 
     ##### V8 defaults for Node.js #####
 
@@ -221,7 +222,6 @@
               'dbghelp.lib',
               'shlwapi.lib',
               'winmm.lib',
-              'msvcprt.lib',
             ],
             'AdditionalOptions': [
               # Suggested by Microsoft Devrel to avoid
@@ -524,7 +524,10 @@
         ],
       }],
       ['v8_enable_pointer_compression == 1', {
-        'defines': ['V8_COMPRESS_POINTERS'],
+        'defines': [
+          'V8_COMPRESS_POINTERS',
+          'V8_COMPRESS_POINTERS_IN_ISOLATE_CAGE',
+        ],
       }],
       ['v8_enable_pointer_compression == 1 or v8_enable_31bit_smis_on_64bit_arch == 1', {
         'defines': ['V8_31BIT_SMIS_ON_64BIT_ARCH'],
@@ -550,9 +553,7 @@
           }],
           [ 'building_nw==1 and component!="shared_library"', {
             'defines': [ '_LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS', '_LIBCPP_NO_AUTO_LINK' ],
-            'include_dirs': [ '<(DEPTH)/buildtools/third_party/libc++/trunk/include',
-                              '<(DEPTH)/buildtools/third_party/libc++',
-                            ],
+            'include_dirs': [ '<(DEPTH)/buildtools/third_party/libc++/trunk/include'],
           }],
         ],
       }],

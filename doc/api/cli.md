@@ -277,12 +277,11 @@ added: v11.8.0
 
 Use the specified file as a security policy.
 
-### `--experimental-repl-await`
+### `--no-experimental-repl-await`
 <!-- YAML
-added: v10.0.0
--->
-
-Enable experimental top-level `await` keyword support in REPL.
+added: v16.6.0
+ -->
+ Use this flag to disable top-level await in REPL.
 
 ### `--experimental-specifier-resolution=mode`
 <!-- YAML
@@ -584,10 +583,10 @@ added:
 changes:
   - version: v13.13.0
     pr-url: https://github.com/nodejs/node/pull/32520
-    description: Change maximum default size of HTTP headers from 8KB to 16KB.
+    description: Change maximum default size of HTTP headers from 8 KB to 16 KB.
 -->
 
-Specify the maximum size, in bytes, of HTTP headers. Defaults to 16KB.
+Specify the maximum size, in bytes, of HTTP headers. Defaults to 16 KB.
 
 ### `--napi-modules`
 <!-- YAML
@@ -1399,7 +1398,6 @@ Node.js options that are allowed are:
 * `--experimental-loader`
 * `--experimental-modules`
 * `--experimental-policy`
-* `--experimental-repl-await`
 * `--experimental-specifier-resolution`
 * `--experimental-top-level-await`
 * `--experimental-vm-modules`
@@ -1421,6 +1419,7 @@ Node.js options that are allowed are:
 * `--max-http-header-size`
 * `--napi-modules`
 * `--no-deprecation`
+* `--no-experimental-repl-await`
 * `--no-force-async-hooks-checks`
 * `--no-warnings`
 * `--node-memory-debug`
@@ -1758,8 +1757,8 @@ Sets the max memory size of V8's old memory section. As memory
 consumption approaches the limit, V8 will spend more time on
 garbage collection in an effort to free unused memory.
 
-On a machine with 2GB of memory, consider setting this to
-1536 (1.5GB) to leave some memory for other uses and avoid swapping.
+On a machine with 2 GB of memory, consider setting this to
+1536 (1.5 GB) to leave some memory for other uses and avoid swapping.
 
 ```console
 $ node --max-old-space-size=1536 index.js

@@ -39,11 +39,6 @@
 #include <string>
 #include <vector>
 
-// Custom constants used by both node_constants.cc and node_zlib.cc
-#define Z_MIN_WINDOWBITS 8
-#define Z_MAX_WINDOWBITS 15
-#define Z_DEFAULT_WINDOWBITS 15
-
 struct sockaddr;
 
 namespace node {
@@ -99,7 +94,7 @@ void SignalExit(int signal, siginfo_t* info, void* ucontext);
 std::string GetProcessTitle(const char* default_title);
 std::string GetHumanReadableProcessName();
 
-void InitializeContextRuntime(v8::Local<v8::Context>);
+v8::Maybe<bool> InitializeContextRuntime(v8::Local<v8::Context> context);
 bool InitializePrimordials(v8::Local<v8::Context> context);
 
 class NodeArrayBufferAllocator : public ArrayBufferAllocator {

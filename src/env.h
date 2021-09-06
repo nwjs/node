@@ -170,7 +170,6 @@ constexpr size_t kFsStatsBufferLength =
   V(oninit_symbol, "oninit")                                                   \
   V(owner_symbol, "owner_symbol")                                              \
   V(onpskexchange_symbol, "onpskexchange")                                     \
-  V(resource_symbol, "resource_symbol")                                        \
   V(trigger_async_id_symbol, "trigger_async_id_symbol")                        \
 
 // Strings are per-isolate primitives but Environment proxies them
@@ -521,6 +520,8 @@ constexpr size_t kFsStatsBufferLength =
   V(internal_binding_loader, v8::Function)                                     \
   V(immediate_callback_function, v8::Function)                                 \
   V(inspector_console_extension_installer, v8::Function)                       \
+  V(inspector_disable_async_hooks, v8::Function)                               \
+  V(inspector_enable_async_hooks, v8::Function)                                \
   V(messaging_deserialize_create_object, v8::Function)                         \
   V(message_port, v8::Object)                                                  \
   V(native_module_require, v8::Function)                                       \
@@ -1198,6 +1199,7 @@ class Environment : public MemoryRetainer {
   inline bool owns_process_state() const;
   inline bool owns_inspector() const;
   inline bool tracks_unmanaged_fds() const;
+  inline bool hide_console_windows() const;
   inline uint64_t thread_id() const;
   inline worker::Worker* worker_context() const;
   Environment* worker_parent_env() const;

@@ -34,6 +34,10 @@ const customTypesMap = {
 
   'AsyncIterable': 'https://tc39.github.io/ecma262/#sec-asynciterable-interface',
 
+  'AsyncFunction': 'https://tc39.es/ecma262/#sec-async-function-constructor',
+
+  'AsyncGeneratorFunction': 'https://tc39.es/proposal-async-iteration/#sec-asyncgeneratorfunction-constructor',
+
   'bigint': `${jsDocPrefix}Reference/Global_Objects/BigInt`,
   'WebAssembly.Instance':
     `${jsDocPrefix}Reference/Global_Objects/WebAssembly/Instance`,
@@ -97,7 +101,7 @@ const customTypesMap = {
   'EcKeyImportParams': 'webcrypto.html#webcrypto_class_eckeyimportparams',
   'HmacImportParams': 'webcrypto.html#webcrypto_class_hmacimportparams',
   'AesImportParams': 'webcrypto.html#webcrypto_class_aesimportparams',
-  'Pbkdf2ImportParams': 'webcrypto.html#webcrypto_class.pbkdf2importparams',
+  'Pbkdf2ImportParams': 'webcrypto.html#webcrypto_class_pbkdf2importparams',
   'HmacParams': 'webcrypto.html#webcrypto_class_hmacparams',
   'EcdsaParams': 'webcrypto.html#webcrypto_class_ecdsaparams',
   'RsaPssParams': 'webcrypto.html#webcrypto_class_rsapssparams',
@@ -226,6 +230,37 @@ const customTypesMap = {
   'X509Certificate': 'crypto.html#crypto_class_x509certificate',
 
   'zlib options': 'zlib.html#zlib_class_options',
+
+  'ReadableStream':
+    'webstreams.md#webstreamsapi_class_readablestream',
+  'ReadableStreamDefaultReader':
+    'webstreams.md#webstreamsapi_class_readablestreamdefaultreader',
+  'ReadableStreamBYOBReader':
+    'webstreams.md#webstreamsapi_class_readablestreambyobreader',
+  'ReadableStreamDefaultController':
+    'webstreams.md#webstreamsapi_class_readablestreamdefaultcontroller',
+  'ReadableByteStreamController':
+    'webstreams.md#webstreamsapi_class_readablebytestreamcontroller',
+  'ReadableStreamBYOBRequest':
+    'webstreams.md#webstreamsapi_class_readablestreambyobrequest',
+  'WritableStream':
+    'webstreams.md#webstreamsapi_class_writablestream',
+  'WritableStreamDefaultWriter':
+    'webstreams.md#webstreamsapi_class_writablestreamdefaultwriter',
+  'WritableStreamDefaultController':
+    'webstreams.md#webstreamsapi_class_writablestreamdefaultcontroller',
+  'TransformStream':
+    'webstreams.md#webstreamsapi_class_transformstream',
+  'TransformStreamDefaultController':
+    'webstreams.md#webstreamsapi_class_transformstreamdefaultcontroller',
+  'ByteLengthQueuingStrategy':
+    'webstreams.md#webstreamsapi_class_bytelengthqueuingstrategy',
+  'CountQueuingStrategy':
+    'webstreams.md#webstreamsapi_class_countqueuingstrategy',
+  'TextEncoderStream':
+    'webstreams.md#webstreamsapi_class_textencoderstream',
+  'TextDecoderStream':
+    'webstreams.md#webstreamsapi_class_textdecoderstream',
 };
 
 const arrayPart = /(?:\[])+$/;
@@ -261,7 +296,7 @@ export function toLink(typeInput) {
       } else {
         throw new Error(
           `Unrecognized type: '${typeTextFull}'.\n` +
-          "Please, edit the type or update the 'tools/doc/type-parser.js'."
+          `Please, edit the type or update '${import.meta.url}'.`
         );
       }
     } else {

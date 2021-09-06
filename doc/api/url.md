@@ -608,6 +608,53 @@ console.log(JSON.stringify(myURLs));
 // Prints ["https://www.example.com/","https://test.example.org/"]
 ```
 
+#### `URL.createObjectURL(blob)`
+<!-- YAML
+added: v16.7.0
+-->
+
+> Stability: 1 - Experimental
+
+* `blob` {Blob}
+* Returns: {string}
+
+Creates a `'blob:nodedata:...'` URL string that represents the given {Blob}
+object and can be used to retrieve the `Blob` later.
+
+```js
+const {
+  Blob,
+  resolveObjectURL,
+} = require('buffer');
+
+const blob = new Blob(['hello']);
+const id = URL.createObjectURL(blob);
+
+// later...
+
+const otherBlob = resolveObjectURL(id);
+console.log(otherBlob.size);
+```
+
+The data stored by the registered {Blob} will be retained in memory until
+`URL.revokeObjectURL()` is called to remove it.
+
+`Blob` objects are registered within the current thread. If using Worker
+Threads, `Blob` objects registered within one Worker will not be available
+to other workers or the main thread.
+
+#### `URL.revokeObjectURL(id)`
+<!-- YAML
+added: v16.7.0
+-->
+
+> Stability: 1 - Experimental
+
+* `id` {string} A `'blob:nodedata:...` URL string returned by a prior call to
+  `URL.createObjectURL()`.
+
+Removes the stored {Blob} identified by the given ID.
+
 ### Class: `URLSearchParams`
 <!-- YAML
 added:
@@ -1169,7 +1216,7 @@ expected by the [`http.request()`][] and [`https.request()`][] APIs.
 import { urlToHttpOptions } from 'url';
 const myURL = new URL('https://a:b@測試?abc#foo');
 
-console.log(urlToHttpOptions(myUrl));
+console.log(urlToHttpOptions(myURL));
 /**
 {
   protocol: 'https:',
@@ -1593,8 +1640,8 @@ console.log(myURL.origin);
 
 [ICU]: intl.md#intl_options_for_building_node_js
 [Punycode]: https://tools.ietf.org/html/rfc5891#section-4.4
-[WHATWG URL Standard]: https://url.spec.whatwg.org/
 [WHATWG URL]: #url_the_whatwg_url_api
+[WHATWG URL Standard]: https://url.spec.whatwg.org/
 [`Error`]: errors.md#errors_class_error
 [`JSON.stringify()`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify
 [`Map`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map

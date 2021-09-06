@@ -30,7 +30,6 @@ fi
 
 # Dependencies bundled in distributions
 addlicense "Acorn" "deps/acorn" "$(cat "${rootdir}"/deps/acorn/acorn/LICENSE)"
-addlicense "Acorn plugins" "deps/acorn-plugins" "$(cat "${rootdir}"/deps/acorn-plugins/acorn-class-fields/LICENSE)"
 addlicense "c-ares" "deps/cares" "$(tail -n +3 "${rootdir}"/deps/cares/LICENSE.md)"
 addlicense "cjs-module-lexer" "deps/cjs-module-lexer" "$(cat "${rootdir}"/deps/cjs-module-lexer/LICENSE)"
 if [ -f "${rootdir}/deps/icu/LICENSE" ]; then
@@ -84,7 +83,7 @@ addlicense "cpplint.py" "tools/cpplint.py" \
            "$(sed -e '/^$/,$d' -e 's/^#$//' -e 's/^# //' "${rootdir}"/tools/cpplint.py | tail -n +3)"
 addlicense "ESLint" "tools/node_modules/eslint" "$(cat "${rootdir}"/tools/node_modules/eslint/LICENSE)"
 addlicense "Babel" "tools/node_modules/@babel" "$(cat "${rootdir}"/tools/node_modules/@babel/core/LICENSE)"
-addlicense "gtest" "test/cctest/gtest" "$(cat "${rootdir}"/test/cctest/gtest/LICENSE)"
+addlicense "gtest" "deps/googletest" "$(cat "${rootdir}"/deps/googletest/LICENSE)"
 
 # nghttp2
 addlicense "nghttp2" "deps/nghttp2" "$(cat "${rootdir}"/deps/nghttp2/COPYING)"
@@ -112,5 +111,8 @@ addlicense "rimraf" "lib/internal/fs/rimraf.js" \
 addlicense "uvwasi" "deps/uvwasi" "$(cat "${rootdir}"/deps/uvwasi/LICENSE)"
 addlicense "ngtcp2" "deps/ngtcp2/ngtcp2/" "$(cat "${rootdir}"/deps/ngtcp2/LICENSE_ngtcp2)"
 addlicense "nghttp3" "deps/ngtcp2/nghttp3/" "$(cat "${rootdir}"/deps/ngtcp2/LICENSE_nghttp3)"
+
+addlicense "node-fs-extra" "lib/internal/fs/cp" \
+           "$(curl -sL https://raw.githubusercontent.com/jprichardson/node-fs-extra/b34da2762a4865b025cac06d02d6a2f1f1027b65/LICENSE)"
 
 mv "$tmplicense" "$licensefile"

@@ -314,7 +314,7 @@ void ECDH::SetPrivateKey(const FunctionCallbackInfo<Value>& args) {
     return THROW_ERR_CRYPTO_OPERATION_FAILED(env,
         "Failed to set generated public key");
 
-  EC_KEY_copy(ecdh->key_.get(), new_key.get());
+  ecdh->key_ = std::move(new_key);
   ecdh->group_ = EC_KEY_get0_group(ecdh->key_.get());
 }
 
@@ -737,6 +737,34 @@ Maybe<bool> ExportJWKEcKey(
           env->jwk_y_string(),
           y.get(),
           degree_bytes).IsNothing()) {
+    return Nothing<bool>();
+  }
+
+  Local<String> crv_name;
+  const int nid = EC_GROUP_get_curve_name(group);
+  switch (nid) {
+    case NID_X9_62_prime256v1:
+      crv_name = OneByteString(env->isolate(), "P-256");
+      break;
+    case NID_secp256k1:
+      crv_name = OneByteString(env->isolate(), "secp256k1");
+      break;
+    case NID_secp384r1:
+      crv_name = OneByteString(env->isolate(), "P-384");
+      break;
+    case NID_secp521r1:
+      crv_name = OneByteString(env->isolate(), "P-521");
+      break;
+    default: {
+      THROW_ERR_CRYPTO_JWK_UNSUPPORTED_CURVE(
+          env, "Unsupported JWK EC curve: %s.", OBJ_nid2sn(nid));
+      return Nothing<bool>();
+    }
+  }
+  if (target->Set(
+      env->context(),
+      env->jwk_crv_string(),
+      crv_name).IsNothing()) {
     return Nothing<bool>();
   }
 

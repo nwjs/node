@@ -19,7 +19,6 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-/* eslint-disable node-core/require-common-first, node-core/required-modules */
 /* eslint-disable node-core/crypto-check */
 'use strict';
 const process = global.process;  // Some tests tamper with the process global.
@@ -252,9 +251,6 @@ function platformTimeout(ms) {
 
   const armv = process.config.variables.arm_version;
 
-  if (armv === '6')
-    return multipliers.seven * ms;  // ARMv6
-
   if (armv === '7')
     return multipliers.two * ms;  // ARMv7
 
@@ -289,6 +285,12 @@ if (global.gc) {
 
 if (global.performance) {
   knownGlobals.push(global.performance);
+}
+if (global.PerformanceMark) {
+  knownGlobals.push(global.PerformanceMark);
+}
+if (global.PerformanceMeasure) {
+  knownGlobals.push(global.PerformanceMeasure);
 }
 
 function allowGlobals(...allowlist) {
@@ -787,11 +789,6 @@ const common = {
   skipIfEslintMissing,
   skipIfInspectorDisabled,
   skipIfWorker,
-
-  get enoughTestCpu() {
-    const cpus = require('os').cpus();
-    return Array.isArray(cpus) && (cpus.length > 1 || cpus[0].speed > 999);
-  },
 
   get enoughTestMem() {
     return require('os').totalmem() > 0x70000000; /* 1.75 Gb */

@@ -113,8 +113,8 @@ platforms. This is true regardless of entries in the table below.
 | Windows          | x86 (native)     | >= Windows 8.1/2012 R2          | Tier 1 (running) / Experimental (compiling) <sup>[6](#fn6)</sup> | |
 | Windows          | x64, x86         | Windows Server 2012 (not R2)    | Experimental |                                   |
 | Windows          | arm64            | >= Windows 10                   | Tier 2 (compiling) / Experimental (running) |    |
-| macOS            | x64              | >= 10.13                        | Tier 1       |                                   |
-| macOS            | arm64            | >= 11                           | Experimental |                                   |
+| macOS            | x64              | >= 10.13                        | Tier 1       | For notes about compilation see <sup>[8](#fn8)</sup>              |
+| macOS            | arm64            | >= 11                           | Tier 1       |                                   |
 | SmartOS          | x64              | >= 18                           | Tier 2       |                                   |
 | AIX              | ppc64be >=power7 | >= 7.2 TL04                     | Tier 2       |                                   |
 | FreeBSD          | x64              | >= 11                           | Experimental | Downgraded as of Node.js 12  <sup>[7](#fn7)</sup>     |
@@ -154,6 +154,10 @@ may not be possible.
 <em id="fn7">7</em>: The default FreeBSD 12.0 compiler is Clang 6.0.1, but
 FreeBSD 12.1 upgrades to 8.0.1. Other Clang/LLVM versions are available
 via the system's package manager, including Clang 9.0.
+
+<em id="fn8">8</em>: Our macOS x64 Binaries are compiled with 10.13 as a target.
+However there is no guarantee compiling on 10.13 will work as Xcode11 is
+required to compile.
 
 ### Supported toolchains
 
@@ -305,7 +309,7 @@ $ make test-only
 
 At this point, you are ready to make code changes and re-run the tests.
 
-If you are running tests before submitting a Pull Request, the recommended
+If you are running tests before submitting a pull request, the recommended
 command is:
 
 ```console
@@ -766,23 +770,42 @@ to enable FIPS using the configuration flag `--openssl-is-fips`.
 ### Configuring and building quictls/openssl for FIPS
 
 For quictls/openssl 3.0 it is possible to enable FIPS when dynamically linking.
-Node.js currently uses openssl-3.0.0+quic which can be configured as
-follows:
-```console
-$ git clone git@github.com:quictls/openssl.git
-$ cd openssl
-$ ./config --prefix=/path/to/install/dir/ shared enable-fips linux-x86_64
-```
-This can be compiled and installed using the following commands:
-```console
-$ make -j8
-$ make install_ssldirs
-$ make install_fips
+If you want to build Node.js using openssl-3.0.0+quic, you can follow these
+steps:
+
+**clone OpenSSL source and prepare build**
+```bash
+git clone git@github.com:quictls/openssl.git
+
+cd openssl
+
+./config \
+  --prefix=/path/to/install/dir/ \
+  shared \
+  enable-fips \
+  linux-x86_64
 ```
 
-After the FIPS module and configuration file have been installed by the above
-instructions we also need to update `/path/to/install/dir/ssl/openssl.cnf` to
-use the generated FIPS configuration file (`fipsmodule.cnf`):
+The `/path/to/install/dir` is the path in which the `make install` instructions
+will publish the OpenSSL libraries and such. We will also use this path
+(and sub-paths) later when compiling Node.js.
+
+**compile and install OpenSSL**
+```console
+make -j8
+make install
+make install_ssldirs
+make install_fips
+```
+
+After the OpenSSL (including FIPS) modules have been compiled and installed
+(into the `/path/to/install/dir`) by the above instructions we also need to
+update the OpenSSL configuration file located under
+`/path/to/install/dir/ssl/openssl.cnf`. Right next to this file, you should
+find the `fipsmodule.cnf` file - let's add the following to the end of the
+`openssl.cnf` file.
+
+**alter openssl.cnf**
 ```text
 .include fipsmodule.cnf
 
@@ -797,25 +820,53 @@ fips = fips_sect
 activate = 1
 ```
 
-In the above case OpenSSL is not installed in the default location so two
-environment variables need to be set, `OPENSSL_CONF`, and `OPENSSL_MODULES`
-which should point to the OpenSSL configuration file and the directory where
-OpenSSL modules are located:
+You can e.g. accomplish this by running the following command - be sure to
+replace `/path/to/install/dir/` with the path you have selected. Please make
+sure that you specify an absolute path for the `.include fipsmodule.cnf` line -
+using relative paths did not work on my system!
+
+**alter openssl.cnf using a script**
 ```console
-$ export OPENSSL_CONF=/path/to/install/dir/ssl/openssl.cnf
-$ export OPENSSL_MODULES=/path/to/install/dir/lib/ossl-modules
+cat <<EOT >> /path/to/install/dir/ssl/openssl.cnf
+.include /path/to/install/dir/ssl/fipsmodule.cnf
+
+# List of providers to load
+[provider_sect]
+default = default_sect
+# The fips section name should match the section name inside the
+# included /path/to/install/dir/ssl/fipsmodule.cnf.
+fips = fips_sect
+
+[default_sect]
+activate = 1
+EOT
 ```
 
-Node.js can then be configured to enable FIPS:
+As you might have picked a non-custom path for your OpenSSL install dir, we
+have to export the following two environment variables in order for Node.js to
+find our OpenSSL modules we built beforehand:
 ```console
-$ ./configure --shared-openssl --shared-openssl-libpath=/path/to/install/dir/lib --shared-openssl-includes=/path/to/install/dir/include --shared-openssl-libname=crypto,ssl --openssl-is-fips
-$ export LD_LIBRARY_PATH=/path/to/install/dir/lib
-$ make -j8
+export OPENSSL_CONF=/path/to/install/dir/ssl/openssl.cnf
+export OPENSSL_MODULES=/path/to/install/dir/lib/ossl-modules
 ```
 
-Verify the produced executable:
+**build Node.js**
 ```console
-$ ldd ./node
+./configure \
+  --shared-openssl \
+  --shared-openssl-libpath=/path/to/install/dir/lib \
+  --shared-openssl-includes=/path/to/install/dir/include \
+  --shared-openssl-libname=crypto,ssl \
+  --openssl-is-fips
+
+export LD_LIBRARY_PATH=/path/to/install/dir/lib
+
+make -j8
+```
+
+**verify the produced executable**
+```console
+ldd ./node
     linux-vdso.so.1 (0x00007ffd7917b000)
     libcrypto.so.81.3 => /path/to/install/dir/lib/libcrypto.so.81.3 (0x00007fd911321000)
     libssl.so.81.3 => /path/to/install/dir/lib/libssl.so.81.3 (0x00007fd91125e000)
@@ -827,21 +878,23 @@ $ ldd ./node
     libc.so.6 => /usr/lib64/libc.so.6 (0x00007fd910cec000)
     /lib64/ld-linux-x86-64.so.2 (0x00007fd9117f2000)
 ```
+
 If the `ldd` command says that `libcrypto` cannot be found one needs to set
 `LD_LIBRARY_PATH` to point to the directory used above for
 `--shared-openssl-libpath` (see previous step).
 
-Verify the OpenSSL version:
+**verify the OpenSSL version**
 ```console
-$ ./node -p process.versions.openssl
+./node -p process.versions.openssl
 3.0.0-alpha16+quic
 ```
 
-Verify that FIPS is available:
+**verify that FIPS is available**
 ```console
-$ ./node -p 'process.config.variables.openssl_is_fips'
+./node -p 'process.config.variables.openssl_is_fips'
 true
-$ ./node --enable-fips -p 'crypto.getFips()'
+
+./node --enable-fips -p 'crypto.getFips()'
 1
 ```
 

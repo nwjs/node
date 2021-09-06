@@ -831,12 +831,15 @@ The [`require.extensions`][] property is deprecated.
 ### DEP0040: `punycode` module
 <!-- YAML
 changes:
+  - version: v16.6.0
+    pr-url: https://github.com/nodejs/node/pull/38444
+    description: Added support for `--pending-deprecation`.
   - version: v7.0.0
     pr-url: https://github.com/nodejs/node/pull/7941
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Documentation-only (supports [`--pending-deprecation`][])
 
 The [`punycode`][] module is deprecated. Please use a userland alternative
 instead.
@@ -1796,7 +1799,7 @@ Assigning properties to the top-level `this` as an alternative
 to `module.exports` is deprecated. Developers should use `exports`
 or `module.exports` instead.
 
-### DEP0093: `crypto.fips` is deprecated and replaced.
+### DEP0093: `crypto.fips` is deprecated and replaced
 <!-- YAML
 changes:
   - version: v10.0.0
@@ -1809,7 +1812,7 @@ Type: Documentation-only
 The [`crypto.fips`][] property is deprecated. Please use `crypto.setFips()`
 and `crypto.getFips()` instead.
 
-### DEP0094: Using `assert.fail()` with more than one argument.
+### DEP0094: Using `assert.fail()` with more than one argument
 <!-- YAML
 changes:
   - version: v10.0.0
@@ -1929,7 +1932,7 @@ Type: End-of-Life
 
 The `--with-lttng` compile-time option has been removed.
 
-### DEP0102: Using `noAssert` in `Buffer#(read|write)` operations.
+### DEP0102: Using `noAssert` in `Buffer#(read|write)` operations
 <!-- YAML
 changes:
   - version: v10.0.0
@@ -2781,6 +2784,21 @@ These properties are now available within the standard `detail` property
 of the `PerformanceEntry` object. The existing accessors have been
 deprecated and should no longer be used.
 
+### DEP0153: `dns.lookup` and `dnsPromises.lookup` options type coercion
+<!-- YAML
+changes:
+  - version: v16.8.0
+    pr-url: https://github.com/nodejs/node/pull/38906
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only
+
+Using a non-nullish non-integer value for `family` option, a non-nullish
+non-number value for `hints` option, a non-nullish non-boolean value for `all`
+option, or a non-nullish non-boolean value for `verbatim` option in
+[`dns.lookup()`][] and [`dnsPromises.lookup()`][] is deprecated.
+
 [Legacy URL API]: url.md#url_legacy_url_api
 [NIST SP 800-38D]: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf
 [RFC 6066]: https://tools.ietf.org/html/rfc6066#section-3
@@ -2820,6 +2838,8 @@ deprecated and should no longer be used.
 [`crypto.scrypt()`]: crypto.md#crypto_crypto_scrypt_password_salt_keylen_options_callback
 [`decipher.final()`]: crypto.md#crypto_decipher_final_outputencoding
 [`decipher.setAuthTag()`]: crypto.md#crypto_decipher_setauthtag_buffer_encoding
+[`dns.lookup()`]: domain.md#dns_dns_lookup_hostname_options_callback
+[`dnsPromises.lookup()`]: domain.md#dns_dnspromises_lookup_hostname_options
 [`domain`]: domain.md
 [`ecdh.setPublicKey()`]: crypto.md#crypto_ecdh_setpublickey_publickey_encoding
 [`emitter.listenerCount(eventName)`]: events.md#events_emitter_listenercount_eventname

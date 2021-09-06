@@ -45,6 +45,7 @@ import getmoduleversion
 import getnapibuildversion
 import getsharedopensslhasquic
 from gyp_node import run_gyp
+from utils import SearchFiles
 
 # parse our options
 parser = argparse.ArgumentParser()
@@ -1049,12 +1050,7 @@ def is_arm_hard_float_abi():
 def host_arch_cc():
   """Host architecture check using the CC command."""
 
-  if sys.platform.startswith('aix'):
-    # we only support gcc at this point and the default on AIX
-    # would be xlc so hard code gcc
-    k = cc_macros('gcc')
-  else:
-    k = cc_macros(os.environ.get('CC_host'))
+  k = cc_macros(os.environ.get('CC_host'))
 
   matchup = {
     '__aarch64__' : 'arm64',
@@ -1066,6 +1062,7 @@ def host_arch_cc():
     '__PPC__'     : 'ppc64',
     '__x86_64__'  : 'x64',
     '__s390x__'   : 's390x',
+    '__riscv'     : 'riscv',
   }
 
   rtn = 'ia32' # default
@@ -1077,6 +1074,12 @@ def host_arch_cc():
 
   if rtn == 'mipsel' and '_LP64' in k:
     rtn = 'mips64el'
+
+  if rtn == 'riscv':
+    if k['__riscv_xlen'] == '64':
+      rtn = 'riscv64'
+    else:
+      rtn = 'riscv32'
 
   return rtn
 
@@ -1148,6 +1151,8 @@ def gcc_version_ge(version_checked):
       return False
   return True
 
+def configure_node_lib_files(o):
+  o['variables']['node_library_files'] = SearchFiles('lib', 'js')
 
 def configure_node(o):
   if options.dest_os == 'android':
@@ -1896,6 +1901,7 @@ if (options.dest_os):
 flavor = GetFlavor(flavor_params)
 
 configure_node(output)
+configure_node_lib_files(output)
 configure_napi(output)
 configure_library('zlib', output)
 configure_library('http_parser', output)
@@ -1998,6 +2004,10 @@ else:
 
 if options.compile_commands_json:
   gyp_args += ['-f', 'compile_commands_json']
+
+# override the variable `python` defined in common.gypi
+if bin_override is not None:
+  gyp_args += ['-Dpython=' + sys.executable]
 
 # pass the leftover positional arguments to GYP
 gyp_args += args

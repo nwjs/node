@@ -10,18 +10,22 @@ See [test/wpt](../../wpt/README.md) for information on how these tests are run.
 
 Last update:
 
-- common: https://github.com/web-platform-tests/wpt/tree/bb97a68974/common
+- common: https://github.com/web-platform-tests/wpt/tree/03c5072aff/common
 - console: https://github.com/web-platform-tests/wpt/tree/3b1f72e99a/console
-- dom/abort: https://github.com/web-platform-tests/wpt/tree/1728d198c9/dom/abort
+- dom/abort: https://github.com/web-platform-tests/wpt/tree/c49cafb491/dom/abort
 - encoding: https://github.com/web-platform-tests/wpt/tree/35f70910d3/encoding
 - FileAPI: https://github.com/web-platform-tests/wpt/tree/3b279420d4/FileAPI
 - hr-time: https://github.com/web-platform-tests/wpt/tree/9910784394/hr-time
 - html/webappapis/atob: https://github.com/web-platform-tests/wpt/tree/f267e1dca6/html/webappapis/atob
 - html/webappapis/microtask-queuing: https://github.com/web-platform-tests/wpt/tree/2c5c3c4c27/html/webappapis/microtask-queuing
 - html/webappapis/timers: https://github.com/web-platform-tests/wpt/tree/5873f2d8f1/html/webappapis/timers
-- interfaces: https://github.com/web-platform-tests/wpt/tree/79fa4cf76e/interfaces
-- resources: https://github.com/web-platform-tests/wpt/tree/972ca5b669/resources
-- url: https://github.com/web-platform-tests/wpt/tree/1fcb39223d/url
+- interfaces: https://github.com/web-platform-tests/wpt/tree/fc086c82d5/interfaces
+- performance-timeline: https://github.com/web-platform-tests/wpt/tree/17ebc3aea0/performance-timeline
+- resources: https://github.com/web-platform-tests/wpt/tree/fbee645164/resources
+- streams: https://github.com/web-platform-tests/wpt/tree/8f60d94439/streams
+- url: https://github.com/web-platform-tests/wpt/tree/77d54aa9e0/url
+- user-timing: https://github.com/web-platform-tests/wpt/tree/df24fb604e/user-timing
+- WebCryptoAPI: https://github.com/web-platform-tests/wpt/tree/cdd0f03df4/WebCryptoAPI
 
 [Web Platform Tests]: https://github.com/web-platform-tests/wpt
-[`git node wpt`]: https://github.com/nodejs/node-core-utils/blob/master/docs/git-node.md#git-node-wpt
+[`git node wpt`]: https://github.com/nodejs/node-core-utils/blob/main/docs/git-node.md#git-node-wpt

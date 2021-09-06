@@ -14,24 +14,20 @@ way modeled on standard POSIX functions.
 To use the promise-based APIs:
 
 ```mjs
-// Using ESM Module syntax:
 import * as fs from 'fs/promises';
 ```
 
 ```cjs
-// Using CommonJS syntax:
 const fs = require('fs/promises');
 ```
 
 To use the callback and sync APIs:
 
 ```mjs
-// Using ESM Module syntax:
 import * as fs from 'fs';
 ```
 
 ```cjs
-// Using CommonJS syntax:
 const fs = require('fs');
 ```
 
@@ -44,7 +40,6 @@ Promise-based operations return a promise that is fulfilled when the
 asynchronous operation is complete.
 
 ```mjs
-// Using ESM Module syntax:
 import { unlink } from 'fs/promises';
 
 try {
@@ -56,7 +51,6 @@ try {
 ```
 
 ```cjs
-// Using CommonJS syntax
 const { unlink } = require('fs/promises');
 
 (async function(path) {
@@ -78,7 +72,6 @@ reserved for an exception. If the operation is completed successfully, then
 the first argument is `null` or `undefined`.
 
 ```mjs
-// Using ESM syntax
 import { unlink } from 'fs';
 
 unlink('/tmp/hello', (err) => {
@@ -88,7 +81,6 @@ unlink('/tmp/hello', (err) => {
 ```
 
 ```cjs
-// Using CommonJS syntax
 const { unlink } = require('fs');
 
 unlink('/tmp/hello', (err) => {
@@ -108,7 +100,6 @@ execution until the operation is complete. Exceptions are thrown immediately
 and can be handled using `try…catch`, or can be allowed to bubble up.
 
 ```mjs
-// Using ESM syntax
 import { unlinkSync } from 'fs';
 
 try {
@@ -120,7 +111,6 @@ try {
 ```
 
 ```cjs
-// Using CommonJS syntax
 const { unlinkSync } = require('fs');
 
 try {
@@ -450,6 +440,9 @@ changes:
 
 Write `buffer` to the file.
 
+If `buffer` is a plain object, it must have an own (not inherited) `toString`
+function property.
+
 The promise is resolved with an object containing two properties:
 
 * `bytesWritten` {integer} the number of bytes written
@@ -700,6 +693,37 @@ try {
 }
 ```
 
+### `fsPromises.cp(src, dest[, options])`
+<!-- YAML
+added: v16.7.0
+-->
+
+> Stability: 1 - Experimental
+
+* `src` {string|URL} source path to copy.
+* `dest` {string|URL} destination path to copy to.
+* `options` {Object}
+  * `dereference` {boolean} dereference symlinks. **Default:** `false`.
+  * `errorOnExist` {boolean} when `force` is `false`, and the destination
+    exists, throw an error. **Default:** `false`.
+  * `filter` {Function} Function to filter copied files/directories. Return
+    `true` to copy the item, `false` to ignore it. Can also return a `Promise`
+    that resolves to `true` or `false` **Default:** `undefined`.
+  * `force` {boolean} overwrite existing file or directory. _The copy
+    operation will ignore errors if you set this to false and the destination
+    exists. Use the `errorOnExist` option to change this behavior.
+    **Default:** `true`.
+  * `preserveTimestamps` {boolean} When `true` timestamps from `src` will
+    be preserved. **Default:** `false`.
+  * `recursive` {boolean} copy directories recursively **Default:** `false`
+* Returns: {Promise} Fulfills with `undefined` upon success.
+
+Asynchronously copies the entire directory structure from `src` to `dest`,
+including subdirectories and files.
+
+When copying a directory to another directory, globs are not supported and
+behavior is similar to `cp dir1/ dir2/`.
+
 ### `fsPromises.lchmod(path, mode)`
 <!-- YAML
 deprecated: v10.0.0
@@ -802,6 +826,10 @@ rejection only when `recursive` is false.
 ### `fsPromises.mkdtemp(prefix[, options])`
 <!-- YAML
 added: v10.0.0
+changes:
+  - version: v16.5.0
+    pr-url: https://github.com/nodejs/node/pull/39028
+    description: The `prefix` parameter now accepts an empty string.
 -->
 
 * `prefix` {string}
@@ -1069,6 +1097,9 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/37302
     description: The `recursive` option is deprecated, using it triggers a
                  deprecation warning.
+  - version: v14.14.0
+    pr-url: https://github.com/nodejs/node/pull/35579
+    description: The `recursive` option is deprecated, use `fsPromises.rm` instead.
   - version:
      - v13.3.0
      - v12.16.0
@@ -1093,7 +1124,7 @@ changes:
     option is not `true`. **Default:** `0`.
   * `recursive` {boolean} If `true`, perform a recursive directory removal. In
     recursive mode, operations are retried on failure. **Default:** `false`.
-    **Deprecated**.
+    **Deprecated.**
   * `retryDelay` {integer} The amount of time in milliseconds to wait between
     retries. This option is ignored if the `recursive` option is not `true`.
     **Default:** `100`.
@@ -1290,8 +1321,8 @@ changes:
 * Returns: {Promise} Fulfills with `undefined` upon success.
 
 Asynchronously writes data to a file, replacing the file if it already exists.
-`data` can be a string, a {Buffer}, or an object with an own `toString` function
-property.
+`data` can be a string, a {Buffer}, or, an object with an own (not inherited)
+`toString` function property.
 
 The `encoding` option is ignored if `data` is a buffer.
 
@@ -1313,6 +1344,7 @@ to be written.
 
 ```mjs
 import { writeFile } from 'fs/promises';
+import { Buffer } from 'buffer';
 
 try {
   const controller = new AbortController();
@@ -1398,7 +1430,7 @@ access(file, constants.W_OK, (err) => {
 });
 
 // Check if the file exists in the current directory, and if it is writable.
-access(file, constants.F_OK | fs.constants.W_OK, (err) => {
+access(file, constants.F_OK | constants.W_OK, (err) => {
   if (err) {
     console.error(
       `${file} ${err.code === 'ENOENT' ? 'does not exist' : 'is read-only'}`);
@@ -1801,6 +1833,37 @@ copyFile('source.txt', 'destination.txt', callback);
 // By using COPYFILE_EXCL, the operation will fail if destination.txt exists.
 copyFile('source.txt', 'destination.txt', constants.COPYFILE_EXCL, callback);
 ```
+
+### `fs.cp(src, dest[, options], callback)`
+<!-- YAML
+added: v16.7.0
+-->
+
+> Stability: 1 - Experimental
+
+* `src` {string|URL} source path to copy.
+* `dest` {string|URL} destination path to copy to.
+* `options` {Object}
+  * `dereference` {boolean} dereference symlinks. **Default:** `false`.
+  * `errorOnExist` {boolean} when `force` is `false`, and the destination
+    exists, throw an error. **Default:** `false`.
+  * `filter` {Function} Function to filter copied files/directories. Return
+    `true` to copy the item, `false` to ignore it. Can also return a `Promise`
+    that resolves to `true` or `false` **Default:** `undefined`.
+  * `force` {boolean} overwrite existing file or directory. _The copy
+    operation will ignore errors if you set this to false and the destination
+    exists. Use the `errorOnExist` option to change this behavior.
+    **Default:** `true`.
+  * `preserveTimestamps` {boolean} When `true` timestamps from `src` will
+    be preserved. **Default:** `false`.
+  * `recursive` {boolean} copy directories recursively **Default:** `false`
+* `callback` {Function}
+
+Asynchronously copies the entire directory structure from `src` to `dest`,
+including subdirectories and files.
+
+When copying a directory to another directory, globs are not supported and
+behavior is similar to `cp dir1/ dir2/`.
 
 ### `fs.createReadStream(path[, options])`
 <!-- YAML
@@ -2571,6 +2634,9 @@ See the POSIX mkdir(2) documentation for more details.
 <!-- YAML
 added: v5.10.0
 changes:
+  - version: v16.5.0
+    pr-url: https://github.com/nodejs/node/pull/39028
+    description: The `prefix` parameter now accepts an empty string.
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/12562
     description: The `callback` parameter is no longer optional. Not passing
@@ -2961,8 +3027,8 @@ to read a complete file into memory.
 The additional read overhead can vary broadly on different systems and depends
 on the type of file being read. If the file type is not a regular file (a pipe
 for instance) and Node.js is unable to determine an actual file size, each read
-operation will load on 64kb of data. For regular files, each read will process
-512kb of data.
+operation will load on 64 KB of data. For regular files, each read will process
+512 KB of data.
 
 For applications that require as-fast-as-possible reading of file contents, it
 is better to use `fs.read()` directly and for application code to manage
@@ -3182,6 +3248,9 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/37302
     description: The `recursive` option is deprecated, using it triggers a
                  deprecation warning.
+  - version: v14.14.0
+    pr-url: https://github.com/nodejs/node/pull/35579
+    description: The `recursive` option is deprecated, use `fs.rm` instead.
   - version:
      - v13.3.0
      - v12.16.0
@@ -3218,7 +3287,7 @@ changes:
     option is not `true`. **Default:** `0`.
   * `recursive` {boolean} If `true`, perform a recursive directory removal. In
     recursive mode, operations are retried on failure. **Default:** `false`.
-    **Deprecated**.
+    **Deprecated.**
   * `retryDelay` {integer} The amount of time in milliseconds to wait between
     retries. This option is ignored if the `recursive` option is not `true`.
     **Default:** `100`.
@@ -3450,6 +3519,24 @@ changes:
 Truncates the file. No arguments other than a possible exception are
 given to the completion callback. A file descriptor can also be passed as the
 first argument. In this case, `fs.ftruncate()` is called.
+
+```mjs
+import { truncate } from 'fs';
+// Assuming that 'path/file.txt' is a regular file.
+truncate('path/file.txt', (err) => {
+  if (err) throw err;
+  console.log('path/file.txt was truncated');
+});
+```
+
+```cjs
+const { truncate } = require('fs');
+// Assuming that 'path/file.txt' is a regular file.
+truncate('path/file.txt', (err) => {
+  if (err) throw err;
+  console.log('path/file.txt was truncated');
+});
+```
 
 Passing a file descriptor is deprecated and may result in an error being thrown
 in the future.
@@ -3939,10 +4026,13 @@ When `file` is a file descriptor, the behavior is similar to calling
 a file descriptor.
 
 The `encoding` option is ignored if `data` is a buffer.
-If `data` is a normal object, it must have an own `toString` function property.
+
+If `data` is a plain object, it must have an own (not inherited) `toString`
+function property.
 
 ```mjs
 import { writeFile } from 'fs';
+import { Buffer } from 'buffer';
 
 const data = new Uint8Array(Buffer.from('Hello Node.js'));
 writeFile('message.txt', data, (err) => {
@@ -3973,6 +4063,7 @@ to be written.
 
 ```mjs
 import { writeFile } from 'fs';
+import { Buffer } from 'buffer';
 
 const controller = new AbortController();
 const { signal } = controller;
@@ -3994,6 +4085,7 @@ calling `fs.write()` like:
 
 ```mjs
 import { write } from 'fs';
+import { Buffer } from 'buffer';
 
 write(fd, Buffer.from(data, options.encoding), callback);
 ```
@@ -4242,6 +4334,35 @@ console.log('source.txt was copied to destination.txt');
 // By using COPYFILE_EXCL, the operation will fail if destination.txt exists.
 copyFileSync('source.txt', 'destination.txt', constants.COPYFILE_EXCL);
 ```
+
+### `fs.cpSync(src, dest[, options])`
+<!-- YAML
+added: v16.7.0
+-->
+
+> Stability: 1 - Experimental
+
+* `src` {string|URL} source path to copy.
+* `dest` {string|URL} destination path to copy to.
+* `options` {Object}
+  * `dereference` {boolean} dereference symlinks. **Default:** `false`.
+  * `errorOnExist` {boolean} when `force` is `false`, and the destination
+    exists, throw an error. **Default:** `false`.
+  * `filter` {Function} Function to filter copied files/directories. Return
+    `true` to copy the item, `false` to ignore it. **Default:** `undefined`
+  * `force` {boolean} overwrite existing file or directory. _The copy
+    operation will ignore errors if you set this to false and the destination
+    exists. Use the `errorOnExist` option to change this behavior.
+    **Default:** `true`.
+  * `preserveTimestamps` {boolean} When `true` timestamps from `src` will
+    be preserved. **Default:** `false`.
+  * `recursive` {boolean} copy directories recursively **Default:** `false`
+
+Synchronously copies the entire directory structure from `src` to `dest`,
+including subdirectories and files.
+
+When copying a directory to another directory, globs are not supported and
+behavior is similar to `cp dir1/ dir2/`.
 
 ### `fs.existsSync(path)`
 <!-- YAML
@@ -4497,6 +4618,10 @@ See the POSIX mkdir(2) documentation for more details.
 ### `fs.mkdtempSync(prefix[, options])`
 <!-- YAML
 added: v5.10.0
+changes:
+  - version: v16.5.0
+    pr-url: https://github.com/nodejs/node/pull/39028
+    description: The `prefix` parameter now accepts an empty string.
 -->
 
 * `prefix` {string}
@@ -4821,6 +4946,9 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/37302
     description: The `recursive` option is deprecated, using it triggers a
                  deprecation warning.
+  - version: v14.14.0
+    pr-url: https://github.com/nodejs/node/pull/35579
+    description: The `recursive` option is deprecated, use `fs.rmSync` instead.
   - version:
      - v13.3.0
      - v12.16.0
@@ -4849,7 +4977,7 @@ changes:
     option is not `true`. **Default:** `0`.
   * `recursive` {boolean} If `true`, perform a recursive directory removal. In
     recursive mode, operations are retried on failure. **Default:** `false`.
-    **Deprecated**.
+    **Deprecated.**
   * `retryDelay` {integer} The amount of time in milliseconds to wait between
     retries. This option is ignored if the `recursive` option is not `true`.
     **Default:** `100`.
@@ -5026,6 +5154,9 @@ changes:
 
 Returns `undefined`.
 
+If `data` is a plain object, it must have an own (not inherited) `toString`
+function property.
+
 For detailed information, see the documentation of the asynchronous version of
 this API: [`fs.writeFile()`][].
 
@@ -5060,6 +5191,9 @@ changes:
 * `position` {integer}
 * Returns: {number} The number of bytes written.
 
+If `buffer` is a plain object, it must have an own (not inherited) `toString`
+function property.
+
 For detailed information, see the documentation of the asynchronous version of
 this API: [`fs.write(fd, buffer...)`][].
 
@@ -5085,6 +5219,9 @@ changes:
 * `position` {integer}
 * `encoding` {string}
 * Returns: {number} The number of bytes written.
+
+If `string` is a plain object, it must have an own (not inherited) `toString`
+function property.
 
 For detailed information, see the documentation of the asynchronous version of
 this API: [`fs.write(fd, string...)`][].
@@ -6301,7 +6438,6 @@ It is important to correctly order the operations by awaiting the results
 of one before invoking the other:
 
 ```mjs
-// Using ESM syntax
 import { rename, stat } from 'fs/promises';
 
 const from = '/tmp/hello';
@@ -6317,7 +6453,6 @@ try {
 ```
 
 ```cjs
-// Using CommonJS syntax
 const { rename, stat } = require('fs/promises');
 
 (async function(from, to) {
@@ -6499,6 +6634,7 @@ Example using an absolute path on POSIX:
 
 ```mjs
 import { open } from 'fs/promises';
+import { Buffer } from 'buffer';
 
 let fd;
 try {
@@ -6690,7 +6826,6 @@ the file contents.
 [Naming Files, Paths, and Namespaces]: https://docs.microsoft.com/en-us/windows/desktop/FileIO/naming-a-file
 [Readable Stream]: stream.md#stream_class_stream_readable
 [Writable Stream]: stream.md#stream_class_stream_writable
-[caveats]: #fs_caveats
 [`AHAFS`]: https://developer.ibm.com/articles/au-aix_event_infrastructure/
 [`Buffer.byteLength`]: buffer.md#buffer_static_method_buffer_bytelength_string_encoding
 [`FSEvents`]: https://developer.apple.com/documentation/coreservices/file_system_events
@@ -6705,7 +6840,7 @@ the file contents.
 [`fs.copyFile()`]: #fs_fs_copyfile_src_dest_mode_callback
 [`fs.createReadStream()`]: #fs_fs_createreadstream_path_options
 [`fs.createWriteStream()`]: #fs_fs_createwritestream_path_options
-[`fs.exists()`]: fs.md#fs_fs_exists_path_callback
+[`fs.exists()`]: #fs_fs_exists_path_callback
 [`fs.fstat()`]: #fs_fs_fstat_fd_options_callback
 [`fs.ftruncate()`]: #fs_fs_ftruncate_fd_len_callback
 [`fs.futimes()`]: #fs_fs_futimes_fd_atime_mtime_callback
@@ -6743,6 +6878,7 @@ the file contents.
 [`kqueue(2)`]: https://www.freebsd.org/cgi/man.cgi?query=kqueue&sektion=2
 [`util.promisify()`]: util.md#util_util_promisify_original
 [bigints]: https://tc39.github.io/proposal-bigint
+[caveats]: #fs_caveats
 [chcp]: https://ss64.com/nt/chcp.html
 [inode]: https://en.wikipedia.org/wiki/Inode
 [support of file system `flags`]: #fs_file_system_flags

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "src/api/api-inl.h"
+#include "src/base/strings.h"
 #include "src/objects/js-array-buffer-inl.h"
 #include "test/cctest/test-api.h"
 
@@ -25,10 +26,10 @@ void CheckIsDetached(v8::Local<v8::TypedArray> ta) {
 }
 
 void CheckIsTypedArrayVarDetached(const char* name) {
-  i::ScopedVector<char> source(1024);
-  i::SNPrintF(source,
-              "%s.byteLength == 0 && %s.byteOffset == 0 && %s.length == 0",
-              name, name, name);
+  v8::base::ScopedVector<char> source(1024);
+  v8::base::SNPrintF(
+      source, "%s.byteLength == 0 && %s.byteOffset == 0 && %s.length == 0",
+      name, name, name);
   CHECK(CompileRun(source.begin())->IsTrue());
   v8::Local<v8::TypedArray> ta = CompileRun(name).As<v8::TypedArray>();
   CheckIsDetached(ta);
@@ -155,7 +156,7 @@ THREADED_TEST(ArrayBuffer_External) {
   v8::Isolate* isolate = env->GetIsolate();
   v8::HandleScope handle_scope(isolate);
 
-  i::ScopedVector<uint8_t> my_data(100);
+  v8::base::ScopedVector<uint8_t> my_data(100);
   memset(my_data.begin(), 0, 100);
   // Keep the tests until the deprecated functions are removed.
 #if __clang__
@@ -386,7 +387,7 @@ THREADED_TEST(ArrayBuffer_ExternalReused) {
   v8::Isolate* isolate = env->GetIsolate();
   v8::HandleScope handle_scope(isolate);
 
-  i::ScopedVector<uint8_t> data(100);
+  v8::base::ScopedVector<uint8_t> data(100);
   Local<v8::ArrayBuffer> ab1 = v8::ArrayBuffer::New(isolate, data.begin(), 100);
   std::shared_ptr<v8::BackingStore> bs1 = ab1->GetBackingStore();
   ab1->Detach();
@@ -400,7 +401,7 @@ THREADED_TEST(SharedArrayBuffer_ExternalReused) {
   v8::Isolate* isolate = env->GetIsolate();
   v8::HandleScope handle_scope(isolate);
 
-  i::ScopedVector<uint8_t> data(100);
+  v8::base::ScopedVector<uint8_t> data(100);
   Local<v8::SharedArrayBuffer> ab1 =
       v8::SharedArrayBuffer::New(isolate, data.begin(), 100);
   std::shared_ptr<v8::BackingStore> bs1 = ab1->GetBackingStore();
@@ -457,7 +458,7 @@ THREADED_TEST(SharedArrayBuffer_External) {
   v8::Isolate* isolate = env->GetIsolate();
   v8::HandleScope handle_scope(isolate);
 
-  i::ScopedVector<uint8_t> my_data(100);
+  v8::base::ScopedVector<uint8_t> my_data(100);
   memset(my_data.begin(), 0, 100);
   Local<v8::SharedArrayBuffer> ab3 =
       v8::SharedArrayBuffer::New(isolate, my_data.begin(), 100);

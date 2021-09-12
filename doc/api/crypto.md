@@ -1908,11 +1908,20 @@ const {
 ### `keyObject.asymmetricKeyDetails`
 <!-- YAML
 added: v15.7.0
+changes:
+  - version: v16.9.0
+    pr-url: https://github.com/nodejs/node/pull/39851
+    description: Expose `RSASSA-PSS-params` sequence parameters
+                 for RSA-PSS keys.
 -->
 
 * {Object}
   * `modulusLength`: {number} Key size in bits (RSA, DSA).
   * `publicExponent`: {bigint} Public exponent (RSA).
+  * `hashAlgorithm`: {string} Name of the message digest (RSA-PSS).
+  * `mgf1HashAlgorithm`: {string} Name of the message digest used by
+    MGF1 (RSA-PSS).
+  * `saltLength`: {number} Minimal salt length in bytes (RSA-PSS).
   * `divisorLength`: {number} Size of `q` in bits (DSA).
   * `namedCurve`: {string} Name of the curve (EC).
 
@@ -1921,8 +1930,11 @@ this object contains information about the key. None of the information obtained
 through this property can be used to uniquely identify a key or to compromise
 the security of the key.
 
-RSA-PSS parameters, DH, or any future key type details might be exposed via this
-API using additional attributes.
+For RSA-PSS keys, if the key material contains a `RSASSA-PSS-params` sequence,
+the `hashAlgorithm`, `mgf1HashAlgorithm`, and `saltLength` properties will be
+set.
+
+Other key details might be exposed via this API using additional attributes.
 
 ### `keyObject.asymmetricKeyType`
 <!-- YAML
@@ -3369,6 +3381,9 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/31178
     description: Add support for Diffie-Hellman.
   - version: v12.0.0
+    pr-url: https://github.com/nodejs/node/pull/26960
+    description: Add support for RSA-PSS key pairs.
+  - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/26774
     description: Add ability to generate X25519 and X448 key pairs.
   - version: v12.0.0
@@ -3380,8 +3395,8 @@ changes:
                  produce key objects if no encoding was specified.
 -->
 
-* `type`: {string} Must be `'rsa'`, `'dsa'`, `'ec'`, `'ed25519'`, `'ed448'`,
-  `'x25519'`, `'x448'`, or `'dh'`.
+* `type`: {string} Must be `'rsa'`, `'rsa-pss'`, `'dsa'`, `'ec'`, `'ed25519'`,
+  `'ed448'`, `'x25519'`, `'x448'`, or `'dh'`.
 * `options`: {Object}
   * `modulusLength`: {number} Key size in bits (RSA, DSA).
   * `publicExponent`: {number} Public exponent (RSA). **Default:** `0x10001`.
@@ -3399,8 +3414,8 @@ changes:
   * `publicKey`: {string | Buffer | KeyObject}
   * `privateKey`: {string | Buffer | KeyObject}
 
-Generates a new asymmetric key pair of the given `type`. RSA, DSA, EC, Ed25519,
-Ed448, X25519, X448, and DH are currently supported.
+Generates a new asymmetric key pair of the given `type`. RSA, RSA-PSS, DSA, EC,
+Ed25519, Ed448, X25519, X448, and DH are currently supported.
 
 If a `publicKeyEncoding` or `privateKeyEncoding` was specified, this function
 behaves as if [`keyObject.export()`][] had been called on its result. Otherwise,
@@ -3469,6 +3484,12 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/31178
     description: Add support for Diffie-Hellman.
   - version: v12.0.0
+    pr-url: https://github.com/nodejs/node/pull/26960
+    description: Add support for RSA-PSS key pairs.
+  - version: v12.0.0
+    pr-url: https://github.com/nodejs/node/pull/26774
+    description: Add ability to generate X25519 and X448 key pairs.
+  - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/26554
     description: Add ability to generate Ed25519 and Ed448 key pairs.
   - version: v11.6.0
@@ -3477,8 +3498,8 @@ changes:
                  produce key objects if no encoding was specified.
 -->
 
-* `type`: {string} Must be `'rsa'`, `'dsa'`, `'ec'`, `'ed25519'`, `'ed448'`,
-  `'x25519'`, `'x448'`, or `'dh'`.
+* `type`: {string} Must be `'rsa'`, `'rsa-pss'`, `'dsa'`, `'ec'`, `'ed25519'`,
+  `'ed448'`, `'x25519'`, `'x448'`, or `'dh'`.
 * `options`: {Object}
   * `modulusLength`: {number} Key size in bits (RSA, DSA).
   * `publicExponent`: {number} Public exponent (RSA). **Default:** `0x10001`.
@@ -3495,8 +3516,8 @@ changes:
   * `publicKey`: {string | Buffer | KeyObject}
   * `privateKey`: {string | Buffer | KeyObject}
 
-Generates a new asymmetric key pair of the given `type`. RSA, DSA, EC, Ed25519,
-Ed448, X25519, X448, and DH are currently supported.
+Generates a new asymmetric key pair of the given `type`. RSA, RSA-PSS, DSA, EC,
+Ed25519, Ed448, X25519, X448, and DH are currently supported.
 
 If a `publicKeyEncoding` or `privateKeyEncoding` was specified, this function
 behaves as if [`keyObject.export()`][] had been called on its result. Otherwise,
@@ -5305,6 +5326,8 @@ the `crypto`, `tls`, and `https` modules and are generally specific to OpenSSL.
 
 ### OpenSSL options
 
+See the [list of SSL OP Flags][] for details.
+
 <table>
   <tr>
     <th>Constant</th>
@@ -5538,8 +5561,6 @@ the `crypto`, `tls`, and `https` modules and are generally specific to OpenSSL.
 </table>
 
 ### Other OpenSSL constants
-
-See the [list of SSL OP Flags][] for details.
 
 <table>
   <tr>

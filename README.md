@@ -171,8 +171,6 @@ For information about the governance of the Node.js project, see
 **Colin Ihrig** &lt;cjihrig@gmail.com&gt; (he/him)
 * [codebytere](https://github.com/codebytere) -
 **Shelley Vohr** &lt;shelley.vohr@gmail.com&gt; (she/her)
-* [danbev](https://github.com/danbev) -
-**Daniel Bevenius** &lt;daniel.bevenius@gmail.com&gt; (he/him)
 * [danielleadams](https://github.com/danielleadams) -
 **Danielle Adams** &lt;adamzdanielle@gmail.com&gt; (she/her)
 * [fhinkel](https://github.com/fhinkel) -
@@ -214,6 +212,8 @@ For information about the governance of the Node.js project, see
 **Ben Noordhuis** &lt;info@bnoordhuis.nl&gt;
 * [chrisdickinson](https://github.com/chrisdickinson) -
 **Chris Dickinson** &lt;christopher.s.dickinson@gmail.com&gt;
+* [danbev](https://github.com/danbev) -
+**Daniel Bevenius** &lt;daniel.bevenius@gmail.com&gt; (he/him)
 * [evanlucas](https://github.com/evanlucas) -
 **Evan Lucas** &lt;evanlucas@me.com&gt; (he/him)
 * [Fishrock123](https://github.com/Fishrock123) -
@@ -622,12 +622,18 @@ maintaining the Node.js project.
 **Qingyu Deng** &lt;i@ayase-lab.com&gt;
 * [himadriganguly](https://github.com/himadriganguly) -
 **Himadri Ganguly** &lt;himadri.tech@gmail.com&gt; (he/him)
+* [iam-frankqiu](https://github.com/iam-frankqiu) -
+**Frank Qiu** &lt;iam.frankqiu@gmail.com&gt; (he/him)
 * [marsonya](https://github.com/marsonya) -
 **Akhil Marsonya** &lt;akhil.marsonya27@gmail.com&gt; (he/him)
+* [Mesteery](https://github.com/Mesteery) -
+**Mestery** &lt;mestery@pm.me&gt;
 * [PoojaDurgad](https://github.com/PoojaDurgad) -
 **Pooja Durgad** &lt;Pooja.D.P@ibm.com&gt;
 * [RaisinTen](https://github.com/RaisinTen) -
 **Darshan Sen** &lt;raisinten@gmail.com&gt;
+* [VoltrexMaster](https://github.com/VoltrexMaster) -
+**Voltrex** &lt;mohammadkeyvanzade94@gmail.com&gt; (he/him)
 
 ### Release keys
 

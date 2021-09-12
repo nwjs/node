@@ -499,6 +499,9 @@ the end of the file.
 <!-- YAML
 added: v10.0.0
 changes:
+  - version: v15.14.0
+    pr-url: https://github.com/nodejs/node/pull/37490
+    description: The `data` argument supports `AsyncIterable`, `Iterable` and `Stream`.
   - version: v14.12.0
     pr-url: https://github.com/nodejs/node/pull/34993
     description: The `data` parameter will stringify an object with an
@@ -509,14 +512,16 @@ changes:
                  strings anymore.
 -->
 
-* `data` {string|Buffer|TypedArray|DataView|Object}
+* `data` {string|Buffer|TypedArray|DataView|Object|AsyncIterable|Iterable
+  |Stream}
 * `options` {Object|string}
   * `encoding` {string|null} The expected character encoding when `data` is a
     string. **Default:** `'utf8'`
 * Returns: {Promise}
 
 Asynchronously writes data to a file, replacing the file if it already exists.
-`data` can be a string, a buffer, or an object with an own `toString` function
+`data` can be a string, a buffer, an {AsyncIterable} or {Iterable} object, or an
+object with an own `toString` function
 property. The promise is resolved with no arguments upon success.
 
 If `options` is a string, then it specifies the `encoding`.
@@ -612,6 +617,9 @@ Asynchronously append data to a file, creating the file if it does not yet
 exist. `data` can be a string or a {Buffer}.
 
 If `options` is a string, then it specifies the `encoding`.
+
+The `mode` option only affects the newly created file. See [`fs.open()`][]
+for more details.
 
 The `path` may be specified as a {FileHandle} that has been opened
 for appending (using `fsPromises.open()`).
@@ -1295,7 +1303,7 @@ added: v10.0.0
 changes:
   - version: v15.14.0
     pr-url: https://github.com/nodejs/node/pull/37490
-    description: The `data` argument supports `AsyncIterable`, `Iterable` & `Stream`.
+    description: The `data` argument supports `AsyncIterable`, `Iterable` and `Stream`.
   - version: v15.2.0
     pr-url: https://github.com/nodejs/node/pull/35993
     description: The options argument may include an AbortSignal to abort an
@@ -1327,6 +1335,9 @@ Asynchronously writes data to a file, replacing the file if it already exists.
 The `encoding` option is ignored if `data` is a buffer.
 
 If `options` is a string, then it specifies the encoding.
+
+The `mode` option only affects the newly created file. See [`fs.open()`][]
+for more details.
 
 Any specified {FileHandle} has to support writing.
 
@@ -1593,6 +1604,9 @@ changes:
 
 Asynchronously append data to a file, creating the file if it does not yet
 exist. `data` can be a string or a {Buffer}.
+
+The `mode` option only affects the newly created file. See [`fs.open()`][]
+for more details.
 
 ```mjs
 import { appendFile } from 'fs';
@@ -4027,6 +4041,9 @@ a file descriptor.
 
 The `encoding` option is ignored if `data` is a buffer.
 
+The `mode` option only affects the newly created file. See [`fs.open()`][]
+for more details.
+
 If `data` is a plain object, it must have an own (not inherited) `toString`
 function property.
 
@@ -4200,6 +4217,9 @@ changes:
 
 Synchronously append data to a file, creating the file if it does not yet
 exist. `data` can be a string or a {Buffer}.
+
+The `mode` option only affects the newly created file. See [`fs.open()`][]
+for more details.
 
 ```mjs
 import { appendFileSync } from 'fs';
@@ -5156,6 +5176,9 @@ Returns `undefined`.
 
 If `data` is a plain object, it must have an own (not inherited) `toString`
 function property.
+
+The `mode` option only affects the newly created file. See [`fs.open()`][]
+for more details.
 
 For detailed information, see the documentation of the asynchronous version of
 this API: [`fs.writeFile()`][].

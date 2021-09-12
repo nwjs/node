@@ -105,10 +105,10 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
   const { publicKey, privateKey } = ret;
 
   assert.strictEqual(typeof publicKey, 'string');
-  assert(pkcs1PubExp.test(publicKey));
+  assert.match(publicKey, pkcs1PubExp);
   assertApproximateSize(publicKey, 162);
   assert.strictEqual(typeof privateKey, 'string');
-  assert(pkcs8Exp.test(privateKey));
+  assert.match(privateKey, pkcs8Exp);
   assertApproximateSize(privateKey, 512);
 
   testEncryptDecrypt(publicKey, privateKey);
@@ -183,7 +183,7 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     assertApproximateSize(publicKeyDER, 74);
 
     assert.strictEqual(typeof privateKey, 'string');
-    assert(pkcs1PrivExp.test(privateKey));
+    assert.match(privateKey, pkcs1PrivExp);
     assertApproximateSize(privateKey, 512);
 
     const publicKey = { key: publicKeyDER, ...publicKeyEncoding };
@@ -207,7 +207,7 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     assertApproximateSize(publicKeyDER, 74);
 
     assert.strictEqual(typeof privateKey, 'string');
-    assert(pkcs1EncExp('AES-256-CBC').test(privateKey));
+    assert.match(privateKey, pkcs1EncExp('AES-256-CBC'));
 
     // Since the private key is encrypted, signing shouldn't work anymore.
     const publicKey = { key: publicKeyDER, ...publicKeyEncoding };
@@ -309,14 +309,20 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     assert.strictEqual(publicKey.asymmetricKeyType, 'rsa-pss');
     assert.deepStrictEqual(publicKey.asymmetricKeyDetails, {
       modulusLength: 512,
-      publicExponent: 65537n
+      publicExponent: 65537n,
+      hashAlgorithm: 'sha256',
+      mgf1HashAlgorithm: 'sha256',
+      saltLength: 16
     });
 
     assert.strictEqual(privateKey.type, 'private');
     assert.strictEqual(privateKey.asymmetricKeyType, 'rsa-pss');
     assert.deepStrictEqual(privateKey.asymmetricKeyDetails, {
       modulusLength: 512,
-      publicExponent: 65537n
+      publicExponent: 65537n,
+      hashAlgorithm: 'sha256',
+      mgf1HashAlgorithm: 'sha256',
+      saltLength: 16
     });
 
     // Unlike RSA, RSA-PSS does not allow encryption.
@@ -341,6 +347,29 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
 }
 
 {
+  // 'rsa-pss' should not add a RSASSA-PSS-params sequence by default.
+  // Regression test for: https://github.com/nodejs/node/issues/39936
+
+  generateKeyPair('rsa-pss', {
+    modulusLength: 512
+  }, common.mustSucceed((publicKey, privateKey) => {
+    const expectedKeyDetails = {
+      modulusLength: 512,
+      publicExponent: 65537n
+    };
+    assert.deepStrictEqual(publicKey.asymmetricKeyDetails, expectedKeyDetails);
+    assert.deepStrictEqual(privateKey.asymmetricKeyDetails, expectedKeyDetails);
+
+    // To allow backporting the fix to versions that do not support
+    // asymmetricKeyDetails for RSA-PSS params, also verify that the exported
+    // AlgorithmIdentifier member of the SubjectPublicKeyInfo has the expected
+    // length of 11 bytes (as opposed to > 11 bytes if node added params).
+    const spki = publicKey.export({ format: 'der', type: 'spki' });
+    assert.strictEqual(spki[3], 11, spki.toString('hex'));
+  }));
+}
+
+{
   const privateKeyEncoding = {
     type: 'pkcs8',
     format: 'der'
@@ -361,7 +390,7 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     }
   }, common.mustSucceed((publicKey, privateKeyDER) => {
     assert.strictEqual(typeof publicKey, 'string');
-    assert(spkiExp.test(publicKey));
+    assert.match(publicKey, spkiExp);
     // The private key is DER-encoded.
     assert(Buffer.isBuffer(privateKeyDER));
 
@@ -426,9 +455,9 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     }
   }, common.mustSucceed((publicKey, privateKey) => {
     assert.strictEqual(typeof publicKey, 'string');
-    assert(spkiExp.test(publicKey));
+    assert.match(publicKey, spkiExp);
     assert.strictEqual(typeof privateKey, 'string');
-    assert(sec1Exp.test(privateKey));
+    assert.match(privateKey, sec1Exp);
 
     testSignVerify(publicKey, privateKey);
   }));
@@ -448,9 +477,9 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     }
   }, common.mustSucceed((publicKey, privateKey) => {
     assert.strictEqual(typeof publicKey, 'string');
-    assert(spkiExp.test(publicKey));
+    assert.match(publicKey, spkiExp);
     assert.strictEqual(typeof privateKey, 'string');
-    assert(sec1Exp.test(privateKey));
+    assert.match(privateKey, sec1Exp);
 
     testSignVerify(publicKey, privateKey);
   }));
@@ -471,9 +500,9 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     }
   }, common.mustSucceed((publicKey, privateKey) => {
     assert.strictEqual(typeof publicKey, 'string');
-    assert(spkiExp.test(publicKey));
+    assert.match(publicKey, spkiExp);
     assert.strictEqual(typeof privateKey, 'string');
-    assert(sec1EncExp('AES-128-CBC').test(privateKey));
+    assert.match(privateKey, sec1EncExp('AES-128-CBC'));
 
     // Since the private key is encrypted, signing shouldn't work anymore.
     assert.throws(() => testSignVerify(publicKey, privateKey),
@@ -505,9 +534,9 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     }
   }, common.mustSucceed((publicKey, privateKey) => {
     assert.strictEqual(typeof publicKey, 'string');
-    assert(spkiExp.test(publicKey));
+    assert.match(publicKey, spkiExp);
     assert.strictEqual(typeof privateKey, 'string');
-    assert(sec1EncExp('AES-128-CBC').test(privateKey));
+    assert.match(privateKey, sec1EncExp('AES-128-CBC'));
 
     // Since the private key is encrypted, signing shouldn't work anymore.
     assert.throws(() => testSignVerify(publicKey, privateKey),
@@ -542,9 +571,9 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     }
   }, common.mustSucceed((publicKey, privateKey) => {
     assert.strictEqual(typeof publicKey, 'string');
-    assert(spkiExp.test(publicKey));
+    assert.match(publicKey, spkiExp);
     assert.strictEqual(typeof privateKey, 'string');
-    assert(pkcs8EncExp.test(privateKey));
+    assert.match(privateKey, pkcs8EncExp);
 
     // Since the private key is encrypted, signing shouldn't work anymore.
     assert.throws(() => testSignVerify(publicKey, privateKey),
@@ -579,9 +608,9 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     }
   }, common.mustSucceed((publicKey, privateKey) => {
     assert.strictEqual(typeof publicKey, 'string');
-    assert(spkiExp.test(publicKey));
+    assert.match(publicKey, spkiExp);
     assert.strictEqual(typeof privateKey, 'string');
-    assert(pkcs8EncExp.test(privateKey));
+    assert.match(privateKey, pkcs8EncExp);
 
     // Since the private key is encrypted, signing shouldn't work anymore.
     assert.throws(() => testSignVerify(publicKey, privateKey),
@@ -753,11 +782,11 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
   }).then(common.mustCall((keys) => {
     const { publicKey, privateKey } = keys;
     assert.strictEqual(typeof publicKey, 'string');
-    assert(pkcs1PubExp.test(publicKey));
+    assert.match(publicKey, pkcs1PubExp);
     assertApproximateSize(publicKey, 180);
 
     assert.strictEqual(typeof privateKey, 'string');
-    assert(pkcs1PrivExp.test(privateKey));
+    assert.match(privateKey, pkcs1PrivExp);
     assertApproximateSize(privateKey, 512);
 
     testEncryptDecrypt(publicKey, privateKey);

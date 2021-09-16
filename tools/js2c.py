@@ -124,7 +124,10 @@ def AddModule(filename, definitions, initializers):
   initializers.append(initializer)
 
 def NormalizeFileName(filename):
-  split = filename.split(os.path.sep)
+  if '/' in filename:
+    split = filename.split('/')
+  else:
+    split = filename.split(os.path.sep)
   if split[0] == 'deps':
     split = ['internal'] + split
   else:  # `lib/**/*.js` so drop the 'lib' part

@@ -302,8 +302,8 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
   generateKeyPair('rsa-pss', {
     modulusLength: 512,
     saltLength: 16,
-    hash: 'sha256',
-    mgf1Hash: 'sha256'
+    hashAlgorithm: 'sha256',
+    mgf1HashAlgorithm: 'sha256'
   }, common.mustSucceed((publicKey, privateKey) => {
     assert.strictEqual(publicKey.type, 'public');
     assert.strictEqual(publicKey.asymmetricKeyType, 'rsa-pss');
@@ -366,6 +366,65 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     // length of 11 bytes (as opposed to > 11 bytes if node added params).
     const spki = publicKey.export({ format: 'der', type: 'spki' });
     assert.strictEqual(spki[3], 11, spki.toString('hex'));
+  }));
+}
+
+{
+  // RFC 8017, 9.1.: "Assuming that the mask generation function is based on a
+  // hash function, it is RECOMMENDED that the hash function be the same as the
+  // one that is applied to the message."
+
+  generateKeyPair('rsa-pss', {
+    modulusLength: 512,
+    hashAlgorithm: 'sha256',
+    saltLength: 16
+  }, common.mustSucceed((publicKey, privateKey) => {
+    const expectedKeyDetails = {
+      modulusLength: 512,
+      publicExponent: 65537n,
+      hashAlgorithm: 'sha256',
+      mgf1HashAlgorithm: 'sha256',
+      saltLength: 16
+    };
+    assert.deepStrictEqual(publicKey.asymmetricKeyDetails, expectedKeyDetails);
+    assert.deepStrictEqual(privateKey.asymmetricKeyDetails, expectedKeyDetails);
+  }));
+}
+
+{
+  // RFC 8017, A.2.3.: "For a given hashAlgorithm, the default value of
+  // saltLength is the octet length of the hash value."
+
+  generateKeyPair('rsa-pss', {
+    modulusLength: 512,
+    hashAlgorithm: 'sha512'
+  }, common.mustSucceed((publicKey, privateKey) => {
+    const expectedKeyDetails = {
+      modulusLength: 512,
+      publicExponent: 65537n,
+      hashAlgorithm: 'sha512',
+      mgf1HashAlgorithm: 'sha512',
+      saltLength: 64
+    };
+    assert.deepStrictEqual(publicKey.asymmetricKeyDetails, expectedKeyDetails);
+    assert.deepStrictEqual(privateKey.asymmetricKeyDetails, expectedKeyDetails);
+  }));
+
+  // It is still possible to explicitly set saltLength to 0.
+  generateKeyPair('rsa-pss', {
+    modulusLength: 512,
+    hashAlgorithm: 'sha512',
+    saltLength: 0
+  }, common.mustSucceed((publicKey, privateKey) => {
+    const expectedKeyDetails = {
+      modulusLength: 512,
+      publicExponent: 65537n,
+      hashAlgorithm: 'sha512',
+      mgf1HashAlgorithm: 'sha512',
+      saltLength: 0
+    };
+    assert.deepStrictEqual(publicKey.asymmetricKeyDetails, expectedKeyDetails);
+    assert.deepStrictEqual(privateKey.asymmetricKeyDetails, expectedKeyDetails);
   }));
 }
 
@@ -578,7 +637,8 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     // Since the private key is encrypted, signing shouldn't work anymore.
     assert.throws(() => testSignVerify(publicKey, privateKey),
                   common.hasOpenSSL3 ? {
-                    message: 'error:1E08010C:DECODER routines::unsupported'
+                    message: 'error:07880109:common libcrypto ' +
+                             'routines::interrupted or cancelled'
                   } : {
                     name: 'TypeError',
                     code: 'ERR_MISSING_PASSPHRASE',
@@ -615,7 +675,8 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     // Since the private key is encrypted, signing shouldn't work anymore.
     assert.throws(() => testSignVerify(publicKey, privateKey),
                   common.hasOpenSSL3 ? {
-                    message: 'error:1E08010C:DECODER routines::unsupported'
+                    message: 'error:07880109:common libcrypto ' +
+                             'routines::interrupted or cancelled'
                   } : {
                     name: 'TypeError',
                     code: 'ERR_MISSING_PASSPHRASE',
@@ -1324,12 +1385,12 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     assert.throws(() => {
       generateKeyPairSync('rsa-pss', {
         modulusLength: 4096,
-        hash: hashValue
+        hashAlgorithm: hashValue
       });
     }, {
       name: 'TypeError',
       code: 'ERR_INVALID_ARG_VALUE',
-      message: "The property 'options.hash' is invalid. " +
+      message: "The property 'options.hashAlgorithm' is invalid. " +
         `Received ${inspect(hashValue)}`
     });
   }
@@ -1339,8 +1400,8 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     generateKeyPair('rsa-pss', {
       modulusLength: 512,
       saltLength: 2147483648,
-      hash: 'sha256',
-      mgf1Hash: 'sha256'
+      hashAlgorithm: 'sha256',
+      mgf1HashAlgorithm: 'sha256'
     }, common.mustNotCall());
   }, {
     name: 'TypeError',
@@ -1353,8 +1414,8 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     generateKeyPair('rsa-pss', {
       modulusLength: 512,
       saltLength: -1,
-      hash: 'sha256',
-      mgf1Hash: 'sha256'
+      hashAlgorithm: 'sha256',
+      mgf1HashAlgorithm: 'sha256'
     }, common.mustNotCall());
   }, {
     name: 'TypeError',
@@ -1451,8 +1512,8 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
       generateKeyPair('rsa-pss', {
         modulusLength: 512,
         saltLength: 16,
-        hash: 'sha256',
-        mgf1Hash: undefined
+        hashAlgorithm: 'sha256',
+        mgf1HashAlgorithm: undefined
       });
     },
     {
@@ -1462,21 +1523,21 @@ const sec1EncExp = (cipher) => getRegExpForPEM('EC PRIVATE KEY', cipher);
     }
   );
 
-  for (const mgf1Hash of [null, 0, false, {}, []]) {
+  for (const mgf1HashAlgorithm of [null, 0, false, {}, []]) {
     assert.throws(
       () => {
         generateKeyPair('rsa-pss', {
           modulusLength: 512,
           saltLength: 16,
-          hash: 'sha256',
-          mgf1Hash
+          hashAlgorithm: 'sha256',
+          mgf1HashAlgorithm
         }, common.mustNotCall());
       },
       {
         name: 'TypeError',
         code: 'ERR_INVALID_ARG_VALUE',
-        message: "The property 'options.mgf1Hash' is invalid. " +
-          `Received ${inspect(mgf1Hash)}`
+        message: "The property 'options.mgf1HashAlgorithm' is invalid. " +
+          `Received ${inspect(mgf1HashAlgorithm)}`
 
       }
     );
@@ -1567,4 +1628,57 @@ if (!common.hasOpenSSL3) {
       }));
     }
   }
+}
+
+{
+  // This test makes sure deprecated and new options may be used
+  // simultaneously so long as they're identical values.
+
+  generateKeyPair('rsa-pss', {
+    modulusLength: 512,
+    saltLength: 16,
+    hash: 'sha256',
+    hashAlgorithm: 'sha256',
+    mgf1Hash: 'sha256',
+    mgf1HashAlgorithm: 'sha256'
+  }, common.mustSucceed((publicKey, privateKey) => {
+    assert.strictEqual(publicKey.type, 'public');
+    assert.strictEqual(publicKey.asymmetricKeyType, 'rsa-pss');
+    assert.deepStrictEqual(publicKey.asymmetricKeyDetails, {
+      modulusLength: 512,
+      publicExponent: 65537n,
+      hashAlgorithm: 'sha256',
+      mgf1HashAlgorithm: 'sha256',
+      saltLength: 16
+    });
+
+    assert.strictEqual(privateKey.type, 'private');
+    assert.strictEqual(privateKey.asymmetricKeyType, 'rsa-pss');
+    assert.deepStrictEqual(privateKey.asymmetricKeyDetails, {
+      modulusLength: 512,
+      publicExponent: 65537n,
+      hashAlgorithm: 'sha256',
+      mgf1HashAlgorithm: 'sha256',
+      saltLength: 16
+    });
+  }));
+}
+
+{
+  // This test makes sure deprecated and new options must
+  // be the same value.
+
+  assert.throws(() => generateKeyPair('rsa-pss', {
+    modulusLength: 512,
+    saltLength: 16,
+    mgf1Hash: 'sha256',
+    mgf1HashAlgorithm: 'sha1'
+  }, common.mustNotCall()), { code: 'ERR_INVALID_ARG_VALUE' });
+
+  assert.throws(() => generateKeyPair('rsa-pss', {
+    modulusLength: 512,
+    saltLength: 16,
+    hash: 'sha256',
+    hashAlgorithm: 'sha1'
+  }, common.mustNotCall()), { code: 'ERR_INVALID_ARG_VALUE' });
 }

@@ -63,17 +63,31 @@ EVPKeyCtxPointer RsaKeyGenTraits::Setup(RsaKeyPairGenConfig* params) {
       return EVPKeyCtxPointer();
     }
 
-    if (params->params.mgf1_md != nullptr &&
+    // TODO(tniessen): This appears to only be necessary in OpenSSL 3, while
+    // OpenSSL 1.1.1 behaves as recommended by RFC 8017 and defaults the MGF1
+    // hash algorithm to the RSA-PSS hashAlgorithm. Remove this code if the
+    // behavior of OpenSSL 3 changes.
+    const EVP_MD* mgf1_md = params->params.mgf1_md;
+    if (mgf1_md == nullptr && params->params.md != nullptr) {
+      mgf1_md = params->params.md;
+    }
+
+    if (mgf1_md != nullptr &&
         EVP_PKEY_CTX_set_rsa_pss_keygen_mgf1_md(
             ctx.get(),
-            params->params.mgf1_md) <= 0) {
+            mgf1_md) <= 0) {
       return EVPKeyCtxPointer();
     }
 
-    if (params->params.saltlen >= 0 &&
+    int saltlen = params->params.saltlen;
+    if (saltlen < 0 && params->params.md != nullptr) {
+      saltlen = EVP_MD_size(params->params.md);
+    }
+
+    if (saltlen >= 0 &&
         EVP_PKEY_CTX_set_rsa_pss_keygen_saltlen(
             ctx.get(),
-            params->params.saltlen) <= 0) {
+            saltlen) <= 0) {
       return EVPKeyCtxPointer();
     }
   }

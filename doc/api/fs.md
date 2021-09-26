@@ -258,9 +258,7 @@ added: v10.0.0
 * `buffer` {Buffer|TypedArray|DataView} A buffer that will be filled with the
   file data read.
 * `offset` {integer} The location in the buffer at which to start filling.
-  **Default:** `0`
-* `length` {integer} The number of bytes to read. **Default:**
-  `buffer.byteLength`
+* `length` {integer} The number of bytes to read.
 * `position` {integer} The location where to begin reading data from the
   file. If `null`, data will be read from the current file position, and
   the position will be updated. If `position` is an integer, the current
@@ -983,7 +981,9 @@ try {
 <!-- YAML
 added: v10.0.0
 changes:
-  - version: v15.2.0
+  - version:
+    - v15.2.0
+    - v14.17.0
     pr-url: https://github.com/nodejs/node/pull/35911
     description: The options argument may include an AbortSignal to abort an
                  ongoing readFile request.
@@ -1304,7 +1304,9 @@ changes:
   - version: v15.14.0
     pr-url: https://github.com/nodejs/node/pull/37490
     description: The `data` argument supports `AsyncIterable`, `Iterable` and `Stream`.
-  - version: v15.2.0
+  - version:
+    - v15.2.0
+    - v14.17.0
     pr-url: https://github.com/nodejs/node/pull/35993
     description: The options argument may include an AbortSignal to abort an
                  ongoing writeFile request.
@@ -1883,6 +1885,12 @@ behavior is similar to `cp dir1/ dir2/`.
 <!-- YAML
 added: v0.1.31
 changes:
+  - version: v16.10.0
+    pr-url: https://github.com/nodejs/node/pull/40013
+    description: The `fs` option does not need `open` method if an `fd` was provided.
+  - version: v16.10.0
+    pr-url: https://github.com/nodejs/node/pull/40013
+    description: The `fs` option does not need `close` method if `autoClose` is `false`.
   - version:
      - v15.4.0
     pr-url: https://github.com/nodejs/node/pull/35922
@@ -1958,7 +1966,9 @@ destroyed, like most `Readable` streams.  Set the `emitClose` option to
 
 By providing the `fs` option, it is possible to override the corresponding `fs`
 implementations for `open`, `read`, and `close`. When providing the `fs` option,
-overrides for `open`, `read`, and `close` are required.
+an override for `read` is required. If no `fd` is provided, an override for
+`open` is also required. If `autoClose` is `true`, an override for `close` is
+also required.
 
 ```mjs
 import { createReadStream } from 'fs';
@@ -2000,6 +2010,12 @@ If `options` is a string, then it specifies the encoding.
 <!-- YAML
 added: v0.1.31
 changes:
+  - version: v16.10.0
+    pr-url: https://github.com/nodejs/node/pull/40013
+    description: The `fs` option does not need `open` method if an `fd` was provided.
+  - version: v16.10.0
+    pr-url: https://github.com/nodejs/node/pull/40013
+    description: The `fs` option does not need `close` method if `autoClose` is `false`.
   - version:
      - v15.4.0
     pr-url: https://github.com/nodejs/node/pull/35922
@@ -2063,8 +2079,10 @@ destroyed, like most `Writable` streams.  Set the `emitClose` option to
 By providing the `fs` option it is possible to override the corresponding `fs`
 implementations for `open`, `write`, `writev` and `close`. Overriding `write()`
 without `writev()` can reduce performance as some optimizations (`_writev()`)
-will be disabled. When providing the `fs` option,  overrides for `open`,
-`close`, and at least one of `write` and `writev` are required.
+will be disabled. When providing the `fs` option, overrides for at least one of
+`write` and `writev` are required. If no `fd` option is supplied, an override
+for `open` is also required. If `autoClose` is `true`, an override for `close`
+is also required.
 
 Like {fs.ReadStream}, if `fd` is specified, {fs.WriteStream} will ignore the
 `path` argument and will use the specified file descriptor. This means that no
@@ -2612,7 +2630,7 @@ changes:
 Asynchronously creates a directory.
 
 The callback is given a possible exception and, if `recursive` is `true`, the
-first directory path created, `(err, [path])`.
+first directory path created, `(err[, path])`.
 `path` can still be `undefined` when `recursive` is `true`, if no directory was
 created.
 
@@ -2816,11 +2834,9 @@ changes:
 
 * `fd` {integer}
 * `buffer` {Buffer|TypedArray|DataView} The buffer that the data will be
-  written to. **Default:** `Buffer.alloc(16384)`
-* `offset` {integer} The position in `buffer` to write the data to. **Default:**
-  `0`
-* `length` {integer} The number of bytes to read. **Default:**
-  `buffer.byteLength`
+  written to.
+* `offset` {integer} The position in `buffer` to write the data to.
+* `length` {integer} The number of bytes to read.
 * `position` {integer|bigint} Specifies where to begin reading from in the
   file. If `position` is `null` or `-1 `, data will be read from the current
   file position, and the file position will be updated. If `position` is an
@@ -4577,7 +4593,9 @@ link(2) documentation for more detail. Returns `undefined`.
 <!-- YAML
 added: v0.1.30
 changes:
-  - version: v15.3.0
+  - version:
+    - v15.3.0
+    - v14.17.0
     pr-url: https://github.com/nodejs/node/pull/33716
     description: Accepts a `throwIfNoEntry` option to specify whether
                  an exception should be thrown if the entry does not exist.
@@ -4832,7 +4850,7 @@ Returns the number of `bytesRead`.
 For detailed information, see the documentation of the asynchronous version of
 this API: [`fs.read()`][].
 
-### `fs.readSync(fd, buffer, [options])`
+### `fs.readSync(fd, buffer[, options])`
 <!-- YAML
 added:
  - v13.13.0
@@ -5037,7 +5055,9 @@ utility). Returns `undefined`.
 <!-- YAML
 added: v0.1.21
 changes:
-  - version: v15.3.0
+  - version:
+    - v15.3.0
+    - v14.17.0
     pr-url: https://github.com/nodejs/node/pull/33716
     description: Accepts a `throwIfNoEntry` option to specify whether
                  an exception should be thrown if the entry does not exist.

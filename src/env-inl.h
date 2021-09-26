@@ -871,6 +871,11 @@ inline bool Environment::is_main_thread() const {
   return worker_context() == nullptr;
 }
 
+inline bool Environment::no_native_addons() const {
+  return (flags_ & EnvironmentFlags::kNoNativeAddons) ||
+          !options_->allow_native_addons;
+}
+
 inline bool Environment::should_not_register_esm_loader() const {
   return flags_ & EnvironmentFlags::kNoRegisterESMLoader;
 }
@@ -889,6 +894,11 @@ inline bool Environment::tracks_unmanaged_fds() const {
 
 inline bool Environment::hide_console_windows() const {
   return flags_ & EnvironmentFlags::kHideConsoleWindows;
+}
+
+inline bool Environment::no_global_search_paths() const {
+  return (flags_ & EnvironmentFlags::kNoGlobalSearchPaths) ||
+         !options_->global_search_paths;
 }
 
 bool Environment::filehandle_close_warning() const {

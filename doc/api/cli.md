@@ -595,6 +595,15 @@ added: v7.10.0
 
 This option is a no-op. It is kept for compatibility.
 
+### `--no-addons`
+<!-- YAML
+added: v16.10.0
+-->
+
+Disable the `node-addons` exports condition as well as disable loading
+native addons. When `--no-addons` is specified, calling `process.dlopen` or
+requiring a native C++ addon will fail and throw an exception.
+
 ### `--no-deprecation`
 <!-- YAML
 added: v0.8.0
@@ -609,6 +618,14 @@ added: v9.0.0
 
 Disables runtime checks for `async_hooks`. These will still be enabled
 dynamically when `async_hooks` is enabled.
+
+### `--no-global-search-paths`
+<!-- YAML
+added: v16.10.0
+-->
+
+Do not search modules from global paths like `$HOME/.node_modules` and
+`$NODE_PATH`.
 
 ### `--no-warnings`
 <!-- YAML
@@ -1418,9 +1435,11 @@ Node.js options that are allowed are:
 * `--inspect`
 * `--max-http-header-size`
 * `--napi-modules`
+* `--no-addons`
 * `--no-deprecation`
 * `--no-experimental-repl-await`
 * `--no-force-async-hooks-checks`
+* `--no-global-search-paths`
 * `--no-warnings`
 * `--node-memory-debug`
 * `--openssl-config`

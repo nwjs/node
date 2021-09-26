@@ -214,6 +214,11 @@ void PatchProcessObject(const FunctionCallbackInfo<Value>& args) {
 
 void RegisterProcessExternalReferences(ExternalReferenceRegistry* registry) {
   registry->Register(RawDebug);
+  registry->Register(GetParentProcessId);
+  registry->Register(DebugPortSetter);
+  registry->Register(DebugPortGetter);
+  registry->Register(ProcessTitleSetter);
+  registry->Register(ProcessTitleGetter);
 }
 
 }  // namespace node

@@ -28,7 +28,7 @@ import htmlStringify from 'rehype-stringify';
 import gfm from 'remark-gfm';
 import markdown from 'remark-parse';
 import remark2rehype from 'remark-rehype';
-import unified from 'unified';
+import { unified } from 'unified';
 import { visit } from 'unist-util-visit';
 
 import * as common from './common.mjs';
@@ -227,7 +227,8 @@ export function preprocessElements({ filename }) {
               nextNode.lang !== node.lang) {
             // Saving the highlight code as value to be added in the next node.
             node.value = highlighted;
-          } else if (isJSFlavorSnippet(previousNode)) {
+          } else if (isJSFlavorSnippet(previousNode) &&
+                     previousNode.lang !== node.lang) {
             node.value = '<pre>' +
               '<input class="js-flavor-selector" type="checkbox"' +
               // If CJS comes in second, ESM should display by default.
@@ -395,7 +396,7 @@ export function buildToc({ filename, apilinks }) {
 
       depth = node.depth;
       const realFilename = path.basename(filename, '.md');
-      const headingText = file.contents.slice(
+      const headingText = file.value.slice(
         node.children[0].position.start.offset,
         node.position.end.offset).trim();
       const id = getId(`${realFilename}_${headingText}`, idCounters);

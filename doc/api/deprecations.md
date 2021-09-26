@@ -2799,6 +2799,33 @@ non-number value for `hints` option, a non-nullish non-boolean value for `all`
 option, or a non-nullish non-boolean value for `verbatim` option in
 [`dns.lookup()`][] and [`dnsPromises.lookup()`][] is deprecated.
 
+### DEP0154: RSA-PSS generate key pair options
+<!-- YAML
+changes:
+  - version: v16.10.0
+    pr-url: https://github.com/nodejs/node/pull/39927
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only (supports [`--pending-deprecation`][])
+
+The `'hash'` and `'mgf1Hash'` options are replaced with `'hashAlgorithm'`
+and `'mgf1HashAlgorithm'`.
+
+### DEP0155: Trailing slashes in pattern specifier resolutions
+<!-- YAML
+changes:
+  - version: v16.10.0
+    pr-url: https://github.com/nodejs/node/pull/40039
+    description: Documentation-only deprecation
+                 with `--pending-deprecation` support.
+-->
+
+Type: Documentation-only (supports [`--pending-deprecation`][])
+
+The remapping of specifiers ending in `"/"` like `import 'pkg/x/'` is deprecated
+for package `"exports"` and `"imports"` pattern resolutions.
+
 [Legacy URL API]: url.md#url_legacy_url_api
 [NIST SP 800-38D]: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf
 [RFC 6066]: https://tools.ietf.org/html/rfc6066#section-3

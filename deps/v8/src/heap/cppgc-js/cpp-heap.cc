@@ -10,8 +10,8 @@
 
 #include "include/cppgc/heap-consistency.h"
 #include "include/cppgc/platform.h"
+#include "include/v8-local-handle.h"
 #include "include/v8-platform.h"
-#include "include/v8.h"
 #include "src/base/logging.h"
 #include "src/base/macros.h"
 #include "src/base/platform/platform.h"
@@ -217,6 +217,14 @@ void UnifiedHeapMarker::AddObject(void* object) {
       cppgc::internal::HeapObjectHeader::FromObject(object));
 }
 
+void FatalOutOfMemoryHandlerImpl(const std::string& reason,
+                                 const SourceLocation&, HeapBase* heap) {
+  FatalProcessOutOfMemory(
+      reinterpret_cast<v8::internal::Isolate*>(
+          static_cast<v8::internal::CppHeap*>(heap)->isolate()),
+      reason.c_str());
+}
+
 }  // namespace
 
 void CppHeap::MetricRecorderAdapter::AddMainThreadEvent(
@@ -355,6 +363,7 @@ void CppHeap::AttachIsolate(Isolate* isolate) {
       wrapper_descriptor_);
   SetMetricRecorder(std::make_unique<MetricRecorderAdapter>(*this));
   SetStackStart(base::Stack::GetStackStart());
+  oom_handler().SetCustomHandler(&FatalOutOfMemoryHandlerImpl);
   no_gc_scope_--;
 }
 
@@ -376,6 +385,7 @@ void CppHeap::DetachIsolate() {
   isolate_ = nullptr;
   // Any future garbage collections will ignore the V8->C++ references.
   isolate()->SetEmbedderHeapTracer(nullptr);
+  oom_handler().SetCustomHandler(nullptr);
   // Enter no GC scope.
   no_gc_scope_++;
 }
@@ -401,8 +411,7 @@ bool ShouldReduceMemory(CppHeap::TraceFlags flags) {
 }  // namespace
 
 void CppHeap::TracePrologue(TraceFlags flags) {
-  // Finish sweeping in case it is still running.
-  sweeper_.FinishIfRunning();
+  CHECK(!sweeper_.IsSweepingInProgress());
 
   current_flags_ = flags;
   const UnifiedHeapMarker::MarkingConfig marking_config{
@@ -481,13 +490,17 @@ void CppHeap::TraceEpilogue(TraceSummary* trace_summary) {
         stats_collector_->marked_bytes(),
         stats_collector_->marking_time().InMillisecondsF());
   }
-  ExecutePreFinalizers();
-  // TODO(chromium:1056170): replace build flag with dedicated flag.
-#if DEBUG
+  // The allocated bytes counter in v8 was reset to the current marked bytes, so
+  // any pending allocated bytes updates should be discarded.
+  buffered_allocated_bytes_ = 0;
+  const size_t bytes_allocated_in_prefinalizers = ExecutePreFinalizers();
+#if CPPGC_VERIFY_HEAP
   UnifiedHeapMarkingVerifier verifier(*this);
-  verifier.Run(stack_state_of_prev_gc(), stack_end_of_current_gc(),
-               stats_collector()->marked_bytes());
-#endif
+  verifier.Run(
+      stack_state_of_prev_gc(), stack_end_of_current_gc(),
+      stats_collector()->marked_bytes() + bytes_allocated_in_prefinalizers);
+#endif  // CPPGC_VERIFY_HEAP
+  USE(bytes_allocated_in_prefinalizers);
 
   {
     cppgc::subtle::NoGarbageCollectionScope no_gc(*this);
@@ -684,6 +697,8 @@ CppHeap::MetricRecorderAdapter* CppHeap::GetMetricRecorder() const {
   return static_cast<MetricRecorderAdapter*>(
       stats_collector_->GetMetricRecorder());
 }
+
+void CppHeap::FinishSweepingIfRunning() { sweeper_.FinishIfRunning(); }
 
 }  // namespace internal
 }  // namespace v8

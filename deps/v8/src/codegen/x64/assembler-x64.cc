@@ -443,6 +443,10 @@ void Assembler::CodeTargetAlign() {
   Align(16);  // Preferred alignment of jump targets on x64.
 }
 
+void Assembler::LoopHeaderAlign() {
+  Align(64);  // Preferred alignment of loop header on x64.
+}
+
 bool Assembler::IsNop(Address addr) {
   byte* a = reinterpret_cast<byte*>(addr);
   while (*a == 0x66) a++;
@@ -533,10 +537,38 @@ bool Assembler::is_optimizable_farjmp(int idx) {
   return !!(bitmap[idx / 32] & (1 << (idx & 31)));
 }
 
+void Assembler::FixOnHeapReferences(bool update_embedded_objects) {
+  Address base = reinterpret_cast<Address>(buffer_->start());
+  if (update_embedded_objects) {
+    for (auto p : saved_handles_for_raw_object_ptr_) {
+      Handle<HeapObject> object(reinterpret_cast<Address*>(p.second));
+      WriteUnalignedValue(base + p.first, *object);
+    }
+  }
+  for (auto p : saved_offsets_for_runtime_entries_) {
+    Address pc = base + p.first;
+    Address target = p.second + options().code_range_start;
+    WriteUnalignedValue<uint32_t>(pc, relative_target_offset(target, pc));
+  }
+}
+
+void Assembler::FixOnHeapReferencesToHandles() {
+  Address base = reinterpret_cast<Address>(buffer_->start());
+  for (auto p : saved_handles_for_raw_object_ptr_) {
+    WriteUnalignedValue(base + p.first, p.second);
+  }
+  saved_handles_for_raw_object_ptr_.clear();
+  for (auto p : saved_offsets_for_runtime_entries_) {
+    WriteUnalignedValue<uint32_t>(base + p.first, p.second);
+  }
+  saved_offsets_for_runtime_entries_.clear();
+}
+
 void Assembler::GrowBuffer() {
   DCHECK(buffer_overflow());
 
   bool previously_on_heap = buffer_->IsOnHeap();
+  int previous_on_heap_gc_count = OnHeapGCCount();
 
   // Compute new buffer size.
   DCHECK_EQ(buffer_start_, buffer_->start());
@@ -575,14 +607,12 @@ void Assembler::GrowBuffer() {
     WriteUnalignedValue(p, ReadUnalignedValue<intptr_t>(p) + pc_delta);
   }
 
-  // Patch on-heap references to handles.
-  if (previously_on_heap && !buffer_->IsOnHeap()) {
-    Address base = reinterpret_cast<Address>(buffer_->start());
-    for (auto p : saved_handles_for_raw_object_ptr_) {
-      WriteUnalignedValue(base + p.first, p.second);
-    }
-    for (auto p : saved_offsets_for_runtime_entries_) {
-      WriteUnalignedValue<uint32_t>(base + p.first, p.second);
+  // Fix on-heap references.
+  if (previously_on_heap) {
+    if (buffer_->IsOnHeap()) {
+      FixOnHeapReferences(previous_on_heap_gc_count != OnHeapGCCount());
+    } else {
+      FixOnHeapReferencesToHandles();
     }
   }
 
@@ -3317,26 +3347,6 @@ void Assembler::cvtqsi2sd(XMMRegister dst, Register src) {
   emit_sse_operand(dst, src);
 }
 
-void Assembler::cvtss2sd(XMMRegister dst, XMMRegister src) {
-  DCHECK(!IsEnabled(AVX));
-  EnsureSpace ensure_space(this);
-  emit(0xF3);
-  emit_optional_rex_32(dst, src);
-  emit(0x0F);
-  emit(0x5A);
-  emit_sse_operand(dst, src);
-}
-
-void Assembler::cvtss2sd(XMMRegister dst, Operand src) {
-  DCHECK(!IsEnabled(AVX));
-  EnsureSpace ensure_space(this);
-  emit(0xF3);
-  emit_optional_rex_32(dst, src);
-  emit(0x0F);
-  emit(0x5A);
-  emit_sse_operand(dst, src);
-}
-
 void Assembler::cvtsd2si(Register dst, XMMRegister src) {
   DCHECK(!IsEnabled(AVX));
   EnsureSpace ensure_space(this);
@@ -3571,6 +3581,14 @@ void Assembler::vmovdqa(XMMRegister dst, XMMRegister src) {
   emit_sse_operand(dst, src);
 }
 
+void Assembler::vmovdqa(YMMRegister dst, YMMRegister src) {
+  DCHECK(IsEnabled(AVX));
+  EnsureSpace ensure_space(this);
+  emit_vex_prefix(dst, xmm0, src, kL256, k66, k0F, kWIG);
+  emit(0x6F);
+  emit_sse_operand(dst, src);
+}
+
 void Assembler::vmovdqu(XMMRegister dst, Operand src) {
   DCHECK(IsEnabled(AVX));
   EnsureSpace ensure_space(this);
@@ -3591,6 +3609,14 @@ void Assembler::vmovdqu(XMMRegister dst, XMMRegister src) {
   DCHECK(IsEnabled(AVX));
   EnsureSpace ensure_space(this);
   emit_vex_prefix(src, xmm0, dst, kL128, kF3, k0F, kWIG);
+  emit(0x7F);
+  emit_sse_operand(src, dst);
+}
+
+void Assembler::vmovdqu(YMMRegister dst, YMMRegister src) {
+  DCHECK(IsEnabled(AVX));
+  EnsureSpace ensure_space(this);
+  emit_vex_prefix(src, xmm0, dst, kL256, kF3, k0F, kWIG);
   emit(0x7F);
   emit_sse_operand(src, dst);
 }
@@ -3658,10 +3684,27 @@ void Assembler::vps(byte op, XMMRegister dst, XMMRegister src1,
   emit_sse_operand(dst, src2);
 }
 
+void Assembler::vps(byte op, YMMRegister dst, YMMRegister src1,
+                    YMMRegister src2) {
+  DCHECK(IsEnabled(AVX));
+  EnsureSpace ensure_space(this);
+  emit_vex_prefix(dst, src1, src2, kL256, kNone, k0F, kWIG);
+  emit(op);
+  emit_sse_operand(dst, src2);
+}
+
 void Assembler::vps(byte op, XMMRegister dst, XMMRegister src1, Operand src2) {
   DCHECK(IsEnabled(AVX));
   EnsureSpace ensure_space(this);
   emit_vex_prefix(dst, src1, src2, kL128, kNone, k0F, kWIG);
+  emit(op);
+  emit_sse_operand(dst, src2);
+}
+
+void Assembler::vps(byte op, YMMRegister dst, YMMRegister src1, Operand src2) {
+  DCHECK(IsEnabled(AVX));
+  EnsureSpace ensure_space(this);
+  emit_vex_prefix(dst, src1, src2, kL256, kNone, k0F, kWIG);
   emit(op);
   emit_sse_operand(dst, src2);
 }
@@ -4302,7 +4345,8 @@ void Assembler::db(uint8_t data) {
 void Assembler::dd(uint32_t data, RelocInfo::Mode rmode) {
   EnsureSpace ensure_space(this);
   if (!RelocInfo::IsNone(rmode)) {
-    DCHECK(RelocInfo::IsDataEmbeddedObject(rmode));
+    DCHECK(RelocInfo::IsDataEmbeddedObject(rmode) ||
+           RelocInfo::IsLiteralConstant(rmode));
     RecordRelocInfo(rmode);
   }
   emitl(data);
@@ -4311,7 +4355,8 @@ void Assembler::dd(uint32_t data, RelocInfo::Mode rmode) {
 void Assembler::dq(uint64_t data, RelocInfo::Mode rmode) {
   EnsureSpace ensure_space(this);
   if (!RelocInfo::IsNone(rmode)) {
-    DCHECK(RelocInfo::IsDataEmbeddedObject(rmode));
+    DCHECK(RelocInfo::IsDataEmbeddedObject(rmode) ||
+           RelocInfo::IsLiteralConstant(rmode));
     RecordRelocInfo(rmode);
   }
   emitq(data);

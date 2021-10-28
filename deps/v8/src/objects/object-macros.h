@@ -30,11 +30,6 @@
 
 #define OBJECT_CONSTRUCTORS_IMPL(Type, Super) \
   inline Type::Type(Address ptr) : Super(ptr) { SLOW_DCHECK(Is##Type()); }
-// In these cases, we don't have our own instance type to check, so check the
-// supertype instead. This happens for types denoting a NativeContext-dependent
-// set of maps.
-#define OBJECT_CONSTRUCTORS_IMPL_CHECK_SUPER(Type, Super) \
-  inline Type::Type(Address ptr) : Super(ptr) { SLOW_DCHECK(Is##Super()); }
 
 #define NEVER_READ_ONLY_SPACE   \
   inline Heap* GetHeap() const; \
@@ -61,6 +56,10 @@
 #define DECL_INT_ACCESSORS(name) DECL_PRIMITIVE_ACCESSORS(name, int)
 
 #define DECL_INT32_ACCESSORS(name) DECL_PRIMITIVE_ACCESSORS(name, int32_t)
+
+#define DECL_RELAXED_INT32_ACCESSORS(name)   \
+  inline int32_t name(RelaxedLoadTag) const; \
+  inline void set_##name(int32_t value, RelaxedStoreTag);
 
 #define DECL_UINT16_ACCESSORS(name) \
   inline uint16_t name() const;     \
@@ -159,12 +158,12 @@
   int32_t holder::name() const { return ReadField<int32_t>(offset); } \
   void holder::set_##name(int32_t value) { WriteField<int32_t>(offset, value); }
 
-#define RELAXED_INT32_ACCESSORS(holder, name, offset) \
-  int32_t holder::name() const {                      \
-    return RELAXED_READ_INT32_FIELD(*this, offset);   \
-  }                                                   \
-  void holder::set_##name(int32_t value) {            \
-    RELAXED_WRITE_INT32_FIELD(*this, offset, value);  \
+#define RELAXED_INT32_ACCESSORS(holder, name, offset)       \
+  int32_t holder::name(RelaxedLoadTag) const {              \
+    return RELAXED_READ_INT32_FIELD(*this, offset);         \
+  }                                                         \
+  void holder::set_##name(int32_t value, RelaxedStoreTag) { \
+    RELAXED_WRITE_INT32_FIELD(*this, offset, value);        \
   }
 
 #define UINT16_ACCESSORS(holder, name, offset)                          \

@@ -733,11 +733,10 @@ class IndexedReferencesExtractor : public ObjectVisitor {
     VisitPointers(host, MaybeObjectSlot(start), MaybeObjectSlot(end));
   }
   void VisitMapPointer(HeapObject object) override {
-    if (generator_->visited_fields_[0]) {
-      generator_->visited_fields_[0] = false;
-    } else {
-      VisitHeapObjectImpl(object.map(), 0);
-    }
+    // TODO(v8:11880): support external code space (here object could be Code,
+    // so the V8 heap cage_base must be used here).
+    PtrComprCageBase cage_base = GetPtrComprCageBase(object);
+    VisitSlotImpl(cage_base, object.map_slot());
   }
   void VisitPointers(HeapObject host, MaybeObjectSlot start,
                      MaybeObjectSlot end) override {
@@ -745,17 +744,17 @@ class IndexedReferencesExtractor : public ObjectVisitor {
     // all the slots must point inside the object.
     CHECK_LE(parent_start_, start);
     CHECK_LE(end, parent_end_);
-    for (MaybeObjectSlot p = start; p < end; ++p) {
-      int field_index = static_cast<int>(p - parent_start_);
-      if (generator_->visited_fields_[field_index]) {
-        generator_->visited_fields_[field_index] = false;
-        continue;
-      }
-      HeapObject heap_object;
-      if ((*p)->GetHeapObject(&heap_object)) {
-        VisitHeapObjectImpl(heap_object, field_index);
-      }
+    PtrComprCageBase cage_base = GetPtrComprCageBase(host);
+    for (MaybeObjectSlot slot = start; slot < end; ++slot) {
+      VisitSlotImpl(cage_base, slot);
     }
+  }
+
+  void VisitCodePointer(HeapObject host, CodeObjectSlot slot) override {
+    CHECK(V8_EXTERNAL_CODE_SPACE_BOOL);
+    // TODO(v8:11880): support external code space.
+    PtrComprCageBase code_cage_base = GetPtrComprCageBase(host);
+    VisitSlotImpl(code_cage_base, slot);
   }
 
   void VisitCodeTarget(Code host, RelocInfo* rinfo) override {
@@ -764,10 +763,31 @@ class IndexedReferencesExtractor : public ObjectVisitor {
   }
 
   void VisitEmbeddedPointer(Code host, RelocInfo* rinfo) override {
-    VisitHeapObjectImpl(rinfo->target_object(), -1);
+    HeapObject object = rinfo->target_object();
+    if (host.IsWeakObject(object)) {
+      generator_->SetWeakReference(parent_, next_index_++, object, {});
+    } else {
+      VisitHeapObjectImpl(rinfo->target_object(), -1);
+    }
   }
 
  private:
+  template <typename TSlot>
+  V8_INLINE void VisitSlotImpl(PtrComprCageBase cage_base, TSlot slot) {
+    int field_index = static_cast<int>(MaybeObjectSlot(slot) - parent_start_);
+    if (generator_->visited_fields_[field_index]) {
+      generator_->visited_fields_[field_index] = false;
+    } else {
+      HeapObject heap_object;
+      auto loaded_value = slot.load(cage_base);
+      if (loaded_value.GetHeapObjectIfStrong(&heap_object)) {
+        VisitHeapObjectImpl(heap_object, field_index);
+      } else if (loaded_value.GetHeapObjectIfWeak(&heap_object)) {
+        generator_->SetWeakReference(parent_, next_index_++, heap_object, {});
+      }
+    }
+  }
+
   V8_INLINE void VisitHeapObjectImpl(HeapObject heap_object, int field_index) {
     DCHECK_LE(-1, field_index);
     // The last parameter {field_offset} is only used to check some well-known
@@ -1200,18 +1220,31 @@ void V8HeapExplorer::TagBuiltinCodeObject(Code code, const char* name) {
 }
 
 void V8HeapExplorer::ExtractCodeReferences(HeapEntry* entry, Code code) {
-  TagObject(code.relocation_info(), "(code relocation info)");
-  SetInternalReference(entry, "relocation_info", code.relocation_info(),
+  Object reloc_info_or_undefined = code.relocation_info_or_undefined();
+  TagObject(reloc_info_or_undefined, "(code relocation info)");
+  SetInternalReference(entry, "relocation_info", reloc_info_or_undefined,
                        Code::kRelocationInfoOffset);
-  TagObject(code.deoptimization_data(), "(code deopt data)");
-  SetInternalReference(entry, "deoptimization_data", code.deoptimization_data(),
-                       Code::kDeoptimizationDataOffset);
+  if (reloc_info_or_undefined.IsUndefined()) {
+    // The code object was compiled directly on the heap, but it was not
+    // finalized.
+    DCHECK(code.kind() == CodeKind::BASELINE);
+    return;
+  }
+
   if (code.kind() == CodeKind::BASELINE) {
+    TagObject(code.bytecode_or_interpreter_data(), "(interpreter data)");
+    SetInternalReference(entry, "interpreter_data",
+                         code.bytecode_or_interpreter_data(),
+                         Code::kDeoptimizationDataOrInterpreterDataOffset);
     TagObject(code.bytecode_offset_table(), "(bytecode offset table)");
     SetInternalReference(entry, "bytecode_offset_table",
                          code.bytecode_offset_table(),
                          Code::kPositionTableOffset);
   } else {
+    TagObject(code.deoptimization_data(), "(code deopt data)");
+    SetInternalReference(entry, "deoptimization_data",
+                         code.deoptimization_data(),
+                         Code::kDeoptimizationDataOrInterpreterDataOffset);
     TagObject(code.source_position_table(), "(source position table)");
     SetInternalReference(entry, "source_position_table",
                          code.source_position_table(),
@@ -1761,7 +1794,8 @@ void V8HeapExplorer::SetWeakReference(HeapEntry* parent_entry,
 }
 
 void V8HeapExplorer::SetWeakReference(HeapEntry* parent_entry, int index,
-                                      Object child_obj, int field_offset) {
+                                      Object child_obj,
+                                      base::Optional<int> field_offset) {
   if (!IsEssentialObject(child_obj)) {
     return;
   }
@@ -1769,7 +1803,9 @@ void V8HeapExplorer::SetWeakReference(HeapEntry* parent_entry, int index,
   DCHECK_NOT_NULL(child_entry);
   parent_entry->SetNamedReference(
       HeapGraphEdge::kWeak, names_->GetFormatted("%d", index), child_entry);
-  MarkVisitedField(field_offset);
+  if (field_offset.has_value()) {
+    MarkVisitedField(*field_offset);
+  }
 }
 
 void V8HeapExplorer::SetDataOrAccessorPropertyReference(

@@ -5,11 +5,13 @@
 #ifndef V8_HEAP_THIRD_PARTY_HEAP_API_H_
 #define V8_HEAP_THIRD_PARTY_HEAP_API_H_
 
-#include "include/v8.h"
 #include "src/base/address-region.h"
 #include "src/heap/heap.h"
 
 namespace v8 {
+
+class Isolate;
+
 namespace internal {
 namespace third_party_heap {
 
@@ -34,8 +36,6 @@ class Heap {
 
   static bool InOldSpace(Address address);
 
-  static bool InCodeSpace(Address address);
-
   static bool InReadOnlySpace(Address address);
 
   static bool InLargeObjectSpace(Address address);
@@ -43,6 +43,8 @@ class Heap {
   static bool IsValidHeapObject(HeapObject object);
 
   static bool IsImmovable(HeapObject object);
+
+  static bool IsValidCodeObject(HeapObject object);
 
   void ResetIterator();
   HeapObject NextObject();

@@ -7,6 +7,7 @@
 <!-- source_link=lib/async_hooks.js -->
 
 ## Introduction
+
 These classes are used to associate state and propagate it throughout
 callbacks and promise chains.
 They allow storing data throughout the lifetime of a web request
@@ -25,6 +26,7 @@ const async_hooks = require('async_hooks');
 ```
 
 ## Class: `AsyncLocalStorage`
+
 <!-- YAML
 added:
  - v13.10.0
@@ -115,6 +117,7 @@ Multiple instances can safely exist simultaneously without risk of interfering
 with each other data.
 
 ### `new AsyncLocalStorage()`
+
 <!-- YAML
 added:
  - v13.10.0
@@ -125,6 +128,7 @@ Creates a new instance of `AsyncLocalStorage`. Store is only provided within a
 `run()` call or after an `enterWith()` call.
 
 ### `asyncLocalStorage.disable()`
+
 <!-- YAML
 added:
  - v13.10.0
@@ -149,6 +153,7 @@ Use this method when the `asyncLocalStorage` is not in use anymore
 in the current process.
 
 ### `asyncLocalStorage.getStore()`
+
 <!-- YAML
 added:
  - v13.10.0
@@ -163,6 +168,7 @@ calling `asyncLocalStorage.run()` or `asyncLocalStorage.enterWith()`, it
 returns `undefined`.
 
 ### `asyncLocalStorage.enterWith(store)`
+
 <!-- YAML
 added:
  - v13.11.0
@@ -212,6 +218,7 @@ asyncLocalStorage.getStore(); // Returns the same object
 ```
 
 ### `asyncLocalStorage.run(store, callback[, ...args])`
+
 <!-- YAML
 added:
  - v13.10.0
@@ -223,8 +230,9 @@ added:
 * `...args` {any}
 
 Runs a function synchronously within a context and returns its
-return value. The store is not accessible outside of the callback function or
-the asynchronous operations created within the callback.
+return value. The store is not accessible outside of the callback function.
+The store is accessible to any asynchronous operations created within the
+callback.
 
 The optional `args` are passed to the callback function.
 
@@ -238,6 +246,9 @@ const store = { id: 2 };
 try {
   asyncLocalStorage.run(store, () => {
     asyncLocalStorage.getStore(); // Returns the store object
+    setTimeout(() => {
+      asyncLocalStorage.getStore(); // Returns the store object
+    }, 200);
     throw new Error();
   });
 } catch (e) {
@@ -247,6 +258,7 @@ try {
 ```
 
 ### `asyncLocalStorage.exit(callback[, ...args])`
+
 <!-- YAML
 added:
  - v13.10.0
@@ -322,6 +334,7 @@ the loss. When the code logs `undefined`, the last callback called is probably
 responsible for the context loss.
 
 ## Class: `AsyncResource`
+
 <!-- YAML
 changes:
  - version: v16.4.0
@@ -430,6 +443,7 @@ class DBQuery extends AsyncResource {
 ```
 
 ### Static method: `AsyncResource.bind(fn[, type, [thisArg]])`
+
 <!-- YAML
 added:
   - v14.8.0
@@ -451,6 +465,7 @@ The returned function will have an `asyncResource` property referencing
 the `AsyncResource` to which the function is bound.
 
 ### `asyncResource.bind(fn[, thisArg])`
+
 <!-- YAML
 added:
   - v14.8.0
@@ -470,6 +485,7 @@ The returned function will have an `asyncResource` property referencing
 the `AsyncResource` to which the function is bound.
 
 ### `asyncResource.runInAsyncScope(fn[, thisArg, ...args])`
+
 <!-- YAML
 added: v9.6.0
 -->
@@ -503,6 +519,7 @@ never be called.
   `AsyncResource` constructor.
 
 <a id="async-resource-worker-pool"></a>
+
 ### Using `AsyncResource` for a `Worker` thread pool
 
 The following example shows how to use the `AsyncResource` class to properly
@@ -786,8 +803,8 @@ const server = createServer((req, res) => {
 }).listen(3000);
 ```
 
-[`AsyncResource`]: #async_context_class_asyncresource
-[`EventEmitter`]: events.md#events_class_eventemitter
-[`Stream`]: stream.md#stream_stream
-[`Worker`]: worker_threads.md#worker_threads_class_worker
-[`util.promisify()`]: util.md#util_util_promisify_original
+[`AsyncResource`]: #class-asyncresource
+[`EventEmitter`]: events.md#class-eventemitter
+[`Stream`]: stream.md#stream
+[`Worker`]: worker_threads.md#class-worker
+[`util.promisify()`]: util.md#utilpromisifyoriginal

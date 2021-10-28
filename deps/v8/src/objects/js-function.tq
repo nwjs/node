@@ -3,11 +3,9 @@
 // found in the LICENSE file.
 
 @abstract
-@generateCppClass
 extern class JSFunctionOrBoundFunction extends JSObject {
 }
 
-@generateCppClass
 extern class JSBoundFunction extends JSFunctionOrBoundFunction {
   // The wrapped function object.
   bound_target_function: Callable;

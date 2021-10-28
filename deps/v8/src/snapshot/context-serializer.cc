@@ -175,10 +175,10 @@ void ContextSerializer::SerializeObjectImpl(Handle<HeapObject> obj) {
     // Unconditionally reset the JSFunction to its SFI's code, since we can't
     // serialize optimized code anyway.
     Handle<JSFunction> closure = Handle<JSFunction>::cast(obj);
-    closure->ResetIfBytecodeFlushed();
+    closure->ResetIfCodeFlushed();
     if (closure->is_compiled()) {
-      if (closure->shared().HasBaselineData()) {
-        closure->shared().flush_baseline_data();
+      if (closure->shared().HasBaselineCode()) {
+        closure->shared().FlushBaselineCode();
       }
       closure->set_code(closure->shared().GetCode(), kReleaseStore);
     }

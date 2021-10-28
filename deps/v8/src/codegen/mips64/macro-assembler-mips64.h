@@ -197,6 +197,7 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void BranchMSA(Label* target, MSABranchDF df, MSABranchCondition cond,
                  MSARegister wt, BranchDelaySlot bd = PROTECT);
 
+  void BranchLong(int32_t offset, BranchDelaySlot bdslot = PROTECT);
   void Branch(Label* L, Condition cond, Register rs, RootIndex index,
               BranchDelaySlot bdslot = PROTECT);
 
@@ -483,15 +484,6 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   }
 
   void SmiUntag(Register reg) { SmiUntag(reg, reg); }
-
-  // Removes current frame and its arguments from the stack preserving
-  // the arguments and a return address pushed to the stack for the next call.
-  // Both |callee_args_count| and |caller_args_count| do not include
-  // receiver. |callee_args_count| is not modified. |caller_args_count|
-  // is trashed.
-  void PrepareForTailCall(Register callee_args_count,
-                          Register caller_args_count, Register scratch0,
-                          Register scratch1);
 
   int CalculateStackPassedWords(int num_reg_arguments,
                                 int num_double_arguments);
@@ -813,7 +805,7 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void MSARoundD(MSARegister dst, MSARegister src, FPURoundingMode mode);
 
   // Jump the register contains a smi.
-  void JumpIfSmi(Register value, Label* smi_label, Register scratch = at,
+  void JumpIfSmi(Register value, Label* smi_label,
                  BranchDelaySlot bd = PROTECT);
 
   void JumpIfEqual(Register a, int32_t b, Label* dest) {
@@ -843,8 +835,6 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   // Compute the start of the generated instruction stream from the current PC.
   // This is an alternative to embedding the {CodeObject} handle as a reference.
   void ComputeCodeStartAddress(Register dst);
-
-  void ResetSpeculationPoisonRegister();
 
   // Control-flow integrity:
 
@@ -1190,7 +1180,7 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
   }
 
   // Jump if the register contains a non-smi.
-  void JumpIfNotSmi(Register value, Label* not_smi_label, Register scratch = at,
+  void JumpIfNotSmi(Register value, Label* not_smi_label,
                     BranchDelaySlot bd = PROTECT);
 
   // Abort execution if argument is a smi, enabled via --debug-code.

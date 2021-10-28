@@ -190,7 +190,7 @@ const asyncHook = async_hooks.createHook(new MyAddedCallbacks());
 
 Because promises are asynchronous resources whose lifecycle is tracked
 via the async hooks mechanism, the `init()`, `before()`, `after()`, and
-`destroy()` callbacks *must not* be async functions that return promises.
+`destroy()` callbacks _must not_ be async functions that return promises.
 
 ### Error handling
 
@@ -350,13 +350,13 @@ listening to the hooks.
 
 `triggerAsyncId` is the `asyncId` of the resource that caused (or "triggered")
 the new resource to initialize and that caused `init` to call. This is different
-from `async_hooks.executionAsyncId()` that only shows *when* a resource was
-created, while `triggerAsyncId` shows *why* a resource was created.
+from `async_hooks.executionAsyncId()` that only shows _when_ a resource was
+created, while `triggerAsyncId` shows _why_ a resource was created.
 
 The following is a simple demonstration of `triggerAsyncId`:
 
 ```mjs
-import { createHook, executionASyncId } from 'async_hooks';
+import { createHook, executionAsyncId } from 'async_hooks';
 import { stdout } from 'process';
 import net from 'net';
 
@@ -499,13 +499,13 @@ TickObject(6)
 
 The `TCPSERVERWRAP` is not part of this graph, even though it was the reason for
 `console.log()` being called. This is because binding to a port without a host
-name is a *synchronous* operation, but to maintain a completely asynchronous
+name is a _synchronous_ operation, but to maintain a completely asynchronous
 API the user's callback is placed in a `process.nextTick()`. Which is why
 `TickObject` is present in the output and is a 'parent' for `.listen()`
 callback.
 
-The graph only shows *when* a resource was created, not *why*, so to track
-the *why* use `triggerAsyncId`. Which can be represented with the following
+The graph only shows _when_ a resource was created, not _why_, so to track
+the _why_ use `triggerAsyncId`. Which can be represented with the following
 graph:
 
 ```console
@@ -545,7 +545,7 @@ it only once.
 Called immediately after the callback specified in `before` is completed.
 
 If an uncaught exception occurs during execution of the callback, then `after`
-will run *after* the `'uncaughtException'` event is emitted or a `domain`'s
+will run _after_ the `'uncaughtException'` event is emitted or a `domain`'s
 handler runs.
 
 #### `destroy(asyncId)`
@@ -841,14 +841,14 @@ The documentation for this class has moved [`AsyncResource`][].
 
 The documentation for this class has moved [`AsyncLocalStorage`][].
 
-[Hook Callbacks]: #async_hooks_hook_callbacks
+[Hook Callbacks]: #hook-callbacks
 [PromiseHooks]: https://docs.google.com/document/d/1rda3yKGHimKIhg5YeoAmCOtyURgsbTH_qaYR79FELlk/edit
-[`AsyncLocalStorage`]: async_context.md#async_context_class_asynclocalstorage
-[`AsyncResource`]: async_context.md#async_context_class_asyncresource
-[`Worker`]: worker_threads.md#worker_threads_class_worker
-[`after` callback]: #async_hooks_after_asyncid
-[`before` callback]: #async_hooks_before_asyncid
-[`destroy` callback]: #async_hooks_destroy_asyncid
-[`init` callback]: #async_hooks_init_asyncid_type_triggerasyncid_resource
-[`promiseResolve` callback]: #async_hooks_promiseresolve_asyncid
-[promise execution tracking]: #async_hooks_promise_execution_tracking
+[`AsyncLocalStorage`]: async_context.md#class-asynclocalstorage
+[`AsyncResource`]: async_context.md#class-asyncresource
+[`Worker`]: worker_threads.md#class-worker
+[`after` callback]: #afterasyncid
+[`before` callback]: #beforeasyncid
+[`destroy` callback]: #destroyasyncid
+[`init` callback]: #initasyncid-type-triggerasyncid-resource
+[`promiseResolve` callback]: #promiseresolveasyncid
+[promise execution tracking]: #promise-execution-tracking

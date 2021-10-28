@@ -9,6 +9,7 @@
 #include "src/baseline/bytecode-offset-iterator.h"
 #include "src/codegen/code-desc.h"
 #include "src/common/assert-scope.h"
+#include "src/common/globals.h"
 #include "src/execution/isolate.h"
 #include "src/heap/heap-inl.h"
 #include "src/heap/heap-write-barrier-inl.h"
@@ -31,8 +32,10 @@
 namespace v8 {
 namespace internal {
 
+#include "torque-generated/src/objects/code-tq-inl.inc"
+
 OBJECT_CONSTRUCTORS_IMPL(DeoptimizationData, FixedArray)
-OBJECT_CONSTRUCTORS_IMPL(BytecodeArray, FixedArrayBase)
+TQ_OBJECT_CONSTRUCTORS_IMPL(BytecodeArray)
 OBJECT_CONSTRUCTORS_IMPL(AbstractCode, HeapObject)
 OBJECT_CONSTRUCTORS_IMPL(DependentCode, WeakFixedArray)
 OBJECT_CONSTRUCTORS_IMPL(CodeDataContainer, HeapObject)
@@ -40,7 +43,6 @@ OBJECT_CONSTRUCTORS_IMPL(CodeDataContainer, HeapObject)
 NEVER_READ_ONLY_SPACE_IMPL(AbstractCode)
 
 CAST_ACCESSOR(AbstractCode)
-CAST_ACCESSOR(BytecodeArray)
 CAST_ACCESSOR(Code)
 CAST_ACCESSOR(CodeDataContainer)
 CAST_ACCESSOR(DependentCode)
@@ -204,15 +206,26 @@ CODE_ACCESSORS_CHECKED(relocation_info_or_undefined, HeapObject,
                        kRelocationInfoOffset,
                        value.IsUndefined() || value.IsByteArray())
 
-CODE_ACCESSORS(deoptimization_data, FixedArray, kDeoptimizationDataOffset)
-#define IS_BASELINE() (kind() == CodeKind::BASELINE)
+ACCESSORS_CHECKED2(Code, deoptimization_data, FixedArray,
+                   kDeoptimizationDataOrInterpreterDataOffset,
+                   kind() != CodeKind::BASELINE,
+                   kind() != CodeKind::BASELINE &&
+                       !ObjectInYoungGeneration(value))
+ACCESSORS_CHECKED2(Code, bytecode_or_interpreter_data, HeapObject,
+                   kDeoptimizationDataOrInterpreterDataOffset,
+                   kind() == CodeKind::BASELINE,
+                   kind() == CodeKind::BASELINE &&
+                       !ObjectInYoungGeneration(value))
+
 ACCESSORS_CHECKED2(Code, source_position_table, ByteArray, kPositionTableOffset,
-                   !IS_BASELINE(),
-                   !IS_BASELINE() && !ObjectInYoungGeneration(value))
+                   kind() != CodeKind::BASELINE,
+                   kind() != CodeKind::BASELINE &&
+                       !ObjectInYoungGeneration(value))
 ACCESSORS_CHECKED2(Code, bytecode_offset_table, ByteArray, kPositionTableOffset,
-                   IS_BASELINE(),
-                   IS_BASELINE() && !ObjectInYoungGeneration(value))
-#undef IS_BASELINE
+                   kind() == CodeKind::BASELINE,
+                   kind() == CodeKind::BASELINE &&
+                       !ObjectInYoungGeneration(value))
+
 // Concurrent marker needs to access kind specific flags in code data container.
 RELEASE_ACQUIRE_CODE_ACCESSORS(code_data_container, CodeDataContainer,
                                kCodeDataContainerOffset)
@@ -267,7 +280,8 @@ inline CodeDataContainer CodeDataContainerFromCodeT(CodeT code) {
 
 void Code::WipeOutHeader() {
   WRITE_FIELD(*this, kRelocationInfoOffset, Smi::FromInt(0));
-  WRITE_FIELD(*this, kDeoptimizationDataOffset, Smi::FromInt(0));
+  WRITE_FIELD(*this, kDeoptimizationDataOrInterpreterDataOffset,
+              Smi::FromInt(0));
   WRITE_FIELD(*this, kPositionTableOffset, Smi::FromInt(0));
   WRITE_FIELD(*this, kCodeDataContainerOffset, Smi::FromInt(0));
 }
@@ -380,7 +394,9 @@ int Code::MetadataSize() const {
 int Code::SizeIncludingMetadata() const {
   int size = CodeSize();
   size += relocation_info().Size();
-  size += deoptimization_data().Size();
+  if (kind() != CodeKind::BASELINE) {
+    size += deoptimization_data().Size();
+  }
   return size;
 }
 
@@ -524,8 +540,8 @@ inline bool Code::is_interpreter_trampoline_builtin() const {
 inline bool Code::is_baseline_trampoline_builtin() const {
   return builtin_id() != Builtin::kNoBuiltinId &&
          (builtin_id() == Builtin::kBaselineOutOfLinePrologue ||
-          builtin_id() == Builtin::kBaselineEnterAtBytecode ||
-          builtin_id() == Builtin::kBaselineEnterAtNextBytecode);
+          builtin_id() == Builtin::kBaselineOrInterpreterEnterAtBytecode ||
+          builtin_id() == Builtin::kBaselineOrInterpreterEnterAtNextBytecode);
 }
 
 inline bool Code::is_baseline_leave_frame_builtin() const {
@@ -552,44 +568,47 @@ inline bool Code::is_turbofanned() const {
 
 inline bool Code::can_have_weak_objects() const {
   DCHECK(CodeKindIsOptimizedJSFunction(kind()));
-  int32_t flags = code_data_container(kAcquireLoad).kind_specific_flags();
+  int32_t flags =
+      code_data_container(kAcquireLoad).kind_specific_flags(kRelaxedLoad);
   return CanHaveWeakObjectsField::decode(flags);
 }
 
 inline void Code::set_can_have_weak_objects(bool value) {
   DCHECK(CodeKindIsOptimizedJSFunction(kind()));
   CodeDataContainer container = code_data_container(kAcquireLoad);
-  int32_t previous = container.kind_specific_flags();
+  int32_t previous = container.kind_specific_flags(kRelaxedLoad);
   int32_t updated = CanHaveWeakObjectsField::update(previous, value);
-  container.set_kind_specific_flags(updated);
+  container.set_kind_specific_flags(updated, kRelaxedStore);
 }
 
 inline bool Code::is_promise_rejection() const {
   DCHECK(kind() == CodeKind::BUILTIN);
-  int32_t flags = code_data_container(kAcquireLoad).kind_specific_flags();
+  int32_t flags =
+      code_data_container(kAcquireLoad).kind_specific_flags(kRelaxedLoad);
   return IsPromiseRejectionField::decode(flags);
 }
 
 inline void Code::set_is_promise_rejection(bool value) {
   DCHECK(kind() == CodeKind::BUILTIN);
   CodeDataContainer container = code_data_container(kAcquireLoad);
-  int32_t previous = container.kind_specific_flags();
+  int32_t previous = container.kind_specific_flags(kRelaxedLoad);
   int32_t updated = IsPromiseRejectionField::update(previous, value);
-  container.set_kind_specific_flags(updated);
+  container.set_kind_specific_flags(updated, kRelaxedStore);
 }
 
 inline bool Code::is_exception_caught() const {
   DCHECK(kind() == CodeKind::BUILTIN);
-  int32_t flags = code_data_container(kAcquireLoad).kind_specific_flags();
+  int32_t flags =
+      code_data_container(kAcquireLoad).kind_specific_flags(kRelaxedLoad);
   return IsExceptionCaughtField::decode(flags);
 }
 
 inline void Code::set_is_exception_caught(bool value) {
   DCHECK(kind() == CodeKind::BUILTIN);
   CodeDataContainer container = code_data_container(kAcquireLoad);
-  int32_t previous = container.kind_specific_flags();
+  int32_t previous = container.kind_specific_flags(kRelaxedLoad);
   int32_t updated = IsExceptionCaughtField::update(previous, value);
-  container.set_kind_specific_flags(updated);
+  container.set_kind_specific_flags(updated, kRelaxedStore);
 }
 
 inline bool Code::is_off_heap_trampoline() const {
@@ -641,7 +660,8 @@ int Code::stack_slots() const {
 
 bool Code::marked_for_deoptimization() const {
   DCHECK(CodeKindCanDeoptimize(kind()));
-  int32_t flags = code_data_container(kAcquireLoad).kind_specific_flags();
+  int32_t flags =
+      code_data_container(kAcquireLoad).kind_specific_flags(kRelaxedLoad);
   return MarkedForDeoptimizationField::decode(flags);
 }
 
@@ -649,14 +669,15 @@ void Code::set_marked_for_deoptimization(bool flag) {
   DCHECK(CodeKindCanDeoptimize(kind()));
   DCHECK_IMPLIES(flag, AllowDeoptimization::IsAllowed(GetIsolate()));
   CodeDataContainer container = code_data_container(kAcquireLoad);
-  int32_t previous = container.kind_specific_flags();
+  int32_t previous = container.kind_specific_flags(kRelaxedLoad);
   int32_t updated = MarkedForDeoptimizationField::update(previous, flag);
-  container.set_kind_specific_flags(updated);
+  container.set_kind_specific_flags(updated, kRelaxedStore);
 }
 
 int Code::deoptimization_count() const {
   DCHECK(CodeKindCanDeoptimize(kind()));
-  int32_t flags = code_data_container(kAcquireLoad).kind_specific_flags();
+  int32_t flags =
+      code_data_container(kAcquireLoad).kind_specific_flags(kRelaxedLoad);
   int count = DeoptCountField::decode(flags);
   DCHECK_GE(count, 0);
   return count;
@@ -665,17 +686,18 @@ int Code::deoptimization_count() const {
 void Code::increment_deoptimization_count() {
   DCHECK(CodeKindCanDeoptimize(kind()));
   CodeDataContainer container = code_data_container(kAcquireLoad);
-  int32_t flags = container.kind_specific_flags();
+  int32_t flags = container.kind_specific_flags(kRelaxedLoad);
   int32_t count = DeoptCountField::decode(flags);
   DCHECK_GE(count, 0);
   CHECK_LE(count + 1, DeoptCountField::kMax);
   int32_t updated = DeoptCountField::update(flags, count + 1);
-  container.set_kind_specific_flags(updated);
+  container.set_kind_specific_flags(updated, kRelaxedStore);
 }
 
 bool Code::embedded_objects_cleared() const {
   DCHECK(CodeKindIsOptimizedJSFunction(kind()));
-  int32_t flags = code_data_container(kAcquireLoad).kind_specific_flags();
+  int32_t flags =
+      code_data_container(kAcquireLoad).kind_specific_flags(kRelaxedLoad);
   return EmbeddedObjectsClearedField::decode(flags);
 }
 
@@ -683,14 +705,15 @@ void Code::set_embedded_objects_cleared(bool flag) {
   DCHECK(CodeKindIsOptimizedJSFunction(kind()));
   DCHECK_IMPLIES(flag, marked_for_deoptimization());
   CodeDataContainer container = code_data_container(kAcquireLoad);
-  int32_t previous = container.kind_specific_flags();
+  int32_t previous = container.kind_specific_flags(kRelaxedLoad);
   int32_t updated = EmbeddedObjectsClearedField::update(previous, flag);
-  container.set_kind_specific_flags(updated);
+  container.set_kind_specific_flags(updated, kRelaxedStore);
 }
 
 bool Code::deopt_already_counted() const {
   DCHECK(CodeKindCanDeoptimize(kind()));
-  int32_t flags = code_data_container(kAcquireLoad).kind_specific_flags();
+  int32_t flags =
+      code_data_container(kAcquireLoad).kind_specific_flags(kRelaxedLoad);
   return DeoptAlreadyCountedField::decode(flags);
 }
 
@@ -698,9 +721,9 @@ void Code::set_deopt_already_counted(bool flag) {
   DCHECK(CodeKindCanDeoptimize(kind()));
   DCHECK_IMPLIES(flag, AllowDeoptimization::IsAllowed(GetIsolate()));
   CodeDataContainer container = code_data_container(kAcquireLoad);
-  int32_t previous = container.kind_specific_flags();
+  int32_t previous = container.kind_specific_flags(kRelaxedLoad);
   int32_t updated = DeoptAlreadyCountedField::update(previous, flag);
-  container.set_kind_specific_flags(updated);
+  container.set_kind_specific_flags(updated, kRelaxedStore);
 }
 
 bool Code::is_optimized_code() const {
@@ -915,13 +938,13 @@ void BytecodeArray::set_incoming_new_target_or_generator_register(
 }
 
 int BytecodeArray::osr_loop_nesting_level() const {
-  return ReadField<int8_t>(kOsrNestingLevelOffset);
+  return ReadField<int8_t>(kOsrLoopNestingLevelOffset);
 }
 
 void BytecodeArray::set_osr_loop_nesting_level(int depth) {
   DCHECK(0 <= depth && depth <= AbstractCode::kMaxLoopNestingMarker);
   STATIC_ASSERT(AbstractCode::kMaxLoopNestingMarker < kMaxInt8);
-  WriteField<int8_t>(kOsrNestingLevelOffset, depth);
+  WriteField<int8_t>(kOsrLoopNestingLevelOffset, depth);
 }
 
 BytecodeArray::Age BytecodeArray::bytecode_age() const {
@@ -942,11 +965,6 @@ int32_t BytecodeArray::parameter_count() const {
   // it to be used directly by generated code.
   return ReadField<int32_t>(kParameterSizeOffset) >> kSystemPointerSizeLog2;
 }
-
-ACCESSORS(BytecodeArray, constant_pool, FixedArray, kConstantPoolOffset)
-ACCESSORS(BytecodeArray, handler_table, ByteArray, kHandlerTableOffset)
-RELEASE_ACQUIRE_ACCESSORS(BytecodeArray, source_position_table, Object,
-                          kSourcePositionTableOffset)
 
 void BytecodeArray::clear_padding() {
   int data_size = kHeaderSize + length();
@@ -1008,6 +1026,9 @@ DEFINE_DEOPT_ELEMENT_ACCESSORS(LazyDeoptCount, Smi)
 DEFINE_DEOPT_ENTRY_ACCESSORS(BytecodeOffsetRaw, Smi)
 DEFINE_DEOPT_ENTRY_ACCESSORS(TranslationIndex, Smi)
 DEFINE_DEOPT_ENTRY_ACCESSORS(Pc, Smi)
+#ifdef DEBUG
+DEFINE_DEOPT_ENTRY_ACCESSORS(NodeId, Smi)
+#endif  // DEBUG
 
 BytecodeOffset DeoptimizationData::GetBytecodeOffset(int i) {
   return BytecodeOffset(BytecodeOffsetRaw(i).value());

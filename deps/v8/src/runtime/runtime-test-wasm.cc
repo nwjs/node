@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "include/v8-wasm.h"
 #include "src/base/memory.h"
 #include "src/base/platform/mutex.h"
 #include "src/execution/arguments-inl.h"
@@ -293,7 +294,7 @@ RUNTIME_FUNCTION(Runtime_GetWasmRecoveredTrapCount) {
   return *isolate->factory()->NewNumberFromSize(trap_count);
 }
 
-RUNTIME_FUNCTION(Runtime_GetWasmExceptionId) {
+RUNTIME_FUNCTION(Runtime_GetWasmExceptionTagId) {
   HandleScope scope(isolate);
   DCHECK_EQ(2, args.length());
   CONVERT_ARG_HANDLE_CHECKED(WasmExceptionPackage, exception, 0);
@@ -301,9 +302,9 @@ RUNTIME_FUNCTION(Runtime_GetWasmExceptionId) {
   Handle<Object> tag =
       WasmExceptionPackage::GetExceptionTag(isolate, exception);
   CHECK(tag->IsWasmExceptionTag());
-  Handle<FixedArray> exceptions_table(instance->exceptions_table(), isolate);
-  for (int index = 0; index < exceptions_table->length(); ++index) {
-    if (exceptions_table->get(index) == *tag) return Smi::FromInt(index);
+  Handle<FixedArray> tags_table(instance->tags_table(), isolate);
+  for (int index = 0; index < tags_table->length(); ++index) {
+    if (tags_table->get(index) == *tag) return Smi::FromInt(index);
   }
   UNREACHABLE();
 }

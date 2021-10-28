@@ -11,7 +11,7 @@
 #include "src/codegen/optimized-compilation-info.h"
 #include "src/compiler/wasm-compiler.h"
 #include "src/diagnostics/code-tracer.h"
-#include "src/logging/counters.h"
+#include "src/logging/counters-scopes.h"
 #include "src/logging/log.h"
 #include "src/utils/ostreams.h"
 #include "src/wasm/baseline/liftoff-compiler.h"
@@ -77,12 +77,15 @@ WasmCompilationResult WasmCompilationUnit::ExecuteFunctionCompilation(
                                code.end()};
 
   base::Optional<TimedHistogramScope> wasm_compile_function_time_scope;
+  base::Optional<TimedHistogramScope> wasm_compile_huge_function_time_scope;
   if (counters) {
-    if ((func_body.end - func_body.start) >= 100 * KB) {
+    if (func_body.end - func_body.start >= 100 * KB) {
       auto huge_size_histogram = SELECT_WASM_COUNTER(
           counters, env->module->origin, wasm, huge_function_size_bytes);
       huge_size_histogram->AddSample(
           static_cast<int>(func_body.end - func_body.start));
+      wasm_compile_huge_function_time_scope.emplace(
+          counters->wasm_compile_huge_function_time());
     }
     auto timed_histogram = SELECT_WASM_COUNTER(counters, env->module->origin,
                                                wasm_compile, function_time);
@@ -107,18 +110,20 @@ WasmCompilationResult WasmCompilationUnit::ExecuteFunctionCompilation(
       if (V8_LIKELY(FLAG_wasm_tier_mask_for_testing == 0) ||
           func_index_ >= 32 ||
           ((FLAG_wasm_tier_mask_for_testing & (1 << func_index_)) == 0)) {
-        if (V8_LIKELY(func_index_ >= 32 || (FLAG_wasm_debug_mask_for_testing &
-                                            (1 << func_index_)) == 0)) {
-          result = ExecuteLiftoffCompilation(
-              env, func_body, func_index_, for_debugging_, counters, detected);
-        } else {
-          // We don't use the debug side table, we only pass it to cover
-          // different code paths in Liftoff for testing.
-          std::unique_ptr<DebugSideTable> debug_sidetable;
-          result = ExecuteLiftoffCompilation(env, func_body, func_index_,
-                                             kForDebugging, counters, detected,
-                                             {}, &debug_sidetable);
+        // We do not use the debug side table, we only (optionally) pass it to
+        // cover different code paths in Liftoff for testing.
+        std::unique_ptr<DebugSideTable> unused_debug_sidetable;
+        std::unique_ptr<DebugSideTable>* debug_sidetable_ptr = nullptr;
+        if (V8_UNLIKELY(func_index_ < 32 && (FLAG_wasm_debug_mask_for_testing &
+                                             (1 << func_index_)) != 0)) {
+          debug_sidetable_ptr = &unused_debug_sidetable;
         }
+        result = ExecuteLiftoffCompilation(
+            env, func_body, func_index_, for_debugging_,
+            LiftoffOptions{}
+                .set_counters(counters)
+                .set_detected_features(detected)
+                .set_debug_sidetable(debug_sidetable_ptr));
         if (result.succeeded()) break;
       }
 
@@ -129,37 +134,13 @@ WasmCompilationResult WasmCompilationUnit::ExecuteFunctionCompilation(
 
     case ExecutionTier::kTurbofan:
       result = compiler::ExecuteTurbofanWasmCompilation(
-          env, func_body, func_index_, counters, detected);
+          env, wire_bytes_storage, func_body, func_index_, counters, detected);
       result.for_debugging = for_debugging_;
       break;
   }
 
   return result;
 }
-
-namespace {
-bool must_record_function_compilation(Isolate* isolate) {
-  return isolate->logger()->is_listening_to_code_events() ||
-         isolate->is_profiling();
-}
-
-PRINTF_FORMAT(3, 4)
-void RecordWasmHeapStubCompilation(Isolate* isolate, Handle<Code> code,
-                                   const char* format, ...) {
-  DCHECK(must_record_function_compilation(isolate));
-
-  base::ScopedVector<char> buffer(128);
-  va_list arguments;
-  va_start(arguments, format);
-  int len = base::VSNPrintF(buffer, format, arguments);
-  CHECK_LT(0, len);
-  va_end(arguments);
-  Handle<String> name_str =
-      isolate->factory()->NewStringFromAsciiChecked(buffer.begin());
-  PROFILE(isolate, CodeCreateEvent(CodeEventListener::STUB_TAG,
-                                   Handle<AbstractCode>::cast(code), name_str));
-}
-}  // namespace
 
 // static
 void WasmCompilationUnit::CompileWasmFunction(Isolate* isolate,
@@ -238,17 +219,19 @@ void JSToWasmWrapperCompilationUnit::Execute() {
 }
 
 Handle<Code> JSToWasmWrapperCompilationUnit::Finalize() {
-  Handle<Code> code;
   if (use_generic_wrapper_) {
-    code = isolate_->builtins()->code_handle(Builtin::kGenericJSToWasmWrapper);
-  } else {
-    CompilationJob::Status status = job_->FinalizeJob(isolate_);
-    CHECK_EQ(status, CompilationJob::SUCCEEDED);
-    code = job_->compilation_info()->code();
+    return isolate_->builtins()->code_handle(Builtin::kGenericJSToWasmWrapper);
   }
-  if (!use_generic_wrapper_ && must_record_function_compilation(isolate_)) {
-    RecordWasmHeapStubCompilation(
-        isolate_, code, "%s", job_->compilation_info()->GetDebugName().get());
+
+  CompilationJob::Status status = job_->FinalizeJob(isolate_);
+  CHECK_EQ(status, CompilationJob::SUCCEEDED);
+  Handle<Code> code = job_->compilation_info()->code();
+  if (isolate_->logger()->is_listening_to_code_events() ||
+      isolate_->is_profiling()) {
+    Handle<String> name = isolate_->factory()->NewStringFromAsciiChecked(
+        job_->compilation_info()->GetDebugName().get());
+    PROFILE(isolate_, CodeCreateEvent(CodeEventListener::STUB_TAG,
+                                      Handle<AbstractCode>::cast(code), name));
   }
   return code;
 }

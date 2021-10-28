@@ -291,6 +291,8 @@ Register Operand::reg() const {
   return Register::from_code(buf_[0] & 0x07);
 }
 
+bool operator!=(Operand op, XMMRegister r) { return !op.is_reg(r); }
+
 void Assembler::AllocateAndInstallRequestedHeapObjects(Isolate* isolate) {
   DCHECK_IMPLIES(isolate == nullptr, heap_object_requests_.empty());
   for (auto& request : heap_object_requests_) {
@@ -686,6 +688,14 @@ void Assembler::movq(XMMRegister dst, Operand src) {
   EMIT(0x0F);
   EMIT(0x7E);
   emit_operand(dst, src);
+}
+
+void Assembler::movq(Operand dst, XMMRegister src) {
+  EnsureSpace ensure_space(this);
+  EMIT(0x66);
+  EMIT(0x0F);
+  EMIT(0xD6);
+  emit_operand(src, dst);
 }
 
 void Assembler::cmov(Condition cc, Register dst, Operand src) {
@@ -3341,11 +3351,29 @@ void Assembler::emit_vex_prefix(Register vreg, VectorLength l, SIMDPrefix pp,
   emit_vex_prefix(ivreg, l, pp, mm, w);
 }
 
+void Assembler::FixOnHeapReferences(bool update_embedded_objects) {
+  if (!update_embedded_objects) return;
+  Address base = reinterpret_cast<Address>(buffer_->start());
+  for (auto p : saved_handles_for_raw_object_ptr_) {
+    Handle<HeapObject> object(reinterpret_cast<Address*>(p.second));
+    WriteUnalignedValue(base + p.first, *object);
+  }
+}
+
+void Assembler::FixOnHeapReferencesToHandles() {
+  Address base = reinterpret_cast<Address>(buffer_->start());
+  for (auto p : saved_handles_for_raw_object_ptr_) {
+    WriteUnalignedValue<uint32_t>(base + p.first, p.second);
+  }
+  saved_handles_for_raw_object_ptr_.clear();
+}
+
 void Assembler::GrowBuffer() {
   DCHECK(buffer_overflow());
   DCHECK_EQ(buffer_start_, buffer_->start());
 
   bool previously_on_heap = buffer_->IsOnHeap();
+  int previous_on_heap_gc_count = OnHeapGCCount();
 
   // Compute new buffer size.
   int old_size = buffer_->size();
@@ -3394,11 +3422,12 @@ void Assembler::GrowBuffer() {
     it.rinfo()->apply(pc_delta);
   }
 
-  // Patch on-heap references to handles.
-  if (previously_on_heap && !buffer_->IsOnHeap()) {
-    Address base = reinterpret_cast<Address>(buffer_->start());
-    for (auto p : saved_handles_for_raw_object_ptr_) {
-      WriteUnalignedValue<uint32_t>(base + p.first, p.second);
+  // Fix on-heap references.
+  if (previously_on_heap) {
+    if (buffer_->IsOnHeap()) {
+      FixOnHeapReferences(previous_on_heap_gc_count != OnHeapGCCount());
+    } else {
+      FixOnHeapReferencesToHandles();
     }
   }
 
@@ -3494,7 +3523,8 @@ void Assembler::db(uint8_t data) {
 void Assembler::dd(uint32_t data, RelocInfo::Mode rmode) {
   EnsureSpace ensure_space(this);
   if (!RelocInfo::IsNone(rmode)) {
-    DCHECK(RelocInfo::IsDataEmbeddedObject(rmode));
+    DCHECK(RelocInfo::IsDataEmbeddedObject(rmode) ||
+           RelocInfo::IsLiteralConstant(rmode));
     RecordRelocInfo(rmode);
   }
   emit(data);

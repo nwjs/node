@@ -288,6 +288,7 @@ class WPTRunner {
     this.resource = new ResourceLoader(path);
 
     this.flags = [];
+    this.dummyGlobalThisScript = null;
     this.initScript = null;
 
     this.status = new StatusLoader(path);
@@ -300,6 +301,8 @@ class WPTRunner {
     this.inProgress = new Set();
     this.workers = new Map();
     this.unexpectedFailures = [];
+
+    this.scriptsModifier = null;
   }
 
   /**
@@ -316,6 +319,51 @@ class WPTRunner {
    */
   setInitScript(script) {
     this.initScript = script;
+  }
+
+  /**
+   * Set the scripts modifier for each script.
+   * @param {(meta: { code: string, filename: string }) => void}
+   */
+  setScriptModifier(modifier) {
+    this.scriptsModifier = modifier;
+  }
+
+  get fullInitScript() {
+    if (this.initScript === null && this.dummyGlobalThisScript === null) {
+      return null;
+    }
+
+    if (this.initScript === null) {
+      return this.dummyGlobalThisScript;
+    } else if (this.dummyGlobalThisScript === null) {
+      return this.initScript;
+    }
+
+    return `${this.dummyGlobalThisScript}\n\n//===\n${this.initScript}`;
+  }
+
+  /**
+   * Pretend the runner is run in `name`'s environment (globalThis).
+   * @param {'Window'} name
+   * @see {@link https://github.com/nodejs/node/blob/24673ace8ae196bd1c6d4676507d6e8c94cf0b90/test/fixtures/wpt/resources/idlharness.js#L654-L671}
+   */
+  pretendGlobalThisAs(name) {
+    switch (name) {
+      case 'Window': {
+        this.dummyGlobalThisScript =
+          'global.Window = Object.getPrototypeOf(globalThis).constructor;';
+        break;
+      }
+
+      // TODO(XadillaX): implement `ServiceWorkerGlobalScope`,
+      // `DedicateWorkerGlobalScope`, etc.
+      //
+      // e.g. `ServiceWorkerGlobalScope` should implement dummy
+      // `addEventListener` and so on.
+
+      default: throw new Error(`Invalid globalThis type ${name}.`);
+    }
   }
 
   // TODO(joyeecheung): work with the upstream to port more tests in .html
@@ -349,17 +397,21 @@ class WPTRunner {
       // Scripts specified with the `// META: script=` header
       if (meta.script) {
         for (const script of meta.script) {
-          scriptsToRun.push({
+          const obj = {
             filename: this.resource.toRealFilePath(relativePath, script),
             code: this.resource.read(relativePath, script, false)
-          });
+          };
+          this.scriptsModifier?.(obj);
+          scriptsToRun.push(obj);
         }
       }
       // The actual test
-      scriptsToRun.push({
+      const obj = {
         code: content,
         filename: absolutePath
-      });
+      };
+      this.scriptsModifier?.(obj);
+      scriptsToRun.push(obj);
 
       const workerPath = path.join(__dirname, 'wpt/worker.js');
       const worker = new Worker(workerPath, {
@@ -368,7 +420,7 @@ class WPTRunner {
           testRelativePath: relativePath,
           wptRunner: __filename,
           wptPath: this.path,
-          initScript: this.initScript,
+          initScript: this.fullInitScript,
           harness: {
             code: fs.readFileSync(harnessPath, 'utf8'),
             filename: harnessPath,

@@ -9,7 +9,6 @@
 #include <memory>
 
 #include "include/v8-internal.h"
-#include "include/v8.h"
 #include "include/v8config.h"
 #include "src/base/bits.h"
 #include "src/base/build_config.h"
@@ -81,7 +80,7 @@
 //         - JSSegments            // If V8_INTL_SUPPORT enabled.
 //         - JSSegmentIterator     // If V8_INTL_SUPPORT enabled.
 //         - JSV8BreakIterator     // If V8_INTL_SUPPORT enabled.
-//         - WasmExceptionObject
+//         - WasmTagObject
 //         - WasmGlobalObject
 //         - WasmInstanceObject
 //         - WasmMemoryObject
@@ -592,7 +591,7 @@ class Object : public TaggedImpl<HeapObjectReferenceType::STRONG, Address> {
   // Returns true if the result of iterating over the object is the same
   // (including observable effects) as simply accessing the properties between 0
   // and length.
-  bool IterationHasObservableEffects();
+  V8_EXPORT_PRIVATE bool IterationHasObservableEffects();
 
   // TC39 "Dynamic Code Brand Checks"
   bool IsCodeLike(Isolate* isolate) const;
@@ -839,18 +838,6 @@ enum EnsureElementsMode {
 
 // Indicator for one component of an AccessorPair.
 enum AccessorComponent { ACCESSOR_GETTER, ACCESSOR_SETTER };
-
-enum class GetKeysConversion {
-  kKeepNumbers = static_cast<int>(v8::KeyConversionMode::kKeepNumbers),
-  kConvertToString = static_cast<int>(v8::KeyConversionMode::kConvertToString),
-  kNoNumbers = static_cast<int>(v8::KeyConversionMode::kNoNumbers)
-};
-
-enum class KeyCollectionMode {
-  kOwnOnly = static_cast<int>(v8::KeyCollectionMode::kOwnOnly),
-  kIncludePrototypes =
-      static_cast<int>(v8::KeyCollectionMode::kIncludePrototypes)
-};
 
 // Utility superclass for stack-allocated objects that must be updated
 // on gc.  It provides two ways for the gc to update instances, either

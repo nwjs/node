@@ -42,8 +42,7 @@ void Assembler::emit_runtime_entry(Address entry, RelocInfo::Mode rmode) {
   RecordRelocInfo(rmode);
   uint32_t offset = static_cast<uint32_t>(entry - options().code_range_start);
   if (IsOnHeap()) {
-    saved_offsets_for_runtime_entries_.push_back(
-        std::make_pair(pc_offset(), offset));
+    saved_offsets_for_runtime_entries_.emplace_back(pc_offset(), offset);
     emitl(relative_target_offset(entry, reinterpret_cast<Address>(pc_)));
     // We must ensure that `emitl` is not growing the assembler buffer
     // and falling back to off-heap compilation.
@@ -64,15 +63,11 @@ void Assembler::emit(Immediate64 x) {
   if (!RelocInfo::IsNone(x.rmode_)) {
     RecordRelocInfo(x.rmode_);
     if (x.rmode_ == RelocInfo::FULL_EMBEDDED_OBJECT && IsOnHeap()) {
-      Address handle_address = reinterpret_cast<Address>(&x.value_);
-      Handle<HeapObject> object = Handle<HeapObject>::cast(
-          ReadUnalignedValue<Handle<Object>>(handle_address));
-      saved_handles_for_raw_object_ptr_.push_back(
-          std::make_pair(pc_offset(), x.value_));
+      int offset = pc_offset();
+      Handle<HeapObject> object(reinterpret_cast<Address*>(x.value_));
+      saved_handles_for_raw_object_ptr_.emplace_back(offset, x.value_);
       emitq(static_cast<uint64_t>(object->ptr()));
-      // We must ensure that `emitq` is not growing the assembler buffer
-      // and falling back to off-heap compilation.
-      DCHECK(IsOnHeap());
+      DCHECK(EmbeddedObjectMatches(offset, object));
       return;
     }
   }

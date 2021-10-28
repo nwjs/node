@@ -328,6 +328,15 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
     GetCode(isolate, desc, kNoSafepointTable, kNoHandlerTable);
   }
 
+  // This function is called when on-heap-compilation invariants are
+  // invalidated. For instance, when the assembler buffer grows or a GC happens
+  // between Code object allocation and Code object finalization.
+  void FixOnHeapReferences(bool update_embedded_objects = true);
+
+  // This function is called when we fallback from on-heap to off-heap
+  // compilation and patch on-heap references to handles.
+  void FixOnHeapReferencesToHandles();
+
   // Label operations & relative jumps (PPUM Appendix D)
   //
   // Takes a branch opcode (cc) and a label (L) and generates
@@ -401,6 +410,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   void DataAlign(int m);
   // Aligns code to something that's optimal for a jump target for the platform.
   void CodeTargetAlign();
+  void LoopHeaderAlign() { CodeTargetAlign(); }
 
   // Branch instructions
   void b(int branch_offset, Condition cond = al,
@@ -1057,7 +1067,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
     ~BlockConstPoolScope() { assem_->EndBlockConstPool(); }
 
    private:
-    Assembler* assem_;
+    Assembler* const assem_;
 
     DISALLOW_IMPLICIT_CONSTRUCTORS(BlockConstPoolScope);
   };
@@ -1067,8 +1077,8 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
 
   // Record a deoptimization reason that can be used by a log or cpu profiler.
   // Use --trace-deopt to enable.
-  void RecordDeoptReason(DeoptimizeReason reason, SourcePosition position,
-                         int id);
+  void RecordDeoptReason(DeoptimizeReason reason, uint32_t node_id,
+                         SourcePosition position, int id);
 
   // Record the emission of a constant pool.
   //
@@ -1187,6 +1197,13 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
     }
   }
 
+#ifdef DEBUG
+  bool EmbeddedObjectMatches(int pc_offset, Handle<Object> object) {
+    return *reinterpret_cast<uint32_t*>(buffer_->start() + pc_offset) ==
+           (IsOnHeap() ? object->ptr() : object.address());
+  }
+#endif
+
   // Move a 32-bit immediate into a register, potentially via the constant pool.
   void Move32BitImmediate(Register rd, const Operand& x, Condition cond = al);
 
@@ -1231,6 +1248,12 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   bool is_const_pool_blocked() const {
     return (const_pool_blocked_nesting_ > 0) ||
            (pc_offset() < no_const_pool_before_);
+  }
+
+  bool has_pending_constants() const {
+    bool result = !pending_32_bit_constants_.empty();
+    DCHECK_EQ(result, first_const_pool_32_use_ != -1);
+    return result;
   }
 
   bool VfpRegisterIsAvailable(DwVfpRegister reg) {

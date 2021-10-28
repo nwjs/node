@@ -9,9 +9,8 @@
 
 // TODO(v8:11421): Remove #if once baseline compiler is ported to other
 // architectures.
-#if V8_TARGET_ARCH_IA32 || V8_TARGET_ARCH_X64 || V8_TARGET_ARCH_ARM64 ||     \
-    V8_TARGET_ARCH_ARM || V8_TARGET_ARCH_RISCV64 || V8_TARGET_ARCH_MIPS64 || \
-    V8_TARGET_ARCH_MIPS
+#include "src/flags/flags.h"
+#if ENABLE_SPARKPLUG
 
 #include "src/baseline/baseline-assembler-inl.h"
 #include "src/baseline/baseline-compiler.h"
@@ -43,6 +42,13 @@ bool CanCompileWithBaseline(Isolate* isolate, SharedFunctionInfo shared) {
 
   // Functions with breakpoints have to stay interpreted.
   if (shared.HasBreakInfo()) return false;
+
+  // Functions with instrumented bytecode can't be baseline compiled since the
+  // baseline code's bytecode array pointer is immutable.
+  if (shared.HasDebugInfo() &&
+      shared.GetDebugInfo().HasInstrumentedBytecodeArray()) {
+    return false;
+  }
 
   // Do not baseline compile if function doesn't pass sparkplug_filter.
   if (!shared.PassesFilter(FLAG_sparkplug_filter)) return false;

@@ -5,6 +5,8 @@
 # This script must be be in the tools directory when it runs because it uses
 # $0 to determine directories to work in.
 
+set -e
+
 cd "$( dirname "${0}" )" || exit
 rm -rf node_modules/@babel
 mkdir babel-eslint-tmp
@@ -13,10 +15,10 @@ cd babel-eslint-tmp || exit
 ROOT="$PWD/../.."
 [ -z "$NODE" ] && NODE="$ROOT/out/Release/node"
 [ -x "$NODE" ] || NODE=`command -v node`
-NPM="$ROOT/deps/npm"
+NPM="$ROOT/deps/npm/bin/npm-cli.js"
 
 "$NODE" "$NPM" init --yes
-"$NODE" "$NPM" install --global-style --no-bin-links --production --no-package-lock @babel/core @babel/eslint-parser@latest @babel/plugin-syntax-class-properties@latest @babel/plugin-syntax-import-assertions@latest @babel/plugin-syntax-top-level-await@latest
+"$NODE" "$NPM" install --global-style --no-bin-links --production --no-package-lock @babel/core @babel/eslint-parser@latest @babel/plugin-syntax-import-assertions@latest
 
 # Use dmn to remove some unneeded files.
 "$NODE" "$NPM" exec -- dmn@2.2.2 -f clean

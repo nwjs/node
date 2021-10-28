@@ -574,6 +574,15 @@ TNode<Map> GraphAssembler::LoadMap(Node* object) {
 #endif
 }
 
+void GraphAssembler::StoreMap(Node* object, TNode<Map> map) {
+#ifdef V8_MAP_PACKING
+  map = PackMapWord(map);
+#endif
+  StoreRepresentation rep(MachineType::TaggedRepresentation(),
+                          kMapWriteBarrier);
+  Store(rep, object, HeapObject::kMapOffset - kHeapObjectTag, map);
+}
+
 Node* JSGraphAssembler::StoreElement(ElementAccess const& access, Node* object,
                                      Node* index, Node* value) {
   return AddNode(graph()->NewNode(simplified()->StoreElement(access), object,
@@ -820,46 +829,36 @@ Node* GraphAssembler::BitcastMaybeObjectToWord(Node* value) {
                                   effect(), control()));
 }
 
-Node* GraphAssembler::Word32PoisonOnSpeculation(Node* value) {
-  return AddNode(graph()->NewNode(machine()->Word32PoisonOnSpeculation(), value,
-                                  effect(), control()));
-}
-
 Node* GraphAssembler::DeoptimizeIf(DeoptimizeReason reason,
                                    FeedbackSource const& feedback,
-                                   Node* condition, Node* frame_state,
-                                   IsSafetyCheck is_safety_check) {
-  return AddNode(
-      graph()->NewNode(common()->DeoptimizeIf(DeoptimizeKind::kEager, reason,
-                                              feedback, is_safety_check),
-                       condition, frame_state, effect(), control()));
+                                   Node* condition, Node* frame_state) {
+  return AddNode(graph()->NewNode(
+      common()->DeoptimizeIf(DeoptimizeKind::kEager, reason, feedback),
+      condition, frame_state, effect(), control()));
 }
 
 Node* GraphAssembler::DeoptimizeIf(DeoptimizeKind kind, DeoptimizeReason reason,
                                    FeedbackSource const& feedback,
-                                   Node* condition, Node* frame_state,
-                                   IsSafetyCheck is_safety_check) {
-  return AddNode(graph()->NewNode(
-      common()->DeoptimizeIf(kind, reason, feedback, is_safety_check),
-      condition, frame_state, effect(), control()));
+                                   Node* condition, Node* frame_state) {
+  return AddNode(
+      graph()->NewNode(common()->DeoptimizeIf(kind, reason, feedback),
+                       condition, frame_state, effect(), control()));
 }
 
 Node* GraphAssembler::DeoptimizeIfNot(DeoptimizeKind kind,
                                       DeoptimizeReason reason,
                                       FeedbackSource const& feedback,
-                                      Node* condition, Node* frame_state,
-                                      IsSafetyCheck is_safety_check) {
-  return AddNode(graph()->NewNode(
-      common()->DeoptimizeUnless(kind, reason, feedback, is_safety_check),
-      condition, frame_state, effect(), control()));
+                                      Node* condition, Node* frame_state) {
+  return AddNode(
+      graph()->NewNode(common()->DeoptimizeUnless(kind, reason, feedback),
+                       condition, frame_state, effect(), control()));
 }
 
 Node* GraphAssembler::DeoptimizeIfNot(DeoptimizeReason reason,
                                       FeedbackSource const& feedback,
-                                      Node* condition, Node* frame_state,
-                                      IsSafetyCheck is_safety_check) {
+                                      Node* condition, Node* frame_state) {
   return DeoptimizeIfNot(DeoptimizeKind::kEager, reason, feedback, condition,
-                         frame_state, is_safety_check);
+                         frame_state);
 }
 
 Node* GraphAssembler::DynamicCheckMapsWithDeoptUnless(Node* condition,
@@ -915,8 +914,7 @@ void GraphAssembler::BranchWithCriticalSafetyCheck(
     hint = if_false->IsDeferred() ? BranchHint::kTrue : BranchHint::kFalse;
   }
 
-  BranchImpl(condition, if_true, if_false, hint,
-             IsSafetyCheck::kCriticalSafetyCheck);
+  BranchImpl(condition, if_true, if_false, hint);
 }
 
 void GraphAssembler::RecordBranchInBlockUpdater(Node* branch,

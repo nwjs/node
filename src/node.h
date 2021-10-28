@@ -214,6 +214,20 @@ namespace node {
 class IsolateData;
 class Environment;
 
+namespace ProcessFlags {
+enum Flags : uint64_t {
+  kNoFlags = 0,
+  // Enable stdio inheritance, which is disabled by default.
+  kEnableStdioInheritance = 1 << 0,
+  // Disable reading the NODE_OPTIONS environment variable.
+  kDisableNodeOptionsEnv = 1 << 1,
+  // Do not parse CLI options.
+  kDisableCLIOptions = 1 << 2,
+  // Do not initialize ICU.
+  kNoICU = 1 << 3,
+};
+}  // namespace ProcessFlags
+
 // TODO(addaleax): Officially deprecate this and replace it with something
 // better suited for a public embedder API.
 NODE_EXTERN int Start(int argc, char* argv[]);
@@ -226,9 +240,16 @@ NODE_EXTERN int Stop(Environment* env);
 // from argv, fill exec_argv, and possibly add errors resulting from parsing
 // the arguments to `errors`. The return value is a suggested exit code for the
 // program; If it is 0, then initializing Node.js succeeded.
-NODE_EXTERN int InitializeNodeWithArgs(std::vector<std::string>* argv,
-                                       std::vector<std::string>* exec_argv,
-                                       std::vector<std::string>* errors);
+NODE_EXTERN int InitializeNodeWithArgs(
+    std::vector<std::string>* argv,
+    std::vector<std::string>* exec_argv,
+    std::vector<std::string>* errors);
+// TODO(zcbenz): Turn above overloaded version into below's default argument.
+NODE_EXTERN int InitializeNodeWithArgs(
+    std::vector<std::string>* argv,
+    std::vector<std::string>* exec_argv,
+    std::vector<std::string>* errors,
+    ProcessFlags::Flags flags);
 
 enum OptionEnvvarSettings {
   kAllowedInEnvironment,
@@ -310,7 +331,8 @@ class NODE_EXTERN MultiIsolatePlatform : public v8::Platform {
 
   static std::unique_ptr<MultiIsolatePlatform> Create(
       int thread_pool_size,
-      v8::TracingController* tracing_controller = nullptr);
+      v8::TracingController* tracing_controller = nullptr,
+      v8::PageAllocator* page_allocator = nullptr);
 };
 
 enum IsolateSettingsFlags {
@@ -366,7 +388,7 @@ NODE_EXTERN v8::Local<v8::Context> NewContext(
 
 // Runs Node.js-specific tweaks on an already constructed context
 // Return value indicates success of operation
-NODE_EXTERN bool InitializeContext(v8::Local<v8::Context> context);
+NODE_EXTERN v8::Maybe<bool> InitializeContext(v8::Local<v8::Context> context);
 
 // If `platform` is passed, it will be used to register new Worker instances.
 // It can be `nullptr`, in which case creating new Workers inside of

@@ -9,7 +9,6 @@
 #include <memory>
 #include <vector>
 
-#include "include/v8.h"
 #include "src/base/bit-field.h"
 #include "src/base/export-template.h"
 #include "src/base/logging.h"
@@ -31,7 +30,7 @@ class AccountingAllocator;
 class AstRawString;
 class AstStringConstants;
 class AstValueFactory;
-class CompilerDispatcher;
+class LazyCompileDispatcher;
 class DeclarationScope;
 class FunctionLiteral;
 class RuntimeCallStats;
@@ -155,8 +154,8 @@ class V8_EXPORT_PRIVATE UnoptimizedCompileState {
 
   class ParallelTasks {
    public:
-    explicit ParallelTasks(CompilerDispatcher* compiler_dispatcher)
-        : dispatcher_(compiler_dispatcher) {
+    explicit ParallelTasks(LazyCompileDispatcher* lazy_compile_dispatcher)
+        : dispatcher_(lazy_compile_dispatcher) {
       DCHECK_NOT_NULL(dispatcher_);
     }
 
@@ -169,10 +168,10 @@ class V8_EXPORT_PRIVATE UnoptimizedCompileState {
     EnqueuedJobsIterator begin() { return enqueued_jobs_.begin(); }
     EnqueuedJobsIterator end() { return enqueued_jobs_.end(); }
 
-    CompilerDispatcher* dispatcher() { return dispatcher_; }
+    LazyCompileDispatcher* dispatcher() { return dispatcher_; }
 
    private:
-    CompilerDispatcher* dispatcher_;
+    LazyCompileDispatcher* dispatcher_;
     std::forward_list<std::pair<FunctionLiteral*, uintptr_t>> enqueued_jobs_;
   };
 

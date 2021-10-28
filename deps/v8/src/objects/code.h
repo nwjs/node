@@ -32,6 +32,8 @@ namespace interpreter {
 class Register;
 }  // namespace interpreter
 
+#include "torque-generated/src/objects/code-tq.inc"
+
 // CodeDataContainer is a container for all mutable fields associated with its
 // referencing {Code} object. Since {Code} objects reside on write-protected
 // pages within the heap, its header fields need to be immutable. There always
@@ -41,7 +43,7 @@ class CodeDataContainer : public HeapObject {
  public:
   NEVER_READ_ONLY_SPACE
   DECL_ACCESSORS(next_code_link, Object)
-  DECL_INT_ACCESSORS(kind_specific_flags)
+  DECL_RELAXED_INT32_ACCESSORS(kind_specific_flags)
 
   // Clear uninitialized padding space. This ensures that the snapshot content
   // is deterministic.
@@ -77,11 +79,13 @@ class CodeDataContainer : public HeapObject {
 // Layout description.
 #define CODE_DATA_FIELDS(V)                                     \
   /* Strong pointer fields. */                                  \
-  V(kCodeOffset, V8_EXTERNAL_CODE_SPACE_BOOL ? kTaggedSize : 0) \
   V(kPointerFieldsStrongEndOffset, 0)                           \
   /* Weak pointer fields. */                                    \
   V(kNextCodeLinkOffset, kTaggedSize)                           \
   V(kPointerFieldsWeakEndOffset, 0)                             \
+  /* Strong Code pointer fields. */                             \
+  V(kCodeOffset, V8_EXTERNAL_CODE_SPACE_BOOL ? kTaggedSize : 0) \
+  V(kCodePointerFieldsStrongEndOffset, 0)                       \
   /* Raw data fields. */                                        \
   V(kCodeEntryPointOffset,                                      \
     V8_EXTERNAL_CODE_SPACE_BOOL ? kExternalPointerSize : 0)     \
@@ -275,8 +279,12 @@ class Code : public HeapObject {
   // This function should be called only from GC.
   void ClearEmbeddedObjects(Heap* heap);
 
-  // [deoptimization_data]: Array containing data for deopt.
+  // [deoptimization_data]: Array containing data for deopt for non-baseline
+  // code.
   DECL_ACCESSORS(deoptimization_data, FixedArray)
+  // [bytecode_or_interpreter_data]: BytecodeArray or InterpreterData for
+  // baseline code.
+  DECL_ACCESSORS(bytecode_or_interpreter_data, HeapObject)
 
   // [source_position_table]: ByteArray for the source positions table for
   // non-baseline code.
@@ -507,7 +515,7 @@ class Code : public HeapObject {
   // Layout description.
 #define CODE_FIELDS(V)                                                        \
   V(kRelocationInfoOffset, kTaggedSize)                                       \
-  V(kDeoptimizationDataOffset, kTaggedSize)                                   \
+  V(kDeoptimizationDataOrInterpreterDataOffset, kTaggedSize)                  \
   V(kPositionTableOffset, kTaggedSize)                                        \
   V(kCodeDataContainerOffset, kTaggedSize)                                    \
   /* Data or code not directly visited by GC directly starts here. */         \
@@ -540,8 +548,10 @@ class Code : public HeapObject {
   static constexpr int kHeaderPaddingSize = COMPRESS_POINTERS_BOOL ? 12 : 24;
 #elif V8_TARGET_ARCH_MIPS64
   static constexpr int kHeaderPaddingSize = 24;
+#elif V8_TARGET_ARCH_LOONG64
+  static constexpr int kHeaderPaddingSize = 24;
 #elif V8_TARGET_ARCH_X64
-  static constexpr int kHeaderPaddingSize = COMPRESS_POINTERS_BOOL ? 12 : 24;
+  static constexpr int kHeaderPaddingSize = COMPRESS_POINTERS_BOOL ? 12 : 56;
 #elif V8_TARGET_ARCH_ARM
   static constexpr int kHeaderPaddingSize = 12;
 #elif V8_TARGET_ARCH_IA32
@@ -643,6 +653,10 @@ class Code::OptimizedCodeIterator {
 inline CodeT ToCodeT(Code code);
 inline Code FromCodeT(CodeT code);
 inline Code FromCodeT(CodeT code, RelaxedLoadTag);
+inline Code FromCodeT(CodeT code, AcquireLoadTag);
+inline Code FromCodeT(CodeT code, PtrComprCageBase);
+inline Code FromCodeT(CodeT code, PtrComprCageBase, RelaxedLoadTag);
+inline Code FromCodeT(CodeT code, PtrComprCageBase, AcquireLoadTag);
 inline CodeDataContainer CodeDataContainerFromCodeT(CodeT code);
 
 class AbstractCode : public HeapObject {
@@ -826,7 +840,8 @@ class DependentCode : public WeakFixedArray {
 };
 
 // BytecodeArray represents a sequence of interpreter bytecodes.
-class BytecodeArray : public FixedArrayBase {
+class BytecodeArray
+    : public TorqueGeneratedBytecodeArray<BytecodeArray, FixedArrayBase> {
  public:
   enum Age {
     kNoAgeBytecodeAge = 0,
@@ -879,21 +894,6 @@ class BytecodeArray : public FixedArrayBase {
   inline Age bytecode_age() const;
   inline void set_bytecode_age(Age age);
 
-  // Accessors for the constant pool.
-  DECL_ACCESSORS(constant_pool, FixedArray)
-
-  // Accessors for handler table containing offsets of exception handlers.
-  DECL_ACCESSORS(handler_table, ByteArray)
-
-  // Accessors for source position table. Can contain:
-  // * undefined (initial value)
-  // * empty_byte_array (for bytecode generated for functions that will never
-  // have source positions, e.g. native functions).
-  // * ByteArray (when source positions have been collected for the bytecode)
-  // * exception (when an error occurred while explicitly collecting source
-  // positions for pre-existing bytecode).
-  DECL_RELEASE_ACQUIRE_ACCESSORS(source_position_table, Object)
-
   inline bool HasSourcePositionTable() const;
   inline bool DidSourcePositionGenerationFail() const;
 
@@ -906,8 +906,6 @@ class BytecodeArray : public FixedArrayBase {
   // |SourcePositionTable| will return an empty byte array rather than crashing
   // as it would if no attempt was ever made to collect source positions.
   inline void SetSourcePositionsFailedToCollect();
-
-  DECL_CAST(BytecodeArray)
 
   // Dispatched behavior.
   inline int BytecodeArraySize();
@@ -933,14 +931,10 @@ class BytecodeArray : public FixedArrayBase {
   // is deterministic.
   inline void clear_padding();
 
-  // Layout description.
-  DEFINE_FIELD_OFFSET_CONSTANTS(FixedArrayBase::kHeaderSize,
-                                TORQUE_GENERATED_BYTECODE_ARRAY_FIELDS)
-
   // InterpreterEntryTrampoline expects these fields to be next to each other
   // and writes a 16-bit value to reset them.
   STATIC_ASSERT(BytecodeArray::kBytecodeAgeOffset ==
-                kOsrNestingLevelOffset + kCharSize);
+                kOsrLoopNestingLevelOffset + kCharSize);
 
   // Maximal memory consumption for a single BytecodeArray.
   static const int kMaxSize = 512 * MB;
@@ -949,7 +943,11 @@ class BytecodeArray : public FixedArrayBase {
 
   class BodyDescriptor;
 
-  OBJECT_CONSTRUCTORS(BytecodeArray, FixedArrayBase);
+ private:
+  // Hide accessors inherited from generated class. Use parameter_count instead.
+  DECL_INT_ACCESSORS(parameter_size)
+
+  TQ_OBJECT_CONSTRUCTORS(BytecodeArray)
 };
 
 // DeoptimizationData is a fixed array used to hold the deoptimization data for
@@ -978,7 +976,12 @@ class DeoptimizationData : public FixedArray {
   static const int kBytecodeOffsetRawOffset = 0;
   static const int kTranslationIndexOffset = 1;
   static const int kPcOffset = 2;
+#ifdef DEBUG
+  static const int kNodeIdOffset = 3;
+  static const int kDeoptEntrySize = 4;
+#else   // DEBUG
   static const int kDeoptEntrySize = 3;
+#endif  // DEBUG
 
 // Simple element accessors.
 #define DECL_ELEMENT_ACCESSORS(name, type) \
@@ -1007,6 +1010,9 @@ class DeoptimizationData : public FixedArray {
   DECL_ENTRY_ACCESSORS(BytecodeOffsetRaw, Smi)
   DECL_ENTRY_ACCESSORS(TranslationIndex, Smi)
   DECL_ENTRY_ACCESSORS(Pc, Smi)
+#ifdef DEBUG
+  DECL_ENTRY_ACCESSORS(NodeId, Smi)
+#endif  // DEBUG
 
 #undef DECL_ENTRY_ACCESSORS
 

@@ -36,7 +36,6 @@ namespace internal {
 namespace compiler {
 
 enum class MaintainSchedule { kMaintain, kDiscard };
-enum class MaskArrayIndexEnable { kDoNotMaskArrayIndex, kMaskArrayIndex };
 
 class EffectControlLinearizer {
  public:
@@ -44,13 +43,11 @@ class EffectControlLinearizer {
                           JSGraphAssembler* graph_assembler, Zone* temp_zone,
                           SourcePositionTable* source_positions,
                           NodeOriginTable* node_origins,
-                          MaskArrayIndexEnable mask_array_index,
                           MaintainSchedule maintain_schedule,
                           JSHeapBroker* broker)
       : js_graph_(js_graph),
         schedule_(schedule),
         temp_zone_(temp_zone),
-        mask_array_index_(mask_array_index),
         maintain_schedule_(maintain_schedule),
         source_positions_(source_positions),
         node_origins_(node_origins),
@@ -80,7 +77,6 @@ class EffectControlLinearizer {
   Node* LowerChangeTaggedToUint32(Node* node);
   Node* LowerChangeTaggedToInt64(Node* node);
   Node* LowerChangeTaggedToTaggedSigned(Node* node);
-  Node* LowerPoisonIndex(Node* node);
   Node* LowerCheckInternalizedString(Node* node, Node* frame_state);
   void LowerCheckMaps(Node* node, Node* frame_state);
   void LowerDynamicCheckMaps(Node* node, Node* frame_state);
@@ -197,6 +193,9 @@ class EffectControlLinearizer {
   void LowerTransitionElementsKind(Node* node);
   Node* LowerLoadFieldByIndex(Node* node);
   Node* LowerLoadMessage(Node* node);
+  Node* AdaptFastCallTypedArrayArgument(Node* node,
+                                        ElementsKind expected_elements_kind,
+                                        GraphAssemblerLabel<0>* bailout);
   Node* AdaptFastCallArgument(Node* node, CTypeInfo arg_type,
                               GraphAssemblerLabel<0>* if_error);
 
@@ -335,7 +334,6 @@ class EffectControlLinearizer {
   JSGraph* js_graph_;
   Schedule* schedule_;
   Zone* temp_zone_;
-  MaskArrayIndexEnable mask_array_index_;
   MaintainSchedule maintain_schedule_;
   RegionObservability region_observability_ = RegionObservability::kObservable;
   SourcePositionTable* source_positions_;
@@ -962,9 +960,6 @@ bool EffectControlLinearizer::TryWireInStateEffect(Node* node,
       break;
     case IrOpcode::kTruncateTaggedToFloat64:
       result = LowerTruncateTaggedToFloat64(node);
-      break;
-    case IrOpcode::kPoisonIndex:
-      result = LowerPoisonIndex(node);
       break;
     case IrOpcode::kCheckClosure:
       result = LowerCheckClosure(node, frame_state);
@@ -1785,14 +1780,6 @@ Node* EffectControlLinearizer::LowerTruncateTaggedToFloat64(Node* node) {
   return done.PhiAt(0);
 }
 
-Node* EffectControlLinearizer::LowerPoisonIndex(Node* node) {
-  Node* index = node->InputAt(0);
-  if (mask_array_index_ == MaskArrayIndexEnable::kMaskArrayIndex) {
-    index = __ Word32PoisonOnSpeculation(index);
-  }
-  return index;
-}
-
 Node* EffectControlLinearizer::LowerCheckClosure(Node* node,
                                                  Node* frame_state) {
   Handle<FeedbackCell> feedback_cell = FeedbackCellOf(node->op());
@@ -1828,8 +1815,7 @@ void EffectControlLinearizer::MigrateInstanceOrDeopt(
       __ Word32And(bitfield3,
                    __ Int32Constant(Map::Bits3::IsDeprecatedBit::kMask)),
       __ Int32Constant(0));
-  __ DeoptimizeIf(reason, feedback_source, is_not_deprecated, frame_state,
-                  IsSafetyCheck::kCriticalSafetyCheck);
+  __ DeoptimizeIf(reason, feedback_source, is_not_deprecated, frame_state);
   Operator::Properties properties = Operator::kNoDeopt | Operator::kNoThrow;
   Runtime::FunctionId id = Runtime::kTryMigrateInstance;
   auto call_descriptor = Linkage::GetRuntimeCallDescriptor(
@@ -1839,7 +1825,7 @@ void EffectControlLinearizer::MigrateInstanceOrDeopt(
                          __ Int32Constant(1), __ NoContextConstant());
   Node* check = ObjectIsSmi(result);
   __ DeoptimizeIf(DeoptimizeReason::kInstanceMigrationFailed, feedback_source,
-                  check, frame_state, IsSafetyCheck::kCriticalSafetyCheck);
+                  check, frame_state);
 }
 
 void EffectControlLinearizer::LowerCheckMaps(Node* node, Node* frame_state) {
@@ -1883,7 +1869,7 @@ void EffectControlLinearizer::LowerCheckMaps(Node* node, Node* frame_state) {
       Node* check = __ TaggedEqual(value_map, map);
       if (i == map_count - 1) {
         __ DeoptimizeIfNot(DeoptimizeReason::kWrongMap, p.feedback(), check,
-                           frame_state, IsSafetyCheck::kCriticalSafetyCheck);
+                           frame_state);
       } else {
         auto next_map = __ MakeLabel();
         __ BranchWithCriticalSafetyCheck(check, &done, &next_map);
@@ -1905,7 +1891,7 @@ void EffectControlLinearizer::LowerCheckMaps(Node* node, Node* frame_state) {
 
       if (i == map_count - 1) {
         __ DeoptimizeIfNot(DeoptimizeReason::kWrongMap, p.feedback(), check,
-                           frame_state, IsSafetyCheck::kCriticalSafetyCheck);
+                           frame_state);
       } else {
         auto next_map = __ MakeLabel();
         __ BranchWithCriticalSafetyCheck(check, &done, &next_map);
@@ -2525,8 +2511,8 @@ Node* EffectControlLinearizer::LowerCheckedUint32Bounds(Node* node,
   Node* check = __ Uint32LessThan(index, limit);
   if (!(params.flags() & CheckBoundsFlag::kAbortOnOutOfBounds)) {
     __ DeoptimizeIfNot(DeoptimizeReason::kOutOfBounds,
-                       params.check_parameters().feedback(), check, frame_state,
-                       IsSafetyCheck::kCriticalSafetyCheck);
+                       params.check_parameters().feedback(), check,
+                       frame_state);
   } else {
     auto if_abort = __ MakeDeferredLabel();
     auto done = __ MakeLabel();
@@ -2571,8 +2557,8 @@ Node* EffectControlLinearizer::LowerCheckedUint64Bounds(Node* node,
   Node* check = __ Uint64LessThan(index, limit);
   if (!(params.flags() & CheckBoundsFlag::kAbortOnOutOfBounds)) {
     __ DeoptimizeIfNot(DeoptimizeReason::kOutOfBounds,
-                       params.check_parameters().feedback(), check, frame_state,
-                       IsSafetyCheck::kCriticalSafetyCheck);
+                       params.check_parameters().feedback(), check,
+                       frame_state);
   } else {
     auto if_abort = __ MakeDeferredLabel();
     auto done = __ MakeLabel();
@@ -3693,9 +3679,14 @@ Node* EffectControlLinearizer::LowerToBoolean(Node* node) {
 }
 
 Node* EffectControlLinearizer::LowerArgumentsLength(Node* node) {
-  return ChangeIntPtrToSmi(
+  Node* arguments_length = ChangeIntPtrToSmi(
       __ Load(MachineType::Pointer(), __ LoadFramePointer(),
               __ IntPtrConstant(StandardFrameConstants::kArgCOffset)));
+  if (kJSArgcIncludesReceiver) {
+    arguments_length =
+        __ SmiSub(arguments_length, __ SmiConstant(kJSArgcReceiverSlots));
+  }
+  return arguments_length;
 }
 
 Node* EffectControlLinearizer::LowerRestLength(Node* node) {
@@ -3708,6 +3699,10 @@ Node* EffectControlLinearizer::LowerRestLength(Node* node) {
   Node* arguments_length = ChangeIntPtrToSmi(
       __ Load(MachineType::Pointer(), frame,
               __ IntPtrConstant(StandardFrameConstants::kArgCOffset)));
+  if (kJSArgcIncludesReceiver) {
+    arguments_length =
+        __ SmiSub(arguments_length, __ SmiConstant(kJSArgcReceiverSlots));
+  }
   Node* rest_length =
       __ SmiSub(arguments_length, __ SmiConstant(formal_parameter_count));
   __ GotoIf(__ SmiLessThan(rest_length, __ SmiConstant(0)), &done,
@@ -4260,12 +4255,10 @@ Node* EffectControlLinearizer::LowerStringToUpperCaseIntl(Node* node) {
 
 Node* EffectControlLinearizer::LowerStringToLowerCaseIntl(Node* node) {
   UNREACHABLE();
-  return nullptr;
 }
 
 Node* EffectControlLinearizer::LowerStringToUpperCaseIntl(Node* node) {
   UNREACHABLE();
-  return nullptr;
 }
 
 #endif  // V8_INTL_SUPPORT
@@ -5004,16 +4997,102 @@ MachineType MachineTypeFor(CTypeInfo::Type type) {
 }
 }  // namespace
 
+Node* EffectControlLinearizer::AdaptFastCallTypedArrayArgument(
+    Node* node, ElementsKind expected_elements_kind,
+    GraphAssemblerLabel<0>* bailout) {
+  Node* value_map = __ LoadField(AccessBuilder::ForMap(), node);
+  Node* value_instance_type =
+      __ LoadField(AccessBuilder::ForMapInstanceType(), value_map);
+  Node* value_is_typed_array = __ Word32Equal(
+      value_instance_type, __ Int32Constant(JS_TYPED_ARRAY_TYPE));
+  __ GotoIfNot(value_is_typed_array, bailout);
+
+  Node* bit_field2 = __ LoadField(AccessBuilder::ForMapBitField2(), value_map);
+  Node* mask = __ Int32Constant(Map::Bits2::ElementsKindBits::kMask);
+  Node* andit = __ Word32And(bit_field2, mask);
+  Node* shift = __ Int32Constant(Map::Bits2::ElementsKindBits::kShift);
+  Node* kind = __ Word32Shr(andit, shift);
+
+  Node* value_is_expected_elements_kind =
+      __ Word32Equal(kind, __ Int32Constant(expected_elements_kind));
+  __ GotoIfNot(value_is_expected_elements_kind, bailout);
+
+  Node* buffer =
+      __ LoadField(AccessBuilder::ForJSArrayBufferViewBuffer(), node);
+  Node* buffer_bit_field =
+      __ LoadField(AccessBuilder::ForJSArrayBufferBitField(), buffer);
+
+  // Go to the slow path if the {buffer} was detached.
+  Node* buffer_is_not_detached = __ Word32Equal(
+      __ Word32And(buffer_bit_field,
+                   __ Int32Constant(JSArrayBuffer::WasDetachedBit::kMask)),
+      __ ZeroConstant());
+  __ GotoIfNot(buffer_is_not_detached, bailout);
+
+  // Go to the slow path if the {buffer} is shared.
+  Node* buffer_is_not_shared = __ Word32Equal(
+      __ Word32And(buffer_bit_field,
+                   __ Int32Constant(JSArrayBuffer::IsSharedBit::kMask)),
+      __ ZeroConstant());
+  __ GotoIfNot(buffer_is_not_shared, bailout);
+
+  // Unpack the store and length, and store them to a struct
+  // FastApiTypedArray.
+  Node* external_pointer =
+      __ LoadField(AccessBuilder::ForJSTypedArrayExternalPointer(), node);
+
+  // Load the base pointer for the buffer. This will always be Smi
+  // zero unless we allow on-heap TypedArrays, which is only the case
+  // for Chrome. Node and Electron both set this limit to 0. Setting
+  // the base to Smi zero here allows the BuildTypedArrayDataPointer
+  // to optimize away the tricky part of the access later.
+  Node* base_pointer =
+      __ LoadField(AccessBuilder::ForJSTypedArrayBasePointer(), node);
+  if (JSTypedArray::kMaxSizeInHeap == 0) {
+    base_pointer = jsgraph()->ZeroConstant();
+  }
+  Node* data_ptr = BuildTypedArrayDataPointer(base_pointer, external_pointer);
+  Node* length_in_bytes =
+      __ LoadField(AccessBuilder::ForJSTypedArrayLength(), node);
+
+  // We hard-code int32_t here, because all specializations of
+  // FastApiTypedArray have the same size.
+  constexpr int kAlign = alignof(FastApiTypedArray<int32_t>);
+  constexpr int kSize = sizeof(FastApiTypedArray<int32_t>);
+  static_assert(kAlign == alignof(FastApiTypedArray<double>),
+                "Alignment mismatch between different specializations of "
+                "FastApiTypedArray");
+  static_assert(kSize == sizeof(FastApiTypedArray<double>),
+                "Size mismatch between different specializations of "
+                "FastApiTypedArray");
+  static_assert(
+      kSize == sizeof(uintptr_t) + sizeof(size_t),
+      "The size of "
+      "FastApiTypedArray isn't equal to the sum of its expected members.");
+  Node* stack_slot = __ StackSlot(kSize, kAlign);
+
+  __ Store(StoreRepresentation(MachineType::PointerRepresentation(),
+                               kNoWriteBarrier),
+           stack_slot, 0, length_in_bytes);
+  __ Store(StoreRepresentation(MachineType::PointerRepresentation(),
+                               kNoWriteBarrier),
+           stack_slot, sizeof(size_t), data_ptr);
+  static_assert(sizeof(uintptr_t) == sizeof(size_t),
+                "The buffer length can't "
+                "fit the PointerRepresentation used to store it.");
+
+  return stack_slot;
+}
+
 Node* EffectControlLinearizer::AdaptFastCallArgument(
     Node* node, CTypeInfo arg_type, GraphAssemblerLabel<0>* if_error) {
+  int kAlign = alignof(uintptr_t);
+  int kSize = sizeof(uintptr_t);
   switch (arg_type.GetSequenceType()) {
     case CTypeInfo::SequenceType::kScalar: {
       switch (arg_type.GetType()) {
         case CTypeInfo::Type::kV8Value: {
-          int kAlign = alignof(uintptr_t);
-          int kSize = sizeof(uintptr_t);
           Node* stack_slot = __ StackSlot(kSize, kAlign);
-
           __ Store(StoreRepresentation(MachineType::PointerRepresentation(),
                                        kNoWriteBarrier),
                    stack_slot, 0, node);
@@ -5035,10 +5114,7 @@ Node* EffectControlLinearizer::AdaptFastCallArgument(
       Node* value_is_smi = ObjectIsSmi(node);
       __ GotoIf(value_is_smi, if_error);
 
-      int kAlign = alignof(uintptr_t);
-      int kSize = sizeof(uintptr_t);
       Node* stack_slot = __ StackSlot(kSize, kAlign);
-
       __ Store(StoreRepresentation(MachineType::PointerRepresentation(),
                                    kNoWriteBarrier),
                stack_slot, 0, node);
@@ -5053,9 +5129,15 @@ Node* EffectControlLinearizer::AdaptFastCallArgument(
 
       return stack_slot;
     }
-    case CTypeInfo::SequenceType::kIsTypedArray:
-      // TODO(mslekova): Implement typed arrays.
-      return node;
+    case CTypeInfo::SequenceType::kIsTypedArray: {
+      // Check that the value is a HeapObject.
+      Node* value_is_smi = ObjectIsSmi(node);
+      __ GotoIf(value_is_smi, if_error);
+
+      return AdaptFastCallTypedArrayArgument(
+          node, fast_api_call::GetTypedArrayElementsKind(arg_type.GetType()),
+          if_error);
+    }
     default: {
       UNREACHABLE();
     }
@@ -5069,14 +5151,8 @@ EffectControlLinearizer::AdaptOverloadedFastCallArgument(
     GraphAssemblerLabel<0>* if_error) {
   static constexpr int kReceiver = 1;
 
-  auto merge = __ MakeLabel(MachineRepresentation::kTagged);
-
-  int kAlign = alignof(uintptr_t);
-  int kSize = sizeof(uintptr_t);
-  Node* stack_slot = __ StackSlot(kSize, kAlign);
-  __ Store(StoreRepresentation(MachineType::PointerRepresentation(),
-                               kNoWriteBarrier),
-           stack_slot, 0, node);
+  auto merge = __ MakeLabel(MachineRepresentation::kTagged,
+                            MachineRepresentation::kTagged);
 
   for (size_t func_index = 0; func_index < c_functions.size(); func_index++) {
     const CFunctionInfo* c_signature = c_functions[func_index].signature;
@@ -5101,34 +5177,31 @@ EffectControlLinearizer::AdaptOverloadedFastCallArgument(
             value_instance_type, __ Int32Constant(JS_ARRAY_TYPE));
         __ GotoIfNot(value_is_js_array, &next);
 
+        int kAlign = alignof(uintptr_t);
+        int kSize = sizeof(uintptr_t);
+        Node* stack_slot = __ StackSlot(kSize, kAlign);
+
+        __ Store(StoreRepresentation(MachineType::PointerRepresentation(),
+                                     kNoWriteBarrier),
+                 stack_slot, 0, node);
+
         Node* target_address = __ ExternalConstant(
             ExternalReference::Create(c_functions[func_index].address));
-        __ Goto(&merge, target_address);
+        __ Goto(&merge, target_address, stack_slot);
         break;
       }
 
       case CTypeInfo::SequenceType::kIsTypedArray: {
         // Check that the value is a TypedArray with a type that matches the
         // type declared in the c-function.
-        ElementsKind typed_array_elements_kind =
+        Node* stack_slot = AdaptFastCallTypedArrayArgument(
+            node,
             fast_api_call::GetTypedArrayElementsKind(
-                overloads_resolution_result.element_type);
-
-        Node* value_map = __ LoadField(AccessBuilder::ForMap(), node);
-        Node* value_bit_field2 =
-            __ LoadField(AccessBuilder::ForMapBitField2(), value_map);
-        Node* value_elements_kind = __ WordShr(
-            __ WordAnd(value_bit_field2,
-                       __ Int32Constant(Map::Bits2::ElementsKindBits::kMask)),
-            __ Int32Constant(Map::Bits2::ElementsKindBits::kShift));
-        Node* is_same_kind = __ Word32Equal(
-            value_elements_kind,
-            __ Int32Constant(GetPackedElementsKind(typed_array_elements_kind)));
-        __ GotoIfNot(is_same_kind, &next);
-
+                overloads_resolution_result.element_type),
+            &next);
         Node* target_address = __ ExternalConstant(
             ExternalReference::Create(c_functions[func_index].address));
-        __ Goto(&merge, target_address);
+        __ Goto(&merge, target_address, stack_slot);
         break;
       }
 
@@ -5142,7 +5215,7 @@ EffectControlLinearizer::AdaptOverloadedFastCallArgument(
   __ Goto(if_error);
 
   __ Bind(&merge);
-  return {merge.PhiAt(0), stack_slot};
+  return {merge.PhiAt(0), merge.PhiAt(1)};
 }
 
 Node* EffectControlLinearizer::WrapFastCall(
@@ -5693,8 +5766,7 @@ Node* EffectControlLinearizer::LowerLoadTypedElement(Node* node) {
   Node* data_ptr = BuildTypedArrayDataPointer(base, external);
 
   // Perform the actual typed element access.
-  return __ LoadElement(AccessBuilder::ForTypedArrayElement(
-                            array_type, true, LoadSensitivity::kCritical),
+  return __ LoadElement(AccessBuilder::ForTypedArrayElement(array_type, true),
                         data_ptr, index);
 }
 
@@ -6713,26 +6785,13 @@ Node* EffectControlLinearizer::BuildIsClearedWeakReference(Node* maybe_object) {
 
 #undef __
 
-namespace {
-
-MaskArrayIndexEnable MaskArrayForPoisonLevel(
-    PoisoningMitigationLevel poison_level) {
-  return (poison_level != PoisoningMitigationLevel::kDontPoison)
-             ? MaskArrayIndexEnable::kMaskArrayIndex
-             : MaskArrayIndexEnable::kDoNotMaskArrayIndex;
-}
-
-}  // namespace
-
 void LinearizeEffectControl(JSGraph* graph, Schedule* schedule, Zone* temp_zone,
                             SourcePositionTable* source_positions,
                             NodeOriginTable* node_origins,
-                            PoisoningMitigationLevel poison_level,
                             JSHeapBroker* broker) {
   JSGraphAssembler graph_assembler_(graph, temp_zone, base::nullopt, nullptr);
   EffectControlLinearizer linearizer(graph, schedule, &graph_assembler_,
                                      temp_zone, source_positions, node_origins,
-                                     MaskArrayForPoisonLevel(poison_level),
                                      MaintainSchedule::kDiscard, broker);
   linearizer.Run();
 }
@@ -6741,16 +6800,13 @@ void LowerToMachineSchedule(JSGraph* js_graph, Schedule* schedule,
                             Zone* temp_zone,
                             SourcePositionTable* source_positions,
                             NodeOriginTable* node_origins,
-                            PoisoningMitigationLevel poison_level,
                             JSHeapBroker* broker) {
   JSGraphAssembler graph_assembler(js_graph, temp_zone, base::nullopt,
                                    schedule);
   EffectControlLinearizer linearizer(js_graph, schedule, &graph_assembler,
                                      temp_zone, source_positions, node_origins,
-                                     MaskArrayForPoisonLevel(poison_level),
                                      MaintainSchedule::kMaintain, broker);
-  MemoryLowering memory_lowering(js_graph, temp_zone, &graph_assembler,
-                                 poison_level);
+  MemoryLowering memory_lowering(js_graph, temp_zone, &graph_assembler);
   SelectLowering select_lowering(&graph_assembler, js_graph->graph());
   graph_assembler.AddInlineReducer(&memory_lowering);
   graph_assembler.AddInlineReducer(&select_lowering);

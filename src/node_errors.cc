@@ -416,6 +416,10 @@ static void ReportFatalException(Environment* env,
     }
   }
 
+  if (env->options()->extra_info_on_fatal_exception) {
+    FPrintF(stderr, "\nNode.js %s\n", NODE_VERSION);
+  }
+
   fflush(stderr);
 }
 

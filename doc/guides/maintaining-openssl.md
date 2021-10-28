@@ -28,6 +28,7 @@ Branches are used per OpenSSL version (for instance,
 <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1j+quic)>.
 
 ## Requirements
+
 * Linux environment.
 * `perl` Only Perl version 5 is tested.
 * `nasm` (<https://www.nasm.us/>) Version 2.11 or higher is needed.
@@ -57,6 +58,8 @@ and copy all files into `deps/openssl/openssl`. Then add all files and commit
 them. (The link above, and the branch, will change with each new OpenSSL
 release).
 
+### OpenSSL 1.1.1
+
 ```console
 % git clone https://github.com/quictls/openssl
 % cd openssl
@@ -71,6 +74,7 @@ release).
 
 The commit message can be written as (with the openssl version set
 to the relevant value):
+
 ```text
 deps: upgrade openssl sources to OpenSSL_1_1_1j
 
@@ -86,10 +90,38 @@ This updates all sources in deps/openssl/openssl by:
     $ git commit openssl
 ```
 
+### OpenSSL 3.0.0
+
+```console
+% git clone https://github.com/quictls/openssl
+% cd openssl
+% cd ../node/deps/openssl
+% rm -rf openssl
+% cp -R ../../../openssl openssl
+% rm -rf openssl/.git* openssl/.travis*
+% git add --all openssl
+% git commit openssl
+```
+
+```text
+deps: upgrade openssl sources to quictls/openssl-3.0.0-alpha-16
+
+This updates all sources in deps/openssl/openssl by:
+    $ git clone git@github.com:quictls/openssl.git
+    $ cd openssl
+    $ cd ../node/deps/openssl
+    $ rm -rf openssl
+    $ cp -R ../openssl openssl
+    $ rm -rf openssl/.git* openssl/.travis*
+    $ git add --all openssl
+    $ git commit openssl
+```
+
 ## 2. Execute `make` in `deps/openssl/config` directory
 
 Use `make` to regenerate all platform dependent files in
 `deps/openssl/config/archs/`:
+
 ```console
 # On non-Linux machines
 % make gen-openssl
@@ -103,13 +135,14 @@ Use `make` to regenerate all platform dependent files in
 Check diffs to ensure updates are right. Even if there are no updates in openssl
 sources, `buildinf.h` files will be updated because they have timestamp
 data in them.
+
 ```console
 % git diff -- deps/openssl
 ```
 
-*Note*: On Windows, OpenSSL Configure generates a `makefile` that can be
+_Note_: On Windows, OpenSSL Configure generates a `makefile` that can be
 used for the `nmake` command. The `make` command in step 2 (above) uses
- `Makefile_VC-WIN64A` and `Makefile_VC-WIN32` that are manually
+`Makefile_VC-WIN64A` and `Makefile_VC-WIN32` that are manually
 created. When source files or build options are updated in Windows,
 it needs to change these two Makefiles by hand. If you are not sure,
 please ask @shigeki for details.
@@ -118,6 +151,7 @@ please ask @shigeki for details.
 
 Update all architecture dependent files. Do not forget to git add or remove
 files if they are changed before committing:
+
 ```console
 % git add deps/openssl/config/archs
 % git add deps/openssl/openssl/include/crypto/bn_conf.h
@@ -128,6 +162,8 @@ files if they are changed before committing:
 
 The commit message can be written as (with the openssl version set
 to the relevant value):
+
+### OpenSSL 1.1.1
 ```text
  deps: update archs files for OpenSSL-1.1.1
 
@@ -138,6 +174,18 @@ to the relevant value):
     $ git add deps/openssl/openssl/include/crypto/bn_conf.h
     $ git add deps/openssl/openssl/include/crypto/dso_conf.h
     $ git add deps/openssl/openssl/include/openssl/opensslconf.h
+    $ git commit
+```
+
+### OpenSSL 3.0.0
+```text
+deps: update archs files for quictls/openssl-3.0.0-alpha-16
+
+After an OpenSSL source update, all the config files need to be
+regenerated and committed by:
+    $ make -C deps/openssl/config
+    $ git add deps/openssl/config/archs
+    $ git add deps/openssl/openssl
     $ git commit
 ```
 

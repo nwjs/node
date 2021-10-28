@@ -7,6 +7,7 @@
 #include "src/builtins/accessors.h"
 #include "src/codegen/assembler-inl.h"
 #include "src/codegen/compiler.h"
+#include "src/codegen/script-details.h"
 #include "src/common/globals.h"
 #include "src/debug/debug-frames.h"
 #include "src/debug/debug-scopes.h"
@@ -29,13 +30,12 @@ namespace {
 static MaybeHandle<SharedFunctionInfo> GetFunctionInfo(Isolate* isolate,
                                                        Handle<String> source,
                                                        REPLMode repl_mode) {
-  Compiler::ScriptDetails script_details(isolate->factory()->empty_string());
+  ScriptDetails script_details(isolate->factory()->empty_string(),
+                               ScriptOriginOptions(false, true));
   script_details.repl_mode = repl_mode;
-  ScriptOriginOptions origin_options(false, true);
   return Compiler::GetSharedFunctionInfoForScript(
-      isolate, source, script_details, origin_options, nullptr, nullptr,
-      ScriptCompiler::kNoCompileOptions, ScriptCompiler::kNoCacheNoReason,
-      NOT_NATIVES_CODE);
+      isolate, source, script_details, ScriptCompiler::kNoCompileOptions,
+      ScriptCompiler::kNoCacheNoReason, NOT_NATIVES_CODE);
 }
 }  // namespace
 
@@ -390,8 +390,7 @@ bool IntrinsicHasNoSideEffect(Runtime::FunctionId id) {
   /* Test */                                  \
   V(GetOptimizationStatus)                    \
   V(OptimizeFunctionOnNextCall)               \
-  V(OptimizeOsr)                              \
-  V(UnblockConcurrentRecompilation)
+  V(OptimizeOsr)
 
 // Intrinsics with inline versions have to be allowlisted here a second time.
 #define INLINE_INTRINSIC_ALLOWLIST(V) \
@@ -560,6 +559,7 @@ DebugInfo::SideEffectState BuiltinGetSideEffectState(Builtin id) {
     case Builtin::kArrayPrototypeValues:
     case Builtin::kArrayIncludes:
     case Builtin::kArrayPrototypeAt:
+    case Builtin::kArrayPrototypeConcat:
     case Builtin::kArrayPrototypeEntries:
     case Builtin::kArrayPrototypeFill:
     case Builtin::kArrayPrototypeFind:
@@ -1059,6 +1059,14 @@ static bool TransitivelyCalledBuiltinHasNoSideEffect(Builtin caller,
     case Builtin::kTSANRelaxedStore32SaveFP:
     case Builtin::kTSANRelaxedStore64IgnoreFP:
     case Builtin::kTSANRelaxedStore64SaveFP:
+    case Builtin::kTSANSeqCstStore8IgnoreFP:
+    case Builtin::kTSANSeqCstStore8SaveFP:
+    case Builtin::kTSANSeqCstStore16IgnoreFP:
+    case Builtin::kTSANSeqCstStore16SaveFP:
+    case Builtin::kTSANSeqCstStore32IgnoreFP:
+    case Builtin::kTSANSeqCstStore32SaveFP:
+    case Builtin::kTSANSeqCstStore64IgnoreFP:
+    case Builtin::kTSANSeqCstStore64SaveFP:
     case Builtin::kTSANRelaxedLoad32IgnoreFP:
     case Builtin::kTSANRelaxedLoad32SaveFP:
     case Builtin::kTSANRelaxedLoad64IgnoreFP:

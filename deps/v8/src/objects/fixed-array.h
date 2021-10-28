@@ -138,7 +138,9 @@ class FixedArray
   inline void set(int index, Smi value);
 #else
   inline void set(int index, Smi value) {
+#if !defined(_WIN32)
     DCHECK_NE(map(), GetReadOnlyRoots().fixed_cow_array_map());
+#endif
     DCHECK_LT(static_cast<unsigned>(index), static_cast<unsigned>(length()));
     DCHECK(Object(value).IsSmi());
     int offset = OffsetOfElementAt(index);
@@ -295,6 +297,10 @@ class WeakFixedArray
   inline void Set(
       int index, MaybeObject value,
       WriteBarrierMode mode = WriteBarrierMode::UPDATE_WRITE_BARRIER);
+
+  static inline Handle<WeakFixedArray> EnsureSpace(Isolate* isolate,
+                                                   Handle<WeakFixedArray> array,
+                                                   int length);
 
   // Forward declare the non-atomic (set_)length defined in torque.
   using TorqueGeneratedWeakFixedArray::length;

@@ -115,6 +115,14 @@ class MarkingStateBase {
     movable_slots_worklist_.reset();
   }
 
+  bool DidDiscoverNewEphemeronPairs() const {
+    return discovered_new_ephemeron_pairs_;
+  }
+
+  void ResetDidDiscoverNewEphemeronPairs() {
+    discovered_new_ephemeron_pairs_ = false;
+  }
+
  protected:
   inline void MarkAndPush(HeapObjectHeader&, TraceDescriptor);
 
@@ -150,6 +158,8 @@ class MarkingStateBase {
       movable_slots_worklist_;
 
   size_t marked_bytes_ = 0;
+  bool in_ephemeron_processing_ = false;
+  bool discovered_new_ephemeron_pairs_ = false;
 };
 
 MarkingStateBase::MarkingStateBase(HeapBase& heap,
@@ -229,8 +239,10 @@ void MarkingStateBase::RegisterWeakReferenceIfNeeded(const void* object,
   // Filter out already marked values. The write barrier for WeakMember
   // ensures that any newly set value after this point is kept alive and does
   // not require the callback.
-  if (HeapObjectHeader::FromObject(desc.base_object_payload)
-          .IsMarked<AccessMode::kAtomic>())
+  const HeapObjectHeader& header =
+      HeapObjectHeader::FromObject(desc.base_object_payload);
+  if (!header.IsInConstruction<AccessMode::kAtomic>() &&
+      header.IsMarked<AccessMode::kAtomic>())
     return;
   RegisterWeakCallback(weak_callback, parameter);
 }
@@ -284,10 +296,16 @@ void MarkingStateBase::ProcessWeakContainer(const void* object,
 void MarkingStateBase::ProcessEphemeron(const void* key, const void* value,
                                         TraceDescriptor value_desc,
                                         Visitor& visitor) {
+  // ProcessEphemeron is not expected to find new ephemerons recursively, which
+  // would break the main marking loop.
+  DCHECK(!in_ephemeron_processing_);
+  in_ephemeron_processing_ = true;
   // Filter out already marked keys. The write barrier for WeakMember
   // ensures that any newly set value after this point is kept alive and does
   // not require the callback.
-  if (HeapObjectHeader::FromObject(key).IsMarked<AccessMode::kAtomic>()) {
+  if (!HeapObjectHeader::FromObject(key)
+           .IsInConstruction<AccessMode::kAtomic>() &&
+      HeapObjectHeader::FromObject(key).IsMarked<AccessMode::kAtomic>()) {
     if (value_desc.base_object_payload) {
       MarkAndPush(value_desc.base_object_payload, value_desc);
     } else {
@@ -295,9 +313,11 @@ void MarkingStateBase::ProcessEphemeron(const void* key, const void* value,
       // should be immediately traced.
       value_desc.callback(&visitor, value);
     }
-    return;
+  } else {
+    discovered_ephemeron_pairs_worklist_.Push({key, value, value_desc});
+    discovered_new_ephemeron_pairs_ = true;
   }
-  discovered_ephemeron_pairs_worklist_.Push({key, value, value_desc});
+  in_ephemeron_processing_ = false;
 }
 
 void MarkingStateBase::AccountMarkedBytes(const HeapObjectHeader& header) {

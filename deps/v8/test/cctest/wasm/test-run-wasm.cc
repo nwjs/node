@@ -11,6 +11,7 @@
 #include "src/base/platform/elapsed-timer.h"
 #include "src/codegen/assembler-inl.h"
 #include "src/utils/utils.h"
+#include "src/wasm/code-space-access.h"
 #include "src/wasm/wasm-opcodes-inl.h"
 #include "test/cctest/cctest.h"
 #include "test/cctest/compiler/value-helper.h"
@@ -1053,35 +1054,41 @@ WASM_EXEC_TEST(BrTable_loop_target) {
   CHECK_EQ(1, r.Call(0));
 }
 
-WASM_EXEC_TEST(F32ReinterpretI32) {
+WASM_EXEC_TEST(I32ReinterpretF32) {
   WasmRunner<int32_t> r(execution_tier);
-  int32_t* memory =
-      r.builder().AddMemoryElems<int32_t>(kWasmPageSize / sizeof(int32_t));
+  float* memory =
+      r.builder().AddMemoryElems<float>(kWasmPageSize / sizeof(float));
 
   BUILD(r, WASM_I32_REINTERPRET_F32(
                WASM_LOAD_MEM(MachineType::Float32(), WASM_ZERO)));
 
-  FOR_INT32_INPUTS(i) {
-    int32_t expected = i;
-    r.builder().WriteMemory(&memory[0], expected);
+  FOR_FLOAT32_INPUTS(i) {
+    float input = i;
+    int32_t expected = bit_cast<int32_t, float>(input);
+    r.builder().WriteMemory(&memory[0], input);
     CHECK_EQ(expected, r.Call());
   }
 }
 
-WASM_EXEC_TEST(I32ReinterpretF32) {
-  WasmRunner<int32_t, int32_t> r(execution_tier);
+WASM_EXEC_TEST(F32ReinterpretI32) {
+  WasmRunner<float> r(execution_tier);
   int32_t* memory =
       r.builder().AddMemoryElems<int32_t>(kWasmPageSize / sizeof(int32_t));
 
-  BUILD(r,
-        WASM_STORE_MEM(MachineType::Float32(), WASM_ZERO,
-                       WASM_F32_REINTERPRET_I32(WASM_LOCAL_GET(0))),
-        WASM_I32V_2(107));
+  BUILD(r, WASM_F32_REINTERPRET_I32(
+               WASM_LOAD_MEM(MachineType::Int32(), WASM_ZERO)));
 
   FOR_INT32_INPUTS(i) {
-    int32_t expected = i;
-    CHECK_EQ(107, r.Call(expected));
-    CHECK_EQ(expected, r.builder().ReadMemory(&memory[0]));
+    int32_t input = i;
+    float expected = bit_cast<float, int32_t>(input);
+    r.builder().WriteMemory(&memory[0], input);
+    float result = r.Call();
+    if (std::isnan(expected)) {
+      CHECK(std::isnan(result));
+      CHECK(IsSameNan(expected, result));
+    } else {
+      CHECK_EQ(expected, result);
+    }
   }
 }
 
@@ -3874,28 +3881,31 @@ TEST(Liftoff_tier_up) {
       r.builder().instance_object()->module_object().native_module();
 
   // This test only works if we managed to compile with Liftoff.
-  if (native_module->GetCode(add.function_index())->is_liftoff()) {
-    // First run should execute {add}.
-    CHECK_EQ(18, r.Call(11, 7));
+  if (!native_module->GetCode(add.function_index())->is_liftoff()) return;
 
-    // Now make a copy of the {sub} function, and add it to the native module at
-    // the index of {add}.
-    CodeDesc desc;
-    memset(&desc, 0, sizeof(CodeDesc));
-    WasmCode* sub_code = native_module->GetCode(sub.function_index());
-    size_t sub_size = sub_code->instructions().size();
-    std::unique_ptr<byte[]> buffer(new byte[sub_code->instructions().size()]);
-    memcpy(buffer.get(), sub_code->instructions().begin(), sub_size);
-    desc.buffer = buffer.get();
-    desc.instr_size = static_cast<int>(sub_size);
+  // First run should execute {add}.
+  CHECK_EQ(18, r.Call(11, 7));
+
+  // Now make a copy of the {sub} function, and add it to the native module at
+  // the index of {add}.
+  CodeDesc desc;
+  memset(&desc, 0, sizeof(CodeDesc));
+  WasmCode* sub_code = native_module->GetCode(sub.function_index());
+  size_t sub_size = sub_code->instructions().size();
+  std::unique_ptr<byte[]> buffer(new byte[sub_code->instructions().size()]);
+  memcpy(buffer.get(), sub_code->instructions().begin(), sub_size);
+  desc.buffer = buffer.get();
+  desc.instr_size = static_cast<int>(sub_size);
+  {
+    CodeSpaceWriteScope write_scope(native_module);
     std::unique_ptr<WasmCode> new_code = native_module->AddCode(
         add.function_index(), desc, 0, 0, {}, {}, WasmCode::kFunction,
         ExecutionTier::kTurbofan, kNoDebugging);
     native_module->PublishCode(std::move(new_code));
-
-    // Second run should now execute {sub}.
-    CHECK_EQ(4, r.Call(11, 7));
   }
+
+  // Second run should now execute {sub}.
+  CHECK_EQ(4, r.Call(11, 7));
 }
 
 TEST(Regression_1085507) {

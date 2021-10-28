@@ -35,7 +35,7 @@ namespace internal {
 
 #include "torque-generated/src/wasm/wasm-objects-tq-inl.inc"
 
-TQ_OBJECT_CONSTRUCTORS_IMPL(WasmExceptionObject)
+TQ_OBJECT_CONSTRUCTORS_IMPL(WasmTagObject)
 TQ_OBJECT_CONSTRUCTORS_IMPL(WasmExceptionTag)
 TQ_OBJECT_CONSTRUCTORS_IMPL(WasmCapiFunctionData)
 TQ_OBJECT_CONSTRUCTORS_IMPL(WasmExportedFunctionData)
@@ -186,13 +186,20 @@ bool WasmGlobalObject::SetFuncRef(Isolate* isolate, Handle<Object> value) {
 // WasmInstanceObject
 PRIMITIVE_ACCESSORS(WasmInstanceObject, memory_start, byte*, kMemoryStartOffset)
 PRIMITIVE_ACCESSORS(WasmInstanceObject, memory_size, size_t, kMemorySizeOffset)
-PRIMITIVE_ACCESSORS(WasmInstanceObject, memory_mask, size_t, kMemoryMaskOffset)
 PRIMITIVE_ACCESSORS(WasmInstanceObject, isolate_root, Address,
                     kIsolateRootOffset)
 PRIMITIVE_ACCESSORS(WasmInstanceObject, stack_limit_address, Address,
                     kStackLimitAddressOffset)
 PRIMITIVE_ACCESSORS(WasmInstanceObject, real_stack_limit_address, Address,
                     kRealStackLimitAddressOffset)
+PRIMITIVE_ACCESSORS(WasmInstanceObject, new_allocation_limit_address, Address*,
+                    kNewAllocationLimitAddressOffset)
+PRIMITIVE_ACCESSORS(WasmInstanceObject, new_allocation_top_address, Address*,
+                    kNewAllocationTopAddressOffset)
+PRIMITIVE_ACCESSORS(WasmInstanceObject, old_allocation_limit_address, Address*,
+                    kOldAllocationLimitAddressOffset)
+PRIMITIVE_ACCESSORS(WasmInstanceObject, old_allocation_top_address, Address*,
+                    kOldAllocationTopAddressOffset)
 PRIMITIVE_ACCESSORS(WasmInstanceObject, imported_function_targets, Address*,
                     kImportedFunctionTargetsOffset)
 PRIMITIVE_ACCESSORS(WasmInstanceObject, globals_start, byte*,
@@ -241,8 +248,7 @@ OPTIONAL_ACCESSORS(WasmInstanceObject, indirect_function_table_refs, FixedArray,
                    kIndirectFunctionTableRefsOffset)
 OPTIONAL_ACCESSORS(WasmInstanceObject, managed_native_allocations, Foreign,
                    kManagedNativeAllocationsOffset)
-OPTIONAL_ACCESSORS(WasmInstanceObject, exceptions_table, FixedArray,
-                   kExceptionsTableOffset)
+OPTIONAL_ACCESSORS(WasmInstanceObject, tags_table, FixedArray, kTagsTableOffset)
 OPTIONAL_ACCESSORS(WasmInstanceObject, wasm_external_functions, FixedArray,
                    kWasmExternalFunctionsOffset)
 ACCESSORS(WasmInstanceObject, managed_object_maps, FixedArray,
@@ -290,7 +296,7 @@ ImportedFunctionEntry::ImportedFunctionEntry(
 }
 
 // WasmExceptionPackage
-OBJECT_CONSTRUCTORS_IMPL(WasmExceptionPackage, JSReceiver)
+OBJECT_CONSTRUCTORS_IMPL(WasmExceptionPackage, JSObject)
 CAST_ACCESSOR(WasmExceptionPackage)
 
 // WasmExportedFunction
@@ -552,10 +558,25 @@ int WasmStruct::Size(const wasm::StructType* type) {
                   Heap::kMinObjectSizeInTaggedWords * kTaggedSize);
 }
 
-int WasmStruct::GcSafeSize(Map map) {
-  wasm::StructType* type = GcSafeType(map);
-  return Size(type);
+// static
+void WasmStruct::EncodeInstanceSizeInMap(int instance_size, Map map) {
+  // WasmStructs can be bigger than the {map.instance_size_in_words} field
+  // can describe; yet we have to store the instance size somewhere on the
+  // map so that the GC can read it without relying on any other objects
+  // still being around. To solve this problem, we store the instance size
+  // in two other fields that are otherwise unused for WasmStructs.
+  STATIC_ASSERT(0xFFFF - kHeaderSize >
+                wasm::kMaxValueTypeSize * wasm::kV8MaxWasmStructFields);
+  map.SetWasmByte1(instance_size & 0xFF);
+  map.SetWasmByte2(instance_size >> 8);
 }
+
+// static
+int WasmStruct::DecodeInstanceSizeFromMap(Map map) {
+  return (map.WasmByte2() << 8) | map.WasmByte1();
+}
+
+int WasmStruct::GcSafeSize(Map map) { return DecodeInstanceSizeFromMap(map); }
 
 wasm::StructType* WasmStruct::type() const { return type(map()); }
 
@@ -607,12 +628,7 @@ wasm::ArrayType* WasmArray::GcSafeType(Map map) {
 wasm::ArrayType* WasmArray::type() const { return type(map()); }
 
 int WasmArray::SizeFor(Map map, int length) {
-  int element_size = type(map)->element_type().element_size_bytes();
-  return kHeaderSize + RoundUp(element_size * length, kTaggedSize);
-}
-
-int WasmArray::GcSafeSizeFor(Map map, int length) {
-  int element_size = GcSafeType(map)->element_type().element_size_bytes();
+  int element_size = DecodeElementSizeFromMap(map);
   return kHeaderSize + RoundUp(element_size * length, kTaggedSize);
 }
 
@@ -627,6 +643,14 @@ Handle<Object> WasmArray::GetElement(Isolate* isolate, Handle<WasmArray> array,
       WasmArray::kHeaderSize + index * element_type.element_size_bytes();
   return ReadValueAt(isolate, array, element_type, offset);
 }
+
+// static
+void WasmArray::EncodeElementSizeInMap(int element_size, Map map) {
+  map.SetWasmByte1(element_size);
+}
+
+// static
+int WasmArray::DecodeElementSizeFromMap(Map map) { return map.WasmByte1(); }
 
 void WasmTypeInfo::clear_foreign_address(Isolate* isolate) {
 #ifdef V8_HEAP_SANDBOX

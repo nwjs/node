@@ -5,14 +5,18 @@
 #ifndef V8_DEBUG_DEBUG_PROPERTY_ITERATOR_H_
 #define V8_DEBUG_DEBUG_PROPERTY_ITERATOR_H_
 
+#include "include/v8-local-handle.h"
+#include "include/v8-maybe.h"
+#include "include/v8-object.h"
 #include "src/debug/debug-interface.h"
 #include "src/execution/isolate.h"
 #include "src/handles/handles.h"
 #include "src/objects/prototype.h"
 
-#include "include/v8.h"
-
 namespace v8 {
+
+class Name;
+
 namespace internal {
 
 class JSReceiver;
@@ -45,6 +49,7 @@ class DebugPropertyIterator final : public debug::PropertyIterator {
   bool should_move_to_next_stage() const;
   void CalculateNativeAccessorFlags();
   Handle<Name> raw_name() const;
+  void AdvanceToPrototype();
   V8_WARN_UNUSED_RESULT bool AdvanceInternal();
 
   Isolate* isolate_;
@@ -59,6 +64,7 @@ class DebugPropertyIterator final : public debug::PropertyIterator {
   bool calculated_native_accessor_flags_ = false;
   int native_accessor_flags_ = 0;
   bool is_own_ = true;
+  bool is_done_ = false;
 };
 }  // namespace internal
 }  // namespace v8

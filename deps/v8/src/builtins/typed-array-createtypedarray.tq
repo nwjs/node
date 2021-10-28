@@ -62,7 +62,6 @@ transitioning macro AllocateTypedArray(implicit context: Context)(
   typedArray.bit_field.is_length_tracking = isLengthTracking;
   typedArray.bit_field.is_backed_by_rab =
       IsResizableArrayBuffer(buffer) && !IsSharedArrayBuffer(buffer);
-  typed_array::AllocateJSTypedArrayExternalPointerEntry(typedArray);
   if constexpr (isOnHeap) {
     typed_array::SetJSTypedArrayOnHeapDataPtr(typedArray, elements, byteOffset);
   } else {
@@ -161,7 +160,7 @@ transitioning macro ConstructByArrayLike(implicit context: Context)(
         ThrowTypeError(MessageTemplate::kDetachedOperation, 'Construct');
 
       } else if (src.elements_kind != elementsInfo.kind) {
-        goto IfSlow;
+        goto IfElementsKindMismatch(src.elements_kind);
 
       } else if (length > 0) {
         const byteLength = typedArray.byte_length;
@@ -174,6 +173,12 @@ transitioning macro ConstructByArrayLike(implicit context: Context)(
               typedArray.data_ptr, src.data_ptr, byteLength);
         }
       }
+    } label IfElementsKindMismatch(srcKind: ElementsKind) deferred {
+      if (IsBigInt64ElementsKind(srcKind) !=
+          IsBigInt64ElementsKind(elementsInfo.kind)) {
+        ThrowTypeError(MessageTemplate::kBigIntMixedTypes);
+      }
+      goto IfSlow;
     } label IfSlow deferred {
       if (length > 0) {
         TypedArrayCopyElements(

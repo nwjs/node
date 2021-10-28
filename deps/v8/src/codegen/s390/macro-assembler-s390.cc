@@ -16,6 +16,7 @@
 #include "src/codegen/macro-assembler.h"
 #include "src/codegen/register-configuration.h"
 #include "src/debug/debug.h"
+#include "src/deoptimizer/deoptimizer.h"
 #include "src/execution/frames-inl.h"
 #include "src/heap/memory-chunk.h"
 #include "src/init/bootstrapper.h"
@@ -415,14 +416,14 @@ void TurboAssembler::Jump(Handle<Code> code, RelocInfo::Mode rmode,
   DCHECK_IMPLIES(options().isolate_independent_code,
                  Builtins::IsIsolateIndependentBuiltin(*code));
 
-  Builtin builtin_index = Builtin::kNoBuiltinId;
+  Builtin builtin = Builtin::kNoBuiltinId;
   bool target_is_builtin =
-      isolate()->builtins()->IsBuiltinHandle(code, &builtin_index);
+      isolate()->builtins()->IsBuiltinHandle(code, &builtin);
 
   if (options().inline_offheap_trampolines && target_is_builtin) {
     // Inline the trampoline.
-    RecordCommentForOffHeapTrampoline(builtin_index);
-    mov(ip, Operand(BuiltinEntry(builtin_index), RelocInfo::OFF_HEAP_TARGET));
+    RecordCommentForOffHeapTrampoline(builtin);
+    mov(ip, Operand(BuiltinEntry(builtin), RelocInfo::OFF_HEAP_TARGET));
     b(cond, ip);
     return;
   }
@@ -473,19 +474,26 @@ void TurboAssembler::Call(Handle<Code> code, RelocInfo::Mode rmode,
 
   DCHECK_IMPLIES(options().isolate_independent_code,
                  Builtins::IsIsolateIndependentBuiltin(*code));
-  Builtin builtin_index = Builtin::kNoBuiltinId;
+  Builtin builtin = Builtin::kNoBuiltinId;
   bool target_is_builtin =
-      isolate()->builtins()->IsBuiltinHandle(code, &builtin_index);
+      isolate()->builtins()->IsBuiltinHandle(code, &builtin);
 
   if (target_is_builtin && options().inline_offheap_trampolines) {
     // Inline the trampoline.
-    RecordCommentForOffHeapTrampoline(builtin_index);
-    mov(ip, Operand(BuiltinEntry(builtin_index), RelocInfo::OFF_HEAP_TARGET));
-    Call(ip);
+    CallBuiltin(builtin);
     return;
   }
   DCHECK(code->IsExecutable());
   call(code, rmode);
+}
+
+void TurboAssembler::CallBuiltin(Builtin builtin) {
+  ASM_CODE_COMMENT_STRING(this, CommentForOffHeapTrampoline("call", builtin));
+  DCHECK(Builtins::IsBuiltinId(builtin));
+  // Use ip directly instead of using UseScratchRegisterScope, as we do not
+  // preserve scratch registers across calls.
+  mov(ip, Operand(BuiltinEntry(builtin), RelocInfo::OFF_HEAP_TARGET));
+  Call(ip);
 }
 
 void TurboAssembler::Drop(int count) {
@@ -1183,7 +1191,6 @@ void TurboAssembler::ConvertFloat32ToInt64(const Register dst,
       break;
     case kRoundToNearest:
       UNIMPLEMENTED();
-      break;
     case kRoundToPlusInf:
       m = Condition(6);
       break;
@@ -1192,7 +1199,6 @@ void TurboAssembler::ConvertFloat32ToInt64(const Register dst,
       break;
     default:
       UNIMPLEMENTED();
-      break;
   }
   cgebr(m, dst, double_input);
 }
@@ -1207,7 +1213,6 @@ void TurboAssembler::ConvertDoubleToInt64(const Register dst,
       break;
     case kRoundToNearest:
       UNIMPLEMENTED();
-      break;
     case kRoundToPlusInf:
       m = Condition(6);
       break;
@@ -1216,7 +1221,6 @@ void TurboAssembler::ConvertDoubleToInt64(const Register dst,
       break;
     default:
       UNIMPLEMENTED();
-      break;
   }
   cgdbr(m, dst, double_input);
 }
@@ -1240,7 +1244,6 @@ void TurboAssembler::ConvertDoubleToInt32(const Register dst,
       break;
     default:
       UNIMPLEMENTED();
-      break;
   }
 #ifdef V8_TARGET_ARCH_S390X
   lghi(dst, Operand::Zero());
@@ -1267,7 +1270,6 @@ void TurboAssembler::ConvertFloat32ToInt32(const Register result,
       break;
     default:
       UNIMPLEMENTED();
-      break;
   }
 #ifdef V8_TARGET_ARCH_S390X
   lghi(result, Operand::Zero());
@@ -1285,7 +1287,6 @@ void TurboAssembler::ConvertFloat32ToUnsignedInt32(
       break;
     case kRoundToNearest:
       UNIMPLEMENTED();
-      break;
     case kRoundToPlusInf:
       m = Condition(6);
       break;
@@ -1294,7 +1295,6 @@ void TurboAssembler::ConvertFloat32ToUnsignedInt32(
       break;
     default:
       UNIMPLEMENTED();
-      break;
   }
 #ifdef V8_TARGET_ARCH_S390X
   lghi(result, Operand::Zero());
@@ -1312,7 +1312,6 @@ void TurboAssembler::ConvertFloat32ToUnsignedInt64(
       break;
     case kRoundToNearest:
       UNIMPLEMENTED();
-      break;
     case kRoundToPlusInf:
       m = Condition(6);
       break;
@@ -1321,7 +1320,6 @@ void TurboAssembler::ConvertFloat32ToUnsignedInt64(
       break;
     default:
       UNIMPLEMENTED();
-      break;
   }
   clgebr(m, Condition(0), result, double_input);
 }
@@ -1336,7 +1334,6 @@ void TurboAssembler::ConvertDoubleToUnsignedInt64(
       break;
     case kRoundToNearest:
       UNIMPLEMENTED();
-      break;
     case kRoundToPlusInf:
       m = Condition(6);
       break;
@@ -1345,7 +1342,6 @@ void TurboAssembler::ConvertDoubleToUnsignedInt64(
       break;
     default:
       UNIMPLEMENTED();
-      break;
   }
   clgdbr(m, Condition(0), dst, double_input);
 }
@@ -1360,7 +1356,6 @@ void TurboAssembler::ConvertDoubleToUnsignedInt32(
       break;
     case kRoundToNearest:
       UNIMPLEMENTED();
-      break;
     case kRoundToPlusInf:
       m = Condition(6);
       break;
@@ -1369,7 +1364,6 @@ void TurboAssembler::ConvertDoubleToUnsignedInt32(
       break;
     default:
       UNIMPLEMENTED();
-      break;
   }
 #ifdef V8_TARGET_ARCH_S390X
   lghi(dst, Operand::Zero());
@@ -1399,6 +1393,47 @@ void TurboAssembler::Prologue(Register base, int prologue_offset) {
   PushStandardFrame(r3);
 }
 
+void TurboAssembler::DropArguments(Register count, ArgumentsCountType type,
+                                   ArgumentsCountMode mode) {
+  int receiver_bytes =
+      (mode == kCountExcludesReceiver) ? kSystemPointerSize : 0;
+  switch (type) {
+    case kCountIsInteger: {
+      ShiftLeftU64(ip, count, Operand(kSystemPointerSizeLog2));
+      lay(sp, MemOperand(sp, ip));
+      break;
+    }
+    case kCountIsSmi: {
+      STATIC_ASSERT(kSmiTagSize == 1 && kSmiTag == 0);
+      SmiToPtrArrayOffset(count, count);
+      AddS64(sp, sp, count);
+      break;
+    }
+    case kCountIsBytes: {
+      AddS64(sp, sp, count);
+      break;
+    }
+  }
+  if (receiver_bytes != 0) {
+    AddS64(sp, sp, Operand(receiver_bytes));
+  }
+}
+
+void TurboAssembler::DropArgumentsAndPushNewReceiver(Register argc,
+                                                     Register receiver,
+                                                     ArgumentsCountType type,
+                                                     ArgumentsCountMode mode) {
+  DCHECK(!AreAliased(argc, receiver));
+  if (mode == kCountExcludesReceiver) {
+    // Drop arguments without receiver and override old receiver.
+    DropArguments(argc, type, kCountIncludesReceiver);
+    StoreU64(receiver, MemOperand(sp));
+  } else {
+    DropArguments(argc, type, mode);
+    push(receiver);
+  }
+}
+
 void TurboAssembler::EnterFrame(StackFrame::Type type,
                                 bool load_constant_pool_pointer_reg) {
   // We create a stack frame with:
@@ -1410,6 +1445,9 @@ void TurboAssembler::EnterFrame(StackFrame::Type type,
 
   mov(ip, Operand(StackFrame::TypeToMarker(type)));
   PushCommonFrame(ip);
+#if V8_ENABLE_WEBASSEMBLY
+  if (type == StackFrame::WASM) Push(kWasmInstanceRegister);
+#endif  // V8_ENABLE_WEBASSEMBLY
 }
 
 int TurboAssembler::LeaveFrame(StackFrame::Type type, int stack_adjustment) {
@@ -1572,55 +1610,6 @@ void TurboAssembler::MovFromFloatResult(const DoubleRegister dst) {
 
 void TurboAssembler::MovFromFloatParameter(const DoubleRegister dst) {
   Move(dst, d0);
-}
-
-void TurboAssembler::PrepareForTailCall(Register callee_args_count,
-                                        Register caller_args_count,
-                                        Register scratch0, Register scratch1) {
-  DCHECK(!AreAliased(callee_args_count, caller_args_count, scratch0, scratch1));
-
-  // Calculate the end of destination area where we will put the arguments
-  // after we drop current frame. We AddS64 kSystemPointerSize to count the
-  // receiver argument which is not included into formal parameters count.
-  Register dst_reg = scratch0;
-  ShiftLeftU64(dst_reg, caller_args_count, Operand(kSystemPointerSizeLog2));
-  AddS64(dst_reg, fp, dst_reg);
-  AddS64(dst_reg, dst_reg,
-         Operand(StandardFrameConstants::kCallerSPOffset + kSystemPointerSize));
-
-  Register src_reg = caller_args_count;
-  // Calculate the end of source area. +kSystemPointerSize is for the receiver.
-  ShiftLeftU64(src_reg, callee_args_count, Operand(kSystemPointerSizeLog2));
-  AddS64(src_reg, sp, src_reg);
-  AddS64(src_reg, src_reg, Operand(kSystemPointerSize));
-
-  if (FLAG_debug_code) {
-    CmpU64(src_reg, dst_reg);
-    Check(lt, AbortReason::kStackAccessBelowStackPointer);
-  }
-
-  // Restore caller's frame pointer and return address now as they will be
-  // overwritten by the copying loop.
-  RestoreFrameStateForTailCall();
-
-  // Now copy callee arguments to the caller frame going backwards to avoid
-  // callee arguments corruption (source and destination areas could overlap).
-
-  // Both src_reg and dst_reg are pointing to the word after the one to copy,
-  // so they must be pre-decremented in the loop.
-  Register tmp_reg = scratch1;
-  Label loop;
-  AddS64(tmp_reg, callee_args_count, Operand(1));  // +1 for receiver
-  mov(r1, tmp_reg);
-  bind(&loop);
-  LoadU64(tmp_reg, MemOperand(src_reg, -kSystemPointerSize));
-  StoreU64(tmp_reg, MemOperand(dst_reg, -kSystemPointerSize));
-  lay(src_reg, MemOperand(src_reg, -kSystemPointerSize));
-  lay(dst_reg, MemOperand(dst_reg, -kSystemPointerSize));
-  BranchOnCount(r1, &loop);
-
-  // Leave current frame.
-  mov(sp, dst_reg);
 }
 
 MemOperand MacroAssembler::StackLimitAsMemOperand(StackLimitKind kind) {
@@ -3928,6 +3917,125 @@ void TurboAssembler::StoreV128LE(Simd128Register src, const MemOperand& mem,
   }
 }
 
+// Vector LE Load and Transform instructions.
+void TurboAssembler::LoadAndSplat8x16LE(Simd128Register dst,
+                                        const MemOperand& mem) {
+  vlrep(dst, mem, Condition(0));
+}
+#define LOAD_SPLAT_LIST(V) \
+  V(64x2, LoadU64LE, 3)    \
+  V(32x4, LoadU32LE, 2)    \
+  V(16x8, LoadU16LE, 1)
+
+#define LOAD_SPLAT(name, scalar_instr, condition)                      \
+  void TurboAssembler::LoadAndSplat##name##LE(Simd128Register dst,     \
+                                              const MemOperand& mem) { \
+    if (CpuFeatures::IsSupported(VECTOR_ENHANCE_FACILITY_2) &&         \
+        is_uint12(mem.offset())) {                                     \
+      vlbrrep(dst, mem, Condition(condition));                         \
+      return;                                                          \
+    }                                                                  \
+    scalar_instr(r1, mem);                                             \
+    vlvg(dst, r1, MemOperand(r0, 0), Condition(condition));            \
+    vrep(dst, dst, Operand(0), Condition(condition));                  \
+  }
+LOAD_SPLAT_LIST(LOAD_SPLAT)
+#undef LOAD_SPLAT
+#undef LOAD_SPLAT_LIST
+
+#define LOAD_EXTEND_LIST(V) \
+  V(32x2U, vuplh, 2)        \
+  V(32x2S, vuph, 2)         \
+  V(16x4U, vuplh, 1)        \
+  V(16x4S, vuph, 1)         \
+  V(8x8U, vuplh, 0)         \
+  V(8x8S, vuph, 0)
+
+#define LOAD_EXTEND(name, unpack_instr, condition)                      \
+  void TurboAssembler::LoadAndExtend##name##LE(Simd128Register dst,     \
+                                               const MemOperand& mem) { \
+    if (CpuFeatures::IsSupported(VECTOR_ENHANCE_FACILITY_2) &&          \
+        is_uint12(mem.offset())) {                                      \
+      vlebrg(kScratchDoubleReg, mem, Condition(0));                     \
+    } else {                                                            \
+      LoadU64LE(r1, mem);                                               \
+      vlvg(kScratchDoubleReg, r1, MemOperand(r0, 0), Condition(3));     \
+    }                                                                   \
+    unpack_instr(dst, kScratchDoubleReg, Condition(0), Condition(0),    \
+                 Condition(condition));                                 \
+  }
+LOAD_EXTEND_LIST(LOAD_EXTEND)
+#undef LOAD_EXTEND
+#undef LOAD_EXTEND
+
+void TurboAssembler::LoadV32ZeroLE(Simd128Register dst, const MemOperand& mem) {
+  vx(dst, dst, dst, Condition(0), Condition(0), Condition(0));
+  if (CpuFeatures::IsSupported(VECTOR_ENHANCE_FACILITY_2)) {
+    vlebrf(dst, mem, Condition(3));
+    return;
+  }
+  LoadU32LE(r1, mem);
+  vlvg(dst, r1, MemOperand(r0, 3), Condition(2));
+}
+
+void TurboAssembler::LoadV64ZeroLE(Simd128Register dst, const MemOperand& mem) {
+  vx(dst, dst, dst, Condition(0), Condition(0), Condition(0));
+  if (CpuFeatures::IsSupported(VECTOR_ENHANCE_FACILITY_2)) {
+    vlebrg(dst, mem, Condition(1));
+    return;
+  }
+  LoadU64LE(r1, mem);
+  vlvg(dst, r1, MemOperand(r0, 1), Condition(3));
+}
+
+void TurboAssembler::LoadLane8LE(Simd128Register dst, const MemOperand& mem,
+                                 int index) {
+  vleb(dst, mem, Condition(index));
+}
+#define LOAD_LANE_LIST(V)     \
+  V(64, vlebrg, LoadU64LE, 3) \
+  V(32, vlebrf, LoadU32LE, 2) \
+  V(16, vlebrh, LoadU16LE, 1)
+
+#define LOAD_LANE(name, vector_instr, scalar_instr, condition)               \
+  void TurboAssembler::LoadLane##name##LE(Simd128Register dst,               \
+                                          const MemOperand& mem, int lane) { \
+    if (CpuFeatures::IsSupported(VECTOR_ENHANCE_FACILITY_2) &&               \
+        is_uint12(mem.offset())) {                                           \
+      vector_instr(dst, mem, Condition(lane));                               \
+      return;                                                                \
+    }                                                                        \
+    scalar_instr(r1, mem);                                                   \
+    vlvg(dst, r1, MemOperand(r0, lane), Condition(condition));               \
+  }
+LOAD_LANE_LIST(LOAD_LANE)
+#undef LOAD_LANE
+#undef LOAD_LANE_LIST
+
+void TurboAssembler::StoreLane8LE(Simd128Register src, const MemOperand& mem,
+                                  int index) {
+  vsteb(src, mem, Condition(index));
+}
+#define STORE_LANE_LIST(V)      \
+  V(64, vstebrg, StoreU64LE, 3) \
+  V(32, vstebrf, StoreU32LE, 2) \
+  V(16, vstebrh, StoreU16LE, 1)
+
+#define STORE_LANE(name, vector_instr, scalar_instr, condition)               \
+  void TurboAssembler::StoreLane##name##LE(Simd128Register src,               \
+                                           const MemOperand& mem, int lane) { \
+    if (CpuFeatures::IsSupported(VECTOR_ENHANCE_FACILITY_2) &&                \
+        is_uint12(mem.offset())) {                                            \
+      vector_instr(src, mem, Condition(lane));                                \
+      return;                                                                 \
+    }                                                                         \
+    vlgv(r1, src, MemOperand(r0, lane), Condition(condition));                \
+    scalar_instr(r1, mem);                                                    \
+  }
+STORE_LANE_LIST(STORE_LANE)
+#undef STORE_LANE
+#undef STORE_LANE_LIST
+
 #else
 void TurboAssembler::LoadU64LE(Register dst, const MemOperand& mem,
                                Register scratch) {
@@ -3999,6 +4107,83 @@ void TurboAssembler::StoreV128LE(Simd128Register src, const MemOperand& mem,
                                  Register scratch1, Register scratch2) {
   StoreV128(src, mem, scratch1);
 }
+
+// Vector LE Load and Transform instructions.
+#define LOAD_SPLAT_LIST(V) \
+  V(64x2, 3)               \
+  V(32x4, 2)               \
+  V(16x8, 1)               \
+  V(8x16, 0)
+
+#define LOAD_SPLAT(name, condition)                                    \
+  void TurboAssembler::LoadAndSplat##name##LE(Simd128Register dst,     \
+                                              const MemOperand& mem) { \
+    vlrep(dst, mem, Condition(condition));                             \
+  }
+LOAD_SPLAT_LIST(LOAD_SPLAT)
+#undef LOAD_SPLAT
+#undef LOAD_SPLAT_LIST
+
+#define LOAD_EXTEND_LIST(V) \
+  V(32x2U, vuplh, 2)        \
+  V(32x2S, vuph, 2)         \
+  V(16x4U, vuplh, 1)        \
+  V(16x4S, vuph, 1)         \
+  V(8x8U, vuplh, 0)         \
+  V(8x8S, vuph, 0)
+
+#define LOAD_EXTEND(name, unpack_instr, condition)                      \
+  void TurboAssembler::LoadAndExtend##name##LE(Simd128Register dst,     \
+                                               const MemOperand& mem) { \
+    vleg(kScratchDoubleReg, mem, Condition(0));                         \
+    unpack_instr(dst, kScratchDoubleReg, Condition(0), Condition(0),    \
+                 Condition(condition));                                 \
+  }
+LOAD_EXTEND_LIST(LOAD_EXTEND)
+#undef LOAD_EXTEND
+#undef LOAD_EXTEND
+
+void TurboAssembler::LoadV32ZeroLE(Simd128Register dst, const MemOperand& mem) {
+  vx(dst, dst, dst, Condition(0), Condition(0), Condition(0));
+  vlef(dst, mem, Condition(3));
+}
+
+void TurboAssembler::LoadV64ZeroLE(Simd128Register dst, const MemOperand& mem) {
+  vx(dst, dst, dst, Condition(0), Condition(0), Condition(0));
+  vleg(dst, mem, Condition(1));
+}
+
+#define LOAD_LANE_LIST(V) \
+  V(64, vleg)             \
+  V(32, vlef)             \
+  V(16, vleh)             \
+  V(8, vleb)
+
+#define LOAD_LANE(name, vector_instr)                                        \
+  void TurboAssembler::LoadLane##name##LE(Simd128Register dst,               \
+                                          const MemOperand& mem, int lane) { \
+    DCHECK(is_uint12(mem.offset()));                                         \
+    vector_instr(dst, mem, Condition(lane));                                 \
+  }
+LOAD_LANE_LIST(LOAD_LANE)
+#undef LOAD_LANE
+#undef LOAD_LANE_LIST
+
+#define STORE_LANE_LIST(V) \
+  V(64, vsteg)             \
+  V(32, vstef)             \
+  V(16, vsteh)             \
+  V(8, vsteb)
+
+#define STORE_LANE(name, vector_instr)                                        \
+  void TurboAssembler::StoreLane##name##LE(Simd128Register src,               \
+                                           const MemOperand& mem, int lane) { \
+    DCHECK(is_uint12(mem.offset()));                                          \
+    vector_instr(src, mem, Condition(lane));                                  \
+  }
+STORE_LANE_LIST(STORE_LANE)
+#undef STORE_LANE
+#undef STORE_LANE_LIST
 
 #endif
 
@@ -4674,10 +4859,6 @@ void TurboAssembler::SwapSimd128(MemOperand src, MemOperand dst,
   lay(sp, MemOperand(sp, kSimd128Size));
 }
 
-void TurboAssembler::ResetSpeculationPoisonRegister() {
-  mov(kSpeculationPoisonRegister, Operand(-1));
-}
-
 void TurboAssembler::ComputeCodeStartAddress(Register dst) {
   larl(dst, Operand(-pc_offset() / 2));
 }
@@ -4801,8 +4982,9 @@ void TurboAssembler::StoreReturnAddressAndCall(Register target) {
 void TurboAssembler::CallForDeoptimization(Builtin target, int, Label* exit,
                                            DeoptimizeKind kind, Label* ret,
                                            Label*) {
+  ASM_CODE_COMMENT(this);
   LoadU64(ip, MemOperand(kRootRegister,
-                         IsolateData::builtin_entry_slot_offset(target)));
+                         IsolateData::BuiltinEntrySlotOffset(target)));
   Call(ip);
   DCHECK_EQ(SizeOfCodeGeneratedSince(exit),
             (kind == DeoptimizeKind::kLazy)
@@ -5085,6 +5267,352 @@ void TurboAssembler::AtomicExchangeU16(Register addr, Register value,
 
   bind(&done);
 }
+
+// Simd Support.
+#define kScratchDoubleReg d13
+
+void TurboAssembler::F64x2Splat(Simd128Register dst, Simd128Register src) {
+  vrep(dst, src, Operand(0), Condition(3));
+}
+
+void TurboAssembler::F32x4Splat(Simd128Register dst, Simd128Register src) {
+  vrep(dst, src, Operand(0), Condition(2));
+}
+
+void TurboAssembler::I64x2Splat(Simd128Register dst, Register src) {
+  vlvg(dst, src, MemOperand(r0, 0), Condition(3));
+  vrep(dst, dst, Operand(0), Condition(3));
+}
+
+void TurboAssembler::I32x4Splat(Simd128Register dst, Register src) {
+  vlvg(dst, src, MemOperand(r0, 0), Condition(2));
+  vrep(dst, dst, Operand(0), Condition(2));
+}
+
+void TurboAssembler::I16x8Splat(Simd128Register dst, Register src) {
+  vlvg(dst, src, MemOperand(r0, 0), Condition(1));
+  vrep(dst, dst, Operand(0), Condition(1));
+}
+
+void TurboAssembler::I8x16Splat(Simd128Register dst, Register src) {
+  vlvg(dst, src, MemOperand(r0, 0), Condition(0));
+  vrep(dst, dst, Operand(0), Condition(0));
+}
+
+void TurboAssembler::F64x2ExtractLane(DoubleRegister dst, Simd128Register src,
+                                      uint8_t imm_lane_idx) {
+  vrep(dst, src, Operand(1 - imm_lane_idx), Condition(3));
+}
+
+void TurboAssembler::F32x4ExtractLane(DoubleRegister dst, Simd128Register src,
+                                      uint8_t imm_lane_idx) {
+  vrep(dst, src, Operand(3 - imm_lane_idx), Condition(2));
+}
+
+void TurboAssembler::I64x2ExtractLane(Register dst, Simd128Register src,
+                                      uint8_t imm_lane_idx) {
+  vlgv(dst, src, MemOperand(r0, 1 - imm_lane_idx), Condition(3));
+}
+
+void TurboAssembler::I32x4ExtractLane(Register dst, Simd128Register src,
+                                      uint8_t imm_lane_idx) {
+  vlgv(dst, src, MemOperand(r0, 3 - imm_lane_idx), Condition(2));
+}
+
+void TurboAssembler::I16x8ExtractLaneU(Register dst, Simd128Register src,
+                                       uint8_t imm_lane_idx) {
+  vlgv(dst, src, MemOperand(r0, 7 - imm_lane_idx), Condition(1));
+}
+
+void TurboAssembler::I16x8ExtractLaneS(Register dst, Simd128Register src,
+                                       uint8_t imm_lane_idx) {
+  vlgv(r0, src, MemOperand(r0, 7 - imm_lane_idx), Condition(1));
+  lghr(dst, r0);
+}
+
+void TurboAssembler::I8x16ExtractLaneU(Register dst, Simd128Register src,
+                                       uint8_t imm_lane_idx) {
+  vlgv(dst, src, MemOperand(r0, 15 - imm_lane_idx), Condition(0));
+}
+
+void TurboAssembler::I8x16ExtractLaneS(Register dst, Simd128Register src,
+                                       uint8_t imm_lane_idx) {
+  vlgv(r0, src, MemOperand(r0, 15 - imm_lane_idx), Condition(0));
+  lgbr(dst, r0);
+}
+
+void TurboAssembler::F64x2ReplaceLane(Simd128Register dst, Simd128Register src1,
+                                      DoubleRegister src2,
+                                      uint8_t imm_lane_idx) {
+  vlgv(r0, src2, MemOperand(r0, 0), Condition(3));
+  if (src1 != dst) {
+    vlr(dst, src1, Condition(0), Condition(0), Condition(0));
+  }
+  vlvg(dst, r0, MemOperand(r0, 1 - imm_lane_idx), Condition(3));
+}
+
+void TurboAssembler::F32x4ReplaceLane(Simd128Register dst, Simd128Register src1,
+                                      DoubleRegister src2,
+                                      uint8_t imm_lane_idx) {
+  vlgv(r0, src2, MemOperand(r0, 0), Condition(2));
+  if (src1 != dst) {
+    vlr(dst, src1, Condition(0), Condition(0), Condition(0));
+  }
+  vlvg(dst, r0, MemOperand(r0, 3 - imm_lane_idx), Condition(2));
+}
+
+void TurboAssembler::I64x2ReplaceLane(Simd128Register dst, Simd128Register src1,
+                                      Register src2, uint8_t imm_lane_idx) {
+  if (src1 != dst) {
+    vlr(dst, src1, Condition(0), Condition(0), Condition(0));
+  }
+  vlvg(dst, src2, MemOperand(r0, 1 - imm_lane_idx), Condition(3));
+}
+
+void TurboAssembler::I32x4ReplaceLane(Simd128Register dst, Simd128Register src1,
+                                      Register src2, uint8_t imm_lane_idx) {
+  if (src1 != dst) {
+    vlr(dst, src1, Condition(0), Condition(0), Condition(0));
+  }
+  vlvg(dst, src2, MemOperand(r0, 3 - imm_lane_idx), Condition(2));
+}
+
+void TurboAssembler::I16x8ReplaceLane(Simd128Register dst, Simd128Register src1,
+                                      Register src2, uint8_t imm_lane_idx) {
+  if (src1 != dst) {
+    vlr(dst, src1, Condition(0), Condition(0), Condition(0));
+  }
+  vlvg(dst, src2, MemOperand(r0, 7 - imm_lane_idx), Condition(1));
+}
+
+void TurboAssembler::I8x16ReplaceLane(Simd128Register dst, Simd128Register src1,
+                                      Register src2, uint8_t imm_lane_idx) {
+  if (src1 != dst) {
+    vlr(dst, src1, Condition(0), Condition(0), Condition(0));
+  }
+  vlvg(dst, src2, MemOperand(r0, 15 - imm_lane_idx), Condition(0));
+}
+
+#define SIMD_BINOP_LIST_VRR_B(V) \
+  V(I64x2Eq, vceq, 0, 3)         \
+  V(I64x2GtS, vch, 0, 3)         \
+  V(I32x4Eq, vceq, 0, 2)         \
+  V(I32x4GtS, vch, 0, 2)         \
+  V(I32x4GtU, vchl, 0, 2)        \
+  V(I16x8Eq, vceq, 0, 1)         \
+  V(I16x8GtS, vch, 0, 1)         \
+  V(I16x8GtU, vchl, 0, 1)        \
+  V(I8x16Eq, vceq, 0, 0)         \
+  V(I8x16GtS, vch, 0, 0)         \
+  V(I8x16GtU, vchl, 0, 0)
+
+#define EMIT_SIMD_BINOP_VRR_B(name, op, c1, c2)                        \
+  void TurboAssembler::name(Simd128Register dst, Simd128Register src1, \
+                            Simd128Register src2) {                    \
+    op(dst, src1, src2, Condition(c1), Condition(c2));                 \
+  }
+SIMD_BINOP_LIST_VRR_B(EMIT_SIMD_BINOP_VRR_B)
+#undef EMIT_SIMD_BINOP_VRR_B
+#undef SIMD_BINOP_LIST_VRR_B
+
+#define SIMD_BINOP_LIST_VRR_C(V) \
+  V(F64x2Add, vfa, 0, 0, 3)      \
+  V(F64x2Sub, vfs, 0, 0, 3)      \
+  V(F64x2Mul, vfm, 0, 0, 3)      \
+  V(F64x2Div, vfd, 0, 0, 3)      \
+  V(F64x2Min, vfmin, 1, 0, 3)    \
+  V(F64x2Max, vfmax, 1, 0, 3)    \
+  V(F64x2Eq, vfce, 0, 0, 3)      \
+  V(F32x4Add, vfa, 0, 0, 2)      \
+  V(F32x4Sub, vfs, 0, 0, 2)      \
+  V(F32x4Mul, vfm, 0, 0, 2)      \
+  V(F32x4Div, vfd, 0, 0, 2)      \
+  V(F32x4Min, vfmin, 1, 0, 2)    \
+  V(F32x4Max, vfmax, 1, 0, 2)    \
+  V(F32x4Eq, vfce, 0, 0, 2)      \
+  V(I64x2Add, va, 0, 0, 3)       \
+  V(I64x2Sub, vs, 0, 0, 3)       \
+  V(I32x4Add, va, 0, 0, 2)       \
+  V(I32x4Sub, vs, 0, 0, 2)       \
+  V(I32x4Mul, vml, 0, 0, 2)      \
+  V(I32x4MinS, vmn, 0, 0, 2)     \
+  V(I32x4MinU, vmnl, 0, 0, 2)    \
+  V(I32x4MaxS, vmx, 0, 0, 2)     \
+  V(I32x4MaxU, vmxl, 0, 0, 2)    \
+  V(I16x8Add, va, 0, 0, 1)       \
+  V(I16x8Sub, vs, 0, 0, 1)       \
+  V(I16x8Mul, vml, 0, 0, 1)      \
+  V(I16x8MinS, vmn, 0, 0, 1)     \
+  V(I16x8MinU, vmnl, 0, 0, 1)    \
+  V(I16x8MaxS, vmx, 0, 0, 1)     \
+  V(I16x8MaxU, vmxl, 0, 0, 1)    \
+  V(I8x16Add, va, 0, 0, 0)       \
+  V(I8x16Sub, vs, 0, 0, 0)       \
+  V(I8x16MinS, vmn, 0, 0, 0)     \
+  V(I8x16MinU, vmnl, 0, 0, 0)    \
+  V(I8x16MaxS, vmx, 0, 0, 0)     \
+  V(I8x16MaxU, vmxl, 0, 0, 0)
+
+#define EMIT_SIMD_BINOP_VRR_C(name, op, c1, c2, c3)                    \
+  void TurboAssembler::name(Simd128Register dst, Simd128Register src1, \
+                            Simd128Register src2) {                    \
+    op(dst, src1, src2, Condition(c1), Condition(c2), Condition(c3));  \
+  }
+SIMD_BINOP_LIST_VRR_C(EMIT_SIMD_BINOP_VRR_C)
+#undef EMIT_SIMD_BINOP_VRR_C
+#undef SIMD_BINOP_LIST_VRR_C
+
+#define SIMD_SHIFT_LIST(V) \
+  V(I64x2Shl, veslv, 3)    \
+  V(I64x2ShrS, vesrav, 3)  \
+  V(I64x2ShrU, vesrlv, 3)  \
+  V(I32x4Shl, veslv, 2)    \
+  V(I32x4ShrS, vesrav, 2)  \
+  V(I32x4ShrU, vesrlv, 2)  \
+  V(I16x8Shl, veslv, 1)    \
+  V(I16x8ShrS, vesrav, 1)  \
+  V(I16x8ShrU, vesrlv, 1)  \
+  V(I8x16Shl, veslv, 0)    \
+  V(I8x16ShrS, vesrav, 0)  \
+  V(I8x16ShrU, vesrlv, 0)
+
+#define EMIT_SIMD_SHIFT(name, op, c1)                                      \
+  void TurboAssembler::name(Simd128Register dst, Simd128Register src1,     \
+                            Register src2) {                               \
+    vlvg(kScratchDoubleReg, src2, MemOperand(r0, 0), Condition(c1));       \
+    vrep(kScratchDoubleReg, kScratchDoubleReg, Operand(0), Condition(c1)); \
+    op(dst, src1, kScratchDoubleReg, Condition(0), Condition(0),           \
+       Condition(c1));                                                     \
+  }                                                                        \
+  void TurboAssembler::name(Simd128Register dst, Simd128Register src1,     \
+                            const Operand& src2) {                         \
+    mov(ip, src2);                                                         \
+    name(dst, src1, ip);                                                   \
+  }
+SIMD_SHIFT_LIST(EMIT_SIMD_SHIFT)
+#undef EMIT_SIMD_SHIFT
+#undef SIMD_SHIFT_LIST
+
+void TurboAssembler::I64x2Mul(Simd128Register dst, Simd128Register src1,
+                              Simd128Register src2) {
+  Register scratch_1 = r0;
+  Register scratch_2 = r1;
+  for (int i = 0; i < 2; i++) {
+    vlgv(scratch_1, src1, MemOperand(r0, i), Condition(3));
+    vlgv(scratch_2, src2, MemOperand(r0, i), Condition(3));
+    MulS64(scratch_1, scratch_2);
+    scratch_1 = r1;
+    scratch_2 = ip;
+  }
+  vlvgp(dst, r0, r1);
+}
+
+void TurboAssembler::F64x2Ne(Simd128Register dst, Simd128Register src1,
+                             Simd128Register src2) {
+  vfce(dst, src1, src2, Condition(0), Condition(0), Condition(3));
+  vno(dst, dst, dst, Condition(0), Condition(0), Condition(3));
+}
+
+void TurboAssembler::F64x2Lt(Simd128Register dst, Simd128Register src1,
+                             Simd128Register src2) {
+  vfch(dst, src2, src1, Condition(0), Condition(0), Condition(3));
+}
+
+void TurboAssembler::F64x2Le(Simd128Register dst, Simd128Register src1,
+                             Simd128Register src2) {
+  vfche(dst, src2, src1, Condition(0), Condition(0), Condition(3));
+}
+
+void TurboAssembler::F32x4Ne(Simd128Register dst, Simd128Register src1,
+                             Simd128Register src2) {
+  vfce(dst, src1, src2, Condition(0), Condition(0), Condition(2));
+  vno(dst, dst, dst, Condition(0), Condition(0), Condition(2));
+}
+
+void TurboAssembler::F32x4Lt(Simd128Register dst, Simd128Register src1,
+                             Simd128Register src2) {
+  vfch(dst, src2, src1, Condition(0), Condition(0), Condition(2));
+}
+
+void TurboAssembler::F32x4Le(Simd128Register dst, Simd128Register src1,
+                             Simd128Register src2) {
+  vfche(dst, src2, src1, Condition(0), Condition(0), Condition(2));
+}
+
+void TurboAssembler::I64x2Ne(Simd128Register dst, Simd128Register src1,
+                             Simd128Register src2) {
+  vceq(dst, src1, src2, Condition(0), Condition(3));
+  vno(dst, dst, dst, Condition(0), Condition(0), Condition(3));
+}
+
+void TurboAssembler::I64x2GeS(Simd128Register dst, Simd128Register src1,
+                              Simd128Register src2) {
+  // Compute !(B > A) which is equal to A >= B.
+  vch(dst, src2, src1, Condition(0), Condition(3));
+  vno(dst, dst, dst, Condition(0), Condition(0), Condition(3));
+}
+
+void TurboAssembler::I32x4Ne(Simd128Register dst, Simd128Register src1,
+                             Simd128Register src2) {
+  vceq(dst, src1, src2, Condition(0), Condition(2));
+  vno(dst, dst, dst, Condition(0), Condition(0), Condition(2));
+}
+
+void TurboAssembler::I32x4GeS(Simd128Register dst, Simd128Register src1,
+                              Simd128Register src2) {
+  // Compute !(B > A) which is equal to A >= B.
+  vch(dst, src2, src1, Condition(0), Condition(2));
+  vno(dst, dst, dst, Condition(0), Condition(0), Condition(2));
+}
+
+void TurboAssembler::I32x4GeU(Simd128Register dst, Simd128Register src1,
+                              Simd128Register src2) {
+  vceq(kScratchDoubleReg, src1, src2, Condition(0), Condition(2));
+  vchl(dst, src1, src2, Condition(0), Condition(2));
+  vo(dst, dst, kScratchDoubleReg, Condition(0), Condition(0), Condition(2));
+}
+
+void TurboAssembler::I16x8Ne(Simd128Register dst, Simd128Register src1,
+                             Simd128Register src2) {
+  vceq(dst, src1, src2, Condition(0), Condition(1));
+  vno(dst, dst, dst, Condition(0), Condition(0), Condition(1));
+}
+
+void TurboAssembler::I16x8GeS(Simd128Register dst, Simd128Register src1,
+                              Simd128Register src2) {
+  // Compute !(B > A) which is equal to A >= B.
+  vch(dst, src2, src1, Condition(0), Condition(1));
+  vno(dst, dst, dst, Condition(0), Condition(0), Condition(1));
+}
+
+void TurboAssembler::I16x8GeU(Simd128Register dst, Simd128Register src1,
+                              Simd128Register src2) {
+  vceq(kScratchDoubleReg, src1, src2, Condition(0), Condition(1));
+  vchl(dst, src1, src2, Condition(0), Condition(1));
+  vo(dst, dst, kScratchDoubleReg, Condition(0), Condition(0), Condition(1));
+}
+
+void TurboAssembler::I8x16Ne(Simd128Register dst, Simd128Register src1,
+                             Simd128Register src2) {
+  vceq(dst, src1, src2, Condition(0), Condition(0));
+  vno(dst, dst, dst, Condition(0), Condition(0), Condition(0));
+}
+
+void TurboAssembler::I8x16GeS(Simd128Register dst, Simd128Register src1,
+                              Simd128Register src2) {
+  // Compute !(B > A) which is equal to A >= B.
+  vch(dst, src2, src1, Condition(0), Condition(0));
+  vno(dst, dst, dst, Condition(0), Condition(0), Condition(0));
+}
+
+void TurboAssembler::I8x16GeU(Simd128Register dst, Simd128Register src1,
+                              Simd128Register src2) {
+  vceq(kScratchDoubleReg, src1, src2, Condition(0), Condition(0));
+  vchl(dst, src1, src2, Condition(0), Condition(0));
+  vo(dst, dst, kScratchDoubleReg, Condition(0), Condition(0), Condition(0));
+}
+
+#undef kScratchDoubleReg
 
 }  // namespace internal
 }  // namespace v8

@@ -1,6 +1,7 @@
 # Modules: `module` API
 
 <!--introduced_in=v12.20.0-->
+
 <!-- YAML
 added: v0.3.7
 -->
@@ -14,6 +15,7 @@ Provides general utility methods when interacting with instances of
 via `import 'module'` or `require('module')`.
 
 ### `module.builtinModules`
+
 <!-- YAML
 added:
   - v9.3.0
@@ -21,7 +23,7 @@ added:
   - v6.13.0
 -->
 
-* {string[]}
+* {string\[]}
 
 A list of the names of all modules provided by Node.js. Can be used to verify
 if a module is maintained by a third party or not.
@@ -42,6 +44,7 @@ const builtin = require('module').builtinModules;
 ```
 
 ### `module.createRequire(filename)`
+
 <!-- YAML
 added: v12.2.0
 -->
@@ -60,6 +63,7 @@ const siblingModule = require('./sibling-module');
 ```
 
 ### `module.syncBuiltinESMExports()`
+
 <!-- YAML
 added: v12.12.0
 -->
@@ -98,6 +102,7 @@ import('fs').then((esmFS) => {
 ```
 
 ## Source map v3 support
+
 <!-- YAML
 added:
  - v13.7.0
@@ -127,7 +132,9 @@ const { findSourceMap, SourceMap } = require('module');
 ```
 
 <!-- Anchors to make sure old links find a target -->
+
 <a id="module_module_findsourcemap_path_error"></a>
+
 ### `module.findSourceMap(path)`
 
 <!-- YAML
@@ -143,6 +150,7 @@ added:
 should be fetched.
 
 ### Class: `module.SourceMap`
+
 <!-- YAML
 added:
  - v13.7.0
@@ -159,9 +167,9 @@ Creates a new `sourceMap` instance.
 
 * `file`: {string}
 * `version`: {number}
-* `sources`: {string[]}
-* `sourcesContent`: {string[]}
-* `names`: {string[]}
+* `sources`: {string\[]}
+* `sourcesContent`: {string\[]}
+* `names`: {string\[]}
 * `mappings`: {string}
 * `sourceRoot`: {string}
 
@@ -191,9 +199,9 @@ consists of the following keys:
 [CommonJS]: modules.md
 [ES Modules]: esm.md
 [Source map v3 format]: https://sourcemaps.info/spec.html#h.mofvlxcwqzej
-[`--enable-source-maps`]: cli.md#cli_enable_source_maps
-[`NODE_V8_COVERAGE=dir`]: cli.md#cli_node_v8_coverage_dir
-[`SourceMap`]: #module_class_module_sourcemap
-[`module`]: modules.md#modules_the_module_object
-[module wrapper]: modules.md#modules_the_module_wrapper
+[`--enable-source-maps`]: cli.md#--enable-source-maps
+[`NODE_V8_COVERAGE=dir`]: cli.md#node_v8_coveragedir
+[`SourceMap`]: #class-modulesourcemap
+[`module`]: modules.md#the-module-object
+[module wrapper]: modules.md#the-module-wrapper
 [source map include directives]: https://sourcemaps.info/spec.html#h.lmz475t4mvbx

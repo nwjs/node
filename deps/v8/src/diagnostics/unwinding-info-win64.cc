@@ -17,6 +17,11 @@
 #error "Unsupported OS"
 #endif  // V8_OS_WIN_X64
 
+#include <windows.h>
+
+// This has to come after windows.h.
+#include <versionhelpers.h>  // For IsWindows8OrGreater().
+
 // Forward declaration to keep this independent of Win8
 NTSYSAPI
 DWORD
@@ -46,7 +51,6 @@ NTAPI
 RtlDeleteGrowableFunctionTable(
     _In_ PVOID DynamicTable
     );
-
 
 namespace v8 {
 namespace internal {

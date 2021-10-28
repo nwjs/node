@@ -306,6 +306,8 @@ ASSERT_TRIVIALLY_COPYABLE(Operand);
 static_assert(sizeof(Operand) <= 2 * kSystemPointerSize,
               "Operand must be small enough to pass it by value");
 
+bool operator!=(Operand op, XMMRegister r);
+
 // -----------------------------------------------------------------------------
 // A Displacement describes the 32bit immediate field of an instruction which
 // may be used together with a Label in order to refer to a yet unknown code
@@ -392,10 +394,26 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
     GetCode(isolate, desc, kNoSafepointTable, kNoHandlerTable);
   }
 
+  // This function is called when on-heap-compilation invariants are
+  // invalidated. For instance, when the assembler buffer grows or a GC happens
+  // between Code object allocation and Code object finalization.
+  void FixOnHeapReferences(bool update_embedded_objects = true);
+
+  // This function is called when we fallback from on-heap to off-heap
+  // compilation and patch on-heap references to handles.
+  void FixOnHeapReferencesToHandles();
+
   void FinalizeJumpOptimizationInfo();
 
   // Unused on this architecture.
   void MaybeEmitOutOfLineConstantPool() {}
+
+#ifdef DEBUG
+  bool EmbeddedObjectMatches(int pc_offset, Handle<Object> object) {
+    return *reinterpret_cast<uint32_t*>(buffer_->start() + pc_offset) ==
+           (IsOnHeap() ? object->ptr() : object.address());
+  }
+#endif
 
   // Read/Modify the code target in the branch/call instruction at pc.
   // The isolate argument is unused (and may be nullptr) when skipping flushing.
@@ -464,6 +482,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   void Nop(int bytes = 1);
   // Aligns code to something that's optimal for a jump target for the platform.
   void CodeTargetAlign();
+  void LoopHeaderAlign() { CodeTargetAlign(); }
 
   // Stack
   void pushad();
@@ -518,6 +537,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   void movzx_w(Register dst, Operand src);
 
   void movq(XMMRegister dst, Operand src);
+  void movq(Operand dst, XMMRegister src);
 
   // Conditional moves
   void cmov(Condition cc, Register dst, Register src) {
@@ -1527,6 +1547,9 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   void vmovdqa(XMMRegister dst, Operand src) {
     vinstr(0x6F, dst, xmm0, src, k66, k0F, kWIG);
   }
+  void vmovdqa(XMMRegister dst, XMMRegister src) {
+    vinstr(0x6F, dst, xmm0, src, k66, k0F, kWIG);
+  }
   void vmovdqu(XMMRegister dst, Operand src) {
     vinstr(0x6F, dst, xmm0, src, kF3, k0F, kWIG);
   }
@@ -1692,6 +1715,8 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   }
 
   PACKED_CMP_LIST(AVX_CMP_P)
+  // vcmpgeps/vcmpgepd only in AVX.
+  AVX_CMP_P(cmpge, 0xd)
 #undef AVX_CMP_P
 #undef PACKED_CMP_LIST
 
@@ -1773,6 +1798,19 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   SSE4_RM_INSTRUCTION_LIST(DECLARE_SSE4_AVX_RM_INSTRUCTION)
 #undef DECLARE_SSE4_AVX_RM_INSTRUCTION
 
+  // AVX2 instructions
+#define AVX2_INSTRUCTION(instr, prefix, escape1, escape2, opcode)           \
+  void instr(XMMRegister dst, XMMRegister src) {                            \
+    vinstr(0x##opcode, dst, xmm0, src, k##prefix, k##escape1##escape2, kW0, \
+           AVX2);                                                           \
+  }                                                                         \
+  void instr(XMMRegister dst, Operand src) {                                \
+    vinstr(0x##opcode, dst, xmm0, src, k##prefix, k##escape1##escape2, kW0, \
+           AVX2);                                                           \
+  }
+  AVX2_BROADCAST_LIST(AVX2_INSTRUCTION)
+#undef AVX2_INSTRUCTION
+
   // Prefetch src position into cache level.
   // Level 1, 2 or 3 specifies CPU cache level. Level 0 specifies a
   // non-temporal
@@ -1786,8 +1824,8 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
 
   // Record a deoptimization reason that can be used by a log or cpu profiler.
   // Use --trace-deopt to enable.
-  void RecordDeoptReason(DeoptimizeReason reason, SourcePosition position,
-                         int id);
+  void RecordDeoptReason(DeoptimizeReason reason, uint32_t node_id,
+                         SourcePosition position, int id);
 
   // Writes a single byte or word of data in the code stream.  Used for
   // inline tables, e.g., jump-tables.

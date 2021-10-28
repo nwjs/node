@@ -32,6 +32,8 @@
 
 #include "include/libplatform/v8-tracing.h"
 #include "include/v8-fast-api-calls.h"
+#include "include/v8-function.h"
+#include "include/v8-locker.h"
 #include "include/v8-profiler.h"
 #include "src/api/api-inl.h"
 #include "src/base/platform/platform.h"
@@ -551,7 +553,8 @@ class ProfilerHelper {
       v8::Local<v8::Function> function, v8::Local<v8::Value> argv[], int argc,
       unsigned min_js_samples = 0, unsigned min_external_samples = 0,
       ProfilingMode mode = ProfilingMode::kLeafNodeLineNumbers,
-      unsigned max_samples = v8::CpuProfilingOptions::kNoSampleLimit);
+      unsigned max_samples = v8::CpuProfilingOptions::kNoSampleLimit,
+      v8::Local<v8::Context> context = v8::Local<v8::Context>());
 
   v8::CpuProfiler* profiler() { return profiler_; }
 
@@ -564,11 +567,12 @@ v8::CpuProfile* ProfilerHelper::Run(v8::Local<v8::Function> function,
                                     v8::Local<v8::Value> argv[], int argc,
                                     unsigned min_js_samples,
                                     unsigned min_external_samples,
-                                    ProfilingMode mode, unsigned max_samples) {
+                                    ProfilingMode mode, unsigned max_samples,
+                                    v8::Local<v8::Context> context) {
   v8::Local<v8::String> profile_name = v8_str("my_profile");
 
   profiler_->SetSamplingInterval(50);
-  profiler_->StartProfiling(profile_name, {mode, max_samples, 0});
+  profiler_->StartProfiling(profile_name, {mode, max_samples, 0, context});
 
   v8::internal::CpuProfiler* iprofiler =
       reinterpret_cast<v8::internal::CpuProfiler*>(profiler_);
@@ -3817,6 +3821,141 @@ TEST(Bug9151StaleCodeEntries) {
   CHECK(callback);
 }
 
+// Tests that functions from other contexts aren't recorded when filtering for
+// another context.
+TEST(ContextIsolation) {
+  i::FLAG_allow_natives_syntax = true;
+  LocalContext execution_env;
+  i::HandleScope scope(CcTest::i_isolate());
+
+  // Install CollectSample callback for more deterministic sampling.
+  v8::Local<v8::FunctionTemplate> func_template = v8::FunctionTemplate::New(
+      execution_env.local()->GetIsolate(), CallCollectSample);
+  v8::Local<v8::Function> func =
+      func_template->GetFunction(execution_env.local()).ToLocalChecked();
+  func->SetName(v8_str("CallCollectSample"));
+  execution_env->Global()
+      ->Set(execution_env.local(), v8_str("CallCollectSample"), func)
+      .FromJust();
+
+  ProfilerHelper helper(execution_env.local());
+  CompileRun(R"(
+    function optimized() {
+      CallCollectSample();
+    }
+
+    function unoptimized() {
+      CallCollectSample();
+    }
+
+    function start() {
+      // Test optimized functions
+      %PrepareFunctionForOptimization(optimized);
+      optimized();
+      optimized();
+      %OptimizeFunctionOnNextCall(optimized);
+      optimized();
+
+      // Test unoptimized functions
+      %NeverOptimizeFunction(unoptimized);
+      unoptimized();
+
+      // Test callback
+      CallCollectSample();
+    }
+  )");
+  v8::Local<v8::Function> function =
+      GetFunction(execution_env.local(), "start");
+
+  v8::CpuProfile* same_context_profile = helper.Run(
+      function, nullptr, 0, 0, 0, v8::CpuProfilingMode::kLeafNodeLineNumbers,
+      v8::CpuProfilingOptions::kNoSampleLimit, execution_env.local());
+  const v8::CpuProfileNode* root = same_context_profile->GetTopDownRoot();
+  const v8::CpuProfileNode* start_node = FindChild(root, "start");
+  CHECK(start_node);
+  const v8::CpuProfileNode* optimized_node = FindChild(start_node, "optimized");
+  CHECK(optimized_node);
+  const v8::CpuProfileNode* unoptimized_node =
+      FindChild(start_node, "unoptimized");
+  CHECK(unoptimized_node);
+  const v8::CpuProfileNode* callback_node =
+      FindChild(start_node, "CallCollectSample");
+  CHECK(callback_node);
+
+  {
+    LocalContext filter_env;
+    v8::CpuProfile* diff_context_profile = helper.Run(
+        function, nullptr, 0, 0, 0, v8::CpuProfilingMode::kLeafNodeLineNumbers,
+        v8::CpuProfilingOptions::kNoSampleLimit, filter_env.local());
+    const v8::CpuProfileNode* diff_root =
+        diff_context_profile->GetTopDownRoot();
+    // Ensure that no children were recorded (including callbacks, builtins).
+    CHECK(!FindChild(diff_root, "start"));
+  }
+}
+
+// Tests that when a native context that's being filtered is moved, we continue
+// to track its execution.
+TEST(ContextFilterMovedNativeContext) {
+  if (i::FLAG_enable_third_party_heap) return;
+  i::FLAG_allow_natives_syntax = true;
+  i::FLAG_manual_evacuation_candidates_selection = true;
+  LocalContext env;
+  i::HandleScope scope(CcTest::i_isolate());
+
+  {
+    // Install CollectSample callback for more deterministic sampling.
+    v8::Local<v8::FunctionTemplate> sample_func_template =
+        v8::FunctionTemplate::New(env.local()->GetIsolate(), CallCollectSample);
+    v8::Local<v8::Function> sample_func =
+        sample_func_template->GetFunction(env.local()).ToLocalChecked();
+    sample_func->SetName(v8_str("CallCollectSample"));
+    env->Global()
+        ->Set(env.local(), v8_str("CallCollectSample"), sample_func)
+        .FromJust();
+
+    // Install a function that triggers the native context to be moved.
+    v8::Local<v8::FunctionTemplate> move_func_template =
+        v8::FunctionTemplate::New(
+            env.local()->GetIsolate(),
+            [](const v8::FunctionCallbackInfo<v8::Value>& info) {
+              i::Isolate* isolate =
+                  reinterpret_cast<i::Isolate*>(info.GetIsolate());
+              i::heap::ForceEvacuationCandidate(
+                  i::Page::FromHeapObject(isolate->raw_native_context()));
+              CcTest::CollectAllGarbage();
+            });
+    v8::Local<v8::Function> move_func =
+        move_func_template->GetFunction(env.local()).ToLocalChecked();
+    move_func->SetName(v8_str("ForceNativeContextMove"));
+    env->Global()
+        ->Set(env.local(), v8_str("ForceNativeContextMove"), move_func)
+        .FromJust();
+
+    ProfilerHelper helper(env.local());
+    CompileRun(R"(
+      function start() {
+        ForceNativeContextMove();
+        CallCollectSample();
+      }
+    )");
+    v8::Local<v8::Function> function = GetFunction(env.local(), "start");
+
+    v8::CpuProfile* profile = helper.Run(
+        function, nullptr, 0, 0, 0, v8::CpuProfilingMode::kLeafNodeLineNumbers,
+        v8::CpuProfilingOptions::kNoSampleLimit, env.local());
+    const v8::CpuProfileNode* root = profile->GetTopDownRoot();
+    const v8::CpuProfileNode* start_node = FindChild(root, "start");
+    CHECK(start_node);
+
+    // Verify that after moving the native context, CallCollectSample is still
+    // recorded.
+    const v8::CpuProfileNode* callback_node =
+        FindChild(start_node, "CallCollectSample");
+    CHECK(callback_node);
+  }
+}
+
 enum class EntryCountMode { kAll, kOnlyInlined };
 
 // Count the number of unique source positions.
@@ -4182,10 +4321,17 @@ TEST(ClearUnusedWithEagerLogging) {
   i::Isolate* isolate = CcTest::i_isolate();
   i::HandleScope scope(isolate);
 
-  CpuProfiler profiler(isolate, kDebugNaming, kEagerLogging);
+  CodeEntryStorage storage;
+  CpuProfilesCollection* profiles = new CpuProfilesCollection(isolate);
+  ProfilerCodeObserver* code_observer =
+      new ProfilerCodeObserver(isolate, storage);
+
+  CpuProfiler profiler(isolate, kDebugNaming, kEagerLogging, profiles, nullptr,
+                       nullptr, code_observer);
 
   CodeMap* code_map = profiler.code_map_for_test();
   size_t initial_size = code_map->size();
+  size_t profiler_size = code_observer->GetEstimatedMemoryUsage();
 
   {
     // Create and run a new script and function, generating 2 code objects.
@@ -4197,6 +4343,7 @@ TEST(ClearUnusedWithEagerLogging) {
         "function some_func() {}"
         "some_func();");
     CHECK_GT(code_map->size(), initial_size);
+    CHECK_GT(code_observer->GetEstimatedMemoryUsage(), profiler_size);
   }
 
   // Clear the compilation cache so that there are no more references to the
@@ -4207,6 +4354,33 @@ TEST(ClearUnusedWithEagerLogging) {
 
   // Verify that the CodeMap's size is unchanged post-GC.
   CHECK_EQ(code_map->size(), initial_size);
+  CHECK_EQ(code_observer->GetEstimatedMemoryUsage(), profiler_size);
+}
+
+// Ensure that ProfilerCodeObserver doesn't compute estimated size when race
+// condition potential
+TEST(SkipEstimatedSizeWhenActiveProfiling) {
+  ManualGCScope manual_gc;
+  TestSetup test_setup;
+  i::Isolate* isolate = CcTest::i_isolate();
+  i::HandleScope scope(isolate);
+
+  CodeEntryStorage storage;
+  CpuProfilesCollection* profiles = new CpuProfilesCollection(isolate);
+  ProfilerCodeObserver* code_observer =
+      new ProfilerCodeObserver(isolate, storage);
+
+  CpuProfiler profiler(isolate, kDebugNaming, kEagerLogging, profiles, nullptr,
+                       nullptr, code_observer);
+
+  CHECK_GT(code_observer->GetEstimatedMemoryUsage(), 0);
+
+  profiler.StartProfiling("");
+  CHECK_EQ(code_observer->GetEstimatedMemoryUsage(), 0);
+
+  profiler.StopProfiling("");
+
+  CHECK_GT(code_observer->GetEstimatedMemoryUsage(), 0);
 }
 
 }  // namespace test_cpu_profiler

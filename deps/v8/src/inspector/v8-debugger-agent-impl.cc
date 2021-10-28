@@ -7,7 +7,10 @@
 #include <algorithm>
 
 #include "../../third_party/inspector_protocol/crdtp/json.h"
+#include "include/v8-context.h"
+#include "include/v8-function.h"
 #include "include/v8-inspector.h"
+#include "include/v8-microtask-queue.h"
 #include "src/base/safe_conversions.h"
 #include "src/debug/debug-interface.h"
 #include "src/inspector/injected-script.h"
@@ -1618,7 +1621,7 @@ void V8DebuggerAgentImpl::didParseSource(
       hasSourceURLComment ? &hasSourceURLComment : nullptr;
   const bool* isModuleParam = isModule ? &isModule : nullptr;
   std::unique_ptr<V8StackTraceImpl> stack =
-      V8StackTraceImpl::capture(m_inspector->debugger(), contextGroupId, 1);
+      V8StackTraceImpl::capture(m_inspector->debugger(), 1);
   std::unique_ptr<protocol::Runtime::StackTrace> stackTrace =
       stack && !stack->isEmpty()
           ? stack->buildInspectorObjectImpl(m_debugger, 0)

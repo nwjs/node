@@ -44,6 +44,7 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
  public:
   using TurboAssemblerBase::TurboAssemblerBase;
 
+  void CallBuiltin(Builtin builtin);
   void AtomicCmpExchangeHelper(Register addr, Register output,
                                Register old_value, Register new_value,
                                int start, int end, int shift_amount, int offset,
@@ -392,6 +393,27 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
                   Register scratch1);
   void LoadF64LE(DoubleRegister dst, const MemOperand& opnd, Register scratch);
   void LoadF32LE(DoubleRegister dst, const MemOperand& opnd, Register scratch);
+  // Vector LE Load and Transform instructions.
+  void LoadAndSplat64x2LE(Simd128Register dst, const MemOperand& mem);
+  void LoadAndSplat32x4LE(Simd128Register dst, const MemOperand& mem);
+  void LoadAndSplat16x8LE(Simd128Register dst, const MemOperand& mem);
+  void LoadAndSplat8x16LE(Simd128Register dst, const MemOperand& mem);
+  void LoadAndExtend8x8ULE(Simd128Register dst, const MemOperand& mem);
+  void LoadAndExtend8x8SLE(Simd128Register dst, const MemOperand& mem);
+  void LoadAndExtend16x4ULE(Simd128Register dst, const MemOperand& mem);
+  void LoadAndExtend16x4SLE(Simd128Register dst, const MemOperand& mem);
+  void LoadAndExtend32x2ULE(Simd128Register dst, const MemOperand& mem);
+  void LoadAndExtend32x2SLE(Simd128Register dst, const MemOperand& mem);
+  void LoadV32ZeroLE(Simd128Register dst, const MemOperand& mem);
+  void LoadV64ZeroLE(Simd128Register dst, const MemOperand& mem);
+  void LoadLane8LE(Simd128Register dst, const MemOperand& mem, int lane);
+  void LoadLane16LE(Simd128Register dst, const MemOperand& mem, int lane);
+  void LoadLane32LE(Simd128Register dst, const MemOperand& mem, int lane);
+  void LoadLane64LE(Simd128Register dst, const MemOperand& mem, int lane);
+  void StoreLane8LE(Simd128Register src, const MemOperand& mem, int lane);
+  void StoreLane16LE(Simd128Register src, const MemOperand& mem, int lane);
+  void StoreLane32LE(Simd128Register src, const MemOperand& mem, int lane);
+  void StoreLane64LE(Simd128Register src, const MemOperand& mem, int lane);
 
   // Load And Test
   void LoadAndTest32(Register dst, Register src);
@@ -735,6 +757,14 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
                     int prologue_offset = 0);
   void Prologue(Register base, int prologue_offset = 0);
 
+  enum ArgumentsCountMode { kCountIncludesReceiver, kCountExcludesReceiver };
+  enum ArgumentsCountType { kCountIsInteger, kCountIsSmi, kCountIsBytes };
+  void DropArguments(Register count, ArgumentsCountType type,
+                     ArgumentsCountMode mode);
+  void DropArgumentsAndPushNewReceiver(Register argc, Register receiver,
+                                       ArgumentsCountType type,
+                                       ArgumentsCountMode mode);
+
   // Get the actual activation frame alignment for target environment.
   static int ActivationFrameAlignment();
   // ----------------------------------------------------------------
@@ -811,10 +841,6 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
     nilh(src, Operand(0x7FFF));
 #endif
   }
-
-  void PrepareForTailCall(Register callee_args_count,
-                          Register caller_args_count, Register scratch0,
-                          Register scratch1);
 
   // ---------------------------------------------------------------------------
   // Runtime calls
@@ -1011,7 +1037,6 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void CheckPageFlag(Register object, Register scratch, int mask, Condition cc,
                      Label* condition_met);
 
-  void ResetSpeculationPoisonRegister();
   void ComputeCodeStartAddress(Register dst);
   void LoadPC(Register dst);
 
@@ -1031,7 +1056,151 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void StoreReturnAddressAndCall(Register target);
 
   // ---------------------------------------------------------------------------
+  // Simd Support.
+  void F64x2Splat(Simd128Register dst, Simd128Register src);
+  void F32x4Splat(Simd128Register dst, Simd128Register src);
+  void I64x2Splat(Simd128Register dst, Register src);
+  void I32x4Splat(Simd128Register dst, Register src);
+  void I16x8Splat(Simd128Register dst, Register src);
+  void I8x16Splat(Simd128Register dst, Register src);
+  void F64x2ExtractLane(DoubleRegister dst, Simd128Register src,
+                        uint8_t imm_lane_idx);
+  void F32x4ExtractLane(DoubleRegister dst, Simd128Register src,
+                        uint8_t imm_lane_idx);
+  void I64x2ExtractLane(Register dst, Simd128Register src,
+                        uint8_t imm_lane_idx);
+  void I32x4ExtractLane(Register dst, Simd128Register src,
+                        uint8_t imm_lane_idx);
+  void I16x8ExtractLaneU(Register dst, Simd128Register src,
+                         uint8_t imm_lane_idx);
+  void I16x8ExtractLaneS(Register dst, Simd128Register src,
+                         uint8_t imm_lane_idx);
+  void I8x16ExtractLaneU(Register dst, Simd128Register src,
+                         uint8_t imm_lane_idx);
+  void I8x16ExtractLaneS(Register dst, Simd128Register src,
+                         uint8_t imm_lane_idx);
+  void F64x2ReplaceLane(Simd128Register dst, Simd128Register src1,
+                        DoubleRegister src2, uint8_t imm_lane_idx);
+  void F32x4ReplaceLane(Simd128Register dst, Simd128Register src1,
+                        DoubleRegister src2, uint8_t imm_lane_idx);
+  void I64x2ReplaceLane(Simd128Register dst, Simd128Register src1,
+                        Register src2, uint8_t imm_lane_idx);
+  void I32x4ReplaceLane(Simd128Register dst, Simd128Register src1,
+                        Register src2, uint8_t imm_lane_idx);
+  void I16x8ReplaceLane(Simd128Register dst, Simd128Register src1,
+                        Register src2, uint8_t imm_lane_idx);
+  void I8x16ReplaceLane(Simd128Register dst, Simd128Register src1,
+                        Register src2, uint8_t imm_lane_idx);
+
+#define SIMD_BINOP_LIST(V)      \
+  V(F64x2Add, Simd128Register)  \
+  V(F64x2Sub, Simd128Register)  \
+  V(F64x2Mul, Simd128Register)  \
+  V(F64x2Div, Simd128Register)  \
+  V(F64x2Min, Simd128Register)  \
+  V(F64x2Max, Simd128Register)  \
+  V(F64x2Eq, Simd128Register)   \
+  V(F64x2Ne, Simd128Register)   \
+  V(F64x2Lt, Simd128Register)   \
+  V(F64x2Le, Simd128Register)   \
+  V(F32x4Add, Simd128Register)  \
+  V(F32x4Sub, Simd128Register)  \
+  V(F32x4Mul, Simd128Register)  \
+  V(F32x4Div, Simd128Register)  \
+  V(F32x4Min, Simd128Register)  \
+  V(F32x4Max, Simd128Register)  \
+  V(F32x4Eq, Simd128Register)   \
+  V(F32x4Ne, Simd128Register)   \
+  V(F32x4Lt, Simd128Register)   \
+  V(F32x4Le, Simd128Register)   \
+  V(I64x2Add, Simd128Register)  \
+  V(I64x2Sub, Simd128Register)  \
+  V(I64x2Mul, Simd128Register)  \
+  V(I64x2Eq, Simd128Register)   \
+  V(I64x2Ne, Simd128Register)   \
+  V(I64x2GtS, Simd128Register)  \
+  V(I64x2GeS, Simd128Register)  \
+  V(I64x2Shl, Register)         \
+  V(I64x2ShrS, Register)        \
+  V(I64x2ShrU, Register)        \
+  V(I64x2Shl, const Operand&)   \
+  V(I64x2ShrS, const Operand&)  \
+  V(I64x2ShrU, const Operand&)  \
+  V(I32x4Add, Simd128Register)  \
+  V(I32x4Sub, Simd128Register)  \
+  V(I32x4Mul, Simd128Register)  \
+  V(I32x4Eq, Simd128Register)   \
+  V(I32x4Ne, Simd128Register)   \
+  V(I32x4GtS, Simd128Register)  \
+  V(I32x4GeS, Simd128Register)  \
+  V(I32x4GtU, Simd128Register)  \
+  V(I32x4GeU, Simd128Register)  \
+  V(I32x4MinS, Simd128Register) \
+  V(I32x4MinU, Simd128Register) \
+  V(I32x4MaxS, Simd128Register) \
+  V(I32x4MaxU, Simd128Register) \
+  V(I32x4Shl, Register)         \
+  V(I32x4ShrS, Register)        \
+  V(I32x4ShrU, Register)        \
+  V(I32x4Shl, const Operand&)   \
+  V(I32x4ShrS, const Operand&)  \
+  V(I32x4ShrU, const Operand&)  \
+  V(I16x8Add, Simd128Register)  \
+  V(I16x8Sub, Simd128Register)  \
+  V(I16x8Mul, Simd128Register)  \
+  V(I16x8Eq, Simd128Register)   \
+  V(I16x8Ne, Simd128Register)   \
+  V(I16x8GtS, Simd128Register)  \
+  V(I16x8GeS, Simd128Register)  \
+  V(I16x8GtU, Simd128Register)  \
+  V(I16x8GeU, Simd128Register)  \
+  V(I16x8MinS, Simd128Register) \
+  V(I16x8MinU, Simd128Register) \
+  V(I16x8MaxS, Simd128Register) \
+  V(I16x8MaxU, Simd128Register) \
+  V(I16x8Shl, Register)         \
+  V(I16x8ShrS, Register)        \
+  V(I16x8ShrU, Register)        \
+  V(I16x8Shl, const Operand&)   \
+  V(I16x8ShrS, const Operand&)  \
+  V(I16x8ShrU, const Operand&)  \
+  V(I8x16Add, Simd128Register)  \
+  V(I8x16Sub, Simd128Register)  \
+  V(I8x16Eq, Simd128Register)   \
+  V(I8x16Ne, Simd128Register)   \
+  V(I8x16GtS, Simd128Register)  \
+  V(I8x16GeS, Simd128Register)  \
+  V(I8x16GtU, Simd128Register)  \
+  V(I8x16GeU, Simd128Register)  \
+  V(I8x16MinS, Simd128Register) \
+  V(I8x16MinU, Simd128Register) \
+  V(I8x16MaxS, Simd128Register) \
+  V(I8x16MaxU, Simd128Register) \
+  V(I8x16Shl, Register)         \
+  V(I8x16ShrS, Register)        \
+  V(I8x16ShrU, Register)        \
+  V(I8x16Shl, const Operand&)   \
+  V(I8x16ShrS, const Operand&)  \
+  V(I8x16ShrU, const Operand&)
+
+#define PROTOTYPE_SIMD_BINOP(name, stype) \
+  void name(Simd128Register dst, Simd128Register src1, stype src2);
+  SIMD_BINOP_LIST(PROTOTYPE_SIMD_BINOP)
+#undef PROTOTYPE_SIMD_BINOP
+#undef SIMD_BINOP_LIST
+
+  // ---------------------------------------------------------------------------
   // Pointer compression Support
+
+  void SmiToPtrArrayOffset(Register dst, Register src) {
+#if defined(V8_COMPRESS_POINTERS) || defined(V8_31BIT_SMIS_ON_64BIT_ARCH)
+    STATIC_ASSERT(kSmiTag == 0 && kSmiShift < kSystemPointerSizeLog2);
+    ShiftLeftU64(dst, src, Operand(kSystemPointerSizeLog2 - kSmiShift));
+#else
+    STATIC_ASSERT(kSmiTag == 0 && kSmiShift > kSystemPointerSizeLog2);
+    ShiftRightS64(dst, src, Operand(kSmiShift - kSystemPointerSizeLog2));
+#endif
+  }
 
   // Loads a field containing a HeapObject and decompresses it if pointer
   // compression is enabled.
@@ -1284,16 +1453,6 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
   void SmiTag(Register reg) { SmiTag(reg, reg); }
   void SmiTag(Register dst, Register src) {
     ShiftLeftU64(dst, src, Operand(kSmiShift));
-  }
-
-  void SmiToPtrArrayOffset(Register dst, Register src) {
-#if defined(V8_COMPRESS_POINTERS) || defined(V8_31BIT_SMIS_ON_64BIT_ARCH)
-    STATIC_ASSERT(kSmiTag == 0 && kSmiShift < kSystemPointerSizeLog2);
-    ShiftLeftU64(dst, src, Operand(kSystemPointerSizeLog2 - kSmiShift));
-#else
-    STATIC_ASSERT(kSmiTag == 0 && kSmiShift > kSystemPointerSizeLog2);
-    ShiftRightS64(dst, src, Operand(kSmiShift - kSystemPointerSizeLog2));
-#endif
   }
 
   // Jump if either of the registers contain a non-smi.

@@ -13,9 +13,11 @@
 #include <unordered_map>
 #include <vector>
 
+#include "include/v8-context.h"
 #include "include/v8-internal.h"
+#include "include/v8-isolate.h"
 #include "include/v8-metrics.h"
-#include "include/v8.h"
+#include "include/v8-snapshot.h"
 #include "src/base/macros.h"
 #include "src/base/platform/mutex.h"
 #include "src/builtins/builtins.h"
@@ -33,6 +35,7 @@
 #include "src/heap/heap.h"
 #include "src/heap/read-only-heap.h"
 #include "src/init/isolate-allocator.h"
+#include "src/init/vm-cage.h"
 #include "src/objects/code.h"
 #include "src/objects/contexts.h"
 #include "src/objects/debug-objects.h"
@@ -82,7 +85,6 @@ class CodeTracer;
 class CommonFrame;
 class CompilationCache;
 class CompilationStatistics;
-class CompilerDispatcher;
 class Counters;
 class Debug;
 class Deoptimizer;
@@ -92,7 +94,9 @@ class EternalHandles;
 class HandleScopeImplementer;
 class HeapObjectToIndexHashMap;
 class HeapProfiler;
+class GlobalHandles;
 class InnerPointerToCodeCache;
+class LazyCompileDispatcher;
 class LocalIsolate;
 class Logger;
 class MaterializedObjectStore;
@@ -470,7 +474,6 @@ using DebugObjectCache = std::vector<Handle<HeapObject>>;
   V(v8_inspector::V8Inspector*, inspector, nullptr)                           \
   V(bool, next_v8_call_is_safe_for_termination, false)                        \
   V(bool, only_terminate_in_safe_scope, false)                                \
-  V(bool, detailed_source_positions_for_profiling, FLAG_detailed_line_info)   \
   V(int, embedder_wrapper_type_index, -1)                                     \
   V(int, embedder_wrapper_object_index, -1)                                   \
   V(compiler::NodeObserver*, node_observer, nullptr)                          \
@@ -706,21 +709,12 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
     return thread_local_top()->thread_id_.load(std::memory_order_relaxed);
   }
 
-  // Interface to pending exception.
-  inline Object pending_exception();
-  inline void set_pending_exception(Object exception_obj);
-  inline void clear_pending_exception();
-
   void InstallConditionalFeatures(Handle<Context> context);
 
   bool IsSharedArrayBufferConstructorEnabled(Handle<Context> context);
 
   bool IsWasmSimdEnabled(Handle<Context> context);
   bool AreWasmExceptionsEnabled(Handle<Context> context);
-
-  THREAD_LOCAL_TOP_ADDRESS(Object, pending_exception)
-
-  inline bool has_pending_exception();
 
   THREAD_LOCAL_TOP_ADDRESS(Context, pending_handler_context)
   THREAD_LOCAL_TOP_ADDRESS(Address, pending_handler_entrypoint)
@@ -733,20 +727,27 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   v8::TryCatch* try_catch_handler() {
     return thread_local_top()->try_catch_handler_;
   }
-  bool* external_caught_exception_address() {
-    return &thread_local_top()->external_caught_exception_;
-  }
+
+  THREAD_LOCAL_TOP_ADDRESS(bool, external_caught_exception)
+
+  // Interface to pending exception.
+  THREAD_LOCAL_TOP_ADDRESS(Object, pending_exception)
+  inline Object pending_exception();
+  inline void set_pending_exception(Object exception_obj);
+  inline void clear_pending_exception();
+  inline bool has_pending_exception();
+
+  THREAD_LOCAL_TOP_ADDRESS(Object, pending_message)
+  inline void clear_pending_message();
+  inline Object pending_message();
+  inline bool has_pending_message();
+  inline void set_pending_message(Object message_obj);
 
   THREAD_LOCAL_TOP_ADDRESS(Object, scheduled_exception)
-
-  inline void clear_pending_message();
-  Address pending_message_obj_address() {
-    return reinterpret_cast<Address>(&thread_local_top()->pending_message_obj_);
-  }
-
   inline Object scheduled_exception();
   inline bool has_scheduled_exception();
   inline void clear_scheduled_exception();
+  inline void set_scheduled_exception(Object exception);
 
   bool IsJavaScriptHandlerOnTop(Object exception);
   bool IsExternalHandlerOnTop(Object exception);
@@ -1008,6 +1009,17 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   ISOLATE_INIT_LIST(GLOBAL_ACCESSOR)
 #undef GLOBAL_ACCESSOR
 
+  void SetDetailedSourcePositionsForProfiling(bool value) {
+    if (value) {
+      CollectSourcePositionsForAllBytecodeArrays();
+    }
+    detailed_source_positions_for_profiling_ = value;
+  }
+
+  bool detailed_source_positions_for_profiling() const {
+    return detailed_source_positions_for_profiling_;
+  }
+
 #define GLOBAL_ARRAY_ACCESSOR(type, name, length)                \
   inline type* name() {                                          \
     DCHECK(OFFSET_OF(Isolate, name##_) == name##_debug_offset_); \
@@ -1111,9 +1123,9 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   }
 
   Address* builtin_entry_table() { return isolate_data_.builtin_entry_table(); }
-  V8_INLINE Address* builtins_table() { return isolate_data_.builtins(); }
+  V8_INLINE Address* builtin_table() { return isolate_data_.builtin_table(); }
 
-  bool IsBuiltinsTableHandleLocation(Address* handle_location);
+  bool IsBuiltinTableHandleLocation(Address* handle_location);
 
   StubCache* load_stub_cache() const { return load_stub_cache_; }
   StubCache* store_stub_cache() const { return store_stub_cache_; }
@@ -1218,7 +1230,10 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
     return is_profiling_.load(std::memory_order_relaxed);
   }
 
-  void set_is_profiling(bool enabled) {
+  void SetIsProfiling(bool enabled) {
+    if (enabled) {
+      CollectSourcePositionsForAllBytecodeArrays();
+    }
     is_profiling_.store(enabled, std::memory_order_relaxed);
   }
 
@@ -1454,7 +1469,10 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
                                    size_t heap_limit);
   void AddCallCompletedCallback(CallCompletedCallback callback);
   void RemoveCallCompletedCallback(CallCompletedCallback callback);
-  void FireCallCompletedCallback(MicrotaskQueue* microtask_queue);
+  void FireCallCompletedCallback(MicrotaskQueue* microtask_queue) {
+    if (!thread_local_top()->CallDepthIsZero()) return;
+    FireCallCompletedCallbackInternal(microtask_queue);
+  }
 
   void AddBeforeCallEnteredCallback(BeforeCallEnteredCallback callback);
   void RemoveBeforeCallEnteredCallback(BeforeCallEnteredCallback callback);
@@ -1614,7 +1632,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
 
   AccountingAllocator* allocator() { return allocator_; }
 
-  CompilerDispatcher* compiler_dispatcher() const {
+  LazyCompileDispatcher* lazy_compile_dispatcher() const {
     return compiler_dispatcher_;
   }
 
@@ -1626,18 +1644,6 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
 
   void ClearKeptObjects();
 
-  // While deprecating v8::HostImportModuleDynamicallyCallback in v8.h we still
-  // need to support the version of the API that uses it, but we can't directly
-  // reference the deprecated version because of the enusing build warnings. So,
-  // we declare this matching type for temporary internal use.
-  // TODO(v8:10958) Delete this declaration and all references to it once
-  // v8::HostImportModuleDynamicallyCallback is removed.
-  typedef MaybeLocal<Promise> (*DeprecatedHostImportModuleDynamicallyCallback)(
-      v8::Local<v8::Context> context, v8::Local<v8::ScriptOrModule> referrer,
-      v8::Local<v8::String> specifier);
-
-  void SetHostImportModuleDynamicallyCallback(
-      DeprecatedHostImportModuleDynamicallyCallback callback);
   void SetHostImportModuleDynamicallyCallback(
       HostImportModuleDynamicallyWithImportAssertionsCallback callback);
   MaybeHandle<JSPromise> RunHostImportModuleDynamicallyCallback(
@@ -1761,10 +1767,14 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   MaybeLocal<v8::Context> GetContextFromRecorderContextId(
       v8::metrics::Recorder::ContextId id);
 
+  void UpdateLongTaskStats();
+  v8::metrics::LongTaskStats* GetCurrentLongTaskStats();
+
   LocalIsolate* main_thread_local_isolate() {
     return main_thread_local_isolate_.get();
   }
 
+  Isolate* AsIsolate() { return this; }
   LocalIsolate* AsLocalIsolate() { return main_thread_local_isolate(); }
 
   LocalHeap* main_thread_local_heap();
@@ -1827,6 +1837,8 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   static Isolate* Allocate(bool is_shared);
 
   static void RemoveContextIdCallback(const v8::WeakCallbackInfo<void>& data);
+
+  void FireCallCompletedCallbackInternal(MicrotaskQueue* microtask_queue);
 
   class ThreadDataTable {
    public:
@@ -1998,8 +2010,6 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   v8::Isolate::AtomicsWaitCallback atomics_wait_callback_ = nullptr;
   void* atomics_wait_callback_data_ = nullptr;
   PromiseHook promise_hook_ = nullptr;
-  DeprecatedHostImportModuleDynamicallyCallback
-      host_import_module_dynamically_callback_ = nullptr;
   HostImportModuleDynamicallyWithImportAssertionsCallback
       host_import_module_dynamically_with_import_assertions_callback_ = nullptr;
   std::atomic<debug::CoverageMode> code_coverage_mode_{
@@ -2078,7 +2088,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   // through all compilations (and thus all JSHeapBroker instances).
   Zone* compiler_zone_ = nullptr;
 
-  CompilerDispatcher* compiler_dispatcher_ = nullptr;
+  LazyCompileDispatcher* compiler_dispatcher_ = nullptr;
   baseline::BaselineBatchCompiler* baseline_batch_compiler_ = nullptr;
 
   using InterruptEntry = std::pair<InterruptCallback, void*>;
@@ -2103,6 +2113,8 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
 #undef ISOLATE_FIELD_OFFSET
 #endif
 
+  bool detailed_source_positions_for_profiling_;
+
   OptimizingCompileDispatcher* optimizing_compile_dispatcher_ = nullptr;
 
   std::unique_ptr<PersistentHandlesList> persistent_handles_list_;
@@ -2112,6 +2124,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
 
   bool force_slow_path_ = false;
 
+  bool initialized_ = false;
   bool jitless_ = false;
 
   int next_optimization_id_ = 0;
@@ -2136,6 +2149,9 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
       uintptr_t,
       Persistent<v8::Context, v8::CopyablePersistentTraits<v8::Context>>>
       recorder_context_id_map_;
+
+  size_t last_long_task_stats_counter_ = 0;
+  v8::metrics::LongTaskStats long_task_stats_;
 
   std::vector<Object> startup_object_cache_;
 

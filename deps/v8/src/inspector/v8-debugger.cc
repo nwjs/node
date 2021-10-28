@@ -4,6 +4,11 @@
 
 #include "src/inspector/v8-debugger.h"
 
+#include "include/v8-container.h"
+#include "include/v8-context.h"
+#include "include/v8-function.h"
+#include "include/v8-microtask-queue.h"
+#include "include/v8-util.h"
 #include "src/inspector/inspected-context.h"
 #include "src/inspector/protocol/Protocol.h"
 #include "src/inspector/string-util.h"
@@ -13,8 +18,6 @@
 #include "src/inspector/v8-runtime-agent-impl.h"
 #include "src/inspector/v8-stack-trace-impl.h"
 #include "src/inspector/v8-value-utils.h"
-
-#include "include/v8-util.h"
 
 namespace v8_inspector {
 
@@ -535,10 +538,6 @@ size_t HeapLimitForDebugging(size_t initial_heap_limit) {
 size_t V8Debugger::nearHeapLimitCallback(void* data, size_t current_heap_limit,
                                          size_t initial_heap_limit) {
   V8Debugger* thisPtr = static_cast<V8Debugger*>(data);
-// TODO(solanes, v8:10876): Remove when bug is solved.
-#if DEBUG
-  printf("nearHeapLimitCallback\n");
-#endif
   thisPtr->m_originalHeapLimit = current_heap_limit;
   thisPtr->m_scheduledOOMBreak = true;
   v8::Local<v8::Context> context =
@@ -859,7 +858,7 @@ v8::Local<v8::Array> V8Debugger::queryObjects(v8::Local<v8::Context> context,
 
 std::unique_ptr<V8StackTraceImpl> V8Debugger::createStackTrace(
     v8::Local<v8::StackTrace> v8StackTrace) {
-  return V8StackTraceImpl::create(this, currentContextGroupId(), v8StackTrace,
+  return V8StackTraceImpl::create(this, v8StackTrace,
                                   V8StackTraceImpl::maxCallStackSizeToCapture);
 }
 
@@ -902,7 +901,7 @@ V8StackTraceId V8Debugger::storeCurrentStackTrace(
   if (!contextGroupId) return V8StackTraceId();
 
   std::shared_ptr<AsyncStackTrace> asyncStack =
-      AsyncStackTrace::capture(this, contextGroupId, toString16(description),
+      AsyncStackTrace::capture(this, toString16(description),
                                V8StackTraceImpl::maxCallStackSizeToCapture);
   if (!asyncStack) return V8StackTraceId();
 
@@ -980,9 +979,8 @@ void V8Debugger::asyncTaskScheduledForStack(const String16& taskName,
                                             void* task, bool recurring) {
   if (!m_maxAsyncCallStackDepth) return;
   v8::HandleScope scope(m_isolate);
-  std::shared_ptr<AsyncStackTrace> asyncStack =
-      AsyncStackTrace::capture(this, currentContextGroupId(), taskName,
-                               V8StackTraceImpl::maxCallStackSizeToCapture);
+  std::shared_ptr<AsyncStackTrace> asyncStack = AsyncStackTrace::capture(
+      this, taskName, V8StackTraceImpl::maxCallStackSizeToCapture);
   if (asyncStack) {
     m_asyncTaskStacks[task] = asyncStack;
     if (recurring) m_recurringTasks.insert(task);
@@ -1104,7 +1102,7 @@ std::unique_ptr<V8StackTraceImpl> V8Debugger::captureStackTrace(
             stackSize = V8StackTraceImpl::maxCallStackSizeToCapture;
         });
   }
-  return V8StackTraceImpl::capture(this, contextGroupId, stackSize);
+  return V8StackTraceImpl::capture(this, stackSize);
 }
 
 int V8Debugger::currentContextGroupId() {

@@ -11,6 +11,9 @@
 
 #if HAVE_OPENSSL
 #include <openssl/opensslv.h>
+#if NODE_OPENSSL_HAS_QUIC
+#include <openssl/quic.h>
+#endif
 #endif  // HAVE_OPENSSL
 
 #if 0

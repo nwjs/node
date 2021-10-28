@@ -95,7 +95,7 @@ std::string GetProcessTitle(const char* default_title);
 std::string GetHumanReadableProcessName();
 
 v8::Maybe<bool> InitializeContextRuntime(v8::Local<v8::Context> context);
-bool InitializePrimordials(v8::Local<v8::Context> context);
+v8::Maybe<bool> InitializePrimordials(v8::Local<v8::Context> context);
 
 class NodeArrayBufferAllocator : public ArrayBufferAllocator {
  public:
@@ -327,7 +327,8 @@ InitializationResult InitializeOncePerProcess(int argc, char** argv);
 InitializationResult InitializeOncePerProcess(
   int argc,
   char** argv,
-  InitializationSettingsFlags flags);
+  InitializationSettingsFlags flags,
+  ProcessFlags::Flags process_flags = ProcessFlags::kNoFlags);
 void TearDownOncePerProcess();
 void SetIsolateErrorHandlers(v8::Isolate* isolate, const IsolateSettings& s);
 void SetIsolateMiscHandlers(v8::Isolate* isolate, const IsolateSettings& s);

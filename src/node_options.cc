@@ -4,6 +4,9 @@
 #include "env-inl.h"
 #include "node_binding.h"
 #include "node_internals.h"
+#if HAVE_OPENSSL
+#include "openssl/opensslv.h"
+#endif
 
 #include <errno.h>
 #include <sstream>
@@ -521,6 +524,11 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             "show stack traces on process warnings",
             &EnvironmentOptions::trace_warnings,
             kAllowedInEnvironment);
+  AddOption("--extra-info-on-fatal-exception",
+            "hide extra information on fatal exception that causes exit",
+            &EnvironmentOptions::extra_info_on_fatal_exception,
+            kAllowedInEnvironment,
+            true);
   AddOption("--unhandled-rejections",
             "define unhandled rejections behavior. Options are 'strict' "
             "(always raise an error), 'throw' (raise an error unless "
@@ -809,6 +817,13 @@ PerProcessOptionsParser::PerProcessOptionsParser(
             &PerProcessOptions::secure_heap_min,
             kAllowedInEnvironment);
 #endif
+#if OPENSSL_VERSION_MAJOR >= 3
+  AddOption("--openssl-legacy-provider",
+            "enable OpenSSL 3.0 legacy provider",
+            &PerProcessOptions::openssl_legacy_provider,
+            kAllowedInEnvironment);
+
+#endif  // OPENSSL_VERSION_MAJOR
   AddOption("--use-largepages",
             "Map the Node.js static code to large pages. Options are "
             "'off' (the default value, meaning do not map), "
@@ -916,7 +931,7 @@ std::string GetBashCompletion() {
 
 // Return a map containing all the options and their metadata as well
 // as the aliases
-void GetOptions(const FunctionCallbackInfo<Value>& args) {
+void GetCLIOptions(const FunctionCallbackInfo<Value>& args) {
   Mutex::ScopedLock lock(per_process::cli_options_mutex);
   Environment* env = Environment::GetCurrent(args);
   if (!env->has_run_bootstrapping_code()) {
@@ -1057,13 +1072,38 @@ void GetOptions(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(ret);
 }
 
+void GetEmbedderOptions(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+  if (!env->has_run_bootstrapping_code()) {
+    // No code because this is an assertion.
+    return env->ThrowError(
+        "Should not query options before bootstrapping is done");
+  }
+  Isolate* isolate = args.GetIsolate();
+  Local<Context> context = env->context();
+  Local<Object> ret = Object::New(isolate);
+
+  if (ret->Set(context,
+           FIXED_ONE_BYTE_STRING(env->isolate(), "shouldNotRegisterESMLoader"),
+           Boolean::New(isolate, env->should_not_register_esm_loader()))
+      .IsNothing()) return;
+
+  if (ret->Set(context,
+           FIXED_ONE_BYTE_STRING(env->isolate(), "noGlobalSearchPaths"),
+           Boolean::New(isolate, env->no_global_search_paths()))
+      .IsNothing()) return;
+
+  args.GetReturnValue().Set(ret);
+}
+
 void Initialize(Local<Object> target,
                 Local<Value> unused,
                 Local<Context> context,
                 void* priv) {
   Environment* env = Environment::GetCurrent(context);
   Isolate* isolate = env->isolate();
-  env->SetMethodNoSideEffect(target, "getOptions", GetOptions);
+  env->SetMethodNoSideEffect(target, "getCLIOptions", GetCLIOptions);
+  env->SetMethodNoSideEffect(target, "getEmbedderOptions", GetEmbedderOptions);
 
   Local<Object> env_settings = Object::New(isolate);
   NODE_DEFINE_CONSTANT(env_settings, kAllowedInEnvironment);
@@ -1071,18 +1111,6 @@ void Initialize(Local<Object> target,
   target
       ->Set(
           context, FIXED_ONE_BYTE_STRING(isolate, "envSettings"), env_settings)
-      .Check();
-
-  target
-      ->Set(context,
-            FIXED_ONE_BYTE_STRING(env->isolate(), "shouldNotRegisterESMLoader"),
-            Boolean::New(isolate, env->should_not_register_esm_loader()))
-      .Check();
-
-  target
-      ->Set(context,
-            FIXED_ONE_BYTE_STRING(env->isolate(), "noGlobalSearchPaths"),
-            Boolean::New(isolate, env->no_global_search_paths()))
       .Check();
 
   Local<Object> types = Object::New(isolate);

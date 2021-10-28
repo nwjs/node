@@ -1891,7 +1891,7 @@ TNode<IntPtrT> CodeStubAssembler::LoadMapInobjectPropertiesStartInWords(
   // See Map::GetInObjectPropertiesStartInWords() for details.
   CSA_ASSERT(this, IsJSObjectMap(map));
   return ChangeInt32ToIntPtr(LoadObjectField<Uint8T>(
-      map, Map::kInObjectPropertiesStartOrConstructorFunctionIndexOffset));
+      map, Map::kInobjectPropertiesStartOrConstructorFunctionIndexOffset));
 }
 
 TNode<IntPtrT> CodeStubAssembler::LoadMapConstructorFunctionIndex(
@@ -1899,7 +1899,7 @@ TNode<IntPtrT> CodeStubAssembler::LoadMapConstructorFunctionIndex(
   // See Map::GetConstructorFunctionIndex() for details.
   CSA_ASSERT(this, IsPrimitiveInstanceType(LoadMapInstanceType(map)));
   return ChangeInt32ToIntPtr(LoadObjectField<Uint8T>(
-      map, Map::kInObjectPropertiesStartOrConstructorFunctionIndexOffset));
+      map, Map::kInobjectPropertiesStartOrConstructorFunctionIndexOffset));
 }
 
 TNode<Object> CodeStubAssembler::LoadMapConstructor(TNode<Map> map) {
@@ -2193,9 +2193,10 @@ TNode<IntPtrT> CodeStubAssembler::LoadArrayLength(
 }
 
 template <typename Array, typename TIndex, typename TValue>
-TNode<TValue> CodeStubAssembler::LoadArrayElement(
-    TNode<Array> array, int array_header_size, TNode<TIndex> index_node,
-    int additional_offset, LoadSensitivity needs_poisoning) {
+TNode<TValue> CodeStubAssembler::LoadArrayElement(TNode<Array> array,
+                                                  int array_header_size,
+                                                  TNode<TIndex> index_node,
+                                                  int additional_offset) {
   // TODO(v8:9708): Do we want to keep both IntPtrT and UintPtrT variants?
   static_assert(std::is_same<TIndex, Smi>::value ||
                     std::is_same<TIndex, UintPtrT>::value ||
@@ -2210,23 +2211,17 @@ TNode<TValue> CodeStubAssembler::LoadArrayElement(
   CSA_ASSERT(this, IsOffsetInBounds(offset, LoadArrayLength(array),
                                     array_header_size));
   constexpr MachineType machine_type = MachineTypeOf<TValue>::value;
-  // TODO(gsps): Remove the Load case once LoadFromObject supports poisoning
-  if (needs_poisoning == LoadSensitivity::kSafe) {
-    return UncheckedCast<TValue>(LoadFromObject(machine_type, array, offset));
-  } else {
-    return UncheckedCast<TValue>(
-        Load(machine_type, array, offset, needs_poisoning));
-  }
+  return UncheckedCast<TValue>(LoadFromObject(machine_type, array, offset));
 }
 
 template V8_EXPORT_PRIVATE TNode<MaybeObject>
 CodeStubAssembler::LoadArrayElement<TransitionArray, IntPtrT>(
-    TNode<TransitionArray>, int, TNode<IntPtrT>, int, LoadSensitivity);
+    TNode<TransitionArray>, int, TNode<IntPtrT>, int);
 
 template <typename TIndex>
 TNode<Object> CodeStubAssembler::LoadFixedArrayElement(
     TNode<FixedArray> object, TNode<TIndex> index, int additional_offset,
-    LoadSensitivity needs_poisoning, CheckBounds check_bounds) {
+    CheckBounds check_bounds) {
   // TODO(v8:9708): Do we want to keep both IntPtrT and UintPtrT variants?
   static_assert(std::is_same<TIndex, Smi>::value ||
                     std::is_same<TIndex, UintPtrT>::value ||
@@ -2238,25 +2233,22 @@ TNode<Object> CodeStubAssembler::LoadFixedArrayElement(
   if (NeedsBoundsCheck(check_bounds)) {
     FixedArrayBoundsCheck(object, index, additional_offset);
   }
-  TNode<MaybeObject> element =
-      LoadArrayElement(object, FixedArray::kHeaderSize, index,
-                       additional_offset, needs_poisoning);
+  TNode<MaybeObject> element = LoadArrayElement(object, FixedArray::kHeaderSize,
+                                                index, additional_offset);
   return CAST(element);
 }
 
 template V8_EXPORT_PRIVATE TNode<Object>
 CodeStubAssembler::LoadFixedArrayElement<Smi>(TNode<FixedArray>, TNode<Smi>,
-                                              int, LoadSensitivity,
-                                              CheckBounds);
+                                              int, CheckBounds);
 template V8_EXPORT_PRIVATE TNode<Object>
 CodeStubAssembler::LoadFixedArrayElement<UintPtrT>(TNode<FixedArray>,
                                                    TNode<UintPtrT>, int,
-                                                   LoadSensitivity,
                                                    CheckBounds);
 template V8_EXPORT_PRIVATE TNode<Object>
 CodeStubAssembler::LoadFixedArrayElement<IntPtrT>(TNode<FixedArray>,
                                                   TNode<IntPtrT>, int,
-                                                  LoadSensitivity, CheckBounds);
+                                                  CheckBounds);
 
 void CodeStubAssembler::FixedArrayBoundsCheck(TNode<FixedArrayBase> array,
                                               TNode<Smi> index,
@@ -2291,9 +2283,8 @@ void CodeStubAssembler::FixedArrayBoundsCheck(TNode<FixedArrayBase> array,
 TNode<Object> CodeStubAssembler::LoadPropertyArrayElement(
     TNode<PropertyArray> object, TNode<IntPtrT> index) {
   int additional_offset = 0;
-  LoadSensitivity needs_poisoning = LoadSensitivity::kSafe;
   return CAST(LoadArrayElement(object, PropertyArray::kHeaderSize, index,
-                               additional_offset, needs_poisoning));
+                               additional_offset));
 }
 
 TNode<IntPtrT> CodeStubAssembler::LoadPropertyArrayLength(
@@ -2648,7 +2639,7 @@ TNode<Int32T> CodeStubAssembler::LoadAndUntagToWord32FixedArrayElement(
 TNode<MaybeObject> CodeStubAssembler::LoadWeakFixedArrayElement(
     TNode<WeakFixedArray> object, TNode<IntPtrT> index, int additional_offset) {
   return LoadArrayElement(object, WeakFixedArray::kHeaderSize, index,
-                          additional_offset, LoadSensitivity::kSafe);
+                          additional_offset);
 }
 
 TNode<Float64T> CodeStubAssembler::LoadFixedDoubleArrayElement(
@@ -2934,11 +2925,18 @@ TNode<BytecodeArray> CodeStubAssembler::LoadSharedFunctionInfoBytecodeArray(
   Label check_for_interpreter_data(this, &var_result);
   Label done(this, &var_result);
 
-  GotoIfNot(HasInstanceType(var_result.value(), BASELINE_DATA_TYPE),
+  GotoIfNot(HasInstanceType(var_result.value(), CODET_TYPE),
             &check_for_interpreter_data);
-  TNode<HeapObject> baseline_data = LoadObjectField<HeapObject>(
-      var_result.value(), BaselineData::kDataOffset);
-  var_result = baseline_data;
+  {
+    TNode<Code> code = FromCodeT(CAST(var_result.value()));
+    CSA_ASSERT(
+        this, Word32Equal(DecodeWord32<Code::KindField>(LoadObjectField<Int32T>(
+                              code, Code::kFlagsOffset)),
+                          Int32Constant(static_cast<int>(CodeKind::BASELINE))));
+    TNode<HeapObject> baseline_data = LoadObjectField<HeapObject>(
+        code, Code::kDeoptimizationDataOrInterpreterDataOffset);
+    var_result = baseline_data;
+  }
   Goto(&check_for_interpreter_data);
 
   BIND(&check_for_interpreter_data);
@@ -3197,7 +3195,8 @@ TNode<Smi> CodeStubAssembler::BuildAppendJSArray(ElementsKind kind,
 
   // Resize the capacity of the fixed array if it doesn't fit.
   TNode<IntPtrT> first = arg_index->value();
-  TNode<BInt> growth = IntPtrToBInt(IntPtrSub(args->GetLength(), first));
+  TNode<BInt> growth =
+      IntPtrToBInt(IntPtrSub(args->GetLengthWithoutReceiver(), first));
   PossiblyGrowElementsCapacity(kind, array, var_length.value(), &var_elements,
                                growth, &pre_bailout);
 
@@ -4350,17 +4349,11 @@ TNode<FixedArray> CodeStubAssembler::ExtractToFixedArray(
   {
     bool handle_old_space = !FLAG_young_generation_large_objects;
     if (handle_old_space) {
-      if (extract_flags & ExtractFixedArrayFlag::kNewSpaceAllocationOnly) {
-        handle_old_space = false;
-        CSA_ASSERT(this, Word32BinaryNot(FixedArraySizeDoesntFitInNewSpace(
-                             count, FixedArray::kHeaderSize)));
-      } else {
-        int constant_count;
-        handle_old_space =
-            !TryGetIntPtrOrSmiConstantValue(count, &constant_count) ||
-            (constant_count >
-             FixedArray::GetMaxLengthForNewSpaceAllocation(PACKED_ELEMENTS));
-      }
+      int constant_count;
+      handle_old_space =
+          !TryGetIntPtrOrSmiConstantValue(count, &constant_count) ||
+          (constant_count >
+           FixedArray::GetMaxLengthForNewSpaceAllocation(PACKED_ELEMENTS));
     }
 
     Label old_space(this, Label::kDeferred);
@@ -4563,10 +4556,7 @@ TNode<FixedArrayBase> CodeStubAssembler::ExtractFixedArray(
       var_holes_converted != nullptr ? HoleConversionMode::kConvertToUndefined
                                      : HoleConversionMode::kDontConvert;
   TVARIABLE(FixedArrayBase, var_result);
-  const AllocationFlags allocation_flags =
-      (extract_flags & ExtractFixedArrayFlag::kNewSpaceAllocationOnly)
-          ? CodeStubAssembler::kNone
-          : CodeStubAssembler::kAllowLargeObjectAllocation;
+  auto allocation_flags = CodeStubAssembler::kAllowLargeObjectAllocation;
   if (!first) {
     first = IntPtrOrSmiConstant<TIndex>(0);
   }
@@ -6191,6 +6181,13 @@ TNode<BoolT> CodeStubAssembler::IsPromiseThenProtectorCellInvalid() {
 TNode<BoolT> CodeStubAssembler::IsArraySpeciesProtectorCellInvalid() {
   TNode<Smi> invalid = SmiConstant(Protectors::kProtectorInvalid);
   TNode<PropertyCell> cell = ArraySpeciesProtectorConstant();
+  TNode<Object> cell_value = LoadObjectField(cell, PropertyCell::kValueOffset);
+  return TaggedEqual(cell_value, invalid);
+}
+
+TNode<BoolT> CodeStubAssembler::IsIsConcatSpreadableProtectorCellInvalid() {
+  TNode<Smi> invalid = SmiConstant(Protectors::kProtectorInvalid);
+  TNode<PropertyCell> cell = IsConcatSpreadableProtectorConstant();
   TNode<Object> cell_value = LoadObjectField(cell, PropertyCell::kValueOffset);
   return TaggedEqual(cell_value, invalid);
 }
@@ -9528,7 +9525,8 @@ TNode<Object> CodeStubAssembler::CallGetterIfAccessor(
             GetCreationContext(CAST(holder), if_bailout);
         var_value = CallBuiltin(
             Builtin::kCallFunctionTemplate_CheckAccessAndCompatibleReceiver,
-            creation_context, getter, IntPtrConstant(0), receiver);
+            creation_context, getter, IntPtrConstant(i::JSParameterCount(0)),
+            receiver);
         Goto(&done);
 
         BIND(&runtime);
@@ -9689,7 +9687,7 @@ void CodeStubAssembler::TryLookupElement(
   // TODO(verwaest): Support other elements kinds as well.
   Label if_isobjectorsmi(this), if_isdouble(this), if_isdictionary(this),
       if_isfaststringwrapper(this), if_isslowstringwrapper(this), if_oob(this),
-      if_typedarray(this);
+      if_typedarray(this), if_rab_gsab_typedarray(this);
   // clang-format off
   int32_t values[] = {
       // Handled by {if_isobjectorsmi}.
@@ -9719,8 +9717,18 @@ void CodeStubAssembler::TryLookupElement(
       UINT8_CLAMPED_ELEMENTS,
       BIGUINT64_ELEMENTS,
       BIGINT64_ELEMENTS,
+      RAB_GSAB_UINT8_ELEMENTS,
+      RAB_GSAB_INT8_ELEMENTS,
+      RAB_GSAB_UINT16_ELEMENTS,
+      RAB_GSAB_INT16_ELEMENTS,
+      RAB_GSAB_UINT32_ELEMENTS,
+      RAB_GSAB_INT32_ELEMENTS,
+      RAB_GSAB_FLOAT32_ELEMENTS,
+      RAB_GSAB_FLOAT64_ELEMENTS,
+      RAB_GSAB_UINT8_CLAMPED_ELEMENTS,
+      RAB_GSAB_BIGUINT64_ELEMENTS,
+      RAB_GSAB_BIGINT64_ELEMENTS,
   };
-  // TODO(v8:11111): Support RAB / GSAB.
   Label* labels[] = {
       &if_isobjectorsmi, &if_isobjectorsmi, &if_isobjectorsmi,
       &if_isobjectorsmi, &if_isobjectorsmi, &if_isobjectorsmi,
@@ -9742,6 +9750,17 @@ void CodeStubAssembler::TryLookupElement(
       &if_typedarray,
       &if_typedarray,
       &if_typedarray,
+      &if_rab_gsab_typedarray,
+      &if_rab_gsab_typedarray,
+      &if_rab_gsab_typedarray,
+      &if_rab_gsab_typedarray,
+      &if_rab_gsab_typedarray,
+      &if_rab_gsab_typedarray,
+      &if_rab_gsab_typedarray,
+      &if_rab_gsab_typedarray,
+      &if_rab_gsab_typedarray,
+      &if_rab_gsab_typedarray,
+      &if_rab_gsab_typedarray,
   };
   // clang-format on
   STATIC_ASSERT(arraysize(values) == arraysize(labels));
@@ -9806,6 +9825,13 @@ void CodeStubAssembler::TryLookupElement(
     GotoIf(IsDetachedBuffer(buffer), if_absent);
 
     TNode<UintPtrT> length = LoadJSTypedArrayLength(CAST(object));
+    Branch(UintPtrLessThan(intptr_index, length), if_found, if_absent);
+  }
+  BIND(&if_rab_gsab_typedarray);
+  {
+    TNode<JSArrayBuffer> buffer = LoadJSArrayBufferViewBuffer(CAST(object));
+    TNode<UintPtrT> length =
+        LoadVariableLengthJSTypedArrayLength(CAST(object), buffer, if_absent);
     Branch(UintPtrLessThan(intptr_index, length), if_found, if_absent);
   }
   BIND(&if_oob);
@@ -13771,9 +13797,8 @@ void CodeStubAssembler::ThrowIfArrayBufferViewBufferIsDetached(
 
 TNode<RawPtrT> CodeStubAssembler::LoadJSArrayBufferBackingStorePtr(
     TNode<JSArrayBuffer> array_buffer) {
-  return LoadExternalPointerFromObject(array_buffer,
-                                       JSArrayBuffer::kBackingStoreOffset,
-                                       kArrayBufferBackingStoreTag);
+  return LoadObjectField<RawPtrT>(array_buffer,
+                                  JSArrayBuffer::kBackingStoreOffset);
 }
 
 TNode<JSArrayBuffer> CodeStubAssembler::LoadJSArrayBufferViewBuffer(
@@ -13889,6 +13914,45 @@ TNode<UintPtrT> CodeStubAssembler::LoadVariableLengthJSTypedArrayLength(
   }
   BIND(&end);
   return result.value();
+}
+
+void CodeStubAssembler::IsTypedArrayDetachedOrOutOfBounds(
+    TNode<JSTypedArray> array, Label* detached_or_oob,
+    Label* not_detached_nor_oob) {
+  TNode<JSArrayBuffer> buffer = LoadJSArrayBufferViewBuffer(array);
+
+  GotoIf(IsDetachedBuffer(buffer), detached_or_oob);
+  GotoIfNot(IsVariableLengthTypedArray(array), not_detached_nor_oob);
+  GotoIf(IsSharedArrayBuffer(buffer), not_detached_nor_oob);
+
+  {
+    TNode<UintPtrT> buffer_byte_length = LoadJSArrayBufferByteLength(buffer);
+    TNode<UintPtrT> array_byte_offset = LoadJSArrayBufferViewByteOffset(array);
+
+    Label length_tracking(this), not_length_tracking(this);
+    Branch(IsLengthTrackingTypedArray(array), &length_tracking,
+           &not_length_tracking);
+
+    BIND(&length_tracking);
+    {
+      // The backing RAB might have been shrunk so that the start of the
+      // TypedArray is already out of bounds.
+      Branch(UintPtrLessThanOrEqual(array_byte_offset, buffer_byte_length),
+             not_detached_nor_oob, detached_or_oob);
+    }
+
+    BIND(&not_length_tracking);
+    {
+      // Check if the backing RAB has shrunk so that the buffer is out of
+      // bounds.
+      TNode<UintPtrT> array_byte_length =
+          LoadJSArrayBufferViewByteLength(array);
+      Branch(UintPtrGreaterThanOrEqual(
+                 buffer_byte_length,
+                 UintPtrAdd(array_byte_offset, array_byte_length)),
+             not_detached_nor_oob, detached_or_oob);
+    }
+  }
 }
 
 // ES #sec-integerindexedobjectbytelength
@@ -14019,7 +14083,8 @@ TNode<RawPtrT> CodeStubArguments::AtIndexPtr(TNode<IntPtrT> index) const {
 }
 
 TNode<Object> CodeStubArguments::AtIndex(TNode<IntPtrT> index) const {
-  CSA_ASSERT(assembler_, assembler_->UintPtrOrSmiLessThan(index, GetLength()));
+  CSA_ASSERT(assembler_, assembler_->UintPtrOrSmiLessThan(
+                             index, GetLengthWithoutReceiver()));
   return assembler_->LoadFullTagged(AtIndexPtr(index));
 }
 
@@ -14027,9 +14092,19 @@ TNode<Object> CodeStubArguments::AtIndex(int index) const {
   return AtIndex(assembler_->IntPtrConstant(index));
 }
 
+TNode<IntPtrT> CodeStubArguments::GetLengthWithoutReceiver() const {
+  TNode<IntPtrT> argc = argc_;
+  if (kJSArgcIncludesReceiver) {
+    argc = assembler_->IntPtrSub(argc, assembler_->IntPtrConstant(1));
+  }
+  return argc;
+}
+
 TNode<IntPtrT> CodeStubArguments::GetLengthWithReceiver() const {
-  TNode<IntPtrT> argc = GetLength();
-  argc = assembler_->IntPtrAdd(argc, assembler_->IntPtrConstant(1));
+  TNode<IntPtrT> argc = argc_;
+  if (!kJSArgcIncludesReceiver) {
+    argc = assembler_->IntPtrAdd(argc, assembler_->IntPtrConstant(1));
+  }
   return argc;
 }
 
@@ -14039,8 +14114,9 @@ TNode<Object> CodeStubArguments::GetOptionalArgumentValue(
   CodeStubAssembler::Label argument_missing(assembler_),
       argument_done(assembler_, &result);
 
-  assembler_->GotoIf(assembler_->UintPtrGreaterThanOrEqual(index, argc_),
-                     &argument_missing);
+  assembler_->GotoIf(
+      assembler_->UintPtrGreaterThanOrEqual(index, GetLengthWithoutReceiver()),
+      &argument_missing);
   result = AtIndex(index);
   assembler_->Goto(&argument_done);
 
@@ -14061,7 +14137,7 @@ void CodeStubArguments::ForEach(
     first = assembler_->IntPtrConstant(0);
   }
   if (last == nullptr) {
-    last = argc_;
+    last = GetLengthWithoutReceiver();
   }
   TNode<RawPtrT> start = AtIndexPtr(first);
   TNode<RawPtrT> end = AtIndexPtr(last);
@@ -14076,8 +14152,7 @@ void CodeStubArguments::ForEach(
 }
 
 void CodeStubArguments::PopAndReturn(TNode<Object> value) {
-  TNode<IntPtrT> pop_count =
-      assembler_->IntPtrAdd(argc_, assembler_->IntPtrConstant(1));
+  TNode<IntPtrT> pop_count = GetLengthWithReceiver();
   assembler_->PopAndReturn(pop_count, value);
 }
 
@@ -14262,7 +14337,7 @@ TNode<Code> CodeStubAssembler::GetSharedFunctionInfoCode(
 
   int32_t case_values[] = {
     BYTECODE_ARRAY_TYPE,
-    BASELINE_DATA_TYPE,
+    CODET_TYPE,
     UNCOMPILED_DATA_WITHOUT_PREPARSE_DATA_TYPE,
     UNCOMPILED_DATA_WITH_PREPARSE_DATA_TYPE,
     FUNCTION_TEMPLATE_INFO_TYPE,
@@ -14306,7 +14381,7 @@ TNode<Code> CodeStubAssembler::GetSharedFunctionInfoCode(
   // IsBaselineData: Execute baseline code
   BIND(&check_is_baseline_data);
   {
-    TNode<CodeT> baseline_code = LoadBaselineDataBaselineCode(CAST(sfi_data));
+    TNode<CodeT> baseline_code = CAST(sfi_data);
     sfi_code = FromCodeT(baseline_code);
     Goto(&done);
   }
@@ -14376,7 +14451,7 @@ TNode<JSFunction> CodeStubAssembler::AllocateFunctionWithMapAndContext(
   StoreObjectFieldNoWriteBarrier(fun, JSFunction::kSharedFunctionInfoOffset,
                                  shared_info);
   StoreObjectFieldNoWriteBarrier(fun, JSFunction::kContextOffset, context);
-  StoreObjectFieldNoWriteBarrier(fun, JSFunction::kCodeOffset, ToCodeT(code));
+  StoreObjectField(fun, JSFunction::kCodeOffset, ToCodeT(code));
   return CAST(fun);
 }
 
@@ -14489,7 +14564,15 @@ TNode<Object> CodeStubAssembler::GetArgumentValue(TorqueStructArguments args,
 }
 
 TorqueStructArguments CodeStubAssembler::GetFrameArguments(
-    TNode<RawPtrT> frame, TNode<IntPtrT> argc) {
+    TNode<RawPtrT> frame, TNode<IntPtrT> argc,
+    FrameArgumentsArgcType argc_type) {
+  if (kJSArgcIncludesReceiver &&
+      argc_type == FrameArgumentsArgcType::kCountExcludesReceiver) {
+    argc = IntPtrAdd(argc, IntPtrConstant(kJSArgcReceiverSlots));
+  } else if (!kJSArgcIncludesReceiver &&
+             argc_type == FrameArgumentsArgcType::kCountIncludesReceiver) {
+    argc = IntPtrSub(argc, IntPtrConstant(1));
+  }
   return CodeStubArguments(this, argc, frame).GetTorqueArguments();
 }
 

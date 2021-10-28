@@ -235,6 +235,7 @@ class V8_EXPORT_PRIVATE Operand {
   }
 
   Operand(const Operand&) V8_NOEXCEPT = default;
+  Operand& operator=(const Operand&) V8_NOEXCEPT = default;
 
   const Data& data() const { return data_; }
 
@@ -421,6 +422,15 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
     GetCode(isolate, desc, kNoSafepointTable, kNoHandlerTable);
   }
 
+  // This function is called when on-heap-compilation invariants are
+  // invalidated. For instance, when the assembler buffer grows or a GC happens
+  // between Code object allocation and Code object finalization.
+  void FixOnHeapReferences(bool update_embedded_objects = true);
+
+  // This function is called when we fallback from on-heap to off-heap
+  // compilation and patch on-heap references to handles.
+  void FixOnHeapReferencesToHandles();
+
   void FinalizeJumpOptimizationInfo();
 
   // Unused on this architecture.
@@ -551,6 +561,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   void Nop(int bytes = 1);
   // Aligns code to something that's optimal for a jump target for the platform.
   void CodeTargetAlign();
+  void LoopHeaderAlign();
 
   // Stack
   void pushfq();
@@ -1231,9 +1242,6 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   void cvtqsi2sd(XMMRegister dst, Operand src);
   void cvtqsi2sd(XMMRegister dst, Register src);
 
-  void cvtss2sd(XMMRegister dst, XMMRegister src);
-  void cvtss2sd(XMMRegister dst, Operand src);
-
   void cvtsd2si(Register dst, XMMRegister src);
   void cvtsd2siq(Register dst, XMMRegister src);
 
@@ -1246,14 +1254,15 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
 
   void pmovmskb(Register dst, XMMRegister src);
 
+  void pinsrw(XMMRegister dst, Register src, uint8_t imm8);
+  void pinsrw(XMMRegister dst, Operand src, uint8_t imm8);
+
   // SSE 4.1 instruction
   void insertps(XMMRegister dst, XMMRegister src, byte imm8);
   void insertps(XMMRegister dst, Operand src, byte imm8);
   void pextrq(Register dst, XMMRegister src, int8_t imm8);
   void pinsrb(XMMRegister dst, Register src, uint8_t imm8);
   void pinsrb(XMMRegister dst, Operand src, uint8_t imm8);
-  void pinsrw(XMMRegister dst, Register src, uint8_t imm8);
-  void pinsrw(XMMRegister dst, Operand src, uint8_t imm8);
   void pinsrd(XMMRegister dst, Register src, uint8_t imm8);
   void pinsrd(XMMRegister dst, Operand src, uint8_t imm8);
   void pinsrq(XMMRegister dst, Register src, uint8_t imm8);
@@ -1341,9 +1350,11 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   void vmovsd(Operand dst, XMMRegister src) { vsd(0x11, src, xmm0, dst); }
   void vmovdqa(XMMRegister dst, Operand src);
   void vmovdqa(XMMRegister dst, XMMRegister src);
+  void vmovdqa(YMMRegister dst, YMMRegister src);
   void vmovdqu(XMMRegister dst, Operand src);
   void vmovdqu(Operand dst, XMMRegister src);
   void vmovdqu(XMMRegister dst, XMMRegister src);
+  void vmovdqu(YMMRegister dst, YMMRegister src);
 
   void vmovlps(XMMRegister dst, XMMRegister src1, Operand src2);
   void vmovlps(Operand dst, XMMRegister src);
@@ -1357,6 +1368,12 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   }                                                  \
   void v##instr(XMMRegister dst, Operand src2) {     \
     vps(0x##opcode, dst, xmm0, src2);                \
+  }                                                  \
+  void v##instr(YMMRegister dst, YMMRegister src2) { \
+    vps(0x##opcode, dst, ymm0, src2);                \
+  }                                                  \
+  void v##instr(YMMRegister dst, Operand src2) {     \
+    vps(0x##opcode, dst, ymm0, src2);                \
   }
   SSE_UNOP_INSTRUCTION_LIST(AVX_SSE_UNOP)
 #undef AVX_SSE_UNOP
@@ -1366,6 +1383,12 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
     vps(0x##opcode, dst, src1, src2);                                  \
   }                                                                    \
   void v##instr(XMMRegister dst, XMMRegister src1, Operand src2) {     \
+    vps(0x##opcode, dst, src1, src2);                                  \
+  }                                                                    \
+  void v##instr(YMMRegister dst, YMMRegister src1, YMMRegister src2) { \
+    vps(0x##opcode, dst, src1, src2);                                  \
+  }                                                                    \
+  void v##instr(YMMRegister dst, YMMRegister src1, Operand src2) {     \
     vps(0x##opcode, dst, src1, src2);                                  \
   }
   SSE_BINOP_INSTRUCTION_LIST(AVX_SSE_BINOP)
@@ -1411,12 +1434,6 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   }
   void vcvtdq2pd(XMMRegister dst, XMMRegister src) {
     vinstr(0xe6, dst, xmm0, src, kF3, k0F, kWIG);
-  }
-  void vcvtss2sd(XMMRegister dst, XMMRegister src1, XMMRegister src2) {
-    vinstr(0x5a, dst, src1, src2, kF3, k0F, kWIG);
-  }
-  void vcvtss2sd(XMMRegister dst, XMMRegister src1, Operand src2) {
-    vinstr(0x5a, dst, src1, src2, kF3, k0F, kWIG);
   }
   void vcvttps2dq(XMMRegister dst, XMMRegister src) {
     vinstr(0x5b, dst, xmm0, src, kF3, k0F, kWIG);
@@ -1580,6 +1597,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   AVX_CMP_P(vcmpneq, 0x4)
   AVX_CMP_P(vcmpnlt, 0x5)
   AVX_CMP_P(vcmpnle, 0x6)
+  AVX_CMP_P(vcmpge, 0xd)
 
 #undef AVX_CMP_P
 
@@ -1683,7 +1701,9 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   }
 
   void vps(byte op, XMMRegister dst, XMMRegister src1, XMMRegister src2);
+  void vps(byte op, YMMRegister dst, YMMRegister src1, YMMRegister src2);
   void vps(byte op, XMMRegister dst, XMMRegister src1, Operand src2);
+  void vps(byte op, YMMRegister dst, YMMRegister src1, Operand src2);
   void vps(byte op, XMMRegister dst, XMMRegister src1, XMMRegister src2,
            byte imm8);
   void vpd(byte op, XMMRegister dst, XMMRegister src1, XMMRegister src2);
@@ -1854,8 +1874,8 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
 
   // Record a deoptimization reason that can be used by a log or cpu profiler.
   // Use --trace-deopt to enable.
-  void RecordDeoptReason(DeoptimizeReason reason, SourcePosition position,
-                         int id);
+  void RecordDeoptReason(DeoptimizeReason reason, uint32_t node_id,
+                         SourcePosition position, int id);
 
   // Writes a single word of data in the code stream.
   // Used for inline tables, e.g., jump-tables.
@@ -1866,6 +1886,13 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
     dq(data, rmode);
   }
   void dq(Label* label);
+
+#ifdef DEBUG
+  bool EmbeddedObjectMatches(int pc_offset, Handle<Object> object) {
+    return *reinterpret_cast<uint64_t*>(buffer_->start() + pc_offset) ==
+           (IsOnHeap() ? object->ptr() : object.address());
+  }
+#endif
 
   // Patch entries for partial constant pool.
   void PatchConstPool();

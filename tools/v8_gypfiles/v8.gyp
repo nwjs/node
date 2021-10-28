@@ -231,7 +231,7 @@
             '<(generate_bytecode_builtins_list_output)',
           ],
           'action': [
-            'python',
+            '<(python)',
             '<(V8_ROOT)/tools/run.py',
             '<@(_inputs)',
             '<@(_outputs)',
@@ -509,12 +509,7 @@
       ],
       'direct_dependent_settings': {
         'sources': [
-          '<(V8_ROOT)/include/v8-cppgc.h',
-          '<(V8_ROOT)/include/v8-fast-api-calls.h',
-          '<(V8_ROOT)/include/v8-internal.h',
-          '<(V8_ROOT)/include/v8-profiler.h',
-          '<(V8_ROOT)/include/v8-util.h',
-          '<(V8_ROOT)/include/v8.h',
+          '<!@pymod_do_main(GN-scraper "<(V8_ROOT)/BUILD.gn"  "v8_header_set.\\"v8_headers\\".*?sources = ")',
 
           '<(V8_ROOT)/include/v8-wasm-trap-handler-posix.h',
           '<(V8_ROOT)/include/v8-wasm-trap-handler-win.h',
@@ -1554,7 +1549,7 @@
             '<(SHARED_INTERMEDIATE_DIR)/src/regexp/special-case.cc',
           ],
           'action': [
-            'python',
+            '<(python)',
             '<(V8_ROOT)/tools/run.py',
             '<@(_inputs)',
             '<@(_outputs)',
@@ -1606,9 +1601,6 @@
           ['v8_advanced_bigint_algorithms==1', {
             'sources': [
               '<!@pymod_do_main(GN-scraper "<(V8_ROOT)/BUILD.gn"  "v8_source_set.\\"v8_bigint.*?v8_advanced_bigint_algorithms.*?sources \\+= ")',
-            ],
-            'defines': [
-              'V8_ADVANCED_BIGINT_ALGORITHMS',
             ],
           }],
         ],

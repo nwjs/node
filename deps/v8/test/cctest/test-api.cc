@@ -37,7 +37,15 @@
 #include <unistd.h>
 #endif
 
+#include "include/v8-date.h"
+#include "include/v8-extension.h"
 #include "include/v8-fast-api-calls.h"
+#include "include/v8-function.h"
+#include "include/v8-initialization.h"
+#include "include/v8-json.h"
+#include "include/v8-locker.h"
+#include "include/v8-primitive-object.h"
+#include "include/v8-regexp.h"
 #include "include/v8-util.h"
 #include "src/api/api-inl.h"
 #include "src/base/overflowing-math.h"
@@ -76,6 +84,7 @@
 
 #if V8_ENABLE_WEBASSEMBLY
 #include "test/cctest/wasm/wasm-run-utils.h"
+#include "test/common/wasm/test-signatures.h"
 #include "test/common/wasm/wasm-macro-gen.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
@@ -13738,16 +13747,14 @@ static v8::base::HashMap* jitcode_line_info = nullptr;
 static int saw_bar = 0;
 static int move_events = 0;
 
-
 static bool FunctionNameIs(const char* expected,
                            const v8::JitCodeEvent* event) {
   // Log lines for functions are of the general form:
   // "LazyCompile:<type><function_name>" or Function:<type><function_name>,
   // where the type is one of "*", "~" or "".
-  static const char* kPreamble;
-  if (!i::FLAG_lazy) {
-    kPreamble = "Function:";
-  } else {
+  static const char* kPreamble = "Function:";
+  if (i::FLAG_lazy &&
+      event->code_type != v8::JitCodeEvent::CodeType::WASM_CODE) {
     kPreamble = "LazyCompile:";
   }
   static size_t kPreambleLen = strlen(kPreamble);
@@ -13779,7 +13786,6 @@ static bool FunctionNameIs(const char* expected,
 
   return strncmp(tail, expected, expected_len) == 0;
 }
-
 
 static void event_handler(const v8::JitCodeEvent* event) {
   CHECK_NOT_NULL(event);
@@ -13872,7 +13878,6 @@ static void event_handler(const v8::JitCodeEvent* event) {
       UNREACHABLE();
   }
 }
-
 
 UNINITIALIZED_TEST(SetJitCodeEventHandler) {
   i::FLAG_stress_compaction = true;
@@ -13997,6 +14002,77 @@ UNINITIALIZED_TEST(SetJitCodeEventHandler) {
   isolate->Exit();
   isolate->Dispose();
 }
+
+#if V8_ENABLE_WEBASSEMBLY
+static bool saw_wasm_main = false;
+static void wasm_event_handler(const v8::JitCodeEvent* event) {
+  switch (event->type) {
+    case v8::JitCodeEvent::CODE_ADDED: {
+      if (FunctionNameIs("main-0-turbofan", event)) {
+        saw_wasm_main = true;
+        // Make sure main function has line info.
+        auto* entry = jitcode_line_info->Lookup(
+            event->code_start, i::ComputePointerHash(event->code_start));
+        CHECK_NOT_NULL(entry);
+      }
+      break;
+    }
+    case v8::JitCodeEvent::CODE_END_LINE_INFO_RECORDING: {
+      jitcode_line_info->LookupOrInsert(
+          event->code_start, i::ComputePointerHash(event->code_start));
+      break;
+    }
+    case v8::JitCodeEvent::CODE_ADD_LINE_POS_INFO: {
+      break;
+    }
+    default: {
+      // Ignore all other events;
+    }
+  }
+}
+
+namespace v8 {
+namespace internal {
+namespace wasm {
+TEST(WasmSetJitCodeEventHandler) {
+  v8::base::HashMap code;
+  code_map = &code;
+
+  v8::base::HashMap lineinfo;
+  jitcode_line_info = &lineinfo;
+
+  WasmRunner<int32_t, int32_t, int32_t> r(TestExecutionTier::kTurbofan);
+  i::Isolate* isolate = r.main_isolate();
+
+  v8::Isolate* v8_isolate = reinterpret_cast<v8::Isolate*>(isolate);
+  v8_isolate->SetJitCodeEventHandler(v8::kJitCodeEventDefault,
+                                     wasm_event_handler);
+
+  TestSignatures sigs;
+  auto& f = r.NewFunction(sigs.i_i(), "f");
+  BUILD(f, WASM_I32_ADD(WASM_LOCAL_GET(0), WASM_LOCAL_GET(0)));
+
+  LocalContext env;
+
+  BUILD(r,
+        WASM_I32_ADD(WASM_LOCAL_GET(0), WASM_CALL_FUNCTION(f.function_index(),
+                                                           WASM_LOCAL_GET(1))));
+
+  Handle<JSFunction> func = r.builder().WrapCode(0);
+  CHECK(env->Global()
+            ->Set(env.local(), v8_str("func"), v8::Utils::ToLocal(func))
+            .FromJust());
+  const char* script = R"(
+    func(1, 2);
+  )";
+  CompileRun(script);
+  CHECK(saw_wasm_main);
+  saw_wasm_main = false;
+}
+}  // namespace wasm
+}  // namespace internal
+}  // namespace v8
+#endif  // V8_ENABLE_WEBASSEMBLY
 
 TEST(ExternalAllocatedMemory) {
   v8::Isolate* isolate = CcTest::isolate();
@@ -21658,10 +21734,6 @@ TEST(RegExpInterruptAndMakeSubjectTwoByteExternal) {
   // experimental engine.
   i::FLAG_enable_experimental_regexp_engine_on_excessive_backtracks = false;
   RegExpInterruptTest test;
-  // We want to be stuck regexp execution, so no fallback to linear-time
-  // engine.
-  // TODO(mbid,v8:10765): Find a way to test interrupt support of the
-  // experimental engine.
   test.RunTest(RegExpInterruptTest::MakeSubjectTwoByteExternal);
 }
 
@@ -22622,25 +22694,86 @@ TEST(ChainSignatureCheck) {
 
 
 static const char* last_event_message;
-static int last_event_status;
+// See v8::LogEventStatus
+static v8::LogEventStatus last_event_status;
+static int event_count = 0;
 void StoringEventLoggerCallback(const char* message, int status) {
     last_event_message = message;
-    last_event_status = status;
+    last_event_status = static_cast<v8::LogEventStatus>(status);
+    event_count++;
 }
 
 
 TEST(EventLogging) {
   v8::Isolate* isolate = CcTest::isolate();
   isolate->SetEventLogger(StoringEventLoggerCallback);
-  v8::internal::HistogramTimer histogramTimer(
-      "V8.Test", 0, 10000, v8::internal::HistogramTimerResolution::MILLISECOND,
+  v8::internal::NestedTimedHistogram histogram(
+      "V8.Test", 0, 10000, v8::internal::TimedHistogramResolution::MILLISECOND,
       50, reinterpret_cast<v8::internal::Isolate*>(isolate)->counters());
-  histogramTimer.Start();
+  event_count = 0;
+  int count = 0;
+  {
+    CHECK_EQ(0, event_count);
+    {
+      CHECK_EQ(0, event_count);
+      v8::internal::NestedTimedHistogramScope scope0(&histogram);
+      CHECK_EQ(0, strcmp("V8.Test", last_event_message));
+      CHECK_EQ(v8::LogEventStatus::kStart, last_event_status);
+      CHECK_EQ(++count, event_count);
+    }
+    CHECK_EQ(v8::LogEventStatus::kEnd, last_event_status);
+    CHECK_EQ(++count, event_count);
+
+    v8::internal::NestedTimedHistogramScope scope1(&histogram);
+    CHECK_EQ(0, strcmp("V8.Test", last_event_message));
+    CHECK_EQ(v8::LogEventStatus::kStart, last_event_status);
+    CHECK_EQ(++count, event_count);
+    {
+      CHECK_EQ(count, event_count);
+      v8::internal::NestedTimedHistogramScope scope2(&histogram);
+      CHECK_EQ(0, strcmp("V8.Test", last_event_message));
+      CHECK_EQ(v8::LogEventStatus::kStart, last_event_status);
+      CHECK_EQ(++count, event_count);
+      {
+        CHECK_EQ(count, event_count);
+        v8::internal::NestedTimedHistogramScope scope3(&histogram);
+        CHECK_EQ(++count, event_count);
+        v8::internal::PauseNestedTimedHistogramScope scope4(&histogram);
+        // The outer timer scope is just paused, no event is emited yet.
+        CHECK_EQ(count, event_count);
+        {
+          CHECK_EQ(count, event_count);
+          v8::internal::NestedTimedHistogramScope scope5(&histogram);
+          v8::internal::NestedTimedHistogramScope scope5_1(&histogram);
+          CHECK_EQ(0, strcmp("V8.Test", last_event_message));
+          CHECK_EQ(v8::LogEventStatus::kStart, last_event_status);
+          count++;
+          CHECK_EQ(++count, event_count);
+        }
+        CHECK_EQ(0, strcmp("V8.Test", last_event_message));
+        CHECK_EQ(v8::LogEventStatus::kEnd, last_event_status);
+        count++;
+        CHECK_EQ(++count, event_count);
+      }
+      CHECK_EQ(0, strcmp("V8.Test", last_event_message));
+      CHECK_EQ(v8::LogEventStatus::kEnd, last_event_status);
+      CHECK_EQ(++count, event_count);
+      v8::internal::PauseNestedTimedHistogramScope scope6(&histogram);
+      // The outer timer scope is just paused, no event is emited yet.
+      CHECK_EQ(count, event_count);
+      {
+        v8::internal::PauseNestedTimedHistogramScope scope7(&histogram);
+        CHECK_EQ(count, event_count);
+      }
+      CHECK_EQ(count, event_count);
+    }
+    CHECK_EQ(0, strcmp("V8.Test", last_event_message));
+    CHECK_EQ(v8::LogEventStatus::kEnd, last_event_status);
+    CHECK_EQ(++count, event_count);
+  }
   CHECK_EQ(0, strcmp("V8.Test", last_event_message));
-  CHECK_EQ(0, last_event_status);
-  histogramTimer.Stop();
-  CHECK_EQ(0, strcmp("V8.Test", last_event_message));
-  CHECK_EQ(1, last_event_status);
+  CHECK_EQ(v8::LogEventStatus::kEnd, last_event_status);
+  CHECK_EQ(++count, event_count);
 }
 
 TEST(PropertyDescriptor) {
@@ -24378,7 +24511,7 @@ TEST(CreateSyntheticModule) {
             .IsUndefined());
   CHECK_EQ(i_module->export_names().length(), 1);
   CHECK(i::String::cast(i_module->export_names().get(0)).Equals(*default_name));
-  CHECK_EQ(i_module->status(), i::Module::kInstantiated);
+  CHECK_EQ(i_module->status(), i::Module::kLinked);
   CHECK(module->IsSyntheticModule());
   CHECK(!module->IsSourceTextModule());
   CHECK_EQ(module->GetModuleRequests()->Length(), 0);
@@ -28737,7 +28870,7 @@ TEST(FastApiCalls) {
 #ifndef V8_LITE_MODE
 namespace {
 void FastCallback1TypedArray(v8::Local<v8::Object> receiver, int arg0,
-                             v8::FastApiTypedArray<double> arg1) {
+                             const v8::FastApiTypedArray<double>& arg1) {
   // TODO(mslekova): Use the TypedArray parameter
 }
 
@@ -29250,4 +29383,58 @@ TEST(TestSetSabConstructorEnabledCallback) {
 
   sab_constructor_enabled_value = true;
   CHECK(i_isolate->IsSharedArrayBufferConstructorEnabled(i_context));
+}
+
+namespace {
+void NodeTypeCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+  v8::Isolate* isolate = args.GetIsolate();
+  args.GetReturnValue().Set(v8::Number::New(isolate, 1));
+}
+}  // namespace
+
+TEST(EmbedderInstanceTypes) {
+  LocalContext env;
+  v8::Isolate* isolate = env->GetIsolate();
+  v8::HandleScope scope(isolate);
+  i::FLAG_embedder_instance_types = true;
+  Local<FunctionTemplate> node = FunctionTemplate::New(isolate);
+  Local<ObjectTemplate> proto_template = node->PrototypeTemplate();
+  Local<FunctionTemplate> nodeType = v8::FunctionTemplate::New(
+      isolate, NodeTypeCallback, Local<Value>(),
+      v8::Signature::New(isolate, node), 0, v8::ConstructorBehavior::kThrow,
+      v8::SideEffectType::kHasSideEffect, nullptr, 0, 1, 3);
+  proto_template->SetAccessorProperty(
+      String::NewFromUtf8Literal(isolate, "nodeType"), nodeType);
+
+  Local<FunctionTemplate> element = FunctionTemplate::New(
+      isolate, nullptr, Local<Value>(), Local<v8::Signature>(), 0,
+      v8::ConstructorBehavior::kAllow, v8::SideEffectType::kHasSideEffect,
+      nullptr, 1);
+  element->Inherit(node);
+
+  Local<FunctionTemplate> html_element = FunctionTemplate::New(
+      isolate, nullptr, Local<Value>(), Local<v8::Signature>(), 0,
+      v8::ConstructorBehavior::kAllow, v8::SideEffectType::kHasSideEffect,
+      nullptr, 2);
+  html_element->Inherit(element);
+
+  Local<FunctionTemplate> div_element = FunctionTemplate::New(
+      isolate, nullptr, Local<Value>(), Local<v8::Signature>(), 0,
+      v8::ConstructorBehavior::kAllow, v8::SideEffectType::kHasSideEffect,
+      nullptr, 3);
+  div_element->Inherit(html_element);
+
+  CHECK(env->Global()
+            ->Set(env.local(), v8_str("div"),
+                  div_element->GetFunction(env.local())
+                      .ToLocalChecked()
+                      ->NewInstance(env.local())
+                      .ToLocalChecked())
+            .FromJust());
+
+  CompileRun("var x = div.nodeType;");
+
+  Local<Value> res =
+      env->Global()->Get(env.local(), v8_str("x")).ToLocalChecked();
+  CHECK_EQ(1, res->ToInt32(env.local()).ToLocalChecked()->Value());
 }

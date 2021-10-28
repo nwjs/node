@@ -482,7 +482,8 @@ MultiIsolatePlatform* CreatePlatform(
 MultiIsolatePlatform* CreatePlatform(
     int thread_pool_size,
     v8::TracingController* tracing_controller) {
-  return MultiIsolatePlatform::Create(thread_pool_size, tracing_controller)
+  return MultiIsolatePlatform::Create(thread_pool_size,
+                                      tracing_controller)
       .release();
 }
 
@@ -492,8 +493,11 @@ void FreePlatform(MultiIsolatePlatform* platform) {
 
 std::unique_ptr<MultiIsolatePlatform> MultiIsolatePlatform::Create(
     int thread_pool_size,
-    v8::TracingController* tracing_controller) {
-  return std::make_unique<NodePlatform>(thread_pool_size, tracing_controller);
+    v8::TracingController* tracing_controller,
+    v8::PageAllocator* page_allocator) {
+  return std::make_unique<NodePlatform>(thread_pool_size,
+                                        tracing_controller,
+                                        page_allocator);
 }
 
 MaybeLocal<Object> GetPerContextExports(Local<Context> context) {
@@ -512,7 +516,7 @@ MaybeLocal<Object> GetPerContextExports(Local<Context> context) {
 
   Local<Object> exports = Object::New(isolate);
   if (context->Global()->SetPrivate(context, key, exports).IsNothing() ||
-      !InitializePrimordials(context))
+      InitializePrimordials(context).IsNothing())
     return MaybeLocal<Object>();
   return handle_scope.Escape(exports);
 }
@@ -525,7 +529,7 @@ Local<Context> NewContext(Isolate* isolate,
   auto context = create ? Context::New(isolate, nullptr, object_template) : isolate->GetEnteredOrMicrotaskContext();
   if (context.IsEmpty()) return context;
 
-  if (!InitializeContext(context)) {
+  if (InitializeContext(context).IsNothing()) {
     return Local<Context>();
   }
 
@@ -647,16 +651,17 @@ Maybe<bool> InitializeContextRuntime(Local<Context> context) {
   return Just(true);
 }
 
-bool InitializeContextForSnapshot(Local<Context> context) {
+Maybe<bool> InitializeContextForSnapshot(Local<Context> context) {
   Isolate* isolate = context->GetIsolate();
   HandleScope handle_scope(isolate);
 
   context->SetEmbedderData(ContextEmbedderIndex::kAllowWasmCodeGeneration,
                            True(isolate));
+
   return InitializePrimordials(context);
 }
 
-bool InitializePrimordials(Local<Context> context) {
+Maybe<bool> InitializePrimordials(Local<Context> context) {
   // Run per-context JS files.
   Isolate* isolate = context->GetIsolate();
   Context::Scope context_scope(context);
@@ -669,10 +674,10 @@ bool InitializePrimordials(Local<Context> context) {
 
   // Create primordials first and make it available to per-context scripts.
   Local<Object> primordials = Object::New(isolate);
-  if (!primordials->SetPrototype(context, Null(isolate)).FromJust() ||
+  if (primordials->SetPrototype(context, Null(isolate)).IsNothing() ||
       !GetPerContextExports(context).ToLocal(&exports) ||
-      !exports->Set(context, primordials_string, primordials).FromJust()) {
-    return false;
+      exports->Set(context, primordials_string, primordials).IsNothing()) {
+    return Nothing<bool>();
   }
 
   static const char* context_files[] = {"internal/per_context/primordials",
@@ -689,26 +694,25 @@ bool InitializePrimordials(Local<Context> context) {
             context, *module, &parameters, nullptr);
     Local<Function> fn;
     if (!maybe_fn.ToLocal(&fn)) {
-      return false;
+      return Nothing<bool>();
     }
     MaybeLocal<Value> result =
         fn->Call(context, Undefined(isolate), arraysize(arguments), arguments);
     // Execution failed during context creation.
-    // TODO(joyeecheung): deprecate this signature and return a MaybeLocal.
     if (result.IsEmpty()) {
-      return false;
+      return Nothing<bool>();
     }
   }
 
-  return true;
+  return Just(true);
 }
 
-bool InitializeContext(Local<Context> context) {
-  if (!InitializeContextForSnapshot(context)) {
-    return false;
+Maybe<bool> InitializeContext(Local<Context> context) {
+  if (InitializeContextForSnapshot(context).IsNothing()) {
+    return Nothing<bool>();
   }
 
-  return InitializeContextRuntime(context).IsJust();
+  return InitializeContextRuntime(context);
 }
 
 uv_loop_t* GetCurrentEventLoop(Isolate* isolate) {

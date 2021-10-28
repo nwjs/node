@@ -57,7 +57,7 @@ GC_STRESS_FLAGS = ['--gc-interval=500', '--stress-compaction',
                    '--concurrent-recompilation-queue-length=64',
                    '--concurrent-recompilation-delay=500',
                    '--concurrent-recompilation',
-                   '--stress-flush-bytecode',
+                   '--stress-flush-code', '--flush-bytecode',
                    '--wasm-code-gc', '--stress-wasm-code-gc']
 
 RANDOM_GC_STRESS_FLAGS = ['--random-gc-interval=5000',
@@ -132,13 +132,6 @@ class StandardTestRunner(base_runner.BaseTestRunner):
     parser.add_option('--cfi-vptr',
                       help='Run tests with UBSAN cfi_vptr option.',
                       default=False, action='store_true')
-    parser.add_option('--infra-staging', help='Use new test runner features',
-                      dest='infra_staging', default=None,
-                      action='store_true')
-    parser.add_option('--no-infra-staging',
-                      help='Opt out of new test runner features',
-                      dest='infra_staging', default=None,
-                      action='store_false')
     parser.add_option('--no-sorting', '--nosorting',
                       help='Don\'t sort tests according to duration of last'
                       ' run.',

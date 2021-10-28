@@ -9,6 +9,8 @@
 #include <string.h>
 
 #include "include/libplatform/libplatform.h"
+#include "include/v8-context.h"
+#include "include/v8-initialization.h"
 #include "src/flags/flags.h"
 #include "src/trap-handler/trap-handler.h"
 
@@ -21,11 +23,17 @@ FuzzerSupport::FuzzerSupport(int* argc, char*** argv) {
   v8::V8::InitializeExternalStartupData((*argv)[0]);
   platform_ = v8::platform::NewDefaultPlatform();
   v8::V8::InitializePlatform(platform_.get());
+#ifdef V8_VIRTUAL_MEMORY_CAGE
+  if (!v8::V8::InitializeVirtualMemoryCage()) {
+    FATAL("Could not initialize the virtual memory cage");
+  }
+#endif
   v8::V8::Initialize();
 
   allocator_ = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
   v8::Isolate::CreateParams create_params;
   create_params.array_buffer_allocator = allocator_;
+  create_params.allow_atomics_wait = false;
   isolate_ = v8::Isolate::New(create_params);
 
   {

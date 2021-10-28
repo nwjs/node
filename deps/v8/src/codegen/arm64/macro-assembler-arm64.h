@@ -555,15 +555,6 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   inline void Isb();
   inline void Csdb();
 
-  // Removes current frame and its arguments from the stack preserving
-  // the arguments and a return address pushed to the stack for the next call.
-  // Both |callee_args_count| and |caller_args_count| do not include
-  // receiver. |callee_args_count| is not modified. |caller_args_count| is
-  // trashed.
-  void PrepareForTailCall(Register callee_args_count,
-                          Register caller_args_count, Register scratch0,
-                          Register scratch1);
-
   inline void SmiUntag(Register dst, Register src);
   inline void SmiUntag(Register dst, const MemOperand& src);
   inline void SmiUntag(Register smi);
@@ -1201,6 +1192,29 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   LSPAIR_MACRO_LIST(DECLARE_FUNCTION)
 #undef DECLARE_FUNCTION
 
+  void St1(const VRegister& vt, const MemOperand& dst) {
+    DCHECK(allow_macro_instructions());
+    st1(vt, dst);
+  }
+  void St1(const VRegister& vt, const VRegister& vt2, const MemOperand& dst) {
+    DCHECK(allow_macro_instructions());
+    st1(vt, vt2, dst);
+  }
+  void St1(const VRegister& vt, const VRegister& vt2, const VRegister& vt3,
+           const MemOperand& dst) {
+    DCHECK(allow_macro_instructions());
+    st1(vt, vt2, vt3, dst);
+  }
+  void St1(const VRegister& vt, const VRegister& vt2, const VRegister& vt3,
+           const VRegister& vt4, const MemOperand& dst) {
+    DCHECK(allow_macro_instructions());
+    st1(vt, vt2, vt3, vt4, dst);
+  }
+  void St1(const VRegister& vt, int lane, const MemOperand& dst) {
+    DCHECK(allow_macro_instructions());
+    st1(vt, lane, dst);
+  }
+
 #define NEON_2VREG_SHIFT_MACRO_LIST(V) \
   V(rshrn, Rshrn)                      \
   V(rshrn2, Rshrn2)                    \
@@ -1356,8 +1370,6 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   // This is an alternative to embedding the {CodeObject} handle as a reference.
   void ComputeCodeStartAddress(const Register& rd);
 
-  void ResetSpeculationPoisonRegister();
-
   // ---------------------------------------------------------------------------
   // Pointer compression Support
 
@@ -1382,6 +1394,9 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void StoreTaggedField(const Register& value,
                         const MemOperand& dst_field_operand);
 
+  void AtomicStoreTaggedField(const Register& value, const Register& dst_base,
+                              const Register& dst_index, const Register& temp);
+
   void DecompressTaggedSigned(const Register& destination,
                               const MemOperand& field_operand);
   void DecompressTaggedPointer(const Register& destination,
@@ -1391,6 +1406,17 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void DecompressAnyTagged(const Register& destination,
                            const MemOperand& field_operand);
 
+  void AtomicDecompressTaggedSigned(const Register& destination,
+                                    const Register& base, const Register& index,
+                                    const Register& temp);
+  void AtomicDecompressTaggedPointer(const Register& destination,
+                                     const Register& base,
+                                     const Register& index,
+                                     const Register& temp);
+  void AtomicDecompressAnyTagged(const Register& destination,
+                                 const Register& base, const Register& index,
+                                 const Register& temp);
+
   // Restore FP and LR from the values stored in the current frame. This will
   // authenticate the LR when pointer authentication is enabled.
   void RestoreFPAndLR();
@@ -1399,9 +1425,10 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void StoreReturnAddressInWasmExitFrame(Label* return_location);
 #endif  // V8_ENABLE_WEBASSEMBLY
 
-  // Wasm SIMD helpers. These instructions don't have direct lowering to native
-  // instructions. These helpers allow us to define the optimal code sequence,
-  // and be used in both TurboFan and Liftoff.
+  // Wasm helpers. These instructions don't have direct lowering
+  // to native instructions. These helpers allow us to define the optimal code
+  // sequence, and be used in both TurboFan and Liftoff.
+  void PopcntHelper(Register dst, Register src);
   void I64x2BitMask(Register dst, VRegister src);
   void I64x2AllTrue(Register dst, VRegister src);
 
@@ -1653,28 +1680,6 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
             const VRegister& vt4, const MemOperand& src) {
     DCHECK(allow_macro_instructions());
     ld4r(vt, vt2, vt3, vt4, src);
-  }
-  void St1(const VRegister& vt, const MemOperand& dst) {
-    DCHECK(allow_macro_instructions());
-    st1(vt, dst);
-  }
-  void St1(const VRegister& vt, const VRegister& vt2, const MemOperand& dst) {
-    DCHECK(allow_macro_instructions());
-    st1(vt, vt2, dst);
-  }
-  void St1(const VRegister& vt, const VRegister& vt2, const VRegister& vt3,
-           const MemOperand& dst) {
-    DCHECK(allow_macro_instructions());
-    st1(vt, vt2, vt3, dst);
-  }
-  void St1(const VRegister& vt, const VRegister& vt2, const VRegister& vt3,
-           const VRegister& vt4, const MemOperand& dst) {
-    DCHECK(allow_macro_instructions());
-    st1(vt, vt2, vt3, vt4, dst);
-  }
-  void St1(const VRegister& vt, int lane, const MemOperand& dst) {
-    DCHECK(allow_macro_instructions());
-    st1(vt, lane, dst);
   }
   void St2(const VRegister& vt, const VRegister& vt2, const MemOperand& dst) {
     DCHECK(allow_macro_instructions());

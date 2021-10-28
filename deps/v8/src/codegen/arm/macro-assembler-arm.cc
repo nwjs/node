@@ -18,6 +18,7 @@
 #include "src/codegen/macro-assembler.h"
 #include "src/codegen/register-configuration.h"
 #include "src/debug/debug.h"
+#include "src/deoptimizer/deoptimizer.h"
 #include "src/execution/frames-inl.h"
 #include "src/heap/memory-chunk.h"
 #include "src/init/bootstrapper.h"
@@ -181,7 +182,7 @@ void TurboAssembler::Jump(Handle<Code> code, RelocInfo::Mode rmode,
     // size s.t. pc-relative calls may be used.
     UseScratchRegisterScope temps(this);
     Register scratch = temps.Acquire();
-    int offset = IsolateData::builtin_entry_slot_offset(code->builtin_id());
+    int offset = IsolateData::BuiltinEntrySlotOffset(code->builtin_id());
     ldr(scratch, MemOperand(kRootRegister, offset));
     Jump(scratch, cond);
     return;
@@ -268,7 +269,7 @@ void TurboAssembler::Call(Handle<Code> code, RelocInfo::Mode rmode,
     // This branch is taken only for specific cctests, where we force isolate
     // creation at runtime. At this point, Code space isn't restricted to a
     // size s.t. pc-relative calls may be used.
-    int offset = IsolateData::builtin_entry_slot_offset(code->builtin_id());
+    int offset = IsolateData::BuiltinEntrySlotOffset(code->builtin_id());
     ldr(ip, MemOperand(kRootRegister, offset));
     Call(ip, cond);
     return;
@@ -314,7 +315,7 @@ MemOperand TurboAssembler::EntryFromBuiltinAsOperand(Builtin builtin) {
   ASM_CODE_COMMENT(this);
   DCHECK(root_array_available());
   return MemOperand(kRootRegister,
-                    IsolateData::builtin_entry_slot_offset(builtin));
+                    IsolateData::BuiltinEntrySlotOffset(builtin));
 }
 
 void TurboAssembler::CallBuiltin(Builtin builtin, Condition cond) {
@@ -342,29 +343,32 @@ void TurboAssembler::LoadCodeObjectEntry(Register destination,
     DCHECK(root_array_available());
     Label if_code_is_off_heap, out;
 
-    UseScratchRegisterScope temps(this);
-    Register scratch = temps.Acquire();
+    {
+      UseScratchRegisterScope temps(this);
+      Register scratch = temps.Acquire();
 
-    DCHECK(!AreAliased(destination, scratch));
-    DCHECK(!AreAliased(code_object, scratch));
+      DCHECK(!AreAliased(destination, scratch));
+      DCHECK(!AreAliased(code_object, scratch));
 
-    // Check whether the Code object is an off-heap trampoline. If so, call its
-    // (off-heap) entry point directly without going through the (on-heap)
-    // trampoline.  Otherwise, just call the Code object as always.
-    ldr(scratch, FieldMemOperand(code_object, Code::kFlagsOffset));
-    tst(scratch, Operand(Code::IsOffHeapTrampoline::kMask));
-    b(ne, &if_code_is_off_heap);
+      // Check whether the Code object is an off-heap trampoline. If so, call
+      // its (off-heap) entry point directly without going through the (on-heap)
+      // trampoline.  Otherwise, just call the Code object as always.
+      ldr(scratch, FieldMemOperand(code_object, Code::kFlagsOffset));
+      tst(scratch, Operand(Code::IsOffHeapTrampoline::kMask));
+      b(ne, &if_code_is_off_heap);
 
-    // Not an off-heap trampoline, the entry point is at
-    // Code::raw_instruction_start().
-    add(destination, code_object, Operand(Code::kHeaderSize - kHeapObjectTag));
-    jmp(&out);
+      // Not an off-heap trampoline, the entry point is at
+      // Code::raw_instruction_start().
+      add(destination, code_object,
+          Operand(Code::kHeaderSize - kHeapObjectTag));
+      jmp(&out);
 
-    // An off-heap trampoline, the entry point is loaded from the builtin entry
-    // table.
-    bind(&if_code_is_off_heap);
-    ldr(scratch, FieldMemOperand(code_object, Code::kBuiltinIndexOffset));
-    lsl(destination, scratch, Operand(kSystemPointerSizeLog2));
+      // An off-heap trampoline, the entry point is loaded from the builtin
+      // entry table.
+      bind(&if_code_is_off_heap);
+      ldr(scratch, FieldMemOperand(code_object, Code::kBuiltinIndexOffset));
+      lsl(destination, scratch, Operand(kSystemPointerSizeLog2));
+    }
     add(destination, destination, kRootRegister);
     ldr(destination,
         MemOperand(destination, IsolateData::builtin_entry_table_offset()));
@@ -1358,6 +1362,44 @@ void TurboAssembler::StubPrologue(StackFrame::Type type) {
 
 void TurboAssembler::Prologue() { PushStandardFrame(r1); }
 
+void TurboAssembler::DropArguments(Register count, ArgumentsCountType type,
+                                   ArgumentsCountMode mode) {
+  int receiver_bytes = (mode == kCountExcludesReceiver) ? kPointerSize : 0;
+  switch (type) {
+    case kCountIsInteger: {
+      add(sp, sp, Operand(count, LSL, kPointerSizeLog2), LeaveCC);
+      break;
+    }
+    case kCountIsSmi: {
+      STATIC_ASSERT(kSmiTagSize == 1 && kSmiTag == 0);
+      add(sp, sp, Operand(count, LSL, kPointerSizeLog2 - kSmiTagSize), LeaveCC);
+      break;
+    }
+    case kCountIsBytes: {
+      add(sp, sp, count, LeaveCC);
+      break;
+    }
+  }
+  if (receiver_bytes != 0) {
+    add(sp, sp, Operand(receiver_bytes), LeaveCC);
+  }
+}
+
+void TurboAssembler::DropArgumentsAndPushNewReceiver(Register argc,
+                                                     Register receiver,
+                                                     ArgumentsCountType type,
+                                                     ArgumentsCountMode mode) {
+  DCHECK(!AreAliased(argc, receiver));
+  if (mode == kCountExcludesReceiver) {
+    // Drop arguments without receiver and override old receiver.
+    DropArguments(argc, type, kCountIncludesReceiver);
+    str(receiver, MemOperand(sp, 0));
+  } else {
+    DropArguments(argc, type, mode);
+    push(receiver);
+  }
+}
+
 void TurboAssembler::EnterFrame(StackFrame::Type type,
                                 bool load_constant_pool_pointer_reg) {
   ASM_CODE_COMMENT(this);
@@ -1369,6 +1411,9 @@ void TurboAssembler::EnterFrame(StackFrame::Type type,
     mov(scratch, Operand(StackFrame::TypeToMarker(type)));
   }
   PushCommonFrame(scratch);
+#if V8_ENABLE_WEBASSEMBLY
+  if (type == StackFrame::WASM) Push(kWasmInstanceRegister);
+#endif  // V8_ENABLE_WEBASSEMBLY
 }
 
 int TurboAssembler::LeaveFrame(StackFrame::Type type) {
@@ -1553,54 +1598,6 @@ void TurboAssembler::MovFromFloatParameter(DwVfpRegister dst) {
   MovFromFloatResult(dst);
 }
 
-void TurboAssembler::PrepareForTailCall(Register callee_args_count,
-                                        Register caller_args_count,
-                                        Register scratch0, Register scratch1) {
-  ASM_CODE_COMMENT(this);
-  DCHECK(!AreAliased(callee_args_count, caller_args_count, scratch0, scratch1));
-
-  // Calculate the end of destination area where we will put the arguments
-  // after we drop current frame. We add kPointerSize to count the receiver
-  // argument which is not included into formal parameters count.
-  Register dst_reg = scratch0;
-  add(dst_reg, fp, Operand(caller_args_count, LSL, kPointerSizeLog2));
-  add(dst_reg, dst_reg,
-      Operand(StandardFrameConstants::kCallerSPOffset + kPointerSize));
-
-  Register src_reg = caller_args_count;
-  // Calculate the end of source area. +kPointerSize is for the receiver.
-  add(src_reg, sp, Operand(callee_args_count, LSL, kPointerSizeLog2));
-  add(src_reg, src_reg, Operand(kPointerSize));
-
-  if (FLAG_debug_code) {
-    cmp(src_reg, dst_reg);
-    Check(lo, AbortReason::kStackAccessBelowStackPointer);
-  }
-
-  // Restore caller's frame pointer and return address now as they will be
-  // overwritten by the copying loop.
-  ldr(lr, MemOperand(fp, StandardFrameConstants::kCallerPCOffset));
-  ldr(fp, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
-
-  // Now copy callee arguments to the caller frame going backwards to avoid
-  // callee arguments corruption (source and destination areas could overlap).
-
-  // Both src_reg and dst_reg are pointing to the word after the one to copy,
-  // so they must be pre-decremented in the loop.
-  Register tmp_reg = scratch1;
-  Label loop, entry;
-  b(&entry);
-  bind(&loop);
-  ldr(tmp_reg, MemOperand(src_reg, -kPointerSize, PreIndex));
-  str(tmp_reg, MemOperand(dst_reg, -kPointerSize, PreIndex));
-  bind(&entry);
-  cmp(sp, src_reg);
-  b(ne, &loop);
-
-  // Leave current frame.
-  mov(sp, dst_reg);
-}
-
 void MacroAssembler::LoadStackLimit(Register destination, StackLimitKind kind) {
   ASM_CODE_COMMENT(this);
   DCHECK(root_array_available());
@@ -1675,7 +1672,11 @@ void MacroAssembler::InvokePrologue(Register expected_parameter_count,
     str(scratch, MemOperand(dest, kSystemPointerSize, PostIndex));
     sub(num, num, Operand(1), SetCC);
     bind(&check);
-    b(ge, &copy);
+    if (kJSArgcIncludesReceiver) {
+      b(gt, &copy);
+    } else {
+      b(ge, &copy);
+    }
   }
 
   // Fill remaining expected arguments with undefined values.
@@ -2666,17 +2667,19 @@ void TurboAssembler::ComputeCodeStartAddress(Register dst) {
   sub(dst, pc, Operand(pc_offset() + Instruction::kPcLoadDelta));
 }
 
-void TurboAssembler::ResetSpeculationPoisonRegister() {
-  mov(kSpeculationPoisonRegister, Operand(-1));
-}
-
 void TurboAssembler::CallForDeoptimization(Builtin target, int, Label* exit,
                                            DeoptimizeKind kind, Label* ret,
                                            Label*) {
   ASM_CODE_COMMENT(this);
+
+  // All constants should have been emitted prior to deoptimization exit
+  // emission. See PrepareForDeoptimizationExits.
+  DCHECK(!has_pending_constants());
   BlockConstPoolScope block_const_pool(this);
-  ldr(ip, MemOperand(kRootRegister,
-                     IsolateData::builtin_entry_slot_offset(target)));
+
+  CHECK_LE(target, Builtins::kLastTier0);
+  ldr(ip,
+      MemOperand(kRootRegister, IsolateData::BuiltinEntrySlotOffset(target)));
   Call(ip);
   DCHECK_EQ(SizeOfCodeGeneratedSince(exit),
             (kind == DeoptimizeKind::kLazy)
@@ -2688,6 +2691,9 @@ void TurboAssembler::CallForDeoptimization(Builtin target, int, Label* exit,
     DCHECK_EQ(SizeOfCodeGeneratedSince(exit),
               Deoptimizer::kEagerWithResumeBeforeArgsSize);
   }
+
+  // The above code must not emit constants either.
+  DCHECK(!has_pending_constants());
 }
 
 void TurboAssembler::Trap() { stop(); }

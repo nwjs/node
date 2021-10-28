@@ -38,29 +38,18 @@ Register GetRegisterThatIsNotOneOf(Register reg1, Register reg2 = no_reg,
 
 // These exist to provide portability between 32 and 64bit
 #if V8_TARGET_ARCH_PPC64
-#define ShiftLeftImm sldi
-#define ShiftRightImm srdi
 #define ClearLeftImm clrldi
 #define ClearRightImm clrrdi
-#define ShiftRightArithImm sradi
-#define ShiftLeft_ sld
-#define ShiftRight_ srd
-#define ShiftRightArith srad
 #else
-#define ShiftLeftImm slwi
-#define ShiftRightImm srwi
 #define ClearLeftImm clrlwi
 #define ClearRightImm clrrwi
-#define ShiftRightArithImm srawi
-#define ShiftLeft_ slw
-#define ShiftRight_ srw
-#define ShiftRightArith sraw
 #endif
 
 class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
  public:
   using TurboAssemblerBase::TurboAssemblerBase;
 
+  void CallBuiltin(Builtin builtin, Condition cond);
   void Popcnt32(Register dst, Register src);
   void Popcnt64(Register dst, Register src);
   // Converts the integer (untagged smi) in |src| to a double, storing
@@ -123,6 +112,14 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   // Generates function and stub prologue code.
   void StubPrologue(StackFrame::Type type);
   void Prologue();
+
+  enum ArgumentsCountMode { kCountIncludesReceiver, kCountExcludesReceiver };
+  enum ArgumentsCountType { kCountIsInteger, kCountIsSmi, kCountIsBytes };
+  void DropArguments(Register count, ArgumentsCountType type,
+                     ArgumentsCountMode mode);
+  void DropArgumentsAndPushNewReceiver(Register argc, Register receiver,
+                                       ArgumentsCountType type,
+                                       ArgumentsCountMode mode);
 
   // Push a standard frame, consisting of lr, fp, constant pool,
   // context and JS function
@@ -190,6 +187,98 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void SubS64(Register dst, Register src, const Operand& value,
               Register scratch = r0, OEBit s = LeaveOE, RCBit r = LeaveRC);
   void SubS64(Register dst, Register src, Register value, OEBit s = LeaveOE,
+              RCBit r = LeaveRC);
+  void AddS32(Register dst, Register src, const Operand& value,
+              Register scratch = r0, RCBit r = LeaveRC);
+  void AddS32(Register dst, Register src, Register value, RCBit r = LeaveRC);
+  void SubS32(Register dst, Register src, const Operand& value,
+              Register scratch = r0, RCBit r = LeaveRC);
+  void SubS32(Register dst, Register src, Register value, RCBit r = LeaveRC);
+  void MulS64(Register dst, Register src, const Operand& value,
+              Register scratch = r0, OEBit s = LeaveOE, RCBit r = LeaveRC);
+  void MulS64(Register dst, Register src, Register value, OEBit s = LeaveOE,
+              RCBit r = LeaveRC);
+  void MulS32(Register dst, Register src, const Operand& value,
+              Register scratch = r0, OEBit s = LeaveOE, RCBit r = LeaveRC);
+  void MulS32(Register dst, Register src, Register value, OEBit s = LeaveOE,
+              RCBit r = LeaveRC);
+  void DivS64(Register dst, Register src, Register value, OEBit s = LeaveOE,
+              RCBit r = LeaveRC);
+  void DivU64(Register dst, Register src, Register value, OEBit s = LeaveOE,
+              RCBit r = LeaveRC);
+  void DivS32(Register dst, Register src, Register value, OEBit s = LeaveOE,
+              RCBit r = LeaveRC);
+  void DivU32(Register dst, Register src, Register value, OEBit s = LeaveOE,
+              RCBit r = LeaveRC);
+  void ModS64(Register dst, Register src, Register value);
+  void ModU64(Register dst, Register src, Register value);
+  void ModS32(Register dst, Register src, Register value);
+  void ModU32(Register dst, Register src, Register value);
+
+  void AndU64(Register dst, Register src, const Operand& value,
+              Register scratch = r0, RCBit r = SetRC);
+  void AndU64(Register dst, Register src, Register value, RCBit r = SetRC);
+  void OrU64(Register dst, Register src, const Operand& value,
+             Register scratch = r0, RCBit r = SetRC);
+  void OrU64(Register dst, Register src, Register value, RCBit r = LeaveRC);
+  void XorU64(Register dst, Register src, const Operand& value,
+              Register scratch = r0, RCBit r = SetRC);
+  void XorU64(Register dst, Register src, Register value, RCBit r = LeaveRC);
+  void AndU32(Register dst, Register src, const Operand& value,
+              Register scratch = r0, RCBit r = SetRC);
+  void AndU32(Register dst, Register src, Register value, RCBit r = SetRC);
+  void OrU32(Register dst, Register src, const Operand& value,
+             Register scratch = r0, RCBit r = SetRC);
+  void OrU32(Register dst, Register src, Register value, RCBit r = LeaveRC);
+  void XorU32(Register dst, Register src, const Operand& value,
+              Register scratch = r0, RCBit r = SetRC);
+  void XorU32(Register dst, Register src, Register value, RCBit r = LeaveRC);
+
+  void ShiftLeftU64(Register dst, Register src, const Operand& value,
+                    RCBit r = LeaveRC);
+  void ShiftRightU64(Register dst, Register src, const Operand& value,
+                     RCBit r = LeaveRC);
+  void ShiftRightS64(Register dst, Register src, const Operand& value,
+                     RCBit r = LeaveRC);
+  void ShiftLeftU32(Register dst, Register src, const Operand& value,
+                    RCBit r = LeaveRC);
+  void ShiftRightU32(Register dst, Register src, const Operand& value,
+                     RCBit r = LeaveRC);
+  void ShiftRightS32(Register dst, Register src, const Operand& value,
+                     RCBit r = LeaveRC);
+  void ShiftLeftU64(Register dst, Register src, Register value,
+                    RCBit r = LeaveRC);
+  void ShiftRightU64(Register dst, Register src, Register value,
+                     RCBit r = LeaveRC);
+  void ShiftRightS64(Register dst, Register src, Register value,
+                     RCBit r = LeaveRC);
+  void ShiftLeftU32(Register dst, Register src, Register value,
+                    RCBit r = LeaveRC);
+  void ShiftRightU32(Register dst, Register src, Register value,
+                     RCBit r = LeaveRC);
+  void ShiftRightS32(Register dst, Register src, Register value,
+                     RCBit r = LeaveRC);
+
+  void CountLeadingZerosU32(Register dst, Register src, RCBit r = LeaveRC);
+  void CountLeadingZerosU64(Register dst, Register src, RCBit r = LeaveRC);
+  void CountTrailingZerosU32(Register dst, Register src, RCBit r = LeaveRC);
+  void CountTrailingZerosU64(Register dst, Register src, RCBit r = LeaveRC);
+
+  void AddF64(DoubleRegister dst, DoubleRegister lhs, DoubleRegister rhs,
+              RCBit r = LeaveRC);
+  void SubF64(DoubleRegister dst, DoubleRegister lhs, DoubleRegister rhs,
+              RCBit r = LeaveRC);
+  void MulF64(DoubleRegister dst, DoubleRegister lhs, DoubleRegister rhs,
+              RCBit r = LeaveRC);
+  void DivF64(DoubleRegister dst, DoubleRegister lhs, DoubleRegister rhs,
+              RCBit r = LeaveRC);
+  void AddF32(DoubleRegister dst, DoubleRegister lhs, DoubleRegister rhs,
+              RCBit r = LeaveRC);
+  void SubF32(DoubleRegister dst, DoubleRegister lhs, DoubleRegister rhs,
+              RCBit r = LeaveRC);
+  void MulF32(DoubleRegister dst, DoubleRegister lhs, DoubleRegister rhs,
+              RCBit r = LeaveRC);
+  void DivF32(DoubleRegister dst, DoubleRegister lhs, DoubleRegister rhs,
               RCBit r = LeaveRC);
 
   void Push(Register src) { push(src); }
@@ -356,10 +445,6 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
                             Register scratch);
   void PrepareCallCFunction(int num_reg_arguments, Register scratch);
 
-  void PrepareForTailCall(Register callee_args_count,
-                          Register caller_args_count, Register scratch0,
-                          Register scratch1);
-
   // There are two ways of passing double arguments on ARM, depending on
   // whether soft or hard floating point ABI is used. These functions
   // abstract parameter passing for the three different ways we call
@@ -489,8 +574,8 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
       Register dst_hi,
 #endif
       Register dst, DoubleRegister src);
-  void MovIntToFloat(DoubleRegister dst, Register src);
-  void MovFloatToInt(Register dst, DoubleRegister src);
+  void MovIntToFloat(DoubleRegister dst, Register src, Register scratch);
+  void MovFloatToInt(Register dst, DoubleRegister src, DoubleRegister scratch);
   // Register move. May do nothing if the registers are identical.
   void Move(Register dst, Smi smi) { LoadSmiLiteral(dst, smi); }
   void Move(Register dst, Handle<HeapObject> value,
@@ -507,7 +592,7 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
     if (COMPRESS_POINTERS_BOOL) {
       srawi(dst, src, kSmiShift, rc);
     } else {
-      ShiftRightArithImm(dst, src, kSmiShift, rc);
+      ShiftRightS64(dst, src, Operand(kSmiShift), rc);
     }
   }
 
@@ -663,8 +748,6 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   // The return address on the stack is used by frame iteration.
   void StoreReturnAddressAndCall(Register target);
 
-  void ResetSpeculationPoisonRegister();
-
   // Control-flow integrity:
 
   // Define a function entrypoint. This doesn't emit any code for this
@@ -677,6 +760,16 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
 
   // ---------------------------------------------------------------------------
   // Pointer compression Support
+
+  void SmiToPtrArrayOffset(Register dst, Register src) {
+#if defined(V8_COMPRESS_POINTERS) || defined(V8_31BIT_SMIS_ON_64BIT_ARCH)
+    STATIC_ASSERT(kSmiTag == 0 && kSmiShift < kSystemPointerSizeLog2);
+    ShiftLeftU64(dst, src, Operand(kSystemPointerSizeLog2 - kSmiShift));
+#else
+    STATIC_ASSERT(kSmiTag == 0 && kSmiShift > kSystemPointerSizeLog2);
+    ShiftRightS64(dst, src, Operand(kSmiShift - kSystemPointerSizeLog2));
+#endif
+  }
 
   // Loads a field containing a HeapObject and decompresses it if pointer
   // compression is enabled.
@@ -835,10 +928,6 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
   // than assembler-ppc and may generate variable length sequences
 
   // load a literal double value <value> to FPR <result>
-
-  void And(Register ra, Register rs, const Operand& rb, RCBit rc = LeaveRC);
-  void Or(Register ra, Register rs, const Operand& rb, RCBit rc = LeaveRC);
-  void Xor(Register ra, Register rs, const Operand& rb, RCBit rc = LeaveRC);
 
   void AddSmiLiteral(Register dst, Register src, Smi smi, Register scratch);
   void SubSmiLiteral(Register dst, Register src, Smi smi, Register scratch);
@@ -1011,17 +1100,7 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
   // Shift left by kSmiShift
   void SmiTag(Register reg, RCBit rc = LeaveRC) { SmiTag(reg, reg, rc); }
   void SmiTag(Register dst, Register src, RCBit rc = LeaveRC) {
-    ShiftLeftImm(dst, src, Operand(kSmiShift), rc);
-  }
-
-  void SmiToPtrArrayOffset(Register dst, Register src) {
-#if defined(V8_COMPRESS_POINTERS) || defined(V8_31BIT_SMIS_ON_64BIT_ARCH)
-    STATIC_ASSERT(kSmiTag == 0 && kSmiShift < kSystemPointerSizeLog2);
-    ShiftLeftImm(dst, src, Operand(kSystemPointerSizeLog2 - kSmiShift));
-#else
-    STATIC_ASSERT(kSmiTag == 0 && kSmiShift > kSystemPointerSizeLog2);
-    ShiftRightArithImm(dst, src, kSmiShift - kSystemPointerSizeLog2);
-#endif
+    ShiftLeftU64(dst, src, Operand(kSmiShift), rc);
   }
 
   // Jump if either of the registers contain a non-smi.

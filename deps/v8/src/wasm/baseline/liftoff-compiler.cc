@@ -306,14 +306,8 @@ void CheckBailoutAllowed(LiftoffBailoutReason reason, const char* detail,
 
   // Some externally maintained architectures don't fully implement Liftoff yet.
 #if V8_TARGET_ARCH_MIPS || V8_TARGET_ARCH_MIPS64 || V8_TARGET_ARCH_S390X || \
-    V8_TARGET_ARCH_PPC || V8_TARGET_ARCH_PPC64
+    V8_TARGET_ARCH_PPC || V8_TARGET_ARCH_PPC64 || V8_TARGET_ARCH_LOONG64
   return;
-#endif
-
-  // TODO(11235): On arm and arm64 there is still a limit on the size of
-  // supported stack frames.
-#if V8_TARGET_ARCH_ARM || V8_TARGET_ARCH_ARM64
-  if (strstr(detail, "Stack limited to 512 bytes")) return;
 #endif
 
 #define LIST_FEATURE(name, ...) kFeature_##name,
@@ -747,8 +741,6 @@ class LiftoffCompiler {
               Register::from_code(
                   descriptor_->GetInputLocation(kInstanceParameterIndex)
                       .AsRegister()));
-    // Store the instance parameter to a special stack slot.
-    __ SpillInstance(kWasmInstanceRegister);
     __ cache_state()->SetInstanceCacheRegister(kWasmInstanceRegister);
     if (for_debugging_) __ ResetOSRTarget();
 
@@ -855,7 +847,7 @@ class LiftoffCompiler {
 
   void GenerateOutOfLineCode(OutOfLineCode* ool) {
     CODE_COMMENT(
-        (std::string("out of line: ") + GetRuntimeStubName(ool->stub)).c_str());
+        (std::string("OOL: ") + GetRuntimeStubName(ool->stub)).c_str());
     __ bind(ool->label.get());
     const bool is_stack_check = ool->stub == WasmCode::kWasmStackGuard;
 
@@ -954,7 +946,8 @@ class LiftoffCompiler {
       GenerateOutOfLineCode(&ool);
     }
     DCHECK_EQ(frame_size, __ GetTotalFrameSize());
-    __ PatchPrepareStackFrame(pc_offset_stack_frame_construction_);
+    __ PatchPrepareStackFrame(pc_offset_stack_frame_construction_,
+                              &safepoint_table_builder_);
     __ FinishCode();
     safepoint_table_builder_.Emit(&asm_, __ GetTotalFrameSlotCountForGC());
     // Emit the handler table.
@@ -1148,8 +1141,8 @@ class LiftoffCompiler {
   }
 
   void CatchException(FullDecoder* decoder,
-                      const ExceptionIndexImmediate<validate>& imm,
-                      Control* block, base::Vector<Value> values) {
+                      const TagIndexImmediate<validate>& imm, Control* block,
+                      base::Vector<Value> values) {
     DCHECK(block->is_try_catch());
     __ emit_jump(block->label.get());
 
@@ -1178,7 +1171,7 @@ class LiftoffCompiler {
 
     CODE_COMMENT("load expected exception tag");
     Register imm_tag = pinned.set(__ GetUnusedRegister(kGpReg, pinned)).gp();
-    LOAD_TAGGED_PTR_INSTANCE_FIELD(imm_tag, ExceptionsTable, pinned);
+    LOAD_TAGGED_PTR_INSTANCE_FIELD(imm_tag, TagsTable, pinned);
     __ LoadTaggedPointer(
         imm_tag, imm_tag, no_reg,
         wasm::ObjectAccess::ElementOffsetInTaggedFixedArray(imm.index), {});
@@ -1196,8 +1189,7 @@ class LiftoffCompiler {
       block->try_info->in_handler = true;
       num_exceptions_++;
     }
-    GetExceptionValues(decoder, __ cache_state()->stack_state.back(),
-                       imm.exception);
+    GetExceptionValues(decoder, __ cache_state()->stack_state.back(), imm.tag);
   }
 
   void Rethrow(FullDecoder* decoder,
@@ -2816,30 +2808,6 @@ class LiftoffCompiler {
     __ DeallocateStackSlot(sizeof(MemoryTracingInfo));
   }
 
-  Register AddMemoryMasking(Register index, uintptr_t* offset,
-                            LiftoffRegList* pinned) {
-    if (!FLAG_untrusted_code_mitigations ||
-        env_->bounds_checks == kTrapHandler) {
-      return index;
-    }
-    CODE_COMMENT("mask memory index");
-    // Make sure that we can overwrite {index}.
-    if (__ cache_state()->is_used(LiftoffRegister(index))) {
-      Register old_index = index;
-      pinned->clear(LiftoffRegister{old_index});
-      index = pinned->set(__ GetUnusedRegister(kGpReg, *pinned)).gp();
-      if (index != old_index) {
-        __ Move(index, old_index, kPointerKind);
-      }
-    }
-    Register tmp = __ GetUnusedRegister(kGpReg, *pinned).gp();
-    LOAD_INSTANCE_FIELD(tmp, MemoryMask, kSystemPointerSize, *pinned);
-    if (*offset) __ emit_ptrsize_addi(index, index, *offset);
-    __ emit_ptrsize_and(index, index, tmp);
-    *offset = 0;
-    return index;
-  }
-
   bool IndexStaticallyInBounds(const LiftoffAssembler::VarState& index_slot,
                                int access_size, uintptr_t* offset) {
     if (!index_slot.is_const()) return false;
@@ -2900,7 +2868,6 @@ class LiftoffCompiler {
 
       CODE_COMMENT("load from memory");
       LiftoffRegList pinned = LiftoffRegList::ForRegs(index);
-      index = AddMemoryMasking(index, &offset, &pinned);
 
       // Load the memory start address only now to reduce register pressure
       // (important on ia32).
@@ -2945,7 +2912,6 @@ class LiftoffCompiler {
 
     uintptr_t offset = imm.offset;
     LiftoffRegList pinned = LiftoffRegList::ForRegs(index);
-    index = AddMemoryMasking(index, &offset, &pinned);
     CODE_COMMENT("load with transformation");
     Register addr = GetMemoryStart(pinned);
     LiftoffRegister value = __ GetUnusedRegister(reg_class_for(kS128), {});
@@ -2985,7 +2951,6 @@ class LiftoffCompiler {
 
     uintptr_t offset = imm.offset;
     pinned.set(index);
-    index = AddMemoryMasking(index, &offset, &pinned);
     CODE_COMMENT("load lane");
     Register addr = GetMemoryStart(pinned);
     LiftoffRegister result = __ GetUnusedRegister(reg_class_for(kS128), {});
@@ -3031,7 +2996,6 @@ class LiftoffCompiler {
       if (index == no_reg) return;
 
       pinned.set(index);
-      index = AddMemoryMasking(index, &offset, &pinned);
       CODE_COMMENT("store to memory");
       uint32_t protected_store_pc = 0;
       // Load the memory start address only now to reduce register pressure
@@ -3066,7 +3030,6 @@ class LiftoffCompiler {
 
     uintptr_t offset = imm.offset;
     pinned.set(index);
-    index = AddMemoryMasking(index, &offset, &pinned);
     CODE_COMMENT("store lane to memory");
     Register addr = pinned.set(GetMemoryStart(pinned));
     uint32_t protected_store_pc = 0;
@@ -4234,18 +4197,18 @@ class LiftoffCompiler {
 
   void GetExceptionValues(FullDecoder* decoder,
                           LiftoffAssembler::VarState& exception_var,
-                          const WasmException* exception) {
+                          const WasmTag* tag) {
     LiftoffRegList pinned;
     CODE_COMMENT("get exception values");
     LiftoffRegister values_array = GetExceptionProperty(
         exception_var, RootIndex::kwasm_exception_values_symbol);
     pinned.set(values_array);
     uint32_t index = 0;
-    const WasmExceptionSig* sig = exception->sig;
+    const WasmTagSig* sig = tag->sig;
     for (ValueType param : sig->parameters()) {
       LoadExceptionValue(param.kind(), values_array, &index, pinned);
     }
-    DCHECK_EQ(index, WasmExceptionPackage::GetEncodedSize(exception));
+    DCHECK_EQ(index, WasmExceptionPackage::GetEncodedSize(tag));
   }
 
   void EmitLandingPad(FullDecoder* decoder, int handler_offset) {
@@ -4280,12 +4243,12 @@ class LiftoffCompiler {
     __ DropValues(1);
   }
 
-  void Throw(FullDecoder* decoder, const ExceptionIndexImmediate<validate>& imm,
+  void Throw(FullDecoder* decoder, const TagIndexImmediate<validate>& imm,
              const base::Vector<Value>& /* args */) {
     LiftoffRegList pinned;
 
     // Load the encoded size in a register for the builtin call.
-    int encoded_size = WasmExceptionPackage::GetEncodedSize(imm.exception);
+    int encoded_size = WasmExceptionPackage::GetEncodedSize(imm.tag);
     LiftoffRegister encoded_size_reg =
         pinned.set(__ GetUnusedRegister(kGpReg, pinned));
     __ LoadConstant(encoded_size_reg, WasmValue(encoded_size));
@@ -4307,7 +4270,7 @@ class LiftoffCompiler {
     // first value, such that we can just pop them from the value stack.
     CODE_COMMENT("fill values array");
     int index = encoded_size;
-    auto* sig = imm.exception->sig;
+    auto* sig = imm.tag->sig;
     for (size_t param_idx = sig->parameter_count(); param_idx > 0;
          --param_idx) {
       ValueType type = sig->GetParam(param_idx - 1);
@@ -4319,7 +4282,7 @@ class LiftoffCompiler {
     CODE_COMMENT("load exception tag");
     LiftoffRegister exception_tag =
         pinned.set(__ GetUnusedRegister(kGpReg, pinned));
-    LOAD_TAGGED_PTR_INSTANCE_FIELD(exception_tag.gp(), ExceptionsTable, pinned);
+    LOAD_TAGGED_PTR_INSTANCE_FIELD(exception_tag.gp(), TagsTable, pinned);
     __ LoadTaggedPointer(
         exception_tag.gp(), exception_tag.gp(), no_reg,
         wasm::ObjectAccess::ElementOffsetInTaggedFixedArray(imm.index), {});
@@ -4348,7 +4311,6 @@ class LiftoffCompiler {
     pinned.set(index);
     AlignmentCheckMem(decoder, type.size(), imm.offset, index, pinned);
     uintptr_t offset = imm.offset;
-    index = AddMemoryMasking(index, &offset, &pinned);
     CODE_COMMENT("atomic store to memory");
     Register addr = pinned.set(GetMemoryStart(pinned));
     LiftoffRegList outer_pinned;
@@ -4371,7 +4333,6 @@ class LiftoffCompiler {
     LiftoffRegList pinned = LiftoffRegList::ForRegs(index);
     AlignmentCheckMem(decoder, type.size(), imm.offset, index, pinned);
     uintptr_t offset = imm.offset;
-    index = AddMemoryMasking(index, &offset, &pinned);
     CODE_COMMENT("atomic load from memory");
     Register addr = pinned.set(GetMemoryStart(pinned));
     RegClass rc = reg_class_for(kind);
@@ -4419,7 +4380,6 @@ class LiftoffCompiler {
     AlignmentCheckMem(decoder, type.size(), imm.offset, index, pinned);
 
     uintptr_t offset = imm.offset;
-    index = AddMemoryMasking(index, &offset, &pinned);
     Register addr = pinned.set(GetMemoryStart(pinned));
 
     (asm_.*emit_fn)(addr, index, offset, value, result, type);
@@ -4442,7 +4402,6 @@ class LiftoffCompiler {
     AlignmentCheckMem(decoder, type.size(), imm.offset, index, pinned);
 
     uintptr_t offset = imm.offset;
-    index = AddMemoryMasking(index, &offset, &pinned);
     Register addr = pinned.set(__ GetUnusedRegister(kGpReg, pinned)).gp();
     LOAD_INSTANCE_FIELD(addr, MemoryStart, kSystemPointerSize, pinned);
     __ emit_i32_add(addr, addr, index);
@@ -4475,7 +4434,6 @@ class LiftoffCompiler {
     AlignmentCheckMem(decoder, type.size(), imm.offset, index, pinned);
 
     uintptr_t offset = imm.offset;
-    index = AddMemoryMasking(index, &offset, &pinned);
     Register addr = pinned.set(GetMemoryStart(pinned));
     LiftoffRegister result =
         pinned.set(__ GetUnusedRegister(reg_class_for(result_kind), pinned));
@@ -4522,7 +4480,6 @@ class LiftoffCompiler {
                       pinned);
 
     uintptr_t offset = imm.offset;
-    index_reg = AddMemoryMasking(index_reg, &offset, &pinned);
     Register index_plus_offset =
         __ cache_state()->is_used(LiftoffRegister(index_reg))
             ? pinned.set(__ GetUnusedRegister(kGpReg, pinned)).gp()
@@ -4539,8 +4496,7 @@ class LiftoffCompiler {
         __ cache_state()->stack_state.end()[-2];
     LiftoffAssembler::VarState index = __ cache_state()->stack_state.end()[-3];
 
-    // We have to set the correct register for the index. It may have changed
-    // above in {AddMemoryMasking}.
+    // We have to set the correct register for the index.
     index.MakeRegister(LiftoffRegister(index_plus_offset));
 
     static constexpr WasmCode::RuntimeStubId kTargets[2][2]{
@@ -4570,7 +4526,6 @@ class LiftoffCompiler {
     AlignmentCheckMem(decoder, kInt32Size, imm.offset, index_reg, pinned);
 
     uintptr_t offset = imm.offset;
-    index_reg = AddMemoryMasking(index_reg, &offset, &pinned);
     Register index_plus_offset =
         __ cache_state()->is_used(LiftoffRegister(index_reg))
             ? pinned.set(__ GetUnusedRegister(kGpReg, pinned)).gp()
@@ -5063,7 +5018,7 @@ class LiftoffCompiler {
       Label* trap_label =
           AddOutOfLineTrap(decoder, WasmCode::kThrowWasmTrapArrayTooLarge);
       __ emit_i32_cond_jumpi(kUnsignedGreaterThan, trap_label, length.gp(),
-                             static_cast<int>(wasm::kV8MaxWasmArrayLength));
+                             WasmArray::MaxLength(imm.array_type));
     }
     ValueKind elem_kind = imm.array_type->element_type().kind();
     int elem_size = element_size_bytes(elem_kind);
@@ -5192,6 +5147,8 @@ class LiftoffCompiler {
   void ArrayCopy(FullDecoder* decoder, const Value& dst, const Value& dst_index,
                  const Value& src, const Value& src_index,
                  const Value& length) {
+    // TODO(7748): Unify implementation with TF: Implement this with
+    // GenerateCCall. Remove runtime function and builtin in wasm.tq.
     CallRuntimeStub(WasmCode::kWasmArrayCopyWithChecks,
                     MakeSig::Params(kI32, kI32, kI32, kOptRef, kOptRef),
                     // Builtin parameter order:
@@ -5786,28 +5743,6 @@ class LiftoffCompiler {
     __ emit_cond_jump(kUnsignedGreaterEqual, invalid_func_label, kI32, index,
                       tmp_const);
 
-    // Mask the index to prevent SSCA.
-    if (FLAG_untrusted_code_mitigations) {
-      CODE_COMMENT("Mask indirect call index");
-      // mask = ((index - size) & ~index) >> 31
-      // Reuse allocated registers; note: size is still stored in {tmp_const}.
-      Register diff = table;
-      Register neg_index = tmp_const;
-      Register mask = scratch;
-      // 1) diff = index - size
-      __ emit_i32_sub(diff, index, tmp_const);
-      // 2) neg_index = ~index
-      __ LoadConstant(LiftoffRegister(neg_index), WasmValue(int32_t{-1}));
-      __ emit_i32_xor(neg_index, neg_index, index);
-      // 3) mask = diff & neg_index
-      __ emit_i32_and(mask, diff, neg_index);
-      // 4) mask = mask >> 31
-      __ emit_i32_sari(mask, mask, 31);
-
-      // Apply mask.
-      __ emit_i32_and(index, index, mask);
-    }
-
     CODE_COMMENT("Check indirect call signature");
     // Load the signature from {instance->ift_sig_ids[key]}
     if (imm.table_imm.index == 0) {
@@ -6159,14 +6094,14 @@ class LiftoffCompiler {
                     ValueKind lane_kind) {
     RegClass rc = reg_class_for(kS128);
     LiftoffRegister tmp_gp = pinned.set(__ GetUnusedRegister(kGpReg, pinned));
-    LiftoffRegister tmp_fp = pinned.set(__ GetUnusedRegister(rc, pinned));
+    LiftoffRegister tmp_s128 = pinned.set(__ GetUnusedRegister(rc, pinned));
     LiftoffRegister nondeterminism_addr =
         pinned.set(__ GetUnusedRegister(kGpReg, pinned));
     __ LoadConstant(
         nondeterminism_addr,
         WasmValue::ForUintPtr(reinterpret_cast<uintptr_t>(nondeterminism_)));
-    __ emit_s128_set_if_nan(nondeterminism_addr.gp(), dst.fp(), tmp_gp.gp(),
-                            tmp_fp.fp(), lane_kind);
+    __ emit_s128_set_if_nan(nondeterminism_addr.gp(), dst, tmp_gp.gp(),
+                            tmp_s128, lane_kind);
   }
 
   static constexpr WasmOpcode kNoOutstandingOp = kExprUnreachable;
@@ -6283,10 +6218,7 @@ constexpr base::EnumSet<ValueKind> LiftoffCompiler::kUnconditionallySupported;
 
 WasmCompilationResult ExecuteLiftoffCompilation(
     CompilationEnv* env, const FunctionBody& func_body, int func_index,
-    ForDebugging for_debugging, Counters* counters, WasmFeatures* detected,
-    base::Vector<const int> breakpoints,
-    std::unique_ptr<DebugSideTable>* debug_sidetable, int dead_breakpoint,
-    int32_t* max_steps, int32_t* nondeterminism) {
+    ForDebugging for_debugging, const LiftoffOptions& compiler_options) {
   int func_body_size = static_cast<int>(func_body.end - func_body.start);
   TRACE_EVENT2(TRACE_DISABLED_BY_DEFAULT("v8.wasm.detailed"),
                "wasm.CompileBaseline", "funcIndex", func_index, "bodySize",
@@ -6302,20 +6234,25 @@ WasmCompilationResult ExecuteLiftoffCompilation(
   // have to grow more often.
   int initial_buffer_size = static_cast<int>(128 + code_size_estimate * 4 / 3);
   std::unique_ptr<DebugSideTableBuilder> debug_sidetable_builder;
-  if (debug_sidetable) {
+  if (compiler_options.debug_sidetable) {
     debug_sidetable_builder = std::make_unique<DebugSideTableBuilder>();
   }
-  DCHECK_IMPLIES(max_steps, for_debugging == kForDebugging);
+  DCHECK_IMPLIES(compiler_options.max_steps, for_debugging == kForDebugging);
+  WasmFeatures unused_detected_features;
   WasmFullDecoder<Decoder::kBooleanValidation, LiftoffCompiler> decoder(
-      &zone, env->module, env->enabled_features, detected, func_body,
-      call_descriptor, env, &zone, NewAssemblerBuffer(initial_buffer_size),
-      debug_sidetable_builder.get(), for_debugging, func_index, breakpoints,
-      dead_breakpoint, max_steps, nondeterminism);
+      &zone, env->module, env->enabled_features,
+      compiler_options.detected_features ? compiler_options.detected_features
+                                         : &unused_detected_features,
+      func_body, call_descriptor, env, &zone,
+      NewAssemblerBuffer(initial_buffer_size), debug_sidetable_builder.get(),
+      for_debugging, func_index, compiler_options.breakpoints,
+      compiler_options.dead_breakpoint, compiler_options.max_steps,
+      compiler_options.nondeterminism);
   decoder.Decode();
   LiftoffCompiler* compiler = &decoder.interface();
   if (decoder.failed()) compiler->OnFirstError(&decoder);
 
-  if (counters) {
+  if (auto* counters = compiler_options.counters) {
     // Check that the histogram for the bailout reasons has the correct size.
     DCHECK_EQ(0, counters->liftoff_bailout_reasons()->min());
     DCHECK_EQ(kNumBailoutReasons - 1,
@@ -6339,7 +6276,7 @@ WasmCompilationResult ExecuteLiftoffCompilation(
   result.func_index = func_index;
   result.result_tier = ExecutionTier::kLiftoff;
   result.for_debugging = for_debugging;
-  if (debug_sidetable) {
+  if (auto* debug_sidetable = compiler_options.debug_sidetable) {
     *debug_sidetable = debug_sidetable_builder->GenerateDebugSideTable();
   }
 

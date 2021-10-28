@@ -9,6 +9,7 @@
 #include <memory>
 #include <sstream>
 
+#include "include/v8-locker.h"
 #include "src/api/api-inl.h"
 #include "src/base/platform/mutex.h"
 #include "src/base/platform/platform.h"
@@ -614,6 +615,8 @@ void LowLevelLogger::LogCodeInfo() {
   const char arch[] = "ppc64";
 #elif V8_TARGET_ARCH_MIPS
   const char arch[] = "mips";
+#elif V8_TARGET_ARCH_LOONG64
+  const char arch[] = "loong64";
 #elif V8_TARGET_ARCH_ARM64
   const char arch[] = "arm64";
 #elif V8_TARGET_ARCH_S390
@@ -681,10 +684,12 @@ class JitLogger : public CodeEventLogger {
                            Handle<SharedFunctionInfo> shared) override {}
   void AddCodeLinePosInfoEvent(void* jit_handler_data, int pc_offset,
                                int position,
-                               JitCodeEvent::PositionType position_type);
+                               JitCodeEvent::PositionType position_type,
+                               JitCodeEvent::CodeType code_type);
 
-  void* StartCodePosInfoEvent();
-  void EndCodePosInfoEvent(Address start_address, void* jit_handler_data);
+  void* StartCodePosInfoEvent(JitCodeEvent::CodeType code_type);
+  void EndCodePosInfoEvent(Address start_address, void* jit_handler_data,
+                           JitCodeEvent::CodeType code_type);
 
  private:
   void LogRecordedBuffer(Handle<AbstractCode> code,
@@ -705,8 +710,7 @@ JitLogger::JitLogger(Isolate* isolate, JitCodeEventHandler code_event_handler)
 void JitLogger::LogRecordedBuffer(Handle<AbstractCode> code,
                                   MaybeHandle<SharedFunctionInfo> maybe_shared,
                                   const char* name, int length) {
-  JitCodeEvent event;
-  memset(static_cast<void*>(&event), 0, sizeof(event));
+  JitCodeEvent event = {};
   event.type = JitCodeEvent::CODE_ADDED;
   event.code_start = reinterpret_cast<void*>(code->InstructionStart());
   event.code_type =
@@ -727,10 +731,9 @@ void JitLogger::LogRecordedBuffer(Handle<AbstractCode> code,
 #if V8_ENABLE_WEBASSEMBLY
 void JitLogger::LogRecordedBuffer(const wasm::WasmCode* code, const char* name,
                                   int length) {
-  JitCodeEvent event;
-  memset(static_cast<void*>(&event), 0, sizeof(event));
+  JitCodeEvent event = {};
   event.type = JitCodeEvent::CODE_ADDED;
-  event.code_type = JitCodeEvent::JIT_CODE;
+  event.code_type = JitCodeEvent::WASM_CODE;
   event.code_start = code->instructions().begin();
   event.code_len = code->instructions().length();
   event.name.str = name;
@@ -793,10 +796,11 @@ void JitLogger::CodeMoveEvent(AbstractCode from, AbstractCode to) {
 
 void JitLogger::AddCodeLinePosInfoEvent(
     void* jit_handler_data, int pc_offset, int position,
-    JitCodeEvent::PositionType position_type) {
-  JitCodeEvent event;
-  memset(static_cast<void*>(&event), 0, sizeof(event));
+    JitCodeEvent::PositionType position_type,
+    JitCodeEvent::CodeType code_type) {
+  JitCodeEvent event = {};
   event.type = JitCodeEvent::CODE_ADD_LINE_POS_INFO;
+  event.code_type = code_type;
   event.user_data = jit_handler_data;
   event.line_info.offset = pc_offset;
   event.line_info.pos = position;
@@ -806,10 +810,10 @@ void JitLogger::AddCodeLinePosInfoEvent(
   code_event_handler_(&event);
 }
 
-void* JitLogger::StartCodePosInfoEvent() {
-  JitCodeEvent event;
-  memset(static_cast<void*>(&event), 0, sizeof(event));
+void* JitLogger::StartCodePosInfoEvent(JitCodeEvent::CodeType code_type) {
+  JitCodeEvent event = {};
   event.type = JitCodeEvent::CODE_START_LINE_INFO_RECORDING;
+  event.code_type = code_type;
   event.isolate = reinterpret_cast<v8::Isolate*>(isolate_);
 
   code_event_handler_(&event);
@@ -817,10 +821,11 @@ void* JitLogger::StartCodePosInfoEvent() {
 }
 
 void JitLogger::EndCodePosInfoEvent(Address start_address,
-                                    void* jit_handler_data) {
-  JitCodeEvent event;
-  memset(static_cast<void*>(&event), 0, sizeof(event));
+                                    void* jit_handler_data,
+                                    JitCodeEvent::CodeType code_type) {
+  JitCodeEvent event = {};
   event.type = JitCodeEvent::CODE_END_LINE_INFO_RECORDING;
+  event.code_type = code_type;
   event.code_start = reinterpret_cast<void*>(start_address);
   event.user_data = jit_handler_data;
   event.isolate = reinterpret_cast<v8::Isolate*>(isolate_);
@@ -974,6 +979,7 @@ void Profiler::Engage() {
     LOG(isolate_, SharedLibraryEvent(address.library_path, address.start,
                                      address.end, address.aslr_slide));
   }
+  LOG(isolate_, SharedLibraryEnd());
 
   // Start thread processing the profiler buffer.
   base::Relaxed_Store(&running_, 1);
@@ -983,7 +989,7 @@ void Profiler::Engage() {
   Logger* logger = isolate_->logger();
   logger->ticker_->SetProfiler(this);
 
-  logger->ProfilerBeginEvent();
+  LOG(isolate_, ProfilerBeginEvent());
 }
 
 void Profiler::Disengage() {
@@ -1075,8 +1081,8 @@ void Logger::HandleEvent(const char* name, Address* location) {
   msg.WriteToLogFile();
 }
 
-void Logger::ApiSecurityCheck() {
-  if (!FLAG_log_api) return;
+void Logger::WriteApiSecurityCheck() {
+  DCHECK(FLAG_log_api);
   MSG_BUILDER();
   msg << "api" << kNext << "check-security";
   msg.WriteToLogFile();
@@ -1093,6 +1099,13 @@ void Logger::SharedLibraryEvent(const std::string& library_path,
   msg.WriteToLogFile();
 }
 
+void Logger::SharedLibraryEnd() {
+  if (!FLAG_prof_cpp) return;
+  MSG_BUILDER();
+  msg << "shared-library-end";
+  msg.WriteToLogFile();
+}
+
 void Logger::CurrentTimeEvent() {
   DCHECK(FLAG_log_internal_timer_events);
   MSG_BUILDER();
@@ -1100,16 +1113,16 @@ void Logger::CurrentTimeEvent() {
   msg.WriteToLogFile();
 }
 
-void Logger::TimerEvent(Logger::StartEnd se, const char* name) {
+void Logger::TimerEvent(v8::LogEventStatus se, const char* name) {
   MSG_BUILDER();
   switch (se) {
-    case START:
+    case kStart:
       msg << "timer-event-start";
       break;
-    case END:
+    case kEnd:
       msg << "timer-event-end";
       break;
-    case STAMP:
+    case kStamp:
       msg << "timer-event";
   }
   msg << kNext << name << kNext << Time();
@@ -1142,38 +1155,38 @@ bool Logger::is_logging() {
 // Instantiate template methods.
 #define V(TimerName, expose)                                           \
   template void TimerEventScope<TimerEvent##TimerName>::LogTimerEvent( \
-      Logger::StartEnd se);
+      v8::LogEventStatus se);
 TIMER_EVENTS_LIST(V)
 #undef V
 
-void Logger::ApiNamedPropertyAccess(const char* tag, JSObject holder,
-                                    Object property_name) {
+void Logger::WriteApiNamedPropertyAccess(const char* tag, JSObject holder,
+                                         Object property_name) {
+  DCHECK(FLAG_log_api);
   DCHECK(property_name.IsName());
-  if (!FLAG_log_api) return;
   MSG_BUILDER();
   msg << "api" << kNext << tag << kNext << holder.class_name() << kNext
       << Name::cast(property_name);
   msg.WriteToLogFile();
 }
 
-void Logger::ApiIndexedPropertyAccess(const char* tag, JSObject holder,
-                                      uint32_t index) {
-  if (!FLAG_log_api) return;
+void Logger::WriteApiIndexedPropertyAccess(const char* tag, JSObject holder,
+                                           uint32_t index) {
+  DCHECK(FLAG_log_api);
   MSG_BUILDER();
   msg << "api" << kNext << tag << kNext << holder.class_name() << kNext
       << index;
   msg.WriteToLogFile();
 }
 
-void Logger::ApiObjectAccess(const char* tag, JSReceiver object) {
-  if (!FLAG_log_api) return;
+void Logger::WriteApiObjectAccess(const char* tag, JSReceiver object) {
+  DCHECK(FLAG_log_api);
   MSG_BUILDER();
   msg << "api" << kNext << tag << kNext << object.class_name();
   msg.WriteToLogFile();
 }
 
-void Logger::ApiEntryCall(const char* name) {
-  if (!FLAG_log_api) return;
+void Logger::WriteApiEntryCall(const char* name) {
+  DCHECK(FLAG_log_api);
   MSG_BUILDER();
   msg << "api" << kNext << name;
   msg.WriteToLogFile();
@@ -1521,36 +1534,41 @@ void Logger::CodeDependencyChangeEvent(Handle<Code> code,
 namespace {
 
 void CodeLinePosEvent(JitLogger& jit_logger, Address code_start,
-                      SourcePositionTableIterator& iter) {
-  void* jit_handler_data = jit_logger.StartCodePosInfoEvent();
+                      SourcePositionTableIterator& iter,
+                      JitCodeEvent::CodeType code_type) {
+  void* jit_handler_data = jit_logger.StartCodePosInfoEvent(code_type);
   for (; !iter.done(); iter.Advance()) {
     if (iter.is_statement()) {
       jit_logger.AddCodeLinePosInfoEvent(jit_handler_data, iter.code_offset(),
                                          iter.source_position().ScriptOffset(),
-                                         JitCodeEvent::STATEMENT_POSITION);
+                                         JitCodeEvent::STATEMENT_POSITION,
+                                         code_type);
     }
     jit_logger.AddCodeLinePosInfoEvent(jit_handler_data, iter.code_offset(),
                                        iter.source_position().ScriptOffset(),
-                                       JitCodeEvent::POSITION);
+                                       JitCodeEvent::POSITION, code_type);
   }
-  jit_logger.EndCodePosInfoEvent(code_start, jit_handler_data);
+  jit_logger.EndCodePosInfoEvent(code_start, jit_handler_data, code_type);
 }
 
 }  // namespace
 
 void Logger::CodeLinePosInfoRecordEvent(Address code_start,
-                                        ByteArray source_position_table) {
+                                        ByteArray source_position_table,
+                                        JitCodeEvent::CodeType code_type) {
   if (!jit_logger_) return;
   SourcePositionTableIterator iter(source_position_table);
-  CodeLinePosEvent(*jit_logger_, code_start, iter);
+  CodeLinePosEvent(*jit_logger_, code_start, iter, code_type);
 }
 
-void Logger::CodeLinePosInfoRecordEvent(
+#if V8_ENABLE_WEBASSEMBLY
+void Logger::WasmCodeLinePosInfoRecordEvent(
     Address code_start, base::Vector<const byte> source_position_table) {
   if (!jit_logger_) return;
   SourcePositionTableIterator iter(source_position_table);
-  CodeLinePosEvent(*jit_logger_, code_start, iter);
+  CodeLinePosEvent(*jit_logger_, code_start, iter, JitCodeEvent::WASM_CODE);
 }
+#endif  // V8_ENABLE_WEBASSEMBLY
 
 void Logger::CodeNameEvent(Address addr, int pos, const char* code_name) {
   if (code_name == nullptr) return;  // Not a code object.
@@ -2109,6 +2127,9 @@ FILE* Logger::TearDownAndGetLogFile() {
 
 void Logger::UpdateIsLogging(bool value) {
   base::MutexGuard guard(log_->mutex());
+  if (value) {
+    isolate_->CollectSourcePositionsForAllBytecodeArrays();
+  }
   // Relaxed atomic to avoid locking the mutex for the most common case: when
   // logging is disabled.
   is_logging_.store(value, std::memory_order_relaxed);
@@ -2201,12 +2222,11 @@ void ExistingCodeLogger::LogCompiledFunctions() {
           Handle<AbstractCode>(
               AbstractCode::cast(shared->InterpreterTrampoline()), isolate_));
     }
-    if (shared->HasBaselineData()) {
+    if (shared->HasBaselineCode()) {
       LogExistingFunction(
-          shared,
-          Handle<AbstractCode>(
-              AbstractCode::cast(shared->baseline_data().baseline_code()),
-              isolate_));
+          shared, Handle<AbstractCode>(
+                      AbstractCode::cast(shared->baseline_code(kAcquireLoad)),
+                      isolate_));
     }
     if (pair.second.is_identical_to(BUILTIN_CODE(isolate_, CompileLazy)))
       continue;

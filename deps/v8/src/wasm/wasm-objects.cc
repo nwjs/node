@@ -17,6 +17,7 @@
 #include "src/objects/struct-inl.h"
 #include "src/trap-handler/trap-handler.h"
 #include "src/utils/utils.h"
+#include "src/wasm/code-space-access.h"
 #include "src/wasm/jump-table-assembler.h"
 #include "src/wasm/module-compiler.h"
 #include "src/wasm/module-decoder.h"
@@ -850,20 +851,22 @@ MaybeHandle<WasmMemoryObject> WasmMemoryObject::New(Isolate* isolate,
   }
 
 #ifdef V8_TARGET_ARCH_32_BIT
-  if (shared == SharedFlag::kNotShared) {
-    // On 32-bit platforms we need a heuristic here to balance overall memory
-    // and address space consumption. If a maximum memory size is defined, then
-    // we reserve that maximum size up to 1GB. If no maximum memory size is
-    // defined, we just allocate the initial size and grow with a realloc.
-    constexpr int kGBPages = 1024 * 1024 * 1024 / wasm::kWasmPageSize;
-    if (initial > kGBPages || !has_maximum) {
-      // We allocate at least the initial size. If no maximum is specified we
-      // also start with the initial size.
-      heuristic_maximum = initial;
-    } else {
-      // We reserve the maximum size, but at most 1GB.
-      heuristic_maximum = std::min(maximum, kGBPages);
-    }
+  // On 32-bit platforms we need an heuristic here to balance overall memory
+  // and address space consumption.
+  constexpr int kGBPages = 1024 * 1024 * 1024 / wasm::kWasmPageSize;
+  if (initial > kGBPages) {
+    // We always allocate at least the initial size.
+    heuristic_maximum = initial;
+  } else if (has_maximum) {
+    // We try to reserve the maximum, but at most 1GB to avoid OOMs.
+    heuristic_maximum = std::min(maximum, kGBPages);
+  } else if (shared == SharedFlag::kShared) {
+    // If shared memory has no maximum, we use an implicit maximum of 1GB.
+    heuristic_maximum = kGBPages;
+  } else {
+    // If non-shared memory has no maximum, we only allocate the initial size
+    // and then grow with realloc.
+    heuristic_maximum = initial;
   }
 #endif
 
@@ -1240,21 +1243,13 @@ bool WasmInstanceObject::EnsureIndirectFunctionTableWithMinimumSize(
 void WasmInstanceObject::SetRawMemory(byte* mem_start, size_t mem_size) {
   CHECK_LE(mem_size, wasm::max_mem_bytes());
 #if V8_HOST_ARCH_64_BIT
-  uint64_t mem_mask64 = base::bits::RoundUpToPowerOfTwo64(mem_size) - 1;
   set_memory_start(mem_start);
   set_memory_size(mem_size);
-  set_memory_mask(mem_mask64);
 #else
   // Must handle memory > 2GiB specially.
   CHECK_LE(mem_size, size_t{kMaxUInt32});
-  uint32_t mem_mask32 =
-      (mem_size > 2 * size_t{GB})
-          ? 0xFFFFFFFFu
-          : base::bits::RoundUpToPowerOfTwo32(static_cast<uint32_t>(mem_size)) -
-                1;
   set_memory_start(mem_start);
   set_memory_size(mem_size);
-  set_memory_mask(mem_mask32);
 #endif
 }
 
@@ -1295,6 +1290,14 @@ Handle<WasmInstanceObject> WasmInstanceObject::New(
       isolate->stack_guard()->address_of_jslimit());
   instance->set_real_stack_limit_address(
       isolate->stack_guard()->address_of_real_jslimit());
+  instance->set_new_allocation_limit_address(
+      isolate->heap()->NewSpaceAllocationLimitAddress());
+  instance->set_new_allocation_top_address(
+      isolate->heap()->NewSpaceAllocationTopAddress());
+  instance->set_old_allocation_limit_address(
+      isolate->heap()->OldSpaceAllocationLimitAddress());
+  instance->set_old_allocation_top_address(
+      isolate->heap()->OldSpaceAllocationTopAddress());
   instance->set_globals_start(nullptr);
   instance->set_indirect_function_table_size(0);
   instance->set_indirect_function_table_refs(
@@ -1469,7 +1472,9 @@ WasmInstanceObject::GetOrCreateWasmExternalFunction(
   const WasmModule* module = module_object->module();
   const WasmFunction& function = module->functions[function_index];
   int wrapper_index =
-      GetExportWrapperIndex(module, function.sig, function.imported);
+      GetExportWrapperIndex(module, function.sig_index, function.imported);
+  DCHECK_EQ(wrapper_index,
+            GetExportWrapperIndex(module, function.sig, function.imported));
 
   Handle<Object> entry =
       FixedArray::get(module_object->export_wrappers(), wrapper_index, isolate);
@@ -1528,7 +1533,8 @@ void WasmInstanceObject::ImportWasmJSFunctionIntoTable(
   if (sig_id >= 0) {
     wasm::NativeModule* native_module =
         instance->module_object().native_module();
-    // TODO(wasm): Cache and reuse wrapper code.
+    // TODO(wasm): Cache and reuse wrapper code, to avoid repeated compilation
+    // and permissions switching.
     const wasm::WasmFeatures enabled = native_module->enabled_features();
     auto resolved = compiler::ResolveWasmImportCall(
         callable, sig, instance->module(), enabled);
@@ -1541,10 +1547,11 @@ void WasmInstanceObject::ImportWasmJSFunctionIntoTable(
     if (kind == compiler::WasmImportCallKind ::kJSFunctionArityMismatch) {
       expected_arity = Handle<JSFunction>::cast(callable)
                            ->shared()
-                           .internal_formal_parameter_count();
+                           .internal_formal_parameter_count_without_receiver();
     }
     wasm::WasmCompilationResult result = compiler::CompileWasmImportCallWrapper(
         &env, kind, sig, false, expected_arity);
+    wasm::CodeSpaceWriteScope write_scope(native_module);
     std::unique_ptr<wasm::WasmCode> wasm_code = native_module->AddCode(
         result.func_index, result.code_desc, result.frame_slot_count,
         result.tagged_parameter_slots,
@@ -1694,11 +1701,11 @@ Address WasmArray::ElementAddress(uint32_t index) {
 }
 
 // static
-Handle<WasmExceptionObject> WasmExceptionObject::New(
-    Isolate* isolate, const wasm::FunctionSig* sig,
-    Handle<HeapObject> exception_tag) {
-  Handle<JSFunction> exception_cons(
-      isolate->native_context()->wasm_exception_constructor(), isolate);
+Handle<WasmTagObject> WasmTagObject::New(Isolate* isolate,
+                                         const wasm::FunctionSig* sig,
+                                         Handle<HeapObject> tag) {
+  Handle<JSFunction> tag_cons(isolate->native_context()->wasm_tag_constructor(),
+                              isolate);
 
   // Serialize the signature.
   DCHECK_EQ(0, sig->return_count());
@@ -1711,18 +1718,17 @@ Handle<WasmExceptionObject> WasmExceptionObject::New(
     serialized_sig->set(index++, param);
   }
 
-  Handle<JSObject> exception_object =
-      isolate->factory()->NewJSObject(exception_cons, AllocationType::kOld);
-  Handle<WasmExceptionObject> exception =
-      Handle<WasmExceptionObject>::cast(exception_object);
-  exception->set_serialized_signature(*serialized_sig);
-  exception->set_exception_tag(*exception_tag);
+  Handle<JSObject> tag_object =
+      isolate->factory()->NewJSObject(tag_cons, AllocationType::kOld);
+  Handle<WasmTagObject> tag_wrapper = Handle<WasmTagObject>::cast(tag_object);
+  tag_wrapper->set_serialized_signature(*serialized_sig);
+  tag_wrapper->set_tag(*tag);
 
-  return exception;
+  return tag_wrapper;
 }
 
 // TODO(9495): Update this if function type variance is introduced.
-bool WasmExceptionObject::MatchesSignature(const wasm::FunctionSig* sig) {
+bool WasmTagObject::MatchesSignature(const wasm::FunctionSig* sig) {
   DCHECK_EQ(0, sig->return_count());
   DCHECK_LE(sig->parameter_count(), std::numeric_limits<int>::max());
   int sig_size = static_cast<int>(sig->parameter_count());
@@ -1760,14 +1766,20 @@ bool WasmCapiFunction::MatchesSignature(const wasm::FunctionSig* sig) const {
 // static
 Handle<WasmExceptionPackage> WasmExceptionPackage::New(
     Isolate* isolate, Handle<WasmExceptionTag> exception_tag, int size) {
-  Handle<Object> exception = isolate->factory()->NewWasmRuntimeError(
+  Handle<FixedArray> values = isolate->factory()->NewFixedArray(size);
+  return New(isolate, exception_tag, values);
+}
+
+Handle<WasmExceptionPackage> WasmExceptionPackage::New(
+    Isolate* isolate, Handle<WasmExceptionTag> exception_tag,
+    Handle<FixedArray> values) {
+  Handle<JSObject> exception = isolate->factory()->NewWasmExceptionError(
       MessageTemplate::kWasmExceptionError);
   CHECK(!Object::SetProperty(isolate, exception,
                              isolate->factory()->wasm_exception_tag_symbol(),
                              exception_tag, StoreOrigin::kMaybeKeyed,
                              Just(ShouldThrow::kThrowOnError))
              .is_null());
-  Handle<FixedArray> values = isolate->factory()->NewFixedArray(size);
   CHECK(!Object::SetProperty(isolate, exception,
                              isolate->factory()->wasm_exception_values_symbol(),
                              values, StoreOrigin::kMaybeKeyed,
@@ -1802,6 +1814,35 @@ Handle<Object> WasmExceptionPackage::GetExceptionValues(
   return ReadOnlyRoots(isolate).undefined_value_handle();
 }
 
+void EncodeI32ExceptionValue(Handle<FixedArray> encoded_values,
+                             uint32_t* encoded_index, uint32_t value) {
+  encoded_values->set((*encoded_index)++, Smi::FromInt(value >> 16));
+  encoded_values->set((*encoded_index)++, Smi::FromInt(value & 0xffff));
+}
+
+void EncodeI64ExceptionValue(Handle<FixedArray> encoded_values,
+                             uint32_t* encoded_index, uint64_t value) {
+  EncodeI32ExceptionValue(encoded_values, encoded_index,
+                          static_cast<uint32_t>(value >> 32));
+  EncodeI32ExceptionValue(encoded_values, encoded_index,
+                          static_cast<uint32_t>(value));
+}
+
+void DecodeI32ExceptionValue(Handle<FixedArray> encoded_values,
+                             uint32_t* encoded_index, uint32_t* value) {
+  uint32_t msb = Smi::cast(encoded_values->get((*encoded_index)++)).value();
+  uint32_t lsb = Smi::cast(encoded_values->get((*encoded_index)++)).value();
+  *value = (msb << 16) | (lsb & 0xffff);
+}
+
+void DecodeI64ExceptionValue(Handle<FixedArray> encoded_values,
+                             uint32_t* encoded_index, uint64_t* value) {
+  uint32_t lsb = 0, msb = 0;
+  DecodeI32ExceptionValue(encoded_values, encoded_index, &msb);
+  DecodeI32ExceptionValue(encoded_values, encoded_index, &lsb);
+  *value = (static_cast<uint64_t>(msb) << 32) | static_cast<uint64_t>(lsb);
+}
+
 #ifdef DEBUG
 
 namespace {
@@ -1820,9 +1861,8 @@ size_t ComputeEncodedElementSize(wasm::ValueType type) {
 #endif  // DEBUG
 
 // static
-uint32_t WasmExceptionPackage::GetEncodedSize(
-    const wasm::WasmException* exception) {
-  const wasm::WasmExceptionSig* sig = exception->sig;
+uint32_t WasmExceptionPackage::GetEncodedSize(const wasm::WasmTag* tag) {
+  const wasm::WasmTagSig* sig = tag->sig;
   uint32_t encoded_size = 0;
   for (size_t i = 0; i < sig->parameter_count(); ++i) {
     switch (sig->GetParam(i).kind()) {
@@ -1985,7 +2025,7 @@ Handle<WasmExportedFunction> WasmExportedFunction::New(
   // method. This does not apply to functions exported from asm.js however.
   DCHECK_EQ(is_asm_js_module, js_function->IsConstructor());
   shared->set_length(arity);
-  shared->set_internal_formal_parameter_count(arity);
+  shared->set_internal_formal_parameter_count(JSParameterCount(arity));
   shared->set_script(instance->module_object().script());
   return Handle<WasmExportedFunction>::cast(js_function);
 }
@@ -2070,7 +2110,8 @@ Handle<WasmJSFunction> WasmJSFunction::New(Isolate* isolate,
     CK kind = compiler::kDefaultImportCallKind;
     if (callable->IsJSFunction()) {
       SharedFunctionInfo shared = Handle<JSFunction>::cast(callable)->shared();
-      expected_arity = shared.internal_formal_parameter_count();
+      expected_arity =
+          shared.internal_formal_parameter_count_without_receiver();
       if (expected_arity != parameter_count) {
         kind = CK::kJSFunctionArityMismatch;
       }
@@ -2098,7 +2139,8 @@ Handle<WasmJSFunction> WasmJSFunction::New(Isolate* isolate,
       Factory::JSFunctionBuilder{isolate, shared, context}
           .set_map(function_map)
           .Build();
-  js_function->shared().set_internal_formal_parameter_count(parameter_count);
+  js_function->shared().set_internal_formal_parameter_count(
+      JSParameterCount(parameter_count));
   return Handle<WasmJSFunction>::cast(js_function);
 }
 
@@ -2171,10 +2213,6 @@ Handle<AsmWasmData> AsmWasmData::New(
   result->set_uses_bitset(*uses_bitset);
   return result;
 }
-
-static_assert(wasm::kV8MaxWasmArrayLength <=
-                  (Smi::kMaxValue - WasmArray::kHeaderSize) / kDoubleSize,
-              "max Wasm array size must fit into max object size");
 
 namespace wasm {
 

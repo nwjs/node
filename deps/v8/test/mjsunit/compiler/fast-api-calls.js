@@ -5,7 +5,7 @@
 // This file excercises basic fast API calls and enables fuzzing of this
 // functionality.
 
-// Flags: --turbo-fast-api-calls --allow-natives-syntax --opt
+// Flags: --turbo-fast-api-calls --expose-fast-api --allow-natives-syntax --opt
 // --always-opt is disabled because we rely on particular feedback for
 // optimizing to the fastest path.
 // Flags: --no-always-opt
@@ -163,7 +163,7 @@ assertEquals(add_32bit_int_result, add_32bit_int_mismatch(false, -42, 45));
 assertOptimized(add_32bit_int_mismatch);
 
 // Test that passing too few argument falls down the slow path,
-// because it's an argument type mismatch (undefined vs. int).
+// because one of the arguments is undefined.
 fast_c_api.reset_counts();
 assertEquals(-42, add_32bit_int_mismatch(false, -42));
 assertUnoptimized(add_32bit_int_mismatch);

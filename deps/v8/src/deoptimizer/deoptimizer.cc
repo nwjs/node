@@ -430,7 +430,7 @@ void Deoptimizer::DeoptimizeFunction(JSFunction function, Code code) {
   RCS_SCOPE(isolate, RuntimeCallCounterId::kDeoptimizeCode);
   TimerEventScope<TimerEventDeoptimizeCode> timer(isolate);
   TRACE_EVENT0("v8", "V8.DeoptimizeCode");
-  function.ResetIfBytecodeFlushed();
+  function.ResetIfCodeFlushed();
   if (code.is_null()) code = function.code();
 
   if (CodeKindCanDeoptimize(code.kind())) {
@@ -476,15 +476,6 @@ const char* Deoptimizer::MessageFor(DeoptimizeKind kind, bool reuse_code) {
       return "eager-with-resume";
   }
 }
-
-namespace {
-
-uint16_t InternalFormalParameterCountWithReceiver(SharedFunctionInfo sfi) {
-  static constexpr int kTheReceiver = 1;
-  return sfi.internal_formal_parameter_count() + kTheReceiver;
-}
-
-}  // namespace
 
 Deoptimizer::Deoptimizer(Isolate* isolate, JSFunction function,
                          DeoptimizeKind kind, unsigned deopt_exit_index,
@@ -541,7 +532,7 @@ Deoptimizer::Deoptimizer(Isolate* isolate, JSFunction function,
   }
   unsigned size = ComputeInputFrameSize();
   const int parameter_count =
-      InternalFormalParameterCountWithReceiver(function.shared());
+      function.shared().internal_formal_parameter_count_with_receiver();
   input_ = new (size) FrameDescription(size, parameter_count);
 
   if (kSupportsFixedDeoptExitSizes) {
@@ -745,11 +736,19 @@ void Deoptimizer::TraceDeoptBegin(int optimization_id,
     PrintF(file, "%s", CodeKindToString(compiled_code_.kind()));
   }
   PrintF(file,
-         ", opt id %d, bytecode offset %d, deopt exit %d, FP to SP delta %d, "
+         ", opt id %d, "
+#ifdef DEBUG
+         "node id %d, "
+#endif  // DEBUG
+         "bytecode offset %d, deopt exit %d, FP to SP "
+         "delta %d, "
          "caller SP " V8PRIxPTR_FMT ", pc " V8PRIxPTR_FMT "]\n",
-         optimization_id, bytecode_offset.ToInt(), deopt_exit_index_,
-         fp_to_sp_delta_, caller_frame_top_,
-         PointerAuthentication::StripPAC(from_));
+         optimization_id,
+#ifdef DEBUG
+         info.node_id,
+#endif  // DEBUG
+         bytecode_offset.ToInt(), deopt_exit_index_, fp_to_sp_delta_,
+         caller_frame_top_, PointerAuthentication::StripPAC(from_));
   if (verbose_tracing_enabled() && deopt_kind_ != DeoptimizeKind::kLazy) {
     PrintF(file, "            ;;; deoptimize at ");
     OFStream outstr(file);
@@ -895,9 +894,10 @@ void Deoptimizer::DoComputeOutputFrames() {
       isolate_, input_->GetFramePointerAddress(), stack_fp_, &state_iterator,
       input_data.LiteralArray(), input_->GetRegisterValues(), trace_file,
       function_.IsHeapObject()
-          ? function_.shared().internal_formal_parameter_count()
+          ? function_.shared()
+                .internal_formal_parameter_count_without_receiver()
           : 0,
-      actual_argument_count_);
+      actual_argument_count_ - kJSArgcReceiverSlots);
 
   // Do the input frame to output frame(s) translation.
   size_t count = translated_state_.frames().size();
@@ -996,8 +996,8 @@ namespace {
 // Get the dispatch builtin for unoptimized frames.
 Builtin DispatchBuiltinFor(bool is_baseline, bool advance_bc) {
   if (is_baseline) {
-    return advance_bc ? Builtin::kBaselineEnterAtNextBytecode
-                      : Builtin::kBaselineEnterAtBytecode;
+    return advance_bc ? Builtin::kBaselineOrInterpreterEnterAtNextBytecode
+                      : Builtin::kBaselineOrInterpreterEnterAtBytecode;
   } else {
     return advance_bc ? Builtin::kInterpreterEnterAtNextBytecode
                       : Builtin::kInterpreterEnterAtBytecode;
@@ -1018,7 +1018,8 @@ void Deoptimizer::DoComputeUnoptimizedFrame(TranslatedFrame* translated_frame,
   const int bytecode_offset =
       goto_catch_handler ? catch_handler_pc_offset_ : real_bytecode_offset;
 
-  const int parameters_count = InternalFormalParameterCountWithReceiver(shared);
+  const int parameters_count =
+      shared.internal_formal_parameter_count_with_receiver();
 
   // If this is the bottom most frame or the previous frame was the arguments
   // adaptor fake frame, then we already have extra arguments in the stack
@@ -1060,7 +1061,7 @@ void Deoptimizer::DoComputeUnoptimizedFrame(TranslatedFrame* translated_frame,
   const bool advance_bc =
       (!is_topmost || (deopt_kind_ == DeoptimizeKind::kLazy)) &&
       !goto_catch_handler;
-  const bool is_baseline = shared.HasBaselineData();
+  const bool is_baseline = shared.HasBaselineCode();
   Code dispatch_builtin =
       builtins->code(DispatchBuiltinFor(is_baseline, advance_bc));
 
@@ -1092,11 +1093,13 @@ void Deoptimizer::DoComputeUnoptimizedFrame(TranslatedFrame* translated_frame,
   }
 
   // Note: parameters_count includes the receiver.
+  // TODO(v8:11112): Simplify once the receiver is always included in argc.
   if (verbose_tracing_enabled() && is_bottommost &&
-      actual_argument_count_ > parameters_count - 1) {
-    PrintF(trace_scope_->file(),
-           "    -- %d extra argument(s) already in the stack --\n",
-           actual_argument_count_ - parameters_count + 1);
+      actual_argument_count_ - kJSArgcReceiverSlots > parameters_count - 1) {
+    PrintF(
+        trace_scope_->file(),
+        "    -- %d extra argument(s) already in the stack --\n",
+        actual_argument_count_ - kJSArgcReceiverSlots - parameters_count + 1);
   }
   frame_writer.PushStackJSArguments(value_iterator, parameters_count);
 
@@ -1177,7 +1180,7 @@ void Deoptimizer::DoComputeUnoptimizedFrame(TranslatedFrame* translated_frame,
         (translated_state_.frames()[frame_index - 1]).kind();
     argc = previous_frame_kind == TranslatedFrame::kArgumentsAdaptor
                ? output_[frame_index - 1]->parameter_count()
-               : parameters_count - 1;
+               : parameters_count - (kJSArgcIncludesReceiver ? 0 : 1);
   }
   frame_writer.PushRawValue(argc, "actual argument count\n");
 
@@ -1326,7 +1329,8 @@ void Deoptimizer::DoComputeArgumentsAdaptorFrame(
   TranslatedFrame::iterator value_iterator = translated_frame->begin();
   const int argument_count_without_receiver = translated_frame->height() - 1;
   const int formal_parameter_count =
-      translated_frame->raw_shared_info().internal_formal_parameter_count();
+      translated_frame->raw_shared_info()
+          .internal_formal_parameter_count_without_receiver();
   const int extra_argument_count =
       argument_count_without_receiver - formal_parameter_count;
   // The number of pushed arguments is the maximum of the actual argument count
@@ -1342,8 +1346,8 @@ void Deoptimizer::DoComputeArgumentsAdaptorFrame(
   }
 
   // Allocate and store the output frame description.
-  FrameDescription* output_frame = new (output_frame_size)
-      FrameDescription(output_frame_size, argument_count_without_receiver);
+  FrameDescription* output_frame = new (output_frame_size) FrameDescription(
+      output_frame_size, JSParameterCount(argument_count_without_receiver));
   // The top address of the frame is computed from the previous frame's top and
   // this frame's size.
   const intptr_t top_address =
@@ -1462,9 +1466,8 @@ void Deoptimizer::DoComputeConstructStubFrame(TranslatedFrame* translated_frame,
   frame_writer.PushTranslatedValue(value_iterator++, "context");
 
   // Number of incoming arguments.
-  const uint32_t parameters_count_without_receiver = parameters_count - 1;
-  frame_writer.PushRawObject(Smi::FromInt(parameters_count_without_receiver),
-                             "argc\n");
+  const uint32_t argc = parameters_count - (kJSArgcIncludesReceiver ? 0 : 1);
+  frame_writer.PushRawObject(Smi::FromInt(argc), "argc\n");
 
   // The constructor function was mentioned explicitly in the
   // CONSTRUCT_STUB_FRAME.
@@ -2059,7 +2062,7 @@ unsigned Deoptimizer::ComputeInputFrameSize() const {
 
 // static
 unsigned Deoptimizer::ComputeIncomingArgumentSize(SharedFunctionInfo shared) {
-  int parameter_slots = InternalFormalParameterCountWithReceiver(shared);
+  int parameter_slots = shared.internal_formal_parameter_count_with_receiver();
   return parameter_slots * kSystemPointerSize;
 }
 
@@ -2067,11 +2070,13 @@ Deoptimizer::DeoptInfo Deoptimizer::GetDeoptInfo(Code code, Address pc) {
   CHECK(code.InstructionStart() <= pc && pc <= code.InstructionEnd());
   SourcePosition last_position = SourcePosition::Unknown();
   DeoptimizeReason last_reason = DeoptimizeReason::kUnknown;
+  uint32_t last_node_id = 0;
   int last_deopt_id = kNoDeoptimizationId;
   int mask = RelocInfo::ModeMask(RelocInfo::DEOPT_REASON) |
              RelocInfo::ModeMask(RelocInfo::DEOPT_ID) |
              RelocInfo::ModeMask(RelocInfo::DEOPT_SCRIPT_OFFSET) |
-             RelocInfo::ModeMask(RelocInfo::DEOPT_INLINING_ID);
+             RelocInfo::ModeMask(RelocInfo::DEOPT_INLINING_ID) |
+             RelocInfo::ModeMask(RelocInfo::DEOPT_NODE_ID);
   for (RelocIterator it(code, mask); !it.done(); it.next()) {
     RelocInfo* info = it.rinfo();
     if (info->pc() >= pc) break;
@@ -2085,9 +2090,11 @@ Deoptimizer::DeoptInfo Deoptimizer::GetDeoptInfo(Code code, Address pc) {
       last_deopt_id = static_cast<int>(info->data());
     } else if (info->rmode() == RelocInfo::DEOPT_REASON) {
       last_reason = static_cast<DeoptimizeReason>(info->data());
+    } else if (info->rmode() == RelocInfo::DEOPT_NODE_ID) {
+      last_node_id = static_cast<uint32_t>(info->data());
     }
   }
-  return DeoptInfo(last_position, last_reason, last_deopt_id);
+  return DeoptInfo(last_position, last_reason, last_node_id, last_deopt_id);
 }
 
 // static

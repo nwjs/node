@@ -39,6 +39,7 @@
 
     'openssl_product': '<(STATIC_LIB_PREFIX)openssl<(STATIC_LIB_SUFFIX)',
     'openssl_fips': '',
+    'node_fipsinstall': 'false',
     'experimental_quic': 0,
     'llvm_version': '6.0',
 

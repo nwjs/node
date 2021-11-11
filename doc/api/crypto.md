@@ -5378,6 +5378,10 @@ Based on the recommendations of [NIST SP 800-131A][]:
 
 See the reference for other recommendations and details.
 
+Some algorithms that have known weaknesses and are of little relevance in
+practice are only available through the [legacy provider][], which is not
+enabled by default.
+
 ### CCM mode
 
 CCM is one of the supported [AEAD algorithms][]. Applications which use this
@@ -5639,6 +5643,7 @@ See the [list of SSL OP Flags][] for details.
     <td><code>SSL_OP_NO_TLSv1_3</code></td>
     <td>Instructs OpenSSL to turn off TLS v1.3</td>
   </tr>
+  <tr>
     <td><code>SSL_OP_PKCS1_CHECK_1</code></td>
     <td></td>
   </tr>
@@ -5664,6 +5669,7 @@ See the [list of SSL OP Flags][] for details.
     <td>Instructs OpenSSL to always create a new key when using
     temporary/ephemeral ECDH parameters.</td>
   </tr>
+  <tr>
     <td><code>SSL_OP_SSLEAY_080_CLIENT_DH_BUG</code></td>
     <td></td>
   </tr>
@@ -5912,6 +5918,7 @@ See the [list of SSL OP Flags][] for details.
 [certificate object]: tls.md#certificate-object
 [encoding]: buffer.md#buffers-and-character-encodings
 [initialization vector]: https://en.wikipedia.org/wiki/Initialization_vector
+[legacy provider]: cli.md#--openssl-legacy-provider
 [list of SSL OP Flags]: https://wiki.openssl.org/index.php/List_of_SSL_OP_Flags#Table_of_Options
 [modulo bias]: https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle#Modulo_bias
 [safe integers]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/isSafeInteger

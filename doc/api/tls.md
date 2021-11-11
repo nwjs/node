@@ -459,7 +459,7 @@ The `'secure'` event is emitted by the `SecurePair` object once a secure
 connection has been established.
 
 As with checking for the server
-[`'secureConnection'`]()
+[`'secureConnection'`][]
 event, `pair.cleartext.authorized` should be inspected to confirm whether the
 certificate used is properly authorized.
 
@@ -1073,7 +1073,7 @@ For example:
 ```
 
 See
-[SSL\_CIPHER\_get\_name](https://www.openssl.org/docs/man1.1.1/man3/SSL\_CIPHER\_get\_name.html)
+[SSL\_CIPHER\_get\_name](https://www.openssl.org/docs/man1.1.1/man3/SSL_CIPHER_get_name.html)
 for more information.
 
 ### `tlsSocket.getEphemeralKeyInfo()`
@@ -1303,7 +1303,7 @@ added: v12.11.0
   the client in the order of decreasing preference.
 
 See
-[SSL\_get\_shared\_sigalgs](https://www.openssl.org/docs/man1.1.1/man3/SSL\_get\_shared\_sigalgs.html)
+[SSL\_get\_shared\_sigalgs](https://www.openssl.org/docs/man1.1.1/man3/SSL_get_shared_sigalgs.html)
 for more information.
 
 ### `tlsSocket.getTLSTicket()`
@@ -1767,7 +1767,7 @@ changes:
     The list can contain digest algorithms (`SHA256`, `MD5` etc.), public key
     algorithms (`RSA-PSS`, `ECDSA` etc.), combination of both (e.g
     'RSA+SHA384') or TLS v1.3 scheme names (e.g. `rsa_pss_pss_sha512`).
-    See [OpenSSL man pages](https://www.openssl.org/docs/man1.1.1/man3/SSL\_CTX\_set1\_sigalgs\_list.html)
+    See [OpenSSL man pages](https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set1_sigalgs_list.html)
     for more info.
   * `ciphers` {string} Cipher suite specification, replacing the default. For
     more information, see [modifying the default cipher suite][]. Permitted

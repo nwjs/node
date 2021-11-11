@@ -31,25 +31,124 @@
 </table>
 
 * Other Versions
-  * [17.x](CHANGELOG\_V17.md)
-  * [15.x](CHANGELOG\_V15.md)
-  * [14.x](CHANGELOG\_V14.md)
-  * [13.x](CHANGELOG\_V13.md)
-  * [12.x](CHANGELOG\_V12.md)
-  * [11.x](CHANGELOG\_V11.md)
-  * [10.x](CHANGELOG\_V10.md)
-  * [9.x](CHANGELOG\_V9.md)
-  * [8.x](CHANGELOG\_V8.md)
-  * [7.x](CHANGELOG\_V7.md)
-  * [6.x](CHANGELOG\_V6.md)
-  * [5.x](CHANGELOG\_V5.md)
-  * [4.x](CHANGELOG\_V4.md)
-  * [0.12.x](CHANGELOG\_V012.md)
-  * [0.10.x](CHANGELOG\_V010.md)
-  * [io.js](CHANGELOG\_IOJS.md)
-  * [Archive](CHANGELOG\_ARCHIVE.md)
+  * [17.x](CHANGELOG_V17.md)
+  * [15.x](CHANGELOG_V15.md)
+  * [14.x](CHANGELOG_V14.md)
+  * [13.x](CHANGELOG_V13.md)
+  * [12.x](CHANGELOG_V12.md)
+  * [11.x](CHANGELOG_V11.md)
+  * [10.x](CHANGELOG_V10.md)
+  * [9.x](CHANGELOG_V9.md)
+  * [8.x](CHANGELOG_V8.md)
+  * [7.x](CHANGELOG_V7.md)
+  * [6.x](CHANGELOG_V6.md)
+  * [5.x](CHANGELOG_V5.md)
+  * [4.x](CHANGELOG_V4.md)
+  * [0.12.x](CHANGELOG_V012.md)
+  * [0.10.x](CHANGELOG_V010.md)
+  * [io.js](CHANGELOG_IOJS.md)
+  * [Archive](CHANGELOG_ARCHIVE.md)
+
+<a id="16.13.0"></a>
+
+## 2021-10-26, Version 16.13.0 'Gallium' (LTS), @richardlau
+
+### Notable Changes
+
+This release marks the transition of Node.js 16.x into Long Term Support (LTS)
+with the codename 'Gallium'. The 16.x release line now moves into "Active LTS"
+and will remain so until October 2022. After that time, it will move into
+"Maintenance" until end of life in April 2024.
+
+<a id="16.12.0"></a>
+
+## 2021-10-20, Version 16.12.0 (Current), @richardlau
+
+### Notable Changes
+
+#### Experimental ESM Loader Hooks API
+
+Node.js ESM Loader hooks have been consolidated to represent the steps involved needed to facilitate future loader chaining:
+
+1. `resolve`: `resolve` \[+ `getFormat`]
+2. `load`: `getFormat` + `getSource` + `transformSource`
+
+For consistency, `getGlobalPreloadCode` has been renamed to `globalPreload`.
+
+A loader exporting obsolete hook(s) will trigger a single deprecation warning (per loader) listing the errant hooks.
+
+Contributed by Jacob Smith, Geoffrey Booth, and Bradley Farias - <https://github.com/nodejs/node/pull/37468>
+
+#### Other Notable Changes
+
+* \[[`8fdabcb918`](https://github.com/nodejs/node/commit/8fdabcb918)] - **deps**: upgrade npm to 8.1.0 (npm team) [#40463](https://github.com/nodejs/node/pull/40463)
+* \[[`d1d9f2de30`](https://github.com/nodejs/node/commit/d1d9f2de30)] - **doc**: deprecate (doc-only) http abort related (dr-js) [#36670](https://github.com/nodejs/node/pull/36670)
+* \[[`4116b6c907`](https://github.com/nodejs/node/commit/4116b6c907)] - **(SEMVER-MINOR)** **vm**: add support for import assertions in dynamic imports (Antoine du Hamel) [#40249](https://github.com/nodejs/node/pull/40249)
+
+### Commits
+
+* \[[`8bb3951e41`](https://github.com/nodejs/node/commit/8bb3951e41)] - **build**: remove duplicate check for authors.yml (Rich Trott) [#40393](https://github.com/nodejs/node/pull/40393)
+* \[[`2de57edced`](https://github.com/nodejs/node/commit/2de57edced)] - **build**: make scripts in gyp run with right python (Cheng Zhao) [#39730](https://github.com/nodejs/node/pull/39730)
+* \[[`a8926d199d`](https://github.com/nodejs/node/commit/a8926d199d)] - **crypto**: remove incorrect constructor invocation (gc) [#40300](https://github.com/nodejs/node/pull/40300)
+* \[[`8fdabcb918`](https://github.com/nodejs/node/commit/8fdabcb918)] - **deps**: upgrade npm to 8.1.0 (npm team) [#40463](https://github.com/nodejs/node/pull/40463)
+* \[[`dca5ac1539`](https://github.com/nodejs/node/commit/dca5ac1539)] - **deps**: suppress zlib compiler warnings (Daniel Bevenius) [#40343](https://github.com/nodejs/node/pull/40343)
+* \[[`91c3bf6a7f`](https://github.com/nodejs/node/commit/91c3bf6a7f)] - **deps**: upgrade Corepack to 0.10 (Maël Nison) [#40374](https://github.com/nodejs/node/pull/40374)
+* \[[`7e02124a06`](https://github.com/nodejs/node/commit/7e02124a06)] - **dgram**: add `nread` assertion to `UDPWrap::OnRecv` (Darshan Sen) [#40295](https://github.com/nodejs/node/pull/40295)
+* \[[`2d409ed29e`](https://github.com/nodejs/node/commit/2d409ed29e)] - **dns**: refactor and use validators (Voltrex) [#40022](https://github.com/nodejs/node/pull/40022)
+* \[[`dc7291dab8`](https://github.com/nodejs/node/commit/dc7291dab8)] - **doc**: remove ESLint comments which were breaking the CJS/ESM toggles (Mark Skelton) [#40408](https://github.com/nodejs/node/pull/40408)
+* \[[`85b7385115`](https://github.com/nodejs/node/commit/85b7385115)] - **doc**: add pronouns for tniessen to README (Tobias Nießen) [#40412](https://github.com/nodejs/node/pull/40412)
+* \[[`1d5857c9f4`](https://github.com/nodejs/node/commit/1d5857c9f4)] - **doc**: format changelogs (Rich Trott) [#40388](https://github.com/nodejs/node/pull/40388)
+* \[[`5eb9402b50`](https://github.com/nodejs/node/commit/5eb9402b50)] - **doc**: fix missing variable in deepStrictEqual example (OliverOdo) [#40396](https://github.com/nodejs/node/pull/40396)
+* \[[`6f77d1a1d5`](https://github.com/nodejs/node/commit/6f77d1a1d5)] - **doc**: fix asyncLocalStorage.run() description (Constantine Kim) [#40381](https://github.com/nodejs/node/pull/40381)
+* \[[`93a48e02dc`](https://github.com/nodejs/node/commit/93a48e02dc)] - **doc**: fix typos in n-api docs (Ignacio Carbajo) [#40402](https://github.com/nodejs/node/pull/40402)
+* \[[`fb7afb91c2`](https://github.com/nodejs/node/commit/fb7afb91c2)] - **doc**: format doc/guides using format-md task (Rich Trott) [#40358](https://github.com/nodejs/node/pull/40358)
+* \[[`6c091c7878`](https://github.com/nodejs/node/commit/6c091c7878)] - **doc**: improve phrasing in fs.md (Arslan Ali) [#40255](https://github.com/nodejs/node/pull/40255)
+* \[[`38d81380ac`](https://github.com/nodejs/node/commit/38d81380ac)] - **doc**: add link to core promises tracking issue (Michael Dawson) [#40355](https://github.com/nodejs/node/pull/40355)
+* \[[`71a94aa82a`](https://github.com/nodejs/node/commit/71a94aa82a)] - **doc**: correct ESM load hook table header (Jacob Smith) [#40234](https://github.com/nodejs/node/pull/40234)
+* \[[`5b074affb4`](https://github.com/nodejs/node/commit/5b074affb4)] - **doc**: fix typo in esm.md (Mason Malone) [#40273](https://github.com/nodejs/node/pull/40273)
+* \[[`3b3aaa0a37`](https://github.com/nodejs/node/commit/3b3aaa0a37)] - **doc**: fix typo in ESM example (Tobias Nießen) [#40275](https://github.com/nodejs/node/pull/40275)
+* \[[`f848553fb8`](https://github.com/nodejs/node/commit/f848553fb8)] - **doc**: assign missing deprecation number (Michaël Zasso) [#40324](https://github.com/nodejs/node/pull/40324)
+* \[[`d1d9f2de30`](https://github.com/nodejs/node/commit/d1d9f2de30)] - **doc**: deprecate (doc-only) http abort related (dr-js) [#36670](https://github.com/nodejs/node/pull/36670)
+* \[[`1ef2cf8413`](https://github.com/nodejs/node/commit/1ef2cf8413)] - **doc**: anchor link parity between markdown and html-generated docs (foxxyz) [#39304](https://github.com/nodejs/node/pull/39304)
+* \[[`3743406b0a`](https://github.com/nodejs/node/commit/3743406b0a)] - **(SEMVER-MINOR)** **esm**: consolidate ESM loader hooks (Jacob Smith) [#37468](https://github.com/nodejs/node/pull/37468)
+* \[[`168020e1c8`](https://github.com/nodejs/node/commit/168020e1c8)] - **lib**: refactor to use let (gdccwxx) [#40364](https://github.com/nodejs/node/pull/40364)
+* \[[`bcd59d70bb`](https://github.com/nodejs/node/commit/bcd59d70bb)] - **meta**: consolidate AUTHORS entries for gabrielschulhof (Rich Trott) [#40420](https://github.com/nodejs/node/pull/40420)
+* \[[`80b4245db8`](https://github.com/nodejs/node/commit/80b4245db8)] - **meta**: consolidate AUTHORS information for geirha (Rich Trott) [#40406](https://github.com/nodejs/node/pull/40406)
+* \[[`93cecb4700`](https://github.com/nodejs/node/commit/93cecb4700)] - **meta**: consolidate duplicate AUTHORS entries for hassaanp (Rich Trott) [#40391](https://github.com/nodejs/node/pull/40391)
+* \[[`fff3135909`](https://github.com/nodejs/node/commit/fff3135909)] - **meta**: update AUTHORS (Node.js GitHub Bot) [#40392](https://github.com/nodejs/node/pull/40392)
+* \[[`122481713d`](https://github.com/nodejs/node/commit/122481713d)] - **meta**: consolidate AUTHORS entry for thw0rted (Rich Trott) [#40387](https://github.com/nodejs/node/pull/40387)
+* \[[`7f50313fcc`](https://github.com/nodejs/node/commit/7f50313fcc)] - **meta**: update label-pr-config (Mestery) [#40199](https://github.com/nodejs/node/pull/40199)
+* \[[`5668182665`](https://github.com/nodejs/node/commit/5668182665)] - **meta**: use .mailmap to consolidate AUTHORS entries for ide (Rich Trott) [#40367](https://github.com/nodejs/node/pull/40367)
+* \[[`bc86084a3e`](https://github.com/nodejs/node/commit/bc86084a3e)] - **net**: check if option is undefined (Daijiro Wachi) [#40344](https://github.com/nodejs/node/pull/40344)
+* \[[`4564a93e5e`](https://github.com/nodejs/node/commit/4564a93e5e)] - **net**: remove unused ObjectKeys (Daijiro Wachi) [#40344](https://github.com/nodejs/node/pull/40344)
+* \[[`dbb2e6f429`](https://github.com/nodejs/node/commit/dbb2e6f429)] - **net**: check objectMode first and then readble || writable (Daijiro Wachi) [#40344](https://github.com/nodejs/node/pull/40344)
+* \[[`a672be57c8`](https://github.com/nodejs/node/commit/a672be57c8)] - **net**: throw error to object mode in Socket (Daijiro Wachi) [#40344](https://github.com/nodejs/node/pull/40344)
+* \[[`faf9e28c36`](https://github.com/nodejs/node/commit/faf9e28c36)] - **src**: remove usage of `AllocatedBuffer` from `stream_*` (Darshan Sen) [#40293](https://github.com/nodejs/node/pull/40293)
+* \[[`857af2ba99`](https://github.com/nodejs/node/commit/857af2ba99)] - **src**: add missing initialization (Michael Dawson) [#40370](https://github.com/nodejs/node/pull/40370)
+* \[[`2bfa87edbc`](https://github.com/nodejs/node/commit/2bfa87edbc)] - **stream**: fix fromAsyncGen (Robert Nagy) [#40499](https://github.com/nodejs/node/pull/40499)
+* \[[`1e15137e71`](https://github.com/nodejs/node/commit/1e15137e71)] - **test**: replace common port with specific number (Daijiro Wachi) [#40344](https://github.com/nodejs/node/pull/40344)
+* \[[`6f6b99c302`](https://github.com/nodejs/node/commit/6f6b99c302)] - **test**: fix typos in whatwg-webstreams explanations (Tobias Nießen) [#40389](https://github.com/nodejs/node/pull/40389)
+* \[[`641b1bb052`](https://github.com/nodejs/node/commit/641b1bb052)] - **test**: add test for readStream.path when fd is specified (Qingyu Deng) [#40359](https://github.com/nodejs/node/pull/40359)
+* \[[`07dae7ff50`](https://github.com/nodejs/node/commit/07dae7ff50)] - **test**: replace .then chains with await (gdccwxx) [#40348](https://github.com/nodejs/node/pull/40348)
+* \[[`d8a36ee1de`](https://github.com/nodejs/node/commit/d8a36ee1de)] - **test**: fix "test/common/debugger" identify async function (gdccwxx) [#40348](https://github.com/nodejs/node/pull/40348)
+* \[[`13d6a56c7d`](https://github.com/nodejs/node/commit/13d6a56c7d)] - **test**: improve test coverage of `fs.ReadStream` with `FileHandle` (Antoine du Hamel) [#40018](https://github.com/nodejs/node/pull/40018)
+* \[[`50f91ab059`](https://github.com/nodejs/node/commit/50f91ab059)] - **tools**: udpate @babel/eslint-parser (Rich Trott) [#40394](https://github.com/nodejs/node/pull/40394)
+* \[[`3611073145`](https://github.com/nodejs/node/commit/3611073145)] - **tools**: remove @babel/plugin-syntax-import-assertions (Rich Trott) [#40394](https://github.com/nodejs/node/pull/40394)
+* \[[`b72d693a3a`](https://github.com/nodejs/node/commit/b72d693a3a)] - **tools**: remove @bable/plugin-syntax-class-properties (Rich Trott) [#40394](https://github.com/nodejs/node/pull/40394)
+* \[[`d6a99b77da`](https://github.com/nodejs/node/commit/d6a99b77da)] - **tools**: remove @babel/plugin-syntax-top-level-await (Rich Trott) [#40394](https://github.com/nodejs/node/pull/40394)
+* \[[`d9157aa5fe`](https://github.com/nodejs/node/commit/d9157aa5fe)] - **tools**: update ESLint to 8.0.0 (Rich Trott) [#40394](https://github.com/nodejs/node/pull/40394)
+* \[[`43b97c7984`](https://github.com/nodejs/node/commit/43b97c7984)] - **tools**: prepare ESLint rules for 8.0.0 requirements (Rich Trott) [#40394](https://github.com/nodejs/node/pull/40394)
+* \[[`282b6eb4b0`](https://github.com/nodejs/node/commit/282b6eb4b0)] - **tools**: fix ESLint update scripts (Rich Trott) [#40394](https://github.com/nodejs/node/pull/40394)
+* \[[`c3a744f7bf`](https://github.com/nodejs/node/commit/c3a744f7bf)] - **tools**: warn about duplicates when generating AUTHORS file (Rich Trott) [#40304](https://github.com/nodejs/node/pull/40304)
+* \[[`7733b5e55d`](https://github.com/nodejs/node/commit/7733b5e55d)] - **typings**: define types for os binding (Michaël Zasso) [#40222](https://github.com/nodejs/node/pull/40222)
+* \[[`ca9a854877`](https://github.com/nodejs/node/commit/ca9a854877)] - **typings**: add missing types to options and util bindings (Michaël Zasso) [#40222](https://github.com/nodejs/node/pull/40222)
+* \[[`c3a7a0bd59`](https://github.com/nodejs/node/commit/c3a7a0bd59)] - **typings**: define types for timers binding (Michaël Zasso) [#40222](https://github.com/nodejs/node/pull/40222)
+* \[[`65b51d05fa`](https://github.com/nodejs/node/commit/65b51d05fa)] - **typings**: fix declaration of primordials (Michaël Zasso) [#40222](https://github.com/nodejs/node/pull/40222)
+* \[[`5f3f3a5128`](https://github.com/nodejs/node/commit/5f3f3a5128)] - **v8**: remove --harmony-top-level-await (Geoffrey Booth) [#40226](https://github.com/nodejs/node/pull/40226)
+* \[[`4116b6c907`](https://github.com/nodejs/node/commit/4116b6c907)] - **(SEMVER-MINOR)** **vm**: add support for import assertions in dynamic imports (Antoine du Hamel) [#40249](https://github.com/nodejs/node/pull/40249)
 
 <a id="16.11.1"></a>
+
 ## 2021-10-12, Version 16.11.1 (Current), @danielleadams
 
 This is a security release.
@@ -59,13 +158,13 @@ This is a security release.
 * **CVE-2021-22959**: HTTP Request Smuggling due to spaced in headers (Medium)
   * The http parser accepts requests with a space (SP) right after the header name before the colon. This can lead to HTTP Request Smuggling (HRS). More details will be available at [CVE-2021-22959](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-22959) after publication.
 * **CVE-2021-22960**: HTTP Request Smuggling when parsing the body (Medium)
-  * The parse ignores chunk extensions when parsing the body of chunked requests. This leads to HTTP Request Smuggling (HRS) under certain conditions. More details will be available at [CVE-2021-22960](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-22960) after publication.
+  * The http parser ignores chunk extensions when parsing the body of chunked requests. This leads to HTTP Request Smuggling (HRS) under certain conditions. More details will be available at [CVE-2021-22960](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-22960) after publication.
 
 ### Commits
 
-* [[`af488f8dc8`](https://github.com/nodejs/node/commit/af488f8dc8)] - **deps**: update llhttp to 6.0.4 (Matteo Collina) [nodejs-private/node-private#284](https://github.com/nodejs-private/node-private/pull/284)
-* [[`2d1eefad98`](https://github.com/nodejs/node/commit/2d1eefad98)] - **http**: add regression test for smuggling content length (Matteo Collina) [nodejs-private/node-private#284](https://github.com/nodejs-private/node-private/pull/284)
-* [[`45d419ab1c`](https://github.com/nodejs/node/commit/45d419ab1c)] - **http**: add regression test for chunked smuggling (Matteo Collina) [nodejs-private/node-private#284](https://github.com/nodejs-private/node-private/pull/284)
+* \[[`af488f8dc8`](https://github.com/nodejs/node/commit/af488f8dc8)] - **deps**: update llhttp to 6.0.4 (Matteo Collina) [nodejs-private/node-private#284](https://github.com/nodejs-private/node-private/pull/284)
+* \[[`2d1eefad98`](https://github.com/nodejs/node/commit/2d1eefad98)] - **http**: add regression test for smuggling content length (Matteo Collina) [nodejs-private/node-private#284](https://github.com/nodejs-private/node-private/pull/284)
+* \[[`45d419ab1c`](https://github.com/nodejs/node/commit/45d419ab1c)] - **http**: add regression test for chunked smuggling (Matteo Collina) [nodejs-private/node-private#284](https://github.com/nodejs-private/node-private/pull/284)
 
 <a id="16.11.0"></a>
 
@@ -662,7 +761,7 @@ This is a security release.
 
 The V8 engine is updated to version 9.2.230.21.
 
-It notably introduces the new [`Array.prototype.at`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global\_Objects/Array/at) method (also on [Typed Arrays](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global\_Objects/TypedArray/at) and [strings](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global\_Objects/String/at)):
+It notably introduces the new [`Array.prototype.at`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/at) method (also on [Typed Arrays](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray/at) and [strings](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/at)):
 
 ```js
 const array = [1, 2, 3];
@@ -809,7 +908,7 @@ Contributed by Michaël Zasso - [#39470](https://github.com/nodejs/node/pull/394
 #### Experimental Web Streams API
 
 Node.js now exposes an experimental implementation of the
-[Web Streams API](https://developer.mozilla.org/en-US/docs/Web/API/Streams\_API).
+[Web Streams API](https://developer.mozilla.org/en-US/docs/Web/API/Streams_API).
 
 While it is experimental, the API is not exposed on the global object and is only
 accessible using the new `stream/web` core module:

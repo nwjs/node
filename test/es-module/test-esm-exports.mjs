@@ -104,6 +104,10 @@ import fromInside from '../fixtures/node_modules/pkgexports/lib/hole.js';
     // Even though 'pkgexports/sub/asdf.js' works, alternate "path-like"
     // variants do not to prevent confusion and accidental loopholes.
     ['pkgexports/sub/./../asdf.js', './sub/./../asdf.js'],
+    // Cannot reach into node_modules, even percent encoded
+    ['pkgexports/sub/no%64e_modules', './sub/no%64e_modules'],
+    // Cannot backtrack below exposed path, even with percent encoded "."
+    ['pkgexports/sub/%2e./asdf', './asdf'],
   ]);
 
   for (const [specifier, subpath] of undefinedExports) {
@@ -171,8 +175,11 @@ import fromInside from '../fixtures/node_modules/pkgexports/lib/hole.js';
     }));
   }
 
-  // The use of %2F escapes in paths fails loading
+  // The use of %2F and %5C escapes in paths fails loading
   loadFixture('pkgexports/sub/..%2F..%2Fbar.js').catch(mustCall((err) => {
+    strictEqual(err.code, 'ERR_INVALID_MODULE_SPECIFIER');
+  }));
+  loadFixture('pkgexports/sub/..%5C..%5Cbar.js').catch(mustCall((err) => {
     strictEqual(err.code, 'ERR_INVALID_MODULE_SPECIFIER');
   }));
 

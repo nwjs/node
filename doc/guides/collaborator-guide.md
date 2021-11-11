@@ -51,7 +51,7 @@ request. See [Who to CC in the issue tracker](#who-to-cc-in-the-issue-tracker).
 
 Always show courtesy to individuals submitting issues and pull requests. Be
 welcoming to first-time contributors, identified by the GitHub
-![First-time contributor](../first\_timer\_badge.png) badge.
+![First-time contributor](../first_timer_badge.png) badge.
 
 For first-time contributors, check if the commit author is the same as the pull
 request author. This way, once their pull request lands, GitHub will show them
@@ -185,7 +185,7 @@ delay. For example:
   * Regressions that happen right before a release, or reported soon after.
 
 To propose fast-tracking a pull request, apply the `fast-track` label. Then a
-GitHub Action will add a comment that collaborators can upvote.
+GitHub Actions workflow will add a comment that collaborators can upvote.
 
 If someone disagrees with the fast-tracking request, remove the label. Do not
 fast-track the pull request in that case.

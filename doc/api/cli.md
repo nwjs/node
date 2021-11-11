@@ -207,6 +207,10 @@ code from strings throw an exception instead. This does not affect the Node.js
 added:
   - v16.4.0
   - v14.18.0
+changes:
+  - version: v17.0.0
+    pr-url: https://github.com/nodejs/node/pull/39987
+    description: Changed default value to `verbatim`.
 -->
 
 Set the default value of `verbatim` in [`dns.lookup()`][] and
@@ -215,7 +219,7 @@ Set the default value of `verbatim` in [`dns.lookup()`][] and
 * `ipv4first`: sets default `verbatim` `false`.
 * `verbatim`: sets default `verbatim` `true`.
 
-The default is `ipv4first` and [`dns.setDefaultResultOrder()`][] have higher
+The default is `verbatim` and [`dns.setDefaultResultOrder()`][] have higher
 priority than `--dns-result-order`.
 
 ### `--enable-fips`
@@ -290,14 +294,6 @@ added: v9.0.0
 
 Specify the `module` of a custom experimental [ECMAScript Module loader][].
 `module` may be either a path to a file, or an ECMAScript Module name.
-
-### `--experimental-modules`
-
-<!-- YAML
-added: v8.5.0
--->
-
-Enable latest experimental modules features (deprecated).
 
 ### `--experimental-policy`
 
@@ -857,7 +853,7 @@ warning will be written to stderr instead.
 
 The `file` name may be an absolute path. If it is not, the default directory it
 will be written to is controlled by the
-[`--diagnostic-dir`]() command-line option.
+[`--diagnostic-dir`][] command-line option.
 
 ### `--report-compact`
 

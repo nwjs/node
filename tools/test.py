@@ -944,8 +944,8 @@ class Context(object):
 
   def GetTimeout(self, mode, section=''):
     timeout = self.timeout * TIMEOUT_SCALEFACTOR[ARCH_GUESS or 'ia32'][mode]
-    if section == 'pummel':
-      timeout = timeout * 4
+    if section == 'pummel' or section == 'benchmark':
+      timeout = timeout * 6
     return timeout
 
 def RunTestCases(cases_to_run, progress, tasks, flaky_tests_mode):

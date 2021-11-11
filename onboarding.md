@@ -56,10 +56,10 @@ onboarding session.
   * Watching the main repository will flood your inbox (several hundred
     notifications on typical weekdays), so be prepared
 
-The project has two venues for real-time discussion:
+The project has a venue for real-time discussion:
 
 * [`#nodejs-dev`](https://openjs-foundation.slack.com/archives/C019Y2T6STH) on
-  the [OpenJS Foundation](https://slack-invite.openjsf.org/)
+  the [OpenJS Foundation Slack](https://slack-invite.openjsf.org/)
 
 ## Project goals and values
 
@@ -215,7 +215,9 @@ needs to be pointed out separately during the onboarding.
   labels. The `fast-track` label should cause the Node.js GitHub bot to post a
   comment in the pull request asking collaborators to approve the pull request
   by leaving a 👍 reaction on the comment.
-* Run CI on the pull request. Use the `node-test-pull-request` CI task.
+* Optional: Run CI on the pull request. Use the `node-test-pull-request` CI
+  task. As a convenience, you may apply the `request-ci` label to the pull
+  request to have a GitHub Actions workflow start the Jenkins CI task for you.
 * After two Collaborator approvals for the change and two Collaborator approvals
   for fast-tracking, land the PR.
 * If there are not enough approvals within a reasonable time, consider the
@@ -247,6 +249,8 @@ needs to be pointed out separately during the onboarding.
   project. The Foundation has travel funds to cover participants' expenses
   including accommodations, transportation, visa fees, etc. if needed. Check out
   the [summit](https://github.com/nodejs/summit) repository for details.
+* If you are interested in helping to fix coverity reports consider requesting
+  access to the projects coverity project as outlined in [static-analysis][].
 
 [Code of Conduct]: https://github.com/nodejs/admin/blob/HEAD/CODE_OF_CONDUCT.md
 [Labels]: doc/guides/collaborator-guide.md#labels
@@ -256,7 +260,8 @@ needs to be pointed out separately during the onboarding.
 [`core-validate-commit`]: https://github.com/nodejs/core-validate-commit
 [`git-node`]: https://github.com/nodejs/node-core-utils/blob/HEAD/docs/git-node.md
 [`node-core-utils`]: https://github.com/nodejs/node-core-utils
-[set up the credentials]: https://github.com/nodejs/node-core-utils#setting-up-credentials
+[set up the credentials]: https://github.com/nodejs/node-core-utils#setting-up-github-credentials
+[static-analysis]: doc/guides/static-analysis.md
 [two-factor authentication]: https://help.github.com/articles/securing-your-account-with-two-factor-authentication-2fa/
 [using a TOTP mobile app]: https://help.github.com/articles/configuring-two-factor-authentication-via-a-totp-mobile-app/
 [who-to-cc]: doc/guides/collaborator-guide.md#who-to-cc-in-the-issue-tracker

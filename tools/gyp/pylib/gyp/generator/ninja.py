@@ -89,8 +89,12 @@ def Define(d, flavor):
         # cl.exe replaces literal # characters with = in preprocessor definitions for
         # some reason. Octal-encode to work around that.
         d = d.replace("#", "\\%03o" % ord("#"))
-    return QuoteShellArgument(ninja_syntax.escape("-D" + d), flavor)
-
+    ret = QuoteShellArgument(ninja_syntax.escape("-D" + d), flavor)
+    if flavor == "win" :
+        if re.match(r".*MODULESDIR.*", ret) :
+            ret = ret.replace("\\", "\\\\")
+            ret = ret.replace("\\\\\"", "\\\"")
+    return ret
 
 def AddArch(output, arch):
     """Adds an arch string to an output path."""

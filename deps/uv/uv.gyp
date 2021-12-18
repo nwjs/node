@@ -219,6 +219,7 @@
             '-Wextra',
             '-Wno-unused-parameter',
             '-Wstrict-prototypes',
+            '-fno-strict-aliasing',
             '-Wno-varargs',
           ],
         }],

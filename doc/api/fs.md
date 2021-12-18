@@ -91,7 +91,7 @@ unlink('/tmp/hello', (err) => {
 
 The callback-based versions of the `fs` module APIs are preferable over
 the use of the promise APIs when maximal performance (both in terms of
-execution time and memory allocation are required).
+execution time and memory allocation) is required.
 
 ## Synchronous example
 
@@ -3580,6 +3580,11 @@ with options `{ recursive: true, force: true }`.
 
 <!-- YAML
 added: v14.14.0
+changes:
+  - version: v17.3.0
+    pr-url: https://github.com/nodejs/node/pull/41132
+    description: The `path` parameter can be a WHATWG `URL` object using `file:`
+                 protocol.
 -->
 
 * `path` {string|Buffer|URL}
@@ -5328,6 +5333,11 @@ with options `{ recursive: true, force: true }`.
 
 <!-- YAML
 added: v14.14.0
+changes:
+  - version: v17.3.0
+    pr-url: https://github.com/nodejs/node/pull/41132
+    description: The `path` parameter can be a WHATWG `URL` object using `file:`
+                 protocol.
 -->
 
 * `path` {string|Buffer|URL}

@@ -551,6 +551,9 @@ added: v1.0.0
 The `cipher.getAuthTag()` method should only be called after encryption has
 been completed using the [`cipher.final()`][] method.
 
+If the `authTagLength` option was set during the `cipher` instance's creation,
+this function will return exactly `authTagLength` bytes.
+
 ### `cipher.setAAD(buffer[, options])`
 
 <!-- YAML
@@ -2560,6 +2563,16 @@ added: v15.6.0
 * Type: {string}
 
 The SHA-256 fingerprint of this certificate.
+
+### `x509.fingerprint512`
+
+<!-- YAML
+added: v17.2.0
+-->
+
+* Type: {string}
+
+The SHA-512 fingerprint of this certificate.
 
 ### `x509.infoAccess`
 

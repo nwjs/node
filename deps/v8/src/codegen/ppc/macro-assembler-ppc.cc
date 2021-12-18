@@ -1474,9 +1474,11 @@ void MacroAssembler::InvokePrologue(Register expected_parameter_count,
 
   // If the expected parameter count is equal to the adaptor sentinel, no need
   // to push undefined value as arguments.
-  mov(r0, Operand(kDontAdaptArgumentsSentinel));
-  CmpS64(expected_parameter_count, r0);
-  beq(&regular_invoke);
+  if (kDontAdaptArgumentsSentinel != 0) {
+    mov(r0, Operand(kDontAdaptArgumentsSentinel));
+    CmpS64(expected_parameter_count, r0);
+    beq(&regular_invoke);
+  }
 
   // If overapplication or if the actual argument count is equal to the
   // formal parameter count, no need to push extra undefined values.
@@ -1521,8 +1523,8 @@ void MacroAssembler::InvokePrologue(Register expected_parameter_count,
 
   bind(&stack_overflow);
   {
-    FrameScope frame(this,
-                     has_frame() ? StackFrame::NONE : StackFrame::INTERNAL);
+    FrameScope frame(
+        this, has_frame() ? StackFrame::NO_FRAME_TYPE : StackFrame::INTERNAL);
     CallRuntime(Runtime::kThrowStackOverflow);
     bkpt(0);
   }
@@ -1546,8 +1548,8 @@ void MacroAssembler::CheckDebugHook(Register fun, Register new_target,
   {
     // Load receiver to pass it later to DebugOnFunctionCall hook.
     LoadReceiver(r7, actual_parameter_count);
-    FrameScope frame(this,
-                     has_frame() ? StackFrame::NONE : StackFrame::INTERNAL);
+    FrameScope frame(
+        this, has_frame() ? StackFrame::NO_FRAME_TYPE : StackFrame::INTERNAL);
 
     SmiTag(expected_parameter_count);
     Push(expected_parameter_count);
@@ -1702,16 +1704,28 @@ void MacroAssembler::CompareInstanceType(Register map, Register type_reg,
   cmpi(type_reg, Operand(type));
 }
 
+void MacroAssembler::CompareRange(Register value, unsigned lower_limit,
+                                  unsigned higher_limit) {
+  ASM_CODE_COMMENT(this);
+  DCHECK_LT(lower_limit, higher_limit);
+  UseScratchRegisterScope temps(this);
+  Register scratch = temps.Acquire();
+  if (lower_limit != 0) {
+    mov(scratch, Operand(lower_limit));
+    sub(scratch, value, scratch);
+    cmpli(scratch, Operand(higher_limit - lower_limit));
+  } else {
+    mov(scratch, Operand(higher_limit));
+    CmpU64(value, scratch);
+  }
+}
+
 void MacroAssembler::CompareInstanceTypeRange(Register map, Register type_reg,
                                               InstanceType lower_limit,
                                               InstanceType higher_limit) {
   DCHECK_LT(lower_limit, higher_limit);
-  UseScratchRegisterScope temps(this);
-  Register scratch = temps.Acquire();
   LoadU16(type_reg, FieldMemOperand(map, Map::kInstanceTypeOffset));
-  mov(scratch, Operand(lower_limit));
-  sub(scratch, type_reg, scratch);
-  cmpli(scratch, Operand(higher_limit - lower_limit));
+  CompareRange(type_reg, lower_limit, higher_limit);
 }
 
 void MacroAssembler::CompareRoot(Register obj, RootIndex index) {
@@ -1898,15 +1912,7 @@ void TurboAssembler::MaxF64(DoubleRegister dst, DoubleRegister lhs,
 void MacroAssembler::JumpIfIsInRange(Register value, unsigned lower_limit,
                                      unsigned higher_limit,
                                      Label* on_in_range) {
-  Register scratch = r0;
-  if (lower_limit != 0) {
-    mov(scratch, Operand(lower_limit));
-    sub(scratch, value, scratch);
-    cmpli(scratch, Operand(higher_limit - lower_limit));
-  } else {
-    mov(scratch, Operand(higher_limit));
-    CmpU64(value, scratch);
-  }
+  CompareRange(value, lower_limit, higher_limit);
   ble(on_in_range);
 }
 
@@ -2080,7 +2086,7 @@ void TurboAssembler::Abort(AbortReason reason) {
 
   if (should_abort_hard()) {
     // We don't care if we constructed a frame. Just pretend we did.
-    FrameScope assume_frame(this, StackFrame::NONE);
+    FrameScope assume_frame(this, StackFrame::NO_FRAME_TYPE);
     mov(r3, Operand(static_cast<int>(reason)));
     PrepareCallCFunction(1, r4);
     CallCFunction(ExternalReference::abort_with_reason(), 1);
@@ -2093,7 +2099,7 @@ void TurboAssembler::Abort(AbortReason reason) {
   if (!has_frame_) {
     // We don't actually want to generate a pile of code for this, so just
     // claim there is a stack frame, without generating one.
-    FrameScope scope(this, StackFrame::NONE);
+    FrameScope scope(this, StackFrame::NO_FRAME_TYPE);
     Call(BUILTIN_CODE(isolate(), Abort), RelocInfo::CODE_TARGET);
   } else {
     Call(BUILTIN_CODE(isolate(), Abort), RelocInfo::CODE_TARGET);
@@ -2115,7 +2121,7 @@ void MacroAssembler::LoadNativeContextSlot(Register dst, int index) {
   LoadTaggedPointerField(dst, MemOperand(dst, Context::SlotOffset(index)), r0);
 }
 
-void MacroAssembler::AssertNotSmi(Register object) {
+void TurboAssembler::AssertNotSmi(Register object) {
   if (FLAG_debug_code) {
     STATIC_ASSERT(kSmiTag == 0);
     TestIfSmi(object, r0);
@@ -2123,7 +2129,7 @@ void MacroAssembler::AssertNotSmi(Register object) {
   }
 }
 
-void MacroAssembler::AssertSmi(Register object) {
+void TurboAssembler::AssertSmi(Register object) {
   if (FLAG_debug_code) {
     STATIC_ASSERT(kSmiTag == 0);
     TestIfSmi(object, r0);
@@ -2798,19 +2804,55 @@ void TurboAssembler::DivU32(Register dst, Register src, Register value, OEBit s,
 }
 
 void TurboAssembler::ModS64(Register dst, Register src, Register value) {
-  modsd(dst, src, value);
+  if (CpuFeatures::IsSupported(PPC_9_PLUS)) {
+    modsd(dst, src, value);
+  } else {
+    Register scratch = GetRegisterThatIsNotOneOf(dst, src, value);
+    Push(scratch);
+    divd(scratch, src, value);
+    mulld(scratch, scratch, value);
+    sub(dst, src, scratch);
+    Pop(scratch);
+  }
 }
 
 void TurboAssembler::ModU64(Register dst, Register src, Register value) {
-  modud(dst, src, value);
+  if (CpuFeatures::IsSupported(PPC_9_PLUS)) {
+    modud(dst, src, value);
+  } else {
+    Register scratch = GetRegisterThatIsNotOneOf(dst, src, value);
+    Push(scratch);
+    divdu(scratch, src, value);
+    mulld(scratch, scratch, value);
+    sub(dst, src, scratch);
+    Pop(scratch);
+  }
 }
 
 void TurboAssembler::ModS32(Register dst, Register src, Register value) {
-  modsw(dst, src, value);
+  if (CpuFeatures::IsSupported(PPC_9_PLUS)) {
+    modsw(dst, src, value);
+  } else {
+    Register scratch = GetRegisterThatIsNotOneOf(dst, src, value);
+    Push(scratch);
+    divw(scratch, src, value);
+    mullw(scratch, scratch, value);
+    sub(dst, src, scratch);
+    Pop(scratch);
+  }
   extsw(dst, dst);
 }
 void TurboAssembler::ModU32(Register dst, Register src, Register value) {
-  moduw(dst, src, value);
+  if (CpuFeatures::IsSupported(PPC_9_PLUS)) {
+    moduw(dst, src, value);
+  } else {
+    Register scratch = GetRegisterThatIsNotOneOf(dst, src, value);
+    Push(scratch);
+    divwu(scratch, src, value);
+    mullw(scratch, scratch, value);
+    sub(dst, src, scratch);
+    Pop(scratch);
+  }
   ZeroExtWord32(dst, dst);
 }
 
@@ -3059,6 +3101,11 @@ void TurboAssembler::DivF32(DoubleRegister dst, DoubleRegister lhs,
   frsp(dst, dst, r);
 }
 
+void TurboAssembler::CopySignF64(DoubleRegister dst, DoubleRegister lhs,
+                                 DoubleRegister rhs, RCBit r) {
+  fcpsgn(dst, rhs, lhs, r);
+}
+
 void MacroAssembler::CmpSmiLiteral(Register src1, Smi smi, Register scratch,
                                    CRegister cr) {
 #if defined(V8_COMPRESS_POINTERS) || defined(V8_31BIT_SMIS_ON_64BIT_ARCH)
@@ -3111,7 +3158,7 @@ void MacroAssembler::AndSmiLiteral(Register dst, Register src, Smi smi,
 
 #define GenerateMemoryOperation(reg, mem, ri_op, rr_op) \
   {                                                     \
-    int64_t offset = mem.offset();                          \
+    int64_t offset = mem.offset();                      \
                                                         \
     if (mem.rb() == no_reg) {                           \
       if (!is_int16(offset)) {                          \
@@ -3140,7 +3187,7 @@ void MacroAssembler::AndSmiLiteral(Register dst, Register src, Smi smi,
 
 #define GenerateMemoryOperationWithAlign(reg, mem, ri_op, rr_op) \
   {                                                              \
-    int64_t offset = mem.offset();                                   \
+    int64_t offset = mem.offset();                               \
     int misaligned = (offset & 3);                               \
                                                                  \
     if (mem.rb() == no_reg) {                                    \
@@ -3229,7 +3276,10 @@ void TurboAssembler::StoreSimd128(Simd128Register src, const MemOperand& mem) {
 #define GenerateMemoryLEOperation(reg, mem, op)                \
   {                                                            \
     if (mem.offset() == 0) {                                   \
-      op(reg, mem);                                            \
+      if (mem.rb() != no_reg)                                  \
+        op(reg, mem);                                          \
+      else                                                     \
+        op(reg, MemOperand(r0, mem.ra()));                     \
     } else if (is_int16(mem.offset())) {                       \
       if (mem.rb() != no_reg)                                  \
         addi(scratch, mem.rb(), Operand(mem.offset()));        \
@@ -3508,6 +3558,27 @@ void TurboAssembler::SwapSimd128(MemOperand src, MemOperand dst,
   addi(sp, sp, Operand(2 * kSimd128Size));
 }
 
+void TurboAssembler::ByteReverseU16(Register dst, Register val) {
+  subi(sp, sp, Operand(kSystemPointerSize));
+  sth(val, MemOperand(sp));
+  lhbrx(dst, MemOperand(r0, sp));
+  addi(sp, sp, Operand(kSystemPointerSize));
+}
+
+void TurboAssembler::ByteReverseU32(Register dst, Register val) {
+  subi(sp, sp, Operand(kSystemPointerSize));
+  stw(val, MemOperand(sp));
+  lwbrx(dst, MemOperand(r0, sp));
+  addi(sp, sp, Operand(kSystemPointerSize));
+}
+
+void TurboAssembler::ByteReverseU64(Register dst, Register val) {
+  subi(sp, sp, Operand(kSystemPointerSize));
+  std(val, MemOperand(sp));
+  ldbrx(dst, MemOperand(r0, sp));
+  addi(sp, sp, Operand(kSystemPointerSize));
+}
+
 void TurboAssembler::JumpIfEqual(Register x, int32_t y, Label* dest) {
   CmpS64(x, Operand(y), r0);
   beq(dest);
@@ -3683,14 +3754,88 @@ void TurboAssembler::CountLeadingZerosU64(Register dst, Register src, RCBit r) {
   cntlzd(dst, src, r);
 }
 
+#define COUNT_TRAILING_ZEROES_SLOW(max_count, scratch1, scratch2) \
+  Label loop, done;                                               \
+  li(scratch1, Operand(max_count));                               \
+  mtctr(scratch1);                                                \
+  mr(scratch1, src);                                              \
+  li(dst, Operand::Zero());                                       \
+  bind(&loop); /* while ((src & 1) == 0) */                       \
+  andi(scratch2, scratch1, Operand(1));                           \
+  bne(&done, cr0);                                                \
+  srdi(scratch1, scratch1, Operand(1)); /* src >>= 1;*/           \
+  addi(dst, dst, Operand(1));           /* dst++ */               \
+  bdnz(&loop);                                                    \
+  bind(&done);
 void TurboAssembler::CountTrailingZerosU32(Register dst, Register src,
+                                           Register scratch1, Register scratch2,
                                            RCBit r) {
-  cnttzw(dst, src, r);
+  if (CpuFeatures::IsSupported(PPC_9_PLUS)) {
+    cnttzw(dst, src, r);
+  } else {
+    COUNT_TRAILING_ZEROES_SLOW(32, scratch1, scratch2);
+  }
 }
 
 void TurboAssembler::CountTrailingZerosU64(Register dst, Register src,
+                                           Register scratch1, Register scratch2,
                                            RCBit r) {
-  cnttzd(dst, src, r);
+  if (CpuFeatures::IsSupported(PPC_9_PLUS)) {
+    cnttzd(dst, src, r);
+  } else {
+    COUNT_TRAILING_ZEROES_SLOW(64, scratch1, scratch2);
+  }
+}
+#undef COUNT_TRAILING_ZEROES_SLOW
+
+void TurboAssembler::ClearByteU64(Register dst, int byte_idx) {
+  CHECK(0 <= byte_idx && byte_idx <= 7);
+  int shift = byte_idx*8;
+  rldicl(dst, dst, shift, 8);
+  rldicl(dst, dst, 64-shift, 0);
+}
+
+void TurboAssembler::ReverseBitsU64(Register dst, Register src,
+                                    Register scratch1, Register scratch2) {
+  ByteReverseU64(dst, src);
+  for (int i = 0; i < 8; i++) {
+    ReverseBitsInSingleByteU64(dst, dst, scratch1, scratch2, i);
+  }
+}
+
+void TurboAssembler::ReverseBitsU32(Register dst, Register src,
+                                    Register scratch1, Register scratch2) {
+  ByteReverseU32(dst, src);
+  for (int i = 4; i < 8; i++) {
+    ReverseBitsInSingleByteU64(dst, dst, scratch1, scratch2, i);
+  }
+}
+
+// byte_idx=7 refers to least significant byte
+void TurboAssembler::ReverseBitsInSingleByteU64(Register dst, Register src,
+                                                Register scratch1,
+                                                Register scratch2,
+                                                int byte_idx) {
+  CHECK(0 <= byte_idx && byte_idx <= 7);
+  int j = byte_idx;
+  // zero all bits of scratch1
+  li(scratch2, Operand(0));
+  for (int i = 0; i <= 7; i++) {
+    // zero all bits of scratch1
+    li(scratch1, Operand(0));
+    // move bit (j+1)*8-i-1 of src to bit j*8+i of scratch1, erase bits
+    // (j*8+i+1):end of scratch1
+    int shift = 7 - (2*i);
+    if (shift < 0) shift += 64;
+    rldicr(scratch1, src, shift, j*8+i);
+    // erase bits start:(j*8-1+i) of scratch1 (inclusive)
+    rldicl(scratch1, scratch1, 0, j*8+i);
+    // scratch2 = scratch2|scratch1
+    orx(scratch2, scratch2, scratch1);
+  }
+  // clear jth byte of dst and insert jth byte of scratch2
+  ClearByteU64(dst, j);
+  orx(dst, dst, scratch2);
 }
 
 }  // namespace internal

@@ -121,7 +121,7 @@ If you are modifying code, please be sure to run `make lint` (or
 code style guide.
 
 Any documentation you write (including code comments and API documentation)
-should follow the [Style Guide](../doc-style-guide.md). Code samples
+should follow the [Style Guide](../../README.md). Code samples
 included in the API docs will also be checked when running `make lint` (or
 `vcbuild.bat lint` on Windows). If you are adding to or deprecating an API,
 add or change the appropriate YAML documentation. Use `REPLACEME` for the
@@ -270,6 +270,11 @@ From within GitHub, opening a new pull request will present you with a
 details, but feel free to skip parts if you're not sure what to put.
 
 Once opened, pull requests are usually reviewed within a few days.
+
+To get feedback on your proposed change even though it is not ready
+to land, use the `Convert to draft` option in the GitHub UI.
+Do not use the `wip` label as it might not prevent the PR
+from landing before you are ready.
 
 ### Step 9: Discuss and update
 

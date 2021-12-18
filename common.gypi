@@ -48,7 +48,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.13',
+    'v8_embedder_string': '-node.12',
 
     ##### V8 defaults for Node.js #####
 
@@ -418,6 +418,7 @@
     'defines': [
       'V8_DEPRECATION_WARNINGS',
       'V8_REVERSE_JSARGS',
+      'V8_VIRTUAL_MEMORY_CAGE',
       #'V8_IMMINENT_DEPRECATION_WARNINGS',
       '_GLIBCXX_USE_CXX11_ABI=1',
       '_LIBCPP_HAS_NO_VENDOR_AVAILABILITY_ANNOTATIONS',

@@ -23,7 +23,7 @@ FIND ?= find
 ifdef JOBS
 	PARALLEL_ARGS = -j $(JOBS)
 else
-	PARALLEL_ARGS = -J
+	PARALLEL_ARGS =
 endif
 
 ifdef ENABLE_V8_TAP
@@ -737,21 +737,39 @@ $(LINK_DATA): $(wildcard lib/*.js) tools/doc/apilinks.mjs | out/doc
 $(VERSIONS_DATA): CHANGELOG.md src/node_version.h tools/doc/versions.mjs
 	$(call available-node, tools/doc/versions.mjs $@)
 
+node_use_icu = $(call available-node,"-p" "typeof Intl === 'object'")
+
 out/doc/api/%.json out/doc/api/%.html: doc/api/%.md tools/doc/generate.mjs \
 	tools/doc/markdown.mjs tools/doc/html.mjs tools/doc/json.mjs \
 	tools/doc/apilinks.mjs $(VERSIONS_DATA) | $(LINK_DATA) out/doc/api
-	$(call available-node, $(gen-api))
+	@if [ "$(shell $(node_use_icu))" != "true" ]; then \
+		echo "Skipping documentation generation (no ICU)"; \
+	else \
+		$(call available-node, $(gen-api)) \
+	fi
 
 out/doc/api/all.html: $(apidocs_html) tools/doc/allhtml.mjs \
 	tools/doc/apilinks.mjs | out/doc/api
-	$(call available-node, tools/doc/allhtml.mjs)
+	@if [ "$(shell $(node_use_icu))" != "true" ]; then \
+		echo "Skipping HTML single-page doc generation (no ICU)"; \
+	else \
+		$(call available-node, tools/doc/allhtml.mjs) \
+	fi
 
 out/doc/api/all.json: $(apidocs_json) tools/doc/alljson.mjs | out/doc/api
-	$(call available-node, tools/doc/alljson.mjs)
+	@if [ "$(shell $(node_use_icu))" != "true" ]; then \
+		echo "Skipping JSON single-file generation (no ICU)"; \
+	else \
+		$(call available-node, tools/doc/alljson.mjs) \
+	fi
 
 .PHONY: out/doc/api/stability
 out/doc/api/stability: out/doc/api/all.json tools/doc/stability.mjs | out/doc/api
-	$(call available-node, tools/doc/stability.mjs)
+	@if [ "$(shell $(node_use_icu))" != "true" ]; then \
+		echo "Skipping stability indicator generation (no ICU)"; \
+	else \
+		$(call available-node, tools/doc/stability.mjs) \
+	fi
 
 .PHONY: docopen
 docopen: out/doc/api/all.html
@@ -1268,7 +1286,7 @@ format-md:
 LINT_JS_TARGETS = .eslintrc.js benchmark doc lib test tools
 
 run-lint-js = tools/node_modules/eslint/bin/eslint.js --cache \
-	--report-unused-disable-directives $(LINT_JS_TARGETS)
+	--max-warnings=0 --report-unused-disable-directives $(LINT_JS_TARGETS)
 run-lint-js-fix = $(run-lint-js) --fix
 
 .PHONY: lint-js-fix
@@ -1292,7 +1310,7 @@ jslint: lint-js
 	$(warning Please use lint-js instead of jslint)
 
 run-lint-js-ci = tools/node_modules/eslint/bin/eslint.js \
-  --report-unused-disable-directives -f tap \
+  --max-warnings=0 --report-unused-disable-directives -f tap \
 	-o test-eslint.tap $(LINT_JS_TARGETS)
 
 .PHONY: lint-js-ci

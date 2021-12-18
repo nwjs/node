@@ -322,7 +322,7 @@ void AsyncWrap::EmitDestroy(bool from_gc) {
 
   if (!persistent().IsEmpty() && !from_gc) {
     HandleScope handle_scope(env()->isolate());
-    USE(object()->Set(env()->context(), env()->owner_symbol(), object()));
+    USE(object()->Set(env()->context(), env()->resource_symbol(), object()));
   }
 }
 
@@ -336,9 +336,11 @@ void AsyncWrap::QueueDestroyAsyncId(const FunctionCallbackInfo<Value>& args) {
 void AsyncWrap::SetCallbackTrampoline(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
 
-  CHECK(args[0]->IsFunction());
-
-  env->set_async_hooks_callback_trampoline(args[0].As<Function>());
+  if (args[0]->IsFunction()) {
+    env->set_async_hooks_callback_trampoline(args[0].As<Function>());
+  } else {
+    env->set_async_hooks_callback_trampoline(Local<Function>());
+  }
 }
 
 Local<FunctionTemplate> AsyncWrap::GetConstructorTemplate(Environment* env) {
@@ -448,6 +450,7 @@ void AsyncWrap::Initialize(Local<Object> target,
   env->set_async_hooks_after_function(Local<Function>());
   env->set_async_hooks_destroy_function(Local<Function>());
   env->set_async_hooks_promise_resolve_function(Local<Function>());
+  env->set_async_hooks_callback_trampoline(Local<Function>());
   env->set_async_hooks_binding(target);
 }
 
@@ -597,7 +600,7 @@ void AsyncWrap::AsyncReset(Local<Object> resource, double execution_async_id,
     Local<Object> obj = object();
     CHECK(!obj.IsEmpty());
     if (resource != obj) {
-      USE(obj->Set(env()->context(), env()->owner_symbol(), resource));
+      USE(obj->Set(env()->context(), env()->resource_symbol(), resource));
     }
   }
 

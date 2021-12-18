@@ -34,6 +34,7 @@
 #include "handle_wrap.h"
 #include "node.h"
 #include "node_binding.h"
+#include "node_external_reference.h"
 #include "node_main_instance.h"
 #include "node_options.h"
 #include "node_perf_common.h"
@@ -170,6 +171,7 @@ constexpr size_t kFsStatsBufferLength =
   V(oninit_symbol, "oninit")                                                   \
   V(owner_symbol, "owner_symbol")                                              \
   V(onpskexchange_symbol, "onpskexchange")                                     \
+  V(resource_symbol, "resource_symbol")                                        \
   V(trigger_async_id_symbol, "trigger_async_id_symbol")                        \
 
 // Strings are per-isolate primitives but Environment proxies them
@@ -256,6 +258,7 @@ constexpr size_t kFsStatsBufferLength =
   V(file_string, "file")                                                       \
   V(filename_string, "filename")                                               \
   V(fingerprint256_string, "fingerprint256")                                   \
+  V(fingerprint512_string, "fingerprint512")                                   \
   V(fingerprint_string, "fingerprint")                                         \
   V(flags_string, "flags")                                                     \
   V(flowlabel_string, "flowlabel")                                             \
@@ -1239,19 +1242,22 @@ class Environment : public MemoryRetainer {
                                const char* path = nullptr,
                                const char* dest = nullptr);
 
-  inline v8::Local<v8::FunctionTemplate>
-      NewFunctionTemplate(v8::FunctionCallback callback,
-                          v8::Local<v8::Signature> signature =
-                              v8::Local<v8::Signature>(),
-                          v8::ConstructorBehavior behavior =
-                              v8::ConstructorBehavior::kAllow,
-                          v8::SideEffectType side_effect =
-                              v8::SideEffectType::kHasSideEffect);
+  inline v8::Local<v8::FunctionTemplate> NewFunctionTemplate(
+      v8::FunctionCallback callback,
+      v8::Local<v8::Signature> signature = v8::Local<v8::Signature>(),
+      v8::ConstructorBehavior behavior = v8::ConstructorBehavior::kAllow,
+      v8::SideEffectType side_effect = v8::SideEffectType::kHasSideEffect,
+      const v8::CFunction* c_function = nullptr);
 
   // Convenience methods for NewFunctionTemplate().
   inline void SetMethod(v8::Local<v8::Object> that,
                         const char* name,
                         v8::FunctionCallback callback);
+
+  inline void SetFastMethod(v8::Local<v8::Object> that,
+                            const char* name,
+                            v8::FunctionCallback slow_callback,
+                            const v8::CFunction* c_function);
 
   inline void SetProtoMethod(v8::Local<v8::FunctionTemplate> that,
                              const char* name,

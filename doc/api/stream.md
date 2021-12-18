@@ -2145,7 +2145,7 @@ for performance reasons.
 ### `stream.Readable.fromWeb(readableStream[, options])`
 
 <!-- YAML
-added: v16.11.0
+added: v17.0.0
 -->
 
 > Stability: 1 - Experimental
@@ -2170,6 +2170,19 @@ added: v16.8.0
 * Returns: `boolean`
 
 Returns whether the stream has been read from or cancelled.
+
+### `stream.isErrored(stream)`
+
+<!-- YAML
+added: v17.3.0
+-->
+
+> Stability: 1 - Experimental
+
+* `stream` {Readable|Writable|Duplex|WritableStream|ReadableStream}
+* Returns: {boolean}
+
+Returns whether the stream has encountered an error.
 
 ### `stream.Readable.toWeb(streamReadable)`
 
@@ -2558,6 +2571,7 @@ class WriteStream extends Writable {
   constructor(filename) {
     super();
     this.filename = filename;
+    this.fd = null;
   }
   _construct(callback) {
     fs.open(this.filename, (err, fd) => {
@@ -3230,6 +3244,7 @@ pipeline(
         // Make sure is valid json.
         JSON.parse(this.data);
         this.push(this.data);
+        callback();
       } catch (err) {
         callback(err);
       }

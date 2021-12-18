@@ -1447,3 +1447,68 @@ const tsp = require('timers/promises');
     assert.strictEqual(text, 'Hello World!');
   }));
 }
+
+{
+  const pipelinePromise = promisify(pipeline);
+
+  async function run() {
+    const read = new Readable({
+      read() {}
+    });
+
+    const duplex = new PassThrough();
+
+    read.push(null);
+
+    await pipelinePromise(read, duplex);
+
+    assert.strictEqual(duplex.destroyed, false);
+  }
+
+  run().then(common.mustCall());
+}
+
+{
+  const pipelinePromise = promisify(pipeline);
+
+  async function run() {
+    const read = new Readable({
+      read() {}
+    });
+
+    const duplex = new PassThrough();
+
+    read.push(null);
+
+    await pipelinePromise(read, duplex, { end: false });
+
+    assert.strictEqual(duplex.destroyed, false);
+    assert.strictEqual(duplex.writableEnded, false);
+  }
+
+  run().then(common.mustCall());
+}
+
+{
+  const s = new PassThrough({ objectMode: true });
+  pipeline(async function*() {
+    await Promise.resolve();
+    yield 'hello';
+    yield 'world';
+    yield 'world';
+  }, s, async function(source) {
+    let ret = '';
+    let n = 0;
+    for await (const chunk of source) {
+      if (n++ > 1) {
+        break;
+      }
+      ret += chunk;
+    }
+    return ret;
+  }, common.mustCall((err, val) => {
+    assert.strictEqual(err, undefined);
+    assert.strictEqual(val, 'helloworld');
+    assert.strictEqual(s.destroyed, true);
+  }));
+}

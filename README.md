@@ -10,14 +10,14 @@
   </a>
 </p>
 
-Node.js is an open-source, cross-platform, JavaScript runtime environment. It
-executes JavaScript code outside of a browser. For more information on using
-Node.js, see the [Node.js Website][].
+Node.js is an open-source, cross-platform, JavaScript runtime environment.
+
+For information on using Node.js, see the [Node.js Website][].
 
 The Node.js project uses an [open governance model](./GOVERNANCE.md). The
 [OpenJS Foundation][] provides support for the project.
 
-**This project is bound by a [Code of Conduct][].**
+**This project has a [Code of Conduct][].**
 
 # Table of contents
 
@@ -156,8 +156,9 @@ For information on reporting security vulnerabilities in Node.js, see
 For information about the governance of the Node.js project, see
 [GOVERNANCE.md](./GOVERNANCE.md).
 
-<!-- node-core-utils depends on the format of the TSC list. If the
-     format changes, those utilities need to be tested and updated. -->
+<!-- node-core-utils and find-inactive-tsc.mjs depend on the format of the TSC
+     list. If the format changes, those utilities need to be tested and
+     updated. -->
 
 ### TSC (Technical Steering Committee)
 
@@ -175,14 +176,10 @@ For information about the governance of the Node.js project, see
   **Сковорода Никита Андреевич** <<chalkerx@gmail.com>> (he/him)
 * [cjihrig](https://github.com/cjihrig) -
   **Colin Ihrig** <<cjihrig@gmail.com>> (he/him)
-* [codebytere](https://github.com/codebytere) -
-  **Shelley Vohr** <<shelley.vohr@gmail.com>> (she/her)
 * [danielleadams](https://github.com/danielleadams) -
   **Danielle Adams** <<adamzdanielle@gmail.com>> (she/her)
 * [fhinkel](https://github.com/fhinkel) -
   **Franziska Hinkelmann** <<franziska.hinkelmann@gmail.com>> (she/her)
-* [gabrielschulhof](https://github.com/gabrielschulhof) -
-  **Gabriel Schulhof** <<gabrielschulhof@gmail.com>>
 * [gireeshpunathil](https://github.com/gireeshpunathil) -
   **Gireesh Punathil** <<gpunathi@in.ibm.com>> (he/him)
 * [jasnell](https://github.com/jasnell) -
@@ -220,12 +217,16 @@ For information about the governance of the Node.js project, see
   **Ben Noordhuis** <<info@bnoordhuis.nl>>
 * [chrisdickinson](https://github.com/chrisdickinson) -
   **Chris Dickinson** <<christopher.s.dickinson@gmail.com>>
+* [codebytere](https://github.com/codebytere) -
+  **Shelley Vohr** <<shelley.vohr@gmail.com>> (she/her)
 * [danbev](https://github.com/danbev) -
   **Daniel Bevenius** <<daniel.bevenius@gmail.com>> (he/him)
 * [evanlucas](https://github.com/evanlucas) -
   **Evan Lucas** <<evanlucas@me.com>> (he/him)
 * [Fishrock123](https://github.com/Fishrock123) -
   **Jeremiah Senkpiel** <<fishrock123@rocketmail.com>> (he/they)
+* [gabrielschulhof](https://github.com/gabrielschulhof) -
+  **Gabriel Schulhof** <<gabrielschulhof@gmail.com>>
 * [gibfahn](https://github.com/gibfahn) -
   **Gibson Fahnestock** <<gibfahn@gmail.com>> (he/him)
 * [indutny](https://github.com/indutny) -
@@ -289,6 +290,8 @@ For information about the governance of the Node.js project, see
   **Beth Griggs** <<bgriggs@redhat.com>> (she/her)
 * [bmeck](https://github.com/bmeck) -
   **Bradley Farias** <<bradley.meck@gmail.com>>
+* [bnb](https://github.com/bnb) -
+  **Tierney Cyren** <<hello@bnb.im>> (they/he)
 * [boneskull](https://github.com/boneskull) -
   **Christopher Hiller** <<boneskull@boneskull.com>> (he/him)
 * [BridgeAR](https://github.com/BridgeAR) -
@@ -425,8 +428,6 @@ For information about the governance of the Node.js project, see
   **Nikolai Vavilov** <<vvnicholas@gmail.com>>
 * [shisama](https://github.com/shisama) -
   **Masashi Hirano** <<shisama07@gmail.com>> (he/him)
-* [silverwind](https://github.com/silverwind) -
-  **Roman Reiss** <<me@silverwind.io>>
 * [srl295](https://github.com/srl295) -
   **Steven R Loomis** <<srloomis@us.ibm.com>>
 * [starkwang](https://github.com/starkwang) -
@@ -446,11 +447,9 @@ For information about the governance of the Node.js project, see
 * [vdeturckheim](https://github.com/vdeturckheim) -
   **Vladimir de Turckheim** <<vlad2t@hotmail.com>> (he/him)
 * [VoltrexMaster](https://github.com/VoltrexMaster) -
-  **Voltrex** <<mohammadkeyvanzade94@gmail.com>> (he/him)
+  **Mohammed Keyvanzadeh** <<mohammadkeyvanzade94@gmail.com>> (he/him)
 * [watilde](https://github.com/watilde) -
   **Daijiro Wachi** <<daijiro.wachi@gmail.com>> (he/him)
-* [watson](https://github.com/watson) -
-  **Thomas Watson** <<w@tson.dk>>
 * [XadillaX](https://github.com/XadillaX) -
   **Khaidi Chu** <<i@2333.moe>> (he/him)
 * [yashLadha](https://github.com/yashLadha) -
@@ -601,6 +600,8 @@ For information about the governance of the Node.js project, see
   **Sebastiaan Deckers** <<sebdeckers83@gmail.com>>
 * [shigeki](https://github.com/shigeki) -
   **Shigeki Ohtsu** <<ohtsu@ohtsu.org>> (he/him)
+* [silverwind](https://github.com/silverwind) -
+  **Roman Reiss** <<me@silverwind.io>>
 * [stefanmb](https://github.com/stefanmb) -
   **Stefan Budeanu** <<stefan@budeanu.com>>
 * [tellnes](https://github.com/tellnes) -
@@ -617,6 +618,8 @@ For information about the governance of the Node.js project, see
   **Vladimir Kurchatkin** <<vladimir.kurchatkin@gmail.com>>
 * [vsemozhetbyt](https://github.com/vsemozhetbyt) -
   **Vse Mozhet Byt** <<vsemozhetbyt@gmail.com>> (he/him)
+* [watson](https://github.com/watson) -
+  **Thomas Watson** <<w@tson.dk>>
 * [whitlockjc](https://github.com/whitlockjc) -
   **Jeremy Whitlock** <<jwhitlock@apache.org>>
 * [yhwang](https://github.com/yhwang) -
@@ -648,7 +651,7 @@ maintaining the Node.js project.
 * [RaisinTen](https://github.com/RaisinTen) -
   **Darshan Sen** <<raisinten@gmail.com>>
 * [VoltrexMaster](https://github.com/VoltrexMaster) -
-  **Voltrex** <<mohammadkeyvanzade94@gmail.com>> (he/him)
+  **Mohammed Keyvanzadeh** <<mohammadkeyvanzade94@gmail.com>> (he/him)
 
 ### Release keys
 

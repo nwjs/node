@@ -726,6 +726,8 @@
       'include_dirs': [
         'src',
         'deps/openssl/openssl/include',
+        '<(DEPTH)/buildtools/third_party/libc++/trunk/include',
+        '<(DEPTH)/buildtools/third_party/libc++',
         #'../boringssl/src/include',
         '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
         '../../v8', # include/v8_platform.h

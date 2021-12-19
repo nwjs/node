@@ -418,7 +418,6 @@
     'defines': [
       'V8_DEPRECATION_WARNINGS',
       'V8_REVERSE_JSARGS',
-      'V8_VIRTUAL_MEMORY_CAGE',
       #'V8_IMMINENT_DEPRECATION_WARNINGS',
       '_GLIBCXX_USE_CXX11_ABI=1',
       '_LIBCPP_HAS_NO_VENDOR_AVAILABILITY_ANNOTATIONS',
@@ -532,6 +531,9 @@
           'V8_COMPRESS_POINTERS',
           'V8_COMPRESS_POINTERS_IN_ISOLATE_CAGE',
         ],
+      }],
+      ['target_arch=="x64"', {
+        'defines': ['V8_VIRTUAL_MEMORY_CAGE'],
       }],
       ['v8_enable_pointer_compression == 1 or v8_enable_31bit_smis_on_64bit_arch == 1', {
         'defines': ['V8_31BIT_SMIS_ON_64BIT_ARCH'],

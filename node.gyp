@@ -726,8 +726,6 @@
       'include_dirs': [
         'src',
         'deps/openssl/openssl/include',
-        '<(DEPTH)/buildtools/third_party/libc++/trunk/include',
-        '<(DEPTH)/buildtools/third_party/libc++',
         #'../boringssl/src/include',
         '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
         '../../v8', # include/v8_platform.h
@@ -991,6 +989,12 @@
       'msvs_disabled_warnings!': [4244],
 
       'conditions': [
+        [ 'OS=="win" or OS=="linux"', {
+          'include_dirs': [
+            '<(DEPTH)/buildtools/third_party/libc++/trunk/include',
+            '<(DEPTH)/buildtools/third_party/libc++',
+          ],
+        }],
         [ 'openssl_default_cipher_list!=""', {
           'defines': [
             'NODE_OPENSSL_DEFAULT_CIPHER_LIST="<(openssl_default_cipher_list)"'

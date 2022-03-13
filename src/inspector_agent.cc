@@ -368,6 +368,16 @@ bool IsFilePath(const std::string& path) {
 }
 #endif  // __POSIX__
 
+void ThrowUninitializedInspectorError(Environment* env) {
+  HandleScope scope(env->isolate());
+
+  const char* msg = "This Environment was initialized without a V8::Inspector";
+  Local<Value> exception =
+    v8::String::NewFromUtf8(env->isolate(), msg).ToLocalChecked();
+
+  env->isolate()->ThrowException(exception);
+}
+
 }  // namespace
 
 class NodeInspectorClient : public V8InspectorClient {
@@ -728,6 +738,11 @@ bool Agent::StartIoThread() {
   if (io_ != nullptr)
     return true;
 
+  if (!parent_env_->should_create_inspector() && !client_) {
+    ThrowUninitializedInspectorError(parent_env_);
+    return false;
+  }
+
   CHECK_NOT_NULL(client_);
 
   io_ = InspectorIo::Start(client_->getThreadHandle(),
@@ -750,6 +765,12 @@ std::unique_ptr<InspectorSession> Agent::Connect(
     bool prevent_shutdown) {
   if (!client_)
     return nullptr;
+
+  if (!parent_env_->should_create_inspector() && !client_) {
+    ThrowUninitializedInspectorError(parent_env_);
+    return std::unique_ptr<InspectorSession>{};
+  }
+
   int session_id = client_->connectFrontend(std::move(delegate),
                                             prevent_shutdown);
   return std::unique_ptr<InspectorSession>(
@@ -759,6 +780,11 @@ std::unique_ptr<InspectorSession> Agent::Connect(
 std::unique_ptr<InspectorSession> Agent::ConnectToMainThread(
     std::unique_ptr<InspectorSessionDelegate> delegate,
     bool prevent_shutdown) {
+  if (!parent_env_->should_create_inspector() && !client_) {
+    ThrowUninitializedInspectorError(parent_env_);
+    return std::unique_ptr<InspectorSession>{};
+  }
+
   CHECK_NOT_NULL(parent_handle_);
   CHECK_NOT_NULL(client_);
   auto thread_safe_delegate =
@@ -768,6 +794,11 @@ std::unique_ptr<InspectorSession> Agent::ConnectToMainThread(
 }
 
 void Agent::WaitForDisconnect() {
+  if (!parent_env_->should_create_inspector() && !client_) {
+    ThrowUninitializedInspectorError(parent_env_);
+    return;
+  }
+
   CHECK_NOT_NULL(client_);
   bool is_worker = parent_handle_ != nullptr;
   parent_handle_.reset();
@@ -913,6 +944,12 @@ void Agent::SetParentHandle(
 
 std::unique_ptr<ParentInspectorHandle> Agent::GetParentHandle(
     uint64_t thread_id, const std::string& url) {
+  if (!parent_env_->should_create_inspector() && !client_) {
+    ThrowUninitializedInspectorError(parent_env_);
+    return std::unique_ptr<ParentInspectorHandle>{};
+  }
+
+  CHECK_NOT_NULL(client_);
   if (!parent_handle_) {
     return client_->getWorkerManager()->NewParentHandle(thread_id, url);
   } else {
@@ -921,11 +958,21 @@ std::unique_ptr<ParentInspectorHandle> Agent::GetParentHandle(
 }
 
 void Agent::WaitForConnect() {
+  if (!parent_env_->should_create_inspector() && !client_) {
+    ThrowUninitializedInspectorError(parent_env_);
+    return;
+  }
+
   CHECK_NOT_NULL(client_);
   client_->waitForFrontend();
 }
 
 std::shared_ptr<WorkerManager> Agent::GetWorkerManager() {
+  if (!parent_env_->should_create_inspector() && !client_) {
+    ThrowUninitializedInspectorError(parent_env_);
+    return std::unique_ptr<WorkerManager>{};
+  }
+
   CHECK_NOT_NULL(client_);
   return client_->getWorkerManager();
 }

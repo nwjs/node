@@ -7,6 +7,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <numeric>
 #include <string>
 #include <vector>
 
@@ -582,9 +583,7 @@ std::string URLHost::ToString() const {
       dest.reserve(15);
       uint32_t value = value_.ipv4;
       for (int n = 0; n < 4; n++) {
-        char buf[4];
-        snprintf(buf, sizeof(buf), "%d", value % 256);
-        dest.insert(0, buf);
+        dest.insert(0, std::to_string(value % 256));
         if (n < 3)
           dest.insert(0, 1, '.');
         value /= 256;
@@ -933,7 +932,10 @@ void URL::Parse(const char* input,
             url->flags &= ~URL_FLAGS_SPECIAL;
             special = false;
           }
-          special_back_slash = (special && ch == '\\');
+          // `special_back_slash` equals to `(special && ch == '\\')` and `ch`
+          // here always not equals to `\\`. So `special_back_slash` here always
+          // equals to `false`.
+          special_back_slash = false;
           buffer.clear();
           if (has_state_override)
             return;
@@ -1545,44 +1547,61 @@ void URL::Parse(const char* input,
 }  // NOLINT(readability/fn_size)
 
 // https://url.spec.whatwg.org/#url-serializing
-std::string URL::SerializeURL(const struct url_data* url,
+std::string URL::SerializeURL(const url_data& url,
                               bool exclude = false) {
-  std::string output = url->scheme;
-  if (url->flags & URL_FLAGS_HAS_HOST) {
+  std::string output;
+  output.reserve(
+    10 +  // We generally insert < 10 separator characters between URL parts
+    url.scheme.size() +
+    url.username.size() +
+    url.password.size() +
+    url.host.size() +
+    url.query.size() +
+    url.fragment.size() +
+    url.href.size() +
+    std::accumulate(
+        url.path.begin(),
+        url.path.end(),
+        0,
+        [](size_t sum, const auto& str) { return sum + str.size(); }));
+
+  output += url.scheme;
+  if (url.flags & URL_FLAGS_HAS_HOST) {
     output += "//";
-    if (url->flags & URL_FLAGS_HAS_USERNAME ||
-        url->flags & URL_FLAGS_HAS_PASSWORD) {
-      if (url->flags & URL_FLAGS_HAS_USERNAME) {
-        output += url->username;
+    if (url.flags & URL_FLAGS_HAS_USERNAME ||
+        url.flags & URL_FLAGS_HAS_PASSWORD) {
+      if (url.flags & URL_FLAGS_HAS_USERNAME) {
+        output += url.username;
       }
-      if (url->flags & URL_FLAGS_HAS_PASSWORD) {
-        output += ":" + url->password;
+      if (url.flags & URL_FLAGS_HAS_PASSWORD) {
+        output += ":" + url.password;
       }
       output += "@";
     }
-    output += url->host;
-    if (url->port != -1) {
-      output += ":" + std::to_string(url->port);
+    output += url.host;
+    if (url.port != -1) {
+      output += ":" + std::to_string(url.port);
     }
   }
-  if (url->flags & URL_FLAGS_CANNOT_BE_BASE) {
-    output += url->path[0];
+  if (url.flags & URL_FLAGS_CANNOT_BE_BASE) {
+    output += url.path[0];
   } else {
-    if (!(url->flags & URL_FLAGS_HAS_HOST) &&
-          url->path.size() > 1 &&
-          url->path[0].empty()) {
+    if (!(url.flags & URL_FLAGS_HAS_HOST) &&
+          url.path.size() > 1 &&
+          url.path[0].empty()) {
       output += "/.";
     }
-    for (size_t i = 1; i < url->path.size(); i++) {
-      output += "/" + url->path[i];
+    for (size_t i = 1; i < url.path.size(); i++) {
+      output += "/" + url.path[i];
     }
   }
-  if (url->flags & URL_FLAGS_HAS_QUERY) {
-    output = "?" + url->query;
+  if (url.flags & URL_FLAGS_HAS_QUERY) {
+    output += "?" + url.query;
   }
-  if (!exclude && url->flags & URL_FLAGS_HAS_FRAGMENT) {
-    output = "#" + url->fragment;
+  if (!exclude && (url.flags & URL_FLAGS_HAS_FRAGMENT)) {
+    output += "#" + url.fragment;
   }
+  output.shrink_to_fit();
   return output;
 }
 

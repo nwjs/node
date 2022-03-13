@@ -41,6 +41,8 @@ calling `require('crypto')` will result in an error being thrown.
 
 When using CommonJS, the error thrown can be caught using try/catch:
 
+<!-- eslint-skip -->
+
 ```cjs
 let crypto;
 try {
@@ -52,8 +54,8 @@ try {
 
 When using the lexical ESM `import` keyword, the error can only be
 caught if a handler for `process.on('uncaughtException')` is registered
-_before_ any attempt to load the module is made -- using, for instance,
-a preload module.
+_before_ any attempt to load the module is made (using, for instance,
+a preload module).
 
 When using ESM, if there is a chance that the code may be run on a build
 of Node.js where crypto support is not enabled, consider using the
@@ -543,7 +545,7 @@ once will result in an error being thrown.
 added: v1.0.0
 -->
 
-* Returns: {Buffer} When using an authenticated encryption mode (`GCM`, `CCM`
+* Returns: {Buffer} When using an authenticated encryption mode (`GCM`, `CCM`,
   and `OCB` are currently supported), the `cipher.getAuthTag()` method returns a
   [`Buffer`][] containing the _authentication tag_ that has been computed from
   the given data.
@@ -566,7 +568,7 @@ added: v1.0.0
   * `encoding` {string} The string encoding to use when `buffer` is a string.
 * Returns: {Cipher} for method chaining.
 
-When using an authenticated encryption mode (`GCM`, `CCM` and `OCB` are
+When using an authenticated encryption mode (`GCM`, `CCM`, and `OCB` are
 currently supported), the `cipher.setAAD()` method sets the value used for the
 _additional authenticated data_ (AAD) input parameter.
 
@@ -863,7 +865,7 @@ changes:
   * `encoding` {string} String encoding to use when `buffer` is a string.
 * Returns: {Decipher} for method chaining.
 
-When using an authenticated encryption mode (`GCM`, `CCM` and `OCB` are
+When using an authenticated encryption mode (`GCM`, `CCM`, and `OCB` are
 currently supported), the `decipher.setAAD()` method sets the value used for the
 _additional authenticated data_ (AAD) input parameter.
 
@@ -897,7 +899,7 @@ changes:
 * `encoding` {string} String encoding to use when `buffer` is a string.
 * Returns: {Decipher} for method chaining.
 
-When using an authenticated encryption mode (`GCM`, `CCM` and `OCB` are
+When using an authenticated encryption mode (`GCM`, `CCM`, and `OCB` are
 currently supported), the `decipher.setAuthTag()` method is used to pass in the
 received _authentication tag_. If no tag is provided, or if the cipher text
 has been tampered with, [`decipher.final()`][] will throw, indicating that the
@@ -2080,6 +2082,20 @@ encryption mechanism, PEM-level encryption is not supported when encrypting
 a PKCS#8 key. See [RFC 5208][] for PKCS#8 encryption and [RFC 1421][] for
 PKCS#1 and SEC1 encryption.
 
+### `keyObject.equals(otherKeyObject)`
+
+<!-- YAML
+added: v17.7.0
+-->
+
+* `otherKeyObject`: {KeyObject} A `KeyObject` with which to
+  compare `keyObject`.
+* Returns: {boolean}
+
+Returns `true` or `false` depending on whether the keys have exactly the same
+type, value, and parameters. This method is not
+[constant time](https://en.wikipedia.org/wiki/Timing_attack).
+
 ### `keyObject.symmetricKeySize`
 
 <!-- YAML
@@ -2464,62 +2480,104 @@ added: v15.6.0
 added: v15.6.0
 -->
 
-* Type: {boolean} Will be `true` if this is a Certificate Authority (ca)
+* Type: {boolean} Will be `true` if this is a Certificate Authority (CA)
   certificate.
 
 ### `x509.checkEmail(email[, options])`
 
 <!-- YAML
 added: v15.6.0
+changes:
+  - version: v17.5.0
+    pr-url: https://github.com/nodejs/node/pull/41599
+    description: The `wildcards`, `partialWildcards`, `multiLabelWildcards`, and
+                 `singleLabelSubdomains` options have been removed since they
+                 had no effect.
+  - version: v17.5.0
+    pr-url: https://github.com/nodejs/node/pull/41569
+    description: The subject option can now be set to `'default'`.
 -->
 
 * `email` {string}
 * `options` {Object}
-  * `subject` {string} `'always'` or `'never'`. **Default:** `'always'`.
-  * `wildcards` {boolean} **Default:** `true`.
-  * `partialWildcards` {boolean} **Default:** `true`.
-  * `multiLabelWildcards` {boolean} **Default:** `false`.
-  * `singleLabelSubdomains` {boolean} **Default:** `false`.
+  * `subject` {string} `'default'`, `'always'`, or `'never'`.
+    **Default:** `'always'`.
 * Returns: {string|undefined} Returns `email` if the certificate matches,
   `undefined` if it does not.
 
 Checks whether the certificate matches the given email address.
 
+If the `'subject'` option is set to `'always'` and if the subject alternative
+name extension either does not exist or does not contain a matching email
+address, the certificate subject is considered.
+
+If the `'subject'` option is set to `'default'`, the certificate subject is only
+considered if the subject alternative name extension either does not exist or
+does not contain any email addresses.
+
+If the `'subject'` option is set to `'never'`, the certificate subject is never
+considered, even if the certificate contains no subject alternative names.
+
 ### `x509.checkHost(name[, options])`
 
 <!-- YAML
 added: v15.6.0
+changes:
+  - version: v17.5.0
+    pr-url: https://github.com/nodejs/node/pull/41569
+    description: The subject option can now be set to `'default'`.
 -->
 
 * `name` {string}
 * `options` {Object}
-  * `subject` {string} `'always'` or `'never'`. **Default:** `'always'`.
+  * `subject` {string} `'default'`, `'always'`, or `'never'`.
+    **Default:** `'always'`.
   * `wildcards` {boolean} **Default:** `true`.
   * `partialWildcards` {boolean} **Default:** `true`.
   * `multiLabelWildcards` {boolean} **Default:** `false`.
   * `singleLabelSubdomains` {boolean} **Default:** `false`.
-* Returns: {string|undefined} Returns `name` if the certificate matches,
-  `undefined` if it does not.
+* Returns: {string|undefined} Returns a subject name that matches `name`,
+  or `undefined` if no subject name matches `name`.
 
 Checks whether the certificate matches the given host name.
 
-### `x509.checkIP(ip[, options])`
+If the certificate matches the given host name, the matching subject name is
+returned. The returned name might be an exact match (e.g., `foo.example.com`)
+or it might contain wildcards (e.g., `*.example.com`). Because host name
+comparisons are case-insensitive, the returned subject name might also differ
+from the given `name` in capitalization.
+
+If the `'subject'` option is set to `'always'` and if the subject alternative
+name extension either does not exist or does not contain a matching DNS name,
+the certificate subject is considered.
+
+If the `'subject'` option is set to `'default'`, the certificate subject is only
+considered if the subject alternative name extension either does not exist or
+does not contain any DNS names. This behavior is consistent with [RFC 2818][]
+("HTTP Over TLS").
+
+If the `'subject'` option is set to `'never'`, the certificate subject is never
+considered, even if the certificate contains no subject alternative names.
+
+### `x509.checkIP(ip)`
 
 <!-- YAML
 added: v15.6.0
+changes:
+  - version: v17.5.0
+    pr-url: https://github.com/nodejs/node/pull/41571
+    description: The `options` argument has been removed since it had no effect.
 -->
 
 * `ip` {string}
-* `options` {Object}
-  * `subject` {string} `'always'` or `'never'`. **Default:** `'always'`.
-  * `wildcards` {boolean} **Default:** `true`.
-  * `partialWildcards` {boolean} **Default:** `true`.
-  * `multiLabelWildcards` {boolean} **Default:** `false`.
-  * `singleLabelSubdomains` {boolean} **Default:** `false`.
 * Returns: {string|undefined} Returns `ip` if the certificate matches,
   `undefined` if it does not.
 
 Checks whether the certificate matches the given IP address (IPv4 or IPv6).
+
+Only [RFC 5280][] `iPAddress` subject alternative names are considered, and they
+must match the given `ip` address exactly. Other subject alternative names as
+well as the subject field of the certificate are ignored.
 
 ### `x509.checkIssued(otherCert)`
 
@@ -2578,11 +2636,27 @@ The SHA-512 fingerprint of this certificate.
 
 <!-- YAML
 added: v15.6.0
+changes:
+  - version: v17.3.1
+    pr-url: https://github.com/nodejs-private/node-private/pull/300
+    description: Parts of this string may be encoded as JSON string literals
+                 in response to CVE-2021-44532.
 -->
 
 * Type: {string}
 
-The information access content of this certificate.
+A textual representation of the certificate's authority information access
+extension.
+
+This is a line feed separated list of access descriptions. Each line begins with
+the access method and the kind of the access location, followed by a colon and
+the value associated with the access location.
+
+After the prefix denoting the access method and the kind of the access location,
+the remainder of each line might be enclosed in quotes to indicate that the
+value is a JSON string literal. For backward compatibility, Node.js only uses
+JSON string literals within this property when necessary to avoid ambiguity.
+Third-party code should be prepared to handle both possible entry formats.
 
 ### `x509.issuer`
 
@@ -2659,11 +2733,31 @@ The complete subject of this certificate.
 
 <!-- YAML
 added: v15.6.0
+changes:
+  - version: v17.3.1
+    pr-url: https://github.com/nodejs-private/node-private/pull/300
+    description: Parts of this string may be encoded as JSON string literals
+                 in response to CVE-2021-44532.
 -->
 
 * Type: {string}
 
 The subject alternative name specified for this certificate.
+
+This is a comma-separated list of subject alternative names. Each entry begins
+with a string identifying the kind of the subject alternative name followed by
+a colon and the value associated with the entry.
+
+Earlier versions of Node.js incorrectly assumed that it is safe to split this
+property at the two-character sequence `', '` (see [CVE-2021-44532][]). However,
+both malicious and legitimate certificates can contain subject alternative names
+that include this sequence when represented as a string.
+
+After the prefix denoting the type of the entry, the remainder of each entry
+might be enclosed in quotes to indicate that the value is a JSON string literal.
+For backward compatibility, Node.js only uses JSON string literals within this
+property when necessary to avoid ambiguity. Third-party code should be prepared
+to handle both possible entry formats.
 
 ### `x509.toJSON()`
 
@@ -4015,6 +4109,19 @@ const {
 console.log(getHashes()); // ['DSA', 'DSA-SHA', 'DSA-SHA1', ...]
 ```
 
+### `crypto.getRandomValues(typedArray)`
+
+<!-- YAML
+added: v17.4.0
+-->
+
+* `typedArray` {Buffer|TypedArray|DataView|ArrayBuffer}
+* Returns: {Buffer|TypedArray|DataView|ArrayBuffer} Returns `typedArray`.
+
+A convenient alias for [`crypto.webcrypto.getRandomValues()`][]. This
+implementation is not compliant with the Web Crypto spec, to write
+web-compatible code use [`crypto.webcrypto.getRandomValues()`][] instead.
+
 ### `crypto.hkdf(digest, ikm, salt, info, keylen, callback)`
 
 <!-- YAML
@@ -5194,6 +5301,16 @@ additional properties can be passed:
 
 If the `callback` function is provided this function uses libuv's threadpool.
 
+### `crypto.subtle`
+
+<!-- YAML
+added: v17.4.0
+-->
+
+* Type: {SubtleCrypto}
+
+A convenient alias for [`crypto.webcrypto.subtle`][].
+
 ### `crypto.timingSafeEqual(a, b)`
 
 <!-- YAML
@@ -5215,7 +5332,8 @@ comparing HMAC digests or secret values like authentication cookies or
 [capability urls](https://www.w3.org/TR/capability-urls/).
 
 `a` and `b` must both be `Buffer`s, `TypedArray`s, or `DataView`s, and they
-must have the same byte length.
+must have the same byte length. An error is thrown if `a` and `b` have
+different byte lengths.
 
 If at least one of `a` and `b` is a `TypedArray` with more than one byte per
 entry, such as `Uint16Array`, the result will be computed using the platform
@@ -5353,21 +5471,6 @@ API (e.g. `update()`, `final()`, or `digest()`). Also, many methods accepted
 and returned `'latin1'` encoded strings by default rather than `Buffer`s. This
 default was changed after Node.js v0.8 to use [`Buffer`][] objects by default
 instead.
-
-### Recent ECDH changes
-
-Usage of `ECDH` with non-dynamically generated key pairs has been simplified.
-Now, [`ecdh.setPrivateKey()`][] can be called with a preselected private key
-and the associated public point (key) will be computed and stored in the object.
-This allows code to only store and provide the private part of the EC key pair.
-[`ecdh.setPrivateKey()`][] now also validates that the private key is valid for
-the selected curve.
-
-The [`ecdh.setPublicKey()`][] method is now deprecated as its inclusion in the
-API is not useful. Either a previously stored private key should be set, which
-automatically generates the associated public key, or [`ecdh.generateKeys()`][]
-should be called. The main drawback of using [`ecdh.setPublicKey()`][] is that
-it can be used to put the ECDH key pair into an inconsistent state.
 
 ### Support for weak or compromised algorithms
 
@@ -5666,8 +5769,8 @@ See the [list of SSL OP Flags][] for details.
   </tr>
   <tr>
     <td><code>SSL_OP_PRIORITIZE_CHACHA</code></td>
-    <td>Instructs OpenSSL server to prioritize ChaCha20Poly1305
-    when client does.
+    <td>Instructs OpenSSL server to prioritize ChaCha20-Poly1305
+    when the client does.
     This option has no effect if
     <code>SSL_OP_CIPHER_SERVER_PREFERENCE</code>
     is not enabled.</td>
@@ -5857,6 +5960,7 @@ See the [list of SSL OP Flags][] for details.
 
 [AEAD algorithms]: https://en.wikipedia.org/wiki/Authenticated_encryption
 [CCM mode]: #ccm-mode
+[CVE-2021-44532]: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-44532
 [Caveats]: #support-for-weak-or-compromised-algorithms
 [Crypto constants]: #crypto-constants
 [HTML 5.2]: https://www.w3.org/TR/html52/changes.html#features-removed
@@ -5869,11 +5973,13 @@ See the [list of SSL OP Flags][] for details.
 [OpenSSL's SPKAC implementation]: https://www.openssl.org/docs/man1.1.0/apps/openssl-spkac.html
 [RFC 1421]: https://www.rfc-editor.org/rfc/rfc1421.txt
 [RFC 2412]: https://www.rfc-editor.org/rfc/rfc2412.txt
+[RFC 2818]: https://www.rfc-editor.org/rfc/rfc2818.txt
 [RFC 3526]: https://www.rfc-editor.org/rfc/rfc3526.txt
 [RFC 3610]: https://www.rfc-editor.org/rfc/rfc3610.txt
 [RFC 4055]: https://www.rfc-editor.org/rfc/rfc4055.txt
 [RFC 4122]: https://www.rfc-editor.org/rfc/rfc4122.txt
 [RFC 5208]: https://www.rfc-editor.org/rfc/rfc5208.txt
+[RFC 5280]: https://www.rfc-editor.org/rfc/rfc5280.txt
 [Web Crypto API documentation]: webcrypto.md
 [`BN_is_prime_ex`]: https://www.openssl.org/docs/man1.1.1/man3/BN_is_prime_ex.html
 [`Buffer`]: buffer.md
@@ -5908,12 +6014,13 @@ See the [list of SSL OP Flags][] for details.
 [`crypto.randomBytes()`]: #cryptorandombytessize-callback
 [`crypto.randomFill()`]: #cryptorandomfillbuffer-offset-size-callback
 [`crypto.scrypt()`]: #cryptoscryptpassword-salt-keylen-options-callback
+[`crypto.webcrypto.getRandomValues()`]: webcrypto.md#cryptogetrandomvaluestypedarray
+[`crypto.webcrypto.subtle`]: webcrypto.md#class-subtlecrypto
 [`decipher.final()`]: #decipherfinaloutputencoding
 [`decipher.update()`]: #decipherupdatedata-inputencoding-outputencoding
 [`diffieHellman.setPublicKey()`]: #diffiehellmansetpublickeypublickey-encoding
 [`ecdh.generateKeys()`]: #ecdhgeneratekeysencoding-format
 [`ecdh.setPrivateKey()`]: #ecdhsetprivatekeyprivatekey-encoding
-[`ecdh.setPublicKey()`]: #ecdhsetpublickeypublickey-encoding
 [`hash.digest()`]: #hashdigestencoding
 [`hash.update()`]: #hashupdatedata-inputencoding
 [`hmac.digest()`]: #hmacdigestencoding

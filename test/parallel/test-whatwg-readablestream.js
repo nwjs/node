@@ -2,7 +2,7 @@
 'use strict';
 
 const common = require('../common');
-const { isDisturbed, isErrored } = require('stream');
+const { isDisturbed, isErrored, isReadable } = require('stream');
 const assert = require('assert');
 const {
   isPromise,
@@ -78,6 +78,36 @@ const {
   assert(!r.locked);
   r.getReader();
   assert(r.locked);
+}
+
+{
+  // Throw error and return rejected promise in `cancel()` method
+  // would execute same cleanup code
+  const r1 = new ReadableStream({
+    cancel: () => {
+      return Promise.reject('Cancel Error');
+    },
+  });
+  r1.cancel().finally(common.mustCall(() => {
+    const controllerState = r1[kState].controller[kState];
+
+    assert.strictEqual(controllerState.pullAlgorithm, undefined);
+    assert.strictEqual(controllerState.cancelAlgorithm, undefined);
+    assert.strictEqual(controllerState.sizeAlgorithm, undefined);
+  })).catch(() => {});
+
+  const r2 = new ReadableStream({
+    cancel() {
+      throw new Error('Cancel Error');
+    }
+  });
+  r2.cancel().finally(common.mustCall(() => {
+    const controllerState = r2[kState].controller[kState];
+
+    assert.strictEqual(controllerState.pullAlgorithm, undefined);
+    assert.strictEqual(controllerState.cancelAlgorithm, undefined);
+    assert.strictEqual(controllerState.sizeAlgorithm, undefined);
+  })).catch(() => {});
 }
 
 {
@@ -1573,7 +1603,6 @@ class Source {
   })().then(common.mustCall());
 }
 
-
 {
   const stream = new ReadableStream({
     pull: common.mustCall((controller) => {
@@ -1587,4 +1616,34 @@ class Source {
     await reader.read().catch(common.mustCall());
     isErrored(stream, true);
   })().then(common.mustCall());
+}
+
+{
+  const stream = new ReadableStream({
+    pull: common.mustCall((controller) => {
+      controller.error(new Error());
+    }),
+  });
+
+  const reader = stream.getReader();
+  (async () => {
+    isReadable(stream, true);
+    await reader.read().catch(common.mustCall());
+    isReadable(stream, false);
+  })().then(common.mustCall());
+}
+
+{
+  const stream = new ReadableStream({
+    type: 'bytes',
+    start(controller) {
+      controller.close();
+    }
+  });
+
+  const buffer = new ArrayBuffer(1024);
+  const reader = stream.getReader({ mode: 'byob' });
+
+  reader.read(new DataView(buffer))
+    .then(common.mustCall());
 }

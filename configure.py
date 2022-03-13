@@ -14,12 +14,6 @@ import shutil
 import bz2
 import io
 
-# Fallback to find_executable from distutils.spawn is a stopgap for
-# supporting V8 builds, which do not yet support Python 3.
-try:
-  from shutil import which
-except ImportError:
-  from distutils.spawn import find_executable as which
 from distutils.version import StrictVersion
 
 # If not run from node/, cd to node/.
@@ -53,7 +47,7 @@ parser = argparse.ArgumentParser()
 valid_os = ('win', 'mac', 'solaris', 'freebsd', 'openbsd', 'linux',
             'android', 'aix', 'cloudabi')
 valid_arch = ('arm', 'arm64', 'ia32', 'mips', 'mipsel', 'mips64el', 'ppc',
-              'ppc64', 'x32','x64', 'x86', 'x86_64', 's390x', 'riscv64')
+              'ppc64', 'x64', 'x86', 'x86_64', 's390x', 'riscv64', 'loong64')
 valid_arm_float_abi = ('soft', 'softfp', 'hard')
 valid_arm_fpu = ('vfp', 'vfpv3', 'vfpv3-d16', 'neon')
 valid_mips_arch = ('loongson', 'r1', 'r2', 'r6', 'rx')
@@ -68,6 +62,9 @@ shared_optgroup = parser.add_argument_group("Shared libraries",
     "Flags that allows you to control whether you want to build against "
     "built-in dependencies or its shared representations. If necessary, "
     "provide multiple libraries with comma.")
+static_optgroup = parser.add_argument_group("Static libraries",
+    "Flags that allows you to control whether you want to build against "
+    "additional static libraries.")
 intl_optgroup = parser.add_argument_group("Internationalization",
     "Flags that lets you enable i18n features in Node.js as well as which "
     "library you want to build against.")
@@ -418,6 +415,13 @@ shared_optgroup.add_argument('--shared-cares-libpath',
     help='a directory to search for the shared cares DLL')
 
 parser.add_argument_group(shared_optgroup)
+
+static_optgroup.add_argument('--static-zoslib-gyp',
+    action='store',
+    dest='static_zoslib_gyp',
+    help='path to zoslib.gyp file for includes and to link to static zoslib libray')
+
+parser.add_argument_group(static_optgroup)
 
 parser.add_argument('--systemtap-includes',
     action='store',
@@ -770,6 +774,13 @@ parser.add_argument('--v8-enable-object-print',
     default=True,
     help='compile V8 with auxiliar functions for native debuggers')
 
+parser.add_argument('--v8-enable-hugepage',
+    action='store_true',
+    dest='v8_enable_hugepage',
+    default=None,
+    help='Enable V8 transparent hugepage support. This feature is only '+
+         'available on Linux platform.')
+
 parser.add_argument('--node-builtin-modules-path',
     action='store',
     dest='node_builtin_modules_path',
@@ -834,7 +845,7 @@ def pkg_config(pkg):
   otherwise (None, None, None, None)"""
   pkg_config = os.environ.get('PKG_CONFIG', 'pkg-config')
   args = []  # Print pkg-config warnings on first round.
-  retval = ()
+  retval = []
   for flag in ['--libs-only-l', '--cflags-only-I',
                '--libs-only-L', '--modversion']:
     args += [flag]
@@ -849,9 +860,9 @@ def pkg_config(pkg):
     except OSError as e:
       if e.errno != errno.ENOENT: raise e  # Unexpected error.
       return (None, None, None, None)  # No pkg-config/pkgconf installed.
-    retval += (val,)
+    retval.append(val)
     args = ['--silence-errors']
-  return retval
+  return tuple(retval)
 
 
 def try_check_compiler(cc, lang):
@@ -864,7 +875,11 @@ def try_check_compiler(cc, lang):
   proc.stdin.write(b'__clang__ __GNUC__ __GNUC_MINOR__ __GNUC_PATCHLEVEL__ '
                    b'__clang_major__ __clang_minor__ __clang_patchlevel__')
 
-  values = (to_utf8(proc.communicate()[0]).split() + ['0'] * 7)[0:7]
+  if sys.platform == 'zos':
+    values = (to_utf8(proc.communicate()[0]).split('\n')[-2].split() + ['0'] * 7)[0:7]
+  else:
+    values = (to_utf8(proc.communicate()[0]).split() + ['0'] * 7)[0:7]
+
   is_clang = values[0] == '1'
   gcc_version = tuple(map(int, values[1:1+3]))
   clang_version = tuple(map(int, values[4:4+3])) if is_clang else None
@@ -1051,6 +1066,8 @@ def is_arm_hard_float_abi():
 def host_arch_cc():
   """Host architecture check using the CC command."""
 
+  if sys.platform.startswith('zos'):
+    return 's390x'
   k = cc_macros(os.environ.get('CC_host'))
 
   matchup = {
@@ -1064,6 +1081,7 @@ def host_arch_cc():
     '__x86_64__'  : 'x64',
     '__s390x__'   : 's390x',
     '__riscv'     : 'riscv',
+    '__loongarch64': 'loong64',
   }
 
   rtn = 'ia32' # default
@@ -1136,6 +1154,15 @@ def configure_mips(o, target_arch):
   host_byteorder = 'little' if target_arch in ('mipsel', 'mips64el') else 'big'
   o['variables']['v8_host_byteorder'] = host_byteorder
 
+def configure_zos(o):
+  o['variables']['node_static_zoslib'] = b(True)
+  if options.static_zoslib_gyp:
+    # Apply to all Node.js components for now
+    o['variables']['zoslib_include_dir'] = os.path.dirname(options.static_zoslib_gyp) + '/include'
+    o['include_dirs'] += [o['variables']['zoslib_include_dir']]
+  else:
+    raise Exception('--static-zoslib-gyp=<path to zoslib.gyp file> is required.')
+
 def clang_version_ge(version_checked):
   for compiler in [(CC, 'c'), (CXX, 'c++')]:
     ok, is_clang, clang_version, gcc_version = \
@@ -1205,6 +1232,8 @@ def configure_node(o):
     configure_arm(o)
   elif target_arch in ('mips', 'mipsel', 'mips64el'):
     configure_mips(o, target_arch)
+  elif sys.platform == 'zos':
+    configure_zos(o)
 
   if flavor == 'aix':
     o['variables']['node_target_type'] = 'static_library'
@@ -1317,6 +1346,8 @@ def configure_node(o):
     shlib_suffix = '%s.dylib'
   elif sys.platform.startswith('aix'):
     shlib_suffix = '%s.a'
+  elif sys.platform.startswith('zos'):
+    shlib_suffix = '%s.x'
   else:
     shlib_suffix = 'so.%s'
   if '%s' in shlib_suffix:
@@ -1407,7 +1438,11 @@ def configure_v8(o):
     o['variables']['test_isolation_mode'] = 'noop'  # Needed by d8.gyp.
   if options.without_bundled_v8 and options.enable_d8:
     raise Exception('--enable-d8 is incompatible with --without-bundled-v8.')
-
+  if options.static_zoslib_gyp:
+    o['variables']['static_zoslib_gyp'] = options.static_zoslib_gyp
+  if flavor != 'linux' and options.v8_enable_hugepage:
+    raise Exception('--v8-enable-hugepage is supported only on linux.')
+  o['variables']['v8_enable_hugepage'] = 1 if options.v8_enable_hugepage else 0
 
 def configure_openssl(o):
   variables = o['variables']
@@ -1810,6 +1845,9 @@ def configure_intl(o):
   elif sys.platform.startswith('aix'):
     icu_config['variables']['icu_asm_ext'] = 'S'
     icu_config['variables']['icu_asm_opts'] = [ '-a', 'xlc' ]
+  elif sys.platform == 'zos':
+    icu_config['variables']['icu_asm_ext'] = 'S'
+    icu_config['variables']['icu_asm_opts'] = [ '-a', 'zos' ]
   else:
     # assume GCC-compatible asm is OK
     icu_config['variables']['icu_asm_ext'] = 'S'
@@ -1859,7 +1897,7 @@ def make_bin_override():
   # sys.executable. This directory will be prefixed to the PATH, so that
   # other tools that shell out to `python` will use the appropriate python
 
-  which_python = which('python')
+  which_python = shutil.which('python')
   if (which_python and
       os.path.realpath(which_python) == os.path.realpath(sys.executable)):
     return
@@ -2003,8 +2041,8 @@ if options.compile_commands_json:
 if bin_override is not None:
   gyp_args += ['-Dpython=' + sys.executable]
 
-# pass the leftover positional arguments to GYP
-gyp_args += args
+# pass the leftover non-whitespace positional arguments to GYP
+gyp_args += [arg for arg in args if not str.isspace(arg)]
 
 if warn.warned and not options.verbose:
   warn('warnings were emitted in the configure phase')

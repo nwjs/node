@@ -344,7 +344,10 @@ The location information will be one of:
 * `plain-filename.js:line:column`, if the frame represents a call internal
   to Node.js.
 * `/absolute/path/to/file.js:line:column`, if the frame represents a call in
-  a user program, or its dependencies.
+  a user program (using CommonJS module system), or its dependencies.
+* `<transport-protocol>:///url/to/module/file.mjs:line:column`, if the frame
+  represents a call in a user program (using ES module system), or
+  its dependencies.
 
 The string representing the stack trace is lazily generated when the
 `error.stack` property is **accessed**.
@@ -2222,9 +2225,8 @@ transferable object types has been expanded to cover more types than
 
 ### `ERR_MODULE_NOT_FOUND`
 
-> Stability: 1 - Experimental
-
-An [ES Module][] could not be resolved.
+A module file could not be resolved by the ECMAScript modules loader while
+attempting an `import` operation or when loading the program entry point.
 
 <a id="ERR_MULTIPLE_CALLBACK"></a>
 
@@ -2546,6 +2548,15 @@ reports.
 An unspecified or non-specific system error has occurred within the Node.js
 process. The error object will have an `err.info` object property with
 additional details.
+
+<a id="ERR_TLS_CERT_ALTNAME_FORMAT"></a>
+
+### `ERR_TLS_CERT_ALTNAME_FORMAT`
+
+This error is thrown by `checkServerIdentity` if a user-supplied
+`subjectaltname` property violates encoding rules. Certificate objects produced
+by Node.js itself always comply with encoding rules and will never cause
+this error.
 
 <a id="ERR_TLS_CERT_ALTNAME_INVALID"></a>
 
@@ -2946,8 +2957,8 @@ changes:
     description: Added `requireStack` property.
 -->
 
-A module file could not be resolved while attempting a [`require()`][] or
-`import` operation.
+A module file could not be resolved by the CommonJS modules loader while
+attempting a [`require()`][] operation or when loading the program entry point.
 
 ## Legacy Node.js error codes
 
@@ -3105,6 +3116,23 @@ removed: v10.0.0
 -->
 
 Used by the `Node-API` when `Constructor.prototype` is not an object.
+
+<a id="ERR_NETWORK_IMPORT_BAD_RESPONSE"></a>
+
+### `ERR_NETWORK_IMPORT_BAD_RESPONSE`
+
+> Stability: 1 - Experimental
+
+Response was received but was invalid when importing a module over the network.
+
+<a id="ERR_NETWORK_IMPORT_DISALLOWED"></a>
+
+### `ERR_NETWORK_IMPORT_DISALLOWED`
+
+> Stability: 1 - Experimental
+
+A network module attempted to load another module that it is not allowed to
+load. Likely this restriction is for security reasons.
 
 <a id="ERR_NO_LONGER_SUPPORTED"></a>
 

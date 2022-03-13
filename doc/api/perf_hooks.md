@@ -55,6 +55,17 @@ added: v8.5.0
 If `name` is not provided, removes all `PerformanceMark` objects from the
 Performance Timeline. If `name` is provided, removes only the named mark.
 
+### `performance.clearMeasures([name])`
+
+<!-- YAML
+added: v16.7.0
+-->
+
+* `name` {string}
+
+If `name` is not provided, removes all `PerformanceMeasure` objects from the
+Performance Timeline. If `name` is provided, removes only the named mark.
+
 ### `performance.eventLoopUtilization([utilization1[, utilization2]])`
 
 <!-- YAML
@@ -118,6 +129,47 @@ Passing in a user-defined object instead of the result of a previous call to
 `eventLoopUtilization()` will lead to undefined behavior. The return values
 are not guaranteed to reflect any correct state of the event loop.
 
+### `performance.getEntries()`
+
+<!-- YAML
+added: v16.7.0
+-->
+
+* Returns: {PerformanceEntry\[]}
+
+Returns a list of `PerformanceEntry` objects in chronological order with
+respect to `performanceEntry.startTime`. If you are only interested in
+performance entries of certain types or that have certain names, see
+`performance.getEntriesByType()` and `performance.getEntriesByName()`.
+
+### `performance.getEntriesByName(name[, type])`
+
+<!-- YAML
+added: v16.7.0
+-->
+
+* `name` {string}
+* `type` {string}
+* Returns: {PerformanceEntry\[]}
+
+Returns a list of `PerformanceEntry` objects in chronological order
+with respect to `performanceEntry.startTime` whose `performanceEntry.name` is
+equal to `name`, and optionally, whose `performanceEntry.entryType` is equal to
+`type`.
+
+### `performance.getEntriesByType(type)`
+
+<!-- YAML
+added: v16.7.0
+-->
+
+* `type` {string}
+* Returns: {PerformanceEntry\[]}
+
+Returns a list of `PerformanceEntry` objects in chronological order
+with respect to `performanceEntry.startTime` whose `performanceEntry.entryType`
+is equal to `type`.
+
 ### `performance.mark([name[, options]])`
 
 <!-- YAML
@@ -139,6 +191,12 @@ Creates a new `PerformanceMark` entry in the Performance Timeline. A
 `performanceEntry.entryType` is always `'mark'`, and whose
 `performanceEntry.duration` is always `0`. Performance marks are used
 to mark specific significant moments in the Performance Timeline.
+
+The created `PerformanceMark` entry is put in the global Performance Timeline
+and can be queried with `performance.getEntries`,
+`performance.getEntriesByName`, and `performance.getEntriesByType`. When the
+observation is performed, the entries should be cleared from the global
+Performance Timeline manually with `performance.clearMarks`.
 
 ### `performance.measure(name[, startMarkOrOptions[, endMark]])`
 
@@ -182,6 +240,12 @@ in the Performance Timeline or any of the timestamp properties provided by the
 `PerformanceNodeTiming` class. `endMark` will be `performance.now()`
 if no parameter is passed, otherwise if the named `endMark` does not exist, an
 error will be thrown.
+
+The created `PerformanceMeasure` entry is put in the global Performance Timeline
+and can be queried with `performance.getEntries`,
+`performance.getEntriesByName`, and `performance.getEntriesByType`. When the
+observation is performed, the entries should be cleared from the global
+Performance Timeline manually with `performance.clearMeasures`.
 
 ### `performance.nodeTiming`
 
@@ -258,6 +322,9 @@ const wrapped = performance.timerify(someFunction);
 
 const obs = new PerformanceObserver((list) => {
   console.log(list.getEntries()[0].duration);
+
+  performance.clearMarks();
+  performance.clearMeasures();
   obs.disconnect();
 });
 obs.observe({ entryTypes: ['function'] });
@@ -585,6 +652,9 @@ const {
 
 const obs = new PerformanceObserver((list, observer) => {
   console.log(list.getEntries());
+
+  performance.clearMarks();
+  performance.clearMeasures();
   observer.disconnect();
 });
 obs.observe({ entryTypes: ['mark'], buffered: true });
@@ -647,7 +717,7 @@ const {
 } = require('perf_hooks');
 
 const obs = new PerformanceObserver((list, observer) => {
-  // Called three times synchronously. `list` contains one item.
+  // Called once asynchronously. `list` contains three items.
 });
 obs.observe({ type: 'mark' });
 
@@ -700,6 +770,9 @@ const obs = new PerformanceObserver((perfObserverList, observer) => {
    *   }
    * ]
    */
+
+  performance.clearMarks();
+  performance.clearMeasures();
   observer.disconnect();
 });
 obs.observe({ type: 'mark' });
@@ -755,6 +828,9 @@ const obs = new PerformanceObserver((perfObserverList, observer) => {
    * ]
    */
   console.log(perfObserverList.getEntriesByName('test', 'measure')); // []
+
+  performance.clearMarks();
+  performance.clearMeasures();
   observer.disconnect();
 });
 obs.observe({ entryTypes: ['mark', 'measure'] });
@@ -800,6 +876,8 @@ const obs = new PerformanceObserver((perfObserverList, observer) => {
    *   }
    * ]
    */
+  performance.clearMarks();
+  performance.clearMeasures();
   observer.disconnect();
 });
 obs.observe({ type: 'mark' });
@@ -817,10 +895,11 @@ added:
 -->
 
 * `options` {Object}
-  * `min` {number|bigint} The minimum recordable value. Must be an integer
+  * `lowest` {number|bigint} The lowest discernible value. Must be an integer
     value greater than 0. **Default:** `1`.
-  * `max` {number|bigint} The maximum recordable value. Must be an integer
-    value greater than `min`. **Default:** `Number.MAX_SAFE_INTEGER`.
+  * `highest` {number|bigint} The highest recordable value. Must be an integer
+    value that is equal to or greater than two times `min`.
+    **Default:** `Number.MAX_SAFE_INTEGER`.
   * `figures` {number} The number of accuracy digits. Must be a number between
     `1` and `5`. **Default:** `3`.
 * Returns {RecordableHistogram}
@@ -870,6 +949,26 @@ console.log(h.percentile(99));
 added: v11.10.0
 -->
 
+### `histogram.count`
+
+<!-- YAML
+added: v17.4.0
+-->
+
+* {number}
+
+The number of samples recorded by the histogram.
+
+### `histogram.countBigInt`
+
+<!-- YAML
+added: v17.4.0
+-->
+
+* {bigint}
+
+The number of samples recorded by the histogram.
+
 ### `histogram.exceeds`
 
 <!-- YAML
@@ -881,6 +980,17 @@ added: v11.10.0
 The number of times the event loop delay exceeded the maximum 1 hour event
 loop delay threshold.
 
+### `histogram.exceedsBigInt`
+
+<!-- YAML
+added: v17.4.0
+-->
+
+* {bigint}
+
+The number of times the event loop delay exceeded the maximum 1 hour event
+loop delay threshold.
+
 ### `histogram.max`
 
 <!-- YAML
@@ -888,6 +998,16 @@ added: v11.10.0
 -->
 
 * {number}
+
+The maximum recorded event loop delay.
+
+### `histogram.maxBigInt`
+
+<!-- YAML
+added: v17.4.0
+-->
+
+* {bigint}
 
 The maximum recorded event loop delay.
 
@@ -911,6 +1031,16 @@ added: v11.10.0
 
 The minimum recorded event loop delay.
 
+### `histogram.minBigInt`
+
+<!-- YAML
+added: v17.4.0
+-->
+
+* {bigint}
+
+The minimum recorded event loop delay.
+
 ### `histogram.percentile(percentile)`
 
 <!-- YAML
@@ -922,10 +1052,31 @@ added: v11.10.0
 
 Returns the value at the given percentile.
 
+### `histogram.percentileBigInt(percentile)`
+
+<!-- YAML
+added: v17.4.0
+-->
+
+* `percentile` {number} A percentile value in the range (0, 100].
+* Returns: {bigint}
+
+Returns the value at the given percentile.
+
 ### `histogram.percentiles`
 
 <!-- YAML
 added: v11.10.0
+-->
+
+* {Map}
+
+Returns a `Map` object detailing the accumulated percentile distribution.
+
+### `histogram.percentilesBigInt`
+
+<!-- YAML
+added: v17.4.0
 -->
 
 * {Map}
@@ -990,6 +1141,16 @@ added:
   - v14.18.0
 -->
 
+### `histogram.add(other)`
+
+<!-- YAML
+added: v17.4.0
+-->
+
+* `other` {RecordableHistogram}
+
+Adds the values from `other` to this histogram.
+
 ### `histogram.record(val)`
 
 <!-- YAML
@@ -1050,6 +1211,7 @@ hook.enable();
 const obs = new PerformanceObserver((list, observer) => {
   console.log(list.getEntries()[0]);
   performance.clearMarks();
+  performance.clearMeasures();
   observer.disconnect();
 });
 obs.observe({ entryTypes: ['measure'], buffered: true });
@@ -1083,6 +1245,8 @@ const obs = new PerformanceObserver((list) => {
   entries.forEach((entry) => {
     console.log(`require('${entry[0]}')`, entry.duration);
   });
+  performance.clearMarks();
+  performance.clearMeasures();
   obs.disconnect();
 });
 obs.observe({ entryTypes: ['function'], buffered: true });

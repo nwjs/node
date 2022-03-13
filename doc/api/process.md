@@ -181,7 +181,10 @@ See [Advanced serialization for `child_process`][] for more details.
 
 <!-- YAML
 added: v10.12.0
+deprecated: v17.6.0
 -->
+
+> Stability: 0 - Deprecated
 
 * `type` {string} The resolution type. One of `'resolve'` or `'reject'`.
 * `promise` {Promise} The promise that resolved or rejected more than once.
@@ -199,6 +202,9 @@ This is useful for tracking potential errors in an application while using the
 `Promise` constructor, as multiple resolutions are silently swallowed. However,
 the occurrence of this event does not necessarily indicate an error. For
 example, [`Promise.race()`][] can trigger a `'multipleResolves'` event.
+
+Because of the unreliability of the event in cases like the
+[`Promise.race()`][] example above it has been deprecated.
 
 ```mjs
 import process from 'process';
@@ -334,10 +340,12 @@ changes:
 
 * `err` {Error} The uncaught exception.
 * `origin` {string} Indicates if the exception originates from an unhandled
-  rejection or from an synchronous error. Can either be `'uncaughtException'` or
-  `'unhandledRejection'`. The latter is only used in conjunction with the
-  [`--unhandled-rejections`][] flag set to `strict` or `throw` and
-  an unhandled rejection.
+  rejection or from a synchronous error. Can either be `'uncaughtException'` or
+  `'unhandledRejection'`. The latter is used when in an exception happens in a
+  `Promise` based async context (or if a `Promise` is rejected) and
+  [`--unhandled-rejections`][] flag set to `strict` or `throw` (which is the
+  default) and the rejection is not handled, or when a rejection happens during
+  the command line entry point's ES module static loading phase.
 
 The `'uncaughtException'` event is emitted when an uncaught JavaScript
 exception bubbles all the way back to the event loop. By default, Node.js
@@ -431,9 +439,11 @@ added:
 * `err` {Error} The uncaught exception.
 * `origin` {string} Indicates if the exception originates from an unhandled
   rejection or from synchronous errors. Can either be `'uncaughtException'` or
-  `'unhandledRejection'`. The latter is only used in conjunction with the
-  [`--unhandled-rejections`][] flag set to `strict` or `throw` and
-  an unhandled rejection.
+  `'unhandledRejection'`. The latter is used when in an exception happens in a
+  `Promise` based async context (or if a `Promise` is rejected) and
+  [`--unhandled-rejections`][] flag set to `strict` or `throw` (which is the
+  default) and the rejection is not handled, or when a rejection happens during
+  the command line entry point's ES module static loading phase.
 
 The `'uncaughtExceptionMonitor'` event is emitted before an
 `'uncaughtException'` event is emitted or a hook installed via
@@ -860,7 +870,7 @@ added: v0.5.0
 
 The operating system CPU architecture for which the Node.js binary was compiled.
 Possible values are: `'arm'`, `'arm64'`, `'ia32'`, `'mips'`,`'mipsel'`, `'ppc'`,
-`'ppc64'`, `'s390'`, `'s390x'`, `'x32'`, and `'x64'`.
+`'ppc64'`, `'s390'`, `'s390x'`, and `'x64'`.
 
 ```mjs
 import { arch } from 'process';
@@ -871,7 +881,7 @@ console.log(`This processor architecture is ${arch}`);
 ```cjs
 const { arch } = require('process');
 
-console.log(`This processor architecture is ${process.arch}`);
+console.log(`This processor architecture is ${arch}`);
 ```
 
 ## `process.argv`
@@ -2609,7 +2619,7 @@ added: v0.1.16
 * {string}
 
 The `process.platform` property returns a string identifying the operating
-system platform on which the Node.js process is running.
+system platform for which the Node.js binary was compiled.
 
 Currently possible values are:
 
@@ -3523,7 +3533,7 @@ Synchronous writes avoid problems such as output written with `console.log()` or
 _**Warning**_: Synchronous writes block the event loop until the write has
 completed. This can be near instantaneous in the case of output to a file, but
 under high system load, pipes that are not being read at the receiving end, or
-with slow terminals or file systems, its possible for the event loop to be
+with slow terminals or file systems, it's possible for the event loop to be
 blocked often enough and long enough to have severe negative performance
 impacts. This may not be a problem when writing to an interactive terminal
 session, but consider this particularly careful when doing production logging to

@@ -544,7 +544,7 @@
         ],
       }],
       ['target_arch=="x64"', {
-        'defines': ['V8_VIRTUAL_MEMORY_CAGE', 'V8_SANDBOX' ],
+        'defines': ['V8_VIRTUAL_MEMORY_CAGE'],
       }],
       ['v8_enable_pointer_compression == 1 or v8_enable_31bit_smis_on_64bit_arch == 1', {
         'defines': ['V8_31BIT_SMIS_ON_64BIT_ARCH'],

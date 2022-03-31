@@ -482,7 +482,7 @@ function base() {
         continue
       }
       if (options[0] === true) {
-        options[1] = undefined;
+        options[0] = undefined;
       }
       const transformer = attacher.call(processor, ...options);
       if (typeof transformer === 'function') {
@@ -12627,12 +12627,12 @@ const remarkLintListItemBulletIndent = lintRule(
 );
 var remarkLintListItemBulletIndent$1 = remarkLintListItemBulletIndent;
 
-var pointStart = point('start');
-var pointEnd = point('end');
+const pointStart = point('start');
+const pointEnd = point('end');
 function point(type) {
   return point
   function point(node) {
-    var point = (node && node.position && node.position[type]) || {};
+    const point = (node && node.position && node.position[type]) || {};
     return {
       line: point.line || null,
       column: point.column || null,

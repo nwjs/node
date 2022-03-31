@@ -1,14 +1,4 @@
-<!--lint disable no-literal-urls-->
-
-<p align="center">
-  <a href="https://nodejs.org/">
-    <img
-      alt="Node.js"
-      src="https://nodejs.org/static/images/logo-light.svg"
-      width="400"
-    />
-  </a>
-</p>
+# Node.js
 
 Node.js is an open-source, cross-platform, JavaScript runtime environment.
 
@@ -19,7 +9,7 @@ The Node.js project uses an [open governance model](./GOVERNANCE.md). The
 
 **This project has a [Code of Conduct][].**
 
-# Table of contents
+## Table of contents
 
 * [Support](#support)
 * [Release types](#release-types)
@@ -428,6 +418,8 @@ For information about the governance of the Node.js project, see
   **Santiago Gimeno** <<santiago.gimeno@gmail.com>>
 * [shisama](https://github.com/shisama) -
   **Masashi Hirano** <<shisama07@gmail.com>> (he/him)
+* [ShogunPanda](https://github.com/ShogunPanda) -
+  **Paolo Insogna** <<paolo@cowtech.it>> (he/him)
 * [srl295](https://github.com/srl295) -
   **Steven R Loomis** <<srloomis@us.ibm.com>>
 * [starkwang](https://github.com/starkwang) -

@@ -440,6 +440,8 @@ enum Flags : uint64_t {
   // do not expect to have their behaviors changed because of globally
   // installed modules.
   kNoGlobalSearchPaths = 1 << 7,
+  // Do not export browser globals like setTimeout, console, etc.
+  kNoBrowserGlobals = 1 << 8,
   // Controls whether or not the Environment should call V8Inspector::create().
   // This control is needed by embedders who may not want to initialize the V8
   // inspector in situations where one has already been created,
@@ -825,11 +827,13 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
 #endif
 
 #if defined(_MSC_VER)
-#pragma section(".CRT$XCU", read)
 #define NODE_C_CTOR(fn)                                               \
   NODE_CTOR_PREFIX void __cdecl fn(void);                             \
-  __declspec(dllexport, allocate(".CRT$XCU"))                         \
-      void (__cdecl*fn ## _)(void) = fn;                              \
+  namespace {                                                         \
+  struct fn##_ {                                                      \
+    fn##_() { fn(); };                                                \
+  } fn##_v_;                                                          \
+  }                                                                   \
   NODE_CTOR_PREFIX void __cdecl fn(void)
 #else
 #define NODE_C_CTOR(fn)                                               \

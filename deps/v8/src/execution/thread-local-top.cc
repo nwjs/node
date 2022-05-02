@@ -19,6 +19,7 @@ void ThreadLocalTop::Clear() {
   pending_handler_constant_pool_ = kNullAddress;
   pending_handler_fp_ = kNullAddress;
   pending_handler_sp_ = kNullAddress;
+  num_frames_above_pending_handler_ = 0;
   last_api_entry_ = kNullAddress;
   pending_message_ = Object();
   rethrowing_message_ = false;
@@ -31,6 +32,7 @@ void ThreadLocalTop::Clear() {
   js_entry_sp_ = kNullAddress;
   external_callback_scope_ = nullptr;
   current_vm_state_ = EXTERNAL;
+  current_embedder_state_ = nullptr;
   failed_access_check_callback_ = nullptr;
   thread_in_wasm_flag_address_ = kNullAddress;
 #ifdef V8_ENABLE_CONSERVATIVE_STACK_SCANNING

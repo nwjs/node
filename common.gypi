@@ -48,7 +48,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.16',
+    'v8_embedder_string': '-node.13',
 
     ##### V8 defaults for Node.js #####
 
@@ -445,7 +445,11 @@
           '-std:c++17'
         ],
         'BufferSecurityCheck': 'true',
-        'DebugInformationFormat': 1,          # /Z7 embed info in .obj files
+        'target_conditions': [
+          ['_toolset=="target"', {
+            'DebugInformationFormat': 1      # /Z7 embed info in .obj files
+          }],
+        ],
         'ExceptionHandling': 0,               # /EHsc
         'MultiProcessorCompilation': 'true',
         'StringPooling': 'true',              # pool string literals
@@ -694,7 +698,7 @@
           'GCC_ENABLE_CPP_RTTI': 'NO',              # -fno-rtti
           'GCC_ENABLE_PASCAL_STRINGS': 'NO',        # No -mpascal-strings
           'PREBINDING': 'NO',                       # No -Wl,-prebind
-          'MACOSX_DEPLOYMENT_TARGET': '10.13',      # -mmacosx-version-min=10.13
+          'MACOSX_DEPLOYMENT_TARGET': '10.15',      # -mmacosx-version-min=10.15
           'USE_HEADERMAP': 'NO',
           'OTHER_CFLAGS': [
             '-fno-strict-aliasing',

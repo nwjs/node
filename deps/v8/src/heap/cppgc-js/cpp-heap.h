@@ -12,9 +12,10 @@ static_assert(
 
 #include "include/v8-callbacks.h"
 #include "include/v8-cppgc.h"
-#include "include/v8-embedder-heap.h"
 #include "include/v8-metrics.h"
+#include "src/base/flags.h"
 #include "src/base/macros.h"
+#include "src/base/optional.h"
 #include "src/heap/cppgc/heap-base.h"
 #include "src/heap/cppgc/stats-collector.h"
 #include "src/logging/metrics.h"
@@ -25,13 +26,22 @@ class Isolate;
 
 namespace internal {
 
+class CppMarkingState;
+
 // A C++ heap implementation used with V8 to implement unified heap.
 class V8_EXPORT_PRIVATE CppHeap final
     : public cppgc::internal::HeapBase,
       public v8::CppHeap,
-      public v8::EmbedderHeapTracer,
       public cppgc::internal::StatsCollector::AllocationObserver {
  public:
+  enum GarbageCollectionFlagValues : uint8_t {
+    kNoFlags = 0,
+    kReduceMemory = 1 << 1,
+    kForced = 1 << 2,
+  };
+
+  using GarbageCollectionFlags = base::Flags<GarbageCollectionFlagValues>;
+
   class MetricRecorderAdapter final : public cppgc::internal::MetricRecorder {
    public:
     static constexpr int kMaxBatchedEvents = 16;
@@ -54,6 +64,8 @@ class V8_EXPORT_PRIVATE CppHeap final
     const base::Optional<
         cppgc::internal::MetricRecorder::MainThreadIncrementalMark>
     ExtractLastIncrementalMarkEvent();
+
+    void ClearCachedEvents();
 
    private:
     Isolate* GetIsolate() const;
@@ -98,6 +110,7 @@ class V8_EXPORT_PRIVATE CppHeap final
   void EnableDetachedGarbageCollectionsForTesting();
 
   void CollectGarbageForTesting(
+      cppgc::internal::GarbageCollector::Config::CollectionType,
       cppgc::internal::GarbageCollector::Config::StackState);
 
   void CollectCustomSpaceStatisticsAtLastGC(
@@ -105,15 +118,18 @@ class V8_EXPORT_PRIVATE CppHeap final
       std::unique_ptr<CustomSpaceStatisticsReceiver>);
 
   void FinishSweepingIfRunning();
+  void FinishSweepingIfOutOfWork();
 
-  // v8::EmbedderHeapTracer interface.
-  void RegisterV8References(
-      const std::vector<std::pair<void*, void*> >& embedder_fields) final;
-  void TracePrologue(TraceFlags flags) final;
-  bool AdvanceTracing(double deadline_in_ms) final;
-  bool IsTracingDone() final;
-  void TraceEpilogue(TraceSummary* trace_summary) final;
-  void EnterFinalPause(EmbedderStackState stack_state) final;
+  void InitializeTracing(
+      cppgc::internal::GarbageCollector::Config::CollectionType,
+      GarbageCollectionFlags);
+  void StartTracing();
+  bool AdvanceTracing(double max_duration);
+  bool IsTracingDone();
+  void TraceEpilogue();
+  void EnterFinalPause(cppgc::EmbedderStackState stack_state);
+
+  void RunMinorGC();
 
   // StatsCollector::AllocationObserver interface.
   void AllocatedObjectSizeIncreased(size_t) final;
@@ -121,6 +137,15 @@ class V8_EXPORT_PRIVATE CppHeap final
   void ResetAllocatedObjectSize(size_t) final {}
 
   MetricRecorderAdapter* GetMetricRecorder() const;
+
+  v8::WrapperDescriptor wrapper_descriptor() const {
+    return wrapper_descriptor_;
+  }
+
+  Isolate* isolate() const { return isolate_; }
+
+  std::unique_ptr<CppMarkingState> CreateCppMarkingState();
+  std::unique_ptr<CppMarkingState> CreateCppMarkingStateForMutatorThread();
 
  private:
   void FinalizeIncrementalGarbageCollectionIfNeeded(
@@ -132,11 +157,18 @@ class V8_EXPORT_PRIVATE CppHeap final
   void ReportBufferedAllocationSizeIfPossible();
 
   void StartIncrementalGarbageCollectionForTesting() final;
-  void FinalizeIncrementalGarbageCollectionForTesting(EmbedderStackState) final;
+  void FinalizeIncrementalGarbageCollectionForTesting(
+      cppgc::EmbedderStackState) final;
+
+  MarkingType SelectMarkingType() const;
+  SweepingType SelectSweepingType() const;
 
   Isolate* isolate_ = nullptr;
   bool marking_done_ = false;
-  TraceFlags current_flags_ = TraceFlags::kNoFlags;
+  // |collection_type_| is initialized when marking is in progress.
+  base::Optional<cppgc::internal::GarbageCollector::Config::CollectionType>
+      collection_type_;
+  GarbageCollectionFlags current_gc_flags_;
 
   // Buffered allocated bytes. Reporting allocated bytes to V8 can trigger a GC
   // atomic pause. Allocated bytes are buffer in case this is temporarily
@@ -152,6 +184,8 @@ class V8_EXPORT_PRIVATE CppHeap final
 
   friend class MetricRecorderAdapter;
 };
+
+DEFINE_OPERATORS_FOR_FLAGS(CppHeap::GarbageCollectionFlags)
 
 }  // namespace internal
 }  // namespace v8

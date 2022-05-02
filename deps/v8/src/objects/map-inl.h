@@ -12,6 +12,7 @@
 #include "src/objects/field-type.h"
 #include "src/objects/instance-type-inl.h"
 #include "src/objects/js-function-inl.h"
+#include "src/objects/map-updater.h"
 #include "src/objects/map.h"
 #include "src/objects/objects-inl.h"
 #include "src/objects/property.h"
@@ -654,7 +655,7 @@ bool Map::CanBeDeprecated() const {
   for (InternalIndex i : IterateOwnDescriptors()) {
     PropertyDetails details = instance_descriptors(kRelaxedLoad).GetDetails(i);
     if (details.representation().MightCauseMapDeprecation()) return true;
-    if (details.kind() == kData &&
+    if (details.kind() == PropertyKind::kData &&
         details.location() == PropertyLocation::kDescriptor) {
       return true;
     }
@@ -666,7 +667,7 @@ void Map::NotifyLeafMapLayoutChange(Isolate* isolate) {
   if (is_stable()) {
     mark_unstable();
     dependent_code().DeoptimizeDependentCodeGroup(
-        DependentCode::kPrototypeCheckGroup);
+        isolate, DependentCode::kPrototypeCheckGroup);
   }
 }
 
@@ -687,8 +688,8 @@ bool Map::IsBooleanMap() const {
 }
 
 bool Map::IsNullOrUndefinedMap() const {
-  return *this == GetReadOnlyRoots().null_map() ||
-         *this == GetReadOnlyRoots().undefined_map();
+  auto roots = GetReadOnlyRoots();
+  return *this == roots.null_map() || *this == roots.undefined_map();
 }
 
 bool Map::IsPrimitiveMap() const {
@@ -767,8 +768,7 @@ void Map::SetBackPointer(HeapObject value, WriteBarrierMode mode) {
 
 // static
 Map Map::ElementsTransitionMap(Isolate* isolate, ConcurrencyMode cmode) {
-  DisallowGarbageCollection no_gc;
-  return TransitionsAccessor(isolate, *this, &no_gc,
+  return TransitionsAccessor(isolate, *this,
                              cmode == ConcurrencyMode::kConcurrent)
       .SearchSpecial(ReadOnlyRoots(isolate).elements_transition_symbol());
 }
@@ -790,7 +790,8 @@ ACCESSORS_CHECKED(Map, native_context_or_null, Object,
 #if V8_ENABLE_WEBASSEMBLY
 ACCESSORS_CHECKED(Map, wasm_type_info, WasmTypeInfo,
                   kConstructorOrBackPointerOrNativeContextOffset,
-                  IsWasmStructMap() || IsWasmArrayMap())
+                  IsWasmStructMap() || IsWasmArrayMap() ||
+                      IsWasmInternalFunctionMap())
 #endif  // V8_ENABLE_WEBASSEMBLY
 
 bool Map::IsPrototypeValidityCellValid() const {
@@ -856,7 +857,7 @@ void Map::InobjectSlackTrackingStep(Isolate* isolate) {
   int counter = construction_counter();
   set_construction_counter(counter - 1);
   if (counter == kSlackTrackingCounterEnd) {
-    CompleteInobjectSlackTracking(isolate);
+    MapUpdater::CompleteInobjectSlackTracking(isolate, *this);
   }
 }
 

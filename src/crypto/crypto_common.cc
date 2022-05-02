@@ -6,7 +6,6 @@
 #include "crypto/crypto_common.h"
 #include "node.h"
 #include "node_internals.h"
-#include "node_revert.h"
 #include "node_url.h"
 #include "string_bytes.h"
 #include "memory_tracker-inl.h"
@@ -48,6 +47,11 @@ static constexpr int kX509NameFlagsMultiline =
     ASN1_STRFLGS_UTF8_CONVERT |
     XN_FLAG_SEP_MULTILINE |
     XN_FLAG_FN_SN;
+
+static constexpr int kX509NameFlagsRFC2253WithinUtf8JSON =
+    XN_FLAG_RFC2253 &
+    ~ASN1_STRFLGS_ESC_MSB &
+    ~ASN1_STRFLGS_ESC_CTRL;
 
 bool SSL_CTX_get_issuer(SSL_CTX* ctx, X509* cert, X509** issuer) {
   X509_STORE* store = SSL_CTX_get_cert_store(ctx);
@@ -592,44 +596,6 @@ MaybeLocal<Value> GetValidFrom(
   return ToV8Value(env, bio);
 }
 
-// deprecated, only used for security revert
-bool SafeX509ExtPrint(const BIOPointer& out, X509_EXTENSION* ext) {
-  const X509V3_EXT_METHOD* method = X509V3_EXT_get(ext);
-
-  if (method != X509V3_EXT_get_nid(NID_subject_alt_name))
-    return false;
-
-  GENERAL_NAMES* names = static_cast<GENERAL_NAMES*>(X509V3_EXT_d2i(ext));
-  if (names == nullptr)
-    return false;
-
-  for (int i = 0; i < sk_GENERAL_NAME_num(names); i++) {
-    GENERAL_NAME* gen = sk_GENERAL_NAME_value(names, i);
-
-    if (i != 0)
-      BIO_write(out.get(), ", ", 2);
-
-    if (gen->type == GEN_DNS) {
-      ASN1_IA5STRING* name = gen->d.dNSName;
-
-      BIO_write(out.get(), "DNS:", 4);
-      BIO_write(out.get(), name->data, name->length);
-    } else {
-      STACK_OF(CONF_VALUE)* nval = i2v_GENERAL_NAME(
-          const_cast<X509V3_EXT_METHOD*>(method), gen, nullptr);
-      if (nval == nullptr) {
-        sk_GENERAL_NAME_pop_free(names, GENERAL_NAME_free);
-        return false;
-      }
-      X509V3_EXT_val_prn(out.get(), nval, 0, 0);
-      sk_CONF_VALUE_pop_free(nval, X509V3_conf_free);
-    }
-  }
-  sk_GENERAL_NAME_pop_free(names, GENERAL_NAME_free);
-
-  return true;
-}
-
 static inline bool IsSafeAltName(const char* name, size_t length, bool utf8) {
   for (size_t i = 0; i < length; i++) {
     char c = name[i];
@@ -726,9 +692,8 @@ static inline void PrintUtf8AltName(const BIOPointer& out,
                true, safe_prefix);
 }
 
-// This function currently emulates the behavior of i2v_GENERAL_NAME in a safer
-// and less ambiguous way.
-// TODO(tniessen): gradually improve the format in the next major version(s)
+// This function emulates the behavior of i2v_GENERAL_NAME in a safer and less
+// ambiguous way. "othername:" entries use the GENERAL_NAME_print format.
 static bool PrintGeneralName(const BIOPointer& out, const GENERAL_NAME* gen) {
   if (gen->type == GEN_DNS) {
     ASN1_IA5STRING* name = gen->d.dNSName;
@@ -750,20 +715,32 @@ static bool PrintGeneralName(const BIOPointer& out, const GENERAL_NAME* gen) {
     // escaping.
     PrintLatin1AltName(out, name);
   } else if (gen->type == GEN_DIRNAME) {
-    // For backward compatibility, use X509_NAME_oneline to print the
-    // X509_NAME object. The format is non standard and should be avoided
-    // elsewhere, but conveniently, the function produces ASCII and the output
-    // is unlikely to contains commas or other characters that would require
-    // escaping. With that in mind, note that it SHOULD NOT produce ASCII
-    // output since an RFC5280 AttributeValue may be a UTF8String.
-    // TODO(tniessen): switch to RFC2253 rules in a major release
+    // Earlier versions of Node.js used X509_NAME_oneline to print the X509_NAME
+    // object. The format was non standard and should be avoided. The use of
+    // X509_NAME_oneline is discouraged by OpenSSL but was required for backward
+    // compatibility. Conveniently, X509_NAME_oneline produced ASCII and the
+    // output was unlikely to contains commas or other characters that would
+    // require escaping. However, it SHOULD NOT produce ASCII output since an
+    // RFC5280 AttributeValue may be a UTF8String.
+    // Newer versions of Node.js have since switched to X509_NAME_print_ex to
+    // produce a better format at the cost of backward compatibility. The new
+    // format may contain Unicode characters and it is likely to contain commas,
+    // which require escaping. Fortunately, the recently safeguarded function
+    // PrintAltName handles all of that safely.
     BIO_printf(out.get(), "DirName:");
-    char oline[256];
-    if (X509_NAME_oneline(gen->d.dirn, oline, sizeof(oline)) != nullptr) {
-      PrintAltName(out, oline, strlen(oline), false, nullptr);
-    } else {
+    BIOPointer tmp(BIO_new(BIO_s_mem()));
+    CHECK(tmp);
+    if (X509_NAME_print_ex(tmp.get(),
+                           gen->d.dirn,
+                           0,
+                           kX509NameFlagsRFC2253WithinUtf8JSON) < 0) {
       return false;
     }
+    char* oline = nullptr;
+    long n_bytes = BIO_get_mem_data(tmp.get(), &oline);  // NOLINT(runtime/int)
+    CHECK_GE(n_bytes, 0);
+    CHECK_IMPLIES(n_bytes != 0, oline != nullptr);
+    PrintAltName(out, oline, static_cast<size_t>(n_bytes), true, nullptr);
   } else if (gen->type == GEN_IPADD) {
     BIO_printf(out.get(), "IP Address:");
     const ASN1_OCTET_STRING* ip = gen->d.ip;
@@ -783,40 +760,38 @@ static bool PrintGeneralName(const BIOPointer& out, const GENERAL_NAME* gen) {
 #endif
     }
   } else if (gen->type == GEN_RID) {
-    // TODO(tniessen): unlike OpenSSL's default implementation, never print the
-    // OID as text and instead always print its numeric representation, which is
-    // backward compatible in practice and more future proof (see OBJ_obj2txt).
+    // Unlike OpenSSL's default implementation, never print the OID as text and
+    // instead always print its numeric representation.
     char oline[256];
-    i2t_ASN1_OBJECT(oline, sizeof(oline), gen->d.rid);
+    OBJ_obj2txt(oline, sizeof(oline), gen->d.rid, true);
     BIO_printf(out.get(), "Registered ID:%s", oline);
   } else if (gen->type == GEN_OTHERNAME) {
-    // TODO(tniessen): the format that is used here is based on OpenSSL's
-    // implementation of i2v_GENERAL_NAME (as of OpenSSL 3.0.1), mostly for
-    // backward compatibility. It is somewhat awkward, especially when passed to
-    // translatePeerCertificate, and should be changed in the future, probably
-    // to the format used by GENERAL_NAME_print (in a major release).
+    // The format that is used here is based on OpenSSL's implementation of
+    // GENERAL_NAME_print (as of OpenSSL 3.0.1). Earlier versions of Node.js
+    // instead produced the same format as i2v_GENERAL_NAME, which was somewhat
+    // awkward, especially when passed to translatePeerCertificate.
     bool unicode = true;
     const char* prefix = nullptr;
-    // OpenSSL 1.1.1 does not support othername in i2v_GENERAL_NAME and may not
-    // define these NIDs.
+    // OpenSSL 1.1.1 does not support othername in GENERAL_NAME_print and may
+    // not define these NIDs.
 #if OPENSSL_VERSION_MAJOR >= 3
     int nid = OBJ_obj2nid(gen->d.otherName->type_id);
     switch (nid) {
       case NID_id_on_SmtpUTF8Mailbox:
-        prefix = " SmtpUTF8Mailbox:";
+        prefix = "SmtpUTF8Mailbox";
         break;
       case NID_XmppAddr:
-        prefix = " XmppAddr:";
+        prefix = "XmppAddr";
         break;
       case NID_SRVName:
-        prefix = " SRVName:";
+        prefix = "SRVName";
         unicode = false;
         break;
       case NID_ms_upn:
-        prefix = " UPN:";
+        prefix = "UPN";
         break;
       case NID_NAIRealm:
-        prefix = " NAIRealm:";
+        prefix = "NAIRealm";
         break;
     }
 #endif  // OPENSSL_VERSION_MAJOR >= 3
@@ -854,10 +829,6 @@ bool SafeX509SubjectAltNamePrint(const BIOPointer& out, X509_EXTENSION* ext) {
   const X509V3_EXT_METHOD* method = X509V3_EXT_get(ext);
   CHECK(method == X509V3_EXT_get_nid(NID_subject_alt_name));
 
-  if (IsReverted(SECURITY_REVERT_CVE_2021_44532)) {
-    return  SafeX509ExtPrint(out, ext);
-  }
-
   GENERAL_NAMES* names = static_cast<GENERAL_NAMES*>(X509V3_EXT_d2i(ext));
   if (names == nullptr)
     return false;
@@ -882,10 +853,6 @@ bool SafeX509SubjectAltNamePrint(const BIOPointer& out, X509_EXTENSION* ext) {
 bool SafeX509InfoAccessPrint(const BIOPointer& out, X509_EXTENSION* ext) {
   const X509V3_EXT_METHOD* method = X509V3_EXT_get(ext);
   CHECK(method == X509V3_EXT_get_nid(NID_info_access));
-
-  if (IsReverted(SECURITY_REVERT_CVE_2021_44532)) {
-    return (X509V3_EXT_print(out.get(), ext, 0, 0) == 1);
-  }
 
   AUTHORITY_INFO_ACCESS* descs =
       static_cast<AUTHORITY_INFO_ACCESS*>(X509V3_EXT_d2i(ext));
@@ -1315,8 +1282,7 @@ MaybeLocal<Value> GetPeerCert(
 
 MaybeLocal<Object> X509ToObject(
     Environment* env,
-    X509* cert,
-    bool names_as_string) {
+    X509* cert) {
   EscapableHandleScope scope(env->isolate());
   Local<Context> context = env->context();
   Local<Object> info = Object::New(env->isolate());
@@ -1324,34 +1290,15 @@ MaybeLocal<Object> X509ToObject(
   BIOPointer bio(BIO_new(BIO_s_mem()));
   CHECK(bio);
 
-  if (names_as_string) {
-    // TODO(tniessen): this branch should not have to exist. It is only here
-    // because toLegacyObject() does not actually return a legacy object, and
-    // instead represents subject and issuer as strings.
-    if (!Set<Value>(context,
-                    info,
-                    env->subject_string(),
-                    GetSubject(env, bio, cert)) ||
-        !Set<Value>(context,
-                    info,
-                    env->issuer_string(),
-                    GetIssuerString(env, bio, cert))) {
-      return MaybeLocal<Object>();
-    }
-  } else {
-    if (!Set<Value>(context,
-                    info,
-                    env->subject_string(),
-                    GetX509NameObject<X509_get_subject_name>(env, cert)) ||
-        !Set<Value>(context,
-                    info,
-                    env->issuer_string(),
-                    GetX509NameObject<X509_get_issuer_name>(env, cert))) {
-      return MaybeLocal<Object>();
-    }
-  }
-
   if (!Set<Value>(context,
+                  info,
+                  env->subject_string(),
+                  GetX509NameObject<X509_get_subject_name>(env, cert)) ||
+      !Set<Value>(context,
+                  info,
+                  env->issuer_string(),
+                  GetX509NameObject<X509_get_issuer_name>(env, cert)) ||
+      !Set<Value>(context,
                   info,
                   env->subjectaltname_string(),
                   GetSubjectAltNameString(env, bio, cert)) ||

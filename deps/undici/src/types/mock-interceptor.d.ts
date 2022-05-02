@@ -44,12 +44,12 @@ declare namespace MockInterceptor {
   export interface Options {
     /** Path to intercept on. */
     path: string | RegExp | ((path: string) => boolean);
-    /** Method to intercept on. */
-    method: string | RegExp | ((method: string) => boolean);
+    /** Method to intercept on. Defaults to GET. */
+    method?: string | RegExp | ((method: string) => boolean);
     /** Body to intercept on. */
     body?: string | RegExp | ((body: string) => boolean);
     /** Headers to intercept on. */
-    headers?: Record<string, string | RegExp | ((body: string) => boolean)>;
+    headers?: Record<string, string | RegExp | ((body: string) => boolean)> | ((headers: Record<string, string>) => boolean);
   }
   export interface MockDispatch<TData extends object = object, TError extends Error = Error> extends Options {
     times: number | null;

@@ -1182,7 +1182,9 @@ This API throws a JavaScript `RangeError` with the text provided.
 #### `node_api_throw_syntax_error`
 
 <!-- YAML
-added: v17.2.0
+added:
+  - v17.2.0
+  - v16.14.0
 -->
 
 ````c
@@ -1298,7 +1300,9 @@ This API returns a JavaScript `RangeError` with the text provided.
 #### `node_api_create_syntax_error`
 
 <!-- YAML
-added: v17.2.0
+added:
+  - v17.2.0
+  - v16.14.0
 -->
 
 ```c
@@ -5118,6 +5122,11 @@ _Caution_: The optional returned reference (if obtained) should be deleted via
 invocation. If it is deleted before then, then the finalize callback may never
 be invoked. Therefore, when obtaining a reference a finalize callback is also
 required in order to enable correct disposal of the reference.
+
+Finalizer callbacks may be deferred, leaving a window where the object has
+been garbage collected (and the weak reference is invalid) but the finalizer
+hasn't been called yet. When using `napi_get_reference_value()` on weak
+references returned by `napi_wrap()`, you should still handle an empty result.
 
 Calling `napi_wrap()` a second time on an object will return an error. To
 associate another native instance with the object, use `napi_remove_wrap()`

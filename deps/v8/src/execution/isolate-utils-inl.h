@@ -86,15 +86,37 @@ V8_INLINE bool GetIsolateFromHeapObject(HeapObject object, Isolate** isolate) {
 #endif  // V8_COMPRESS_POINTERS_IN_ISOLATE_CAGE, V8_ENABLE_THIRD_PARTY_HEAP
 }
 
-// Use this function instead of Internals::GetIsolateForHeapSandbox for internal
+// Use this function instead of Internals::GetIsolateForSandbox for internal
 // code, as this function is fully inlinable.
-V8_INLINE static Isolate* GetIsolateForHeapSandbox(HeapObject object) {
-#ifdef V8_HEAP_SANDBOX
+V8_INLINE static Isolate* GetIsolateForSandbox(HeapObject object) {
+#ifdef V8_SANDBOXED_EXTERNAL_POINTERS
   return GetIsolateFromWritableObject(object);
 #else
   // Not used in non-sandbox mode.
   return nullptr;
 #endif
+}
+
+// This is an external code space friendly version of GetPtrComprCageBase(..)
+// which also works for objects located in external code space.
+//
+// NOTE: it's supposed to be used only for the cases where performance doesn't
+// matter. For example, in debug only code or in debugging macros.
+// In production code the preferred way is to use precomputed cage base value
+// which is a result of PtrComprCageBase{isolate} or GetPtrComprCageBase()
+// applied to a heap object which is known to not be a part of external code
+// space.
+V8_INLINE PtrComprCageBase GetPtrComprCageBaseSlow(HeapObject object) {
+  if (V8_EXTERNAL_CODE_SPACE_BOOL) {
+    Isolate* isolate;
+    if (GetIsolateFromHeapObject(object, &isolate)) {
+      return PtrComprCageBase{isolate};
+    }
+    // If the Isolate can't be obtained then the heap object is a read-only
+    // one and therefore not a Code object, so fallback to auto-computing cage
+    // base value.
+  }
+  return GetPtrComprCageBase(object);
 }
 
 }  // namespace internal

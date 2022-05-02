@@ -463,6 +463,9 @@ An alias of [`assert.ok()`][].
 <!-- YAML
 added: v0.1.21
 changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41020
+    description: Regular expressions lastIndex property is now compared as well.
   - version:
       - v16.0.0
       - v14.18.0
@@ -537,6 +540,8 @@ are also recursively evaluated by the following rules.
   objects.
 * [`Symbol`][] properties are not compared.
 * [`WeakMap`][] and [`WeakSet`][] comparison does not rely on their values.
+* [`RegExp`][] lastIndex, flags and source are always compared, even if these
+  are not enumerable properties.
 
 The following example does not throw an [`AssertionError`][] because the
 primitives are compared using the [`==` operator][].
@@ -639,6 +644,9 @@ parameter is an instance of an [`Error`][] then it will be thrown instead of the
 <!-- YAML
 added: v1.2.0
 changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41020
+    description: Regular expressions lastIndex property is now compared as well.
   - version: v9.0.0
     pr-url: https://github.com/nodejs/node/pull/15169
     description: Enumerable symbol properties are now compared.
@@ -693,6 +701,8 @@ are recursively evaluated also by the following rules.
   reference.
 * [`WeakMap`][] and [`WeakSet`][] comparison does not rely on their values. See
   below for further details.
+* [`RegExp`][] lastIndex, flags and source are always compared, even if these
+  are not enumerable properties.
 
 ```mjs
 import assert from 'assert/strict';

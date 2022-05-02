@@ -1120,7 +1120,9 @@ The [debugger][] timed out waiting for the required host/port to be free.
 ### `ERR_DLOPEN_DISABLED`
 
 <!-- YAML
-added: v16.10.0
+added:
+  - v16.10.0
+  - v14.19.0
 -->
 
 Loading native addons has been disabled using [`--no-addons`][].
@@ -1697,7 +1699,9 @@ An attempt was made to construct an object using a non-public constructor.
 ### `ERR_IMPORT_ASSERTION_TYPE_FAILED`
 
 <!-- YAML
-added: v17.1.0
+added:
+  - v17.1.0
+  - v16.14.0
 -->
 
 An import assertion has failed, preventing the specified module to be imported.
@@ -1707,7 +1711,9 @@ An import assertion has failed, preventing the specified module to be imported.
 ### `ERR_IMPORT_ASSERTION_TYPE_MISSING`
 
 <!-- YAML
-added: v17.1.0
+added:
+  - v17.1.0
+  - v16.14.0
 -->
 
 An import assertion is missing, preventing the specified module to be imported.
@@ -1717,7 +1723,9 @@ An import assertion is missing, preventing the specified module to be imported.
 ### `ERR_IMPORT_ASSERTION_TYPE_UNSUPPORTED`
 
 <!-- YAML
-added: v17.1.0
+added:
+  - v17.1.0
+  - v16.14.0
 -->
 
 An import assertion is not supported by this version of Node.js.
@@ -1831,12 +1839,6 @@ less than -1 should never happen.
 A swap was performed on a `Buffer` but its size was not compatible with the
 operation.
 
-<a id="ERR_INVALID_CALLBACK"></a>
-
-### `ERR_INVALID_CALLBACK`
-
-A callback function was required but was not been provided to a Node.js API.
-
 <a id="ERR_INVALID_CHAR"></a>
 
 ### `ERR_INVALID_CHAR`
@@ -1918,6 +1920,13 @@ valid.
 
 The imported module string is an invalid URL, package name, or package subpath
 specifier.
+
+<a id="ERR_INVALID_OBJECT_DEFINE_PROPERTY"></a>
+
+### `ERR_INVALID_OBJECT_DEFINE_PROPERTY`
+
+An error occurred while setting an invalid attribute on the property of
+an object.
 
 <a id="ERR_INVALID_PACKAGE_CONFIG"></a>
 
@@ -2549,6 +2558,14 @@ An unspecified or non-specific system error has occurred within the Node.js
 process. The error object will have an `err.info` object property with
 additional details.
 
+<a id="ERR_TEST_FAILURE"></a>
+
+### `ERR_TEST_FAILURE`
+
+This error represents a failed test. Additional information about the failure
+is available via the `cause` property. The `failureType` property specifies
+what the test was doing when the failure occurred.
+
 <a id="ERR_TLS_CERT_ALTNAME_FORMAT"></a>
 
 ### `ERR_TLS_CERT_ALTNAME_FORMAT`
@@ -2784,6 +2801,14 @@ import 'package-name'; // supported
 ### `ERR_UNSUPPORTED_ESM_URL_SCHEME`
 
 `import` with URL schemes other than `file` and `data` is unsupported.
+
+<a id="ERR_USE_AFTER_CLOSE"></a>
+
+### `ERR_USE_AFTER_CLOSE`
+
+> Stability: 1 - Experimental
+
+An attempt was made to use something that was already closed.
 
 <a id="ERR_VALID_PERFORMANCE_ENTRY_TYPE"></a>
 

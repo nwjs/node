@@ -7,11 +7,14 @@
 <!-- YAML
 added: v8.5.0
 changes:
-  - version: v17.1.0
+  - version:
+    - v17.1.0
+    - v16.14.0
     pr-url: https://github.com/nodejs/node/pull/40250
     description: Add support for import assertions.
   - version:
     - v17.0.0
+    - v16.12.0
     pr-url: https://github.com/nodejs/node/pull/37468
     description:
       Consolidate loader hooks, removed `getFormat`, `getSource`,
@@ -175,7 +178,7 @@ The volume root may be referenced via `/`, `//` or `file:///`. Given the
 differences between [URL][] and path resolution (such as percent encoding
 details), it is recommended to use [url.pathToFileURL][] when importing a path.
 
-#### `data:` Imports
+#### `data:` imports
 
 <!-- YAML
 added: v12.10.0
@@ -183,24 +186,23 @@ added: v12.10.0
 
 [`data:` URLs][] are supported for importing with the following MIME types:
 
-* `text/javascript` for ES Modules
+* `text/javascript` for ES modules
 * `application/json` for JSON
 * `application/wasm` for Wasm
 
-`data:` URLs only resolve [_Bare specifiers_][Terminology] for builtin modules
-and [_Absolute specifiers_][Terminology]. Resolving
-[_Relative specifiers_][Terminology] does not work because `data:` is not a
-[special scheme][]. For example, attempting to load `./foo`
-from `data:text/javascript,import "./foo";` fails to resolve because there
-is no concept of relative resolution for `data:` URLs. An example of a `data:`
-URLs being used is:
-
 ```js
 import 'data:text/javascript,console.log("hello!");';
-import _ from 'data:application/json,"world!"';
+import _ from 'data:application/json,"world!"' assert { type: 'json' };
 ```
 
-#### `node:` Imports
+`data:` URLs only resolve [bare specifiers][Terminology] for builtin modules
+and [absolute specifiers][Terminology]. Resolving
+[relative specifiers][Terminology] does not work because `data:` is not a
+[special scheme][]. For example, attempting to load `./foo`
+from `data:text/javascript,import "./foo";` fails to resolve because there
+is no concept of relative resolution for `data:` URLs.
+
+#### `node:` imports
 
 <!-- YAML
 added:
@@ -225,7 +227,9 @@ import fs from 'node:fs/promises';
 ## Import assertions
 
 <!-- YAML
-added: v17.1.0
+added:
+  - v17.1.0
+  - v16.14.0
 -->
 
 > Stability: 1 - Experimental
@@ -688,7 +692,9 @@ won't apply to `require` calls; those still follow [CommonJS][] rules.
 
 <!-- YAML
 changes:
-  - version: v17.1.0
+  - version:
+    - v17.1.0
+    - v16.14.0
     pr-url: https://github.com/nodejs/node/pull/40250
     description: Add support for import assertions.
 -->

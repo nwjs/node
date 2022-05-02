@@ -531,6 +531,30 @@ When `performanceEntry.type` is equal to `'function'`, the
 `performanceEntry.detail` property will be an {Array} listing
 the input arguments to the timed function.
 
+### Net ('net') Details
+
+When `performanceEntry.type` is equal to `'net'`, the
+`performanceEntry.detail` property will be an {Object} containing
+additional information.
+
+If `performanceEntry.name` is equal to `connect`, the `detail`
+will contain the following properties: `host`, `port`.
+
+### DNS ('dns') Details
+
+When `performanceEntry.type` is equal to `'dns'`, the
+`performanceEntry.detail` property will be an {Object} containing
+additional information.
+
+If `performanceEntry.name` is equal to `lookup`, the `detail`
+will contain the following properties: `hostname`, `family`, `hints`, `verbatim`.
+
+If `performanceEntry.name` is equal to `lookupService`, the `detail` will
+contain the following properties: `host`, `port`.
+
+If `performanceEntry.name` is equal to `queryxxx` or `getHostByAddr`, the `detail` will
+contain the following properties: `host`, `ttl`.
+
 ## Class: `PerformanceNodeTiming`
 
 <!-- YAML
@@ -635,6 +659,12 @@ initialized.
 
 <!-- YAML
 added: v8.5.0
+changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41678
+    description: Passing an invalid callback to the `callback` argument
+                 now throws `ERR_INVALID_ARG_TYPE` instead of
+                 `ERR_INVALID_CALLBACK`.
 -->
 
 * `callback` {Function}
@@ -898,7 +928,7 @@ added:
   * `lowest` {number|bigint} The lowest discernible value. Must be an integer
     value greater than 0. **Default:** `1`.
   * `highest` {number|bigint} The highest recordable value. Must be an integer
-    value that is equal to or greater than two times `min`.
+    value that is equal to or greater than two times `lowest`.
     **Default:** `Number.MAX_SAFE_INTEGER`.
   * `figures` {number} The number of accuracy digits. Must be a number between
     `1` and `5`. **Default:** `3`.
@@ -952,7 +982,9 @@ added: v11.10.0
 ### `histogram.count`
 
 <!-- YAML
-added: v17.4.0
+added:
+  - v17.4.0
+  - v16.14.0
 -->
 
 * {number}
@@ -962,7 +994,9 @@ The number of samples recorded by the histogram.
 ### `histogram.countBigInt`
 
 <!-- YAML
-added: v17.4.0
+added:
+  - v17.4.0
+  - v16.14.0
 -->
 
 * {bigint}
@@ -983,7 +1017,9 @@ loop delay threshold.
 ### `histogram.exceedsBigInt`
 
 <!-- YAML
-added: v17.4.0
+added:
+  - v17.4.0
+  - v16.14.0
 -->
 
 * {bigint}
@@ -1004,7 +1040,9 @@ The maximum recorded event loop delay.
 ### `histogram.maxBigInt`
 
 <!-- YAML
-added: v17.4.0
+added:
+  - v17.4.0
+  - v16.14.0
 -->
 
 * {bigint}
@@ -1034,7 +1072,9 @@ The minimum recorded event loop delay.
 ### `histogram.minBigInt`
 
 <!-- YAML
-added: v17.4.0
+added:
+  - v17.4.0
+  - v16.14.0
 -->
 
 * {bigint}
@@ -1055,7 +1095,9 @@ Returns the value at the given percentile.
 ### `histogram.percentileBigInt(percentile)`
 
 <!-- YAML
-added: v17.4.0
+added:
+  - v17.4.0
+  - v16.14.0
 -->
 
 * `percentile` {number} A percentile value in the range (0, 100].
@@ -1076,7 +1118,9 @@ Returns a `Map` object detailing the accumulated percentile distribution.
 ### `histogram.percentilesBigInt`
 
 <!-- YAML
-added: v17.4.0
+added:
+  - v17.4.0
+  - v16.14.0
 -->
 
 * {Map}
@@ -1144,7 +1188,9 @@ added:
 ### `histogram.add(other)`
 
 <!-- YAML
-added: v17.4.0
+added:
+  - v17.4.0
+  - v16.14.0
 -->
 
 * `other` {RecordableHistogram}
@@ -1282,6 +1328,42 @@ http.createServer((req, res) => {
 }).listen(PORT, () => {
   http.get(`http://127.0.0.1:${PORT}`);
 });
+```
+
+### Measuring how long the `net.connect` (only for TCP) takes when the connection is successful
+
+```js
+'use strict';
+const { PerformanceObserver } = require('perf_hooks');
+const net = require('net');
+const obs = new PerformanceObserver((items) => {
+  items.getEntries().forEach((item) => {
+    console.log(item);
+  });
+});
+obs.observe({ entryTypes: ['net'] });
+const PORT = 8080;
+net.createServer((socket) => {
+  socket.destroy();
+}).listen(PORT, () => {
+  net.connect(PORT);
+});
+```
+
+### Measuring how long the DNS takes when the request is successful
+
+```js
+'use strict';
+const { PerformanceObserver } = require('perf_hooks');
+const dns = require('dns');
+const obs = new PerformanceObserver((items) => {
+  items.getEntries().forEach((item) => {
+    console.log(item);
+  });
+});
+obs.observe({ entryTypes: ['dns'] });
+dns.lookup('localhost', () => {});
+dns.promises.resolve('localhost');
 ```
 
 [Async Hooks]: async_hooks.md

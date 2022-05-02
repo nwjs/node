@@ -325,9 +325,8 @@ JSTypeHintLowering::LoweringResult JSTypeHintLowering::ReduceUnaryOperation(
       if (!node) {
         if (jsgraph()->machine()->Is64()) {
           if (GetBinaryOperationHint(slot) == BinaryOperationHint::kBigInt) {
-            const Operator* op =
-                jsgraph()->simplified()->SpeculativeBigIntNegate(
-                    BigIntOperationHint::kBigInt);
+            op = jsgraph()->simplified()->SpeculativeBigIntNegate(
+                BigIntOperationHint::kBigInt);
             node = jsgraph()->graph()->NewNode(op, operand, effect, control);
           }
         }
@@ -536,8 +535,8 @@ JSTypeHintLowering::ReduceStoreNamedOperation(const Operator* op, Node* obj,
                                               Node* val, Node* effect,
                                               Node* control,
                                               FeedbackSlot slot) const {
-  DCHECK(op->opcode() == IrOpcode::kJSStoreNamed ||
-         op->opcode() == IrOpcode::kJSStoreNamedOwn);
+  DCHECK(op->opcode() == IrOpcode::kJSSetNamedProperty ||
+         op->opcode() == IrOpcode::kJSDefineNamedOwnProperty);
   if (Node* node = TryBuildSoftDeopt(
           slot, effect, control,
           DeoptimizeReason::kInsufficientTypeFeedbackForGenericNamedAccess)) {
@@ -551,9 +550,10 @@ JSTypeHintLowering::ReduceStoreKeyedOperation(const Operator* op, Node* obj,
                                               Node* key, Node* val,
                                               Node* effect, Node* control,
                                               FeedbackSlot slot) const {
-  DCHECK(op->opcode() == IrOpcode::kJSStoreProperty ||
+  DCHECK(op->opcode() == IrOpcode::kJSSetKeyedProperty ||
          op->opcode() == IrOpcode::kJSStoreInArrayLiteral ||
-         op->opcode() == IrOpcode::kJSStoreDataPropertyInLiteral);
+         op->opcode() == IrOpcode::kJSDefineKeyedOwnPropertyInLiteral ||
+         op->opcode() == IrOpcode::kJSDefineKeyedOwnProperty);
   if (Node* node = TryBuildSoftDeopt(
           slot, effect, control,
           DeoptimizeReason::kInsufficientTypeFeedbackForGenericKeyedAccess)) {

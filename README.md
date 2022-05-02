@@ -51,7 +51,7 @@ Looking for help? Check out the
 * **Nightly**: Code from the Current branch built every 24-hours when there are
   changes. Use with caution.
 
-Current and LTS releases follow [Semantic Versioning](https://semver.org). A
+Current and LTS releases follow [semantic versioning](https://semver.org). A
 member of the Release Team [signs](#release-keys) each Current and LTS release.
 For more information, see the
 [Release README](https://github.com/nodejs/Release#readme).
@@ -113,7 +113,7 @@ import the keys:
 $ gpg --keyserver hkps://keys.openpgp.org --recv-keys DD8F2338BAE7501E3DD5AC78C273792F7D83545D
 ```
 
-See the bottom of this README for a full script to import active release keys.
+See [Release keys](#release-keys) for a script to import active release keys.
 
 Next, download the `SHASUMS256.txt.sig` for the release:
 
@@ -286,8 +286,6 @@ For information about the governance of the Node.js project, see
   **Tierney Cyren** <<hello@bnb.im>> (they/he)
 * [bnoordhuis](https://github.com/bnoordhuis) -
   **Ben Noordhuis** <<info@bnoordhuis.nl>>
-* [boneskull](https://github.com/boneskull) -
-  **Christopher Hiller** <<boneskull@boneskull.com>> (he/him)
 * [BridgeAR](https://github.com/BridgeAR) -
   **Ruben Bridgewater** <<ruben@bridgewater.de>> (he/him)
 * [bzoz](https://github.com/bzoz) -
@@ -332,8 +330,6 @@ For information about the governance of the Node.js project, see
   **Guy Bedford** <<guybedford@gmail.com>> (he/him)
 * [HarshithaKP](https://github.com/HarshithaKP) -
   **Harshitha K P** <<harshitha014@gmail.com>> (she/her)
-* [hashseed](https://github.com/hashseed) -
-  **Yang Guo** <<yangguo@chromium.org>> (he/him)
 * [himself65](https://github.com/himself65) -
   **Zeyu Yang** <<himself65@outlook.com>> (he/him)
 * [hiroppy](https://github.com/hiroppy) -
@@ -374,6 +370,8 @@ For information about the governance of the Node.js project, see
   **Akhil Marsonya** <<akhil.marsonya27@gmail.com>> (he/him)
 * [mcollina](https://github.com/mcollina) -
   **Matteo Collina** <<matteo.collina@gmail.com>> (he/him)
+* [meixg](https://github.com/meixg) -
+  **Xuguang Mei** <<meixuguang@gmail.com>> (he/him)
 * [Mesteery](https://github.com/Mesteery) -
   **Mestery** <<mestery@protonmail.com>> (he/him)
 * [mhdawson](https://github.com/mhdawson) -
@@ -398,6 +396,8 @@ For information about the governance of the Node.js project, see
   **Andrey Pechkurov** <<apechkurov@gmail.com>> (he/him)
 * [Qard](https://github.com/Qard) -
   **Stephen Belanger** <<admin@stephenbelanger.com>> (he/him)
+* [RafaelGSS](https://github.com/RafaelGSS) -
+  **Rafael Gonzaga** <<rafael.nunu@hotmail.com>> (he/him)
 * [RaisinTen](https://github.com/RaisinTen) -
   **Darshan Sen** <<raisinten@gmail.com>> (he/him)
 * [rexagod](https://github.com/rexagod) -
@@ -470,6 +470,8 @@ For information about the governance of the Node.js project, see
   **Alexey Orlenko** <<eaglexrlnk@gmail.com>> (he/him)
 * [bmeurer](https://github.com/bmeurer) -
   **Benedikt Meurer** <<benedikt.meurer@gmail.com>>
+* [boneskull](https://github.com/boneskull) -
+  **Christopher Hiller** <<boneskull@boneskull.com>> (he/him)
 * [brendanashworth](https://github.com/brendanashworth) -
   **Brendan Ashworth** <<brendan.ashworth@me.com>>
 * [calvinmetcalf](https://github.com/calvinmetcalf) -
@@ -502,6 +504,8 @@ For information about the governance of the Node.js project, see
   **Gibson Fahnestock** <<gibfahn@gmail.com>> (he/him)
 * [glentiki](https://github.com/glentiki) -
   **Glen Keane** <<glenkeane.94@gmail.com>> (he/him)
+* [hashseed](https://github.com/hashseed) -
+  **Yang Guo** <<yangguo@chromium.org>> (he/him)
 * [iarna](https://github.com/iarna) -
   **Rebecca Turner** <<me@re-becca.org>>
 * [imran-iq](https://github.com/imran-iq) -
@@ -645,7 +649,7 @@ maintaining the Node.js project.
 * [marsonya](https://github.com/marsonya) -
   **Akhil Marsonya** <<akhil.marsonya27@gmail.com>> (he/him)
 * [meixg](https://github.com/meixg) -
-  **Xuguang Mei** <<meixg@foxmail.com>> (he/him)
+  **Xuguang Mei** <<meixuguang@gmail.com>> (he/him)
 * [Mesteery](https://github.com/Mesteery) -
   **Mestery** <<mestery@protonmail.com>> (he/him)
 * [PoojaDurgad](https://github.com/PoojaDurgad) -
@@ -702,8 +706,8 @@ gpg --keyserver hkps://keys.openpgp.org --recv-keys 108F52B48DB57BB0CC439B2997B0
 gpg --keyserver hkps://keys.openpgp.org --recv-keys B9E2F5981AA6E0CD28160D9FF13993A75599653C
 ```
 
-See the section above on [Verifying binaries](#verifying-binaries) for how to
-use these keys to verify a downloaded file.
+See [Verifying binaries](#verifying-binaries) for how to use these keys to
+verify a downloaded file.
 
 <details>
 

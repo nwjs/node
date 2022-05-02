@@ -13,6 +13,7 @@
     'openssl_quic': 'false',
     'node_shared_libuv': 'false',
     'node_no_browser_globals%': 'false',
+    'node_snapshot_main%': '',
     'node_use_node_snapshot': 'false',
     'node_use_v8_platform%': 'true',
     'force_dynamic_crt%': 0,
@@ -137,7 +138,10 @@
 'lib/internal/encoding.js',
 'lib/internal/priority_queue.js',
 'lib/internal/modules/package_json_reader.js',
+'lib/internal/modules/esm/fetch_module.js',
+'lib/internal/modules/esm/formats.js',
 'lib/internal/modules/esm/get_source.js',
+'lib/internal/modules/esm/handle_process_exit.js',
 'lib/internal/modules/esm/loader.js',
 'lib/internal/modules/esm/module_map.js',
 'lib/internal/modules/esm/resolve.js',
@@ -145,6 +149,9 @@
 'lib/internal/modules/esm/module_job.js',
 'lib/internal/modules/esm/get_format.js',
 'lib/internal/modules/esm/create_dynamic_module.js',
+'lib/internal/modules/esm/initialize_import_meta.js',
+'lib/internal/modules/esm/assert.js',
+'lib/internal/modules/esm/load.js',
 'lib/internal/modules/run_main.js',
 'lib/internal/modules/cjs/helpers.js',
 'lib/internal/modules/cjs/loader.js',
@@ -177,6 +184,8 @@
 'lib/internal/readline/utils.js',
 'lib/internal/readline/callbacks.js',
 'lib/internal/readline/emitKeypressEvents.js',
+'lib/internal/readline/promises.js',
+'lib/internal/readline/interface.js',
 'lib/internal/buffer.js',
 'lib/internal/webstreams/readablestream.js',
 'lib/internal/webstreams/transfer.js',
@@ -187,6 +196,7 @@
 'lib/internal/webstreams/transformstream.js',
 'lib/internal/vm/module.js',
 'lib/internal/idna.js',
+'lib/internal/bootstrap/browser.js',
 'lib/internal/bootstrap/loaders.js',
 'lib/internal/bootstrap/node.js',
 'lib/internal/bootstrap/pre_execution.js',
@@ -227,10 +237,10 @@
 'lib/internal/streams/transform.js',
 'lib/internal/streams/state.js',
 'lib/internal/streams/writable.js',
+'lib/internal/streams/operators.js',
 'lib/internal/dgram.js',
 'lib/internal/errors.js',
 'lib/internal/tls/secure-pair.js',
-'lib/internal/tls/parse-cert-string.js',
 'lib/internal/tls/secure-context.js',
 'lib/internal/freelist.js',
 'lib/internal/heap_utils.js',
@@ -250,6 +260,8 @@
 'lib/internal/timers.js',
 'lib/internal/freeze_intrinsics.js',
 'lib/internal/options.js',
+'lib/internal/promise_hooks.js',
+'lib/internal/structured_clone.js',
 'lib/string_decoder.js',
 'lib/_http_client.js',
 'lib/dns.js',
@@ -600,23 +612,47 @@
           'dependencies': [
             'node_mksnapshot',
           ],
-          'actions': [
-            {
-              'action_name': 'node_mksnapshot',
-              'process_outputs_as_sources': 1,
-              'inputs': [
-                '<(node_mksnapshot_exec)',
+          'conditions': [
+            ['node_snapshot_main!=""', {
+              'actions': [
+                {
+                  'action_name': 'node_mksnapshot',
+                  'process_outputs_as_sources': 1,
+                  'inputs': [
+                    '<(node_mksnapshot_exec)',
+                    '<(node_snapshot_main)',
+                  ],
+                  'outputs': [
+                    '<(SHARED_INTERMEDIATE_DIR)/node_snapshot.cc',
+                  ],
+                  'action': [
+                    '<(node_mksnapshot_exec)',
+                    '--build-snapshot',
+                    '<(node_snapshot_main)',
+                    '<@(_outputs)',
+                  ],
+                },
               ],
-              'outputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/node_snapshot.cc',
+            }, {
+              'actions': [
+                {
+                  'action_name': 'node_mksnapshot',
+                  'process_outputs_as_sources': 1,
+                  'inputs': [
+                    '<(node_mksnapshot_exec)',
+                  ],
+                  'outputs': [
+                    '<(SHARED_INTERMEDIATE_DIR)/node_snapshot.cc',
+                  ],
+                  'action': [
+                    '<@(_inputs)',
+                    '<@(_outputs)',
+                  ],
+                },
               ],
-              'action': [
-                '<@(_inputs)',
-                '<@(_outputs)',
-              ],
-            },
+            }],
           ],
-        }, {
+          }, {
           'sources': [
             'src/node_snapshot_stub.cc'
           ],

@@ -8,7 +8,9 @@
 #include <forward_list>
 #include <memory>
 
+#include "src/ast/ast-value-factory.h"
 #include "src/base/platform/elapsed-timer.h"
+#include "src/base/small-vector.h"
 #include "src/codegen/bailout-reason.h"
 #include "src/common/globals.h"
 #include "src/execution/isolate.h"
@@ -69,10 +71,16 @@ class V8_EXPORT_PRIVATE Compiler : public AllStatic {
 
   static bool Compile(Isolate* isolate, Handle<SharedFunctionInfo> shared,
                       ClearExceptionFlag flag,
-                      IsCompiledScope* is_compiled_scope);
+                      IsCompiledScope* is_compiled_scope,
+                      CreateSourcePositions create_source_positions_flag =
+                          CreateSourcePositions::kNo);
   static bool Compile(Isolate* isolate, Handle<JSFunction> function,
                       ClearExceptionFlag flag,
                       IsCompiledScope* is_compiled_scope);
+  static MaybeHandle<SharedFunctionInfo> CompileToplevel(
+      ParseInfo* parse_info, Handle<Script> script, Isolate* isolate,
+      IsCompiledScope* is_compiled_scope);
+
   static bool CompileSharedWithBaseline(Isolate* isolate,
                                         Handle<SharedFunctionInfo> shared,
                                         ClearExceptionFlag flag,
@@ -80,32 +88,28 @@ class V8_EXPORT_PRIVATE Compiler : public AllStatic {
   static bool CompileBaseline(Isolate* isolate, Handle<JSFunction> function,
                               ClearExceptionFlag flag,
                               IsCompiledScope* is_compiled_scope);
-  static bool CompileOptimized(Isolate* isolate, Handle<JSFunction> function,
-                               ConcurrencyMode mode, CodeKind code_kind);
-  static MaybeHandle<SharedFunctionInfo> CompileToplevel(
-      ParseInfo* parse_info, Handle<Script> script, Isolate* isolate,
-      IsCompiledScope* is_compiled_scope);
 
-  static void LogFunctionCompilation(Isolate* isolate,
-                                     CodeEventListener::LogEventsAndTags tag,
-                                     Handle<SharedFunctionInfo> shared,
-                                     Handle<Script> script,
-                                     Handle<AbstractCode> abstract_code,
-                                     CodeKind kind, double time_taken_ms);
+  static bool CompileMaglev(Isolate* isolate, Handle<JSFunction> function,
+                            ConcurrencyMode mode,
+                            IsCompiledScope* is_compiled_scope);
+
+  static void CompileOptimized(Isolate* isolate, Handle<JSFunction> function,
+                               ConcurrencyMode mode, CodeKind code_kind);
+
+  V8_WARN_UNUSED_RESULT static MaybeHandle<SharedFunctionInfo>
+  CompileForLiveEdit(ParseInfo* parse_info, Handle<Script> script,
+                     Isolate* isolate);
+
   // Collect source positions for a function that has already been compiled to
   // bytecode, but for which source positions were not collected (e.g. because
   // they were not immediately needed).
   static bool CollectSourcePositions(Isolate* isolate,
                                      Handle<SharedFunctionInfo> shared);
 
-  V8_WARN_UNUSED_RESULT static MaybeHandle<SharedFunctionInfo>
-  CompileForLiveEdit(ParseInfo* parse_info, Handle<Script> script,
-                     Isolate* isolate);
-
   // Finalize and install code from previously run background compile task.
-  static bool FinalizeBackgroundCompileTask(
-      BackgroundCompileTask* task, Handle<SharedFunctionInfo> shared_info,
-      Isolate* isolate, ClearExceptionFlag flag);
+  static bool FinalizeBackgroundCompileTask(BackgroundCompileTask* task,
+                                            Isolate* isolate,
+                                            ClearExceptionFlag flag);
 
   // Finalize and install optimized code from previously run job.
   static bool FinalizeOptimizedCompilationJob(OptimizedCompilationJob* job,
@@ -130,7 +134,9 @@ class V8_EXPORT_PRIVATE Compiler : public AllStatic {
       Handle<String> source, Handle<SharedFunctionInfo> outer_info,
       Handle<Context> context, LanguageMode language_mode,
       ParseRestriction restriction, int parameters_end_pos,
-      int eval_scope_position, int eval_position);
+      int eval_scope_position, int eval_position,
+      ParsingWhileDebugging parsing_while_debugging =
+          ParsingWhileDebugging::kNo);
 
   // Create a function that results from wrapping |source| in a function,
   // with |arguments| being a list of parameters for that function.
@@ -207,6 +213,9 @@ class V8_EXPORT_PRIVATE Compiler : public AllStatic {
       Isolate* isolate, Handle<String> source,
       const ScriptDetails& script_details, ScriptStreamingData* streaming_data);
 
+  static Handle<SharedFunctionInfo> GetSharedFunctionInfoForWebSnapshot(
+      Isolate* isolate, Handle<String> source, MaybeHandle<Object> script_name);
+
   // Create a shared function info object for the given function literal
   // node (the code may be lazily compiled).
   template <typename IsolateT>
@@ -224,7 +233,7 @@ class V8_EXPORT_PRIVATE Compiler : public AllStatic {
   // instead of generating JIT code for a function at all.
 
   // Generate and return optimized code for OSR, or empty handle on failure.
-  V8_WARN_UNUSED_RESULT static MaybeHandle<Code> GetOptimizedCodeForOSR(
+  V8_WARN_UNUSED_RESULT static MaybeHandle<CodeT> GetOptimizedCodeForOSR(
       Isolate* isolate, Handle<JSFunction> function, BytecodeOffset osr_offset,
       JavaScriptFrame* osr_frame);
 };
@@ -489,8 +498,7 @@ using DeferredFinalizationJobDataList =
 class V8_EXPORT_PRIVATE BackgroundCompileTask {
  public:
   // Creates a new task that when run will parse and compile the streamed
-  // script associated with |data| and can be finalized with
-  // Compiler::GetSharedFunctionInfoForStreamedScript.
+  // script associated with |data| and can be finalized with FinalizeScript.
   // Note: does not take ownership of |data|.
   BackgroundCompileTask(ScriptStreamingData* data, Isolate* isolate,
                         v8::ScriptType type);
@@ -498,77 +506,60 @@ class V8_EXPORT_PRIVATE BackgroundCompileTask {
   BackgroundCompileTask& operator=(const BackgroundCompileTask&) = delete;
   ~BackgroundCompileTask();
 
-  // Creates a new task that when run will parse and compile the
-  // |function_literal| and can be finalized with
+  // Creates a new task that when run will parse and compile the top-level
+  // |shared_info| and can be finalized with FinalizeFunction in
   // Compiler::FinalizeBackgroundCompileTask.
   BackgroundCompileTask(
-      const ParseInfo* outer_parse_info, const AstRawString* function_name,
-      const FunctionLiteral* function_literal,
+      Isolate* isolate, Handle<SharedFunctionInfo> shared_info,
+      std::unique_ptr<Utf16CharacterStream> character_stream,
       WorkerThreadRuntimeCallStats* worker_thread_runtime_stats,
       TimedHistogram* timer, int max_stack_size);
 
   void Run();
+  void RunOnMainThread(Isolate* isolate);
+  void Run(LocalIsolate* isolate,
+           ReusableUnoptimizedCompileState* reusable_state);
 
-  ParseInfo* info() {
-    DCHECK_NOT_NULL(info_);
-    return info_.get();
-  }
-  Parser* parser() { return parser_.get(); }
-  UnoptimizedCompilationJobList* compilation_jobs() {
-    return &compilation_jobs_;
-  }
+  MaybeHandle<SharedFunctionInfo> FinalizeScript(
+      Isolate* isolate, Handle<String> source,
+      const ScriptDetails& script_details);
+
+  bool FinalizeFunction(Isolate* isolate, Compiler::ClearExceptionFlag flag);
+
+  void AbortFunction();
+
   UnoptimizedCompileFlags flags() const { return flags_; }
-  UnoptimizedCompileState* compile_state() { return &compile_state_; }
-  LanguageMode language_mode() { return language_mode_; }
-  FinalizeUnoptimizedCompilationDataList*
-  finalize_unoptimized_compilation_data() {
-    return &finalize_unoptimized_compilation_data_;
-  }
-
-  // Jobs which could not be finalized in the background task, and need to be
-  // finalized on the main thread.
-  DeferredFinalizationJobDataList* jobs_to_retry_finalization_on_main_thread() {
-    return &jobs_to_retry_finalization_on_main_thread_;
-  }
-
-  // Getters for the off-thread finalization results, that create main-thread
-  // handles to the objects.
-  MaybeHandle<SharedFunctionInfo> GetOuterFunctionSfi(Isolate* isolate);
-  Handle<Script> GetScript(Isolate* isolate);
 
  private:
-  // Data needed for parsing, and data needed to to be passed between thread
-  // between parsing and compilation. These need to be initialized before the
-  // compilation starts.
+  void ReportStatistics(Isolate* isolate);
+
+  void ClearFunctionJobPointer();
+
+  // Data needed for parsing and compilation. These need to be initialized
+  // before the compilation starts.
+  Isolate* isolate_for_local_isolate_;
   UnoptimizedCompileFlags flags_;
   UnoptimizedCompileState compile_state_;
-  std::unique_ptr<ParseInfo> info_;
-  std::unique_ptr<Parser> parser_;
-
-  // Data needed for finalizing compilation after background compilation.
-  UnoptimizedCompilationJobList compilation_jobs_;
+  std::unique_ptr<Utf16CharacterStream> character_stream_;
+  int stack_size_;
+  WorkerThreadRuntimeCallStats* worker_thread_runtime_call_stats_;
+  TimedHistogram* timer_;
 
   // Data needed for merging onto the main thread after background finalization.
-  // TODO(leszeks): When these are available, the above fields are not. We
-  // should add some stricter type-safety or DCHECKs to ensure that the user of
-  // the task knows this.
-  Isolate* isolate_for_local_isolate_;
   std::unique_ptr<PersistentHandles> persistent_handles_;
   MaybeHandle<SharedFunctionInfo> outer_function_sfi_;
   Handle<Script> script_;
   IsCompiledScope is_compiled_scope_;
   FinalizeUnoptimizedCompilationDataList finalize_unoptimized_compilation_data_;
   DeferredFinalizationJobDataList jobs_to_retry_finalization_on_main_thread_;
+  base::SmallVector<v8::Isolate::UseCounterFeature, 8> use_counts_;
+  int total_preparse_skipped_ = 0;
 
   // Single function data for top-level function compilation.
+  MaybeHandle<SharedFunctionInfo> input_shared_info_;
   int start_position_;
   int end_position_;
   int function_literal_id_;
-
-  int stack_size_;
-  WorkerThreadRuntimeCallStats* worker_thread_runtime_call_stats_;
-  TimedHistogram* timer_;
-  LanguageMode language_mode_;
 };
 
 // Contains all data which needs to be transmitted between threads for

@@ -6,9 +6,11 @@
 
 #include "src/base/platform/platform.h"
 #include "src/base/platform/wrappers.h"
+#include "src/common/globals.h"
 #include "src/heap/code-object-registry.h"
 #include "src/heap/memory-allocator.h"
 #include "src/heap/memory-chunk-inl.h"
+#include "src/heap/memory-chunk-layout.h"
 #include "src/heap/spaces.h"
 #include "src/objects/heap-object.h"
 
@@ -93,10 +95,9 @@ void MemoryChunk::SetCodeModificationPermissions() {
     // We may use RWX pages to write code. Some CPUs have optimisations to push
     // updates to code to the icache through a fast path, and they may filter
     // updates based on the written memory being executable.
-    CHECK(reservation_.SetPermissions(unprotect_start, unprotect_size,
-                                      FLAG_write_code_using_rwx
-                                          ? PageAllocator::kReadWriteExecute
-                                          : PageAllocator::kReadWrite));
+    CHECK(reservation_.SetPermissions(
+        unprotect_start, unprotect_size,
+        MemoryChunk::GetCodeModificationPermission()));
   }
 }
 
@@ -118,11 +119,14 @@ PageAllocator::Permission DefaultWritableCodePermissions() {
 }  // namespace
 
 MemoryChunk* MemoryChunk::Initialize(BasicMemoryChunk* basic_chunk, Heap* heap,
-                                     Executability executable) {
+                                     Executability executable,
+                                     PageSize page_size) {
   MemoryChunk* chunk = static_cast<MemoryChunk*>(basic_chunk);
 
   base::AsAtomicPointer::Release_Store(&chunk->slot_set_[OLD_TO_NEW], nullptr);
   base::AsAtomicPointer::Release_Store(&chunk->slot_set_[OLD_TO_OLD], nullptr);
+  base::AsAtomicPointer::Release_Store(&chunk->slot_set_[OLD_TO_SHARED],
+                                       nullptr);
   if (V8_EXTERNAL_CODE_SPACE_BOOL) {
     base::AsAtomicPointer::Release_Store(&chunk->slot_set_[OLD_TO_CODE],
                                          nullptr);
@@ -131,6 +135,8 @@ MemoryChunk* MemoryChunk::Initialize(BasicMemoryChunk* basic_chunk, Heap* heap,
   base::AsAtomicPointer::Release_Store(&chunk->typed_slot_set_[OLD_TO_NEW],
                                        nullptr);
   base::AsAtomicPointer::Release_Store(&chunk->typed_slot_set_[OLD_TO_OLD],
+                                       nullptr);
+  base::AsAtomicPointer::Release_Store(&chunk->typed_slot_set_[OLD_TO_SHARED],
                                        nullptr);
   chunk->invalidated_slots_[OLD_TO_NEW] = nullptr;
   chunk->invalidated_slots_[OLD_TO_OLD] = nullptr;
@@ -177,6 +183,15 @@ MemoryChunk* MemoryChunk::Initialize(BasicMemoryChunk* basic_chunk, Heap* heap,
 
   chunk->possibly_empty_buckets_.Initialize();
 
+  if (page_size == PageSize::kRegular) {
+    chunk->active_system_pages_.Init(MemoryChunkLayout::kMemoryChunkHeaderSize,
+                                     MemoryAllocator::GetCommitPageSizeBits(),
+                                     chunk->size());
+  } else {
+    // We do not track active system pages for large pages.
+    chunk->active_system_pages_.Clear();
+  }
+
   // All pages of a shared heap need to be marked with this flag.
   if (heap->IsShared()) chunk->SetFlag(IN_SHARED_HEAP);
 
@@ -192,9 +207,8 @@ MemoryChunk* MemoryChunk::Initialize(BasicMemoryChunk* basic_chunk, Heap* heap,
 }
 
 size_t MemoryChunk::CommittedPhysicalMemory() {
-  if (!base::OS::HasLazyCommits() || owner_identity() == LO_SPACE)
-    return size();
-  return high_water_mark_;
+  if (!base::OS::HasLazyCommits() || IsLargePage()) return size();
+  return active_system_pages_.Size(MemoryAllocator::GetCommitPageSizeBits());
 }
 
 void MemoryChunk::SetOldGenerationPageFlags(bool is_marking) {
@@ -260,6 +274,8 @@ void MemoryChunk::ReleaseAllAllocatedMemory() {
 
 template V8_EXPORT_PRIVATE SlotSet* MemoryChunk::AllocateSlotSet<OLD_TO_NEW>();
 template V8_EXPORT_PRIVATE SlotSet* MemoryChunk::AllocateSlotSet<OLD_TO_OLD>();
+template V8_EXPORT_PRIVATE SlotSet*
+MemoryChunk::AllocateSlotSet<OLD_TO_SHARED>();
 #ifdef V8_EXTERNAL_CODE_SPACE
 template V8_EXPORT_PRIVATE SlotSet* MemoryChunk::AllocateSlotSet<OLD_TO_CODE>();
 #endif  // V8_EXTERNAL_CODE_SPACE
@@ -287,6 +303,7 @@ SlotSet* MemoryChunk::AllocateSlotSet(SlotSet** slot_set) {
 
 template void MemoryChunk::ReleaseSlotSet<OLD_TO_NEW>();
 template void MemoryChunk::ReleaseSlotSet<OLD_TO_OLD>();
+template void MemoryChunk::ReleaseSlotSet<OLD_TO_SHARED>();
 #ifdef V8_EXTERNAL_CODE_SPACE
 template void MemoryChunk::ReleaseSlotSet<OLD_TO_CODE>();
 #endif  // V8_EXTERNAL_CODE_SPACE
@@ -309,6 +326,7 @@ void MemoryChunk::ReleaseSlotSet(SlotSet** slot_set) {
 
 template TypedSlotSet* MemoryChunk::AllocateTypedSlotSet<OLD_TO_NEW>();
 template TypedSlotSet* MemoryChunk::AllocateTypedSlotSet<OLD_TO_OLD>();
+template TypedSlotSet* MemoryChunk::AllocateTypedSlotSet<OLD_TO_SHARED>();
 
 template <RememberedSetType type>
 TypedSlotSet* MemoryChunk::AllocateTypedSlotSet() {
@@ -325,6 +343,7 @@ TypedSlotSet* MemoryChunk::AllocateTypedSlotSet() {
 
 template void MemoryChunk::ReleaseTypedSlotSet<OLD_TO_NEW>();
 template void MemoryChunk::ReleaseTypedSlotSet<OLD_TO_OLD>();
+template void MemoryChunk::ReleaseTypedSlotSet<OLD_TO_SHARED>();
 
 template <RememberedSetType type>
 void MemoryChunk::ReleaseTypedSlotSet() {
@@ -390,7 +409,7 @@ void MemoryChunk::InvalidateRecordedSlots(HeapObject object) {
     RegisterObjectWithInvalidatedSlots<OLD_TO_OLD>(object);
   }
 
-  if (!FLAG_always_promote_young_mc || slot_set_[OLD_TO_NEW] != nullptr)
+  if (slot_set_[OLD_TO_NEW] != nullptr)
     RegisterObjectWithInvalidatedSlots<OLD_TO_NEW>(object);
 }
 

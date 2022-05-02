@@ -24,6 +24,7 @@
 #include "src/codegen/macro-assembler-inl.h"
 #include "src/common/globals.h"
 #include "src/execution/frame-constants.h"
+#include "src/heap/local-factory-inl.h"
 #include "src/interpreter/bytecode-array-iterator.h"
 #include "src/interpreter/bytecode-flags.h"
 #include "src/logging/runtime-call-stats-scope.h"
@@ -42,6 +43,10 @@
 #include "src/baseline/ia32/baseline-compiler-ia32-inl.h"
 #elif V8_TARGET_ARCH_ARM
 #include "src/baseline/arm/baseline-compiler-arm-inl.h"
+#elif V8_TARGET_ARCH_PPC64
+#include "src/baseline/ppc/baseline-compiler-ppc-inl.h"
+#elif V8_TARGET_ARCH_S390X
+#include "src/baseline/s390/baseline-compiler-s390-inl.h"
 #elif V8_TARGET_ARCH_RISCV64
 #include "src/baseline/riscv64/baseline-compiler-riscv64-inl.h"
 #elif V8_TARGET_ARCH_MIPS64
@@ -243,43 +248,33 @@ namespace {
 // than pre-allocating a large enough buffer.
 #ifdef V8_TARGET_ARCH_IA32
 const int kAverageBytecodeToInstructionRatio = 5;
-const int kMinimumEstimatedInstructionSize = 200;
 #else
 const int kAverageBytecodeToInstructionRatio = 7;
-const int kMinimumEstimatedInstructionSize = 300;
 #endif
 std::unique_ptr<AssemblerBuffer> AllocateBuffer(
-    Isolate* isolate, Handle<BytecodeArray> bytecodes,
-    BaselineCompiler::CodeLocation code_location) {
+    Handle<BytecodeArray> bytecodes) {
   int estimated_size;
   {
     DisallowHeapAllocation no_gc;
     estimated_size = BaselineCompiler::EstimateInstructionSize(*bytecodes);
-  }
-  Heap* heap = isolate->heap();
-  // TODO(victorgomes): When compiling on heap, we allocate whatever is left
-  // over on the page with a minimum of the estimated_size.
-  if (code_location == BaselineCompiler::kOnHeap &&
-      Code::SizeFor(estimated_size) <
-          heap->MaxRegularHeapObjectSize(AllocationType::kCode)) {
-    return NewOnHeapAssemblerBuffer(isolate, estimated_size);
   }
   return NewAssemblerBuffer(RoundUp(estimated_size, 4 * KB));
 }
 }  // namespace
 
 BaselineCompiler::BaselineCompiler(
-    Isolate* isolate, Handle<SharedFunctionInfo> shared_function_info,
-    Handle<BytecodeArray> bytecode, CodeLocation code_location)
-    : local_isolate_(isolate->AsLocalIsolate()),
-      stats_(isolate->counters()->runtime_call_stats()),
+    LocalIsolate* local_isolate,
+    Handle<SharedFunctionInfo> shared_function_info,
+    Handle<BytecodeArray> bytecode)
+    : local_isolate_(local_isolate),
+      stats_(local_isolate->runtime_call_stats()),
       shared_function_info_(shared_function_info),
       bytecode_(bytecode),
-      masm_(isolate, CodeObjectRequired::kNo,
-            AllocateBuffer(isolate, bytecode, code_location)),
+      masm_(local_isolate->GetMainThreadIsolateUnsafe(),
+            CodeObjectRequired::kNo, AllocateBuffer(bytecode)),
       basm_(&masm_),
       iterator_(bytecode_),
-      zone_(isolate->allocator(), ZONE_NAME),
+      zone_(local_isolate->allocator(), ZONE_NAME),
       labels_(zone_.NewArray<BaselineLabels*>(bytecode_->length())) {
   MemsetPointer(labels_, nullptr, bytecode_->length());
 
@@ -293,9 +288,15 @@ BaselineCompiler::BaselineCompiler(
 
 #define __ basm_.
 
+#define RCS_BASELINE_SCOPE(rcs)                               \
+  RCS_SCOPE(stats_,                                           \
+            local_isolate_->is_main_thread()                  \
+                ? RuntimeCallCounterId::kCompileBaseline##rcs \
+                : RuntimeCallCounterId::kCompileBackgroundBaseline##rcs)
+
 void BaselineCompiler::GenerateCode() {
   {
-    RCS_SCOPE(stats_, RuntimeCallCounterId::kCompileBaselinePreVisit);
+    RCS_BASELINE_SCOPE(PreVisit);
     for (; !iterator_.done(); iterator_.Advance()) {
       PreVisitSingleBytecode();
     }
@@ -307,7 +308,7 @@ void BaselineCompiler::GenerateCode() {
   __ CodeEntry();
 
   {
-    RCS_SCOPE(stats_, RuntimeCallCounterId::kCompileBaselineVisit);
+    RCS_BASELINE_SCOPE(Visit);
     Prologue();
     AddPosition();
     for (; !iterator_.done(); iterator_.Advance()) {
@@ -317,18 +318,19 @@ void BaselineCompiler::GenerateCode() {
   }
 }
 
-MaybeHandle<Code> BaselineCompiler::Build(Isolate* isolate) {
+MaybeHandle<Code> BaselineCompiler::Build(LocalIsolate* local_isolate) {
   CodeDesc desc;
-  __ GetCode(isolate, &desc);
+  __ GetCode(local_isolate->GetMainThreadIsolateUnsafe(), &desc);
+
   // Allocate the bytecode offset table.
   Handle<ByteArray> bytecode_offset_table =
-      bytecode_offset_table_builder_.ToBytecodeOffsetTable(isolate);
+      bytecode_offset_table_builder_.ToBytecodeOffsetTable(local_isolate);
 
-  Factory::CodeBuilder code_builder(isolate, desc, CodeKind::BASELINE);
+  Factory::CodeBuilder code_builder(local_isolate, desc, CodeKind::BASELINE);
   code_builder.set_bytecode_offset_table(bytecode_offset_table);
   if (shared_function_info_->HasInterpreterData()) {
     code_builder.set_interpreter_data(
-        handle(shared_function_info_->interpreter_data(), isolate));
+        handle(shared_function_info_->interpreter_data(), local_isolate));
   } else {
     code_builder.set_interpreter_data(bytecode_);
   }
@@ -336,8 +338,7 @@ MaybeHandle<Code> BaselineCompiler::Build(Isolate* isolate) {
 }
 
 int BaselineCompiler::EstimateInstructionSize(BytecodeArray bytecode) {
-  return bytecode.length() * kAverageBytecodeToInstructionRatio +
-         kMinimumEstimatedInstructionSize;
+  return bytecode.length() * kAverageBytecodeToInstructionRatio;
 }
 
 interpreter::Register BaselineCompiler::RegisterOperand(int operand_index) {
@@ -585,7 +586,7 @@ void BaselineCompiler::UpdateInterruptBudgetAndJumpToLabel(
 
     if (weight < 0) {
       SaveAccumulatorScope accumulator_scope(&basm_);
-      CallRuntime(Runtime::kBytecodeBudgetInterruptWithStackCheckFromBytecode,
+      CallRuntime(Runtime::kBytecodeBudgetInterruptWithStackCheck,
                   __ FunctionOperand());
     }
   }
@@ -840,13 +841,13 @@ void BaselineCompiler::VisitMov() {
   StoreRegister(1, scratch);
 }
 
-void BaselineCompiler::VisitLdaNamedProperty() {
+void BaselineCompiler::VisitGetNamedProperty() {
   CallBuiltin<Builtin::kLoadICBaseline>(RegisterOperand(0),  // object
                                         Constant<Name>(1),   // name
                                         IndexAsTagged(2));   // slot
 }
 
-void BaselineCompiler::VisitLdaNamedPropertyFromSuper() {
+void BaselineCompiler::VisitGetNamedPropertyFromSuper() {
   __ LoadPrototype(
       LoadWithReceiverAndVectorDescriptor::LookupStartObjectRegister(),
       kInterpreterAccumulatorRegister);
@@ -859,7 +860,7 @@ void BaselineCompiler::VisitLdaNamedPropertyFromSuper() {
       IndexAsTagged(2));                // slot
 }
 
-void BaselineCompiler::VisitLdaKeyedProperty() {
+void BaselineCompiler::VisitGetKeyedProperty() {
   CallBuiltin<Builtin::kKeyedLoadICBaseline>(
       RegisterOperand(0),               // object
       kInterpreterAccumulatorRegister,  // key
@@ -920,7 +921,12 @@ void BaselineCompiler::VisitStaModuleVariable() {
   __ StoreTaggedFieldWithWriteBarrier(scratch, Cell::kValueOffset, value);
 }
 
-void BaselineCompiler::VisitStaNamedProperty() {
+void BaselineCompiler::VisitSetNamedProperty() {
+  // StoreIC is currently a base class for multiple property store operations
+  // and contains mixed logic for named and keyed, set and define operations,
+  // the paths are controlled by feedback.
+  // TODO(v8:12548): refactor SetNamedIC as a subclass of StoreIC, which can be
+  // called here.
   CallBuiltin<Builtin::kStoreICBaseline>(
       RegisterOperand(0),               // object
       Constant<Name>(1),                // name
@@ -928,15 +934,29 @@ void BaselineCompiler::VisitStaNamedProperty() {
       IndexAsTagged(2));                // slot
 }
 
-void BaselineCompiler::VisitStaNamedOwnProperty() {
-  // TODO(v8:11429,ishell): Currently we use StoreOwnIC only for storing
-  // properties that already exist in the boilerplate therefore we can use
-  // StoreIC.
-  VisitStaNamedProperty();
+void BaselineCompiler::VisitDefineNamedOwnProperty() {
+  CallBuiltin<Builtin::kDefineNamedOwnICBaseline>(
+      RegisterOperand(0),               // object
+      Constant<Name>(1),                // name
+      kInterpreterAccumulatorRegister,  // value
+      IndexAsTagged(2));                // slot
 }
 
-void BaselineCompiler::VisitStaKeyedProperty() {
+void BaselineCompiler::VisitSetKeyedProperty() {
+  // KeyedStoreIC is currently a base class for multiple keyed property store
+  // operations and contains mixed logic for set and define operations,
+  // the paths are controlled by feedback.
+  // TODO(v8:12548): refactor SetKeyedIC as a subclass of KeyedStoreIC, which
+  // can be called here.
   CallBuiltin<Builtin::kKeyedStoreICBaseline>(
+      RegisterOperand(0),               // object
+      RegisterOperand(1),               // key
+      kInterpreterAccumulatorRegister,  // value
+      IndexAsTagged(2));                // slot
+}
+
+void BaselineCompiler::VisitDefineKeyedOwnProperty() {
+  CallBuiltin<Builtin::kDefineKeyedOwnICBaseline>(
       RegisterOperand(0),               // object
       RegisterOperand(1),               // key
       kInterpreterAccumulatorRegister,  // value
@@ -951,11 +971,12 @@ void BaselineCompiler::VisitStaInArrayLiteral() {
       IndexAsTagged(2));                // slot
 }
 
-void BaselineCompiler::VisitStaDataPropertyInLiteral() {
-  // Here we should save the accumulator, since StaDataPropertyInLiteral doesn't
-  // write the accumulator, but Runtime::kDefineDataPropertyInLiteral returns
-  // the value that we got from the accumulator so this still works.
-  CallRuntime(Runtime::kDefineDataPropertyInLiteral,
+void BaselineCompiler::VisitDefineKeyedOwnPropertyInLiteral() {
+  // Here we should save the accumulator, since
+  // DefineKeyedOwnPropertyInLiteral doesn't write the accumulator, but
+  // Runtime::kDefineKeyedOwnPropertyInLiteral returns the value that we got
+  // from the accumulator so this still works.
+  CallRuntime(Runtime::kDefineKeyedOwnPropertyInLiteral,
               RegisterOperand(0),               // object
               RegisterOperand(1),               // name
               kInterpreterAccumulatorRegister,  // value
@@ -1033,62 +1054,62 @@ void BaselineCompiler::VisitShiftRightLogical() {
 }
 
 void BaselineCompiler::VisitAddSmi() {
-  CallBuiltin<Builtin::kAdd_Baseline>(kInterpreterAccumulatorRegister,
-                                      IntAsSmi(0), Index(1));
-}
-
-void BaselineCompiler::VisitSubSmi() {
-  CallBuiltin<Builtin::kSubtract_Baseline>(kInterpreterAccumulatorRegister,
-                                           IntAsSmi(0), Index(1));
-}
-
-void BaselineCompiler::VisitMulSmi() {
-  CallBuiltin<Builtin::kMultiply_Baseline>(kInterpreterAccumulatorRegister,
-                                           IntAsSmi(0), Index(1));
-}
-
-void BaselineCompiler::VisitDivSmi() {
-  CallBuiltin<Builtin::kDivide_Baseline>(kInterpreterAccumulatorRegister,
+  CallBuiltin<Builtin::kAddSmi_Baseline>(kInterpreterAccumulatorRegister,
                                          IntAsSmi(0), Index(1));
 }
 
+void BaselineCompiler::VisitSubSmi() {
+  CallBuiltin<Builtin::kSubtractSmi_Baseline>(kInterpreterAccumulatorRegister,
+                                              IntAsSmi(0), Index(1));
+}
+
+void BaselineCompiler::VisitMulSmi() {
+  CallBuiltin<Builtin::kMultiplySmi_Baseline>(kInterpreterAccumulatorRegister,
+                                              IntAsSmi(0), Index(1));
+}
+
+void BaselineCompiler::VisitDivSmi() {
+  CallBuiltin<Builtin::kDivideSmi_Baseline>(kInterpreterAccumulatorRegister,
+                                            IntAsSmi(0), Index(1));
+}
+
 void BaselineCompiler::VisitModSmi() {
-  CallBuiltin<Builtin::kModulus_Baseline>(kInterpreterAccumulatorRegister,
-                                          IntAsSmi(0), Index(1));
+  CallBuiltin<Builtin::kModulusSmi_Baseline>(kInterpreterAccumulatorRegister,
+                                             IntAsSmi(0), Index(1));
 }
 
 void BaselineCompiler::VisitExpSmi() {
-  CallBuiltin<Builtin::kExponentiate_Baseline>(kInterpreterAccumulatorRegister,
-                                               IntAsSmi(0), Index(1));
+  CallBuiltin<Builtin::kExponentiateSmi_Baseline>(
+      kInterpreterAccumulatorRegister, IntAsSmi(0), Index(1));
 }
 
 void BaselineCompiler::VisitBitwiseOrSmi() {
-  CallBuiltin<Builtin::kBitwiseOr_Baseline>(kInterpreterAccumulatorRegister,
-                                            IntAsSmi(0), Index(1));
+  CallBuiltin<Builtin::kBitwiseOrSmi_Baseline>(kInterpreterAccumulatorRegister,
+                                               IntAsSmi(0), Index(1));
 }
 
 void BaselineCompiler::VisitBitwiseXorSmi() {
-  CallBuiltin<Builtin::kBitwiseXor_Baseline>(kInterpreterAccumulatorRegister,
-                                             IntAsSmi(0), Index(1));
+  CallBuiltin<Builtin::kBitwiseXorSmi_Baseline>(kInterpreterAccumulatorRegister,
+                                                IntAsSmi(0), Index(1));
 }
 
 void BaselineCompiler::VisitBitwiseAndSmi() {
-  CallBuiltin<Builtin::kBitwiseAnd_Baseline>(kInterpreterAccumulatorRegister,
-                                             IntAsSmi(0), Index(1));
+  CallBuiltin<Builtin::kBitwiseAndSmi_Baseline>(kInterpreterAccumulatorRegister,
+                                                IntAsSmi(0), Index(1));
 }
 
 void BaselineCompiler::VisitShiftLeftSmi() {
-  CallBuiltin<Builtin::kShiftLeft_Baseline>(kInterpreterAccumulatorRegister,
-                                            IntAsSmi(0), Index(1));
+  CallBuiltin<Builtin::kShiftLeftSmi_Baseline>(kInterpreterAccumulatorRegister,
+                                               IntAsSmi(0), Index(1));
 }
 
 void BaselineCompiler::VisitShiftRightSmi() {
-  CallBuiltin<Builtin::kShiftRight_Baseline>(kInterpreterAccumulatorRegister,
-                                             IntAsSmi(0), Index(1));
+  CallBuiltin<Builtin::kShiftRightSmi_Baseline>(kInterpreterAccumulatorRegister,
+                                                IntAsSmi(0), Index(1));
 }
 
 void BaselineCompiler::VisitShiftRightLogicalSmi() {
-  CallBuiltin<Builtin::kShiftRightLogical_Baseline>(
+  CallBuiltin<Builtin::kShiftRightLogicalSmi_Baseline>(
       kInterpreterAccumulatorRegister, IntAsSmi(0), Index(1));
 }
 
@@ -1201,14 +1222,12 @@ void BaselineCompiler::BuildCall(uint32_t slot, uint32_t arg_count,
 void BaselineCompiler::VisitCallAnyReceiver() {
   interpreter::RegisterList args = iterator().GetRegisterListOperand(1);
   uint32_t arg_count = args.register_count();
-  if (!kJSArgcIncludesReceiver) arg_count -= 1;  // Remove receiver.
   BuildCall<ConvertReceiverMode::kAny>(Index(3), arg_count, args);
 }
 
 void BaselineCompiler::VisitCallProperty() {
   interpreter::RegisterList args = iterator().GetRegisterListOperand(1);
   uint32_t arg_count = args.register_count();
-  if (!kJSArgcIncludesReceiver) arg_count -= 1;  // Remove receiver.
   BuildCall<ConvertReceiverMode::kNotNullOrUndefined>(Index(3), arg_count,
                                                       args);
 }
@@ -1261,7 +1280,6 @@ void BaselineCompiler::VisitCallWithSpread() {
   args = args.Truncate(args.register_count() - 1);
 
   uint32_t arg_count = args.register_count();
-  if (!kJSArgcIncludesReceiver) arg_count -= 1;  // Remove receiver.
 
   CallBuiltin<Builtin::kCallWithSpread_Baseline>(
       RegisterOperand(0),  // kFunction
@@ -1317,6 +1335,19 @@ void BaselineCompiler::VisitInvokeIntrinsic() {
 void BaselineCompiler::VisitIntrinsicCopyDataProperties(
     interpreter::RegisterList args) {
   CallBuiltin<Builtin::kCopyDataProperties>(args);
+}
+
+void BaselineCompiler::
+    VisitIntrinsicCopyDataPropertiesWithExcludedPropertiesOnStack(
+        interpreter::RegisterList args) {
+  BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
+  Register rscratch = scratch_scope.AcquireScratch();
+  // Use an offset from args[0] instead of args[1] to pass a valid "end of"
+  // pointer in the case where args.register_count() == 1.
+  basm_.RegisterFrameAddress(interpreter::Register(args[0].index() + 1),
+                             rscratch);
+  CallBuiltin<Builtin::kCopyDataPropertiesWithExcludedPropertiesOnStack>(
+      args[0], args.register_count() - 1, rscratch);
 }
 
 void BaselineCompiler::VisitIntrinsicCreateIterResultObject(
@@ -2111,15 +2142,8 @@ void BaselineCompiler::VisitReturn() {
                          iterator().current_bytecode_size_without_prefix();
   int parameter_count = bytecode_->parameter_count();
 
-  if (kJSArgcIncludesReceiver) {
-    TailCallBuiltin<Builtin::kBaselineLeaveFrame>(parameter_count,
-                                                  -profiling_weight);
-
-  } else {
-    int parameter_count_without_receiver = parameter_count - 1;
-    TailCallBuiltin<Builtin::kBaselineLeaveFrame>(
-        parameter_count_without_receiver, -profiling_weight);
-  }
+  TailCallBuiltin<Builtin::kBaselineLeaveFrame>(parameter_count,
+                                                -profiling_weight);
 }
 
 void BaselineCompiler::VisitThrowReferenceErrorIfHole() {

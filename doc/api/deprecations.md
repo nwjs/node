@@ -1595,6 +1595,9 @@ Type: End-of-Life
 
 <!-- YAML
 changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41479
+    description: End-of-Life.
   - version: v9.0.0
     pr-url: https://github.com/nodejs/node/pull/14249
     description: Runtime deprecation.
@@ -1603,25 +1606,15 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-`tls.parseCertString()` is a trivial parsing helper that was made public by
-mistake. This function can usually be replaced with:
+`tls.parseCertString()` was a trivial parsing helper that was made public by
+mistake. While it was supposed to parse certificate subject and issuer strings,
+it never handled multi-value Relative Distinguished Names correctly.
 
-```js
-const querystring = require('querystring');
-querystring.parse(str, '\n', '=');
-```
-
-This function is not completely equivalent to `querystring.parse()`. One
-difference is that `querystring.parse()` does url decoding:
-
-```console
-> querystring.parse('%E5%A5%BD=1', '\n', '=');
-{ '好': '1' }
-> tls.parseCertString('%E5%A5%BD=1');
-{ '%E5%A5%BD': '1' }
-```
+Earlier versions of this document suggested using `querystring.parse()` as an
+alternative to `tls.parseCertString()`. However, `querystring.parse()` also does
+not handle all certificate subjects correctly and should not be used.
 
 ### DEP0077: `Module._debug()`
 
@@ -2047,9 +2040,9 @@ changes:
 
 Type: End-of-Life
 
-Using the `noAssert` argument has no functionality anymore. All input is going
-to be verified, no matter if it is set to true or not. Skipping the verification
-could lead to hard to find errors and crashes.
+Using the `noAssert` argument has no functionality anymore. All input is
+verified regardless of the value of `noAssert`. Skipping the verification
+could lead to hard-to-find errors and crashes.
 
 ### DEP0103: `process.binding('util').is[...]` typechecks
 
@@ -2950,6 +2943,9 @@ deprecated and should no longer be used.
 
 <!-- YAML
 changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41431
+    description: End-of-Life.
   - version: v17.0.0
     pr-url: https://github.com/nodejs/node/pull/39793
     description: Runtime deprecation.
@@ -2958,12 +2954,13 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 Using a non-nullish non-integer value for `family` option, a non-nullish
 non-number value for `hints` option, a non-nullish non-boolean value for `all`
 option, or a non-nullish non-boolean value for `verbatim` option in
-[`dns.lookup()`][] and [`dnsPromises.lookup()`][] is deprecated.
+[`dns.lookup()`][] and [`dnsPromises.lookup()`][] throws an
+`ERR_INVALID_ARG_TYPE` error.
 
 ### DEP0154: RSA-PSS generate key pair options
 
@@ -3001,7 +2998,9 @@ for package `"exports"` and `"imports"` pattern resolutions.
 
 <!-- YAML
 changes:
-  - version: v17.0.0
+  - version:
+    - v17.0.0
+    - v16.12.0
     pr-url: https://github.com/nodejs/node/pull/36670
     description: Documentation-only deprecation.
 -->
@@ -3024,12 +3023,17 @@ it was an aborted or graceful destroy.
 
 <!-- YAML
 changes:
-  - version: v17.2.0
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/40773
+    description: End-of-life.
+  - version:
+      - v17.2.0
+      - v16.14.0
     pr-url: https://github.com/nodejs/node/pull/40860
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: End-of-Life
 
 An undocumented feature of Node.js streams was to support thenables in
 implementation methods. This is now deprecated, use callbacks instead and avoid
@@ -3064,18 +3068,33 @@ This method was deprecated because it is not compatible with
 
 Use [`buffer.subarray`][] which does the same thing instead.
 
-<!-- md-lint skip-deprecation DEP0159 -->
+### DEP0159: `ERR_INVALID_CALLBACK`
+
+<!-- YAML
+changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41678
+    description: End-of-Life.
+-->
+
+Type: End-of-Life
+
+This error code was removed due to adding more confusion to
+the errors used for value type validation.
 
 ### DEP0160: `process.on('multipleResolves', handler)`
 
 <!-- YAML
 changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41896
+    description: Runtime deprecation.
   - version: v17.6.0
     pr-url: https://github.com/nodejs/node/pull/41872
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime.
 
 This event was deprecated because it did not work with V8 promise combinators
 which diminished its usefulness.
@@ -3102,12 +3121,15 @@ resources and not the actual references.
 
 <!-- YAML
 changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/42607
+    description: Runtime deprecation.
   - version: v17.8.0
     pr-url: https://github.com/nodejs/node/pull/42149
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 Implicit coercion of objects with own `toString` property, passed as second
 parameter in [`fs.write()`][], [`fs.writeFile()`][], [`fs.appendFile()`][],

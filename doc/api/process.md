@@ -7,8 +7,7 @@
 <!-- source_link=lib/process.js -->
 
 The `process` object provides information about, and control over, the current
-Node.js process. While it is available as a global, it is recommended to
-explicitly access it via require or import:
+Node.js process.
 
 ```mjs
 import process from 'process';
@@ -1487,8 +1486,7 @@ The following additional handling is implemented if the warning `type` is
 ### Avoiding duplicate warnings
 
 As a best practice, warnings should be emitted only once per process. To do
-so, it is recommended to place the `emitWarning()` behind a simple boolean
-flag as illustrated in the example below:
+so, place the `emitWarning()` behind a boolean.
 
 ```mjs
 import { emitWarning } from 'process';
@@ -1830,7 +1828,9 @@ previous setting of `process.exitCode`.
 ## `process.getActiveResourcesInfo()`
 
 <!-- YAML
-added: v17.3.0
+added:
+  - v17.3.0
+  - v16.14.0
 -->
 
 > Stability: 1 - Experimental
@@ -2359,6 +2359,11 @@ console.log(memoryUsage.rss());
 <!-- YAML
 added: v0.1.26
 changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41678
+    description: Passing an invalid callback to the `callback` argument
+                 now throws `ERR_INVALID_ARG_TYPE` instead of
+                 `ERR_INVALID_CALLBACK`.
   - version: v1.8.1
     pr-url: https://github.com/nodejs/node/pull/1077
     description: Additional arguments after `callback` are now supported.

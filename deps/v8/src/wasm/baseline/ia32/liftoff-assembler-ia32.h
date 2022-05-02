@@ -51,6 +51,8 @@ inline constexpr Condition ToCondition(LiftoffCondition liftoff_cond) {
 
 // ebp-4 holds the stack marker, ebp-8 is the instance parameter.
 constexpr int kInstanceOffset = 8;
+constexpr int kFeedbackVectorOffset = 12;  // ebp-12 is the feedback vector.
+constexpr int kTierupBudgetOffset = 16;    // ebp-16 is the tiering budget.
 
 inline Operand GetStackSlot(int offset) { return Operand(ebp, -offset); }
 
@@ -64,7 +66,7 @@ inline MemOperand GetHalfStackSlot(int offset, RegPairHalf half) {
 inline Operand GetInstanceOperand() { return GetStackSlot(kInstanceOffset); }
 
 static constexpr LiftoffRegList kByteRegs =
-    LiftoffRegList::FromBits<Register::ListOf(eax, ecx, edx)>();
+    LiftoffRegList::FromBits<RegList{eax, ecx, edx}.bits()>();
 
 inline void Load(LiftoffAssembler* assm, LiftoffRegister dst, Register base,
                  int32_t offset, ValueKind kind) {
@@ -74,7 +76,6 @@ inline void Load(LiftoffAssembler* assm, LiftoffRegister dst, Register base,
     case kOptRef:
     case kRef:
     case kRtt:
-    case kRttWithDepth:
       assm->mov(dst.gp(), src);
       break;
     case kI64:
@@ -103,7 +104,6 @@ inline void Store(LiftoffAssembler* assm, Register base, int32_t offset,
     case kOptRef:
     case kRef:
     case kRtt:
-    case kRttWithDepth:
       assm->mov(dst, src.gp());
       break;
     case kI64:
@@ -119,7 +119,10 @@ inline void Store(LiftoffAssembler* assm, Register base, int32_t offset,
     case kS128:
       assm->movdqu(dst, src.fp());
       break;
-    default:
+    case kVoid:
+    case kBottom:
+    case kI8:
+    case kI16:
       UNREACHABLE();
   }
 }
@@ -130,6 +133,7 @@ inline void push(LiftoffAssembler* assm, LiftoffRegister reg, ValueKind kind,
     case kI32:
     case kRef:
     case kOptRef:
+    case kRtt:
       assm->AllocateStackSpace(padding);
       assm->push(reg.gp());
       break;
@@ -150,7 +154,10 @@ inline void push(LiftoffAssembler* assm, LiftoffRegister reg, ValueKind kind,
       assm->AllocateStackSpace(sizeof(double) * 2 + padding);
       assm->movdqu(Operand(esp, 0), reg.fp());
       break;
-    default:
+    case kVoid:
+    case kBottom:
+    case kI8:
+    case kI16:
       UNREACHABLE();
   }
 }
@@ -307,7 +314,7 @@ void LiftoffAssembler::AbortCompilation() {}
 
 // static
 constexpr int LiftoffAssembler::StaticStackFrameSize() {
-  return liftoff::kInstanceOffset;
+  return liftoff::kTierupBudgetOffset;
 }
 
 int LiftoffAssembler::SlotSizeForType(ValueKind kind) {
@@ -325,7 +332,7 @@ void LiftoffAssembler::LoadConstant(LiftoffRegister reg, WasmValue value,
       TurboAssembler::Move(reg.gp(), Immediate(value.to_i32(), rmode));
       break;
     case kI64: {
-      DCHECK(RelocInfo::IsNone(rmode));
+      DCHECK(RelocInfo::IsNoInfo(rmode));
       int32_t low_word = value.to_i64();
       int32_t high_word = value.to_i64() >> 32;
       TurboAssembler::Move(reg.low_gp(), Immediate(low_word));
@@ -375,10 +382,6 @@ void LiftoffAssembler::SpillInstance(Register instance) {
 }
 
 void LiftoffAssembler::ResetOSRTarget() {}
-
-void LiftoffAssembler::FillInstanceInto(Register dst) {
-  mov(dst, liftoff::GetInstanceOperand());
-}
 
 void LiftoffAssembler::LoadTaggedPointer(Register dst, Register src_addr,
                                          Register offset_reg,
@@ -753,7 +756,7 @@ inline void AtomicBinop32(LiftoffAssembler* lasm, Binop op, Register dst_addr,
   if (is_byte_store) {
     // The scratch register has to be a byte register. As we are already tight
     // on registers, we just use the root register here.
-    static_assert((kLiftoffAssemblerGpCacheRegs & kRootRegister.bit()) == 0,
+    static_assert(!kLiftoffAssemblerGpCacheRegs.has(kRootRegister),
                   "root register is not Liftoff cache register");
     DCHECK(kRootRegister.is_byte_register());
     __ push(kRootRegister);
@@ -1158,17 +1161,15 @@ void LiftoffAssembler::StoreCallerFrameSlot(LiftoffRegister src,
 
 void LiftoffAssembler::MoveStackValue(uint32_t dst_offset, uint32_t src_offset,
                                       ValueKind kind) {
-  if (needs_gp_reg_pair(kind)) {
-    liftoff::MoveStackValue(this,
-                            liftoff::GetHalfStackSlot(src_offset, kLowWord),
-                            liftoff::GetHalfStackSlot(dst_offset, kLowWord));
-    liftoff::MoveStackValue(this,
-                            liftoff::GetHalfStackSlot(src_offset, kHighWord),
-                            liftoff::GetHalfStackSlot(dst_offset, kHighWord));
-  } else {
+  DCHECK_EQ(0, element_size_bytes(kind) % kSystemPointerSize);
+  int words = element_size_bytes(kind) / kSystemPointerSize;
+  DCHECK_LE(1, words);
+  do {
     liftoff::MoveStackValue(this, liftoff::GetStackSlot(src_offset),
                             liftoff::GetStackSlot(dst_offset));
-  }
+    dst_offset -= kSystemPointerSize;
+    src_offset -= kSystemPointerSize;
+  } while (--words);
 }
 
 void LiftoffAssembler::Move(Register dst, Register src, ValueKind kind) {
@@ -1198,7 +1199,6 @@ void LiftoffAssembler::Spill(int offset, LiftoffRegister reg, ValueKind kind) {
     case kOptRef:
     case kRef:
     case kRtt:
-    case kRttWithDepth:
       mov(dst, reg.gp());
       break;
     case kI64:
@@ -1862,10 +1862,6 @@ bool LiftoffAssembler::emit_i64_popcnt(LiftoffRegister dst,
   return true;
 }
 
-void LiftoffAssembler::emit_u32_to_intptr(Register dst, Register src) {
-  // This is a nop on ia32.
-}
-
 void LiftoffAssembler::emit_f32_add(DoubleRegister dst, DoubleRegister lhs,
                                     DoubleRegister rhs) {
   if (CpuFeatures::IsSupported(AVX)) {
@@ -2462,7 +2458,6 @@ void LiftoffAssembler::emit_cond_jump(LiftoffCondition liftoff_cond,
       case kRef:
       case kOptRef:
       case kRtt:
-      case kRttWithDepth:
         DCHECK(liftoff_cond == kEqual || liftoff_cond == kUnequal);
         V8_FALLTHROUGH;
       case kI32:
@@ -2485,6 +2480,13 @@ void LiftoffAssembler::emit_i32_cond_jumpi(LiftoffCondition liftoff_cond,
   Condition cond = liftoff::ToCondition(liftoff_cond);
   cmp(lhs, Immediate(imm));
   j(cond, label);
+}
+
+void LiftoffAssembler::emit_i32_subi_jump_negative(Register value,
+                                                   int subtrahend,
+                                                   Label* result_negative) {
+  sub(value, Immediate(subtrahend));
+  j(negative, result_negative);
 }
 
 namespace liftoff {
@@ -4502,15 +4504,14 @@ void LiftoffAssembler::PopRegisters(LiftoffRegList regs) {
   }
 }
 
-void LiftoffAssembler::RecordSpillsInSafepoint(Safepoint& safepoint,
-                                               LiftoffRegList all_spills,
-                                               LiftoffRegList ref_spills,
-                                               int spill_offset) {
+void LiftoffAssembler::RecordSpillsInSafepoint(
+    SafepointTableBuilder::Safepoint& safepoint, LiftoffRegList all_spills,
+    LiftoffRegList ref_spills, int spill_offset) {
   int spill_space_size = 0;
   while (!all_spills.is_empty()) {
     LiftoffRegister reg = all_spills.GetFirstRegSet();
     if (ref_spills.has(reg)) {
-      safepoint.DefinePointerSlot(spill_offset);
+      safepoint.DefineTaggedStackSlot(spill_offset);
     }
     all_spills.clear(reg);
     ++spill_offset;

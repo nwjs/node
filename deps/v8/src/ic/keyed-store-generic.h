@@ -34,7 +34,17 @@ class KeyedStoreGenericGenerator {
                                    TNode<Object> value);
 };
 
+class DefineKeyedOwnGenericGenerator {
+ public:
+  static void Generate(compiler::CodeAssemblerState* state);
+};
+
 class StoreICNoFeedbackGenerator {
+ public:
+  static void Generate(compiler::CodeAssemblerState* state);
+};
+
+class DefineNamedOwnICNoFeedbackGenerator {
  public:
   static void Generate(compiler::CodeAssemblerState* state);
 };

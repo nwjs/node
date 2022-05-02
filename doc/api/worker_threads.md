@@ -351,9 +351,11 @@ if (isMainThread) {
 
 <!-- YAML
 added: v15.4.0
+changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41271
+    description: No longer experimental.
 -->
-
-> Stability: 1 - Experimental
 
 Instances of `BroadcastChannel` allow asynchronous one-to-many communication
 with all other `BroadcastChannel` instances bound to the same channel name.

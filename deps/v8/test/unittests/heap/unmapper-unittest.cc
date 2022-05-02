@@ -233,7 +233,9 @@ class TrackingPageAllocator : public ::v8::PageAllocator {
   PagePermissionsMap page_permissions_;
 };
 
-#if !V8_OS_FUCHSIA
+// This test is currently incompatible with the sandbox. Enable it
+// once the VirtualAddressSpace interface is stable.
+#if !V8_OS_FUCHSIA && !V8_SANDBOX
 class SequentialUnmapperTest : public TestWithIsolate {
  public:
   SequentialUnmapperTest() = default;
@@ -253,15 +255,14 @@ class SequentialUnmapperTest : public TestWithIsolate {
 #ifdef V8_COMPRESS_POINTERS_IN_SHARED_CAGE
     // Reinitialize the process-wide pointer cage so it can pick up the
     // TrackingPageAllocator.
-    // The pointer cage must be destroyed before the virtual memory cage.
+    // The pointer cage must be destroyed before the sandbox.
     IsolateAllocator::FreeProcessWidePtrComprCageForTesting();
-#ifdef V8_VIRTUAL_MEMORY_CAGE
-    // Reinitialze the virtual memory cage so it uses the TrackingPageAllocator.
-    GetProcessWideVirtualMemoryCage()->TearDown();
+#ifdef V8_SANDBOX
+    // Reinitialze the sandbox so it uses the TrackingPageAllocator.
+    GetProcessWideSandbox()->TearDown();
     constexpr bool use_guard_regions = false;
-    CHECK(GetProcessWideVirtualMemoryCage()->Initialize(
-        tracking_page_allocator_, kVirtualMemoryCageMinimumSize,
-        use_guard_regions));
+    CHECK(GetProcessWideSandbox()->Initialize(
+        tracking_page_allocator_, kSandboxMinimumSize, use_guard_regions));
 #endif
     IsolateAllocator::InitializeOncePerProcess();
 #endif
@@ -275,8 +276,8 @@ class SequentialUnmapperTest : public TestWithIsolate {
     // freed until process teardown.
     IsolateAllocator::FreeProcessWidePtrComprCageForTesting();
 #endif
-#ifdef V8_VIRTUAL_MEMORY_CAGE
-    GetProcessWideVirtualMemoryCage()->TearDown();
+#ifdef V8_SANDBOX
+    GetProcessWideSandbox()->TearDown();
 #endif
     i::FLAG_concurrent_sweeping = old_flag_;
     CHECK(tracking_page_allocator_->IsEmpty());
@@ -311,6 +312,7 @@ bool SequentialUnmapperTest::old_flag_;
 TEST_F(SequentialUnmapperTest, UnmapOnTeardownAfterAlreadyFreeingPooled) {
   if (FLAG_enable_third_party_heap) return;
   Page* page = allocator()->AllocatePage(
+      MemoryAllocator::kRegular,
       MemoryChunkLayout::AllocatableMemoryInDataPage(),
       static_cast<PagedSpace*>(heap()->old_space()),
       Executability::NOT_EXECUTABLE);
@@ -318,7 +320,7 @@ TEST_F(SequentialUnmapperTest, UnmapOnTeardownAfterAlreadyFreeingPooled) {
   const size_t page_size = tracking_page_allocator()->AllocatePageSize();
   tracking_page_allocator()->CheckPagePermissions(page->address(), page_size,
                                                   PageAllocator::kReadWrite);
-  allocator()->Free<MemoryAllocator::kPooledAndQueue>(page);
+  allocator()->Free(MemoryAllocator::kConcurrentlyAndPool, page);
   tracking_page_allocator()->CheckPagePermissions(page->address(), page_size,
                                                   PageAllocator::kReadWrite);
   unmapper()->FreeQueuedChunks();
@@ -340,6 +342,7 @@ TEST_F(SequentialUnmapperTest, UnmapOnTeardownAfterAlreadyFreeingPooled) {
 TEST_F(SequentialUnmapperTest, UnmapOnTeardown) {
   if (FLAG_enable_third_party_heap) return;
   Page* page = allocator()->AllocatePage(
+      MemoryAllocator::kRegular,
       MemoryChunkLayout::AllocatableMemoryInDataPage(),
       static_cast<PagedSpace*>(heap()->old_space()),
       Executability::NOT_EXECUTABLE);
@@ -348,7 +351,7 @@ TEST_F(SequentialUnmapperTest, UnmapOnTeardown) {
   tracking_page_allocator()->CheckPagePermissions(page->address(), page_size,
                                                   PageAllocator::kReadWrite);
 
-  allocator()->Free<MemoryAllocator::kPooledAndQueue>(page);
+  allocator()->Free(MemoryAllocator::kConcurrentlyAndPool, page);
   tracking_page_allocator()->CheckPagePermissions(page->address(), page_size,
                                                   PageAllocator::kReadWrite);
   unmapper()->TearDown();
@@ -362,7 +365,7 @@ TEST_F(SequentialUnmapperTest, UnmapOnTeardown) {
   tracking_page_allocator()->CheckIsFree(page->address(), page_size);
 #endif  // V8_COMPRESS_POINTERS
 }
-#endif  // !V8_OS_FUCHSIA
+#endif  // !V8_OS_FUCHSIA && !V8_SANDBOX
 
 }  // namespace internal
 }  // namespace v8

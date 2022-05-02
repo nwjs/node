@@ -8,6 +8,7 @@
 #include "src/init/v8.h"
 #include "src/objects/managed.h"
 #include "src/objects/objects-inl.h"
+#include "src/wasm/module-compiler.h"
 #include "src/wasm/module-decoder.h"
 #include "src/wasm/streaming-decoder.h"
 #include "src/wasm/wasm-engine.h"
@@ -1176,13 +1177,7 @@ STREAM_TEST(TestIncrementalCaching) {
   CHECK(tester.native_module()->GetCode(2)->is_liftoff());
   // No TurboFan compilation happened yet, and therefore no call to the cache.
   CHECK_EQ(0, call_cache_counter);
-  bool exception = false;
-  // The tier-up threshold is hard-coded right now.
-  constexpr int tier_up_threshold = 4;
-  for (int i = 0; i < tier_up_threshold; ++i) {
-    testing::CallWasmFunctionForTesting(i_isolate, instance, "f0", 0, nullptr,
-                                        &exception);
-  }
+  i::wasm::TriggerTierUp(i_isolate, tester.native_module().get(), 0, instance);
   tester.RunCompilerTasks();
   CHECK(!tester.native_module()->GetCode(0)->is_liftoff());
   CHECK(tester.native_module()->GetCode(1)->is_liftoff());
@@ -1193,10 +1188,7 @@ STREAM_TEST(TestIncrementalCaching) {
     i::wasm::WasmSerializer serializer(tester.native_module().get());
     serialized_size = serializer.GetSerializedNativeModuleSize();
   }
-  for (int i = 0; i < tier_up_threshold; ++i) {
-    testing::CallWasmFunctionForTesting(i_isolate, instance, "f1", 0, nullptr,
-                                        &exception);
-  }
+  i::wasm::TriggerTierUp(i_isolate, tester.native_module().get(), 1, instance);
   tester.RunCompilerTasks();
   CHECK(!tester.native_module()->GetCode(0)->is_liftoff());
   CHECK(!tester.native_module()->GetCode(1)->is_liftoff());
@@ -1244,6 +1236,7 @@ STREAM_TEST(TestModuleWithErrorAfterDataSection) {
 
 // Test that cached bytes work.
 STREAM_TEST(TestDeserializationBypassesCompilation) {
+  FlagScope<bool> no_wasm_dynamic_tiering(&FLAG_wasm_dynamic_tiering, false);
   StreamTester tester(isolate);
   ZoneBuffer wire_bytes = GetValidModuleBytes(tester.zone());
   ZoneBuffer module_bytes =
@@ -1259,6 +1252,7 @@ STREAM_TEST(TestDeserializationBypassesCompilation) {
 
 // Test that bad cached bytes don't cause compilation of wire bytes to fail.
 STREAM_TEST(TestDeserializationFails) {
+  FlagScope<bool> no_wasm_dynamic_tiering(&FLAG_wasm_dynamic_tiering, false);
   StreamTester tester(isolate);
   ZoneBuffer wire_bytes = GetValidModuleBytes(tester.zone());
   ZoneBuffer module_bytes =
@@ -1302,6 +1296,7 @@ STREAM_TEST(TestFunctionSectionWithoutCodeSection) {
 }
 
 STREAM_TEST(TestSetModuleCompiledCallback) {
+  FlagScope<bool> no_wasm_dynamic_tiering(&FLAG_wasm_dynamic_tiering, false);
   StreamTester tester(isolate);
   bool callback_called = false;
   tester.stream()->SetModuleCompiledCallback(

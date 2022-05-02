@@ -379,7 +379,16 @@ MaybeLocal<Value> Environment::BootstrapNode() {
       this, "internal/bootstrap/node", &node_params, &node_args);
 
   if (result.IsEmpty()) {
-    return scope.EscapeMaybe(result);
+    return MaybeLocal<Value>();
+  }
+
+  if (!no_browser_globals()) {
+    result = ExecuteBootstrapper(
+        this, "internal/bootstrap/browser", &node_params, &node_args);
+
+    if (result.IsEmpty()) {
+      return MaybeLocal<Value>();
+    }
   }
 
   // TODO(joyeecheung): skip these in the snapshot building for workers.
@@ -390,7 +399,7 @@ MaybeLocal<Value> Environment::BootstrapNode() {
       ExecuteBootstrapper(this, thread_switch_id, &node_params, &node_args);
 
   if (result.IsEmpty()) {
-    return scope.EscapeMaybe(result);
+    return MaybeLocal<Value>();
   }
 
   auto process_state_switch_id =
@@ -401,7 +410,7 @@ MaybeLocal<Value> Environment::BootstrapNode() {
       this, process_state_switch_id, &node_params, &node_args);
 
   if (result.IsEmpty()) {
-    return scope.EscapeMaybe(result);
+    return MaybeLocal<Value>();
   }
 
   Local<String> env_string = FIXED_ONE_BYTE_STRING(isolate_, "env");
@@ -503,6 +512,10 @@ MaybeLocal<Value> StartExecution(Environment* env, StartExecutionCallback cb) {
 
   if (first_argv == "inspect") {
     return StartExecution(env, "internal/main/inspect");
+  }
+
+  if (per_process::cli_options->build_snapshot) {
+    return StartExecution(env, "internal/main/mksnapshot");
   }
 
   if (per_process::cli_options->print_help) {
@@ -1289,29 +1302,26 @@ int Start(int argc, char** argv) {
     return result.exit_code;
   }
 
+  if (per_process::cli_options->build_snapshot) {
+    fprintf(stderr,
+            "--build-snapshot is not yet supported in the node binary\n");
+    return 1;
+  }
+
   {
-    Isolate::CreateParams params;
-    const std::vector<size_t>* indices = nullptr;
-    const EnvSerializeInfo* env_info = nullptr;
     bool use_node_snapshot =
         per_process::cli_options->per_isolate->node_snapshot;
-    if (use_node_snapshot) {
-      v8::StartupData* blob = NodeMainInstance::GetEmbeddedSnapshotBlob();
-      if (blob != nullptr) {
-        params.snapshot_blob = blob;
-        indices = NodeMainInstance::GetIsolateDataIndices();
-        env_info = NodeMainInstance::GetEnvSerializeInfo();
-      }
-    }
+    const SnapshotData* snapshot_data =
+        use_node_snapshot ? NodeMainInstance::GetEmbeddedSnapshotData()
+                          : nullptr;
     uv_loop_configure(uv_default_loop(), UV_METRICS_IDLE_TIME);
 
-    NodeMainInstance main_instance(&params,
+    NodeMainInstance main_instance(snapshot_data,
                                    uv_default_loop(),
                                    per_process::v8_platform.Platform(),
                                    result.args,
-                                   result.exec_args,
-                                   indices);
-    result.exit_code = main_instance.Run(env_info);
+                                   result.exec_args);
+    result.exit_code = main_instance.Run();
   }
 
   TearDownOncePerProcess();

@@ -280,14 +280,6 @@ effort to report stack traces relative to the original source file.
 Overriding `Error.prepareStackTrace` prevents `--enable-source-maps` from
 modifying the stack trace.
 
-### `--experimental-fetch`
-
-<!-- YAML
-added: v17.5.0
--->
-
-Enable experimental support for the [Fetch API][].
-
 ### `--experimental-global-webcrypto`
 
 <!-- YAML
@@ -332,6 +324,14 @@ added: v11.8.0
 -->
 
 Use the specified file as a security policy.
+
+### `--no-experimental-fetch`
+
+<!-- YAML
+added: v18.0.0
+-->
+
+Disable experimental support for the [Fetch API][].
 
 ### `--no-experimental-repl-await`
 
@@ -437,7 +437,7 @@ heap limit. `count` should be a non-negative integer (in which case
 Node.js will write no more than `max_count` snapshots to disk).
 
 When generating snapshots, garbage collection may be triggered and bring
-the heap usage down, therefore multiple snapshots may be written to disk
+the heap usage down. Therefore multiple snapshots may be written to disk
 before the Node.js instance finally runs out of memory. These heap snapshots
 can be compared to determine what objects are being allocated during the
 time consecutive snapshots are taken. It's not guaranteed that Node.js will
@@ -682,7 +682,9 @@ This option is a no-op. It is kept for compatibility.
 ### `--no-addons`
 
 <!-- YAML
-added: v16.10.0
+added:
+  - v16.10.0
+  - v14.19.0
 -->
 
 Disable the `node-addons` exports condition as well as disable loading
@@ -1049,6 +1051,15 @@ When using `--secure-heap`, the `--secure-heap-min` flag specifies the
 minimum allocation from the secure heap. The minimum value is `2`.
 The maximum value is the lesser of `--secure-heap` or `2147483647`.
 The value given must be a power of two.
+
+### `--test-only`
+
+<!-- YAML
+added: v18.0.0
+-->
+
+Configures the test runner to only execute top level tests that have the `only`
+option set.
 
 ### `--throw-deprecation`
 
@@ -1585,7 +1596,6 @@ Node.js options that are allowed are:
 * `--enable-fips`
 * `--enable-source-maps`
 * `--experimental-abortcontroller`
-* `--experimental-fetch`
 * `--experimental-global-webcrypto`
 * `--experimental-import-meta-resolve`
 * `--experimental-json-modules`
@@ -1615,6 +1625,7 @@ Node.js options that are allowed are:
 * `--napi-modules`
 * `--no-addons`
 * `--no-deprecation`
+* `--no-experimental-fetch`
 * `--no-experimental-repl-await`
 * `--no-extra-info-on-fatal-exception`
 * `--no-force-async-hooks-checks`
@@ -1639,6 +1650,7 @@ Node.js options that are allowed are:
 * `--require`, `-r`
 * `--secure-heap-min`
 * `--secure-heap`
+* `--test-only`
 * `--throw-deprecation`
 * `--title`
 * `--tls-cipher-list`

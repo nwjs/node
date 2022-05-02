@@ -6,7 +6,6 @@
 #define V8_HEAP_NEW_SPACES_H_
 
 #include <atomic>
-#include <map>
 #include <memory>
 
 #include "src/base/macros.h"
@@ -107,7 +106,7 @@ class SemiSpace : public Space {
   void PrependPage(Page* page);
   void MovePageToTheEnd(Page* page);
 
-  Page* InitializePage(MemoryChunk* chunk);
+  Page* InitializePage(MemoryChunk* chunk) override;
 
   // Age mark accessors.
   Address age_mark() { return age_mark_; }
@@ -139,11 +138,18 @@ class SemiSpace : public Space {
 
   size_t Available() override { UNREACHABLE(); }
 
-  Page* first_page() { return reinterpret_cast<Page*>(Space::first_page()); }
-  Page* last_page() { return reinterpret_cast<Page*>(Space::last_page()); }
+  Page* first_page() override {
+    return reinterpret_cast<Page*>(memory_chunk_list_.front());
+  }
+  Page* last_page() override {
+    return reinterpret_cast<Page*>(memory_chunk_list_.back());
+  }
 
-  const Page* first_page() const {
-    return reinterpret_cast<const Page*>(Space::first_page());
+  const Page* first_page() const override {
+    return reinterpret_cast<const Page*>(memory_chunk_list_.front());
+  }
+  const Page* last_page() const override {
+    return reinterpret_cast<const Page*>(memory_chunk_list_.back());
   }
 
   iterator begin() { return iterator(first_page()); }
@@ -169,11 +175,16 @@ class SemiSpace : public Space {
   virtual void Verify();
 #endif
 
+  void AddRangeToActiveSystemPages(Address start, Address end);
+
  private:
   void RewindPages(int num_pages);
 
   // Copies the flags into the masked positions on all pages in the space.
   void FixPagesFlags(Page::MainThreadFlags flags, Page::MainThreadFlags mask);
+
+  void IncrementCommittedPhysicalMemory(size_t increment_value);
+  void DecrementCommittedPhysicalMemory(size_t decrement_value);
 
   // The currently committed space capacity.
   size_t current_capacity_;
@@ -190,6 +201,8 @@ class SemiSpace : public Space {
 
   // Used to govern object promotion during mark-compact collection.
   Address age_mark_;
+
+  size_t committed_physical_memory_{0};
 
   SemiSpaceId id_;
 
@@ -233,7 +246,8 @@ class V8_EXPORT_PRIVATE NewSpace
   using const_iterator = ConstPageIterator;
 
   NewSpace(Heap* heap, v8::PageAllocator* page_allocator,
-           size_t initial_semispace_capacity, size_t max_semispace_capacity);
+           size_t initial_semispace_capacity, size_t max_semispace_capacity,
+           LinearAllocationArea* allocation_info);
 
   ~NewSpace() override { TearDown(); }
 
@@ -393,6 +407,10 @@ class V8_EXPORT_PRIVATE NewSpace
       int size_in_bytes, AllocationAlignment alignment,
       AllocationOrigin origin = AllocationOrigin::kRuntime);
 
+  V8_WARN_UNUSED_RESULT AllocationResult
+  AllocateRawAligned(int size_in_bytes, AllocationAlignment alignment,
+                     AllocationOrigin origin = AllocationOrigin::kRuntime);
+
   // Reset the allocation pointer to the beginning of the active semispace.
   void ResetLinearAllocationArea();
 
@@ -442,8 +460,11 @@ class V8_EXPORT_PRIVATE NewSpace
 
   SemiSpace* active_space() { return &to_space_; }
 
-  Page* first_page() { return to_space_.first_page(); }
-  Page* last_page() { return to_space_.last_page(); }
+  Page* first_page() override { return to_space_.first_page(); }
+  Page* last_page() override { return to_space_.last_page(); }
+
+  const Page* first_page() const override { return to_space_.first_page(); }
+  const Page* last_page() const override { return to_space_.last_page(); }
 
   iterator begin() { return to_space_.begin(); }
   iterator end() { return to_space_.end(); }
@@ -468,6 +489,12 @@ class V8_EXPORT_PRIVATE NewSpace
   base::SharedMutex* pending_allocation_mutex() {
     return &pending_allocation_mutex_;
   }
+
+  // Creates a filler object in the linear allocation area.
+  void MakeLinearAllocationAreaIterable();
+
+  // Creates a filler object in the linear allocation area and closes it.
+  void FreeLinearAllocationArea() override;
 
  private:
   static const int kAllocationBufferParkingThreshold = 4 * KB;
@@ -505,10 +532,6 @@ class V8_EXPORT_PRIVATE NewSpace
   AllocateRawSlow(int size_in_bytes, AllocationAlignment alignment,
                   AllocationOrigin origin);
 
-  V8_WARN_UNUSED_RESULT AllocationResult
-  AllocateRawAligned(int size_in_bytes, AllocationAlignment alignment,
-                     AllocationOrigin origin = AllocationOrigin::kRuntime);
-
   V8_WARN_UNUSED_RESULT AllocationResult AllocateRawUnaligned(
       int size_in_bytes, AllocationOrigin origin = AllocationOrigin::kRuntime);
 
@@ -521,9 +544,9 @@ class V8_EXPORT_PRIVATE NewSpace
 // For contiguous spaces, top should be in the space (or at the end) and limit
 // should be the end of the space.
 #define DCHECK_SEMISPACE_ALLOCATION_INFO(info, space) \
-  SLOW_DCHECK((space).page_low() <= (info).top() &&   \
-              (info).top() <= (space).page_high() &&  \
-              (info).limit() <= (space).page_high())
+  SLOW_DCHECK((space).page_low() <= (info)->top() &&  \
+              (info)->top() <= (space).page_high() && \
+              (info)->limit() <= (space).page_high())
 
 }  // namespace internal
 }  // namespace v8

@@ -59,7 +59,7 @@ a preload module).
 
 When using ESM, if there is a chance that the code may be run on a build
 of Node.js where crypto support is not enabled, consider using the
-`import()` function instead of the lexical `import` keyword:
+[`import()`][] function instead of the lexical `import` keyword:
 
 ```mjs
 let crypto;
@@ -546,7 +546,8 @@ added: v1.0.0
 -->
 
 * Returns: {Buffer} When using an authenticated encryption mode (`GCM`, `CCM`,
-  and `OCB` are currently supported), the `cipher.getAuthTag()` method returns a
+  `OCB`, and `chacha20-poly1305` are currently supported), the
+  `cipher.getAuthTag()` method returns a
   [`Buffer`][] containing the _authentication tag_ that has been computed from
   the given data.
 
@@ -568,7 +569,8 @@ added: v1.0.0
   * `encoding` {string} The string encoding to use when `buffer` is a string.
 * Returns: {Cipher} for method chaining.
 
-When using an authenticated encryption mode (`GCM`, `CCM`, and `OCB` are
+When using an authenticated encryption mode (`GCM`, `CCM`, `OCB`, and
+`chacha20-poly1305` are
 currently supported), the `cipher.setAAD()` method sets the value used for the
 _additional authenticated data_ (AAD) input parameter.
 
@@ -865,7 +867,8 @@ changes:
   * `encoding` {string} String encoding to use when `buffer` is a string.
 * Returns: {Decipher} for method chaining.
 
-When using an authenticated encryption mode (`GCM`, `CCM`, and `OCB` are
+When using an authenticated encryption mode (`GCM`, `CCM`, `OCB`, and
+`chacha20-poly1305` are
 currently supported), the `decipher.setAAD()` method sets the value used for the
 _additional authenticated data_ (AAD) input parameter.
 
@@ -899,7 +902,8 @@ changes:
 * `encoding` {string} String encoding to use when `buffer` is a string.
 * Returns: {Decipher} for method chaining.
 
-When using an authenticated encryption mode (`GCM`, `CCM`, and `OCB` are
+When using an authenticated encryption mode (`GCM`, `CCM`, `OCB`, and
+`chacha20-poly1305` are
 currently supported), the `decipher.setAuthTag()` method is used to pass in the
 received _authentication tag_. If no tag is provided, or if the cipher text
 has been tampered with, [`decipher.final()`][] will throw, indicating that the
@@ -908,7 +912,8 @@ is invalid according to [NIST SP 800-38D][] or does not match the value of the
 `authTagLength` option, `decipher.setAuthTag()` will throw an error.
 
 The `decipher.setAuthTag()` method must be called before [`decipher.update()`][]
-for `CCM` mode or before [`decipher.final()`][] for `GCM` and `OCB` modes.
+for `CCM` mode or before [`decipher.final()`][] for `GCM` and `OCB` modes and
+`chacha20-poly1305`.
 `decipher.setAuthTag()` can only be called once.
 
 When passing a string as the authentication tag, please consider
@@ -2488,7 +2493,12 @@ added: v15.6.0
 <!-- YAML
 added: v15.6.0
 changes:
-  - version: v17.5.0
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41600
+    description: The subject option now defaults to `'default'`.
+  - version:
+      - v17.5.0
+      - v16.14.1
     pr-url: https://github.com/nodejs/node/pull/41599
     description: The `wildcards`, `partialWildcards`, `multiLabelWildcards`, and
                  `singleLabelSubdomains` options have been removed since they
@@ -2501,19 +2511,19 @@ changes:
 * `email` {string}
 * `options` {Object}
   * `subject` {string} `'default'`, `'always'`, or `'never'`.
-    **Default:** `'always'`.
+    **Default:** `'default'`.
 * Returns: {string|undefined} Returns `email` if the certificate matches,
   `undefined` if it does not.
 
 Checks whether the certificate matches the given email address.
 
+If the `'subject'` option is undefined or set to `'default'`, the certificate
+subject is only considered if the subject alternative name extension either does
+not exist or does not contain any email addresses.
+
 If the `'subject'` option is set to `'always'` and if the subject alternative
 name extension either does not exist or does not contain a matching email
 address, the certificate subject is considered.
-
-If the `'subject'` option is set to `'default'`, the certificate subject is only
-considered if the subject alternative name extension either does not exist or
-does not contain any email addresses.
 
 If the `'subject'` option is set to `'never'`, the certificate subject is never
 considered, even if the certificate contains no subject alternative names.
@@ -2523,6 +2533,9 @@ considered, even if the certificate contains no subject alternative names.
 <!-- YAML
 added: v15.6.0
 changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41600
+    description: The subject option now defaults to `'default'`.
   - version: v17.5.0
     pr-url: https://github.com/nodejs/node/pull/41569
     description: The subject option can now be set to `'default'`.
@@ -2531,7 +2544,7 @@ changes:
 * `name` {string}
 * `options` {Object}
   * `subject` {string} `'default'`, `'always'`, or `'never'`.
-    **Default:** `'always'`.
+    **Default:** `'default'`.
   * `wildcards` {boolean} **Default:** `true`.
   * `partialWildcards` {boolean} **Default:** `true`.
   * `multiLabelWildcards` {boolean} **Default:** `false`.
@@ -2547,14 +2560,14 @@ or it might contain wildcards (e.g., `*.example.com`). Because host name
 comparisons are case-insensitive, the returned subject name might also differ
 from the given `name` in capitalization.
 
+If the `'subject'` option is undefined or set to `'default'`, the certificate
+subject is only considered if the subject alternative name extension either does
+not exist or does not contain any DNS names. This behavior is consistent with
+[RFC 2818][] ("HTTP Over TLS").
+
 If the `'subject'` option is set to `'always'` and if the subject alternative
 name extension either does not exist or does not contain a matching DNS name,
 the certificate subject is considered.
-
-If the `'subject'` option is set to `'default'`, the certificate subject is only
-considered if the subject alternative name extension either does not exist or
-does not contain any DNS names. This behavior is consistent with [RFC 2818][]
-("HTTP Over TLS").
 
 If the `'subject'` option is set to `'never'`, the certificate subject is never
 considered, even if the certificate contains no subject alternative names.
@@ -2564,7 +2577,9 @@ considered, even if the certificate contains no subject alternative names.
 <!-- YAML
 added: v15.6.0
 changes:
-  - version: v17.5.0
+  - version:
+      - v17.5.0
+      - v16.14.1
     pr-url: https://github.com/nodejs/node/pull/41571
     description: The `options` argument has been removed since it had no effect.
 -->
@@ -2612,6 +2627,10 @@ added: v15.6.0
 
 The SHA-1 fingerprint of this certificate.
 
+Because SHA-1 is cryptographically broken and because the security of SHA-1 is
+significantly worse than that of algorithms that are commonly used to sign
+certificates, consider using [`x509.fingerprint256`][] instead.
+
 ### `x509.fingerprint256`
 
 <!-- YAML
@@ -2625,19 +2644,29 @@ The SHA-256 fingerprint of this certificate.
 ### `x509.fingerprint512`
 
 <!-- YAML
-added: v17.2.0
+added:
+  - v17.2.0
+  - v16.14.0
 -->
 
 * Type: {string}
 
 The SHA-512 fingerprint of this certificate.
 
+Because computing the SHA-256 fingerprint is usually faster and because it is
+only half the size of the SHA-512 fingerprint, [`x509.fingerprint256`][] may be
+a better choice. While SHA-512 presumably provides a higher level of security in
+general, the security of SHA-256 matches that of most algorithms that are
+commonly used to sign certificates.
+
 ### `x509.infoAccess`
 
 <!-- YAML
 added: v15.6.0
 changes:
-  - version: v17.3.1
+  - version:
+      - v17.3.1
+      - v16.13.2
     pr-url: https://github.com/nodejs-private/node-private/pull/300
     description: Parts of this string may be encoded as JSON string literals
                  in response to CVE-2021-44532.
@@ -2719,6 +2748,10 @@ added: v15.6.0
 
 The serial number of this certificate.
 
+Serial numbers are assigned by certificate authorities and do not uniquely
+identify certificates. Consider using [`x509.fingerprint256`][] as a unique
+identifier instead.
+
 ### `x509.subject`
 
 <!-- YAML
@@ -2734,7 +2767,9 @@ The complete subject of this certificate.
 <!-- YAML
 added: v15.6.0
 changes:
-  - version: v17.3.1
+  - version:
+      - v17.3.1
+      - v16.13.2
     pr-url: https://github.com/nodejs-private/node-private/pull/300
     description: Parts of this string may be encoded as JSON string literals
                  in response to CVE-2021-44532.
@@ -2875,6 +2910,12 @@ This property is deprecated. Please use `crypto.setFips()` and
 
 <!-- YAML
 added: v15.8.0
+changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41678
+    description: Passing an invalid callback to the `callback` argument
+                 now throws `ERR_INVALID_ARG_TYPE` instead of
+                 `ERR_INVALID_CALLBACK`.
 -->
 
 * `candidate` {ArrayBuffer|SharedArrayBuffer|TypedArray|Buffer|DataView|bigint}
@@ -2921,6 +2962,10 @@ Checks the primality of the `candidate`.
 added: v0.1.94
 deprecated: v10.0.0
 changes:
+  - version: v17.9.0
+    pr-url: https://github.com/nodejs/node/pull/42427
+    description: The `authTagLength` option is now optional when using the
+                 `chacha20-poly1305` cipher and defaults to 16 bytes.
   - version: v15.0.0
     pr-url: https://github.com/nodejs/node/pull/35093
     description: The password argument can be an ArrayBuffer and is limited to
@@ -2945,11 +2990,12 @@ Creates and returns a `Cipher` object that uses the given `algorithm` and
 `password`.
 
 The `options` argument controls stream behavior and is optional except when a
-cipher in CCM or OCB mode is used (e.g. `'aes-128-ccm'`). In that case, the
+cipher in CCM or OCB mode (e.g. `'aes-128-ccm'`) is used. In that case, the
 `authTagLength` option is required and specifies the length of the
 authentication tag in bytes, see [CCM mode][]. In GCM mode, the `authTagLength`
 option is not required but can be used to set the length of the authentication
 tag that will be returned by `getAuthTag()` and defaults to 16 bytes.
+For `chacha20-poly1305`, the `authTagLength` option defaults to 16 bytes.
 
 The `algorithm` is dependent on OpenSSL, examples are `'aes192'`, etc. On
 recent OpenSSL releases, `openssl list -cipher-algorithms` will
@@ -2980,6 +3026,10 @@ Adversaries][] for details.
 <!-- YAML
 added: v0.1.94
 changes:
+  - version: v17.9.0
+    pr-url: https://github.com/nodejs/node/pull/42427
+    description: The `authTagLength` option is now optional when using the
+                 `chacha20-poly1305` cipher and defaults to 16 bytes.
   - version: v15.0.0
     pr-url: https://github.com/nodejs/node/pull/35093
     description: The password and iv arguments can be an ArrayBuffer and are
@@ -3016,11 +3066,12 @@ Creates and returns a `Cipher` object, with the given `algorithm`, `key` and
 initialization vector (`iv`).
 
 The `options` argument controls stream behavior and is optional except when a
-cipher in CCM or OCB mode is used (e.g. `'aes-128-ccm'`). In that case, the
+cipher in CCM or OCB mode (e.g. `'aes-128-ccm'`) is used. In that case, the
 `authTagLength` option is required and specifies the length of the
 authentication tag in bytes, see [CCM mode][]. In GCM mode, the `authTagLength`
 option is not required but can be used to set the length of the authentication
 tag that will be returned by `getAuthTag()` and defaults to 16 bytes.
+For `chacha20-poly1305`, the `authTagLength` option defaults to 16 bytes.
 
 The `algorithm` is dependent on OpenSSL, examples are `'aes192'`, etc. On
 recent OpenSSL releases, `openssl list -cipher-algorithms` will
@@ -3048,6 +3099,10 @@ given IV will be.
 added: v0.1.94
 deprecated: v10.0.0
 changes:
+  - version: v17.9.0
+    pr-url: https://github.com/nodejs/node/pull/42427
+    description: The `authTagLength` option is now optional when using the
+                 `chacha20-poly1305` cipher and defaults to 16 bytes.
   - version: v10.10.0
     pr-url: https://github.com/nodejs/node/pull/21447
     description: Ciphers in OCB mode are now supported.
@@ -3064,9 +3119,10 @@ Creates and returns a `Decipher` object that uses the given `algorithm` and
 `password` (key).
 
 The `options` argument controls stream behavior and is optional except when a
-cipher in CCM or OCB mode is used (e.g. `'aes-128-ccm'`). In that case, the
+cipher in CCM or OCB mode (e.g. `'aes-128-ccm'`) is used. In that case, the
 `authTagLength` option is required and specifies the length of the
 authentication tag in bytes, see [CCM mode][].
+For `chacha20-poly1305`, the `authTagLength` option defaults to 16 bytes.
 
 The implementation of `crypto.createDecipher()` derives keys using the OpenSSL
 function [`EVP_BytesToKey`][] with the digest algorithm set to MD5, one
@@ -3085,6 +3141,10 @@ to create the `Decipher` object.
 <!-- YAML
 added: v0.1.94
 changes:
+  - version: v17.9.0
+    pr-url: https://github.com/nodejs/node/pull/42427
+    description: The `authTagLength` option is now optional when using the
+                 `chacha20-poly1305` cipher and defaults to 16 bytes.
   - version: v11.6.0
     pr-url: https://github.com/nodejs/node/pull/24234
     description: The `key` argument can now be a `KeyObject`.
@@ -3117,11 +3177,12 @@ Creates and returns a `Decipher` object that uses the given `algorithm`, `key`
 and initialization vector (`iv`).
 
 The `options` argument controls stream behavior and is optional except when a
-cipher in CCM or OCB mode is used (e.g. `'aes-128-ccm'`). In that case, the
+cipher in CCM or OCB mode (e.g. `'aes-128-ccm'`) is used. In that case, the
 `authTagLength` option is required and specifies the length of the
 authentication tag in bytes, see [CCM mode][]. In GCM mode, the `authTagLength`
 option is not required but can be used to restrict accepted authentication tags
 to those with the specified length.
+For `chacha20-poly1305`, the `authTagLength` option defaults to 16 bytes.
 
 The `algorithm` is dependent on OpenSSL, examples are `'aes192'`, etc. On
 recent OpenSSL releases, `openssl list -cipher-algorithms` will
@@ -3550,6 +3611,12 @@ Both keys must have the same `asymmetricKeyType`, which must be one of `'dh'`
 
 <!-- YAML
 added: v15.0.0
+changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41678
+    description: Passing an invalid callback to the `callback` argument
+                 now throws `ERR_INVALID_ARG_TYPE` instead of
+                 `ERR_INVALID_CALLBACK`.
 -->
 
 * `type`: {string} The intended use of the generated secret key. Currently
@@ -3595,6 +3662,11 @@ generateKey('hmac', { length: 64 }, (err, key) => {
 <!-- YAML
 added: v10.12.0
 changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41678
+    description: Passing an invalid callback to the `callback` argument
+                 now throws `ERR_INVALID_ARG_TYPE` instead of
+                 `ERR_INVALID_CALLBACK`.
   - version: v16.10.0
     pr-url: https://github.com/nodejs/node/pull/39927
     description: Add ability to define `RSASSA-PSS-params` sequence parameters
@@ -3855,6 +3927,12 @@ console.log(key.export().toString('hex'));  // e89..........41e
 
 <!-- YAML
 added: v15.8.0
+changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41678
+    description: Passing an invalid callback to the `callback` argument
+                 now throws `ERR_INVALID_ARG_TYPE` instead of
+                 `ERR_INVALID_CALLBACK`.
 -->
 
 * `size` {number} The size (in bits) of the prime to generate.
@@ -4123,6 +4201,12 @@ web-compatible code use [`crypto.webcrypto.getRandomValues()`][] instead.
 
 <!-- YAML
 added: v15.0.0
+changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41678
+    description: Passing an invalid callback to the `callback` argument
+                 now throws `ERR_INVALID_ARG_TYPE` instead of
+                 `ERR_INVALID_CALLBACK`.
 -->
 
 * `digest` {string} The digest algorithm to use.
@@ -4226,6 +4310,11 @@ console.log(Buffer.from(derivedKey).toString('hex'));  // '24156e2...5391653'
 <!-- YAML
 added: v0.5.5
 changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41678
+    description: Passing an invalid callback to the `callback` argument
+                 now throws `ERR_INVALID_ARG_TYPE` instead of
+                 `ERR_INVALID_CALLBACK`.
   - version: v15.0.0
     pr-url: https://github.com/nodejs/node/pull/35093
     description: The password and salt arguments can also be ArrayBuffer
@@ -4607,6 +4696,11 @@ be passed instead of a public key.
 <!-- YAML
 added: v0.5.8
 changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41678
+    description: Passing an invalid callback to the `callback` argument
+                 now throws `ERR_INVALID_ARG_TYPE` instead of
+                 `ERR_INVALID_CALLBACK`.
   - version: v9.0.0
     pr-url: https://github.com/nodejs/node/pull/16454
     description: Passing `null` as the `callback` argument now throws
@@ -4787,6 +4881,11 @@ added:
   - v7.10.0
   - v6.13.0
 changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41678
+    description: Passing an invalid callback to the `callback` argument
+                 now throws `ERR_INVALID_ARG_TYPE` instead of
+                 `ERR_INVALID_CALLBACK`.
   - version: v9.0.0
     pr-url: https://github.com/nodejs/node/pull/15231
     description: The `buffer` argument may be any `TypedArray` or `DataView`.
@@ -4923,6 +5022,12 @@ request.
 added:
   - v14.10.0
   - v12.19.0
+changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41678
+    description: Passing an invalid callback to the `callback` argument
+                 now throws `ERR_INVALID_ARG_TYPE` instead of
+                 `ERR_INVALID_CALLBACK`.
 -->
 
 * `min` {integer} Start of random range (inclusive). **Default:** `0`.
@@ -5026,6 +5131,11 @@ cryptographic pseudorandom number generator.
 <!-- YAML
 added: v10.5.0
 changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41678
+    description: Passing an invalid callback to the `callback` argument
+                 now throws `ERR_INVALID_ARG_TYPE` instead of
+                 `ERR_INVALID_CALLBACK`.
   - version: v15.0.0
     pr-url: https://github.com/nodejs/node/pull/35093
     description: The password and salt arguments can also be ArrayBuffer
@@ -5249,6 +5359,11 @@ Throws an error if FIPS mode is not available.
 <!-- YAML
 added: v12.0.0
 changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41678
+    description: Passing an invalid callback to the `callback` argument
+                 now throws `ERR_INVALID_ARG_TYPE` instead of
+                 `ERR_INVALID_CALLBACK`.
   - version: v15.12.0
     pr-url: https://github.com/nodejs/node/pull/37500
     description: Optional callback argument added.
@@ -5345,6 +5460,11 @@ not introduce timing vulnerabilities.
 <!-- YAML
 added: v12.0.0
 changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41678
+    description: Passing an invalid callback to the `callback` argument
+                 now throws `ERR_INVALID_ARG_TYPE` instead of
+                 `ERR_INVALID_CALLBACK`.
   - version: v15.12.0
     pr-url: https://github.com/nodejs/node/pull/37500
     description: Optional callback argument added.
@@ -5571,12 +5691,12 @@ console.log(receivedPlaintext);
 ```
 
 ```cjs
+const { Buffer } = require('buffer');
 const {
   createCipheriv,
   createDecipheriv,
   randomBytes,
 } = require('crypto');
-const { Buffer } = require('buffer');
 
 const key = 'keykeykeykeykeykeykeykey';
 const nonce = randomBytes(12);
@@ -6022,6 +6142,7 @@ See the [list of SSL OP Flags][] for details.
 [`hash.update()`]: #hashupdatedata-inputencoding
 [`hmac.digest()`]: #hmacdigestencoding
 [`hmac.update()`]: #hmacupdatedata-inputencoding
+[`import()`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#dynamic_imports
 [`keyObject.export()`]: #keyobjectexportoptions
 [`postMessage()`]: worker_threads.md#portpostmessagevalue-transferlist
 [`sign.sign()`]: #signsignprivatekey-outputencoding
@@ -6031,6 +6152,7 @@ See the [list of SSL OP Flags][] for details.
 [`util.promisify()`]: util.md#utilpromisifyoriginal
 [`verify.update()`]: #verifyupdatedata-inputencoding
 [`verify.verify()`]: #verifyverifyobject-signature-signatureencoding
+[`x509.fingerprint256`]: #x509fingerprint256
 [caveats when using strings as inputs to cryptographic APIs]: #using-strings-as-inputs-to-cryptographic-apis
 [certificate object]: tls.md#certificate-object
 [encoding]: buffer.md#buffers-and-character-encodings

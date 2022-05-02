@@ -12,12 +12,9 @@
 #include "src/common/globals.h"
 #include "src/execution/isolate.h"
 #include "src/heap/heap-inl.h"
-#include "src/heap/heap-write-barrier-inl.h"
 #include "src/interpreter/bytecode-register.h"
 #include "src/objects/code.h"
 #include "src/objects/dictionary.h"
-#include "src/objects/fixed-array.h"
-#include "src/objects/heap-object.h"
 #include "src/objects/instance-type-inl.h"
 #include "src/objects/map-inl.h"
 #include "src/objects/maybe-object-inl.h"
@@ -37,8 +34,9 @@ namespace internal {
 OBJECT_CONSTRUCTORS_IMPL(DeoptimizationData, FixedArray)
 TQ_OBJECT_CONSTRUCTORS_IMPL(BytecodeArray)
 OBJECT_CONSTRUCTORS_IMPL(AbstractCode, HeapObject)
-OBJECT_CONSTRUCTORS_IMPL(DependentCode, WeakFixedArray)
+OBJECT_CONSTRUCTORS_IMPL(DependentCode, WeakArrayList)
 OBJECT_CONSTRUCTORS_IMPL(CodeDataContainer, HeapObject)
+NEVER_READ_ONLY_SPACE_IMPL(CodeDataContainer)
 
 NEVER_READ_ONLY_SPACE_IMPL(AbstractCode)
 
@@ -47,6 +45,7 @@ CAST_ACCESSOR(Code)
 CAST_ACCESSOR(CodeDataContainer)
 CAST_ACCESSOR(DependentCode)
 CAST_ACCESSOR(DeoptimizationData)
+CAST_ACCESSOR(DeoptimizationLiteralArray)
 
 int AbstractCode::raw_instruction_size() {
   if (IsCode()) {
@@ -123,8 +122,14 @@ Address AbstractCode::InstructionEnd() {
   }
 }
 
-bool AbstractCode::contains(Address inner_pointer) {
-  return (address() <= inner_pointer) && (inner_pointer <= address() + Size());
+bool AbstractCode::contains(Isolate* isolate, Address inner_pointer) {
+  PtrComprCageBase cage_base(isolate);
+  if (IsCode(cage_base)) {
+    return GetCode().contains(isolate, inner_pointer);
+  } else {
+    return (address() <= inner_pointer) &&
+           (inner_pointer <= address() + Size(cage_base));
+  }
 }
 
 CodeKind AbstractCode::kind() {
@@ -137,47 +142,6 @@ BytecodeArray AbstractCode::GetBytecodeArray() {
   return BytecodeArray::cast(*this);
 }
 
-DependentCode DependentCode::next_link() {
-  return DependentCode::cast(Get(kNextLinkIndex)->GetHeapObjectAssumeStrong());
-}
-
-void DependentCode::set_next_link(DependentCode next) {
-  Set(kNextLinkIndex, HeapObjectReference::Strong(next));
-}
-
-int DependentCode::flags() { return Smi::ToInt(Get(kFlagsIndex)->ToSmi()); }
-
-void DependentCode::set_flags(int flags) {
-  Set(kFlagsIndex, MaybeObject::FromObject(Smi::FromInt(flags)));
-}
-
-int DependentCode::count() { return CountField::decode(flags()); }
-
-void DependentCode::set_count(int value) {
-  set_flags(CountField::update(flags(), value));
-}
-
-DependentCode::DependencyGroup DependentCode::group() {
-  return static_cast<DependencyGroup>(GroupField::decode(flags()));
-}
-
-void DependentCode::set_object_at(int i, MaybeObject object) {
-  Set(kCodesStartIndex + i, object);
-}
-
-MaybeObject DependentCode::object_at(int i) {
-  return Get(kCodesStartIndex + i);
-}
-
-void DependentCode::clear_at(int i) {
-  Set(kCodesStartIndex + i,
-      HeapObjectReference::Strong(GetReadOnlyRoots().undefined_value()));
-}
-
-void DependentCode::copy(int from, int to) {
-  Set(kCodesStartIndex + to, Get(kCodesStartIndex + from));
-}
-
 OBJECT_CONSTRUCTORS_IMPL(Code, HeapObject)
 NEVER_READ_ONLY_SPACE_IMPL(Code)
 
@@ -186,55 +150,113 @@ INT_ACCESSORS(Code, raw_metadata_size, kMetadataSizeOffset)
 INT_ACCESSORS(Code, handler_table_offset, kHandlerTableOffsetOffset)
 INT_ACCESSORS(Code, code_comments_offset, kCodeCommentsOffsetOffset)
 INT32_ACCESSORS(Code, unwinding_info_offset, kUnwindingInfoOffsetOffset)
-#define CODE_ACCESSORS(name, type, offset)            \
-  ACCESSORS_CHECKED2(Code, name, type, offset,        \
-                     !ObjectInYoungGeneration(value), \
-                     !ObjectInYoungGeneration(value))
-#define CODE_ACCESSORS_CHECKED(name, type, offset, condition)        \
-  ACCESSORS_CHECKED2(Code, name, type, offset,                       \
-                     !ObjectInYoungGeneration(value) && (condition), \
-                     !ObjectInYoungGeneration(value) && (condition))
-#define RELEASE_ACQUIRE_CODE_ACCESSORS(name, type, offset)            \
-  RELEASE_ACQUIRE_ACCESSORS_CHECKED2(Code, name, type, offset,        \
-                                     !ObjectInYoungGeneration(value), \
-                                     !ObjectInYoungGeneration(value))
+
+// Same as ACCESSORS_CHECKED2 macro but with Code as a host and using
+// main_cage_base() for computing the base.
+#define CODE_ACCESSORS_CHECKED2(name, type, offset, get_condition,  \
+                                set_condition)                      \
+  type Code::name() const {                                         \
+    PtrComprCageBase cage_base = main_cage_base();                  \
+    return Code::name(cage_base);                                   \
+  }                                                                 \
+  type Code::name(PtrComprCageBase cage_base) const {               \
+    type value = TaggedField<type, offset>::load(cage_base, *this); \
+    DCHECK(get_condition);                                          \
+    return value;                                                   \
+  }                                                                 \
+  void Code::set_##name(type value, WriteBarrierMode mode) {        \
+    DCHECK(set_condition);                                          \
+    TaggedField<type, offset>::store(*this, value);                 \
+    CONDITIONAL_WRITE_BARRIER(*this, offset, value, mode);          \
+  }
+
+// Same as RELEASE_ACQUIRE_ACCESSORS_CHECKED2 macro but with Code as a host and
+// using main_cage_base(kRelaxedLoad) for computing the base.
+#define RELEASE_ACQUIRE_CODE_ACCESSORS_CHECKED2(name, type, offset,           \
+                                                get_condition, set_condition) \
+  type Code::name(AcquireLoadTag tag) const {                                 \
+    PtrComprCageBase cage_base = main_cage_base(kRelaxedLoad);                \
+    return Code::name(cage_base, tag);                                        \
+  }                                                                           \
+  type Code::name(PtrComprCageBase cage_base, AcquireLoadTag) const {         \
+    type value = TaggedField<type, offset>::Acquire_Load(cage_base, *this);   \
+    DCHECK(get_condition);                                                    \
+    return value;                                                             \
+  }                                                                           \
+  void Code::set_##name(type value, ReleaseStoreTag, WriteBarrierMode mode) { \
+    DCHECK(set_condition);                                                    \
+    TaggedField<type, offset>::Release_Store(*this, value);                   \
+    CONDITIONAL_WRITE_BARRIER(*this, offset, value, mode);                    \
+  }
+
+#define CODE_ACCESSORS(name, type, offset) \
+  CODE_ACCESSORS_CHECKED2(name, type, offset, true, true)
+
+#define RELEASE_ACQUIRE_CODE_ACCESSORS(name, type, offset)                 \
+  RELEASE_ACQUIRE_CODE_ACCESSORS_CHECKED2(name, type, offset,              \
+                                          !ObjectInYoungGeneration(value), \
+                                          !ObjectInYoungGeneration(value))
 
 CODE_ACCESSORS(relocation_info, ByteArray, kRelocationInfoOffset)
-RELEASE_ACQUIRE_CODE_ACCESSORS(relocation_info, ByteArray,
-                               kRelocationInfoOffset)
-CODE_ACCESSORS_CHECKED(relocation_info_or_undefined, HeapObject,
-                       kRelocationInfoOffset,
-                       value.IsUndefined() || value.IsByteArray())
 
-ACCESSORS_CHECKED2(Code, deoptimization_data, FixedArray,
-                   kDeoptimizationDataOrInterpreterDataOffset,
-                   kind() != CodeKind::BASELINE,
-                   kind() != CodeKind::BASELINE &&
-                       !ObjectInYoungGeneration(value))
-ACCESSORS_CHECKED2(Code, bytecode_or_interpreter_data, HeapObject,
-                   kDeoptimizationDataOrInterpreterDataOffset,
-                   kind() == CodeKind::BASELINE,
-                   kind() == CodeKind::BASELINE &&
-                       !ObjectInYoungGeneration(value))
+CODE_ACCESSORS_CHECKED2(deoptimization_data, FixedArray,
+                        kDeoptimizationDataOrInterpreterDataOffset,
+                        kind() != CodeKind::BASELINE,
+                        kind() != CodeKind::BASELINE &&
+                            !ObjectInYoungGeneration(value))
+CODE_ACCESSORS_CHECKED2(bytecode_or_interpreter_data, HeapObject,
+                        kDeoptimizationDataOrInterpreterDataOffset,
+                        kind() == CodeKind::BASELINE,
+                        kind() == CodeKind::BASELINE &&
+                            !ObjectInYoungGeneration(value))
 
-ACCESSORS_CHECKED2(Code, source_position_table, ByteArray, kPositionTableOffset,
-                   kind() != CodeKind::BASELINE,
-                   kind() != CodeKind::BASELINE &&
-                       !ObjectInYoungGeneration(value))
-ACCESSORS_CHECKED2(Code, bytecode_offset_table, ByteArray, kPositionTableOffset,
-                   kind() == CodeKind::BASELINE,
-                   kind() == CodeKind::BASELINE &&
-                       !ObjectInYoungGeneration(value))
+CODE_ACCESSORS_CHECKED2(source_position_table, ByteArray, kPositionTableOffset,
+                        kind() != CodeKind::BASELINE,
+                        kind() != CodeKind::BASELINE &&
+                            !ObjectInYoungGeneration(value))
+CODE_ACCESSORS_CHECKED2(bytecode_offset_table, ByteArray, kPositionTableOffset,
+                        kind() == CodeKind::BASELINE,
+                        kind() == CodeKind::BASELINE &&
+                            !ObjectInYoungGeneration(value))
 
 // Concurrent marker needs to access kind specific flags in code data container.
 RELEASE_ACQUIRE_CODE_ACCESSORS(code_data_container, CodeDataContainer,
                                kCodeDataContainerOffset)
 #undef CODE_ACCESSORS
-#undef CODE_ACCESSORS_CHECKED
+#undef CODE_ACCESSORS_CHECKED2
 #undef RELEASE_ACQUIRE_CODE_ACCESSORS
+#undef RELEASE_ACQUIRE_CODE_ACCESSORS_CHECKED2
+
+PtrComprCageBase Code::main_cage_base() const {
+#ifdef V8_EXTERNAL_CODE_SPACE
+  Address cage_base_hi = ReadField<Tagged_t>(kMainCageBaseUpper32BitsOffset);
+  return PtrComprCageBase(cage_base_hi << 32);
+#else
+  return GetPtrComprCageBase(*this);
+#endif
+}
+
+PtrComprCageBase Code::main_cage_base(RelaxedLoadTag) const {
+#ifdef V8_EXTERNAL_CODE_SPACE
+  Address cage_base_hi =
+      Relaxed_ReadField<Tagged_t>(kMainCageBaseUpper32BitsOffset);
+  return PtrComprCageBase(cage_base_hi << 32);
+#else
+  return GetPtrComprCageBase(*this);
+#endif
+}
+
+void Code::set_main_cage_base(Address cage_base, RelaxedStoreTag) {
+#ifdef V8_EXTERNAL_CODE_SPACE
+  Tagged_t cage_base_hi = static_cast<Tagged_t>(cage_base >> 32);
+  Relaxed_WriteField<Tagged_t>(kMainCageBaseUpper32BitsOffset, cage_base_hi);
+#else
+  UNREACHABLE();
+#endif
+}
 
 CodeDataContainer Code::GCSafeCodeDataContainer(AcquireLoadTag) const {
-  PtrComprCageBase cage_base = GetPtrComprCageBase(*this);
+  PtrComprCageBase cage_base = main_cage_base(kRelaxedLoad);
   HeapObject object =
       TaggedField<HeapObject, kCodeDataContainerOffset>::Acquire_Load(cage_base,
                                                                       *this);
@@ -247,15 +269,34 @@ CodeDataContainer Code::GCSafeCodeDataContainer(AcquireLoadTag) const {
 // Helper functions for converting Code objects to CodeDataContainer and back
 // when V8_EXTERNAL_CODE_SPACE is enabled.
 inline CodeT ToCodeT(Code code) {
-#if V8_EXTERNAL_CODE_SPACE
+#ifdef V8_EXTERNAL_CODE_SPACE
   return code.code_data_container(kAcquireLoad);
 #else
   return code;
 #endif
 }
 
+inline Handle<CodeT> ToCodeT(Handle<Code> code, Isolate* isolate) {
+#ifdef V8_EXTERNAL_CODE_SPACE
+  return handle(ToCodeT(*code), isolate);
+#else
+  return code;
+#endif
+}
+
+inline MaybeHandle<CodeT> ToCodeT(MaybeHandle<Code> maybe_code,
+                                  Isolate* isolate) {
+#ifdef V8_EXTERNAL_CODE_SPACE
+  Handle<Code> code;
+  if (maybe_code.ToHandle(&code)) return ToCodeT(code, isolate);
+  return {};
+#else
+  return maybe_code;
+#endif
+}
+
 inline Code FromCodeT(CodeT code) {
-#if V8_EXTERNAL_CODE_SPACE
+#ifdef V8_EXTERNAL_CODE_SPACE
   return code.code();
 #else
   return code;
@@ -263,15 +304,28 @@ inline Code FromCodeT(CodeT code) {
 }
 
 inline Code FromCodeT(CodeT code, RelaxedLoadTag) {
-#if V8_EXTERNAL_CODE_SPACE
+#ifdef V8_EXTERNAL_CODE_SPACE
   return code.code(kRelaxedLoad);
 #else
   return code;
 #endif
 }
 
+inline Handle<Code> FromCodeT(Handle<CodeT> code, Isolate* isolate) {
+#ifdef V8_EXTERNAL_CODE_SPACE
+  return handle(FromCodeT(*code), isolate);
+#else
+  return code;
+#endif
+}
+
+inline Handle<AbstractCode> ToAbstractCode(Handle<CodeT> code,
+                                           Isolate* isolate) {
+  return Handle<AbstractCode>::cast(FromCodeT(code, isolate));
+}
+
 inline CodeDataContainer CodeDataContainerFromCodeT(CodeT code) {
-#if V8_EXTERNAL_CODE_SPACE
+#ifdef V8_EXTERNAL_CODE_SPACE
   return code;
 #else
   return code.code_data_container(kAcquireLoad);
@@ -284,6 +338,9 @@ void Code::WipeOutHeader() {
               Smi::FromInt(0));
   WRITE_FIELD(*this, kPositionTableOffset, Smi::FromInt(0));
   WRITE_FIELD(*this, kCodeDataContainerOffset, Smi::FromInt(0));
+  if (V8_EXTERNAL_CODE_SPACE_BOOL) {
+    set_main_cage_base(kNullAddress, kRelaxedStore);
+  }
 }
 
 void Code::clear_padding() {
@@ -401,15 +458,9 @@ int Code::SizeIncludingMetadata() const {
 }
 
 ByteArray Code::unchecked_relocation_info() const {
-  PtrComprCageBase cage_base = GetPtrComprCageBase(*this);
+  PtrComprCageBase cage_base = main_cage_base();
   return ByteArray::unchecked_cast(
       TaggedField<HeapObject, kRelocationInfoOffset>::load(cage_base, *this));
-}
-
-HeapObject Code::synchronized_unchecked_relocation_info_or_undefined() const {
-  PtrComprCageBase cage_base = GetPtrComprCageBase(*this);
-  return TaggedField<HeapObject, kRelocationInfoOffset>::Acquire_Load(cage_base,
-                                                                      *this);
 }
 
 byte* Code::relocation_start() const {
@@ -433,7 +484,8 @@ bool Code::contains(Isolate* isolate, Address inner_pointer) {
       return true;
     }
   }
-  return (address() <= inner_pointer) && (inner_pointer < address() + Size());
+  return (address() <= inner_pointer) &&
+         (inner_pointer < address() + CodeSize());
 }
 
 // static
@@ -445,6 +497,8 @@ void Code::CopyRelocInfoToByteArray(ByteArray dest, const CodeDesc& desc) {
 }
 
 int Code::CodeSize() const { return SizeFor(raw_body_size()); }
+
+DEF_GETTER(Code, Size, int) { return CodeSize(); }
 
 CodeKind Code::kind() const {
   STATIC_ASSERT(FIELD_SIZE(kFlagsOffset) == kInt32Size);
@@ -525,29 +579,35 @@ void Code::initialize_flags(CodeKind kind, bool is_turbofanned, int stack_slots,
                    IsOffHeapTrampoline::encode(is_off_heap_trampoline);
   STATIC_ASSERT(FIELD_SIZE(kFlagsOffset) == kInt32Size);
   RELAXED_WRITE_UINT32_FIELD(*this, kFlagsOffset, flags);
-  DCHECK_IMPLIES(stack_slots != 0, has_safepoint_info());
+  DCHECK_IMPLIES(stack_slots != 0, uses_safepoint_table());
+  DCHECK_IMPLIES(!uses_safepoint_table(), stack_slots == 0);
 }
 
 inline bool Code::is_interpreter_trampoline_builtin() const {
-  // Check for kNoBuiltinId first to abort early when the current Code object
-  // is not a builtin.
-  return builtin_id() != Builtin::kNoBuiltinId &&
-         (builtin_id() == Builtin::kInterpreterEntryTrampoline ||
-          builtin_id() == Builtin::kInterpreterEnterAtBytecode ||
-          builtin_id() == Builtin::kInterpreterEnterAtNextBytecode);
+  return IsInterpreterTrampolineBuiltin(builtin_id());
 }
 
 inline bool Code::is_baseline_trampoline_builtin() const {
-  return builtin_id() != Builtin::kNoBuiltinId &&
-         (builtin_id() == Builtin::kBaselineOutOfLinePrologue ||
-          builtin_id() == Builtin::kBaselineOrInterpreterEnterAtBytecode ||
-          builtin_id() == Builtin::kBaselineOrInterpreterEnterAtNextBytecode);
+  return IsBaselineTrampolineBuiltin(builtin_id());
 }
 
 inline bool Code::is_baseline_leave_frame_builtin() const {
   return builtin_id() == Builtin::kBaselineLeaveFrame;
 }
 
+#ifdef V8_EXTERNAL_CODE_SPACE
+// Note, must be in sync with Code::checks_optimization_marker().
+inline bool CodeDataContainer::checks_optimization_marker() const {
+  CHECK(V8_EXTERNAL_CODE_SPACE_BOOL);
+  bool checks_marker = (builtin_id() == Builtin::kCompileLazy ||
+                        builtin_id() == Builtin::kInterpreterEntryTrampoline ||
+                        CodeKindCanTierUp(kind()));
+  return checks_marker ||
+         (CodeKindCanDeoptimize(kind()) && marked_for_deoptimization());
+}
+#endif  // V8_EXTERNAL_CODE_SPACE
+
+// Note, must be in sync with CodeDataContainer::checks_optimization_marker().
 inline bool Code::checks_optimization_marker() const {
   bool checks_marker = (builtin_id() == Builtin::kCompileLazy ||
                         builtin_id() == Builtin::kInterpreterEntryTrampoline ||
@@ -565,6 +625,8 @@ inline bool Code::is_turbofanned() const {
   const uint32_t flags = RELAXED_READ_UINT32_FIELD(*this, kFlagsOffset);
   return IsTurbofannedField::decode(flags);
 }
+
+bool Code::is_maglevved() const { return kind() == CodeKind::MAGLEV; }
 
 inline bool Code::can_have_weak_objects() const {
   DCHECK(CodeKindIsOptimizedJSFunction(kind()));
@@ -596,21 +658,6 @@ inline void Code::set_is_promise_rejection(bool value) {
   container.set_kind_specific_flags(updated, kRelaxedStore);
 }
 
-inline bool Code::is_exception_caught() const {
-  DCHECK(kind() == CodeKind::BUILTIN);
-  int32_t flags =
-      code_data_container(kAcquireLoad).kind_specific_flags(kRelaxedLoad);
-  return IsExceptionCaughtField::decode(flags);
-}
-
-inline void Code::set_is_exception_caught(bool value) {
-  DCHECK(kind() == CodeKind::BUILTIN);
-  CodeDataContainer container = code_data_container(kAcquireLoad);
-  int32_t previous = container.kind_specific_flags(kRelaxedLoad);
-  int32_t updated = IsExceptionCaughtField::update(previous, value);
-  container.set_kind_specific_flags(updated, kRelaxedStore);
-}
-
 inline bool Code::is_off_heap_trampoline() const {
   const uint32_t flags = RELAXED_READ_UINT32_FIELD(*this, kFlagsOffset);
   return IsOffHeapTrampoline::decode(flags);
@@ -618,7 +665,6 @@ inline bool Code::is_off_heap_trampoline() const {
 
 inline HandlerTable::CatchPrediction Code::GetBuiltinCatchPrediction() {
   if (is_promise_rejection()) return HandlerTable::PROMISE;
-  if (is_exception_caught()) return HandlerTable::CAUGHT;
   return HandlerTable::UNCAUGHT;
 }
 
@@ -648,50 +694,46 @@ void Code::set_inlined_bytecode_size(unsigned size) {
   RELAXED_WRITE_UINT_FIELD(*this, kInlinedBytecodeSizeOffset, size);
 }
 
-bool Code::has_safepoint_info() const {
-  return is_turbofanned() || is_wasm_code();
+bool Code::uses_safepoint_table() const {
+  return is_turbofanned() || is_maglevved() || is_wasm_code();
 }
 
 int Code::stack_slots() const {
-  DCHECK(has_safepoint_info());
   const uint32_t flags = RELAXED_READ_UINT32_FIELD(*this, kFlagsOffset);
-  return StackSlotsField::decode(flags);
+  const int slots = StackSlotsField::decode(flags);
+  DCHECK_IMPLIES(!uses_safepoint_table(), slots == 0);
+  return slots;
+}
+
+bool CodeDataContainer::marked_for_deoptimization() const {
+#ifdef V8_EXTERNAL_CODE_SPACE
+  // kind field is not available on CodeDataContainer when external code space
+  // is not enabled.
+  DCHECK(CodeKindCanDeoptimize(kind()));
+#endif  // V8_EXTERNAL_CODE_SPACE
+  int32_t flags = kind_specific_flags(kRelaxedLoad);
+  return Code::MarkedForDeoptimizationField::decode(flags);
 }
 
 bool Code::marked_for_deoptimization() const {
   DCHECK(CodeKindCanDeoptimize(kind()));
-  int32_t flags =
-      code_data_container(kAcquireLoad).kind_specific_flags(kRelaxedLoad);
-  return MarkedForDeoptimizationField::decode(flags);
+  return code_data_container(kAcquireLoad).marked_for_deoptimization();
+}
+
+void CodeDataContainer::set_marked_for_deoptimization(bool flag) {
+#ifdef V8_EXTERNAL_CODE_SPACE
+  // kind field is not available on CodeDataContainer when external code space
+  // is not enabled.
+  DCHECK(CodeKindCanDeoptimize(kind()));
+#endif  // V8_EXTERNAL_CODE_SPACE
+  DCHECK_IMPLIES(flag, AllowDeoptimization::IsAllowed(GetIsolate()));
+  int32_t previous = kind_specific_flags(kRelaxedLoad);
+  int32_t updated = Code::MarkedForDeoptimizationField::update(previous, flag);
+  set_kind_specific_flags(updated, kRelaxedStore);
 }
 
 void Code::set_marked_for_deoptimization(bool flag) {
-  DCHECK(CodeKindCanDeoptimize(kind()));
-  DCHECK_IMPLIES(flag, AllowDeoptimization::IsAllowed(GetIsolate()));
-  CodeDataContainer container = code_data_container(kAcquireLoad);
-  int32_t previous = container.kind_specific_flags(kRelaxedLoad);
-  int32_t updated = MarkedForDeoptimizationField::update(previous, flag);
-  container.set_kind_specific_flags(updated, kRelaxedStore);
-}
-
-int Code::deoptimization_count() const {
-  DCHECK(CodeKindCanDeoptimize(kind()));
-  int32_t flags =
-      code_data_container(kAcquireLoad).kind_specific_flags(kRelaxedLoad);
-  int count = DeoptCountField::decode(flags);
-  DCHECK_GE(count, 0);
-  return count;
-}
-
-void Code::increment_deoptimization_count() {
-  DCHECK(CodeKindCanDeoptimize(kind()));
-  CodeDataContainer container = code_data_container(kAcquireLoad);
-  int32_t flags = container.kind_specific_flags(kRelaxedLoad);
-  int32_t count = DeoptCountField::decode(flags);
-  DCHECK_GE(count, 0);
-  CHECK_LE(count + 1, DeoptCountField::kMax);
-  int32_t updated = DeoptCountField::update(flags, count + 1);
-  container.set_kind_specific_flags(updated, kRelaxedStore);
+  code_data_container(kAcquireLoad).set_marked_for_deoptimization(flag);
 }
 
 bool Code::embedded_objects_cleared() const {
@@ -813,6 +855,15 @@ bool Code::IsWeakObjectInOptimizedCode(HeapObject object) {
          InstanceTypeChecker::IsContext(instance_type);
 }
 
+bool Code::IsWeakObjectInDeoptimizationLiteralArray(Object object) {
+  // Maps must be strong because they can be used as part of the description for
+  // how to materialize an object upon deoptimization, in which case it is
+  // possible to reach the code that requires the Map without anything else
+  // holding a strong pointer to that Map.
+  return object.IsHeapObject() && !object.IsMap() &&
+         Code::IsWeakObjectInOptimizedCode(HeapObject::cast(object));
+}
+
 bool Code::IsExecutable() {
   return !Builtins::IsBuiltinId(builtin_id()) || !is_off_heap_trampoline() ||
          Builtins::CodeObjectIsExecutable(builtin_id());
@@ -824,30 +875,121 @@ STATIC_ASSERT(FIELD_SIZE(CodeDataContainer::kKindSpecificFlagsOffset) ==
               kInt32Size);
 RELAXED_INT32_ACCESSORS(CodeDataContainer, kind_specific_flags,
                         kKindSpecificFlagsOffset)
-ACCESSORS_CHECKED(CodeDataContainer, raw_code, Object, kCodeOffset,
-                  V8_EXTERNAL_CODE_SPACE_BOOL)
-RELAXED_ACCESSORS_CHECKED(CodeDataContainer, raw_code, Object, kCodeOffset,
-                          V8_EXTERNAL_CODE_SPACE_BOOL)
+
+#if defined(V8_TARGET_LITTLE_ENDIAN)
+static_assert(!V8_EXTERNAL_CODE_SPACE_BOOL ||
+                  (CodeDataContainer::kCodeCageBaseUpper32BitsOffset ==
+                   CodeDataContainer::kCodeOffset + kTaggedSize),
+              "CodeDataContainer::code field layout requires updating "
+              "for little endian architectures");
+#elif defined(V8_TARGET_BIG_ENDIAN)
+static_assert(!V8_EXTERNAL_CODE_SPACE_BOOL,
+              "CodeDataContainer::code field layout requires updating "
+              "for big endian architectures");
+#endif
+
+Object CodeDataContainer::raw_code() const {
+  PtrComprCageBase cage_base = code_cage_base();
+  return CodeDataContainer::raw_code(cage_base);
+}
+
+Object CodeDataContainer::raw_code(PtrComprCageBase cage_base) const {
+  CHECK(V8_EXTERNAL_CODE_SPACE_BOOL);
+  Object value = TaggedField<Object, kCodeOffset>::load(cage_base, *this);
+  return value;
+}
+
+void CodeDataContainer::set_raw_code(Object value, WriteBarrierMode mode) {
+  CHECK(V8_EXTERNAL_CODE_SPACE_BOOL);
+  TaggedField<Object, kCodeOffset>::store(*this, value);
+  CONDITIONAL_WRITE_BARRIER(*this, kCodeOffset, value, mode);
+}
+
+Object CodeDataContainer::raw_code(RelaxedLoadTag tag) const {
+  PtrComprCageBase cage_base = code_cage_base(tag);
+  return CodeDataContainer::raw_code(cage_base, tag);
+}
+
+Object CodeDataContainer::raw_code(PtrComprCageBase cage_base,
+                                   RelaxedLoadTag) const {
+  Object value =
+      TaggedField<Object, kCodeOffset>::Relaxed_Load(cage_base, *this);
+  CHECK(V8_EXTERNAL_CODE_SPACE_BOOL);
+  return value;
+}
+
 ACCESSORS(CodeDataContainer, next_code_link, Object, kNextCodeLinkOffset)
+
+PtrComprCageBase CodeDataContainer::code_cage_base() const {
+#ifdef V8_EXTERNAL_CODE_SPACE
+  // TODO(v8:10391): consider protecting this value with the sandbox.
+  Address code_cage_base_hi =
+      ReadField<Tagged_t>(kCodeCageBaseUpper32BitsOffset);
+  return PtrComprCageBase(code_cage_base_hi << 32);
+#else
+  return GetPtrComprCageBase(*this);
+#endif
+}
+
+void CodeDataContainer::set_code_cage_base(Address code_cage_base) {
+#ifdef V8_EXTERNAL_CODE_SPACE
+  Tagged_t code_cage_base_hi = static_cast<Tagged_t>(code_cage_base >> 32);
+  WriteField<Tagged_t>(kCodeCageBaseUpper32BitsOffset, code_cage_base_hi);
+#else
+  UNREACHABLE();
+#endif
+}
+
+PtrComprCageBase CodeDataContainer::code_cage_base(RelaxedLoadTag) const {
+#ifdef V8_EXTERNAL_CODE_SPACE
+  // TODO(v8:10391): consider protecting this value with the sandbox.
+  Address code_cage_base_hi =
+      Relaxed_ReadField<Tagged_t>(kCodeCageBaseUpper32BitsOffset);
+  return PtrComprCageBase(code_cage_base_hi << 32);
+#else
+  return GetPtrComprCageBase(*this);
+#endif
+}
+
+void CodeDataContainer::set_code_cage_base(Address code_cage_base,
+                                           RelaxedStoreTag) {
+#ifdef V8_EXTERNAL_CODE_SPACE
+  Tagged_t code_cage_base_hi = static_cast<Tagged_t>(code_cage_base >> 32);
+  Relaxed_WriteField<Tagged_t>(kCodeCageBaseUpper32BitsOffset,
+                               code_cage_base_hi);
+#else
+  UNREACHABLE();
+#endif
+}
 
 void CodeDataContainer::AllocateExternalPointerEntries(Isolate* isolate) {
   CHECK(V8_EXTERNAL_CODE_SPACE_BOOL);
-  InitExternalPointerField(kCodeEntryPointOffset, isolate);
+  InitExternalPointerField(kCodeEntryPointOffset, isolate, kCodeEntryPointTag);
 }
 
-DEF_GETTER(CodeDataContainer, code, Code) {
+Code CodeDataContainer::code() const {
+  PtrComprCageBase cage_base = code_cage_base();
+  return CodeDataContainer::code(cage_base);
+}
+Code CodeDataContainer::code(PtrComprCageBase cage_base) const {
   CHECK(V8_EXTERNAL_CODE_SPACE_BOOL);
   return Code::cast(raw_code(cage_base));
 }
 
-DEF_RELAXED_GETTER(CodeDataContainer, code, Code) {
+Code CodeDataContainer::code(RelaxedLoadTag tag) const {
+  PtrComprCageBase cage_base = code_cage_base(tag);
+  return CodeDataContainer::code(cage_base, tag);
+}
+
+Code CodeDataContainer::code(PtrComprCageBase cage_base,
+                             RelaxedLoadTag tag) const {
   CHECK(V8_EXTERNAL_CODE_SPACE_BOOL);
-  return Code::cast(raw_code(cage_base, kRelaxedLoad));
+  return Code::cast(raw_code(cage_base, tag));
 }
 
 DEF_GETTER(CodeDataContainer, code_entry_point, Address) {
   CHECK(V8_EXTERNAL_CODE_SPACE_BOOL);
-  Isolate* isolate = GetIsolateForHeapSandbox(*this);
+  Isolate* isolate = GetIsolateForSandbox(*this);
   return ReadExternalPointerField(kCodeEntryPointOffset, isolate,
                                   kCodeEntryPointTag);
 }
@@ -876,10 +1018,87 @@ Address CodeDataContainer::InstructionStart() const {
   return code_entry_point();
 }
 
+Address CodeDataContainer::raw_instruction_start() {
+  return code_entry_point();
+}
+
+Address CodeDataContainer::entry() const { return code_entry_point(); }
+
 void CodeDataContainer::clear_padding() {
   memset(reinterpret_cast<void*>(address() + kUnalignedSize), 0,
          kSize - kUnalignedSize);
 }
+
+RELAXED_UINT16_ACCESSORS(CodeDataContainer, flags, kFlagsOffset)
+
+// Ensure builtin_id field fits into int16_t, so that we can rely on sign
+// extension to convert int16_t{-1} to kNoBuiltinId.
+// If the asserts fail, update the code that use kBuiltinIdOffset below.
+STATIC_ASSERT(static_cast<int>(Builtin::kNoBuiltinId) == -1);
+STATIC_ASSERT(Builtins::kBuiltinCount < std::numeric_limits<int16_t>::max());
+
+void CodeDataContainer::initialize_flags(CodeKind kind, Builtin builtin_id) {
+  CHECK(V8_EXTERNAL_CODE_SPACE_BOOL);
+  uint16_t value = KindField::encode(kind);
+  set_flags(value, kRelaxedStore);
+
+  WriteField<int16_t>(kBuiltinIdOffset, static_cast<int16_t>(builtin_id));
+}
+
+#ifdef V8_EXTERNAL_CODE_SPACE
+
+CodeKind CodeDataContainer::kind() const {
+  return KindField::decode(flags(kRelaxedLoad));
+}
+
+Builtin CodeDataContainer::builtin_id() const {
+  CHECK(V8_EXTERNAL_CODE_SPACE_BOOL);
+  // Rely on sign-extension when converting int16_t to int to preserve
+  // kNoBuiltinId value.
+  STATIC_ASSERT(static_cast<int>(static_cast<int16_t>(Builtin::kNoBuiltinId)) ==
+                static_cast<int>(Builtin::kNoBuiltinId));
+  int value = ReadField<int16_t>(kBuiltinIdOffset);
+  return static_cast<Builtin>(value);
+}
+
+bool CodeDataContainer::is_builtin() const {
+  CHECK(V8_EXTERNAL_CODE_SPACE_BOOL);
+  return builtin_id() != Builtin::kNoBuiltinId;
+}
+
+bool CodeDataContainer::is_optimized_code() const {
+  return CodeKindIsOptimizedJSFunction(kind());
+}
+
+inline bool CodeDataContainer::is_interpreter_trampoline_builtin() const {
+  return IsInterpreterTrampolineBuiltin(builtin_id());
+}
+
+//
+// A collection of getters and predicates that forward queries to associated
+// Code object.
+//
+
+#define DEF_PRIMITIVE_FORWARDING_CDC_GETTER(name, type) \
+  type CodeDataContainer::name() const { return FromCodeT(*this).name(); }
+
+#define DEF_FORWARDING_CDC_GETTER(name, type) \
+  DEF_GETTER(CodeDataContainer, name, type) { \
+    return FromCodeT(*this).name(cage_base);  \
+  }
+
+DEF_PRIMITIVE_FORWARDING_CDC_GETTER(is_turbofanned, bool)
+DEF_PRIMITIVE_FORWARDING_CDC_GETTER(is_off_heap_trampoline, bool)
+
+DEF_FORWARDING_CDC_GETTER(deoptimization_data, FixedArray)
+DEF_FORWARDING_CDC_GETTER(bytecode_or_interpreter_data, HeapObject)
+DEF_FORWARDING_CDC_GETTER(source_position_table, ByteArray)
+DEF_FORWARDING_CDC_GETTER(bytecode_offset_table, ByteArray)
+
+#undef DEF_PRIMITIVE_FORWARDING_CDC_GETTER
+#undef DEF_FORWARDING_CDC_GETTER
+
+#endif  // V8_EXTERNAL_CODE_SPACE
 
 byte BytecodeArray::get(int index) const {
   DCHECK(index >= 0 && index < this->length());
@@ -938,13 +1157,13 @@ void BytecodeArray::set_incoming_new_target_or_generator_register(
 }
 
 int BytecodeArray::osr_loop_nesting_level() const {
-  return ReadField<int8_t>(kOsrLoopNestingLevelOffset);
+  return ACQUIRE_READ_INT8_FIELD(*this, kOsrLoopNestingLevelOffset);
 }
 
 void BytecodeArray::set_osr_loop_nesting_level(int depth) {
   DCHECK(0 <= depth && depth <= AbstractCode::kMaxLoopNestingMarker);
   STATIC_ASSERT(AbstractCode::kMaxLoopNestingMarker < kMaxInt8);
-  WriteField<int8_t>(kOsrLoopNestingLevelOffset, depth);
+  RELEASE_WRITE_INT8_FIELD(*this, kOsrLoopNestingLevelOffset, depth);
 }
 
 BytecodeArray::Age BytecodeArray::bytecode_age() const {
@@ -1014,13 +1233,13 @@ int BytecodeArray::SizeIncludingMetadata() {
 
 DEFINE_DEOPT_ELEMENT_ACCESSORS(TranslationByteArray, TranslationArray)
 DEFINE_DEOPT_ELEMENT_ACCESSORS(InlinedFunctionCount, Smi)
-DEFINE_DEOPT_ELEMENT_ACCESSORS(LiteralArray, FixedArray)
+DEFINE_DEOPT_ELEMENT_ACCESSORS(LiteralArray, DeoptimizationLiteralArray)
 DEFINE_DEOPT_ELEMENT_ACCESSORS(OsrBytecodeOffset, Smi)
 DEFINE_DEOPT_ELEMENT_ACCESSORS(OsrPcOffset, Smi)
 DEFINE_DEOPT_ELEMENT_ACCESSORS(OptimizationId, Smi)
 DEFINE_DEOPT_ELEMENT_ACCESSORS(InliningPositions, PodArray<InliningPosition>)
 DEFINE_DEOPT_ELEMENT_ACCESSORS(DeoptExitStart, Smi)
-DEFINE_DEOPT_ELEMENT_ACCESSORS(EagerSoftAndBailoutDeoptCount, Smi)
+DEFINE_DEOPT_ELEMENT_ACCESSORS(NonLazyDeoptCount, Smi)
 DEFINE_DEOPT_ELEMENT_ACCESSORS(LazyDeoptCount, Smi)
 
 DEFINE_DEOPT_ENTRY_ACCESSORS(BytecodeOffsetRaw, Smi)
@@ -1040,6 +1259,41 @@ void DeoptimizationData::SetBytecodeOffset(int i, BytecodeOffset value) {
 
 int DeoptimizationData::DeoptCount() {
   return (length() - kFirstDeoptEntryIndex) / kDeoptEntrySize;
+}
+
+inline DeoptimizationLiteralArray::DeoptimizationLiteralArray(Address ptr)
+    : WeakFixedArray(ptr) {
+  // No type check is possible beyond that for WeakFixedArray.
+}
+
+inline Object DeoptimizationLiteralArray::get(int index) const {
+  return get(GetPtrComprCageBase(*this), index);
+}
+
+inline Object DeoptimizationLiteralArray::get(PtrComprCageBase cage_base,
+                                              int index) const {
+  MaybeObject maybe = Get(cage_base, index);
+
+  // Slots in the DeoptimizationLiteralArray should only be cleared when there
+  // is no possible code path that could need that slot. This works because the
+  // weakly-held deoptimization literals are basically local variables that
+  // TurboFan has decided not to keep on the stack. Thus, if the deoptimization
+  // literal goes away, then whatever code needed it should be unreachable. The
+  // exception is currently running Code: in that case, the deoptimization
+  // literals array might be the only thing keeping the target object alive.
+  // Thus, when a Code is running, we strongly mark all of its deoptimization
+  // literals.
+  CHECK(!maybe.IsCleared());
+
+  return maybe.GetHeapObjectOrSmi();
+}
+
+inline void DeoptimizationLiteralArray::set(int index, Object value) {
+  MaybeObject maybe = MaybeObject::FromObject(value);
+  if (Code::IsWeakObjectInDeoptimizationLiteralArray(value)) {
+    maybe = MaybeObject::MakeWeak(maybe);
+  }
+  Set(index, maybe);
 }
 
 }  // namespace internal

@@ -106,6 +106,8 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
     AddS64(sp, sp, Operand(-bytes), r0);
   }
 
+  void AllocateStackSpace(Register bytes) { sub(sp, sp, bytes); }
+
   // Push a fixed frame, consisting of lr, fp, constant pool.
   void PushCommonFrame(Register marker_reg = no_reg);
 
@@ -555,15 +557,15 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
   void MultiPush(RegList regs, Register location = sp);
   void MultiPop(RegList regs, Register location = sp);
 
-  void MultiPushDoubles(RegList dregs, Register location = sp);
-  void MultiPopDoubles(RegList dregs, Register location = sp);
+  void MultiPushDoubles(DoubleRegList dregs, Register location = sp);
+  void MultiPopDoubles(DoubleRegList dregs, Register location = sp);
 
-  void MultiPushV128(RegList dregs, Register location = sp);
-  void MultiPopV128(RegList dregs, Register location = sp);
+  void MultiPushV128(Simd128RegList dregs, Register location = sp);
+  void MultiPopV128(Simd128RegList dregs, Register location = sp);
 
-  void MultiPushF64AndV128(RegList dregs, RegList simd_regs,
+  void MultiPushF64AndV128(DoubleRegList dregs, Simd128RegList simd_regs,
                            Register location = sp);
-  void MultiPopF64AndV128(RegList dregs, RegList simd_regs,
+  void MultiPopF64AndV128(DoubleRegList dregs, Simd128RegList simd_regs,
                           Register location = sp);
 
   // Calculate how much stack space (in bytes) are required to store caller
@@ -610,9 +612,9 @@ class V8_EXPORT_PRIVATE TurboAssembler : public TurboAssemblerBase {
                    Simd128Register scratch);
   void SwapSimd128(MemOperand src, MemOperand dst, Simd128Register scratch);
 
-  void ByteReverseU16(Register dst, Register val);
-  void ByteReverseU32(Register dst, Register val);
-  void ByteReverseU64(Register dst, Register val);
+  void ByteReverseU16(Register dst, Register val, Register scratch);
+  void ByteReverseU32(Register dst, Register val, Register scratch);
+  void ByteReverseU64(Register dst, Register val, Register = r0);
 
   // Before calling a C-function from generated code, align arguments on stack.
   // After aligning the frame, non-register arguments must be stored in
@@ -1259,7 +1261,7 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
                                bool builtin_exit_frame = false);
 
   // Generates a trampoline to jump to the off-heap instruction stream.
-  void JumpToInstructionStream(Address entry);
+  void JumpToOffHeapInstructionStream(Address entry);
 
   // ---------------------------------------------------------------------------
   // In-place weak references.
@@ -1322,6 +1324,10 @@ class V8_EXPORT_PRIVATE MacroAssembler : public TurboAssembler {
 
   // Abort execution if argument is not a JSFunction, enabled via --debug-code.
   void AssertFunction(Register object);
+
+  // Abort execution if argument is not a callable JSFunction, enabled via
+  // --debug-code.
+  void AssertCallableFunction(Register object);
 
   // Abort execution if argument is not a JSBoundFunction,
   // enabled via --debug-code.

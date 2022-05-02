@@ -36,6 +36,7 @@
 #include "node_binding.h"
 #include "node_external_reference.h"
 #include "node_main_instance.h"
+#include "node_native_module.h"
 #include "node_options.h"
 #include "node_perf_common.h"
 #include "node_snapshotable.h"
@@ -288,8 +289,6 @@ constexpr size_t kFsStatsBufferLength =
   V(input_string, "input")                                                     \
   V(internal_binding_string, "internalBinding")                                \
   V(internal_string, "internal")                                               \
-  V(ipv4_string, "IPv4")                                                       \
-  V(ipv6_string, "IPv6")                                                       \
   V(isclosing_string, "isClosing")                                             \
   V(issuer_string, "issuer")                                                   \
   V(issuercert_string, "issuerCertificate")                                    \
@@ -973,7 +972,6 @@ struct EnvSerializeInfo {
 };
 
 struct SnapshotData {
-  SnapshotData() { blob.data = nullptr; }
   v8::StartupData blob;
   std::vector<size_t> isolate_data_indices;
   EnvSerializeInfo env_info;
@@ -1217,6 +1215,7 @@ class Environment : public MemoryRetainer {
   inline bool tracks_unmanaged_fds() const;
   inline bool hide_console_windows() const;
   inline bool no_global_search_paths() const;
+  inline bool no_browser_globals() const;
   inline uint64_t thread_id() const;
   inline worker::Worker* worker_context() const;
   Environment* worker_parent_env() const;

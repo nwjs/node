@@ -740,7 +740,9 @@ added:
  - v13.4.0
  - v12.16.0
 changes:
-  - version: v17.4.0
+  - version:
+    - v17.4.0
+    - v16.14.0
     pr-url: https://github.com/nodejs/node/pull/41267
     description: No longer experimental.
 -->
@@ -828,7 +830,7 @@ events. Listeners installed using this symbol are called before the regular
 `'error'` listeners are called.
 
 Installing a listener using this symbol does not change the behavior once an
-`'error'` event is emitted, therefore the process will still crash if no
+`'error'` event is emitted. Therefore, the process will still crash if no
 regular `'error'` listener is installed.
 
 ## `events.getEventListeners(emitterOrTarget, eventName)`
@@ -1029,7 +1031,9 @@ added:
  - v13.4.0
  - v12.16.0
 changes:
-  - version: v17.4.0
+  - version:
+    - v17.4.0
+    - v16.14.0
     pr-url: https://github.com/nodejs/node/pull/41267
     description: No longer experimental.
 -->
@@ -1045,7 +1049,9 @@ added:
   - v13.4.0
   - v12.16.0
 changes:
-  - version: v17.4.0
+  - version:
+    - v17.4.0
+    - v16.14.0
     pr-url: https://github.com/nodejs/node/pull/41267
     description: No longer experimental.
 -->
@@ -1173,7 +1179,9 @@ setMaxListeners(5, target, emitter);
 ## Class: `events.EventEmitterAsyncResource extends EventEmitter`
 
 <!-- YAML
-added: v17.4.0
+added:
+  - v17.4.0
+  - v16.14.0
 -->
 
 Integrates `EventEmitter` with {AsyncResource} for `EventEmitter`s that

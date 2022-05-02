@@ -5,6 +5,7 @@
 #ifndef V8_HEAP_PAGED_SPACES_H_
 #define V8_HEAP_PAGED_SPACES_H_
 
+#include <atomic>
 #include <memory>
 #include <utility>
 
@@ -15,6 +16,7 @@
 #include "src/common/globals.h"
 #include "src/flags/flags.h"
 #include "src/heap/allocation-stats.h"
+#include "src/heap/memory-chunk-layout.h"
 #include "src/heap/memory-chunk.h"
 #include "src/heap/spaces.h"
 
@@ -47,6 +49,16 @@ class V8_EXPORT_PRIVATE PagedSpaceObjectIterator : public ObjectIterator {
   // Returns nullptr when the iteration has ended.
   inline HeapObject Next() override;
 
+  // The pointer compression cage base value used for decompression of all
+  // tagged values except references to Code objects.
+  PtrComprCageBase cage_base() const {
+#if V8_COMPRESS_POINTERS
+    return cage_base_;
+#else
+    return PtrComprCageBase{};
+#endif  // V8_COMPRESS_POINTERS
+  }
+
  private:
   // Fast (inlined) path of next().
   inline HeapObject FromCurrentPage();
@@ -60,6 +72,9 @@ class V8_EXPORT_PRIVATE PagedSpaceObjectIterator : public ObjectIterator {
   PagedSpace* space_;
   PageRange page_range_;
   PageRange::iterator current_page_;
+#if V8_COMPRESS_POINTERS
+  const PtrComprCageBase cage_base_;
+#endif  // V8_COMPRESS_POINTERS
 };
 
 class V8_EXPORT_PRIVATE PagedSpace
@@ -73,7 +88,7 @@ class V8_EXPORT_PRIVATE PagedSpace
   // Creates a space with an id.
   PagedSpace(
       Heap* heap, AllocationSpace id, Executability executable,
-      FreeList* free_list,
+      FreeList* free_list, LinearAllocationArea* allocation_info_,
       CompactionSpaceKind compaction_space_kind = CompactionSpaceKind::kNone);
 
   ~PagedSpace() override { TearDown(); }
@@ -94,6 +109,13 @@ class V8_EXPORT_PRIVATE PagedSpace
 
   // Approximate amount of physical memory committed for this space.
   size_t CommittedPhysicalMemory() override;
+
+#if DEBUG
+  void VerifyCommittedPhysicalMemory();
+#endif  // DEBUG
+
+  void IncrementCommittedPhysicalMemory(size_t increment_value);
+  void DecrementCommittedPhysicalMemory(size_t decrement_value);
 
   // Sets the capacity, the available space and the wasted space to zero.
   // The stats are rebuilt during sweeping by adding each page to the
@@ -181,7 +203,7 @@ class V8_EXPORT_PRIVATE PagedSpace
   void ResetFreeList();
 
   // Empty space linear allocation area, returning unused area to free list.
-  void FreeLinearAllocationArea();
+  void FreeLinearAllocationArea() override;
 
   void MakeLinearAllocationAreaIterable();
 
@@ -203,7 +225,7 @@ class V8_EXPORT_PRIVATE PagedSpace
 
   void RefineAllocatedBytesAfterSweeping(Page* page);
 
-  Page* InitializePage(MemoryChunk* chunk);
+  Page* InitializePage(MemoryChunk* chunk) override;
 
   void ReleasePage(Page* page);
 
@@ -276,9 +298,11 @@ class V8_EXPORT_PRIVATE PagedSpace
   inline void UnlinkFreeListCategories(Page* page);
   inline size_t RelinkFreeListCategories(Page* page);
 
-  Page* first_page() { return reinterpret_cast<Page*>(Space::first_page()); }
-  const Page* first_page() const {
-    return reinterpret_cast<const Page*>(Space::first_page());
+  Page* first_page() override {
+    return reinterpret_cast<Page*>(memory_chunk_list_.front());
+  }
+  const Page* first_page() const override {
+    return reinterpret_cast<const Page*>(memory_chunk_list_.front());
   }
 
   iterator begin() { return iterator(first_page()); }
@@ -312,6 +336,10 @@ class V8_EXPORT_PRIVATE PagedSpace
     return &pending_allocation_mutex_;
   }
 
+  void AddRangeToActiveSystemPages(Page* page, Address start, Address end);
+  void ReduceActiveSystemPages(Page* page,
+                               ActiveSystemPages active_system_pages);
+
  private:
   class ConcurrentAllocationMutex {
    public:
@@ -344,6 +372,10 @@ class V8_EXPORT_PRIVATE PagedSpace
 
   bool HasPages() { return first_page() != nullptr; }
 
+  // Returns whether sweeping of this space is safe on this thread. Code space
+  // sweeping is only allowed on the main thread.
+  bool IsSweepingAllowedOnThread(LocalHeap* local_heap);
+
   // Cleans up the space, frees all pages in this space except those belonging
   // to the initial chunk, uncommits addresses in the initial chunk.
   void TearDown();
@@ -357,7 +389,7 @@ class V8_EXPORT_PRIVATE PagedSpace
   // a memory area of the given size in it. If successful the method returns
   // the address and size of the area.
   base::Optional<std::pair<Address, size_t>> ExpandBackground(
-      LocalHeap* local_heap, size_t size_in_bytes);
+      size_t size_in_bytes);
 
   Page* AllocatePage();
 
@@ -396,14 +428,17 @@ class V8_EXPORT_PRIVATE PagedSpace
                                               AllocationOrigin origin);
 
   V8_WARN_UNUSED_RESULT base::Optional<std::pair<Address, size_t>>
-  TryAllocationFromFreeListBackground(LocalHeap* local_heap,
-                                      size_t min_size_in_bytes,
+  TryAllocationFromFreeListBackground(size_t min_size_in_bytes,
                                       size_t max_size_in_bytes,
                                       AllocationAlignment alignment,
                                       AllocationOrigin origin);
 
   V8_WARN_UNUSED_RESULT bool TryExpand(int size_in_bytes,
                                        AllocationOrigin origin);
+
+  size_t committed_physical_memory() const {
+    return committed_physical_memory_.load(std::memory_order_relaxed);
+  }
 
   Executability executable_;
 
@@ -425,6 +460,8 @@ class V8_EXPORT_PRIVATE PagedSpace
   // Protects original_top_ and original_limit_.
   base::SharedMutex pending_allocation_mutex_;
 
+  std::atomic<size_t> committed_physical_memory_{0};
+
   friend class IncrementalMarking;
   friend class MarkCompactCollector;
 
@@ -440,11 +477,14 @@ class V8_EXPORT_PRIVATE CompactionSpace : public PagedSpace {
   CompactionSpace(Heap* heap, AllocationSpace id, Executability executable,
                   CompactionSpaceKind compaction_space_kind)
       : PagedSpace(heap, id, executable, FreeList::CreateFreeList(),
-                   compaction_space_kind) {
+                   &allocation_info_, compaction_space_kind) {
     DCHECK(is_compaction_space());
   }
 
   const std::vector<Page*>& GetNewPages() { return new_pages_; }
+
+ private:
+  LinearAllocationArea allocation_info_;
 
  protected:
   V8_WARN_UNUSED_RESULT bool RefillLabMain(int size_in_bytes,
@@ -465,6 +505,8 @@ class CompactionSpaceCollection : public Malloced {
                                      CompactionSpaceKind compaction_space_kind)
       : old_space_(heap, OLD_SPACE, Executability::NOT_EXECUTABLE,
                    compaction_space_kind),
+        map_space_(heap, MAP_SPACE, Executability::NOT_EXECUTABLE,
+                   compaction_space_kind),
         code_space_(heap, CODE_SPACE, Executability::EXECUTABLE,
                     compaction_space_kind) {}
 
@@ -472,6 +514,8 @@ class CompactionSpaceCollection : public Malloced {
     switch (space) {
       case OLD_SPACE:
         return &old_space_;
+      case MAP_SPACE:
+        return &map_space_;
       case CODE_SPACE:
         return &code_space_;
       default:
@@ -482,6 +526,7 @@ class CompactionSpaceCollection : public Malloced {
 
  private:
   CompactionSpace old_space_;
+  CompactionSpace map_space_;
   CompactionSpace code_space_;
 };
 
@@ -492,9 +537,9 @@ class OldSpace : public PagedSpace {
  public:
   // Creates an old space object. The constructor does not allocate pages
   // from OS.
-  explicit OldSpace(Heap* heap)
-      : PagedSpace(heap, OLD_SPACE, NOT_EXECUTABLE,
-                   FreeList::CreateFreeList()) {}
+  explicit OldSpace(Heap* heap, LinearAllocationArea* allocation_info)
+      : PagedSpace(heap, OLD_SPACE, NOT_EXECUTABLE, FreeList::CreateFreeList(),
+                   allocation_info) {}
 
   static bool IsAtPageStart(Address addr) {
     return static_cast<intptr_t>(addr & kPageAlignmentMask) ==
@@ -516,7 +561,11 @@ class CodeSpace : public PagedSpace {
   // Creates an old space object. The constructor does not allocate pages
   // from OS.
   explicit CodeSpace(Heap* heap)
-      : PagedSpace(heap, CODE_SPACE, EXECUTABLE, FreeList::CreateFreeList()) {}
+      : PagedSpace(heap, CODE_SPACE, EXECUTABLE, FreeList::CreateFreeList(),
+                   &paged_allocation_info_) {}
+
+ private:
+  LinearAllocationArea paged_allocation_info_;
 };
 
 // -----------------------------------------------------------------------------
@@ -526,8 +575,8 @@ class MapSpace : public PagedSpace {
  public:
   // Creates a map space object.
   explicit MapSpace(Heap* heap)
-      : PagedSpace(heap, MAP_SPACE, NOT_EXECUTABLE,
-                   FreeList::CreateFreeList()) {}
+      : PagedSpace(heap, MAP_SPACE, NOT_EXECUTABLE, FreeList::CreateFreeList(),
+                   &paged_allocation_info_) {}
 
   int RoundSizeDownToObjectAlignment(int size) override {
     if (base::bits::IsPowerOfTwo(Map::kSize)) {
@@ -542,6 +591,9 @@ class MapSpace : public PagedSpace {
 #ifdef VERIFY_HEAP
   void VerifyObject(HeapObject obj) override;
 #endif
+
+ private:
+  LinearAllocationArea paged_allocation_info_;
 };
 
 // Iterates over the chunks (pages and large object pages) that can contain

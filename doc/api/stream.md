@@ -456,6 +456,16 @@ further errors except from `_destroy()` may be emitted as `'error'`.
 Implementors should not override this method,
 but instead implement [`writable._destroy()`][writable-_destroy].
 
+##### `writable.closed`
+
+<!-- YAML
+added: v18.0.0
+-->
+
+* {boolean}
+
+Is `true` after `'close'` has been emitted.
+
 ##### `writable.destroyed`
 
 <!-- YAML
@@ -546,8 +556,8 @@ The `writable.uncork()` method flushes all data buffered since
 [`stream.cork()`][] was called.
 
 When using [`writable.cork()`][] and `writable.uncork()` to manage the buffering
-of writes to a stream, it is recommended that calls to `writable.uncork()` be
-deferred using `process.nextTick()`. Doing so allows batching of all
+of writes to a stream, defer calls to `writable.uncork()` using
+`process.nextTick()`. Doing so allows batching of all
 `writable.write()` calls that occur within a given Node.js event loop phase.
 
 ```js
@@ -586,6 +596,18 @@ added: v11.4.0
 Is `true` if it is safe to call [`writable.write()`][stream-write], which means
 the stream has not been destroyed, errored or ended.
 
+##### `writable.writableAborted`
+
+<!-- YAML
+added: v18.0.0
+-->
+
+> Stability: 1 - Experimental
+
+* {boolean}
+
+Returns whether the stream was destroyed or errored before emitting `'finish'`.
+
 ##### `writable.writableEnded`
 
 <!-- YAML
@@ -610,6 +632,17 @@ added:
 
 Number of times [`writable.uncork()`][stream-uncork] needs to be
 called in order to fully uncork the stream.
+
+##### `writable.errored`
+
+<!-- YAML
+added:
+  v18.0.0
+-->
+
+* {Error}
+
+Returns error if the stream has been destroyed with an error.
 
 ##### `writable.writableFinished`
 
@@ -703,7 +736,7 @@ stop until the [`'drain'`][] event is emitted.
 While a stream is not draining, calls to `write()` will buffer `chunk`, and
 return false. Once all currently buffered chunks are drained (accepted for
 delivery by the operating system), the `'drain'` event will be emitted.
-It is recommended that once `write()` returns false, no more chunks be written
+Once `write()` returns false, do not write more chunks
 until the `'drain'` event is emitted. While calling `write()` on a stream that
 is not draining is allowed, Node.js will buffer all written chunks until
 maximum memory usage occurs, at which point it will abort unconditionally.
@@ -862,12 +895,6 @@ _one_ of the methods of consuming data and _should never_ use multiple methods
 to consume data from a single stream. Specifically, using a combination
 of `on('data')`, `on('readable')`, `pipe()`, or async iterators could
 lead to unintuitive behavior.
-
-Use of the `readable.pipe()` method is recommended for most users as it has been
-implemented to provide the easiest way of consuming stream data. Developers that
-require more fine-grained control over the transfer and generation of data can
-use the [`EventEmitter`][] and `readable.on('readable')`/`readable.read()`
-or the `readable.pause()`/`readable.resume()` APIs.
 
 #### Class: `stream.Readable`
 
@@ -1080,10 +1107,20 @@ further errors except from `_destroy()` may be emitted as `'error'`.
 Implementors should not override this method, but instead implement
 [`readable._destroy()`][readable-_destroy].
 
-##### `readable.destroyed`
+##### `readable.closed`
 
 <!-- YAML
 added: v8.0.0
+-->
+
+* {boolean}
+
+Is `true` after `'close'` has been emitted.
+
+##### `readable.destroyed`
+
+<!-- YAML
+added: v18.0.0
 -->
 
 * {boolean}
@@ -1345,6 +1382,17 @@ added: v12.9.0
 * {boolean}
 
 Becomes `true` when [`'end'`][] event is emitted.
+
+##### `readable.errored`
+
+<!-- YAML
+added:
+  v18.0.0
+-->
+
+* {Error}
+
+Returns error if the stream has been destroyed with an error.
 
 ##### `readable.readableFlowing`
 
@@ -1686,7 +1734,9 @@ showBoth();
 ##### `readable.map(fn[, options])`
 
 <!-- YAML
-added: v17.4.0
+added:
+  - v17.4.0
+  - v16.14.0
 -->
 
 > Stability: 1 - Experimental
@@ -1731,7 +1781,9 @@ for await (const result of dnsResults) {
 ##### `readable.filter(fn[, options])`
 
 <!-- YAML
-added: v17.4.0
+added:
+  - v17.4.0
+  - v16.14.0
 -->
 
 > Stability: 1 - Experimental
@@ -2365,6 +2417,11 @@ const cleanup = finished(rs, (err) => {
 <!-- YAML
 added: v10.0.0
 changes:
+  - version: v18.0.0
+    pr-url: https://github.com/nodejs/node/pull/41678
+    description: Passing an invalid callback to the `callback` argument
+                 now throws `ERR_INVALID_ARG_TYPE` instead of
+                 `ERR_INVALID_CALLBACK`.
   - version: v14.0.0
     pr-url: https://github.com/nodejs/node/pull/32158
     description: The `pipeline(..., cb)` will wait for the `'close'` event
@@ -2512,7 +2569,9 @@ run().catch(console.error);
 
 `stream.pipeline()` leaves dangling event listeners on the streams
 after the `callback` has been invoked. In the case of reuse of streams after
-failure, this can cause event listener leaks and swallowed errors.
+failure, this can cause event listener leaks and swallowed errors. If the last
+stream is readable, dangling event listeners will be removed so that the last
+stream can be consumed later.
 
 `stream.pipeline()` closes all the streams when an error is raised.
 The `IncomingRequest` usage with `pipeline` could lead to an unexpected behavior
@@ -2695,7 +2754,9 @@ Returns whether the stream has been read from or cancelled.
 ### `stream.isErrored(stream)`
 
 <!-- YAML
-added: v17.3.0
+added:
+  - v17.3.0
+  - v16.14.0
 -->
 
 > Stability: 1 - Experimental
@@ -2708,7 +2769,9 @@ Returns whether the stream has encountered an error.
 ### `stream.isReadable(stream)`
 
 <!-- YAML
-added: v17.4.0
+added:
+  - v17.4.0
+  - v16.14.0
 -->
 
 > Stability: 1 - Experimental

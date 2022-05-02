@@ -140,8 +140,11 @@ const expectedModules = new Set([
   'NativeModule internal/validators',
   'NativeModule internal/vm/module',
   'NativeModule internal/webstreams/adapters',
+  'NativeModule internal/webstreams/compression',
+  'NativeModule internal/webstreams/encoding',
   'NativeModule internal/webstreams/queuingstrategies',
   'NativeModule internal/webstreams/readablestream',
+  'NativeModule internal/webstreams/transformstream',
   'NativeModule internal/webstreams/util',
   'NativeModule internal/webstreams/writablestream',
   'NativeModule internal/worker/io',
@@ -204,6 +207,26 @@ if (process.features.inspector) {
 
 if (process.env.NODE_V8_COVERAGE) {
   expectedModules.add('Internal Binding profiler');
+}
+
+if (common.hasCrypto) {
+  expectedModules.add('Internal Binding crypto');
+  expectedModules.add('NativeModule crypto');
+  expectedModules.add('NativeModule internal/crypto/certificate');
+  expectedModules.add('NativeModule internal/crypto/cipher');
+  expectedModules.add('NativeModule internal/crypto/diffiehellman');
+  expectedModules.add('NativeModule internal/crypto/hash');
+  expectedModules.add('NativeModule internal/crypto/hashnames');
+  expectedModules.add('NativeModule internal/crypto/hkdf');
+  expectedModules.add('NativeModule internal/crypto/keygen');
+  expectedModules.add('NativeModule internal/crypto/keys');
+  expectedModules.add('NativeModule internal/crypto/pbkdf2');
+  expectedModules.add('NativeModule internal/crypto/random');
+  expectedModules.add('NativeModule internal/crypto/scrypt');
+  expectedModules.add('NativeModule internal/crypto/sig');
+  expectedModules.add('NativeModule internal/crypto/util');
+  expectedModules.add('NativeModule internal/crypto/x509');
+  expectedModules.add('NativeModule internal/streams/lazy_transform');
 }
 
 const { internalBinding } = require('internal/test/binding');

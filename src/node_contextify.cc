@@ -455,16 +455,8 @@ void ContextifyContext::PropertySetterCallback(
       !is_function)
     return;
 
-  if (!is_declared_on_global_proxy && is_declared_on_sandbox  &&
-      args.ShouldThrowOnError() && is_contextual_store && !is_function) {
-    // The property exists on the sandbox but not on the global
-    // proxy. Setting it would throw because we are in strict mode.
-    // Don't attempt to set it by signaling that the call was
-    // intercepted. Only change the value on the sandbox.
-    args.GetReturnValue().Set(false);
-  }
-
   USE(ctx->sandbox()->Set(context, property, value));
+  args.GetReturnValue().Set(value);
 }
 
 // static
@@ -747,11 +739,10 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
   if (*TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
           TRACING_CATEGORY_NODE2(vm, script)) != 0) {
     Utf8Value fn(isolate, filename);
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
-        TRACING_CATEGORY_NODE2(vm, script),
-        "ContextifyScript::New",
-        contextify_script,
-        "filename", TRACE_STR_COPY(*fn));
+    TRACE_EVENT_BEGIN1(TRACING_CATEGORY_NODE2(vm, script),
+                       "ContextifyScript::New",
+                       "filename",
+                       TRACE_STR_COPY(*fn));
   }
 #endif
 
@@ -802,10 +793,8 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
     no_abort_scope.Close();
     if (!try_catch.HasTerminated())
       try_catch.ReThrow();
-    TRACE_EVENT_NESTABLE_ASYNC_END0(
-        TRACING_CATEGORY_NODE2(vm, script),
-        "ContextifyScript::New",
-        contextify_script);
+    TRACE_EVENT_END0(TRACING_CATEGORY_NODE2(vm, script),
+                     "ContextifyScript::New");
     return;
   }
   contextify_script->script_.Reset(isolate, v8_script.ToLocalChecked());
@@ -834,10 +823,7 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
         env->cached_data_produced_string(),
         Boolean::New(isolate, cached_data_produced)).Check();
   }
-  TRACE_EVENT_NESTABLE_ASYNC_END0(
-      TRACING_CATEGORY_NODE2(vm, script),
-      "ContextifyScript::New",
-      contextify_script);
+  TRACE_EVENT_END0(TRACING_CATEGORY_NODE2(vm, script), "ContextifyScript::New");
 }
 
 bool ContextifyScript::InstanceOf(Environment* env,
@@ -874,8 +860,7 @@ void ContextifyScript::RunInThisContext(
   ASSIGN_OR_RETURN_UNWRAP(&wrapped_script, args.Holder());
 
 #if 0
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
-      TRACING_CATEGORY_NODE2(vm, script), "RunInThisContext", wrapped_script);
+  TRACE_EVENT0(TRACING_CATEGORY_NODE2(vm, script), "RunInThisContext");
 #endif
 
   // TODO(addaleax): Use an options object or otherwise merge this with
@@ -902,9 +887,6 @@ void ContextifyScript::RunInThisContext(
               break_on_first_line,
               nullptr,  // microtask_queue
               args);
-
-  TRACE_EVENT_NESTABLE_ASYNC_END0(
-      TRACING_CATEGORY_NODE2(vm, script), "RunInThisContext", wrapped_script);
 }
 
 void ContextifyScript::RunInContext(const FunctionCallbackInfo<Value>& args) {
@@ -926,8 +908,7 @@ void ContextifyScript::RunInContext(const FunctionCallbackInfo<Value>& args) {
   if (context.IsEmpty())
     return;
 
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
-      TRACING_CATEGORY_NODE2(vm, script), "RunInContext", wrapped_script);
+  TRACE_EVENT0(TRACING_CATEGORY_NODE2(vm, script), "RunInContext");
 
   CHECK(args[1]->IsNumber());
   int64_t timeout = args[1]->IntegerValue(env->context()).FromJust();
@@ -950,9 +931,6 @@ void ContextifyScript::RunInContext(const FunctionCallbackInfo<Value>& args) {
               break_on_first_line,
               contextify_context->microtask_queue(),
               args);
-
-  TRACE_EVENT_NESTABLE_ASYNC_END0(
-      TRACING_CATEGORY_NODE2(vm, script), "RunInContext", wrapped_script);
 }
 
 bool ContextifyScript::EvalMachine(Environment* env,

@@ -254,7 +254,7 @@ run `node benchmark/compare.js`.
 As an example on how to check for a possible performance improvement, the
 [#5134](https://github.com/nodejs/node/pull/5134) pull request will be used as
 an example. This pull request _claims_ to improve the performance of the
-`string_decoder` module.
+`node:string_decoder` module.
 
 First build two versions of Node.js, one from the master branch (here called
 `./node-master`) and another with the pull request applied (here called
@@ -479,7 +479,7 @@ the code inside the `main` function if it's more than just declaration.
 ```js
 'use strict';
 const common = require('../common.js');
-const { SlowBuffer } = require('buffer');
+const { SlowBuffer } = require('node:buffer');
 
 const configs = {
   // Number of operations, specified here so they show up in the report.
@@ -539,7 +539,7 @@ const bench = common.createBenchmark(main, {
 });
 
 function main(conf) {
-  const http = require('http');
+  const http = require('node:http');
   const len = conf.kb * 1024;
   const chunk = Buffer.alloc(len, 'x');
   const server = http.createServer((req, res) => {
@@ -570,5 +570,5 @@ Supported options keys are:
 [git-for-windows]: https://git-scm.com/download/win
 [nghttp2.org]: https://nghttp2.org
 [node-benchmark-compare]: https://github.com/targos/node-benchmark-compare
-[t-test]: https://en.wikipedia.org/wiki/Student%27s_t-test#Equal_or_unequal_sample_sizes.2C_unequal_variances
+[t-test]: https://en.wikipedia.org/wiki/Student%27s_t-test#Equal_or_unequal_sample_sizes%2C_unequal_variances_%28sX1_%3E_2sX2_or_sX2_%3E_2sX1%29
 [wrk]: https://github.com/wg/wrk

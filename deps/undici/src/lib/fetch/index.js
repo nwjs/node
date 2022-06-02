@@ -31,7 +31,6 @@ const {
   coarsenedSharedCurrentTime,
   createDeferredPromise,
   isBlobLike,
-  CORBCheck,
   sameOrigin,
   isCancelled,
   isAborted
@@ -52,7 +51,6 @@ const EE = require('events')
 const { Readable, pipeline } = require('stream')
 const { isErrored, isReadable } = require('../core/util')
 const { dataURLProcessor } = require('./dataURL')
-const { kIsMockActive } = require('../mock/mock-symbols')
 const { TransformStream } = require('stream/web')
 
 /** @type {import('buffer').resolveObjectURL} */
@@ -588,18 +586,8 @@ async function mainFetch (fetchParams, recursive = false) {
         // 2. Set request’s response tainting to "opaque".
         request.responseTainting = 'opaque'
 
-        // 3. Let noCorsResponse be the result of running scheme fetch given
-        // fetchParams.
-        const noCorsResponse = await schemeFetch(fetchParams)
-
-        // 4. If noCorsResponse is a filtered response or the CORB check with
-        // request and noCorsResponse returns allowed, then return noCorsResponse.
-        if (noCorsResponse.status === 0 || CORBCheck(request, noCorsResponse) === 'allowed') {
-          return noCorsResponse
-        }
-
-        // 5. Return a new response whose status is noCorsResponse’s status.
-        return makeResponse({ status: noCorsResponse.status })
+        // 3. Return the result of running scheme fetch given fetchParams.
+        return await schemeFetch(fetchParams)
       }
 
       // request’s current URL’s scheme is not an HTTP(S) scheme
@@ -768,7 +756,7 @@ async function schemeFetch (fetchParams) {
   const {
     protocol: scheme,
     pathname: path
-  } = new URL(requestCurrentURL(request))
+  } = requestCurrentURL(request)
 
   // switch on request’s current URL’s scheme, and run the associated steps:
   switch (scheme) {
@@ -780,7 +768,7 @@ async function schemeFetch (fetchParams) {
         const resp = makeResponse({
           statusText: 'OK',
           headersList: [
-            'content-type', 'text/html;charset=utf-8'
+            ['content-type', 'text/html;charset=utf-8']
           ]
         })
 
@@ -792,7 +780,7 @@ async function schemeFetch (fetchParams) {
       return makeNetworkError('invalid path called')
     }
     case 'blob:': {
-      resolveObjectURL ??= require('buffer').resolveObjectURL
+      resolveObjectURL = resolveObjectURL || require('buffer').resolveObjectURL
 
       // 1. Run these steps, but abort when the ongoing fetch is terminated:
       //    1. Let blob be request’s current URL’s blob URL entry’s object.
@@ -871,7 +859,7 @@ async function schemeFetch (fetchParams) {
       return makeResponse({
         statusText: 'OK',
         headersList: [
-          'content-type', contentType
+          ['content-type', contentType]
         ],
         body: extractBody(dataURLStruct.body)[0]
       })
@@ -1827,6 +1815,11 @@ async function httpNetworkFetch (
       let bytes
       try {
         const { done, value } = await fetchParams.controller.next()
+
+        if (isAborted(fetchParams)) {
+          break
+        }
+
         bytes = done ? undefined : value
       } catch (err) {
         if (fetchParams.controller.ended && !timingInfo.encodedBodySize) {
@@ -1918,9 +1911,11 @@ async function httpNetworkFetch (
         path: url.pathname + url.search,
         origin: url.origin,
         method: request.method,
-        body: fetchParams.controller.dispatcher[kIsMockActive] ? request.body && request.body.source : body,
-        headers: request.headersList,
-        maxRedirections: 0
+        body: fetchParams.controller.dispatcher.isMockActive ? request.body && request.body.source : body,
+        headers: [...request.headersList].flat(),
+        maxRedirections: 0,
+        bodyTimeout: 300_000,
+        headersTimeout: 300_000
       },
       {
         body: null,
@@ -1962,16 +1957,18 @@ async function httpNetworkFetch (
           const decoders = []
 
           // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Encoding
-          for (const coding of codings) {
-            if (/(x-)?gzip/.test(coding)) {
-              decoders.push(zlib.createGunzip())
-            } else if (/(x-)?deflate/.test(coding)) {
-              decoders.push(zlib.createInflate())
-            } else if (coding === 'br') {
-              decoders.push(zlib.createBrotliDecompress())
-            } else {
-              decoders.length = 0
-              break
+          if (request.method !== 'HEAD' && request.method !== 'CONNECT' && !nullBodyStatus.includes(status)) {
+            for (const coding of codings) {
+              if (/(x-)?gzip/.test(coding)) {
+                decoders.push(zlib.createGunzip())
+              } else if (/(x-)?deflate/.test(coding)) {
+                decoders.push(zlib.createInflate())
+              } else if (coding === 'br') {
+                decoders.push(zlib.createBrotliDecompress())
+              } else {
+                decoders.length = 0
+                break
+              }
             }
           }
 
@@ -2029,7 +2026,7 @@ async function httpNetworkFetch (
 
           fetchParams.controller.terminate(error)
 
-          reject(makeNetworkError(error))
+          reject(error)
         }
       }
     ))

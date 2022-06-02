@@ -112,17 +112,6 @@ their underlying data pointers. It is used extensively through `src/crypto`
 to make it easier to deal with inputs that allow any `ArrayBuffer`-backed
 object.
 
-### `AllocatedBuffer`
-
-The `AllocatedBuffer` utility is defined in `allocated_buffer.h` and is not
-specific to `src/crypto`. It is used extensively within `src/crypto` to hold
-allocated data that is intended to be output in response to various
-crypto functions (generated hash values, or ciphertext, for instance).
-
-_Currently, we are working to transition away from using `AllocatedBuffer`
-to directly using the `v8::BackingStore` API. This will take some time.
-New uses of `AllocatedBuffer` should be avoided if possible._
-
 ### Key objects
 
 Most crypto operations involve the use of keys -- cryptographic inputs
@@ -312,12 +301,12 @@ crypto.randomFill(buf, (err, buf) => {
 For the legacy Node.js crypto API, asynchronous single-call
 operations use the traditional Node.js callback pattern, as
 illustrated in the previous `randomFill()` example. In the
-Web Crypto API (accessible via `require('crypto').webcrypto`),
+Web Crypto API (accessible via `require('node:crypto').webcrypto`),
 all asynchronous single-call operations are Promise-based.
 
 ```js
 // Example Web Crypto API asynchronous single-call operation
-const { subtle } = require('crypto').webcrypto;
+const { subtle } = require('node:crypto').webcrypto;
 
 subtle.generateKeys({ name: 'HMAC', length: 256 }, true, ['sign'])
   .then((key) => {

@@ -348,7 +348,6 @@
       'deps/undici/undici.js',
     ],
     'node_mksnapshot_exec': '<(PRODUCT_DIR)/<(EXECUTABLE_PREFIX)node_mksnapshot<(EXECUTABLE_SUFFIX)',
-    'mkcodecache_exec': '<(PRODUCT_DIR)/<(EXECUTABLE_PREFIX)mkcodecache<(EXECUTABLE_SUFFIX)',
     'conditions': [
       ['GENERATOR == "ninja"', {
         'node_text_start_object_path': 'src/large_pages/node_text_start.node_text_start.o'
@@ -492,6 +491,16 @@
           'dependencies': [ 'node_aix_shared' ],
         }, {
           'dependencies': [ '<(node_lib_target_name)' ],
+          'conditions': [
+            ['OS=="win" and node_shared=="true"', {
+              'dependencies': ['generate_node_def'],
+              'msvs_settings': {
+                'VCLinkerTool': {
+                  'ModuleDefinitionFile': '<(PRODUCT_DIR)/<(node_core_target_name).def',
+                },
+              },
+            }],
+          ],
         }],
         [ 'node_intermediate_lib_type=="static_library" and node_shared=="false"', {
           'xcode_settings': {
@@ -531,8 +540,15 @@
         }],
         [ 'node_shared=="true"', {
           'xcode_settings': {
-            'OTHER_LDFLAGS': [ '-Wl,-rpath,@loader_path', ],
+            'OTHER_LDFLAGS': [ '-Wl,-rpath,@loader_path', '-Wl,-rpath,@loader_path/../lib'],
           },
+          'conditions': [
+            ['OS=="linux"', {
+               'ldflags': [
+                 '-Wl,-rpath,\\$$ORIGIN/../lib'
+               ],
+            }],
+          ],
         }],
         [ 'enable_lto=="true"', {
           'xcode_settings': {
@@ -583,32 +599,7 @@
             },
           },
          }],
-        ['node_use_node_code_cache=="true"', {
-          'dependencies': [
-            'mkcodecache',
-          ],
-          'actions': [
-            {
-              'action_name': 'run_mkcodecache',
-              'process_outputs_as_sources': 1,
-              'inputs': [
-                '<(mkcodecache_exec)',
-              ],
-              'outputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/node_code_cache.cc',
-              ],
-              'action': [
-                '<@(_inputs)',
-                '<@(_outputs)',
-              ],
-            },
-          ],
-        }, {
-          'sources': [
-            'src/node_code_cache_stub.cc'
-          ],
-        }],
-        ['node_use_node_snapshot=="true"', {
+         ['node_use_node_snapshot=="true"', {
           'dependencies': [
             'node_mksnapshot',
           ],
@@ -862,6 +853,7 @@
         'src/node_util.cc',
         'src/node_v8.cc',
         'src/node_wasi.cc',
+        'src/node_wasm_web_api.cc',
         'src/node_watchdog.cc',
         'src/node_worker.cc',
         'src/node_zlib.cc',
@@ -890,8 +882,6 @@
         'src/aliased_buffer.h',
         'src/aliased_struct.h',
         'src/aliased_struct-inl.h',
-        'src/allocated_buffer.h',
-        'src/allocated_buffer-inl.h',
         'src/async_wrap.h',
         'src/async_wrap-inl.h',
         'src/base_object.h',
@@ -956,6 +946,7 @@
         'src/node_revert.h',
         'src/node_root_certs.h',
         'src/node_snapshotable.h',
+        'src/node_snapshot_builder.h',
         'src/node_sockaddr.h',
         'src/node_sockaddr-inl.h',
         'src/node_stat_watcher.h',
@@ -1049,7 +1040,6 @@
         [ 'node_shared=="true"', {
           'sources': [
             'src/node_snapshot_stub.cc',
-            'src/node_code_cache_stub.cc',
           ]
         }],
         [ 'node_shared=="true" and node_module_version!="" and OS!="win"', {
@@ -1058,6 +1048,11 @@
             'LD_DYLIB_INSTALL_NAME':
               '@rpath/lib<(node_core_target_name).<(shlib_suffix)'
           },
+        }],
+        [ 'node_use_node_code_cache=="true"', {
+          'defines': [
+            'NODE_USE_NODE_CODE_CACHE=1',
+          ],
         }],
         ['node_shared=="true" and OS=="aix"', {
           'product_name': 'node_base',
@@ -1075,9 +1070,9 @@
               ],
             }],
             [ 'component == "shared_library"', {
-              'libraries': [ 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/nw.dll.lib', '<(PRODUCT_DIR)/../nw/libc++.dll.lib'],
+              'libraries': [ 'Winmm', 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/nw.dll.lib', '<(PRODUCT_DIR)/../nw/libc++.dll.lib'],
             }, {
-              'libraries': [ 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/nw.dll.lib', '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libcpp.lib'],
+              'libraries': [ 'Winmm', 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/nw.dll.lib', '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libcpp.lib'],
             }],
           ],
         }],
@@ -1458,7 +1453,6 @@
       ],
       'sources': [
         'src/node_snapshot_stub.cc',
-        'src/node_code_cache_stub.cc',
         'test/fuzzers/fuzz_url.cc',
       ],
       'conditions': [
@@ -1501,7 +1495,6 @@
       ],
       'sources': [
         'src/node_snapshot_stub.cc',
-        'src/node_code_cache_stub.cc',
         'test/fuzzers/fuzz_env.cc',
       ],
       'conditions': [
@@ -1551,7 +1544,6 @@
 
       'sources': [
         'src/node_snapshot_stub.cc',
-        'src/node_code_cache_stub.cc',
         'test/cctest/node_test_fixture.cc',
         'test/cctest/node_test_fixture.h',
         'test/cctest/test_aliased_buffer.cc',
@@ -1644,7 +1636,6 @@
 
       'sources': [
         'src/node_snapshot_stub.cc',
-        'src/node_code_cache_stub.cc',
         'test/embedding/embedtest.cc',
       ],
 
@@ -1688,68 +1679,6 @@
         }],
       ]
     }, # overlapped-checker
-
-    # TODO(joyeecheung): do not depend on node_lib,
-    # instead create a smaller static library node_lib_base that does
-    # just enough for node_native_module.cc and the cache builder to
-    # compile without compiling the generated code cache C++ file.
-    # So generate_code_cache -> mkcodecache -> node_lib_base,
-    #    node_lib -> node_lib_base & generate_code_cache
-    {
-      'target_name': 'mkcodecache',
-      'type': 'executable',
-
-      'dependencies': [
-        '<(node_lib_target_name)',
-        'deps/histogram/histogram.gyp:histogram',
-        'deps/uvwasi/uvwasi.gyp:uvwasi',
-      ],
-
-      'includes': [
-        'node.gypi'
-      ],
-
-      'include_dirs': [
-        'src',
-        'tools/msvs/genfiles',
-        'deps/v8/include',
-        'deps/cares/include',
-        'deps/uv/include',
-        'deps/uvwasi/include',
-      ],
-
-      'defines': [
-        'NODE_WANT_INTERNALS=1'
-      ],
-      'sources': [
-        'src/node_snapshot_stub.cc',
-        'src/node_code_cache_stub.cc',
-        'tools/code_cache/mkcodecache.cc',
-        'tools/code_cache/cache_builder.cc',
-        'tools/code_cache/cache_builder.h',
-      ],
-
-      'conditions': [
-        [ 'node_use_openssl=="true"', {
-          'defines': [
-            'HAVE_OPENSSL=1',
-          ],
-        }],
-        ['v8_enable_inspector==1', {
-          'defines': [
-            'HAVE_INSPECTOR=1',
-          ],
-        }],
-        ['OS=="win"', {
-          'libraries': [
-            'dbghelp.lib',
-            'PsApi.lib',
-            'winmm.lib',
-            'Ws2_32.lib',
-          ],
-        }],
-      ],
-    }, # mkcodecache
     {
       'target_name': 'node_mksnapshot',
       'type': 'executable',
@@ -1777,7 +1706,6 @@
 
       'sources': [
         'src/node_snapshot_stub.cc',
-        'src/node_code_cache_stub.cc',
         'tools/snapshot/node_mksnapshot.cc',
       ],
 
@@ -1785,6 +1713,11 @@
         [ 'node_use_openssl=="true"', {
           'defines': [
             'HAVE_OPENSSL=1',
+          ],
+        }],
+        [ 'node_use_node_code_cache=="true"', {
+          'defines': [
+            'NODE_USE_NODE_CODE_CACHE=1',
           ],
         }],
         ['v8_enable_inspector==1', {
@@ -1831,5 +1764,40 @@
         },
       ]
     }], # end aix section
+    ['OS=="win" and node_shared=="true"', {
+     'targets': [
+       {
+         'target_name': 'gen_node_def',
+         'type': 'executable',
+         'sources': [
+           'tools/gen_node_def.cc'
+         ],
+       },
+       {
+         'target_name': 'generate_node_def',
+         'dependencies': [
+           'gen_node_def',
+           '<(node_lib_target_name)',
+         ],
+         'type': 'none',
+         'actions': [
+           {
+             'action_name': 'generate_node_def_action',
+             'inputs': [
+               '<(PRODUCT_DIR)/<(node_lib_target_name).dll'
+             ],
+             'outputs': [
+               '<(PRODUCT_DIR)/<(node_core_target_name).def',
+             ],
+             'action': [
+               '<(PRODUCT_DIR)/gen_node_def.exe',
+               '<@(_inputs)',
+               '<@(_outputs)',
+             ],
+           },
+         ],
+       },
+     ],
+   }], # end win section
   ], # end conditions block
 }

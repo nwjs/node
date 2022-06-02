@@ -1,7 +1,6 @@
 #include "crypto/crypto_cipher.h"
-#include "crypto/crypto_util.h"
-#include "allocated_buffer-inl.h"
 #include "base_object-inl.h"
+#include "crypto/crypto_util.h"
 #include "env-inl.h"
 #include "memory_tracker-inl.h"
 #include "node_buffer.h"
@@ -197,10 +196,14 @@ void CipherBase::GetSSLCiphers(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
 
   SSLCtxPointer ctx(SSL_CTX_new(TLS_method()));
-  CHECK(ctx);
+  if (!ctx) {
+    return ThrowCryptoError(env, ERR_get_error(), "SSL_CTX_new");
+  }
 
   SSLPointer ssl(SSL_new(ctx.get()));
-  CHECK(ssl);
+  if (!ssl) {
+    return ThrowCryptoError(env, ERR_get_error(), "SSL_new");
+  }
 
   STACK_OF(SSL_CIPHER)* ciphers = SSL_get_ciphers(ssl.get());
 

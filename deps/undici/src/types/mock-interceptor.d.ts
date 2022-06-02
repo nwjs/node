@@ -1,6 +1,6 @@
 import { IncomingHttpHeaders } from 'http'
-import Dispatcher from './dispatcher';
-import { Headers } from './fetch'
+import Dispatcher = require('./dispatcher');
+import { BodyInit, Headers } from './fetch'
 
 export {
   Interceptable,
@@ -50,6 +50,8 @@ declare namespace MockInterceptor {
     body?: string | RegExp | ((body: string) => boolean);
     /** Headers to intercept on. */
     headers?: Record<string, string | RegExp | ((body: string) => boolean)> | ((headers: Record<string, string>) => boolean);
+    /** Query params to intercept on */
+    query?: Record<string, any>;
   }
   export interface MockDispatch<TData extends object = object, TError extends Error = Error> extends Options {
     times: number | null;
@@ -71,7 +73,7 @@ declare namespace MockInterceptor {
     path: string;
     origin: string;
     method: string;
-    body?: string;
+    body?: BodyInit | Dispatcher.DispatchOptions['body'];
     headers: Headers;
     maxRedirections: number;
   }

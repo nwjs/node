@@ -482,8 +482,7 @@ class WasmGraphAssembler : public GraphAssembler {
         mcgraph()->machine()->Is64() ? ChangeUint32ToUint64(index) : index;
     return IntAdd(
         IntPtrConstant(wasm::ObjectAccess::ToTagged(WasmArray::kHeaderSize)),
-        IntMul(index_intptr,
-               IntPtrConstant(element_type.element_size_bytes())));
+        IntMul(index_intptr, IntPtrConstant(element_type.value_kind_size())));
   }
 
   Node* LoadWasmArrayLength(Node* array) {
@@ -1637,7 +1636,7 @@ Node* WasmGraphBuilder::BuildChangeEndiannessStore(
   Node* result;
   Node* value = node;
   MachineOperatorBuilder* m = mcgraph()->machine();
-  int valueSizeInBytes = wasmtype.element_size_bytes();
+  int valueSizeInBytes = wasmtype.value_kind_size();
   int valueSizeInBits = 8 * valueSizeInBytes;
   bool isFloat = false;
 
@@ -1671,7 +1670,7 @@ Node* WasmGraphBuilder::BuildChangeEndiannessStore(
     // In case we store lower part of WasmI64 expression, we can truncate
     // upper 32bits
     value = gasm_->TruncateInt64ToInt32(value);
-    valueSizeInBytes = wasm::kWasmI32.element_size_bytes();
+    valueSizeInBytes = wasm::kWasmI32.value_kind_size();
     valueSizeInBits = 8 * valueSizeInBytes;
     if (mem_rep == MachineRepresentation::kWord16) {
       value = gasm_->Word32Shl(value, Int32Constant(16));
@@ -3885,7 +3884,7 @@ WasmGraphBuilder::BoundsCheckMem(uint8_t access_size, Node* index,
 
 const Operator* WasmGraphBuilder::GetSafeLoadOperator(int offset,
                                                       wasm::ValueType type) {
-  int alignment = offset % type.element_size_bytes();
+  int alignment = offset % type.value_kind_size();
   MachineType mach_type = type.machine_type();
   if (COMPRESS_POINTERS_BOOL && mach_type.IsTagged()) {
     // We are loading tagged value from off-heap location, so we need to load
@@ -3901,7 +3900,7 @@ const Operator* WasmGraphBuilder::GetSafeLoadOperator(int offset,
 
 const Operator* WasmGraphBuilder::GetSafeStoreOperator(int offset,
                                                        wasm::ValueType type) {
-  int alignment = offset % type.element_size_bytes();
+  int alignment = offset % type.value_kind_size();
   MachineRepresentation rep = type.machine_representation();
   if (COMPRESS_POINTERS_BOOL && IsAnyTagged(rep)) {
     // We are storing tagged value to off-heap location, so we need to store
@@ -5638,9 +5637,9 @@ Node* WasmGraphBuilder::ArrayNewWithRtt(uint32_t array_index,
   // Do NOT mark this as Operator::kEliminatable, because that would cause the
   // Call node to have no control inputs, which means it could get scheduled
   // before the check/trap above.
-  Node* a = gasm_->CallBuiltin(
-      stub, Operator::kNoDeopt | Operator::kNoThrow, rtt, length,
-      Int32Constant(element_type.element_size_bytes()));
+  Node* a =
+      gasm_->CallBuiltin(stub, Operator::kNoDeopt | Operator::kNoThrow, rtt,
+                         length, Int32Constant(element_type.value_kind_size()));
   if (initial_value != nullptr) {
     // TODO(manoskouk): If the loop is ever removed here, we have to update
     // ArrayNewWithRtt() in graph-builder-interface.cc to not mark the current
@@ -5649,7 +5648,7 @@ Node* WasmGraphBuilder::ArrayNewWithRtt(uint32_t array_index,
     auto done = gasm_->MakeLabel();
     Node* start_offset =
         Int32Constant(wasm::ObjectAccess::ToTagged(WasmArray::kHeaderSize));
-    Node* element_size = Int32Constant(element_type.element_size_bytes());
+    Node* element_size = Int32Constant(element_type.value_kind_size());
     Node* end_offset =
         gasm_->Int32Add(start_offset, gasm_->Int32Mul(element_size, length));
     gasm_->Goto(&loop, start_offset);
@@ -5676,7 +5675,7 @@ Node* WasmGraphBuilder::ArrayInit(const wasm::ArrayType* type, Node* rtt,
       gasm_->CallBuiltin(Builtin::kWasmAllocateArray_Uninitialized,
                          Operator::kNoDeopt | Operator::kNoThrow, rtt,
                          Int32Constant(static_cast<int32_t>(elements.size())),
-                         Int32Constant(element_type.element_size_bytes()));
+                         Int32Constant(element_type.value_kind_size()));
   for (int i = 0; i < static_cast<int>(elements.size()); i++) {
     Node* offset =
         gasm_->WasmArrayElementOffset(Int32Constant(i), element_type);
@@ -5794,15 +5793,6 @@ void WasmGraphBuilder::TypeCheck(
   }
 
   Node* map = gasm_->LoadMap(object);
-
-  if (config.reference_kind == kFunction) {
-    // Currently, the only way for a function to match an rtt is if its map
-    // is equal to that rtt.
-    callbacks.fail_if_not(gasm_->TaggedEqual(map, rtt), BranchHint::kTrue);
-    return;
-  }
-
-  DCHECK(config.reference_kind == kArrayOrStruct);
 
   // First, check if types happen to be equal. This has been shown to give large
   // speedups.
@@ -7070,13 +7060,16 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
     Node* suspender = gasm_->Load(
         MachineType::TaggedPointer(), api_function_ref,
         wasm::ObjectAccess::ToTagged(WasmApiFunctionRef::kSuspenderOffset));
+    Node* native_context = gasm_->Load(
+        MachineType::TaggedPointer(), api_function_ref,
+        wasm::ObjectAccess::ToTagged(WasmApiFunctionRef::kNativeContextOffset));
     auto* call_descriptor = GetBuiltinCallDescriptor(
         Builtin::kWasmSuspend, zone_, StubCallMode::kCallWasmRuntimeStub);
     Node* call_target = mcgraph()->RelocatableIntPtrConstant(
         wasm::WasmCode::kWasmSuspend, RelocInfo::WASM_STUB_CALL);
     Node* args[] = {value, suspender};
-    Node* chained_promise =
-        BuildCallToRuntime(Runtime::kWasmCreateResumePromise, args, 2);
+    Node* chained_promise = BuildCallToRuntimeWithContext(
+        Runtime::kWasmCreateResumePromise, native_context, args, 2);
     Node* resolved =
         gasm_->Call(call_descriptor, call_target, chained_promise, suspender);
     gasm_->Goto(&resume, resolved);
@@ -7267,11 +7260,11 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
     // Store arguments on our stack, then align the stack for calling to C.
     int param_bytes = 0;
     for (wasm::ValueType type : sig_->parameters()) {
-      param_bytes += type.element_size_bytes();
+      param_bytes += type.value_kind_size();
     }
     int return_bytes = 0;
     for (wasm::ValueType type : sig_->returns()) {
-      return_bytes += type.element_size_bytes();
+      return_bytes += type.value_kind_size();
     }
 
     int stack_slot_bytes = std::max(param_bytes, return_bytes);
@@ -7290,7 +7283,7 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
       SetEffect(graph()->NewNode(GetSafeStoreOperator(offset, type), values,
                                  Int32Constant(offset), Param(i + 1), effect(),
                                  control()));
-      offset += type.element_size_bytes();
+      offset += type.value_kind_size();
     }
 
     Node* function_node = gasm_->Load(
@@ -7355,7 +7348,7 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
             graph()->NewNode(GetSafeLoadOperator(offset, type), values,
                              Int32Constant(offset), effect(), control()));
         returns[i] = val;
-        offset += type.element_size_bytes();
+        offset += type.value_kind_size();
       }
       Return(base::VectorOf(returns));
     }
@@ -7577,7 +7570,7 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
           graph()->NewNode(GetSafeLoadOperator(offset, type), arg_buffer,
                            Int32Constant(offset), effect(), control()));
       args[pos++] = arg_load;
-      offset += type.element_size_bytes();
+      offset += type.value_kind_size();
     }
 
     args[pos++] = effect();
@@ -7609,7 +7602,7 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
       SetEffect(graph()->NewNode(GetSafeStoreOperator(offset, type), arg_buffer,
                                  Int32Constant(offset), value, effect(),
                                  control()));
-      offset += type.element_size_bytes();
+      offset += type.value_kind_size();
       pos++;
     }
 
@@ -7661,7 +7654,7 @@ void BuildInlinedJSToWasmWrapper(
   builder.BuildJSToWasmWrapper(false, js_wasm_call_data, frame_state);
 }
 
-std::unique_ptr<OptimizedCompilationJob> NewJSToWasmCompilationJob(
+std::unique_ptr<TurbofanCompilationJob> NewJSToWasmCompilationJob(
     Isolate* isolate, const wasm::FunctionSig* sig,
     const wasm::WasmModule* module, bool is_import,
     const wasm::WasmFeatures& enabled_features) {
@@ -8256,7 +8249,7 @@ MaybeHandle<Code> CompileWasmToJSWrapper(Isolate* isolate,
       GetWasmCallDescriptor(zone.get(), sig, WasmCallKind::kWasmImportWrapper);
 
   // Run the compilation job synchronously.
-  std::unique_ptr<OptimizedCompilationJob> job(
+  std::unique_ptr<TurbofanCompilationJob> job(
       Pipeline::NewWasmHeapStubCompilationJob(
           isolate, incoming, std::move(zone), graph,
           CodeKind::WASM_TO_JS_FUNCTION, std::move(name_buffer),
@@ -8305,7 +8298,7 @@ MaybeHandle<Code> CompileJSToJSWrapper(Isolate* isolate,
       base::VectorOf(name_buffer.get(), kMaxNameLen) + kNamePrefixLen, sig);
 
   // Run the compilation job synchronously.
-  std::unique_ptr<OptimizedCompilationJob> job(
+  std::unique_ptr<TurbofanCompilationJob> job(
       Pipeline::NewWasmHeapStubCompilationJob(
           isolate, incoming, std::move(zone), graph,
           CodeKind::JS_TO_JS_FUNCTION, std::move(name_buffer),
@@ -8362,7 +8355,7 @@ Handle<CodeT> CompileCWasmEntry(Isolate* isolate, const wasm::FunctionSig* sig,
       base::VectorOf(name_buffer.get(), kMaxNameLen) + kNamePrefixLen, sig);
 
   // Run the compilation job synchronously.
-  std::unique_ptr<OptimizedCompilationJob> job(
+  std::unique_ptr<TurbofanCompilationJob> job(
       Pipeline::NewWasmHeapStubCompilationJob(
           isolate, incoming, std::move(zone), graph, CodeKind::C_WASM_ENTRY,
           std::move(name_buffer), AssemblerOptions::Default(isolate)));
@@ -8417,10 +8410,12 @@ base::Vector<const char> GetDebugName(Zone* zone,
        FLAG_trace_turbo_graph || FLAG_print_wasm_code)) {
     wasm::WireBytesRef name = module->lazily_generated_names.LookupFunctionName(
         module_bytes.value(), index);
-    int name_len = name.length();
-    char* index_name = zone->NewArray<char>(name_len);
-    memcpy(index_name, module_bytes->start() + name.offset(), name.length());
-    return base::Vector<const char>(index_name, name_len);
+    if (!name.is_empty()) {
+      int name_len = name.length();
+      char* index_name = zone->NewArray<char>(name_len);
+      memcpy(index_name, module_bytes->start() + name.offset(), name_len);
+      return base::Vector<const char>(index_name, name_len);
+    }
   }
 
   constexpr int kBufferLength = 24;
@@ -8440,6 +8435,10 @@ wasm::WasmCompilationResult ExecuteTurbofanWasmCompilation(
     wasm::CompilationEnv* env, const wasm::WireBytesStorage* wire_byte_storage,
     const wasm::FunctionBody& func_body, int func_index, Counters* counters,
     wasm::WasmFeatures* detected) {
+  // Check that we do not accidentally compile a Wasm function to TurboFan if
+  // --liftoff-only is set.
+  DCHECK(!FLAG_liftoff_only);
+
   TRACE_EVENT2(TRACE_DISABLED_BY_DEFAULT("v8.wasm.detailed"),
                "wasm.CompileTopTier", "func_index", func_index, "body_size",
                func_body.end - func_body.start);
@@ -8555,16 +8554,10 @@ class LinkageLocationAllocator {
   // must be offset to just before the param slots, using this |slot_offset_|.
   int slot_offset_;
 };
-}  // namespace
 
-// General code uses the above configuration data.
-CallDescriptor* GetWasmCallDescriptor(Zone* zone, const wasm::FunctionSig* fsig,
-                                      WasmCallKind call_kind,
-                                      bool need_frame_state) {
-  // The extra here is to accomodate the instance object as first parameter
-  // and, when specified, the additional callable.
-  bool extra_callable_param =
-      call_kind == kWasmImportWrapper || call_kind == kWasmCapiFunction;
+LocationSignature* BuildLocations(Zone* zone, const wasm::FunctionSig* fsig,
+                                  bool extra_callable_param,
+                                  int* parameter_slots, int* return_slots) {
   int extra_params = extra_callable_param ? 2 : 1;
   LocationSignature::Builder locations(zone, fsig->return_count(),
                                        fsig->parameter_count() + extra_params);
@@ -8607,19 +8600,37 @@ CallDescriptor* GetWasmCallDescriptor(Zone* zone, const wasm::FunctionSig* fsig,
         kJSFunctionRegister.code(), MachineType::TaggedPointer()));
   }
 
-  int parameter_slots = AddArgumentPaddingSlots(params.NumStackSlots());
+  *parameter_slots = AddArgumentPaddingSlots(params.NumStackSlots());
 
   // Add return location(s).
   LinkageLocationAllocator rets(wasm::kGpReturnRegisters,
-                                wasm::kFpReturnRegisters, parameter_slots);
+                                wasm::kFpReturnRegisters, *parameter_slots);
 
-  const int return_count = static_cast<int>(locations.return_count_);
-  for (int i = 0; i < return_count; i++) {
+  const size_t return_count = locations.return_count_;
+  for (size_t i = 0; i < return_count; i++) {
     MachineRepresentation ret = fsig->GetReturn(i).machine_representation();
     locations.AddReturn(rets.Next(ret));
   }
 
-  int return_slots = rets.NumStackSlots();
+  *return_slots = rets.NumStackSlots();
+
+  return locations.Build();
+}
+}  // namespace
+
+// General code uses the above configuration data.
+CallDescriptor* GetWasmCallDescriptor(Zone* zone, const wasm::FunctionSig* fsig,
+                                      WasmCallKind call_kind,
+                                      bool need_frame_state) {
+  // The extra here is to accomodate the instance object as first parameter
+  // and, when specified, the additional callable.
+  bool extra_callable_param =
+      call_kind == kWasmImportWrapper || call_kind == kWasmCapiFunction;
+
+  int parameter_slots;
+  int return_slots;
+  LocationSignature* location_sig = BuildLocations(
+      zone, fsig, extra_callable_param, &parameter_slots, &return_slots);
 
   const RegList kCalleeSaveRegisters;
   const DoubleRegList kCalleeSaveFPRegisters;
@@ -8645,7 +8656,7 @@ CallDescriptor* GetWasmCallDescriptor(Zone* zone, const wasm::FunctionSig* fsig,
       descriptor_kind,                    // kind
       target_type,                        // target MachineType
       target_loc,                         // target location
-      locations.Build(),                  // location_sig
+      location_sig,                       // location_sig
       parameter_slots,                    // parameter slot count
       compiler::Operator::kNoProperties,  // properties
       kCalleeSaveRegisters,               // callee-saved registers
@@ -8696,78 +8707,45 @@ const wasm::FunctionSig* ReplaceTypeInSig(Zone* zone,
 CallDescriptor* ReplaceTypeInCallDescriptorWith(
     Zone* zone, const CallDescriptor* call_descriptor, size_t num_replacements,
     wasm::ValueType input_type, wasm::ValueType output_type) {
-  size_t parameter_count = call_descriptor->ParameterCount();
-  size_t return_count = call_descriptor->ReturnCount();
-  for (size_t i = 0; i < call_descriptor->ParameterCount(); i++) {
-    if (call_descriptor->GetParameterType(i) == input_type.machine_type()) {
-      parameter_count += num_replacements - 1;
+  if (call_descriptor->wasm_sig() == nullptr) {
+    // This happens for builtins calls. They need no replacements anyway.
+#if DEBUG
+    for (size_t i = 0; i < call_descriptor->ParameterCount(); i++) {
+      DCHECK_NE(call_descriptor->GetParameterType(i),
+                input_type.machine_type());
     }
-  }
-  for (size_t i = 0; i < call_descriptor->ReturnCount(); i++) {
-    if (call_descriptor->GetReturnType(i) == input_type.machine_type()) {
-      return_count += num_replacements - 1;
+    for (size_t i = 0; i < call_descriptor->ReturnCount(); i++) {
+      DCHECK_NE(call_descriptor->GetReturnType(i), input_type.machine_type());
     }
-  }
-  if (parameter_count == call_descriptor->ParameterCount() &&
-      return_count == call_descriptor->ReturnCount()) {
+#endif
     return const_cast<CallDescriptor*>(call_descriptor);
   }
-
-  LocationSignature::Builder locations(zone, return_count, parameter_count);
+  const wasm::FunctionSig* sig =
+      ReplaceTypeInSig(zone, call_descriptor->wasm_sig(), input_type,
+                       output_type, num_replacements);
+  // If {ReplaceTypeInSig} took the early fast path, there's nothing to do.
+  if (sig == call_descriptor->wasm_sig()) {
+    return const_cast<CallDescriptor*>(call_descriptor);
+  }
 
   // The last parameter may be the special callable parameter. In that case we
   // have to preserve it as the last parameter, i.e. we allocate it in the new
   // location signature again in the same register.
-  bool has_callable_param =
+  bool extra_callable_param =
       (call_descriptor->GetInputLocation(call_descriptor->InputCount() - 1) ==
        LinkageLocation::ForRegister(kJSFunctionRegister.code(),
                                     MachineType::TaggedPointer()));
-  LinkageLocationAllocator params(
-      wasm::kGpParamRegisters, wasm::kFpParamRegisters, 0 /* no slot offset */);
 
-  for (size_t i = 0;
-       i < call_descriptor->ParameterCount() - (has_callable_param ? 1 : 0);
-       i++) {
-    if (call_descriptor->GetParameterType(i) == input_type.machine_type()) {
-      for (size_t j = 0; j < num_replacements; j++) {
-        locations.AddParam(params.Next(output_type.machine_representation()));
-      }
-    } else {
-      locations.AddParam(
-          params.Next(call_descriptor->GetParameterType(i).representation()));
-    }
-  }
-  if (has_callable_param) {
-    locations.AddParam(LinkageLocation::ForRegister(
-        kJSFunctionRegister.code(), MachineType::TaggedPointer()));
-  }
-
-  int parameter_slots = AddArgumentPaddingSlots(params.NumStackSlots());
-
-  LinkageLocationAllocator rets(wasm::kGpReturnRegisters,
-                                wasm::kFpReturnRegisters, parameter_slots);
-
-  for (size_t i = 0; i < call_descriptor->ReturnCount(); i++) {
-    if (call_descriptor->GetReturnType(i) == input_type.machine_type()) {
-      for (size_t j = 0; j < num_replacements; j++) {
-        locations.AddReturn(rets.Next(output_type.machine_representation()));
-      }
-    } else {
-      locations.AddReturn(
-          rets.Next(call_descriptor->GetReturnType(i).representation()));
-    }
-  }
-
-  int return_slots = rets.NumStackSlots();
-
-  auto sig = ReplaceTypeInSig(zone, call_descriptor->wasm_sig(), input_type,
-                              output_type, num_replacements);
+  int parameter_slots;
+  int return_slots;
+  LocationSignature* location_sig = BuildLocations(
+      zone, sig, extra_callable_param, &parameter_slots, &return_slots);
 
   return zone->New<CallDescriptor>(               // --
       call_descriptor->kind(),                    // kind
       call_descriptor->GetInputType(0),           // target MachineType
       call_descriptor->GetInputLocation(0),       // target location
-      locations.Build(),                          // location_sig
+      location_sig,                               // location_sig
       parameter_slots,                            // parameter slot count
       call_descriptor->properties(),              // properties
       call_descriptor->CalleeSavedRegisters(),    // callee-saved registers

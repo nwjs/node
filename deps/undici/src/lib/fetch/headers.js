@@ -6,27 +6,9 @@ const { validateHeaderName, validateHeaderValue } = require('http')
 const { kHeadersList } = require('../core/symbols')
 const { kGuard } = require('./symbols')
 const { kEnumerableProperty } = require('../core/util')
-const {
-  forbiddenHeaderNames,
-  forbiddenResponseHeaderNames
-} = require('./constants')
 
-function binarySearch (arr, val) {
-  let low = 0
-  let high = Math.floor(arr.length / 2)
-
-  while (high > low) {
-    const mid = (high + low) >>> 1
-
-    if (val.localeCompare(arr[mid * 2]) > 0) {
-      low = mid + 1
-    } else {
-      high = mid
-    }
-  }
-
-  return low * 2
-}
+const kHeadersMap = Symbol('headers map')
+const kHeadersSortedMap = Symbol('headers map sorted')
 
 function normalizeAndValidateHeaderName (name) {
   if (name === undefined) {
@@ -91,64 +73,106 @@ function fill (headers, object) {
   }
 }
 
-// TODO: Composition over inheritence? Or helper methods?
-class HeadersList extends Array {
-  append (name, value) {
-    const normalizedName = normalizeAndValidateHeaderName(name)
-    const normalizedValue = normalizeAndValidateHeaderValue(name, value)
+// https://tc39.es/ecma262/#sec-%25iteratorprototype%25-object
+const esIteratorPrototype = Object.getPrototypeOf(Object.getPrototypeOf([][Symbol.iterator]()))
 
-    const index = binarySearch(this, normalizedName)
+// https://webidl.spec.whatwg.org/#dfn-iterator-prototype-object
+function makeHeadersIterator (iterator) {
+  const i = {
+    next () {
+      if (Object.getPrototypeOf(this) !== i) {
+        throw new TypeError(
+          '\'next\' called on an object that does not implement interface Headers Iterator.'
+        )
+      }
 
-    if (this[index] === normalizedName) {
-      this[index + 1] += `, ${normalizedValue}`
+      return iterator.next()
+    },
+    // The class string of an iterator prototype object for a given interface is the
+    // result of concatenating the identifier of the interface and the string " Iterator".
+    [Symbol.toStringTag]: 'Headers Iterator'
+  }
+
+  // The [[Prototype]] internal slot of an iterator prototype object must be %IteratorPrototype%.
+  Object.setPrototypeOf(i, esIteratorPrototype)
+  // esIteratorPrototype needs to be the prototype of i
+  // which is the prototype of an empty object. Yes, it's confusing.
+  return Object.setPrototypeOf({}, i)
+}
+
+class HeadersList {
+  constructor (init) {
+    if (init instanceof HeadersList) {
+      this[kHeadersMap] = new Map(init[kHeadersMap])
+      this[kHeadersSortedMap] = init[kHeadersSortedMap]
     } else {
-      this.splice(index, 0, normalizedName, normalizedValue)
+      this[kHeadersMap] = new Map(init)
+      this[kHeadersSortedMap] = null
     }
   }
 
-  delete (name) {
+  clear () {
+    this[kHeadersMap].clear()
+    this[kHeadersSortedMap] = null
+  }
+
+  append (name, value) {
+    this[kHeadersSortedMap] = null
+
     const normalizedName = normalizeAndValidateHeaderName(name)
+    const normalizedValue = normalizeAndValidateHeaderValue(name, value)
 
-    const index = binarySearch(this, normalizedName)
+    const exists = this[kHeadersMap].get(normalizedName)
 
-    if (this[index] === normalizedName) {
-      this.splice(index, 2)
+    if (exists) {
+      this[kHeadersMap].set(normalizedName, `${exists}, ${normalizedValue}`)
+    } else {
+      this[kHeadersMap].set(normalizedName, `${normalizedValue}`)
     }
+  }
+
+  set (name, value) {
+    this[kHeadersSortedMap] = null
+
+    const normalizedName = normalizeAndValidateHeaderName(name)
+    return this[kHeadersMap].set(normalizedName, value)
+  }
+
+  delete (name) {
+    this[kHeadersSortedMap] = null
+
+    const normalizedName = normalizeAndValidateHeaderName(name)
+    return this[kHeadersMap].delete(normalizedName)
   }
 
   get (name) {
     const normalizedName = normalizeAndValidateHeaderName(name)
-
-    const index = binarySearch(this, normalizedName)
-
-    if (this[index] === normalizedName) {
-      return this[index + 1]
-    }
-
-    return null
+    return this[kHeadersMap].get(normalizedName) ?? null
   }
 
   has (name) {
     const normalizedName = normalizeAndValidateHeaderName(name)
-
-    const index = binarySearch(this, normalizedName)
-
-    return this[index] === normalizedName
+    return this[kHeadersMap].has(normalizedName)
   }
 
-  set (name, value) {
-    const normalizedName = normalizeAndValidateHeaderName(name)
-    const normalizedValue = normalizeAndValidateHeaderValue(name, value)
+  keys () {
+    return this[kHeadersMap].keys()
+  }
 
-    const index = binarySearch(this, normalizedName)
-    if (this[index] === normalizedName) {
-      this[index + 1] = normalizedValue
-    } else {
-      this.splice(index, 0, normalizedName, normalizedValue)
-    }
+  values () {
+    return this[kHeadersMap].values()
+  }
+
+  entries () {
+    return this[kHeadersMap].entries()
+  }
+
+  [Symbol.iterator] () {
+    return this[kHeadersMap][Symbol.iterator]()
   }
 }
 
+// https://fetch.spec.whatwg.org/#headers-class
 class Headers {
   constructor (...args) {
     if (
@@ -161,7 +185,6 @@ class Headers {
       )
     }
     const init = args.length >= 1 ? args[0] ?? {} : {}
-
     this[kHeadersList] = new HeadersList()
 
     // The new Headers(init) constructor steps are:
@@ -174,186 +197,157 @@ class Headers {
   }
 
   get [Symbol.toStringTag] () {
-    if (!(this instanceof Headers)) {
-      throw new TypeError('Illegal invocation')
-    }
-
     return this.constructor.name
   }
 
-  toString () {
+  // https://fetch.spec.whatwg.org/#dom-headers-append
+  append (name, value) {
     if (!(this instanceof Headers)) {
       throw new TypeError('Illegal invocation')
     }
 
-    return Object.prototype.toString.call(this)
-  }
-
-  append (...args) {
-    if (!(this instanceof Headers)) {
-      throw new TypeError('Illegal invocation')
-    }
-    if (args.length < 2) {
+    if (arguments.length < 2) {
       throw new TypeError(
-        `Failed to execute 'append' on 'Headers': 2 arguments required, but only ${args.length} present.`
+        `Failed to execute 'append' on 'Headers': 2 arguments required, but only ${arguments.length} present.`
       )
     }
 
-    const normalizedName = normalizeAndValidateHeaderName(String(args[0]))
-
+    // Note: undici does not implement forbidden header names
     if (this[kGuard] === 'immutable') {
       throw new TypeError('immutable')
-    } else if (
-      this[kGuard] === 'request' &&
-      forbiddenHeaderNames.includes(normalizedName)
-    ) {
-      return
     } else if (this[kGuard] === 'request-no-cors') {
       // TODO
-    } else if (
-      this[kGuard] === 'response' &&
-      forbiddenResponseHeaderNames.includes(normalizedName)
-    ) {
-      return
     }
 
-    return this[kHeadersList].append(String(args[0]), String(args[1]))
+    return this[kHeadersList].append(String(name), String(value))
   }
 
-  delete (...args) {
+  // https://fetch.spec.whatwg.org/#dom-headers-delete
+  delete (name) {
     if (!(this instanceof Headers)) {
       throw new TypeError('Illegal invocation')
     }
-    if (args.length < 1) {
+
+    if (arguments.length < 1) {
       throw new TypeError(
-        `Failed to execute 'delete' on 'Headers': 1 argument required, but only ${args.length} present.`
+        `Failed to execute 'delete' on 'Headers': 1 argument required, but only ${arguments.length} present.`
       )
     }
 
-    const normalizedName = normalizeAndValidateHeaderName(String(args[0]))
-
+    // Note: undici does not implement forbidden header names
     if (this[kGuard] === 'immutable') {
       throw new TypeError('immutable')
-    } else if (
-      this[kGuard] === 'request' &&
-      forbiddenHeaderNames.includes(normalizedName)
-    ) {
-      return
     } else if (this[kGuard] === 'request-no-cors') {
       // TODO
-    } else if (
-      this[kGuard] === 'response' &&
-      forbiddenResponseHeaderNames.includes(normalizedName)
-    ) {
-      return
     }
 
-    return this[kHeadersList].delete(String(args[0]))
+    return this[kHeadersList].delete(String(name))
   }
 
-  get (...args) {
+  // https://fetch.spec.whatwg.org/#dom-headers-get
+  get (name) {
     if (!(this instanceof Headers)) {
       throw new TypeError('Illegal invocation')
     }
-    if (args.length < 1) {
+
+    if (arguments.length < 1) {
       throw new TypeError(
-        `Failed to execute 'get' on 'Headers': 1 argument required, but only ${args.length} present.`
+        `Failed to execute 'get' on 'Headers': 1 argument required, but only ${arguments.length} present.`
       )
     }
 
-    return this[kHeadersList].get(String(args[0]))
+    return this[kHeadersList].get(String(name))
   }
 
-  has (...args) {
+  // https://fetch.spec.whatwg.org/#dom-headers-has
+  has (name) {
     if (!(this instanceof Headers)) {
       throw new TypeError('Illegal invocation')
     }
-    if (args.length < 1) {
+
+    if (arguments.length < 1) {
       throw new TypeError(
-        `Failed to execute 'has' on 'Headers': 1 argument required, but only ${args.length} present.`
+        `Failed to execute 'has' on 'Headers': 1 argument required, but only ${arguments.length} present.`
       )
     }
 
-    return this[kHeadersList].has(String(args[0]))
+    return this[kHeadersList].has(String(name))
   }
 
-  set (...args) {
+  // https://fetch.spec.whatwg.org/#dom-headers-set
+  set (name, value) {
     if (!(this instanceof Headers)) {
       throw new TypeError('Illegal invocation')
     }
-    if (args.length < 2) {
+
+    if (arguments.length < 2) {
       throw new TypeError(
-        `Failed to execute 'set' on 'Headers': 2 arguments required, but only ${args.length} present.`
+        `Failed to execute 'set' on 'Headers': 2 arguments required, but only ${arguments.length} present.`
       )
     }
 
-    const normalizedName = normalizeAndValidateHeaderName(String(args[0]))
-
+    // Note: undici does not implement forbidden header names
     if (this[kGuard] === 'immutable') {
       throw new TypeError('immutable')
-    } else if (
-      this[kGuard] === 'request' &&
-      forbiddenHeaderNames.includes(normalizedName)
-    ) {
-      return
     } else if (this[kGuard] === 'request-no-cors') {
       // TODO
-    } else if (
-      this[kGuard] === 'response' &&
-      forbiddenResponseHeaderNames.includes(normalizedName)
-    ) {
-      return
     }
 
-    return this[kHeadersList].set(String(args[0]), String(args[1]))
+    return this[kHeadersList].set(String(name), String(value))
   }
 
-  * keys () {
-    const clone = this[kHeadersList].slice()
-    for (let index = 0; index < clone.length; index += 2) {
-      yield clone[index]
-    }
+  get [kHeadersSortedMap] () {
+    this[kHeadersList][kHeadersSortedMap] ??= new Map([...this[kHeadersList]].sort((a, b) => a[0] < b[0] ? -1 : 1))
+    return this[kHeadersList][kHeadersSortedMap]
   }
 
-  * values () {
-    const clone = this[kHeadersList].slice()
-    for (let index = 1; index < clone.length; index += 2) {
-      yield clone[index]
-    }
-  }
-
-  * entries () {
-    const clone = this[kHeadersList].slice()
-    for (let index = 0; index < clone.length; index += 2) {
-      yield [clone[index], clone[index + 1]]
-    }
-  }
-
-  forEach (...args) {
+  keys () {
     if (!(this instanceof Headers)) {
       throw new TypeError('Illegal invocation')
     }
-    if (args.length < 1) {
+
+    return makeHeadersIterator(this[kHeadersSortedMap].keys())
+  }
+
+  values () {
+    if (!(this instanceof Headers)) {
+      throw new TypeError('Illegal invocation')
+    }
+
+    return makeHeadersIterator(this[kHeadersSortedMap].values())
+  }
+
+  entries () {
+    if (!(this instanceof Headers)) {
+      throw new TypeError('Illegal invocation')
+    }
+
+    return makeHeadersIterator(this[kHeadersSortedMap].entries())
+  }
+
+  /**
+   * @param {(value: string, key: string, self: Headers) => void} callbackFn
+   * @param {unknown} thisArg
+   */
+  forEach (callbackFn, thisArg = globalThis) {
+    if (!(this instanceof Headers)) {
+      throw new TypeError('Illegal invocation')
+    }
+
+    if (arguments.length < 1) {
       throw new TypeError(
-        `Failed to execute 'forEach' on 'Headers': 1 argument required, but only ${args.length} present.`
+        `Failed to execute 'forEach' on 'Headers': 1 argument required, but only ${arguments.length} present.`
       )
     }
-    if (typeof args[0] !== 'function') {
+
+    if (typeof callbackFn !== 'function') {
       throw new TypeError(
         "Failed to execute 'forEach' on 'Headers': parameter 1 is not of type 'Function'."
       )
     }
-    const callback = args[0]
-    const thisArg = args[1]
 
-    const clone = this[kHeadersList].slice()
-    for (let index = 0; index < clone.length; index += 2) {
-      callback.call(
-        thisArg,
-        clone[index + 1],
-        clone[index],
-        this
-      )
+    for (const [key, value] of this) {
+      callbackFn.apply(thisArg, [value, key, this])
     }
   }
 
@@ -384,7 +378,6 @@ module.exports = {
   fill,
   Headers,
   HeadersList,
-  binarySearch,
   normalizeAndValidateHeaderName,
   normalizeAndValidateHeaderValue
 }

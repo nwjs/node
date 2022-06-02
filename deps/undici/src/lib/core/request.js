@@ -4,12 +4,18 @@ const {
   InvalidArgumentError,
   NotSupportedError
 } = require('./errors')
-const util = require('./util')
 const assert = require('assert')
+const util = require('./util')
 
 const kHandler = Symbol('handler')
 
 const channels = {}
+
+let extractBody
+
+const nodeVersion = process.versions.node.split('.')
+const nodeMajor = Number(nodeVersion[0])
+const nodeMinor = Number(nodeVersion[1])
 
 try {
   const diagnosticsChannel = require('diagnostics_channel')
@@ -32,11 +38,13 @@ class Request {
     method,
     body,
     headers,
+    query,
     idempotent,
     blocking,
     upgrade,
     headersTimeout,
-    bodyTimeout
+    bodyTimeout,
+    throwOnError
   }, handler) {
     if (typeof path !== 'string') {
       throw new InvalidArgumentError('path must be a string')
@@ -64,6 +72,8 @@ class Request {
 
     this.bodyTimeout = bodyTimeout
 
+    this.throwOnError = throwOnError === true
+
     this.method = method
 
     if (body == null) {
@@ -79,7 +89,7 @@ class Request {
       this.body = body.byteLength ? body : null
     } else if (typeof body === 'string') {
       this.body = body.length ? Buffer.from(body) : null
-    } else if (util.isIterable(body) || util.isBlobLike(body)) {
+    } else if (util.isFormDataLike(body) || util.isIterable(body) || util.isBlobLike(body)) {
       this.body = body
     } else {
       throw new InvalidArgumentError('body must be a string, a Buffer, a Readable stream, an iterable, or an async iterable')
@@ -91,7 +101,7 @@ class Request {
 
     this.upgrade = upgrade || null
 
-    this.path = path
+    this.path = query ? util.buildURL(path, query) : path
 
     this.origin = origin
 
@@ -126,7 +136,22 @@ class Request {
       throw new InvalidArgumentError('headers must be an object or an array')
     }
 
-    if (util.isBlobLike(body) && this.contentType == null && body.type) {
+    if (util.isFormDataLike(this.body)) {
+      if (nodeMajor < 16 || (nodeMajor === 16 && nodeMinor < 5)) {
+        throw new InvalidArgumentError('Form-Data bodies are only supported in node v16.5 and newer.')
+      }
+
+      if (!extractBody) {
+        extractBody = require('../fetch/body.js').extractBody
+      }
+
+      const [bodyStream, contentType] = extractBody(body)
+      if (this.contentType == null) {
+        this.contentType = contentType
+        this.headers += `content-type: ${contentType}\r\n`
+      }
+      this.body = bodyStream.stream
+    } else if (util.isBlobLike(body) && this.contentType == null && body.type) {
       this.contentType = body.type
       this.headers += `content-type: ${body.type}\r\n`
     }

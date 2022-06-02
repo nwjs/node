@@ -116,7 +116,7 @@ This section was moved to [Modules: Packages](packages.md).
 ### Terminology
 
 The _specifier_ of an `import` statement is the string after the `from` keyword,
-e.g. `'path'` in `import { sep } from 'path'`. Specifiers are also used in
+e.g. `'path'` in `import { sep } from 'node:path'`. Specifiers are also used in
 `export from` statements, and as the argument to an `import()` expression.
 
 There are three types of specifiers:
@@ -139,7 +139,7 @@ algorithm][]. All other specifier resolutions are always only resolved with
 the standard relative [URL][] resolution semantics.
 
 Like in CommonJS, module files within packages can be accessed by appending a
-path to the package name unless the package’s [`package.json`][] contains an
+path to the package name unless the package's [`package.json`][] contains an
 [`"exports"`][] field, in which case files within packages can only be accessed
 via the paths defined in [`"exports"`][].
 
@@ -260,12 +260,12 @@ exports. Named exports of builtin modules are updated only by calling
 [`module.syncBuiltinESMExports()`][].
 
 ```js
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
 const e = new EventEmitter();
 ```
 
 ```js
-import { readFile } from 'fs';
+import { readFile } from 'node:fs';
 readFile('./foo.txt', (err, source) => {
   if (err) {
     console.error(err);
@@ -276,9 +276,9 @@ readFile('./foo.txt', (err, source) => {
 ```
 
 ```js
-import fs, { readFileSync } from 'fs';
-import { syncBuiltinESMExports } from 'module';
-import { Buffer } from 'buffer';
+import fs, { readFileSync } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
+import { Buffer } from 'node:buffer';
 
 fs.readFileSync = () => Buffer.from('Hello, ESM');
 syncBuiltinESMExports();
@@ -308,7 +308,7 @@ current module file.
 This enables useful patterns such as relative file loading:
 
 ```js
-import { readFileSync } from 'fs';
+import { readFileSync } from 'node:fs';
 const buffer = readFileSync(new URL('./data.proto', import.meta.url));
 ```
 
@@ -566,8 +566,6 @@ would provide the exports interface for the instantiation of `module.wasm`.
 added: v14.8.0
 -->
 
-> Stability: 1 - Experimental
-
 The `await` keyword may be used in the top level body of an ECMAScript module.
 
 Assuming an `a.mjs` with
@@ -592,8 +590,8 @@ If a top level `await` expression never resolves, the `node` process will exit
 with a `13` [status code][].
 
 ```js
-import { spawn } from 'child_process';
-import { execPath } from 'process';
+import { spawn } from 'node:child_process';
+import { execPath } from 'node:process';
 
 spawn(execPath, [
   '--input-type=module',
@@ -646,7 +644,7 @@ references to the local dependencies:
 
 ```mjs
 // file.mjs
-import worker_threads from 'worker_threads';
+import worker_threads from 'node:worker_threads';
 import { configure, resize } from 'https://example.com/imagelib.mjs';
 configure({ worker_threads });
 ```
@@ -673,6 +671,15 @@ of Node.js applications.
 <i id="esm_experimental_loaders"></i>
 
 ## Loaders
+
+<!-- YAML
+added: v8.8.0
+changes:
+  - version: v16.12.0
+    pr-url: https://github.com/nodejs/node/pull/37468
+    description: Removed `getFormat`, `getSource`, `transformSource`, and
+                 `globalPreload`; added `load` hook and `getGlobalPreload` hook.
+-->
 
 > Stability: 1 - Experimental
 
@@ -935,7 +942,7 @@ export function globalPreload({ port }) {
 ### Examples
 
 The various loader hooks can be used together to accomplish wide-ranging
-customizations of Node.js’ code loading and evaluation behaviors.
+customizations of the Node.js code loading and evaluation behaviors.
 
 #### HTTPS loader
 
@@ -948,7 +955,7 @@ and there is no security.
 
 ```js
 // https-loader.mjs
-import { get } from 'https';
+import { get } from 'node:https';
 
 export function resolve(specifier, context, defaultResolve) {
   const { parentURL = null } = context;
@@ -1007,7 +1014,7 @@ prints the current version of CoffeeScript per the module at the URL in
 
 #### Transpiler loader
 
-Sources that are in formats Node.js doesn’t understand can be converted into
+Sources that are in formats Node.js doesn't understand can be converted into
 JavaScript using the [`load` hook][load hook]. Before that hook gets called,
 however, a [`resolve` hook][resolve hook] needs to tell Node.js not to
 throw an error on unknown file types.
@@ -1118,7 +1125,7 @@ async function getPackageType(url) {
 import { scream } from './scream.coffee'
 console.log scream 'hello, world'
 
-import { version } from 'process'
+import { version } from 'node:process'
 console.log "Brought to you by Node.js version #{version}"
 ```
 

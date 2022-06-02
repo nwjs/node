@@ -25,8 +25,8 @@
 
 #include "debug_utils-inl.h"
 #include "env-inl.h"
-#include "memory_tracker-inl.h"
 #include "histogram-inl.h"
+#include "memory_tracker-inl.h"
 #include "node_binding.h"
 #include "node_errors.h"
 #include "node_internals.h"
@@ -38,6 +38,7 @@
 #include "node_process-inl.h"
 #include "node_report.h"
 #include "node_revert.h"
+#include "node_snapshot_builder.h"
 #include "node_v8_platform-inl.h"
 #include "node_version.h"
 
@@ -47,7 +48,6 @@
 #include "node_webkit.h"
 
 #if HAVE_OPENSSL
-#include "allocated_buffer-inl.h"  // Inlined functions needed by node_crypto.h
 #include "node_crypto.h"
 #endif
 
@@ -536,6 +536,10 @@ MaybeLocal<Value> StartExecution(Environment* env, StartExecutionCallback cb) {
     return StartExecution(env, "internal/main/check_syntax");
   }
 
+  if (env->options()->test_runner) {
+    return StartExecution(env, "internal/main/test_runner");
+  }
+
   if ((!first_argv.empty() && first_argv != "-") || node_is_nwjs) {
     return StartExecution(env, "internal/main/run_main_module");
   }
@@ -996,8 +1000,6 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
 
 #endif  // defined(NODE_HAVE_I18N_SUPPORT)
 
-//NativeModuleEnv::InitializeCodeCache();
-
   // We should set node_is_initialized here instead of in node::Start,
   // otherwise embedders using node::Init to initialize everything will not be
   // able to set it and native modules will not load for them.
@@ -1309,13 +1311,16 @@ int Start(int argc, char** argv) {
   }
 
   {
-    bool use_node_snapshot =
-        per_process::cli_options->per_isolate->node_snapshot;
+    bool use_node_snapshot = per_process::cli_options->node_snapshot;
     const SnapshotData* snapshot_data =
-        use_node_snapshot ? NodeMainInstance::GetEmbeddedSnapshotData()
+        use_node_snapshot ? SnapshotBuilder::GetEmbeddedSnapshotData()
                           : nullptr;
     uv_loop_configure(uv_default_loop(), UV_METRICS_IDLE_TIME);
 
+    if (false && snapshot_data != nullptr) {
+      native_module::NativeModuleEnv::RefreshCodeCache(
+          snapshot_data->code_cache);
+    }
     NodeMainInstance main_instance(snapshot_data,
                                    uv_default_loop(),
                                    per_process::v8_platform.Platform(),

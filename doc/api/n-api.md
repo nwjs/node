@@ -1187,10 +1187,13 @@ added:
   - v16.14.0
 -->
 
+> Stability: 1 - Experimental
+
 ````c
 NAPI_EXTERN napi_status node_api_throw_syntax_error(napi_env env,
                                                     const char* code,
                                                     const char* msg);
+```
 
 * `[in] env`: The environment that the API is invoked under.
 * `[in] code`: Optional error code to be set on the error.
@@ -1304,6 +1307,8 @@ added:
   - v17.2.0
   - v16.14.0
 -->
+
+> Stability: 1 - Experimental
 
 ```c
 NAPI_EXTERN napi_status node_api_create_syntax_error(napi_env env,
@@ -2507,7 +2512,6 @@ of the ECMAScript Language Specification.
 
 <!-- YAML
 added: v17.5.0
-napiVersion: v17.5.0
 -->
 
 > Stability: 1 - Experimental

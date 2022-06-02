@@ -3,6 +3,7 @@
 const { redirectStatus } = require('./constants')
 const { performance } = require('perf_hooks')
 const { isBlobLike, toUSVString, ReadableStreamFrom } = require('../core/util')
+const assert = require('assert')
 
 let File
 
@@ -316,12 +317,6 @@ function sameOrigin (A, B) {
   return false
 }
 
-// https://fetch.spec.whatwg.org/#corb-check
-function CORBCheck (request, response) {
-  // TODO
-  return 'allowed'
-}
-
 function createDeferredPromise () {
   let res
   let rej
@@ -347,6 +342,23 @@ function normalizeMethod (method) {
   return /^(DELETE|GET|HEAD|OPTIONS|POST|PUT)$/i.test(method)
     ? method.toUpperCase()
     : method
+}
+
+// https://infra.spec.whatwg.org/#serialize-a-javascript-value-to-a-json-string
+function serializeJavascriptValueToJSONString (value) {
+  // 1. Let result be ? Call(%JSON.stringify%, undefined, « value »).
+  const result = JSON.stringify(value)
+
+  // 2. If result is undefined, then throw a TypeError.
+  if (result === undefined) {
+    throw new TypeError('Value is not JSON serializable')
+  }
+
+  // 3. Assert: result is a string.
+  assert(typeof result === 'string')
+
+  // 4. Return result.
+  return result
 }
 
 module.exports = {
@@ -377,6 +389,6 @@ module.exports = {
   isFileLike,
   isValidReasonPhrase,
   sameOrigin,
-  CORBCheck,
-  normalizeMethod
+  normalizeMethod,
+  serializeJavascriptValueToJSONString
 }

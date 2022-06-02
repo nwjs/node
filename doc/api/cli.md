@@ -98,7 +98,7 @@ analysis using a debugger (such as `lldb`, `gdb`, and `mdb`).
 
 If this flag is passed, the behavior can still be set to not abort through
 [`process.setUncaughtExceptionCaptureCallback()`][] (and through usage of the
-`domain` module that uses it).
+`node:domain` module that uses it).
 
 ### `--completion-bash`
 
@@ -226,7 +226,7 @@ added: v9.8.0
 
 Make built-in language features like `eval` and `new Function` that generate
 code from strings throw an exception instead. This does not affect the Node.js
-`vm` module.
+`node:vm` module.
 
 ### `--dns-result-order=order`
 
@@ -301,7 +301,12 @@ Enable experimental `import.meta.resolve()` support.
 ### `--experimental-loader=module`
 
 <!-- YAML
-added: v9.0.0
+added: v8.8.0
+changes:
+  - version: v12.11.1
+    pr-url: https://github.com/nodejs/node/pull/29752
+    description: This flag was renamed from `--loader` to
+                 `--experimental-loader`.
 -->
 
 Specify the `module` of a custom experimental [ECMAScript module loader][].
@@ -364,7 +369,7 @@ See [customizing ESM specifier resolution][] for example usage.
 added: v9.6.0
 -->
 
-Enable experimental ES Module support in the `vm` module.
+Enable experimental ES Module support in the `node:vm` module.
 
 ### `--experimental-wasi-unstable-preview1`
 
@@ -421,6 +426,18 @@ Only the root context is supported. There is no guarantee that
 under this flag.
 
 To allow polyfills to be added, `--require` runs before freezing intrinsics.
+
+### `--force-node-api-uncaught-exceptions-policy`
+
+<!-- YAML
+added: v18.3.0
+-->
+
+Enforces `uncaughtException` event on Node-API asynchronous callbacks.
+
+To prevent from an existing add-on from crashing the process, this flag is not
+enabled by default. In the future, this flag will be enabled by default to
+enforce the correct behavior.
 
 ### `--heapsnapshot-near-heap-limit=max_count`
 
@@ -666,10 +683,10 @@ added:
 changes:
   - version: v13.13.0
     pr-url: https://github.com/nodejs/node/pull/32520
-    description: Change maximum default size of HTTP headers from 8 KB to 16 KB.
+    description: Change maximum default size of HTTP headers from 8 KiB to 16 KiB.
 -->
 
-Specify the maximum size, in bytes, of HTTP headers. Defaults to 16 KB.
+Specify the maximum size, in bytes, of HTTP headers. Defaults to 16 KiB.
 
 ### `--napi-modules`
 
@@ -1051,6 +1068,16 @@ When using `--secure-heap`, the `--secure-heap-min` flag specifies the
 minimum allocation from the secure heap. The minimum value is `2`.
 The maximum value is the lesser of `--secure-heap` or `2147483647`.
 The value given must be a power of two.
+
+### `--test`
+
+<!-- YAML
+added: v18.1.0
+-->
+
+Starts the Node.js command line test runner. This flag cannot be combined with
+`--check`, `--eval`, `--interactive`, or the inspector. See the documentation
+on [running tests from the command line][] for more details.
 
 ### `--test-only`
 
@@ -1610,6 +1637,7 @@ Node.js options that are allowed are:
 * `--experimental-wasm-modules`
 * `--force-context-aware`
 * `--force-fips`
+* `--force-node-api-uncaught-exceptions-policy`
 * `--frozen-intrinsics`
 * `--heapsnapshot-near-heap-limit`
 * `--heapsnapshot-signal`
@@ -1983,8 +2011,8 @@ Sets the max memory size of V8's old memory section. As memory
 consumption approaches the limit, V8 will spend more time on
 garbage collection in an effort to free unused memory.
 
-On a machine with 2 GB of memory, consider setting this to
-1536 (1.5 GB) to leave some memory for other uses and avoid swapping.
+On a machine with 2 GiB of memory, consider setting this to
+1536 (1.5 GiB) to leave some memory for other uses and avoid swapping.
 
 ```console
 $ node --max-old-space-size=1536 index.js
@@ -2033,6 +2061,7 @@ $ node --max-old-space-size=1536 index.js
 [jitless]: https://v8.dev/blog/jitless
 [libuv threadpool documentation]: https://docs.libuv.org/en/latest/threadpool.html
 [remote code execution]: https://www.owasp.org/index.php/Code_Injection
+[running tests from the command line]: test.md#running-tests-from-the-command-line
 [security warning]: #warning-binding-inspector-to-a-public-ipport-combination-is-insecure
 [timezone IDs]: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
 [ways that `TZ` is handled in other environments]: https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html

@@ -468,6 +468,19 @@ if not defined noetw (
     copy /Y ..\src\res\node_etw_provider.man %TARGET_NAME%\ > nul
     if errorlevel 1 echo Cannot copy node_etw_provider.man && goto package_error
 )
+if defined dll (
+  copy /Y libnode.dll %TARGET_NAME%\ > nul
+  if errorlevel 1 echo Cannot copy libnode.dll && goto package_error
+
+  mkdir %TARGET_NAME%\Release > nul
+  copy /Y node.def %TARGET_NAME%\Release\ > nul
+  if errorlevel 1 echo Cannot copy node.def && goto package_error
+
+  set HEADERS_ONLY=1
+  python ..\tools\install.py install %CD%\%TARGET_NAME% \ > nul
+  if errorlevel 1 echo Cannot install headers && goto package_error
+  set HEADERS_ONLY=
+)
 cd ..
 
 :package
@@ -595,7 +608,7 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 :: building addons
 setlocal
 set npm_config_nodedir=%~dp0
-"%node_exe%" "%~dp0tools\build-addons.js" "%~dp0deps\npm\node_modules\node-gyp\bin\node-gyp.js" "%~dp0test\addons"
+"%node_exe%" "%~dp0tools\build-addons.mjs" "%~dp0deps\npm\node_modules\node-gyp\bin\node-gyp.js" "%~dp0test\addons"
 if errorlevel 1 exit /b 1
 endlocal
 
@@ -613,7 +626,7 @@ for /d %%F in (test\js-native-api\??_*) do (
 :: building js-native-api
 setlocal
 set npm_config_nodedir=%~dp0
-"%node_exe%" "%~dp0tools\build-addons.js" "%~dp0deps\npm\node_modules\node-gyp\bin\node-gyp.js" "%~dp0test\js-native-api"
+"%node_exe%" "%~dp0tools\build-addons.mjs" "%~dp0deps\npm\node_modules\node-gyp\bin\node-gyp.js" "%~dp0test\js-native-api"
 if errorlevel 1 exit /b 1
 endlocal
 goto build-node-api-tests
@@ -632,7 +645,7 @@ for /d %%F in (test\node-api\??_*) do (
 :: building node-api
 setlocal
 set npm_config_nodedir=%~dp0
-"%node_exe%" "%~dp0tools\build-addons.js" "%~dp0deps\npm\node_modules\node-gyp\bin\node-gyp.js" "%~dp0test\node-api"
+"%node_exe%" "%~dp0tools\build-addons.mjs" "%~dp0deps\npm\node_modules\node-gyp\bin\node-gyp.js" "%~dp0test\node-api"
 if errorlevel 1 exit /b 1
 endlocal
 goto run-tests

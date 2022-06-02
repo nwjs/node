@@ -143,6 +143,24 @@ void EnvironmentOptions::CheckOptions(std::vector<std::string>* errors) {
     errors->push_back("--heap-snapshot-near-heap-limit must not be negative");
   }
 
+  if (test_runner) {
+    if (syntax_check_only) {
+      errors->push_back("either --test or --check can be used, not both");
+    }
+
+    if (has_eval_string) {
+      errors->push_back("either --test or --eval can be used, not both");
+    }
+
+    if (force_repl) {
+      errors->push_back("either --test or --interactive can be used, not both");
+    }
+
+    if (debug_options_.inspector_enabled) {
+      errors->push_back("the inspector cannot be used with --test");
+    }
+  }
+
 #if HAVE_INSPECTOR
   if (!cpu_prof) {
     if (!cpu_prof_name.empty()) {
@@ -414,6 +432,12 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             &EnvironmentOptions::force_async_hooks_checks,
             kAllowedInEnvironment,
             true);
+  AddOption(
+      "--force-node-api-uncaught-exceptions-policy",
+      "enforces 'uncaughtException' event on Node API asynchronous callbacks",
+      &EnvironmentOptions::force_node_api_uncaught_exceptions_policy,
+      kAllowedInEnvironment,
+      false);
   AddOption("--addons",
             "disable loading native addons",
             &EnvironmentOptions::allow_native_addons,
@@ -498,6 +522,9 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             "write warnings to file instead of stderr",
             &EnvironmentOptions::redirect_warnings,
             kAllowedInEnvironment);
+  AddOption("--test",
+            "launch test runner on startup",
+            &EnvironmentOptions::test_runner);
   AddOption("--test-only",
             "run tests with 'only' option set",
             &EnvironmentOptions::test_only,
@@ -629,10 +656,6 @@ PerIsolateOptionsParser::PerIsolateOptionsParser(
             "track heap object allocations for heap snapshots",
             &PerIsolateOptions::track_heap_objects,
             kAllowedInEnvironment);
-  AddOption("--node-snapshot",
-            "",  // It's a debug-only option.
-            &PerIsolateOptions::node_snapshot,
-            kAllowedInEnvironment);
 
   // Explicitly add some V8 flags to mark them as allowed in NODE_OPTIONS.
   AddOption("--abort-on-uncaught-exception",
@@ -683,14 +706,8 @@ PerIsolateOptionsParser::PerIsolateOptionsParser(
             kAllowedInEnvironment);
   Implies("--report-signal", "--report-on-signal");
 
-  AddOption("--experimental-top-level-await",
-            "",
-            &PerIsolateOptions::experimental_top_level_await,
-            kAllowedInEnvironment);
-  AddOption("--harmony-top-level-await", "", V8Option{});
-  Implies("--experimental-top-level-await", "--harmony-top-level-await");
-  Implies("--harmony-top-level-await", "--experimental-top-level-await");
-  ImpliesNot("--no-harmony-top-level-await", "--experimental-top-level-await");
+  AddOption(
+      "--experimental-top-level-await", "", NoOp{}, kAllowedInEnvironment);
 
   Insert(eop, &PerIsolateOptions::get_per_env_options);
 }
@@ -734,7 +751,10 @@ PerProcessOptionsParser::PerProcessOptionsParser(
             "Currently only supported in the node_mksnapshot binary.",
             &PerProcessOptions::build_snapshot,
             kDisallowedInEnvironment);
-
+  AddOption("--node-snapshot",
+            "",  // It's a debug-only option.
+            &PerProcessOptions::node_snapshot,
+            kAllowedInEnvironment);
   // 12.x renamed this inadvertently, so alias it for consistency within the
   // release line, while using the original name for consistency with older
   // release lines.

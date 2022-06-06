@@ -36,6 +36,10 @@
 #  define __has_declspec_attribute(x) 0
 #endif
 
+#if defined(WIN32)
+#define ssize_t ptrdiff_t
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

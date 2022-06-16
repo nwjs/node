@@ -286,8 +286,6 @@ For information about the governance of the Node.js project, see
   **Ben Noordhuis** <<info@bnoordhuis.nl>>
 * [BridgeAR](https://github.com/BridgeAR) -
   **Ruben Bridgewater** <<ruben@bridgewater.de>> (he/him)
-* [bzoz](https://github.com/bzoz) -
-  **Bartosz Sosnowski** <<bartosz@janeasystems.com>>
 * [cclauss](https://github.com/cclauss) -
   **Christian Clauss** <<cclauss@me.com>> (he/him)
 * [ChALkeR](https://github.com/ChALkeR) -
@@ -330,8 +328,6 @@ For information about the governance of the Node.js project, see
   **Harshitha K P** <<harshitha014@gmail.com>> (she/her)
 * [himself65](https://github.com/himself65) -
   **Zeyu "Alex" Yang** <<himself65@outlook.com>> (he/him)
-* [hiroppy](https://github.com/hiroppy) -
-  **Yuta Hiroto** <<hello@hiroppy.me>> (he/him)
 * [iansu](https://github.com/iansu) -
   **Ian Sutherland** <<ian@iansutherland.ca>>
 * [indutny](https://github.com/indutny) -
@@ -364,8 +360,6 @@ For information about the governance of the Node.js project, see
   **LiviaMedeiros** <<livia@cirno.name>>
 * [lpinca](https://github.com/lpinca) -
   **Luigi Pinca** <<luigipinca@gmail.com>> (he/him)
-* [lundibundi](https://github.com/lundibundi) -
-  **Denys Otrishko** <<shishugi@gmail.com>> (he/him)
 * [Lxxyx](https://github.com/Lxxyx) -
   **Zijian Liu** <<lxxyxzj@gmail.com>> (he/him)
 * [marsonya](https://github.com/marsonya) -
@@ -474,6 +468,8 @@ For information about the governance of the Node.js project, see
   **Christopher Hiller** <<boneskull@boneskull.com>> (he/him)
 * [brendanashworth](https://github.com/brendanashworth) -
   **Brendan Ashworth** <<brendan.ashworth@me.com>>
+* [bzoz](https://github.com/bzoz) -
+  **Bartosz Sosnowski** <<bartosz@janeasystems.com>>
 * [calvinmetcalf](https://github.com/calvinmetcalf) -
   **Calvin Metcalf** <<calvin.metcalf@gmail.com>>
 * [chrisdickinson](https://github.com/chrisdickinson) -
@@ -506,6 +502,8 @@ For information about the governance of the Node.js project, see
   **Glen Keane** <<glenkeane.94@gmail.com>> (he/him)
 * [hashseed](https://github.com/hashseed) -
   **Yang Guo** <<yangguo@chromium.org>> (he/him)
+* [hiroppy](https://github.com/hiroppy) -
+  **Yuta Hiroto** <<hello@hiroppy.me>> (he/him)
 * [iarna](https://github.com/iarna) -
   **Rebecca Turner** <<me@re-becca.org>>
 * [imran-iq](https://github.com/imran-iq) -
@@ -538,6 +536,8 @@ For information about the governance of the Node.js project, see
   **Lance Ball** <<lball@redhat.com>> (he/him)
 * [lucamaraschi](https://github.com/lucamaraschi) -
   **Luca Maraschi** <<luca.maraschi@gmail.com>> (he/him)
+* [lundibundi](https://github.com/lundibundi) -
+  **Denys Otrishko** <<shishugi@gmail.com>> (he/him)
 * [lxe](https://github.com/lxe) -
   **Aleksey Smolenchuk** <<lxe@lxe.co>>
 * [maclover7](https://github.com/maclover7) -
@@ -646,6 +646,8 @@ maintaining the Node.js project.
 
 * [Ayase-252](https://github.com/Ayase-252) -
   **Qingyu Deng** <<i@ayase-lab.com>>
+* [F3n67u](https://github.com/F3n67u) -
+  **Feng Yu** <<F3n67u@outlook.com>> (he/him)
 * [himadriganguly](https://github.com/himadriganguly) -
   **Himadri Ganguly** <<himadri.tech@gmail.com>> (he/him)
 * [iam-frankqiu](https://github.com/iam-frankqiu) -

@@ -79,6 +79,15 @@
             'OTHER_CFLAGS': [ '-mssse3' ]
           },
         }],
+        ['OS=="win"', {
+            'msvs_settings': {
+              'VCCLCompilerTool': {
+                'AdditionalOptions': [
+                  '-mssse3',
+                ],
+              },
+            },
+        }],
       ],
     },
 
@@ -95,6 +104,15 @@
             'OTHER_CFLAGS': [ '-msse4.1' ]
           },
         }],
+        ['OS=="win"', {
+            'msvs_settings': {
+              'VCCLCompilerTool': {
+                'AdditionalOptions': [
+                  '-msse4.1',
+                ],
+              },
+            },
+        }],
       ],
     },
 
@@ -110,6 +128,15 @@
           'xcode_settings': {
             'OTHER_CFLAGS': [ '-msse4.2' ]
           },
+        }],
+        ['OS=="win"', {
+            'msvs_settings': {
+              'VCCLCompilerTool': {
+                'AdditionalOptions': [
+                  '-msse4.2',
+                ],
+              },
+            },
         }],
       ],
     },

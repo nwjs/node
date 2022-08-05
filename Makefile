@@ -1096,7 +1096,7 @@ endif
 		$(MACOSOUTDIR)/dist/npm/usr/local/lib/node_modules
 	unlink $(MACOSOUTDIR)/dist/node/usr/local/bin/npm
 	unlink $(MACOSOUTDIR)/dist/node/usr/local/bin/npx
-	$(NODE) tools/license2rtf.js < LICENSE > \
+	$(NODE) tools/license2rtf.mjs < LICENSE > \
 		$(MACOSOUTDIR)/installer/productbuild/Resources/license.rtf
 	cp doc/osx_installer_logo.png $(MACOSOUTDIR)/installer/productbuild/Resources
 	pkgbuild --version $(FULLVERSION) \
@@ -1429,8 +1429,8 @@ CLANG_FORMAT_START ?= HEAD
 #  $ make format-cpp
 # To format HEAD~1...HEAD (latest commit):
 #  $ CLANG_FORMAT_START=`git rev-parse HEAD~1` make format-cpp
-# To format diff between master and current branch head (master...HEAD):
-#  $ CLANG_FORMAT_START=master make format-cpp
+# To format diff between main and current branch head (main...HEAD):
+#  $ CLANG_FORMAT_START=main make format-cpp
 format-cpp: ## Format C++ diff from $CLANG_FORMAT_START to current changes
 ifneq ("","$(wildcard tools/clang-format/node_modules/)")
 	$(info Formatting C++ diff from $(CLANG_FORMAT_START)..)
@@ -1440,7 +1440,7 @@ ifneq ("","$(wildcard tools/clang-format/node_modules/)")
 		$(CLANG_FORMAT_START) -- \
 		$(LINT_CPP_FILES)
 else
-	$(info clang-format is not installed.)
+	$(info Required tooling for C++ code formatting is not installed.)
 	$(info To install (requires internet access) run: $$ make format-cpp-build)
 endif
 

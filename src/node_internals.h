@@ -121,6 +121,10 @@ class NodeArrayBufferAllocator : public ArrayBufferAllocator {
  private:
   uint32_t zero_fill_field_ = 1;  // Boolean but exposed as uint32 to JS land.
   std::atomic<size_t> total_mem_usage_ {0};
+
+  // Delegate to V8's allocator for compatibility with the V8 memory cage.
+  std::unique_ptr<v8::ArrayBuffer::Allocator> allocator_{
+      v8::ArrayBuffer::Allocator::NewDefaultAllocator()};
 };
 
 class DebuggingArrayBufferAllocator final : public NodeArrayBufferAllocator {
@@ -289,7 +293,10 @@ class ThreadPoolWork {
 #endif  // defined(__POSIX__) && !defined(__ANDROID__) && !defined(__CloudABI__)
 
 namespace credentials {
-bool SafeGetenv(const char* key, std::string* text, Environment* env = nullptr);
+bool SafeGetenv(const char* key,
+                std::string* text,
+                std::shared_ptr<KVStore> env_vars = nullptr,
+                v8::Isolate* isolate = nullptr);
 }  // namespace credentials
 
 void DefineZlibConstants(v8::Local<v8::Object> target);

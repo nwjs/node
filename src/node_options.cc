@@ -339,6 +339,10 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             &EnvironmentOptions::experimental_fetch,
             kAllowedInEnvironment,
             true);
+  AddOption("--experimental-global-customevent",
+            "expose experimental CustomEvent on the global scope",
+            &EnvironmentOptions::experimental_global_customevent,
+            kAllowedInEnvironment);
   AddOption("--experimental-global-webcrypto",
             "expose experimental Web Crypto API on the global scope",
             &EnvironmentOptions::experimental_global_web_crypto,
@@ -346,7 +350,7 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
   AddOption("--experimental-json-modules", "", NoOp{}, kAllowedInEnvironment);
   AddOption("--experimental-loader",
             "use the specified module as a custom loader",
-            &EnvironmentOptions::userland_loader,
+            &EnvironmentOptions::userland_loaders,
             kAllowedInEnvironment);
   AddAlias("--loader", "--experimental-loader");
   AddOption("--experimental-modules", "", NoOp{}, kAllowedInEnvironment);

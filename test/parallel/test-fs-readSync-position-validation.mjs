@@ -1,4 +1,4 @@
-import '../common/index.mjs';
+import * as common from '../common/index.mjs';
 import * as fixtures from '../common/fixtures.mjs';
 import fs from 'fs';
 import assert from 'assert';
@@ -12,13 +12,13 @@ const offset = 0;
 const length = buffer.byteLength;
 
 // allowedErrors is an array of acceptable internal errors
-// For example, on some platforms read syscall might return -EFBIG
+// For example, on some platforms read syscall might return -EFBIG or -EOVERFLOW
 function testValid(position, allowedErrors = []) {
   let fdSync;
   try {
     fdSync = fs.openSync(filepath, 'r');
     fs.readSync(fdSync, buffer, offset, length, position);
-    fs.readSync(fdSync, buffer, { offset, length, position });
+    fs.readSync(fdSync, buffer, common.mustNotMutateObjectDeep({ offset, length, position }));
   } catch (err) {
     if (!allowedErrors.includes(err.code)) {
       assert.fail(err);
@@ -37,7 +37,7 @@ function testInvalid(code, position, internalCatch = false) {
       { code }
     );
     assert.throws(
-      () => fs.readSync(fdSync, buffer, { offset, length, position }),
+      () => fs.readSync(fdSync, buffer, common.mustNotMutateObjectDeep({ offset, length, position })),
       { code }
     );
   } finally {
@@ -57,9 +57,9 @@ function testInvalid(code, position, internalCatch = false) {
   testValid(1n);
   testValid(9);
   testValid(9n);
-  testValid(Number.MAX_SAFE_INTEGER, [ 'EFBIG' ]);
+  testValid(Number.MAX_SAFE_INTEGER, [ 'EFBIG', 'EOVERFLOW' ]);
 
-  testValid(2n ** 63n - 1n - BigInt(length), [ 'EFBIG' ]);
+  testValid(2n ** 63n - 1n - BigInt(length), [ 'EFBIG', 'EOVERFLOW' ]);
   testInvalid('ERR_OUT_OF_RANGE', 2n ** 63n);
 
   // TODO(LiviaMedeiros): test `2n ** 63n - BigInt(length)`

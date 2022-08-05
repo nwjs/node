@@ -2,6 +2,7 @@
 
 const common = require('../common');
 const assert = require('assert');
+const util = require('util');
 const {
   PerformanceObserver,
   PerformanceEntry,
@@ -14,6 +15,7 @@ const {
 
 assert(PerformanceObserver);
 assert(PerformanceEntry);
+assert.throws(() => new PerformanceEntry(), { code: 'ERR_ILLEGAL_CONSTRUCTOR' });
 assert(PerformanceResourceTiming);
 assert(clearResourceTimings);
 assert(markResourceTiming);
@@ -134,6 +136,7 @@ function createTimingInfo({
   assert.ok(typeof resource.cacheMode === 'undefined', 'cacheMode does not have a getter');
   assert.strictEqual(resource.startTime, timingInfo.startTime);
   assert.strictEqual(resource.duration, 0);
+  assert.strictEqual(resource.initiatorType, initiatorType);
   assert.strictEqual(resource.workerStart, 0);
   assert.strictEqual(resource.redirectStart, 0);
   assert.strictEqual(resource.redirectEnd, 0);
@@ -173,6 +176,54 @@ function createTimingInfo({
     encodedBodySize: 0,
     decodedBodySize: 0,
   });
+  assert.strictEqual(util.inspect(performance.getEntries()), `[
+  PerformanceResourceTiming {
+    name: 'http://localhost:8080',
+    entryType: 'resource',
+    startTime: 0,
+    duration: 0,
+    initiatorType: 'fetch',
+    nextHopProtocol: [],
+    workerStart: 0,
+    redirectStart: 0,
+    redirectEnd: 0,
+    fetchStart: 0,
+    domainLookupStart: 0,
+    domainLookupEnd: 0,
+    connectStart: 0,
+    connectEnd: 0,
+    secureConnectionStart: 0,
+    requestStart: 0,
+    responseStart: 0,
+    responseEnd: 0,
+    transferSize: 0,
+    encodedBodySize: 0,
+    decodedBodySize: 0
+  }
+]`);
+  assert.strictEqual(util.inspect(resource), `PerformanceResourceTiming {
+  name: 'http://localhost:8080',
+  entryType: 'resource',
+  startTime: 0,
+  duration: 0,
+  initiatorType: 'fetch',
+  nextHopProtocol: [],
+  workerStart: 0,
+  redirectStart: 0,
+  redirectEnd: 0,
+  fetchStart: 0,
+  domainLookupStart: 0,
+  domainLookupEnd: 0,
+  connectStart: 0,
+  connectEnd: 0,
+  secureConnectionStart: 0,
+  requestStart: 0,
+  responseStart: 0,
+  responseEnd: 0,
+  transferSize: 0,
+  encodedBodySize: 0,
+  decodedBodySize: 0
+}`);
 
   assert(resource instanceof PerformanceEntry);
   assert(resource instanceof PerformanceResourceTiming);

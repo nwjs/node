@@ -108,6 +108,7 @@ class EnvironmentOptions : public Options {
   std::string dns_result_order;
   bool enable_source_maps = false;
   bool experimental_fetch = true;
+  bool experimental_global_customevent = false;
   bool experimental_global_web_crypto = false;
   bool experimental_https_modules = false;
   std::string experimental_specifier_resolution;
@@ -162,7 +163,7 @@ class EnvironmentOptions : public Options {
   bool trace_warnings = false;
   bool extra_info_on_fatal_exception = true;
   std::string unhandled_rejections;
-  std::string userland_loader;
+  std::vector<std::string> userland_loaders;
   bool verify_base_objects =
 #ifdef DEBUG
       true;

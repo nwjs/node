@@ -5,6 +5,10 @@ prefix node-api
 # sample-test                        : PASS,FLAKY
 
 [true] # This section applies to all platforms
-test_buffer/test_finalizer : PASS,FLAKY
 
 [$system==win32]
+
+[$system==solaris] # Also applies to SmartOS
+# https://github.com/nodejs/node/issues/43457
+test_fatal/test_threads: PASS,FLAKY
+test_fatal/test_threads_report: PASS,FLAKY

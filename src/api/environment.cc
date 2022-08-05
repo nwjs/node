@@ -2,7 +2,7 @@
 #include "node_context_data.h"
 #include "node_errors.h"
 #include "node_internals.h"
-#include "node_native_module_env.h"
+#include "node_native_module.h"
 #include "node_options-inl.h"
 #include "node_platform.h"
 #include "node_v8_platform-inl.h"
@@ -87,16 +87,16 @@ MaybeLocal<Value> PrepareStackTraceCallback(Local<Context> context,
 void* NodeArrayBufferAllocator::Allocate(size_t size) {
   void* ret;
   if (zero_fill_field_ || per_process::cli_options->zero_fill_all_buffers)
-    ret = UncheckedCalloc(size);
+    ret = allocator_->Allocate(size);
   else
-    ret = UncheckedMalloc(size);
+    ret = allocator_->AllocateUninitialized(size);
   if (LIKELY(ret != nullptr))
     total_mem_usage_.fetch_add(size, std::memory_order_relaxed);
   return ret;
 }
 
 void* NodeArrayBufferAllocator::AllocateUninitialized(size_t size) {
-  void* ret = node::UncheckedMalloc(size);
+  void* ret = allocator_->AllocateUninitialized(size);
   if (LIKELY(ret != nullptr))
     total_mem_usage_.fetch_add(size, std::memory_order_relaxed);
   return ret;
@@ -104,7 +104,7 @@ void* NodeArrayBufferAllocator::AllocateUninitialized(size_t size) {
 
 void* NodeArrayBufferAllocator::Reallocate(
     void* data, size_t old_size, size_t size) {
-  void* ret = UncheckedRealloc<char>(static_cast<char*>(data), size);
+  void* ret = allocator_->Reallocate(data, old_size, size);
   if (LIKELY(ret != nullptr) || UNLIKELY(size == 0))
     total_mem_usage_.fetch_add(size - old_size, std::memory_order_relaxed);
   return ret;
@@ -114,7 +114,7 @@ void NodeArrayBufferAllocator::Free(void* data, size_t size) {
   if (data == &zero_fill_field_)
     return;
   total_mem_usage_.fetch_sub(size, std::memory_order_relaxed);
-  free(data);
+  allocator_->Free(data, size);
 }
 
 void NodeArrayBufferAllocator::Free(void* data, size_t size, AllocationMode mode) {
@@ -261,6 +261,8 @@ void SetIsolateMiscHandlers(v8::Isolate* isolate, const IsolateSettings& s) {
   auto* allow_wasm_codegen_cb = s.allow_wasm_code_generation_callback ?
     s.allow_wasm_code_generation_callback : AllowWasmCodeGenerationCallback;
   isolate->SetAllowWasmCodeGenerationCallback(allow_wasm_codegen_cb);
+  isolate->SetModifyCodeGenerationFromStringsCallback(
+      ModifyCodeGenerationFromStrings);
 
   Mutex::ScopedLock lock(node::per_process::cli_options_mutex);
   if (per_process::cli_options->get_per_isolate_options()
@@ -452,9 +454,8 @@ MaybeLocal<Value> LoadEnvironment(
 
         // TODO(addaleax): Avoid having a global table for all scripts.
         std::string name = "embedder_main_" + std::to_string(env->thread_id());
-        native_module::NativeModuleEnv::Add(
-            name.c_str(),
-            UnionBytes(**main_utf16, main_utf16->length()));
+        native_module::NativeModuleLoader::Add(
+            name.c_str(), UnionBytes(**main_utf16, main_utf16->length()));
         env->set_main_utf16(std::move(main_utf16));
         std::vector<Local<String>> params = {
             env->process_string(),
@@ -670,6 +671,9 @@ Maybe<bool> InitializeContextForSnapshot(Local<Context> context) {
   Isolate* isolate = context->GetIsolate();
   HandleScope handle_scope(isolate);
 
+  context->AllowCodeGenerationFromStrings(false);
+  context->SetEmbedderData(
+      ContextEmbedderIndex::kAllowCodeGenerationFromStrings, True(isolate));
   context->SetEmbedderData(ContextEmbedderIndex::kAllowWasmCodeGeneration,
                            True(isolate));
 
@@ -705,7 +709,7 @@ Maybe<bool> InitializePrimordials(Local<Context> context) {
         global_string, exports_string, primordials_string};
     Local<Value> arguments[] = {context->Global(), exports, primordials};
     MaybeLocal<Function> maybe_fn =
-        native_module::NativeModuleEnv::LookupAndCompile(
+        native_module::NativeModuleLoader::LookupAndCompile(
             context, *module, &parameters, nullptr);
     Local<Function> fn;
     if (!maybe_fn.ToLocal(&fn)) {

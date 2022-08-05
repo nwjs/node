@@ -108,6 +108,7 @@
 'lib/internal/error_serdes.js',
 'lib/internal/net.js',
 'lib/internal/v8_prof_polyfill.js',
+'lib/internal/v8/startup_snapshot.js',
 'lib/internal/console/global.js',
 'lib/internal/console/constructor.js',
 'lib/internal/blocklist.js',
@@ -140,7 +141,6 @@
 'lib/internal/modules/package_json_reader.js',
 'lib/internal/modules/esm/fetch_module.js',
 'lib/internal/modules/esm/formats.js',
-'lib/internal/modules/esm/get_source.js',
 'lib/internal/modules/esm/handle_process_exit.js',
 'lib/internal/modules/esm/loader.js',
 'lib/internal/modules/esm/module_map.js',
@@ -470,6 +470,12 @@
           'RandomizedBaseAddress': 2, # enable ASLR
           'DataExecutionPrevention': 2, # enable DEP
           'AllowIsolation': 'true',
+          # By default, the MSVC linker only reserves 1 MiB of stack memory for
+          # each thread, whereas other platforms typically allow much larger
+          # stack memory sections. We raise the limit to make it more consistent
+          # across platforms and to support the few use cases that require large
+          # amounts of stack memory, without having to modify the node binary.
+          'StackReserveSize': 0x800000,
         },
       },
 
@@ -762,6 +768,7 @@
         '../../v8/include'
       ],
       'dependencies': [
+        'deps/base64/base64.gyp:base64',
         'deps/googletest/googletest.gyp:gtest_prod',
         'deps/histogram/histogram.gyp:histogram',
         'deps/uvwasi/uvwasi.gyp:uvwasi',
@@ -830,7 +837,6 @@
         'src/node_messaging.cc',
         'src/node_metadata.cc',
         'src/node_native_module.cc',
-        'src/node_native_module_env.cc',
         'src/node_options.cc',
         'src/node_os.cc',
         'src/node_perf.cc',
@@ -935,7 +941,6 @@
         'src/node_metadata.h',
         'src/node_mutex.h',
         'src/node_native_module.h',
-        'src/node_native_module_env.h',
         'src/node_object_wrap.h',
         'src/node_options.h',
         'src/node_options-inl.h',
@@ -1515,6 +1520,7 @@
 
       'dependencies': [
         '<(node_lib_target_name)',
+        'deps/base64/base64.gyp:base64',
         'deps/googletest/googletest.gyp:gtest',
         'deps/googletest/googletest.gyp:gtest_main',
         'deps/histogram/histogram.gyp:histogram',

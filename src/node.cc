@@ -32,7 +32,7 @@
 #include "node_internals.h"
 #include "node_main_instance.h"
 #include "node_metadata.h"
-#include "node_native_module_env.h"
+#include "node_native_module.h"
 #include "node_options-inl.h"
 #include "node_perf.h"
 #include "node_process-inl.h"
@@ -135,7 +135,7 @@ NODE_EXTERN void* g_get_node_env();
 
 namespace node {
 
-using native_module::NativeModuleEnv;
+using native_module::NativeModuleLoader;
 
 using v8::EscapableHandleScope;
 using v8::Function;
@@ -197,7 +197,7 @@ MaybeLocal<Value> ExecuteBootstrapper(Environment* env,
                                       std::vector<Local<Value>>* arguments) {
   EscapableHandleScope scope(env->isolate());
   MaybeLocal<Function> maybe_fn =
-      NativeModuleEnv::LookupAndCompile(env->context(), id, parameters, env);
+      NativeModuleLoader::LookupAndCompile(env->context(), id, parameters, env);
 
   Local<Function> fn;
   if (!maybe_fn.ToLocal(&fn)) {
@@ -361,11 +361,6 @@ MaybeLocal<Value> Environment::BootstrapInternalLoaders() {
 MaybeLocal<Value> Environment::BootstrapNode() {
   EscapableHandleScope scope(isolate_);
 
-  Local<Object> global = context()->Global();
-  // TODO(joyeecheung): this can be done in JS land now.
-  global->Set(context(), FIXED_ONE_BYTE_STRING(isolate_, "global"), global)
-      .Check();
-
   // process, require, internalBinding, primordials
   std::vector<Local<String>> node_params = {
       process_string(),
@@ -502,6 +497,14 @@ MaybeLocal<Value> StartExecution(Environment* env, StartExecutionCallback cb) {
     };
 
     return scope.EscapeMaybe(cb(info));
+  }
+
+  // TODO(joyeecheung): move these conditions into JS land and let the
+  // deserialize main function take precedence. For workers, we need to
+  // move the pre-execution part into a different file that can be
+  // reused when dealing with user-defined main functions.
+  if (!env->snapshot_deserialize_main().IsEmpty()) {
+    return env->RunSnapshotDeserializeMain();
   }
 
   if (env->worker_context() != nullptr) {
@@ -1135,7 +1138,7 @@ InitializationResult InitializeOncePerProcess(
 
   // Initialized the enabled list for Debug() calls with system
   // environment variables.
-  per_process::enabled_debug_list.Parse(nullptr);
+  per_process::enabled_debug_list.Parse();
 
   atexit(ResetStdio);
 
@@ -1338,8 +1341,7 @@ int Start(int argc, char** argv) {
     uv_loop_configure(uv_default_loop(), UV_METRICS_IDLE_TIME);
 
     if (false && snapshot_data != nullptr) {
-      native_module::NativeModuleEnv::RefreshCodeCache(
-          snapshot_data->code_cache);
+      NativeModuleLoader::RefreshCodeCache(snapshot_data->code_cache);
     }
     NodeMainInstance main_instance(snapshot_data,
                                    uv_default_loop(),

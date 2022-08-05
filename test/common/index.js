@@ -315,6 +315,9 @@ if (hasCrypto && global.crypto) {
   knownGlobals.push(global.CryptoKey);
   knownGlobals.push(global.SubtleCrypto);
 }
+if (global.CustomEvent) {
+  knownGlobals.push(global.CustomEvent);
+}
 if (global.ReadableStream) {
   knownGlobals.push(
     global.ReadableStream,
@@ -517,6 +520,52 @@ function mustNotCall(msg) {
       `${msg || 'function should not have been called'} at ${callSite}` +
       argsInfo);
   };
+}
+
+const _mustNotMutateObjectDeepProxies = new WeakMap();
+
+function mustNotMutateObjectDeep(original) {
+  // Return primitives and functions directly. Primitives are immutable, and
+  // proxied functions are impossible to compare against originals, e.g. with
+  // `assert.deepEqual()`.
+  if (original === null || typeof original !== 'object') {
+    return original;
+  }
+
+  const cachedProxy = _mustNotMutateObjectDeepProxies.get(original);
+  if (cachedProxy) {
+    return cachedProxy;
+  }
+
+  const _mustNotMutateObjectDeepHandler = {
+    __proto__: null,
+    defineProperty(target, property, descriptor) {
+      assert.fail(`Expected no side effects, got ${inspect(property)} ` +
+                  'defined');
+    },
+    deleteProperty(target, property) {
+      assert.fail(`Expected no side effects, got ${inspect(property)} ` +
+                  'deleted');
+    },
+    get(target, prop, receiver) {
+      return mustNotMutateObjectDeep(Reflect.get(target, prop, receiver));
+    },
+    preventExtensions(target) {
+      assert.fail('Expected no side effects, got extensions prevented on ' +
+                  inspect(target));
+    },
+    set(target, property, value, receiver) {
+      assert.fail(`Expected no side effects, got ${inspect(value)} ` +
+                  `assigned to ${inspect(property)}`);
+    },
+    setPrototypeOf(target, prototype) {
+      assert.fail(`Expected no side effects, got set prototype to ${prototype}`);
+    }
+  };
+
+  const proxy = new Proxy(original, _mustNotMutateObjectDeepHandler);
+  _mustNotMutateObjectDeepProxies.set(original, proxy);
+  return proxy;
 }
 
 function printSkipMessage(msg) {
@@ -737,14 +786,15 @@ function invalidArgTypeHelper(input) {
     return ` Received function ${input.name}`;
   }
   if (typeof input === 'object') {
-    if (input.constructor && input.constructor.name) {
+    if (input.constructor?.name) {
       return ` Received an instance of ${input.constructor.name}`;
     }
     return ` Received ${inspect(input, { depth: -1 })}`;
   }
+
   let inspected = inspect(input, { colors: false });
-  if (inspected.length > 25)
-    inspected = `${inspected.slice(0, 25)}...`;
+  if (inspected.length > 28) { inspected = `${inspected.slice(inspected, 0, 25)}...`; }
+
   return ` Received type ${typeof input} (${inspected})`;
 }
 
@@ -826,6 +876,7 @@ const common = {
   mustCall,
   mustCallAtLeast,
   mustNotCall,
+  mustNotMutateObjectDeep,
   mustSucceed,
   nodeProcessAborted,
   PIPE,

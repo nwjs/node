@@ -12,7 +12,7 @@ const offset = 0;
 const length = buffer.byteLength;
 
 // allowedErrors is an array of acceptable internal errors
-// For example, on some platforms read syscall might return -EFBIG
+// For example, on some platforms read syscall might return -EFBIG or -EOVERFLOW
 async function testValid(position, allowedErrors = []) {
   return new Promise((resolve, reject) => {
     fs.open(filepath, 'r', common.mustSucceed((fd) => {
@@ -28,7 +28,7 @@ async function testValid(position, allowedErrors = []) {
       }, callCount);
       fs.read(fd, buffer, offset, length, position, handler);
       fs.read(fd, { buffer, offset, length, position }, handler);
-      fs.read(fd, buffer, { offset, length, position }, handler);
+      fs.read(fd, buffer, common.mustNotMutateObjectDeep({ offset, length, position }), handler);
     }));
   });
 }
@@ -46,7 +46,7 @@ async function testInvalid(code, position) {
           { code }
         );
         assert.throws(
-          () => fs.read(fd, buffer, { offset, length, position }, common.mustNotCall()),
+          () => fs.read(fd, buffer, common.mustNotMutateObjectDeep({ offset, length, position }), common.mustNotCall()),
           { code }
         );
         resolve();
@@ -71,9 +71,9 @@ async function testInvalid(code, position) {
   await testValid(1n);
   await testValid(9);
   await testValid(9n);
-  await testValid(Number.MAX_SAFE_INTEGER, [ 'EFBIG' ]);
+  await testValid(Number.MAX_SAFE_INTEGER, [ 'EFBIG', 'EOVERFLOW' ]);
 
-  await testValid(2n ** 63n - 1n - BigInt(length), [ 'EFBIG' ]);
+  await testValid(2n ** 63n - 1n - BigInt(length), [ 'EFBIG', 'EOVERFLOW' ]);
   await testInvalid('ERR_OUT_OF_RANGE', 2n ** 63n);
 
   // TODO(LiviaMedeiros): test `2n ** 63n - BigInt(length)`

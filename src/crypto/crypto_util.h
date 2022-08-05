@@ -747,19 +747,17 @@ class ArrayBufferOrViewContents {
 
   inline ByteSource ToCopy() const {
     if (size() == 0) return ByteSource();
-    char* buf = MallocOpenSSL<char>(size());
-    CHECK_NOT_NULL(buf);
-    memcpy(buf, data(), size());
-    return ByteSource::Allocated(buf, size());
+    ByteSource::Builder buf(size());
+    memcpy(buf.data<void>(), data(), size());
+    return std::move(buf).release();
   }
 
   inline ByteSource ToNullTerminatedCopy() const {
     if (size() == 0) return ByteSource();
-    char* buf = MallocOpenSSL<char>(size() + 1);
-    CHECK_NOT_NULL(buf);
-    buf[size()] = 0;
-    memcpy(buf, data(), size());
-    return ByteSource::Allocated(buf, size());
+    ByteSource::Builder buf(size() + 1);
+    memcpy(buf.data<void>(), data(), size());
+    buf.data<char>()[size()] = 0;
+    return std::move(buf).release(size());
   }
 
   template <typename M>
@@ -776,20 +774,6 @@ class ArrayBufferOrViewContents {
   size_t length_ = 0;
   std::shared_ptr<v8::BackingStore> store_;
 };
-
-template <typename T>
-std::vector<T> CopyBuffer(const ArrayBufferOrViewContents<T>& buf) {
-  std::vector<T> vec;
-  vec->resize(buf.size());
-  if (vec->size() > 0 && buf.data() != nullptr)
-    memcpy(vec->data(), buf.data(), vec->size());
-  return vec;
-}
-
-template <typename T>
-std::vector<T> CopyBuffer(v8::Local<v8::Value> buf) {
-  return CopyBuffer(ArrayBufferOrViewContents<T>(buf));
-}
 
 v8::MaybeLocal<v8::Value> EncodeBignum(
     Environment* env,

@@ -2270,7 +2270,7 @@ added: v0.9.4
 
 If `false` then the stream will automatically end the writable side when the
 readable side ends. Set initially by the `allowHalfOpen` constructor option,
-which defaults to `false`.
+which defaults to `true`.
 
 This can be changed manually to change the half-open behavior of an existing
 `Duplex` stream instance, but must be changed before the `'end'` event is
@@ -2789,7 +2789,7 @@ added:
 
 Returns whether the stream is readable.
 
-### `stream.Readable.toWeb(streamReadable)`
+### `stream.Readable.toWeb(streamReadable[, options])`
 
 <!-- YAML
 added: v17.0.0
@@ -2798,6 +2798,10 @@ added: v17.0.0
 > Stability: 1 - Experimental
 
 * `streamReadable` {stream.Readable}
+* `options` {Object}
+  * `strategy` {Object}
+    * `highWaterMark` {number}
+    * `size` {Function}
 * Returns: {ReadableStream}
 
 ### `stream.Writable.fromWeb(writableStream[, options])`

@@ -159,7 +159,7 @@ For information about the governance of the Node.js project, see
 * [apapirovski](https://github.com/apapirovski) -
   **Anatoli Papirovski** <<apapirovski@mac.com>> (he/him)
 * [BethGriggs](https://github.com/BethGriggs) -
-  **Beth Griggs** <<bgriggs@redhat.com>> (she/her)
+  **Beth Griggs** <<bethanyngriggs@gmail.com>> (she/her)
 * [BridgeAR](https://github.com/BridgeAR) -
   **Ruben Bridgewater** <<ruben@bridgewater.de>> (he/him)
 * [ChALkeR](https://github.com/ChALkeR) -
@@ -170,6 +170,8 @@ For information about the governance of the Node.js project, see
   **Danielle Adams** <<adamzdanielle@gmail.com>> (she/her)
 * [fhinkel](https://github.com/fhinkel) -
   **Franziska Hinkelmann** <<franziska.hinkelmann@gmail.com>> (she/her)
+* [GeoffreyBooth](https://github.com/geoffreybooth) -
+  **Geoffrey Booth** <<webadmin@geoffreybooth.com>> (he/him)
 * [gireeshpunathil](https://github.com/gireeshpunathil) -
   **Gireesh Punathil** <<gpunathi@in.ibm.com>> (he/him)
 * [jasnell](https://github.com/jasnell) -
@@ -180,8 +182,6 @@ For information about the governance of the Node.js project, see
   **Matteo Collina** <<matteo.collina@gmail.com>> (he/him)
 * [mhdawson](https://github.com/mhdawson) -
   **Michael Dawson** <<midawson@redhat.com>> (he/him)
-* [MylesBorins](https://github.com/MylesBorins) -
-  **Myles Borins** <<myles.borins@gmail.com>> (he/him)
 * [RaisinTen](https://github.com/RaisinTen) -
   **Darshan Sen** <<raisinten@gmail.com>> (he/him)
 * [richardlau](https://github.com/richardlau) -
@@ -229,6 +229,8 @@ For information about the governance of the Node.js project, see
   **Mary Marchini** <<oss@mmarchini.me>> (she/her)
 * [mscdex](https://github.com/mscdex) -
   **Brian White** <<mscdex@mscdex.net>>
+* [MylesBorins](https://github.com/MylesBorins) -
+  **Myles Borins** <<myles.borins@gmail.com>> (he/him)
 * [nebrius](https://github.com/nebrius) -
   **Bryan Hughes** <<bryan@nebri.us>>
 * [ofrobots](https://github.com/ofrobots) -
@@ -277,7 +279,7 @@ For information about the governance of the Node.js project, see
 * [benjamingr](https://github.com/benjamingr) -
   **Benjamin Gruenbaum** <<benjamingr@gmail.com>>
 * [BethGriggs](https://github.com/BethGriggs) -
-  **Beth Griggs** <<bgriggs@redhat.com>> (she/her)
+  **Beth Griggs** <<bethanyngriggs@gmail.com>> (she/her)
 * [bmeck](https://github.com/bmeck) -
   **Bradley Farias** <<bradley.meck@gmail.com>>
 * [bnb](https://github.com/bnb) -
@@ -312,6 +314,8 @@ For information about the governance of the Node.js project, see
   **Evan Lucas** <<evanlucas@me.com>> (he/him)
 * [fhinkel](https://github.com/fhinkel) -
   **Franziska Hinkelmann** <<franziska.hinkelmann@gmail.com>> (she/her)
+* [F3n67u](https://github.com/F3n67u) -
+  **Feng Yu** <<F3n67u@outlook.com>> (he/him)
 * [Flarna](https://github.com/Flarna) -
   **Gerhard Stöbich** <<deb2001-github@yahoo.de>>  (he/they)
 * [gabrielschulhof](https://github.com/gabrielschulhof) -
@@ -394,8 +398,6 @@ For information about the governance of the Node.js project, see
   **Rafael Gonzaga** <<rafael.nunu@hotmail.com>> (he/him)
 * [RaisinTen](https://github.com/RaisinTen) -
   **Darshan Sen** <<raisinten@gmail.com>> (he/him)
-* [rexagod](https://github.com/rexagod) -
-  **Pranshu Srivastava** <<rexagod@gmail.com>> (he/him)
 * [richardlau](https://github.com/richardlau) -
   **Richard Lau** <<rlau@redhat.com>>
 * [rickyes](https://github.com/rickyes) -
@@ -582,6 +584,8 @@ For information about the governance of the Node.js project, see
   **Peter Marshall** <<petermarshall@chromium.org>> (he/him)
 * [refack](https://github.com/refack) -
   **Refael Ackermann (רפאל פלחי)** <<refack@gmail.com>> (he/him/הוא/אתה)
+* [rexagod](https://github.com/rexagod) -
+  **Pranshu Srivastava** <<rexagod@gmail.com>> (he/him)
 * [rlidwka](https://github.com/rlidwka) -
   **Alex Kocharin** <<alex@kocharin.ru>>
 * [rmg](https://github.com/rmg) -
@@ -646,6 +650,8 @@ maintaining the Node.js project.
 
 * [Ayase-252](https://github.com/Ayase-252) -
   **Qingyu Deng** <<i@ayase-lab.com>>
+* [daeyeon](https://github.com/daeyeon) -
+  **Daeyeon Jeong** <<daeyeon.dev@gmail.com>> (he/him)
 * [F3n67u](https://github.com/F3n67u) -
   **Feng Yu** <<F3n67u@outlook.com>> (he/him)
 * [himadriganguly](https://github.com/himadriganguly) -
@@ -658,6 +664,8 @@ maintaining the Node.js project.
   **Xuguang Mei** <<meixuguang@gmail.com>> (he/him)
 * [Mesteery](https://github.com/Mesteery) -
   **Mestery** <<mestery@protonmail.com>> (he/him)
+* [MoLow](https://github.com/MoLow) -
+  **Moshe Atlow** <<moshe@atlow.co.il>> (he/him)
 * [PoojaDurgad](https://github.com/PoojaDurgad) -
   **Pooja Durgad** <<Pooja.D.P@ibm.com>>
 * [RaisinTen](https://github.com/RaisinTen) -
@@ -669,7 +677,7 @@ maintaining the Node.js project.
 
 Primary GPG keys for Node.js Releasers (some Releasers sign with subkeys):
 
-* **Beth Griggs** <<bgriggs@redhat.com>>
+* **Beth Griggs** <<bethanyngriggs@gmail.com>>
   `4ED778F539E3634C779C87C6D7062848A1AB005C`
 * **Bryan English** <<bryan@bryanenglish.com>>
   `141F07595B7B3FFE74309A937405533BE57C7D57`

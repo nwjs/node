@@ -340,7 +340,7 @@ changes:
 * `err` {Error} The uncaught exception.
 * `origin` {string} Indicates if the exception originates from an unhandled
   rejection or from a synchronous error. Can either be `'uncaughtException'` or
-  `'unhandledRejection'`. The latter is used when in an exception happens in a
+  `'unhandledRejection'`. The latter is used when an exception happens in a
   `Promise` based async context (or if a `Promise` is rejected) and
   [`--unhandled-rejections`][] flag set to `strict` or `throw` (which is the
   default) and the rejection is not handled, or when a rejection happens during
@@ -438,7 +438,7 @@ added:
 * `err` {Error} The uncaught exception.
 * `origin` {string} Indicates if the exception originates from an unhandled
   rejection or from synchronous errors. Can either be `'uncaughtException'` or
-  `'unhandledRejection'`. The latter is used when in an exception happens in a
+  `'unhandledRejection'`. The latter is used when an exception happens in a
   `Promise` based async context (or if a `Promise` is rejected) and
   [`--unhandled-rejections`][] flag set to `strict` or `throw` (which is the
   default) and the rejection is not handled, or when a rejection happens during
@@ -3820,6 +3820,9 @@ cases:
   options were set, but the port number chosen was invalid or unavailable.
 * `13` **Unfinished Top-Level Await**: `await` was used outside of a function
   in the top-level code, but the passed `Promise` never resolved.
+* `14` **Snapshot Failure**: Node.js was started to build a V8 startup
+  snapshot and it failed because certain requirements of the state of
+  the application were not met.
 * `>128` **Signal Exits**: If Node.js receives a fatal signal such as
   `SIGKILL` or `SIGHUP`, then its exit code will be `128` plus the
   value of the signal code. This is a standard POSIX practice, since

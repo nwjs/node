@@ -34,8 +34,8 @@
 #include "handle_wrap.h"
 #include "node.h"
 #include "node_binding.h"
+#include "node_builtins.h"
 #include "node_main_instance.h"
-#include "node_native_module.h"
 #include "node_options.h"
 #include "node_perf_common.h"
 #include "node_snapshotable.h"
@@ -164,15 +164,16 @@ class NoArrayBufferZeroFillScope {
 // Private symbols are per-isolate primitives but Environment proxies them
 // for the sake of convenience.  Strings should be ASCII-only and have a
 // "node:" prefix to avoid name clashes with third-party code.
-#define PER_ISOLATE_PRIVATE_SYMBOL_PROPERTIES(V)                              \
-  V(alpn_buffer_private_symbol, "node:alpnBuffer")                            \
-  V(arrow_message_private_symbol, "node:arrowMessage")                        \
-  V(contextify_context_private_symbol, "node:contextify:context")             \
-  V(contextify_global_private_symbol, "node:contextify:global")               \
-  V(decorated_private_symbol, "node:decorated")                               \
-  V(napi_type_tag, "node:napi:type_tag")                                      \
-  V(napi_wrapper, "node:napi:wrapper")                                        \
-  V(untransferable_object_private_symbol, "node:untransferableObject")        \
+#define PER_ISOLATE_PRIVATE_SYMBOL_PROPERTIES(V)                               \
+  V(alpn_buffer_private_symbol, "node:alpnBuffer")                             \
+  V(arrow_message_private_symbol, "node:arrowMessage")                         \
+  V(contextify_context_private_symbol, "node:contextify:context")              \
+  V(contextify_global_private_symbol, "node:contextify:global")                \
+  V(decorated_private_symbol, "node:decorated")                                \
+  V(napi_type_tag, "node:napi:type_tag")                                       \
+  V(napi_wrapper, "node:napi:wrapper")                                         \
+  V(untransferable_object_private_symbol, "node:untransferableObject")         \
+  V(exiting_aliased_Uint32Array, "node:exiting_aliased_Uint32Array")
 
 // Symbols are per-isolate primitives but Environment proxies them
 // for the sake of convenience.
@@ -526,6 +527,7 @@ class NoArrayBufferZeroFillScope {
   V(enhance_fatal_stack_after_inspector, v8::Function)                         \
   V(enhance_fatal_stack_before_inspector, v8::Function)                        \
   V(fs_use_promises_symbol, v8::Symbol)                                        \
+  V(get_source_map_error_source, v8::Function)                                 \
   V(host_import_module_dynamically_callback, v8::Function)                     \
   V(host_initialize_import_meta_object_callback, v8::Function)                 \
   V(http2session_on_altsvc_function, v8::Function)                             \
@@ -547,7 +549,7 @@ class NoArrayBufferZeroFillScope {
   V(maybe_cache_generated_source_map, v8::Function)                            \
   V(messaging_deserialize_create_object, v8::Function)                         \
   V(message_port, v8::Object)                                                  \
-  V(native_module_require, v8::Function)                                       \
+  V(builtin_module_require, v8::Function)                                      \
   V(performance_entry_callback, v8::Function)                                  \
   V(performance_entry_template, v8::Function)                                  \
   V(prepare_stack_trace_callback, v8::Function)                                \
@@ -579,7 +581,7 @@ typedef size_t SnapshotIndex;
 
 struct PropInfo {
   std::string name;     // name for debugging
-  size_t id;            // In the list - in case there are any empty entries
+  uint32_t id;          // In the list - in case there are any empty entries
   SnapshotIndex index;  // In the snapshot
 };
 
@@ -968,11 +970,12 @@ struct DeserializeRequest {
 
 struct EnvSerializeInfo {
   std::vector<PropInfo> bindings;
-  std::vector<std::string> native_modules;
+  std::vector<std::string> builtins;
   AsyncHooks::SerializeInfo async_hooks;
   TickInfo::SerializeInfo tick_info;
   ImmediateInfo::SerializeInfo immediate_info;
   performance::PerformanceState::SerializeInfo performance_state;
+  AliasedBufferIndex exiting;
   AliasedBufferIndex stream_base_state;
   AliasedBufferIndex should_abort_on_uncaught_toggle;
 
@@ -985,8 +988,9 @@ struct EnvSerializeInfo {
 struct SnapshotData {
   enum class DataOwnership { kOwned, kNotOwned };
 
-  static const size_t kNodeBaseContextIndex = 0;
-  static const size_t kNodeMainContextIndex = kNodeBaseContextIndex + 1;
+  static const uint32_t kMagic = 0x143da19;
+  static const SnapshotIndex kNodeBaseContextIndex = 0;
+  static const SnapshotIndex kNodeMainContextIndex = kNodeBaseContextIndex + 1;
 
   DataOwnership data_ownership = DataOwnership::kOwned;
 
@@ -998,11 +1002,15 @@ struct SnapshotData {
   // TODO(joyeecheung): there should be a vector of env_info once we snapshot
   // the worker environments.
   EnvSerializeInfo env_info;
+
   // A vector of built-in ids and v8::ScriptCompiler::CachedData, this can be
   // shared across Node.js instances because they are supposed to share the
-  // read only space. We use native_module::CodeCacheInfo because
+  // read only space. We use builtins::CodeCacheInfo because
   // v8::ScriptCompiler::CachedData is not copyable.
-  std::vector<native_module::CodeCacheInfo> code_cache;
+  std::vector<builtins::CodeCacheInfo> code_cache;
+
+  void ToBlob(FILE* out) const;
+  static void FromBlob(SnapshotData* out, FILE* in);
 
   ~SnapshotData();
 
@@ -1173,6 +1181,11 @@ class Environment : public MemoryRetainer {
   inline void set_force_context_aware(bool value);
   inline bool force_context_aware() const;
 
+  // This is a pseudo-boolean that keeps track of whether the process is
+  // exiting.
+  inline void set_exiting(bool value);
+  inline AliasedUint32Array& exiting();
+
   // This stores whether the --abort-on-uncaught-exception flag was passed
   // to Node.
   inline bool abort_on_uncaught_exception() const;
@@ -1194,11 +1207,11 @@ class Environment : public MemoryRetainer {
   inline std::vector<double>* destroy_async_id_list();
 
   std::set<struct node_module*> internal_bindings;
-  std::set<std::string> native_modules_with_cache;
-  std::set<std::string> native_modules_without_cache;
+  std::set<std::string> builtins_with_cache;
+  std::set<std::string> builtins_without_cache;
   // This is only filled during deserialization. We use a vector since
   // it's only used for tests.
-  std::vector<std::string> native_modules_in_snapshot;
+  std::vector<std::string> builtins_in_snapshot;
 
   std::unordered_multimap<int, loader::ModuleWrap*> hash_to_module_map;
   std::unordered_map<uint32_t, loader::ModuleWrap*> id_to_module_map;
@@ -1284,56 +1297,6 @@ class Environment : public MemoryRetainer {
                                const char* message = nullptr,
                                const char* path = nullptr,
                                const char* dest = nullptr);
-
-  v8::Local<v8::FunctionTemplate> NewFunctionTemplate(
-      v8::FunctionCallback callback,
-      v8::Local<v8::Signature> signature = v8::Local<v8::Signature>(),
-      v8::ConstructorBehavior behavior = v8::ConstructorBehavior::kAllow,
-      v8::SideEffectType side_effect = v8::SideEffectType::kHasSideEffect,
-      const v8::CFunction* c_function = nullptr);
-
-  // Convenience methods for NewFunctionTemplate().
-  void SetMethod(v8::Local<v8::Object> that,
-                 const char* name,
-                 v8::FunctionCallback callback);
-
-  void SetFastMethod(v8::Local<v8::Object> that,
-                     const char* name,
-                     v8::FunctionCallback slow_callback,
-                     const v8::CFunction* c_function);
-
-  void SetProtoMethod(v8::Local<v8::FunctionTemplate> that,
-                      const char* name,
-                      v8::FunctionCallback callback);
-
-  void SetInstanceMethod(v8::Local<v8::FunctionTemplate> that,
-                         const char* name,
-                         v8::FunctionCallback callback);
-
-  // Safe variants denote the function has no side effects.
-  void SetMethodNoSideEffect(v8::Local<v8::Object> that,
-                             const char* name,
-                             v8::FunctionCallback callback);
-  void SetProtoMethodNoSideEffect(v8::Local<v8::FunctionTemplate> that,
-                                  const char* name,
-                                  v8::FunctionCallback callback);
-
-  enum class SetConstructorFunctionFlag {
-    NONE,
-    SET_CLASS_NAME,
-  };
-
-  void SetConstructorFunction(v8::Local<v8::Object> that,
-                              const char* name,
-                              v8::Local<v8::FunctionTemplate> tmpl,
-                              SetConstructorFunctionFlag flag =
-                                  SetConstructorFunctionFlag::SET_CLASS_NAME);
-
-  void SetConstructorFunction(v8::Local<v8::Object> that,
-                              v8::Local<v8::String> name,
-                              v8::Local<v8::FunctionTemplate> tmpl,
-                              SetConstructorFunctionFlag flag =
-                                  SetConstructorFunctionFlag::SET_CLASS_NAME);
 
   void AtExit(void (*cb)(void* arg), void* arg);
   void RunAtExitCallbacks();
@@ -1564,6 +1527,8 @@ class Environment : public MemoryRetainer {
   uint32_t script_id_counter_ = 0;
   uint32_t function_id_counter_ = 0;
 
+  AliasedUint32Array exiting_;
+
   AliasedUint32Array should_abort_on_uncaught_toggle_;
   int should_not_abort_scope_counter_ = 0;
 
@@ -1581,9 +1546,6 @@ class Environment : public MemoryRetainer {
   uint64_t flags_;
   uint64_t thread_id_;
   std::unordered_set<worker::Worker*> sub_worker_contexts_;
-
-  static void* const kNodeContextTagPtr;
-  static int const kNodeContextTag;
 
 #if HAVE_INSPECTOR
   std::unique_ptr<inspector::Agent> inspector_agent_;

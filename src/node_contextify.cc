@@ -71,7 +71,6 @@ using v8::PropertyHandlerFlags;
 using v8::Script;
 using v8::ScriptCompiler;
 using v8::ScriptOrigin;
-using v8::ScriptOrModule;
 using v8::String;
 using v8::Uint32;
 using v8::UnboundScript;
@@ -261,16 +260,19 @@ MaybeLocal<Context> ContextifyContext::CreateV8Context(
 
 
 void ContextifyContext::Init(Environment* env, Local<Object> target) {
+  Isolate* isolate = env->isolate();
+  Local<Context> context = env->context();
+
   Local<FunctionTemplate> function_template =
-      FunctionTemplate::New(env->isolate());
+      NewFunctionTemplate(isolate, nullptr);
   function_template->InstanceTemplate()->SetInternalFieldCount(
       ContextifyContext::kInternalFieldCount);
   env->set_script_data_constructor_function(
       function_template->GetFunction(env->context()).ToLocalChecked());
 
-  env->SetMethod(target, "makeContext", MakeContext);
-  env->SetMethod(target, "isContext", IsContext);
-  env->SetMethod(target, "compileFunction", CompileFunction);
+  SetMethod(context, target, "makeContext", MakeContext);
+  SetMethod(context, target, "isContext", IsContext);
+  SetMethod(context, target, "compileFunction", CompileFunction);
 }
 
 void ContextifyContext::RegisterExternalReferences(
@@ -663,16 +665,17 @@ void ContextifyContext::IndexedPropertyDeleterCallback(
 }
 
 void ContextifyScript::Init(Environment* env, Local<Object> target) {
+  Isolate* isolate = env->isolate();
   HandleScope scope(env->isolate());
   Local<String> class_name =
       FIXED_ONE_BYTE_STRING(env->isolate(), "ContextifyScript");
 
-  Local<FunctionTemplate> script_tmpl = env->NewFunctionTemplate(New);
+  Local<FunctionTemplate> script_tmpl = NewFunctionTemplate(isolate, New);
   script_tmpl->InstanceTemplate()->SetInternalFieldCount(
       ContextifyScript::kInternalFieldCount);
   script_tmpl->SetClassName(class_name);
-  env->SetProtoMethod(script_tmpl, "createCachedData", CreateCachedData);
-  env->SetProtoMethod(script_tmpl, "runInContext", RunInContext);
+  SetProtoMethod(isolate, script_tmpl, "createCachedData", CreateCachedData);
+  SetProtoMethod(isolate, script_tmpl, "runInContext", RunInContext);
 
   Local<Context> context = env->context();
 
@@ -750,8 +753,7 @@ void ContextifyScript::New(const FunctionCallbackInfo<Value>& args) {
 
   ScriptCompiler::CachedData* cached_data = nullptr;
   if (!cached_data_buf.IsEmpty()) {
-    uint8_t* data = static_cast<uint8_t*>(
-        cached_data_buf->Buffer()->GetBackingStore()->Data());
+    uint8_t* data = static_cast<uint8_t*>(cached_data_buf->Buffer()->Data());
     cached_data = new ScriptCompiler::CachedData(
         data + cached_data_buf->ByteOffset(), cached_data_buf->ByteLength());
   }
@@ -864,7 +866,7 @@ void ContextifyScript::RunInContext(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[0]->IsObject() || args[0]->IsNull());
 
   Local<Context> context;
-  std::shared_ptr<v8::MicrotaskQueue> microtask_queue;
+  std::shared_ptr<MicrotaskQueue> microtask_queue;
 
   if (args[0]->IsObject()) {
     Local<Object> sandbox = args[0].As<Object>();
@@ -1072,8 +1074,7 @@ void ContextifyContext::CompileFunction(
   // Read cache from cached data buffer
   ScriptCompiler::CachedData* cached_data = nullptr;
   if (!cached_data_buf.IsEmpty()) {
-    uint8_t* data = static_cast<uint8_t*>(
-        cached_data_buf->Buffer()->GetBackingStore()->Data());
+    uint8_t* data = static_cast<uint8_t*>(cached_data_buf->Buffer()->Data());
     cached_data = new ScriptCompiler::CachedData(
       data + cached_data_buf->ByteOffset(), cached_data_buf->ByteLength());
   }
@@ -1136,11 +1137,15 @@ void ContextifyContext::CompileFunction(
     }
   }
 
-  Local<ScriptOrModule> script;
-  MaybeLocal<Function> maybe_fn = ScriptCompiler::CompileFunctionInContext(
-      parsing_context, &source, params.size(), params.data(),
-      context_extensions.size(), context_extensions.data(), options,
-      v8::ScriptCompiler::NoCacheReason::kNoCacheNoReason, &script);
+  MaybeLocal<Function> maybe_fn = ScriptCompiler::CompileFunction(
+      parsing_context,
+      &source,
+      params.size(),
+      params.data(),
+      context_extensions.size(),
+      context_extensions.data(),
+      options,
+      v8::ScriptCompiler::NoCacheReason::kNoCacheNoReason);
 
   Local<Function> fn;
   if (!maybe_fn.ToLocal(&fn)) {
@@ -1156,7 +1161,7 @@ void ContextifyContext::CompileFunction(
            context).ToLocal(&cache_key)) {
     return;
   }
-  CompiledFnEntry* entry = new CompiledFnEntry(env, cache_key, id, script);
+  CompiledFnEntry* entry = new CompiledFnEntry(env, cache_key, id, fn);
   env->id_to_function_map.emplace(id, entry);
 
   Local<Object> result = Object::New(isolate);
@@ -1202,16 +1207,14 @@ void CompiledFnEntry::WeakCallback(
 CompiledFnEntry::CompiledFnEntry(Environment* env,
                                  Local<Object> object,
                                  uint32_t id,
-                                 Local<ScriptOrModule> script)
-    : BaseObject(env, object),
-      id_(id),
-      script_(env->isolate(), script) {
-  script_.SetWeak(this, WeakCallback, v8::WeakCallbackType::kParameter);
+                                 Local<Function> fn)
+    : BaseObject(env, object), id_(id), fn_(env->isolate(), fn) {
+  fn_.SetWeak(this, WeakCallback, v8::WeakCallbackType::kParameter);
 }
 
 CompiledFnEntry::~CompiledFnEntry() {
   env()->id_to_function_map.erase(id_);
-  script_.ClearWeak();
+  fn_.ClearWeak();
 }
 
 static void StartSigintWatchdog(const FunctionCallbackInfo<Value>& args) {
@@ -1247,7 +1250,7 @@ static void MeasureMemory(const FunctionCallbackInfo<Value>& args) {
           static_cast<v8::MeasureMemoryMode>(mode));
   isolate->MeasureMemory(std::move(delegate),
                          static_cast<v8::MeasureMemoryExecution>(execution));
-  v8::Local<v8::Promise> promise = resolver->GetPromise();
+  Local<Promise> promise = resolver->GetPromise();
 
   args.GetReturnValue().Set(promise);
 }
@@ -1270,12 +1273,14 @@ void MicrotaskQueueWrap::New(const FunctionCallbackInfo<Value>& args) {
 }
 
 void MicrotaskQueueWrap::Init(Environment* env, Local<Object> target) {
-  HandleScope scope(env->isolate());
-  Local<FunctionTemplate> tmpl = env->NewFunctionTemplate(New);
+  Isolate* isolate = env->isolate();
+  HandleScope scope(isolate);
+  Local<Context> context = env->context();
+  Local<FunctionTemplate> tmpl = NewFunctionTemplate(isolate, New);
   tmpl->InstanceTemplate()->SetInternalFieldCount(
       ContextifyScript::kInternalFieldCount);
   env->set_microtask_queue_ctor_template(tmpl);
-  env->SetConstructorFunction(target, "MicrotaskQueue", tmpl);
+  SetConstructorFunction(context, target, "MicrotaskQueue", tmpl);
 }
 
 void MicrotaskQueueWrap::RegisterExternalReferences(
@@ -1293,11 +1298,11 @@ void Initialize(Local<Object> target,
   ContextifyScript::Init(env, target);
   MicrotaskQueueWrap::Init(env, target);
 
-  env->SetMethod(target, "startSigintWatchdog", StartSigintWatchdog);
-  env->SetMethod(target, "stopSigintWatchdog", StopSigintWatchdog);
+  SetMethod(context, target, "startSigintWatchdog", StartSigintWatchdog);
+  SetMethod(context, target, "stopSigintWatchdog", StopSigintWatchdog);
   // Used in tests.
-  env->SetMethodNoSideEffect(
-      target, "watchdogHasPendingSigint", WatchdogHasPendingSigint);
+  SetMethodNoSideEffect(
+      context, target, "watchdogHasPendingSigint", WatchdogHasPendingSigint);
 
   {
     Local<FunctionTemplate> tpl = FunctionTemplate::New(env->isolate());
@@ -1333,7 +1338,7 @@ void Initialize(Local<Object> target,
 
   target->Set(context, env->constants_string(), constants).Check();
 
-  env->SetMethod(target, "measureMemory", MeasureMemory);
+  SetMethod(context, target, "measureMemory", MeasureMemory);
 }
 
 void RegisterExternalReferences(ExternalReferenceRegistry* registry) {

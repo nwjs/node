@@ -177,16 +177,7 @@ inline Environment* Environment::GetCurrent(v8::Isolate* isolate) {
 }
 
 inline Environment* Environment::GetCurrent(v8::Local<v8::Context> context) {
-  if (UNLIKELY(context.IsEmpty())) {
-    return nullptr;
-  }
-  if (UNLIKELY(context->GetNumberOfEmbedderDataFields() <=
-               ContextEmbedderIndex::kContextTag)) {
-    return nullptr;
-  }
-  if (UNLIKELY(context->GetAlignedPointerFromEmbedderData(
-                   ContextEmbedderIndex::kContextTag) !=
-               Environment::kNodeContextTagPtr)) {
+  if (UNLIKELY(!ContextEmbedderTag::IsNodeContext(context))) {
     return nullptr;
   }
   return static_cast<Environment*>(
@@ -379,6 +370,14 @@ inline void Environment::set_force_context_aware(bool value) {
 
 inline bool Environment::force_context_aware() const {
   return options_->force_context_aware;
+}
+
+inline void Environment::set_exiting(bool value) {
+  exiting_[0] = value ? 1 : 0;
+}
+
+inline AliasedUint32Array& Environment::exiting() {
+  return exiting_;
 }
 
 inline void Environment::set_abort_on_uncaught_exception(bool value) {

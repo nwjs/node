@@ -63,9 +63,9 @@ using worker::Worker;
 
 extern bool node_is_nwjs;
 
-int const Environment::kNodeContextTag = 0x6e6f64;
-void* const Environment::kNodeContextTagPtr = const_cast<void*>(
-    static_cast<const void*>(&Environment::kNodeContextTag));
+int const ContextEmbedderTag::kNodeContextTag = 0x6e6f64;
+void* const ContextEmbedderTag::kNodeContextTagPtr = const_cast<void*>(
+    static_cast<const void*>(&ContextEmbedderTag::kNodeContextTag));
 
 void AsyncHooks::SetJSPromiseHooks(Local<Function> init,
                                    Local<Function> before,
@@ -251,17 +251,6 @@ std::ostream& operator<<(std::ostream& output,
 }
 
 std::ostream& operator<<(std::ostream& output,
-                         const std::vector<PropInfo>& vec) {
-  output << "{\n";
-  for (const auto& info : vec) {
-    output << "  { \"" << info.name << "\", " << std::to_string(info.id) << ", "
-           << std::to_string(info.index) << " },\n";
-  }
-  output << "}";
-  return output;
-}
-
-std::ostream& operator<<(std::ostream& output,
                          const IsolateDataSerializeInfo& i) {
   output << "{\n"
          << "// -- primitive begins --\n"
@@ -300,7 +289,7 @@ IsolateDataSerializeInfo IsolateData::Serialize(SnapshotCreator* creator) {
   for (size_t i = 0; i < AsyncWrap::PROVIDERS_LENGTH; i++)
     info.primitive_values.push_back(creator->AddData(async_wrap_provider(i)));
 
-  size_t id = 0;
+  uint32_t id = 0;
 #define V(PropertyName, TypeName)                                              \
   do {                                                                         \
     Local<TypeName> field = PropertyName();                                    \
@@ -354,7 +343,7 @@ void IsolateData::DeserializeProperties(const IsolateDataSerializeInfo* info) {
 
   const std::vector<PropInfo>& values = info->template_values;
   i = 0;  // index to the array
-  size_t id = 0;
+  uint32_t id = 0;
 #define V(PropertyName, TypeName)                                              \
   do {                                                                         \
     if (values.size() > i && id == values[i].id) {                             \
@@ -510,11 +499,9 @@ void TrackingTraceStateObserver::UpdateTraceCategoryState() {
 
 void Environment::AssignToContext(Local<v8::Context> context,
                                   const ContextInfo& info) {
+  ContextEmbedderTag::TagNodeContext(context);
   context->SetAlignedPointerInEmbedderData(ContextEmbedderIndex::kEnvironment,
                                            this);
-  // Used by Environment::GetCurrent to know that we are on a node context.
-  context->SetAlignedPointerInEmbedderData(ContextEmbedderIndex::kContextTag,
-                                           Environment::kNodeContextTagPtr);
   // Used to retrieve bindings
   context->SetAlignedPointerInEmbedderData(
       ContextEmbedderIndex::kBindingListIndex, &(this->bindings_));
@@ -580,147 +567,6 @@ std::unique_ptr<v8::BackingStore> Environment::release_managed_buffer(
     released_allocated_buffers_.erase(it);
   }
   return bs;
-}
-
-Local<v8::FunctionTemplate> Environment::NewFunctionTemplate(
-    v8::FunctionCallback callback,
-    Local<v8::Signature> signature,
-    v8::ConstructorBehavior behavior,
-    v8::SideEffectType side_effect_type,
-    const v8::CFunction* c_function) {
-  return v8::FunctionTemplate::New(isolate(),
-                                   callback,
-                                   Local<v8::Value>(),
-                                   signature,
-                                   0,
-                                   behavior,
-                                   side_effect_type,
-                                   c_function);
-}
-
-void Environment::SetMethod(Local<v8::Object> that,
-                            const char* name,
-                            v8::FunctionCallback callback) {
-  Local<v8::Context> context = isolate()->GetCurrentContext();
-  Local<v8::Function> function =
-      NewFunctionTemplate(callback,
-                          Local<v8::Signature>(),
-                          v8::ConstructorBehavior::kThrow,
-                          v8::SideEffectType::kHasSideEffect)
-          ->GetFunction(context)
-          .ToLocalChecked();
-  // kInternalized strings are created in the old space.
-  const v8::NewStringType type = v8::NewStringType::kInternalized;
-  Local<v8::String> name_string =
-      v8::String::NewFromUtf8(isolate(), name, type).ToLocalChecked();
-  that->Set(context, name_string, function).Check();
-  function->SetName(name_string);  // NODE_SET_METHOD() compatibility.
-}
-
-void Environment::SetFastMethod(Local<v8::Object> that,
-                                const char* name,
-                                v8::FunctionCallback slow_callback,
-                                const v8::CFunction* c_function) {
-  Local<v8::Context> context = isolate()->GetCurrentContext();
-  Local<v8::Function> function =
-      NewFunctionTemplate(slow_callback,
-                          Local<v8::Signature>(),
-                          v8::ConstructorBehavior::kThrow,
-                          v8::SideEffectType::kHasNoSideEffect,
-                          c_function)
-          ->GetFunction(context)
-          .ToLocalChecked();
-  const v8::NewStringType type = v8::NewStringType::kInternalized;
-  Local<v8::String> name_string =
-      v8::String::NewFromUtf8(isolate(), name, type).ToLocalChecked();
-  that->Set(context, name_string, function).Check();
-}
-
-void Environment::SetMethodNoSideEffect(Local<v8::Object> that,
-                                        const char* name,
-                                        v8::FunctionCallback callback) {
-  Local<v8::Context> context = isolate()->GetCurrentContext();
-  Local<v8::Function> function =
-      NewFunctionTemplate(callback,
-                          Local<v8::Signature>(),
-                          v8::ConstructorBehavior::kThrow,
-                          v8::SideEffectType::kHasNoSideEffect)
-          ->GetFunction(context)
-          .ToLocalChecked();
-  // kInternalized strings are created in the old space.
-  const v8::NewStringType type = v8::NewStringType::kInternalized;
-  Local<v8::String> name_string =
-      v8::String::NewFromUtf8(isolate(), name, type).ToLocalChecked();
-  that->Set(context, name_string, function).Check();
-  function->SetName(name_string);  // NODE_SET_METHOD() compatibility.
-}
-
-void Environment::SetProtoMethod(Local<v8::FunctionTemplate> that,
-                                 const char* name,
-                                 v8::FunctionCallback callback) {
-  Local<v8::Signature> signature = v8::Signature::New(isolate(), that);
-  Local<v8::FunctionTemplate> t =
-      NewFunctionTemplate(callback,
-                          signature,
-                          v8::ConstructorBehavior::kThrow,
-                          v8::SideEffectType::kHasSideEffect);
-  // kInternalized strings are created in the old space.
-  const v8::NewStringType type = v8::NewStringType::kInternalized;
-  Local<v8::String> name_string =
-      v8::String::NewFromUtf8(isolate(), name, type).ToLocalChecked();
-  that->PrototypeTemplate()->Set(name_string, t);
-  t->SetClassName(name_string);  // NODE_SET_PROTOTYPE_METHOD() compatibility.
-}
-
-void Environment::SetProtoMethodNoSideEffect(Local<v8::FunctionTemplate> that,
-                                             const char* name,
-                                             v8::FunctionCallback callback) {
-  Local<v8::Signature> signature = v8::Signature::New(isolate(), that);
-  Local<v8::FunctionTemplate> t =
-      NewFunctionTemplate(callback,
-                          signature,
-                          v8::ConstructorBehavior::kThrow,
-                          v8::SideEffectType::kHasNoSideEffect);
-  // kInternalized strings are created in the old space.
-  const v8::NewStringType type = v8::NewStringType::kInternalized;
-  Local<v8::String> name_string =
-      v8::String::NewFromUtf8(isolate(), name, type).ToLocalChecked();
-  that->PrototypeTemplate()->Set(name_string, t);
-  t->SetClassName(name_string);  // NODE_SET_PROTOTYPE_METHOD() compatibility.
-}
-
-void Environment::SetInstanceMethod(Local<v8::FunctionTemplate> that,
-                                    const char* name,
-                                    v8::FunctionCallback callback) {
-  Local<v8::Signature> signature = v8::Signature::New(isolate(), that);
-  Local<v8::FunctionTemplate> t =
-      NewFunctionTemplate(callback,
-                          signature,
-                          v8::ConstructorBehavior::kThrow,
-                          v8::SideEffectType::kHasSideEffect);
-  // kInternalized strings are created in the old space.
-  const v8::NewStringType type = v8::NewStringType::kInternalized;
-  Local<v8::String> name_string =
-      v8::String::NewFromUtf8(isolate(), name, type).ToLocalChecked();
-  that->InstanceTemplate()->Set(name_string, t);
-  t->SetClassName(name_string);
-}
-
-void Environment::SetConstructorFunction(Local<v8::Object> that,
-                                         const char* name,
-                                         Local<v8::FunctionTemplate> tmpl,
-                                         SetConstructorFunctionFlag flag) {
-  SetConstructorFunction(that, OneByteString(isolate(), name), tmpl, flag);
-}
-
-void Environment::SetConstructorFunction(Local<v8::Object> that,
-                                         Local<v8::String> name,
-                                         Local<v8::FunctionTemplate> tmpl,
-                                         SetConstructorFunctionFlag flag) {
-  if (LIKELY(flag == SetConstructorFunctionFlag::SET_CLASS_NAME))
-    tmpl->SetClassName(name);
-  that->Set(context(), name, tmpl->GetFunction(context()).ToLocalChecked())
-      .Check();
 }
 
 void Environment::CreateProperties() {
@@ -815,6 +661,7 @@ Environment::Environment(IsolateData* isolate_data,
       exec_argv_(exec_args),
       argv_(args),
       exec_path_(GetExecPath(args)),
+      exiting_(isolate_, 1, MAYBE_FIELD_PTR(env_info, exiting)),
       should_abort_on_uncaught_toggle_(
           isolate_,
           1,
@@ -924,6 +771,9 @@ void Environment::InitializeMainContext(Local<Context> context,
 
   // By default, always abort when --abort-on-uncaught-exception was passed.
   should_abort_on_uncaught_toggle_[0] = 1;
+
+  // The process is not exiting by default.
+  set_exiting(false);
 
   performance_state_->Mark(performance::NODE_PERFORMANCE_MILESTONE_ENVIRONMENT,
                            environment_start_time_);
@@ -1628,6 +1478,7 @@ std::ostream& operator<<(std::ostream& output,
 AsyncHooks::SerializeInfo AsyncHooks::Serialize(Local<Context> context,
                                                 SnapshotCreator* creator) {
   SerializeInfo info;
+  // TODO(joyeecheung): some of these probably don't need to be serialized.
   info.async_ids_stack = async_ids_stack_.Serialize(context, creator);
   info.fields = fields_.Serialize(context, creator);
   info.async_id_fields = async_id_fields_.Serialize(context, creator);
@@ -1750,11 +1601,11 @@ void Environment::PrintInfoForSnapshotIfDebug() {
     fprintf(stderr, "BaseObjects at the exit of the Environment:\n");
     PrintAllBaseObjects();
     fprintf(stderr, "\nNative modules without cache:\n");
-    for (const auto& s : native_modules_without_cache) {
+    for (const auto& s : builtins_without_cache) {
       fprintf(stderr, "%s\n", s.c_str());
     }
     fprintf(stderr, "\nNative modules with cache:\n");
-    for (const auto& s : native_modules_with_cache) {
+    for (const auto& s : builtins_with_cache) {
       fprintf(stderr, "%s\n", s.c_str());
     }
     fprintf(stderr, "\nStatic bindings (need to be registered):\n");
@@ -1810,18 +1661,19 @@ EnvSerializeInfo Environment::Serialize(SnapshotCreator* creator) {
   SerializeBindingData(this, creator, &info);
   // Currently all modules are compiled without cache in builtin snapshot
   // builder.
-  info.native_modules = std::vector<std::string>(
-      native_modules_without_cache.begin(), native_modules_without_cache.end());
+  info.builtins = std::vector<std::string>(builtins_without_cache.begin(),
+                                           builtins_without_cache.end());
 
   info.async_hooks = async_hooks_.Serialize(ctx, creator);
   info.immediate_info = immediate_info_.Serialize(ctx, creator);
   info.tick_info = tick_info_.Serialize(ctx, creator);
   info.performance_state = performance_state_->Serialize(ctx, creator);
+  info.exiting = exiting_.Serialize(ctx, creator);
   info.stream_base_state = stream_base_state_.Serialize(ctx, creator);
   info.should_abort_on_uncaught_toggle =
       should_abort_on_uncaught_toggle_.Serialize(ctx, creator);
 
-  size_t id = 0;
+  uint32_t id = 0;
 #define V(PropertyName, TypeName)                                              \
   do {                                                                         \
     Local<TypeName> field = PropertyName();                                    \
@@ -1839,6 +1691,22 @@ EnvSerializeInfo Environment::Serialize(SnapshotCreator* creator) {
 }
 
 std::ostream& operator<<(std::ostream& output,
+                         const std::vector<PropInfo>& vec) {
+  output << "{\n";
+  for (const auto& info : vec) {
+    output << "  " << info << ",\n";
+  }
+  output << "}";
+  return output;
+}
+
+std::ostream& operator<<(std::ostream& output, const PropInfo& info) {
+  output << "{ \"" << info.name << "\", " << std::to_string(info.id) << ", "
+         << std::to_string(info.index) << " }";
+  return output;
+}
+
+std::ostream& operator<<(std::ostream& output,
                          const std::vector<std::string>& vec) {
   output << "{\n";
   for (const auto& info : vec) {
@@ -1853,9 +1721,9 @@ std::ostream& operator<<(std::ostream& output, const EnvSerializeInfo& i) {
          << "// -- bindings begins --\n"
          << i.bindings << ",\n"
          << "// -- bindings ends --\n"
-         << "// -- native_modules begins --\n"
-         << i.native_modules << ",\n"
-         << "// -- native_modules ends --\n"
+         << "// -- builtins begins --\n"
+         << i.builtins << ",\n"
+         << "// -- builtins ends --\n"
          << "// -- async_hooks begins --\n"
          << i.async_hooks << ",\n"
          << "// -- async_hooks ends --\n"
@@ -1864,6 +1732,7 @@ std::ostream& operator<<(std::ostream& output, const EnvSerializeInfo& i) {
          << "// -- performance_state begins --\n"
          << i.performance_state << ",\n"
          << "// -- performance_state ends --\n"
+         << i.exiting << ",  // exiting\n"
          << i.stream_base_state << ",  // stream_base_state\n"
          << i.should_abort_on_uncaught_toggle
          << ",  // should_abort_on_uncaught_toggle\n"
@@ -1902,11 +1771,12 @@ void Environment::DeserializeProperties(const EnvSerializeInfo* info) {
 
   RunDeserializeRequests();
 
-  native_modules_in_snapshot = info->native_modules;
+  builtins_in_snapshot = info->builtins;
   async_hooks_.Deserialize(ctx);
   immediate_info_.Deserialize(ctx);
   tick_info_.Deserialize(ctx);
   performance_state_->Deserialize(ctx);
+  exiting_.Deserialize(ctx);
   stream_base_state_.Deserialize(ctx);
   should_abort_on_uncaught_toggle_.Deserialize(ctx);
 
@@ -1917,7 +1787,7 @@ void Environment::DeserializeProperties(const EnvSerializeInfo* info) {
 
   const std::vector<PropInfo>& values = info->persistent_values;
   size_t i = 0;  // index to the array
-  size_t id = 0;
+  uint32_t id = 0;
 #define V(PropertyName, TypeName)                                              \
   do {                                                                         \
     if (values.size() > i && id == values[i].id) {                             \
@@ -2122,11 +1992,11 @@ void Environment::MemoryInfo(MemoryTracker* tracker) const {
   // Iteratable STLs have their own sizes subtracted from the parent
   // by default.
   tracker->TrackField("isolate_data", isolate_data_);
-  tracker->TrackField("native_modules_with_cache", native_modules_with_cache);
-  tracker->TrackField("native_modules_without_cache",
-                      native_modules_without_cache);
+  tracker->TrackField("builtins_with_cache", builtins_with_cache);
+  tracker->TrackField("builtins_without_cache", builtins_without_cache);
   tracker->TrackField("destroy_async_id_list", destroy_async_id_list_);
   tracker->TrackField("exec_argv", exec_argv_);
+  tracker->TrackField("exiting", exiting_);
   tracker->TrackField("should_abort_on_uncaught_toggle",
                       should_abort_on_uncaught_toggle_);
   tracker->TrackField("stream_base_state", stream_base_state_);
@@ -2220,8 +2090,8 @@ void BaseObject::LazilyInitializedJSTemplateConstructor(
 
 Local<FunctionTemplate> BaseObject::MakeLazilyInitializedJSTemplate(
     Environment* env) {
-  Local<FunctionTemplate> t =
-      env->NewFunctionTemplate(LazilyInitializedJSTemplateConstructor);
+  Local<FunctionTemplate> t = NewFunctionTemplate(
+      env->isolate(), LazilyInitializedJSTemplateConstructor);
   t->Inherit(BaseObject::GetConstructorTemplate(env));
   t->InstanceTemplate()->SetInternalFieldCount(BaseObject::kInternalFieldCount);
   return t;
@@ -2280,7 +2150,7 @@ bool BaseObject::IsRootNode() const {
 Local<FunctionTemplate> BaseObject::GetConstructorTemplate(Environment* env) {
   Local<FunctionTemplate> tmpl = env->base_object_ctor_template();
   if (tmpl.IsEmpty()) {
-    tmpl = env->NewFunctionTemplate(nullptr);
+    tmpl = NewFunctionTemplate(env->isolate(), nullptr);
     tmpl->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "BaseObject"));
     env->set_base_object_ctor_template(tmpl);
   }

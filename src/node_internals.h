@@ -43,8 +43,8 @@ struct sockaddr;
 
 namespace node {
 
-namespace native_module {
-class NativeModuleLoader;
+namespace builtins {
+class BuiltinLoader;
 }
 
 namespace per_process {
@@ -311,7 +311,6 @@ v8::MaybeLocal<v8::Object> GetPerContextExports(v8::Local<v8::Context> context);
 v8::MaybeLocal<v8::Value> ExecuteBootstrapper(
     Environment* env,
     const char* id,
-    std::vector<v8::Local<v8::String>>* parameters,
     std::vector<v8::Local<v8::Value>>* arguments);
 void MarkBootstrapComplete(const v8::FunctionCallbackInfo<v8::Value>& args);
 
@@ -409,6 +408,25 @@ std::string Basename(const std::string& str, const std::string& extension);
 
 node_module napi_module_to_node_module(const napi_module* mod);
 
+std::ostream& operator<<(std::ostream& output,
+                         const std::vector<SnapshotIndex>& v);
+std::ostream& operator<<(std::ostream& output,
+                         const std::vector<std::string>& vec);
+std::ostream& operator<<(std::ostream& output,
+                         const std::vector<PropInfo>& vec);
+std::ostream& operator<<(std::ostream& output, const PropInfo& d);
+std::ostream& operator<<(std::ostream& output, const EnvSerializeInfo& d);
+std::ostream& operator<<(std::ostream& output,
+                         const ImmediateInfo::SerializeInfo& d);
+std::ostream& operator<<(std::ostream& output,
+                         const TickInfo::SerializeInfo& d);
+std::ostream& operator<<(std::ostream& output,
+                         const AsyncHooks::SerializeInfo& d);
+
+namespace performance {
+std::ostream& operator<<(std::ostream& output,
+                         const PerformanceState::SerializeInfo& d);
+}
 }  // namespace node
 
 #endif  // defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS

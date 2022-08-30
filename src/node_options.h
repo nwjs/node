@@ -136,6 +136,7 @@ class EnvironmentOptions : public Options {
   bool preserve_symlinks = false;
   bool preserve_symlinks_main = false;
   bool prof_process = false;
+  bool update_assert_snapshot = false;
 #if HAVE_INSPECTOR
   std::string cpu_prof_dir;
   static const uint64_t kDefaultCpuProfInterval = 1000;
@@ -236,6 +237,7 @@ class PerProcessOptions : public Options {
   // snapshot used in different isolates in the same process to be the same.
   // Therefore --node-snapshot is a per-process option.
   bool node_snapshot = true;
+  std::string snapshot_blob;
 
   std::vector<std::string> security_reverts;
   bool print_bash_completion = false;

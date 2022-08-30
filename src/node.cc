@@ -28,11 +28,11 @@
 #include "histogram-inl.h"
 #include "memory_tracker-inl.h"
 #include "node_binding.h"
+#include "node_builtins.h"
 #include "node_errors.h"
 #include "node_internals.h"
 #include "node_main_instance.h"
 #include "node_metadata.h"
-#include "node_native_module.h"
 #include "node_options-inl.h"
 #include "node_perf.h"
 #include "node_process-inl.h"
@@ -135,11 +135,10 @@ NODE_EXTERN void* g_get_node_env();
 
 namespace node {
 
-using native_module::NativeModuleLoader;
+using builtins::BuiltinLoader;
 
 using v8::EscapableHandleScope;
 using v8::Function;
-using v8::FunctionCallbackInfo;
 using v8::Isolate;
 using v8::Local;
 using v8::MaybeLocal;
@@ -193,11 +192,10 @@ void SignalExit(int signo, siginfo_t* info, void* ucontext) {
 
 MaybeLocal<Value> ExecuteBootstrapper(Environment* env,
                                       const char* id,
-                                      std::vector<Local<String>>* parameters,
                                       std::vector<Local<Value>>* arguments) {
   EscapableHandleScope scope(env->isolate());
   MaybeLocal<Function> maybe_fn =
-      NativeModuleLoader::LookupAndCompile(env->context(), id, parameters, env);
+      BuiltinLoader::LookupAndCompile(env->context(), id, env);
 
   Local<Function> fn;
   if (!maybe_fn.ToLocal(&fn)) {
@@ -285,10 +283,10 @@ static void AtomicsWaitCallback(Isolate::AtomicsWaitEvent event,
 
   fprintf(stderr,
           "(node:%d) [Thread %" PRIu64 "] Atomics.wait(%p + %zx, %" PRId64
-              ", %.f) %s\n",
+          ", %.f) %s\n",
           static_cast<int>(uv_os_getpid()),
           env->thread_id(),
-          array_buffer->GetBackingStore()->Data(),
+          array_buffer->Data(),
           offset_in_bytes,
           value,
           timeout_in_ms,
@@ -320,26 +318,21 @@ void Environment::InitializeDiagnostics() {
 MaybeLocal<Value> Environment::BootstrapInternalLoaders() {
   EscapableHandleScope scope(isolate_);
 
-  // Create binding loaders
-  std::vector<Local<String>> loaders_params = {
-      process_string(),
-      FIXED_ONE_BYTE_STRING(isolate_, "getLinkedBinding"),
-      FIXED_ONE_BYTE_STRING(isolate_, "getInternalBinding"),
-      primordials_string()};
+  // Arguments must match the parameters specified in
+  // BuiltinLoader::LookupAndCompile().
   std::vector<Local<Value>> loaders_args = {
       process_object(),
-      NewFunctionTemplate(binding::GetLinkedBinding)
+      NewFunctionTemplate(isolate_, binding::GetLinkedBinding)
           ->GetFunction(context())
           .ToLocalChecked(),
-      NewFunctionTemplate(binding::GetInternalBinding)
+      NewFunctionTemplate(isolate_, binding::GetInternalBinding)
           ->GetFunction(context())
           .ToLocalChecked(),
       primordials()};
 
   // Bootstrap internal loaders
   Local<Value> loader_exports;
-  if (!ExecuteBootstrapper(
-           this, "internal/bootstrap/loaders", &loaders_params, &loaders_args)
+  if (!ExecuteBootstrapper(this, "internal/bootstrap/loaders", &loaders_args)
            .ToLocal(&loader_exports)) {
     return MaybeLocal<Value>();
   }
@@ -353,7 +346,7 @@ MaybeLocal<Value> Environment::BootstrapInternalLoaders() {
   Local<Value> require =
       loader_exports_obj->Get(context(), require_string()).ToLocalChecked();
   CHECK(require->IsFunction());
-  set_native_module_require(require.As<Function>());
+  set_builtin_module_require(require.As<Function>());
 
   return scope.Escape(loader_exports);
 }
@@ -361,28 +354,24 @@ MaybeLocal<Value> Environment::BootstrapInternalLoaders() {
 MaybeLocal<Value> Environment::BootstrapNode() {
   EscapableHandleScope scope(isolate_);
 
+  // Arguments must match the parameters specified in
+  // BuiltinLoader::LookupAndCompile().
   // process, require, internalBinding, primordials
-  std::vector<Local<String>> node_params = {
-      process_string(),
-      require_string(),
-      internal_binding_string(),
-      primordials_string()};
-  std::vector<Local<Value>> node_args = {
-      process_object(),
-      native_module_require(),
-      internal_binding_loader(),
-      primordials()};
+  std::vector<Local<Value>> node_args = {process_object(),
+                                         builtin_module_require(),
+                                         internal_binding_loader(),
+                                         primordials()};
 
-  MaybeLocal<Value> result = ExecuteBootstrapper(
-      this, "internal/bootstrap/node", &node_params, &node_args);
+  MaybeLocal<Value> result =
+      ExecuteBootstrapper(this, "internal/bootstrap/node", &node_args);
 
   if (result.IsEmpty()) {
     return MaybeLocal<Value>();
   }
 
   if (!no_browser_globals()) {
-    result = ExecuteBootstrapper(
-        this, "internal/bootstrap/browser", &node_params, &node_args);
+    result =
+        ExecuteBootstrapper(this, "internal/bootstrap/browser", &node_args);
 
     if (result.IsEmpty()) {
       return MaybeLocal<Value>();
@@ -393,8 +382,7 @@ MaybeLocal<Value> Environment::BootstrapNode() {
   auto thread_switch_id =
       is_main_thread() ? "internal/bootstrap/switches/is_main_thread"
                        : "internal/bootstrap/switches/is_not_main_thread";
-  result =
-      ExecuteBootstrapper(this, thread_switch_id, &node_params, &node_args);
+  result = ExecuteBootstrapper(this, thread_switch_id, &node_args);
 
   if (result.IsEmpty()) {
     return MaybeLocal<Value>();
@@ -404,8 +392,7 @@ MaybeLocal<Value> Environment::BootstrapNode() {
       owns_process_state()
           ? "internal/bootstrap/switches/does_own_process_state"
           : "internal/bootstrap/switches/does_not_own_process_state";
-  result = ExecuteBootstrapper(
-      this, process_state_switch_id, &node_params, &node_args);
+  result = ExecuteBootstrapper(this, process_state_switch_id, &node_args);
 
   if (result.IsEmpty()) {
     return MaybeLocal<Value>();
@@ -447,35 +434,20 @@ MaybeLocal<Value> Environment::RunBootstrapping() {
   return scope.Escape(result);
 }
 
-void MarkBootstrapComplete(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-  env->performance_state()->Mark(
-      performance::NODE_PERFORMANCE_MILESTONE_BOOTSTRAP_COMPLETE);
-}
-
 static
 MaybeLocal<Value> StartExecution(Environment* env, const char* main_script_id) {
   EscapableHandleScope scope(env->isolate());
   CHECK_NOT_NULL(main_script_id);
 
-  std::vector<Local<String>> parameters = {
-      env->process_string(),
-      env->require_string(),
-      env->internal_binding_string(),
-      env->primordials_string(),
-      FIXED_ONE_BYTE_STRING(env->isolate(), "markBootstrapComplete")};
-
-  std::vector<Local<Value>> arguments = {
-      env->process_object(),
-      env->native_module_require(),
-      env->internal_binding_loader(),
-      env->primordials(),
-      env->NewFunctionTemplate(MarkBootstrapComplete)
-          ->GetFunction(env->context())
-          .ToLocalChecked()};
+  // Arguments must match the parameters specified in
+  // BuiltinLoader::LookupAndCompile().
+  std::vector<Local<Value>> arguments = {env->process_object(),
+                                         env->builtin_module_require(),
+                                         env->internal_binding_loader(),
+                                         env->primordials()};
 
   return scope.EscapeMaybe(
-      ExecuteBootstrapper(env, main_script_id, &parameters, &arguments));
+      ExecuteBootstrapper(env, main_script_id, &arguments));
 }
 
 MaybeLocal<Value> StartExecution(Environment* env, StartExecutionCallback cb) {
@@ -488,12 +460,11 @@ MaybeLocal<Value> StartExecution(Environment* env, StartExecutionCallback cb) {
   if (cb != nullptr) {
     EscapableHandleScope scope(env->isolate());
 
-    if (StartExecution(env, "internal/bootstrap/environment").IsEmpty())
-      return {};
+    if (StartExecution(env, "internal/main/environment").IsEmpty()) return {};
 
     StartExecutionCallbackInfo info = {
-      env->process_object(),
-      env->native_module_require(),
+        env->process_object(),
+        env->builtin_module_require(),
     };
 
     return scope.EscapeMaybe(cb(info));
@@ -1008,7 +979,7 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
 
   // We should set node_is_initialized here instead of in node::Start,
   // otherwise embedders using node::Init to initialize everything will not be
-  // able to set it and native modules will not load for them.
+  // able to set it and native addons will not load for them.
   node_is_initialized = true;
   return 0;
 }
@@ -1321,38 +1292,127 @@ void TearDownOncePerProcess() {
   per_process::v8_platform.Dispose();
 }
 
+int GenerateAndWriteSnapshotData(const SnapshotData** snapshot_data_ptr,
+                                 InitializationResult* result) {
+  // nullptr indicates there's no snapshot data.
+  DCHECK_NULL(*snapshot_data_ptr);
+
+  // node:embedded_snapshot_main indicates that we are using the
+  // embedded snapshot and we are not supposed to clean it up.
+  if (result->args[1] == "node:embedded_snapshot_main") {
+    *snapshot_data_ptr = SnapshotBuilder::GetEmbeddedSnapshotData();
+    if (*snapshot_data_ptr == nullptr) {
+      // The Node.js binary is built without embedded snapshot
+      fprintf(stderr,
+              "node:embedded_snapshot_main was specified as snapshot "
+              "entry point but Node.js was built without embedded "
+              "snapshot.\n");
+      result->exit_code = 1;
+      return result->exit_code;
+    }
+  } else {
+    // Otherwise, load and run the specified main script.
+    std::unique_ptr<SnapshotData> generated_data =
+        std::make_unique<SnapshotData>();
+    result->exit_code = node::SnapshotBuilder::Generate(
+        generated_data.get(), result->args, result->exec_args);
+    if (result->exit_code == 0) {
+      *snapshot_data_ptr = generated_data.release();
+    } else {
+      return result->exit_code;
+    }
+  }
+
+  // Get the path to write the snapshot blob to.
+  std::string snapshot_blob_path;
+  if (!per_process::cli_options->snapshot_blob.empty()) {
+    snapshot_blob_path = per_process::cli_options->snapshot_blob;
+  } else {
+    // Defaults to snapshot.blob in the current working directory.
+    snapshot_blob_path = std::string("snapshot.blob");
+  }
+
+  FILE* fp = fopen(snapshot_blob_path.c_str(), "wb");
+  if (fp != nullptr) {
+    (*snapshot_data_ptr)->ToBlob(fp);
+    fclose(fp);
+  } else {
+    fprintf(stderr,
+            "Cannot open %s for writing a snapshot.\n",
+            snapshot_blob_path.c_str());
+    result->exit_code = 1;
+  }
+  return result->exit_code;
+}
+
+int LoadSnapshotDataAndRun(const SnapshotData** snapshot_data_ptr,
+                           InitializationResult* result) {
+  // nullptr indicates there's no snapshot data.
+  DCHECK_NULL(*snapshot_data_ptr);
+  // --snapshot-blob indicates that we are reading a customized snapshot.
+  if (!per_process::cli_options->snapshot_blob.empty()) {
+    std::string filename = per_process::cli_options->snapshot_blob;
+    FILE* fp = fopen(filename.c_str(), "rb");
+    if (fp == nullptr) {
+      fprintf(stderr, "Cannot open %s", filename.c_str());
+      result->exit_code = 1;
+      return result->exit_code;
+    }
+    std::unique_ptr<SnapshotData> read_data = std::make_unique<SnapshotData>();
+    SnapshotData::FromBlob(read_data.get(), fp);
+    *snapshot_data_ptr = read_data.release();
+    fclose(fp);
+  } else if (per_process::cli_options->node_snapshot) {
+    // If --snapshot-blob is not specified, we are reading the embedded
+    // snapshot, but we will skip it if --no-node-snapshot is specified.
+    *snapshot_data_ptr = SnapshotBuilder::GetEmbeddedSnapshotData();
+  }
+
+  if (false && (*snapshot_data_ptr) != nullptr) {
+    BuiltinLoader::RefreshCodeCache((*snapshot_data_ptr)->code_cache);
+  }
+  NodeMainInstance main_instance(*snapshot_data_ptr,
+                                 uv_default_loop(),
+                                 per_process::v8_platform.Platform(),
+                                 result->args,
+                                 result->exec_args);
+  result->exit_code = main_instance.Run();
+  return result->exit_code;
+}
+
 int Start(int argc, char** argv) {
   InitializationResult result = InitializeOncePerProcess(argc, argv);
   if (result.early_return) {
     return result.exit_code;
   }
 
-  if (per_process::cli_options->build_snapshot) {
-    fprintf(stderr,
-            "--build-snapshot is not yet supported in the node binary\n");
-    return 1;
-  }
+  DCHECK_EQ(result.exit_code, 0);
+  const SnapshotData* snapshot_data = nullptr;
 
-  {
-    bool use_node_snapshot = per_process::cli_options->node_snapshot;
-    const SnapshotData* snapshot_data =
-        use_node_snapshot ? SnapshotBuilder::GetEmbeddedSnapshotData()
-                          : nullptr;
-    uv_loop_configure(uv_default_loop(), UV_METRICS_IDLE_TIME);
+  auto cleanup_process = OnScopeLeave([&]() {
+    TearDownOncePerProcess();
 
-    if (false && snapshot_data != nullptr) {
-      NativeModuleLoader::RefreshCodeCache(snapshot_data->code_cache);
+    if (snapshot_data != nullptr &&
+        snapshot_data->data_ownership == SnapshotData::DataOwnership::kOwned) {
+      delete snapshot_data;
     }
-    NodeMainInstance main_instance(snapshot_data,
-                                   uv_default_loop(),
-                                   per_process::v8_platform.Platform(),
-                                   result.args,
-                                   result.exec_args);
-    result.exit_code = main_instance.Run();
+  });
+
+  uv_loop_configure(uv_default_loop(), UV_METRICS_IDLE_TIME);
+
+  // --build-snapshot indicates that we are in snapshot building mode.
+  if (per_process::cli_options->build_snapshot) {
+    if (result.args.size() < 2) {
+      fprintf(stderr,
+              "--build-snapshot must be used with an entry point script.\n"
+              "Usage: node --build-snapshot /path/to/entry.js\n");
+      return 9;
+    }
+    return GenerateAndWriteSnapshotData(&snapshot_data, &result);
   }
 
-  TearDownOncePerProcess();
-  return result.exit_code;
+  // Without --build-snapshot, we are in snapshot loading mode.
+  return LoadSnapshotDataAndRun(&snapshot_data, &result);
 }
 
 int Stop(Environment* env) {

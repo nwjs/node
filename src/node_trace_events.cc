@@ -20,6 +20,7 @@ using v8::Context;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
+using v8::Isolate;
 using v8::Local;
 using v8::NewStringType;
 using v8::Object;
@@ -133,21 +134,23 @@ void NodeCategorySet::Initialize(Local<Object> target,
                 Local<Context> context,
                 void* priv) {
   Environment* env = Environment::GetCurrent(context);
+  Isolate* isolate = env->isolate();
 
-  env->SetMethod(target, "getEnabledCategories", GetEnabledCategories);
-  env->SetMethod(
-      target, "setTraceCategoryStateUpdateHandler",
-      SetTraceCategoryStateUpdateHandler);
+  SetMethod(context, target, "getEnabledCategories", GetEnabledCategories);
+  SetMethod(context,
+            target,
+            "setTraceCategoryStateUpdateHandler",
+            SetTraceCategoryStateUpdateHandler);
 
   Local<FunctionTemplate> category_set =
-      env->NewFunctionTemplate(NodeCategorySet::New);
+      NewFunctionTemplate(isolate, NodeCategorySet::New);
   category_set->InstanceTemplate()->SetInternalFieldCount(
       NodeCategorySet::kInternalFieldCount);
   category_set->Inherit(BaseObject::GetConstructorTemplate(env));
-  env->SetProtoMethod(category_set, "enable", NodeCategorySet::Enable);
-  env->SetProtoMethod(category_set, "disable", NodeCategorySet::Disable);
+  SetProtoMethod(isolate, category_set, "enable", NodeCategorySet::Enable);
+  SetProtoMethod(isolate, category_set, "disable", NodeCategorySet::Disable);
 
-  env->SetConstructorFunction(target, "CategorySet", category_set);
+  SetConstructorFunction(context, target, "CategorySet", category_set);
 
   Local<String> isTraceCategoryEnabled =
       FIXED_ONE_BYTE_STRING(env->isolate(), "isTraceCategoryEnabled");
@@ -161,7 +164,7 @@ void NodeCategorySet::Initialize(Local<Object> target,
                   .Check();
   target->Set(context, trace,
               binding->Get(context, trace).ToLocalChecked()).Check();
-  env->SetMethod(target, "trace", Dummy);
+  SetMethod(context, target, "trace", Dummy);
 }
 
 void NodeCategorySet::RegisterExternalReferences(

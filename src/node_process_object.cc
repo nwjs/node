@@ -93,6 +93,14 @@ MaybeLocal<Object> CreateProcessObject(Environment* env, bool node_is_nwjs) {
 
   if (node_is_nwjs)
     READONLY_PROPERTY(process, "__nwjs", Integer::New(env->isolate(), 1));
+  // process[exiting_aliased_Uint32Array]
+  if (process
+          ->SetPrivate(context,
+                       env->exiting_aliased_Uint32Array(),
+                       env->exiting().GetJSArray())
+          .IsNothing()) {
+    return {};
+  }
 
   // process.version
   READONLY_PROPERTY(process,
@@ -138,7 +146,7 @@ MaybeLocal<Object> CreateProcessObject(Environment* env, bool node_is_nwjs) {
 
   // process._rawDebug: may be overwritten later in JS land, but should be
   // available from the beginning for debugging purposes
-  env->SetMethod(process, "_rawDebug", RawDebug);
+  SetMethod(context, process, "_rawDebug", RawDebug);
 
   return scope.Escape(process);
 }

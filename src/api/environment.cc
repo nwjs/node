@@ -561,50 +561,21 @@ Maybe<bool> InitializeContextRuntime(Local<Context> context) {
   Isolate* isolate = context->GetIsolate();
   HandleScope handle_scope(isolate);
 
-  // Delete `Intl.v8BreakIterator`
-  // https://github.com/nodejs/node/issues/14909
-  {
-    Local<String> intl_string =
-      FIXED_ONE_BYTE_STRING(isolate, "Intl");
-    Local<String> break_iter_string =
-      FIXED_ONE_BYTE_STRING(isolate, "v8BreakIterator");
+  // When `IsCodeGenerationFromStringsAllowed` is true, V8 takes the fast path
+  // and ignores the ModifyCodeGenerationFromStrings callback. Set it to false
+  // to delegate the code generation validation to
+  // node::ModifyCodeGenerationFromStrings.
+  // The `IsCodeGenerationFromStringsAllowed` can be refreshed by V8 according
+  // to the runtime flags, propagate the value to the embedder data.
+  bool is_code_generation_from_strings_allowed =
+      context->IsCodeGenerationFromStringsAllowed();
+  context->AllowCodeGenerationFromStrings(false);
+  context->SetEmbedderData(
+      ContextEmbedderIndex::kAllowCodeGenerationFromStrings,
+      is_code_generation_from_strings_allowed ? True(isolate) : False(isolate));
 
-    Local<Value> intl_v;
-    if (!context->Global()
-        ->Get(context, intl_string)
-        .ToLocal(&intl_v)) {
-      return Nothing<bool>();
-    }
-
-    if (intl_v->IsObject() &&
-        intl_v.As<Object>()
-          ->Delete(context, break_iter_string)
-          .IsNothing()) {
-      return Nothing<bool>();
-    }
-  }
-
-  // Delete `Atomics.wake`
-  // https://github.com/nodejs/node/issues/21219
-  {
-    Local<String> atomics_string =
-      FIXED_ONE_BYTE_STRING(isolate, "Atomics");
-    Local<String> wake_string =
-      FIXED_ONE_BYTE_STRING(isolate, "wake");
-
-    Local<Value> atomics_v;
-    if (!context->Global()
-        ->Get(context, atomics_string)
-        .ToLocal(&atomics_v)) {
-      return Nothing<bool>();
-    }
-
-    if (atomics_v->IsObject() &&
-        atomics_v.As<Object>()
-          ->Delete(context, wake_string)
-          .IsNothing()) {
-      return Nothing<bool>();
-    }
+  if (per_process::cli_options->disable_proto == "") {
+    return Just(true);
   }
 
   // Remove __proto__
@@ -666,16 +637,44 @@ Maybe<bool> InitializeContextRuntime(Local<Context> context) {
   return Just(true);
 }
 
-Maybe<bool> InitializeContextForSnapshot(Local<Context> context) {
+Maybe<bool> InitializeBaseContextForSnapshot(Local<Context> context) {
   Isolate* isolate = context->GetIsolate();
   HandleScope handle_scope(isolate);
 
-  context->AllowCodeGenerationFromStrings(false);
-  context->SetEmbedderData(
-      ContextEmbedderIndex::kAllowCodeGenerationFromStrings, True(isolate));
+  // Delete `Intl.v8BreakIterator`
+  // https://github.com/nodejs/node/issues/14909
+  {
+    Context::Scope context_scope(context);
+    Local<String> intl_string = FIXED_ONE_BYTE_STRING(isolate, "Intl");
+    Local<String> break_iter_string =
+        FIXED_ONE_BYTE_STRING(isolate, "v8BreakIterator");
+
+    Local<Value> intl_v;
+    if (!context->Global()->Get(context, intl_string).ToLocal(&intl_v)) {
+      return Nothing<bool>();
+    }
+
+    if (intl_v->IsObject() &&
+        intl_v.As<Object>()->Delete(context, break_iter_string).IsNothing()) {
+      return Nothing<bool>();
+    }
+  }
+  return Just(true);
+}
+
+Maybe<bool> InitializeMainContextForSnapshot(Local<Context> context) {
+  Isolate* isolate = context->GetIsolate();
+  HandleScope handle_scope(isolate);
+
+  // Initialize the default values.
   context->SetEmbedderData(ContextEmbedderIndex::kAllowWasmCodeGeneration,
                            True(isolate));
+  context->SetEmbedderData(
+      ContextEmbedderIndex::kAllowCodeGenerationFromStrings, True(isolate));
 
+  if (InitializeBaseContextForSnapshot(context).IsNothing()) {
+    return Nothing<bool>();
+  }
   return InitializePrimordials(context);
 }
 
@@ -722,8 +721,9 @@ Maybe<bool> InitializePrimordials(Local<Context> context) {
   return Just(true);
 }
 
+// This initializes the main context (i.e. vm contexts are not included).
 Maybe<bool> InitializeContext(Local<Context> context) {
-  if (InitializeContextForSnapshot(context).IsNothing()) {
+  if (InitializeMainContextForSnapshot(context).IsNothing()) {
     return Nothing<bool>();
   }
 

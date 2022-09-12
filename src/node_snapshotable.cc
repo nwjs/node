@@ -7,6 +7,7 @@
 #include "env-inl.h"
 #include "node_blob.h"
 #include "node_builtins.h"
+#include "node_contextify.h"
 #include "node_errors.h"
 #include "node_external_reference.h"
 #include "node_file.h"
@@ -31,6 +32,7 @@ using v8::HandleScope;
 using v8::Isolate;
 using v8::Local;
 using v8::Object;
+using v8::ObjectTemplate;
 using v8::ScriptCompiler;
 using v8::ScriptOrigin;
 using v8::SnapshotCreator;
@@ -853,6 +855,16 @@ const SnapshotData* SnapshotBuilder::GetEmbeddedSnapshotData() {
 )";
 }
 
+// Reset context settings that need to be initialized again after
+// deserialization.
+static void ResetContextSettingsBeforeSnapshot(Local<Context> context) {
+  // Reset the AllowCodeGenerationFromStrings flag to true (default value) so
+  // that it can be re-initialized with v8 flag
+  // --disallow-code-generation-from-strings and recognized in
+  // node::InitializeContextRuntime.
+  context->AllowCodeGenerationFromStrings(true);
+}
+
 Mutex SnapshotBuilder::snapshot_data_mutex_;
 
 const std::vector<intptr_t>& SnapshotBuilder::CollectExternalReferences() {
@@ -922,6 +934,19 @@ int SnapshotBuilder::Generate(SnapshotData* out,
     // The default context with only things created by V8.
     Local<Context> default_context = Context::New(isolate);
 
+    // The context used by the vm module.
+    Local<Context> vm_context;
+    {
+      Local<ObjectTemplate> global_template =
+          main_instance->isolate_data()->contextify_global_template();
+      CHECK(!global_template.IsEmpty());
+      if (!contextify::ContextifyContext::CreateV8Context(
+               isolate, global_template, nullptr, nullptr)
+               .ToLocal(&vm_context)) {
+        return SNAPSHOT_ERROR;
+      }
+    }
+
     // The Node.js-specific context with primodials, can be used by workers
     // TODO(joyeecheung): investigate if this can be used by vm contexts
     // without breaking compatibility.
@@ -929,6 +954,7 @@ int SnapshotBuilder::Generate(SnapshotData* out,
     if (base_context.IsEmpty()) {
       return BOOTSTRAP_ERROR;
     }
+    ResetContextSettingsBeforeSnapshot(base_context);
 
     Local<Context> main_context = NewContext(isolate);
     if (main_context.IsEmpty()) {
@@ -997,13 +1023,17 @@ int SnapshotBuilder::Generate(SnapshotData* out,
                            size_str.c_str());
       }
 #endif
+
+      ResetContextSettingsBeforeSnapshot(main_context);
     }
 
     // Global handles to the contexts can't be disposed before the
     // blob is created. So initialize all the contexts before adding them.
     // TODO(joyeecheung): figure out how to remove this restriction.
     creator.SetDefaultContext(default_context);
-    size_t index = creator.AddContext(base_context);
+    size_t index = creator.AddContext(vm_context);
+    CHECK_EQ(index, SnapshotData::kNodeVMContextIndex);
+    index = creator.AddContext(base_context);
     CHECK_EQ(index, SnapshotData::kNodeBaseContextIndex);
     index = creator.AddContext(main_context,
                                {SerializeNodeContextInternalFields, env});

@@ -1006,6 +1006,8 @@
         'openssl_default_cipher_list%': '',
       },
 
+      'cflags': ['-Werror=unused-result'],
+
       'defines': [
         'NODE_ARCH="<(target_arch)"',
         'NODE_PLATFORM="<(OS)"',

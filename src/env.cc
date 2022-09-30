@@ -165,14 +165,17 @@ bool AsyncHooks::pop_async_context(double async_id) {
 }
 
 void AsyncHooks::clear_async_id_stack() {
-  Isolate* isolate = env()->isolate();
-  HandleScope handle_scope(isolate);
-  if (!js_execution_async_resources_.IsEmpty()) {
-    USE(PersistentToLocal::Strong(js_execution_async_resources_)
-            ->Set(env()->context(),
-                  env()->length_string(),
-                  Integer::NewFromUnsigned(isolate, 0)));
+  if (env()->can_call_into_js()) {
+    Isolate* isolate = env()->isolate();
+    HandleScope handle_scope(isolate);
+    if (!js_execution_async_resources_.IsEmpty()) {
+      USE(PersistentToLocal::Strong(js_execution_async_resources_)
+              ->Set(env()->context(),
+                    env()->length_string(),
+                    Integer::NewFromUnsigned(isolate, 0)));
+    }
   }
+
   native_execution_async_resources_.clear();
   native_execution_async_resources_.shrink_to_fit();
 
@@ -706,6 +709,9 @@ Environment::Environment(IsolateData* isolate_data,
   inspector_host_port_ = std::make_shared<ExclusiveAccess<HostPort>>(
       options_->debug_options().host_port);
 
+  heap_snapshot_near_heap_limit_ =
+      static_cast<uint32_t>(options_->heap_snapshot_near_heap_limit);
+
   if (!(flags_ & EnvironmentFlags::kOwnsProcessState)) {
     set_abort_on_uncaught_exception(false);
   }
@@ -824,9 +830,8 @@ Environment::~Environment() {
   // FreeEnvironment() should have set this.
   CHECK(is_stopping());
 
-  if (options_->heap_snapshot_near_heap_limit > heap_limit_snapshot_taken_) {
-    isolate_->RemoveNearHeapLimitCallback(Environment::NearHeapLimitCallback,
-                                          0);
+  if (heapsnapshot_near_heap_limit_callback_added_) {
+    RemoveHeapSnapshotNearHeapLimitCallback(0);
   }
 
   isolate()->GetHeapProfiler()->RemoveBuildEmbedderGraphCallback(
@@ -1029,33 +1034,10 @@ void Environment::RunCleanup() {
   bindings_.clear();
   CleanupHandles();
 
-  while (!cleanup_hooks_.empty() ||
-         native_immediates_.size() > 0 ||
+  while (!cleanup_queue_.empty() || native_immediates_.size() > 0 ||
          native_immediates_threadsafe_.size() > 0 ||
          native_immediates_interrupts_.size() > 0) {
-    // Copy into a vector, since we can't sort an unordered_set in-place.
-    std::vector<CleanupHookCallback> callbacks(
-        cleanup_hooks_.begin(), cleanup_hooks_.end());
-    // We can't erase the copied elements from `cleanup_hooks_` yet, because we
-    // need to be able to check whether they were un-scheduled by another hook.
-
-    std::sort(callbacks.begin(), callbacks.end(),
-              [](const CleanupHookCallback& a, const CleanupHookCallback& b) {
-      // Sort in descending order so that the most recently inserted callbacks
-      // are run first.
-      return a.insertion_order_counter_ > b.insertion_order_counter_;
-    });
-
-    for (const CleanupHookCallback& cb : callbacks) {
-      if (cleanup_hooks_.count(cb) == 0) {
-        // This hook was removed from the `cleanup_hooks_` set during another
-        // hook that was run earlier. Nothing to do here.
-        continue;
-      }
-
-      cb.fn_(cb.arg_);
-      cleanup_hooks_.erase(cb);
-    }
+    cleanup_queue_.Drain();
     CleanupHandles();
   }
 
@@ -1096,7 +1078,13 @@ void Environment::RunAndClearNativeImmediates(bool only_refed) {
   TRACE_EVENT0(TRACING_CATEGORY_NODE1(environment),
                "RunAndClearNativeImmediates");
   HandleScope handle_scope(isolate_);
-  InternalCallbackScope cb_scope(this, Object::New(isolate_), { 0, 0 });
+  // In case the Isolate is no longer accessible just use an empty Local. This
+  // is not an issue for InternalCallbackScope as this case is already handled
+  // in its constructor but we avoid calls into v8 which can crash the process
+  // in debug builds.
+  Local<Object> obj =
+      can_call_into_js() ? Object::New(isolate_) : Local<Object>();
+  InternalCallbackScope cb_scope(this, obj, {0, 0});
 
   size_t ref_count = 0;
 
@@ -1854,10 +1842,6 @@ void Environment::BuildEmbedderGraph(Isolate* isolate,
   MemoryTracker tracker(isolate, graph);
   Environment* env = static_cast<Environment*>(data);
   tracker.Track(env);
-  env->ForEachBaseObject([&](BaseObject* obj) {
-    if (obj->IsDoneInitializing())
-      tracker.Track(obj);
-  });
 }
 
 size_t Environment::NearHeapLimitCallback(void* data,
@@ -1870,7 +1854,7 @@ size_t Environment::NearHeapLimitCallback(void* data,
         "Invoked NearHeapLimitCallback, processing=%d, "
         "current_limit=%" PRIu64 ", "
         "initial_limit=%" PRIu64 "\n",
-        env->is_processing_heap_limit_callback_,
+        env->is_in_heapsnapshot_heap_limit_callback_,
         static_cast<uint64_t>(current_heap_limit),
         static_cast<uint64_t>(initial_heap_limit));
 
@@ -1922,8 +1906,8 @@ size_t Environment::NearHeapLimitCallback(void* data,
   // new limit, so in a heap with unbounded growth the isolate
   // may eventually crash with this new limit - effectively raising
   // the heap limit to the new one.
-  if (env->is_processing_heap_limit_callback_) {
-    size_t new_limit = current_heap_limit + max_young_gen_size;
+  size_t new_limit = current_heap_limit + max_young_gen_size;
+  if (env->is_in_heapsnapshot_heap_limit_callback_) {
     Debug(env,
           DebugCategory::DIAGNOSTICS,
           "Not generating snapshots in nested callback. "
@@ -1939,15 +1923,14 @@ size_t Environment::NearHeapLimitCallback(void* data,
     Debug(env,
           DebugCategory::DIAGNOSTICS,
           "Not generating snapshots because it's too risky.\n");
-    env->isolate()->RemoveNearHeapLimitCallback(NearHeapLimitCallback,
-                                                initial_heap_limit);
+    env->RemoveHeapSnapshotNearHeapLimitCallback(0);
     // The new limit must be higher than current_heap_limit or V8 might
     // crash.
-    return current_heap_limit + 1;
+    return new_limit;
   }
 
   // Take the snapshot synchronously.
-  env->is_processing_heap_limit_callback_ = true;
+  env->is_in_heapsnapshot_heap_limit_callback_ = true;
 
   std::string dir = env->options()->diagnostic_dir;
   if (dir.empty()) {
@@ -1958,19 +1941,21 @@ size_t Environment::NearHeapLimitCallback(void* data,
 
   Debug(env, DebugCategory::DIAGNOSTICS, "Start generating %s...\n", *name);
 
-  // Remove the callback first in case it's triggered when generating
-  // the snapshot.
-  env->isolate()->RemoveNearHeapLimitCallback(NearHeapLimitCallback,
-                                              initial_heap_limit);
-
   heap::WriteSnapshot(env, filename.c_str());
   env->heap_limit_snapshot_taken_ += 1;
 
-  // Don't take more snapshots than the number specified by
-  // --heapsnapshot-near-heap-limit.
-  if (env->heap_limit_snapshot_taken_ <
-      env->options_->heap_snapshot_near_heap_limit) {
-    env->isolate()->AddNearHeapLimitCallback(NearHeapLimitCallback, env);
+  Debug(env,
+        DebugCategory::DIAGNOSTICS,
+        "%" PRIu32 "/%" PRIu32 " snapshots taken.\n",
+        env->heap_limit_snapshot_taken_,
+        env->heap_snapshot_near_heap_limit_);
+
+  // Don't take more snapshots than the limit specified.
+  if (env->heap_limit_snapshot_taken_ == env->heap_snapshot_near_heap_limit_) {
+    Debug(env,
+          DebugCategory::DIAGNOSTICS,
+          "Removing the near heap limit callback");
+    env->RemoveHeapSnapshotNearHeapLimitCallback(0);
   }
 
   FPrintF(stderr, "Wrote snapshot to %s\n", filename.c_str());
@@ -1978,11 +1963,11 @@ size_t Environment::NearHeapLimitCallback(void* data,
   // 95% of the initial limit.
   env->isolate()->AutomaticallyRestoreInitialHeapLimit(0.95);
 
-  env->is_processing_heap_limit_callback_ = false;
+  env->is_in_heapsnapshot_heap_limit_callback_ = false;
 
   // The new limit must be higher than current_heap_limit or V8 might
   // crash.
-  return current_heap_limit + 1;
+  return new_limit;
 }
 
 inline size_t Environment::SelfSize() const {
@@ -1992,6 +1977,7 @@ inline size_t Environment::SelfSize() const {
   // this can be done for common types within the Track* calls automatically
   // if a certain scope is entered.
   size -= sizeof(async_hooks_);
+  size -= sizeof(cleanup_queue_);
   size -= sizeof(tick_info_);
   size -= sizeof(immediate_info_);
   return size;
@@ -2009,8 +1995,7 @@ void Environment::MemoryInfo(MemoryTracker* tracker) const {
   tracker->TrackField("should_abort_on_uncaught_toggle",
                       should_abort_on_uncaught_toggle_);
   tracker->TrackField("stream_base_state", stream_base_state_);
-  tracker->TrackFieldWithSize(
-      "cleanup_hooks", cleanup_hooks_.size() * sizeof(CleanupHookCallback));
+  tracker->TrackField("cleanup_queue", cleanup_queue_);
   tracker->TrackField("async_hooks", async_hooks_);
   tracker->TrackField("immediate_info", immediate_info_);
   tracker->TrackField("tick_info", tick_info_);

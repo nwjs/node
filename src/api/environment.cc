@@ -703,7 +703,7 @@ Maybe<bool> InitializePrimordials(Local<Context> context) {
   for (const char** module = context_files; *module != nullptr; module++) {
     // Arguments must match the parameters specified in
     // BuiltinLoader::LookupAndCompile().
-    Local<Value> arguments[] = {context->Global(), exports, primordials};
+    Local<Value> arguments[] = {exports, primordials};
     MaybeLocal<Function> maybe_fn =
         builtins::BuiltinLoader::LookupAndCompile(context, *module, nullptr);
     Local<Function> fn;
@@ -780,6 +780,7 @@ ThreadId AllocateEnvironmentThreadId() {
 void DefaultProcessExitHandler(Environment* env, int exit_code) {
   env->set_can_call_into_js(false);
   env->stop_sub_worker_contexts();
+  env->isolate()->DumpAndResetStats();
   DisposePlatform();
   uv_library_shutdown();
   exit(exit_code);

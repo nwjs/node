@@ -308,7 +308,7 @@
     [ 'OS=="linux" and component != "shared_library"', {
           'ldflags': [ '-L<(PRODUCT_DIR)/../nw/lib/', '-lnw',
                       '-Wl,--whole-archive',
-                      '<(LIBCXXABI)', '<(LIBCXX)',
+                      '<(LIBCXXABI)',
                       '-Wl,--no-whole-archive'
                      ]
     }],

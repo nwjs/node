@@ -57,7 +57,7 @@
     'v8_postmortem_support%' : 'false',
     'V8_LIBBASE%': '<(PRODUCT_DIR)/../nw/obj/v8/libv8_libbase.a',
     'V8_PLTFRM%': '<(PRODUCT_DIR)/../nw/obj/v8/libv8_libplatform.a',
-    'LIBCXX%': '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libc++.a',
+    'LIBCXX%': '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libcpp.a',
     'LIBCXXABI%': '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++abi/libc++abi.a',
     'library_files': [
 'lib/constants.js',

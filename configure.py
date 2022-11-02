@@ -57,6 +57,11 @@ valid_intl_modes = ('none', 'small-icu', 'full-icu', 'system-icu')
 with open ('tools/icu/icu_versions.json') as f:
   icu_versions = json.load(f)
 
+shareable_builtins = {'cjs_module_lexer/lexer': 'deps/cjs-module-lexer/lexer.js',
+                     'cjs_module_lexer/dist/lexer': 'deps/cjs-module-lexer/dist/lexer.js',
+                     'undici/undici': 'deps/undici/undici.js'
+}
+
 # create option groups
 shared_optgroup = parser.add_argument_group("Shared libraries",
     "Flags that allows you to control whether you want to build against "
@@ -70,6 +75,9 @@ intl_optgroup = parser.add_argument_group("Internationalization",
     "library you want to build against.")
 http2_optgroup = parser.add_argument_group("HTTP2",
     "Flags that allows you to control HTTP2 features in Node.js")
+shared_builtin_optgroup = parser.add_argument_group("Shared builtins",
+    "Flags that allows you to control whether you want to build against "
+    "internal builtins or shared files.")
 
 # Options should be in alphabetical order but keep --prefix at the top,
 # that's arguably the one people will be looking for most.
@@ -422,17 +430,22 @@ shared_optgroup.add_argument('--shared-cares-libpath',
 
 parser.add_argument_group(shared_optgroup)
 
+for builtin in shareable_builtins:
+  builtin_id = 'shared_builtin_' + builtin + '_path'
+  shared_builtin_optgroup.add_argument('--shared-builtin-' + builtin + '-path',
+    action='store',
+    dest='node_shared_builtin_' + builtin.replace('/', '_') + '_path',
+    help='Path to shared file for ' + builtin + ' builtin. '
+         'Will be used instead of bundled version at runtime')
+
+parser.add_argument_group(shared_builtin_optgroup)
+
 static_optgroup.add_argument('--static-zoslib-gyp',
     action='store',
     dest='static_zoslib_gyp',
     help='path to zoslib.gyp file for includes and to link to static zoslib libray')
 
 parser.add_argument_group(static_optgroup)
-
-parser.add_argument('--systemtap-includes',
-    action='store',
-    dest='systemtap_includes',
-    help='directory containing systemtap header files')
 
 parser.add_argument('--tag',
     action='store',
@@ -512,18 +525,6 @@ parser.add_argument('--with-mips-float-abi',
     choices=valid_mips_float_abi,
     help='MIPS floating-point ABI ({0}) [default: %(default)s]'.format(
         ', '.join(valid_mips_float_abi)))
-
-parser.add_argument('--with-dtrace',
-    action='store_true',
-    dest='with_dtrace',
-    default=None,
-    help='build with DTrace (default is true on sunos and darwin)')
-
-parser.add_argument('--with-etw',
-    action='store_true',
-    dest='with_etw',
-    default=None,
-    help='build with ETW (default is true on Windows)')
 
 parser.add_argument('--use-largepages',
     action='store_true',
@@ -632,18 +633,6 @@ http2_optgroup.add_argument('--debug-nghttp2',
     help='build nghttp2 with DEBUGBUILD (default is false)')
 
 parser.add_argument_group(http2_optgroup)
-
-parser.add_argument('--without-dtrace',
-    action='store_true',
-    dest='without_dtrace',
-    default=None,
-    help='build without DTrace')
-
-parser.add_argument('--without-etw',
-    action='store_true',
-    dest='without_etw',
-    default=None,
-    help='build without ETW')
 
 parser.add_argument('--without-npm',
     action='store_true',
@@ -1323,22 +1312,6 @@ def configure_node(o):
 
   o['variables']['enable_lto'] = b(options.enable_lto)
 
-  if flavor in ('solaris', 'mac', 'linux', 'freebsd'):
-    use_dtrace = not options.without_dtrace
-    # Don't enable by default on linux and freebsd
-    if flavor in ('linux', 'freebsd'):
-      use_dtrace = options.with_dtrace
-
-    if flavor == 'linux':
-      if options.systemtap_includes:
-        o['include_dirs'] += [options.systemtap_includes]
-    o['variables']['node_use_dtrace'] = b(use_dtrace)
-  elif options.with_dtrace:
-    raise Exception(
-       'DTrace is currently only supported on SunOS, MacOS or Linux systems.')
-  else:
-    o['variables']['node_use_dtrace'] = 'false'
-
   if options.node_use_large_pages or options.node_use_large_pages_script_lld:
     warn('''The `--use-largepages` and `--use-largepages-script-lld` options
          have no effect during build time. Support for mapping to large pages is
@@ -1348,14 +1321,6 @@ def configure_node(o):
 
   if options.no_ifaddrs:
     o['defines'] += ['SUNOS_NO_IFADDRS']
-
-  # By default, enable ETW on Windows.
-  if flavor == 'win':
-    o['variables']['node_use_etw'] = b(not options.without_etw)
-  elif options.with_etw:
-    raise Exception('ETW is only supported on Windows.')
-  else:
-    o['variables']['node_use_etw'] = 'false'
 
   o['variables']['node_with_ltcg'] = b(options.with_ltcg)
   if flavor != 'win' and options.with_ltcg:
@@ -2012,6 +1977,19 @@ configure_intl(output)
 configure_static(output)
 configure_inspector(output)
 configure_section_file(output)
+
+# configure shareable builtins
+output['variables']['node_builtin_shareable_builtins'] = []
+for builtin in shareable_builtins:
+  builtin_id = 'node_shared_builtin_' + builtin.replace('/', '_') + '_path'
+  if getattr(options, builtin_id):
+    if options.with_intl == 'none':
+      option_name = '--shared-builtin-' + builtin + '-path'
+      error(option_name + ' is incompatible with --with-intl=none' )
+    else:
+      output['defines'] += [builtin_id.upper() + '=' + getattr(options, builtin_id)]
+  else:
+    output['variables']['node_builtin_shareable_builtins'] += [shareable_builtins[builtin]]
 
 # Forward OSS-Fuzz settings
 output['variables']['ossfuzz'] = b(options.ossfuzz)

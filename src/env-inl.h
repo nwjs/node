@@ -31,6 +31,7 @@
 #include "node_context_data.h"
 #include "node_internals.h"
 #include "node_perf_common.h"
+#include "node_realm-inl.h"
 #include "util-inl.h"
 #include "uv.h"
 #include "v8.h"
@@ -624,15 +625,7 @@ inline void Environment::set_can_call_into_js(bool can_call_into_js) {
 }
 
 inline bool Environment::has_run_bootstrapping_code() const {
-  return has_run_bootstrapping_code_;
-}
-
-inline void Environment::DoneBootstrapping() {
-  has_run_bootstrapping_code_ = true;
-  // This adjusts the return value of base_object_created_after_bootstrap() so
-  // that tests that check the count do not have to account for internally
-  // created BaseObjects.
-  base_object_created_by_bootstrap_ = base_object_count_;
+  return principal_realm_->has_run_bootstrapping_code();
 }
 
 inline bool Environment::has_serialized_options() const {
@@ -665,7 +658,8 @@ inline bool Environment::owns_inspector() const {
 }
 
 inline bool Environment::should_create_inspector() const {
-  return (flags_ & EnvironmentFlags::kNoCreateInspector) == 0;
+  return (flags_ & EnvironmentFlags::kNoCreateInspector) == 0 &&
+         !options_->test_runner && !options_->watch_mode;
 }
 
 inline bool Environment::tracks_unmanaged_fds() const {
@@ -761,6 +755,12 @@ inline IsolateData* Environment::isolate_data() const {
   return isolate_data_;
 }
 
+template <typename T>
+inline void Environment::ForEachRealm(T&& iterator) const {
+  // TODO(legendecas): iterate over more realms bound to the environment.
+  iterator(principal_realm());
+}
+
 inline void Environment::ThrowError(const char* errmsg) {
   ThrowError(v8::Exception::Error, errmsg);
 }
@@ -805,41 +805,13 @@ void Environment::RemoveCleanupHook(CleanupQueue::Callback fn, void* arg) {
   cleanup_queue_.Remove(fn, arg);
 }
 
-template <typename T>
-void Environment::ForEachBaseObject(T&& iterator) {
-  cleanup_queue_.ForEachBaseObject(std::forward<T>(iterator));
-}
-
-template <typename T>
-void Environment::ForEachBindingData(T&& iterator) {
-  BindingDataStore* map = static_cast<BindingDataStore*>(
-      context()->GetAlignedPointerFromEmbedderData(
-          ContextEmbedderIndex::kBindingListIndex));
-  DCHECK_NOT_NULL(map);
-  for (auto& it : *map) {
-    iterator(it.first, it.second);
-  }
-}
-
-void Environment::modify_base_object_count(int64_t delta) {
-  base_object_count_ += delta;
-}
-
-int64_t Environment::base_object_created_after_bootstrap() const {
-  return base_object_count_ - base_object_created_by_bootstrap_;
-}
-
-int64_t Environment::base_object_count() const {
-  return base_object_count_;
-}
-
 void Environment::set_main_utf16(std::unique_ptr<v8::String::Value> str) {
   CHECK(!main_utf16_);
   main_utf16_ = std::move(str);
 }
 
 void Environment::set_process_exit_handler(
-    std::function<void(Environment*, int)>&& handler) {
+    std::function<void(Environment*, ExitCode)>&& handler) {
   process_exit_handler_ = std::move(handler);
 }
 
@@ -897,16 +869,22 @@ void Environment::set_process_exit_handler(
 
 #define V(PropertyName, TypeName)                                              \
   inline v8::Local<TypeName> Environment::PropertyName() const {               \
-    return PersistentToLocal::Strong(PropertyName##_);                         \
+    DCHECK_NOT_NULL(principal_realm_);                                         \
+    return principal_realm_->PropertyName();                                   \
   }                                                                            \
   inline void Environment::set_##PropertyName(v8::Local<TypeName> value) {     \
-    PropertyName##_.Reset(isolate(), value);                                   \
+    DCHECK_NOT_NULL(principal_realm_);                                         \
+    principal_realm_->set_##PropertyName(value);                               \
   }
-  ENVIRONMENT_STRONG_PERSISTENT_VALUES(V)
+  PER_REALM_STRONG_PERSISTENT_VALUES(V)
 #undef V
 
 v8::Local<v8::Context> Environment::context() const {
-  return PersistentToLocal::Strong(context_);
+  return principal_realm()->context();
+}
+
+Realm* Environment::principal_realm() const {
+  return principal_realm_.get();
 }
 
 inline void Environment::set_heap_snapshot_near_heap_limit(uint32_t limit) {

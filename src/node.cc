@@ -36,6 +36,7 @@
 #include "node_options-inl.h"
 #include "node_perf.h"
 #include "node_process-inl.h"
+#include "node_realm-inl.h"
 #include "node_report.h"
 #include "node_revert.h"
 #include "node_snapshot_builder.h"
@@ -59,10 +60,6 @@
 #if HAVE_INSPECTOR
 #include "inspector_agent.h"
 #include "inspector_io.h"
-#endif
-
-#if defined HAVE_DTRACE || defined HAVE_ETW
-#include "node_dtrace.h"
 #endif
 
 #if NODE_USE_V8_PLATFORM
@@ -138,13 +135,10 @@ namespace node {
 using builtins::BuiltinLoader;
 
 using v8::EscapableHandleScope;
-using v8::Function;
 using v8::Isolate;
 using v8::Local;
 using v8::MaybeLocal;
 using v8::Object;
-using v8::String;
-using v8::Undefined;
 using v8::V8;
 using v8::Value;
 
@@ -190,38 +184,8 @@ void SignalExit(int signo, siginfo_t* info, void* ucontext) {
 }
 #endif  // __POSIX__
 
-MaybeLocal<Value> ExecuteBootstrapper(Environment* env,
-                                      const char* id,
-                                      std::vector<Local<Value>>* arguments) {
-  EscapableHandleScope scope(env->isolate());
-  MaybeLocal<Function> maybe_fn =
-      BuiltinLoader::LookupAndCompile(env->context(), id, env);
-
-  Local<Function> fn;
-  if (!maybe_fn.ToLocal(&fn)) {
-    return MaybeLocal<Value>();
-  }
-
-  MaybeLocal<Value> result = fn->Call(env->context(),
-                                      Undefined(env->isolate()),
-                                      arguments->size(),
-                                      arguments->data());
-
-  // If there was an error during bootstrap, it must be unrecoverable
-  // (e.g. max call stack exceeded). Clear the stack so that the
-  // AsyncCallbackScope destructor doesn't fail on the id check.
-  // There are only two ways to have a stack size > 1: 1) the user manually
-  // called MakeCallback or 2) user awaited during bootstrap, which triggered
-  // _tickCallback().
-  if (result.IsEmpty()) {
-    env->async_hooks()->clear_async_id_stack();
-  }
-
-  return scope.EscapeMaybe(result);
-}
-
 #if HAVE_INSPECTOR
-int Environment::InitializeInspector(
+ExitCode Environment::InitializeInspector(
     std::unique_ptr<inspector::ParentInspectorHandle> parent_handle) {
   std::string inspector_path;
   bool is_main = !parent_handle;
@@ -242,7 +206,7 @@ int Environment::InitializeInspector(
                           is_main);
   if (options_->debug_options().inspector_enabled &&
       !inspector_agent_->IsListening()) {
-    return 12;  // Signal internal error
+    return ExitCode::kInvalidCommandLineArgument2;  // Signal internal error
   }
 
   profiler::StartProfilers(this);
@@ -251,7 +215,7 @@ int Environment::InitializeInspector(
     inspector_agent_->PauseOnNextJavascriptStatement("Break at bootstrap");
   }
 
-  return 0;
+  return ExitCode::kNoFailure;
 }
 #endif  // HAVE_INSPECTOR
 
@@ -308,145 +272,15 @@ void Environment::InitializeDiagnostics() {
       env->isolate()->SetAtomicsWaitCallback(nullptr, nullptr);
     }, this);
   }
-
-#if defined HAVE_DTRACE || defined HAVE_ETW
-  InitDTrace(this);
-#endif
-}
-
-MaybeLocal<Value> Environment::BootstrapInternalLoaders() {
-  EscapableHandleScope scope(isolate_);
-
-  // Arguments must match the parameters specified in
-  // BuiltinLoader::LookupAndCompile().
-  std::vector<Local<Value>> loaders_args = {
-      process_object(),
-      NewFunctionTemplate(isolate_, binding::GetLinkedBinding)
-          ->GetFunction(context())
-          .ToLocalChecked(),
-      NewFunctionTemplate(isolate_, binding::GetInternalBinding)
-          ->GetFunction(context())
-          .ToLocalChecked(),
-      primordials()};
-
-  // Bootstrap internal loaders
-  Local<Value> loader_exports;
-  if (!ExecuteBootstrapper(this, "internal/bootstrap/loaders", &loaders_args)
-           .ToLocal(&loader_exports)) {
-    return MaybeLocal<Value>();
-  }
-  CHECK(loader_exports->IsObject());
-  Local<Object> loader_exports_obj = loader_exports.As<Object>();
-  Local<Value> internal_binding_loader =
-      loader_exports_obj->Get(context(), internal_binding_string())
-          .ToLocalChecked();
-  CHECK(internal_binding_loader->IsFunction());
-  set_internal_binding_loader(internal_binding_loader.As<Function>());
-  Local<Value> require =
-      loader_exports_obj->Get(context(), require_string()).ToLocalChecked();
-  CHECK(require->IsFunction());
-  set_builtin_module_require(require.As<Function>());
-
-  return scope.Escape(loader_exports);
-}
-
-MaybeLocal<Value> Environment::BootstrapNode() {
-  EscapableHandleScope scope(isolate_);
-
-  // Arguments must match the parameters specified in
-  // BuiltinLoader::LookupAndCompile().
-  // process, require, internalBinding, primordials
-  std::vector<Local<Value>> node_args = {process_object(),
-                                         builtin_module_require(),
-                                         internal_binding_loader(),
-                                         primordials()};
-
-  MaybeLocal<Value> result =
-      ExecuteBootstrapper(this, "internal/bootstrap/node", &node_args);
-
-  if (result.IsEmpty()) {
-    return MaybeLocal<Value>();
-  }
-
-  if (!no_browser_globals()) {
-    result =
-        ExecuteBootstrapper(this, "internal/bootstrap/browser", &node_args);
-
-    if (result.IsEmpty()) {
-      return MaybeLocal<Value>();
-    }
-  }
-
-  // TODO(joyeecheung): skip these in the snapshot building for workers.
-  auto thread_switch_id =
-      is_main_thread() ? "internal/bootstrap/switches/is_main_thread"
-                       : "internal/bootstrap/switches/is_not_main_thread";
-  result = ExecuteBootstrapper(this, thread_switch_id, &node_args);
-
-  if (result.IsEmpty()) {
-    return MaybeLocal<Value>();
-  }
-
-  auto process_state_switch_id =
-      owns_process_state()
-          ? "internal/bootstrap/switches/does_own_process_state"
-          : "internal/bootstrap/switches/does_not_own_process_state";
-  result = ExecuteBootstrapper(this, process_state_switch_id, &node_args);
-
-  if (result.IsEmpty()) {
-    return MaybeLocal<Value>();
-  }
-
-  Local<String> env_string = FIXED_ONE_BYTE_STRING(isolate_, "env");
-  Local<Object> env_var_proxy;
-  if (!CreateEnvVarProxy(context(), isolate_).ToLocal(&env_var_proxy) ||
-      process_object()->Set(context(), env_string, env_var_proxy).IsNothing()) {
-    return MaybeLocal<Value>();
-  }
-
-  return scope.EscapeMaybe(result);
-}
-
-MaybeLocal<Value> Environment::RunBootstrapping() {
-  EscapableHandleScope scope(isolate_);
-
-  CHECK(!has_run_bootstrapping_code());
-
-  if (BootstrapInternalLoaders().IsEmpty()) {
-    return MaybeLocal<Value>();
-  }
-
-  Local<Value> result;
-  if (!BootstrapNode().ToLocal(&result)) {
-    return MaybeLocal<Value>();
-  }
-
-  // Make sure that no request or handle is created during bootstrap -
-  // if necessary those should be done in pre-execution.
-  // Usually, doing so would trigger the checks present in the ReqWrap and
-  // HandleWrap classes, so this is only a consistency check.
-  CHECK(req_wrap_queue()->IsEmpty());
-  CHECK(handle_wrap_queue()->IsEmpty());
-
-  DoneBootstrapping();
-
-  return scope.Escape(result);
 }
 
 static
 MaybeLocal<Value> StartExecution(Environment* env, const char* main_script_id) {
   EscapableHandleScope scope(env->isolate());
   CHECK_NOT_NULL(main_script_id);
+  Realm* realm = env->principal_realm();
 
-  // Arguments must match the parameters specified in
-  // BuiltinLoader::LookupAndCompile().
-  std::vector<Local<Value>> arguments = {env->process_object(),
-                                         env->builtin_module_require(),
-                                         env->internal_binding_loader(),
-                                         env->primordials()};
-
-  return scope.EscapeMaybe(
-      ExecuteBootstrapper(env, main_script_id, &arguments));
+  return scope.EscapeMaybe(realm->ExecuteBootstrapper(main_script_id));
 }
 
 MaybeLocal<Value> StartExecution(Environment* env, StartExecutionCallback cb) {
@@ -514,6 +348,10 @@ MaybeLocal<Value> StartExecution(Environment* env, StartExecutionCallback cb) {
 
   if (env->options()->test_runner) {
     return StartExecution(env, "internal/main/test_runner");
+  }
+
+  if (env->options()->watch_mode && !first_argv.empty()) {
+    return StartExecution(env, "internal/main/watch_mode");
   }
 
   if ((!first_argv.empty() && first_argv != "-") || node_is_nwjs) {
@@ -592,37 +430,8 @@ static struct {
 } stdio[1 + STDERR_FILENO];
 #endif  // __POSIX__
 
-
-inline void PlatformInit() {
+void ResetSignalHandlers() {
 #ifdef __POSIX__
-#if HAVE_INSPECTOR
-  sigset_t sigmask;
-  sigemptyset(&sigmask);
-  sigaddset(&sigmask, SIGUSR1);
-  const int err = pthread_sigmask(SIG_SETMASK, &sigmask, nullptr);
-#endif  // HAVE_INSPECTOR
-
-  // Make sure file descriptors 0-2 are valid before we start logging anything.
-  for (auto& s : stdio) {
-    const int fd = &s - stdio;
-    if (fstat(fd, &s.stat) == 0)
-      continue;
-    // Anything but EBADF means something is seriously wrong.  We don't
-    // have to special-case EINTR, fstat() is not interruptible.
-    if (errno != EBADF)
-      ABORT();
-    if (fd != open("/dev/null", O_RDWR))
-      ABORT();
-    if (fstat(fd, &s.stat) != 0)
-      ABORT();
-  }
-
-#if HAVE_INSPECTOR
-  CHECK_EQ(err, 0);
-#endif  // HAVE_INSPECTOR
-
-  // TODO(addaleax): NODE_SHARED_MODE does not really make sense here.
-#ifndef NODE_SHARED_MODE
   // Restore signal dispositions, the parent process may have changed them.
   struct sigaction act;
   memset(&act, 0, sizeof(act));
@@ -636,94 +445,150 @@ inline void PlatformInit() {
     act.sa_handler = (nr == SIGPIPE || nr == SIGXFSZ) ? SIG_IGN : SIG_DFL;
     CHECK_EQ(0, sigaction(nr, &act, nullptr));
   }
-#endif  // !NODE_SHARED_MODE
+#endif  // __POSIX__
+}
 
-  // Record the state of the stdio file descriptors so we can restore it
-  // on exit.  Needs to happen before installing signal handlers because
-  // they make use of that information.
-  for (auto& s : stdio) {
-    const int fd = &s - stdio;
-    int err;
+static std::atomic<uint64_t> init_process_flags = 0;
 
-    do
-      s.flags = fcntl(fd, F_GETFL);
-    while (s.flags == -1 && errno == EINTR);  // NOLINT
-    CHECK_NE(s.flags, -1);
+static void PlatformInit(ProcessInitializationFlags::Flags flags) {
+  // init_process_flags is accessed in ResetStdio(),
+  // which can be called from signal handlers.
+  CHECK(init_process_flags.is_lock_free());
+  init_process_flags.store(flags);
 
-    if (uv_guess_handle(fd) != UV_TTY) continue;
-    s.isatty = true;
-
-    do
-      err = tcgetattr(fd, &s.termios);
-    while (err == -1 && errno == EINTR);  // NOLINT
-    CHECK_EQ(err, 0);
+  if (!(flags & ProcessInitializationFlags::kNoStdioInitialization)) {
+    atexit(ResetStdio);
   }
 
-  RegisterSignalHandler(SIGINT, SignalExit, true);
-  RegisterSignalHandler(SIGTERM, SignalExit, true);
+#ifdef __POSIX__
+  if (!(flags & ProcessInitializationFlags::kNoStdioInitialization)) {
+    // Disable stdio buffering, it interacts poorly with printf()
+    // calls elsewhere in the program (e.g., any logging from V8.)
+    setvbuf(stdout, nullptr, _IONBF, 0);
+    setvbuf(stderr, nullptr, _IONBF, 0);
+
+    // Make sure file descriptors 0-2 are valid before we start logging
+    // anything.
+    for (auto& s : stdio) {
+      const int fd = &s - stdio;
+      if (fstat(fd, &s.stat) == 0) continue;
+      // Anything but EBADF means something is seriously wrong.  We don't
+      // have to special-case EINTR, fstat() is not interruptible.
+      if (errno != EBADF) ABORT();
+      if (fd != open("/dev/null", O_RDWR)) ABORT();
+      if (fstat(fd, &s.stat) != 0) ABORT();
+    }
+  }
+
+  if (!(flags & ProcessInitializationFlags::kNoDefaultSignalHandling)) {
+#if HAVE_INSPECTOR
+    sigset_t sigmask;
+    sigemptyset(&sigmask);
+    sigaddset(&sigmask, SIGUSR1);
+    const int err = pthread_sigmask(SIG_SETMASK, &sigmask, nullptr);
+    CHECK_EQ(err, 0);
+#endif  // HAVE_INSPECTOR
+
+    ResetSignalHandlers();
+  }
+
+  if (!(flags & ProcessInitializationFlags::kNoStdioInitialization)) {
+    // Record the state of the stdio file descriptors so we can restore it
+    // on exit.  Needs to happen before installing signal handlers because
+    // they make use of that information.
+    for (auto& s : stdio) {
+      const int fd = &s - stdio;
+      int err;
+
+      do {
+        s.flags = fcntl(fd, F_GETFL);
+      } while (s.flags == -1 && errno == EINTR);  // NOLINT
+      CHECK_NE(s.flags, -1);
+
+      if (uv_guess_handle(fd) != UV_TTY) continue;
+      s.isatty = true;
+
+      do {
+        err = tcgetattr(fd, &s.termios);
+      } while (err == -1 && errno == EINTR);  // NOLINT
+      CHECK_EQ(err, 0);
+    }
+  }
+
+  if (!(flags & ProcessInitializationFlags::kNoDefaultSignalHandling)) {
+    RegisterSignalHandler(SIGINT, SignalExit, true);
+    RegisterSignalHandler(SIGTERM, SignalExit, true);
 
 #if NODE_USE_V8_WASM_TRAP_HANDLER
 #if defined(_WIN32)
-  {
-    constexpr ULONG first = TRUE;
-    per_process::old_vectored_exception_handler =
-        AddVectoredExceptionHandler(first, TrapWebAssemblyOrContinue);
-  }
-#else
-  // Tell V8 to disable emitting WebAssembly
-  // memory bounds checks. This means that we have
-  // to catch the SIGSEGV in TrapWebAssemblyOrContinue
-  // and pass the signal context to V8.
-  {
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_sigaction = TrapWebAssemblyOrContinue;
-    sa.sa_flags = SA_SIGINFO;
-    CHECK_EQ(sigaction(SIGSEGV, &sa, nullptr), 0);
-  }
-#endif  // defined(_WIN32)
-  V8::EnableWebAssemblyTrapHandler(false);
-#endif  // NODE_USE_V8_WASM_TRAP_HANDLER
-
-  // Raise the open file descriptor limit.
-  struct rlimit lim;
-  if (getrlimit(RLIMIT_NOFILE, &lim) == 0 && lim.rlim_cur != lim.rlim_max) {
-    // Do a binary search for the limit.
-    rlim_t min = lim.rlim_cur;
-    rlim_t max = 1 << 20;
-    // But if there's a defined upper bound, don't search, just set it.
-    if (lim.rlim_max != RLIM_INFINITY) {
-      min = lim.rlim_max;
-      max = lim.rlim_max;
+    {
+      constexpr ULONG first = TRUE;
+      per_process::old_vectored_exception_handler =
+          AddVectoredExceptionHandler(first, TrapWebAssemblyOrContinue);
     }
-    do {
-      lim.rlim_cur = min + (max - min) / 2;
-      if (setrlimit(RLIMIT_NOFILE, &lim)) {
-        max = lim.rlim_cur;
-      } else {
-        min = lim.rlim_cur;
+#else
+    // Tell V8 to disable emitting WebAssembly
+    // memory bounds checks. This means that we have
+    // to catch the SIGSEGV in TrapWebAssemblyOrContinue
+    // and pass the signal context to V8.
+    {
+      struct sigaction sa;
+      memset(&sa, 0, sizeof(sa));
+      sa.sa_sigaction = TrapWebAssemblyOrContinue;
+      sa.sa_flags = SA_SIGINFO;
+      CHECK_EQ(sigaction(SIGSEGV, &sa, nullptr), 0);
+    }
+#endif  // defined(_WIN32)
+    V8::EnableWebAssemblyTrapHandler(false);
+#endif  // NODE_USE_V8_WASM_TRAP_HANDLER
+  }
+
+  if (!(flags & ProcessInitializationFlags::kNoAdjustResourceLimits)) {
+    // Raise the open file descriptor limit.
+    struct rlimit lim;
+    if (getrlimit(RLIMIT_NOFILE, &lim) == 0 && lim.rlim_cur != lim.rlim_max) {
+      // Do a binary search for the limit.
+      rlim_t min = lim.rlim_cur;
+      rlim_t max = 1 << 20;
+      // But if there's a defined upper bound, don't search, just set it.
+      if (lim.rlim_max != RLIM_INFINITY) {
+        min = lim.rlim_max;
+        max = lim.rlim_max;
       }
-    } while (min + 1 < max);
+      do {
+        lim.rlim_cur = min + (max - min) / 2;
+        if (setrlimit(RLIMIT_NOFILE, &lim)) {
+          max = lim.rlim_cur;
+        } else {
+          min = lim.rlim_cur;
+        }
+      } while (min + 1 < max);
+    }
   }
 #endif  // __POSIX__
 #ifdef _WIN32
-  for (int fd = 0; fd <= 2; ++fd) {
-    auto handle = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
-    if (handle == INVALID_HANDLE_VALUE ||
-        GetFileType(handle) == FILE_TYPE_UNKNOWN) {
-      // Ignore _close result. If it fails or not depends on used Windows
-      // version. We will just check _open result.
-      _close(fd);
-      if (fd != _open("nul", _O_RDWR))
-        ABORT();
+  if (!(flags & ProcessInitializationFlags::kNoStdioInitialization)) {
+    for (int fd = 0; fd <= 2; ++fd) {
+      auto handle = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+      if (handle == INVALID_HANDLE_VALUE ||
+          GetFileType(handle) == FILE_TYPE_UNKNOWN) {
+        // Ignore _close result. If it fails or not depends on used Windows
+        // version. We will just check _open result.
+        _close(fd);
+        if (fd != _open("nul", _O_RDWR)) ABORT();
+      }
     }
   }
 #endif  // _WIN32
 }
 
-
 // Safe to call more than once and from signal handlers.
 void ResetStdio() {
+  if (init_process_flags.load() &
+      ProcessInitializationFlags::kNoStdioInitialization) {
+    return;
+  }
+
   uv_tty_reset_mode();
 #ifdef __POSIX__
   for (auto& s : stdio) {
@@ -780,11 +645,10 @@ void ResetStdio() {
 #endif  // __POSIX__
 }
 
-
-int ProcessGlobalArgs(std::vector<std::string>* args,
-                      std::vector<std::string>* exec_args,
-                      std::vector<std::string>* errors,
-                      OptionEnvvarSettings settings) {
+static ExitCode ProcessGlobalArgsInternal(std::vector<std::string>* args,
+                                          std::vector<std::string>* exec_args,
+                                          std::vector<std::string>* errors,
+                                          OptionEnvvarSettings settings) {
   // Parse a few arguments which are specific to Node.
   std::vector<std::string> v8_args;
 
@@ -797,14 +661,15 @@ int ProcessGlobalArgs(std::vector<std::string>* args,
       settings,
       errors);
 
-  if (!errors->empty()) return 9;
+  if (!errors->empty()) return ExitCode::kInvalidCommandLineArgument;
 
   std::string revert_error;
   for (const std::string& cve : per_process::cli_options->security_reverts) {
     Revert(cve.c_str(), &revert_error);
     if (!revert_error.empty()) {
       errors->emplace_back(std::move(revert_error));
-      return 12;
+      // TODO(joyeecheung): merge into kInvalidCommandLineArgument.
+      return ExitCode::kInvalidCommandLineArgument2;
     }
   }
 
@@ -812,7 +677,8 @@ int ProcessGlobalArgs(std::vector<std::string>* args,
       per_process::cli_options->disable_proto != "throw" &&
       per_process::cli_options->disable_proto != "") {
     errors->emplace_back("invalid mode passed to --disable-proto");
-    return 12;
+    // TODO(joyeecheung): merge into kInvalidCommandLineArgument.
+    return ExitCode::kInvalidCommandLineArgument2;
   }
 
   // TODO(aduh95): remove this when the harmony-import-assertions flag
@@ -852,24 +718,29 @@ int ProcessGlobalArgs(std::vector<std::string>* args,
   for (size_t i = 1; i < v8_args_as_char_ptr.size(); i++)
     errors->push_back("bad option: " + std::string(v8_args_as_char_ptr[i]));
 
-  if (v8_args_as_char_ptr.size() > 1) return 9;
+  if (v8_args_as_char_ptr.size() > 1)
+    return ExitCode::kInvalidCommandLineArgument;
 
-  return 0;
+  return ExitCode::kNoFailure;
+}
+
+int ProcessGlobalArgs(std::vector<std::string>* args,
+                      std::vector<std::string>* exec_args,
+                      std::vector<std::string>* errors,
+                      OptionEnvvarSettings settings) {
+  return static_cast<int>(
+      ProcessGlobalArgsInternal(args, exec_args, errors, settings));
 }
 
 static std::atomic_bool init_called{false};
 
-int InitializeNodeWithArgs(std::vector<std::string>* argv,
-                           std::vector<std::string>* exec_argv,
-                           std::vector<std::string>* errors) {
-  return InitializeNodeWithArgs(argv, exec_argv, errors,
-                                ProcessFlags::kNoFlags);
-}
-
-int InitializeNodeWithArgs(std::vector<std::string>* argv,
-                           std::vector<std::string>* exec_argv,
-                           std::vector<std::string>* errors,
-                           ProcessFlags::Flags flags) {
+// TODO(addaleax): Turn this into a wrapper around InitializeOncePerProcess()
+// (with the corresponding additional flags set), then eventually remove this.
+static ExitCode InitializeNodeWithArgsInternal(
+    std::vector<std::string>* argv,
+    std::vector<std::string>* exec_argv,
+    std::vector<std::string>* errors,
+    ProcessInitializationFlags::Flags flags) {
   // Make sure InitializeNodeWithArgs() is called only once.
   CHECK(!init_called.exchange(true));
 
@@ -881,13 +752,20 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
 
   if (!node_is_nwjs) {
   // Make inherited handles noninheritable.
-  if (!(flags & ProcessFlags::kEnableStdioInheritance))
+  if (!(flags & ProcessInitializationFlags::kEnableStdioInheritance) &&
+      !(flags & ProcessInitializationFlags::kNoStdioInitialization)) {
     uv_disable_stdio_inheritance();
+  }
   } //node_is_nwjs
 
   // Cache the original command line to be
   // used in diagnostic reports.
   per_process::cli_options->cmdline = *argv;
+
+  // Node provides a "v8.setFlagsFromString" method to dynamically change flags.
+  // Hence do not freeze flags when initializing V8. In a browser setting, this
+  // is security relevant, for Node it's less important.
+  V8::SetFlagsFromString("--no-freeze-flags-after-init");
 
 #if defined(NODE_V8_OPTIONS)
   // Should come before the call to V8::SetFlagsFromCommandLine()
@@ -899,33 +777,29 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
   HandleEnvOptions(per_process::cli_options->per_isolate->per_env);
 
 #if !defined(NODE_WITHOUT_NODE_OPTIONS)
-  if (!(flags & ProcessFlags::kDisableNodeOptionsEnv)) {
+  if (!(flags & ProcessInitializationFlags::kDisableNodeOptionsEnv)) {
     std::string node_options;
 
     if (credentials::SafeGetenv("NODE_OPTIONS", &node_options)) {
       std::vector<std::string> env_argv =
           ParseNodeOptionsEnvVar(node_options, errors);
 
-      if (!errors->empty()) return 9;
+      if (!errors->empty()) return ExitCode::kInvalidCommandLineArgument;
 
       // [0] is expected to be the program name, fill it in from the real argv.
       env_argv.insert(env_argv.begin(), argv->at(0));
 
-      const int exit_code = ProcessGlobalArgs(&env_argv,
-                                              nullptr,
-                                              errors,
-                                              kAllowedInEnvironment);
-      if (exit_code != 0) return exit_code;
+      const ExitCode exit_code = ProcessGlobalArgsInternal(
+          &env_argv, nullptr, errors, kAllowedInEnvironment);
+      if (exit_code != ExitCode::kNoFailure) return exit_code;
     }
   }
 #endif
 
-  if (!(flags & ProcessFlags::kDisableCLIOptions)) {
-    const int exit_code = ProcessGlobalArgs(argv,
-                                            exec_argv,
-                                            errors,
-                                            kDisallowedInEnvironment);
-    if (exit_code != 0) return exit_code;
+  if (!(flags & ProcessInitializationFlags::kDisableCLIOptions)) {
+    const ExitCode exit_code = ProcessGlobalArgsInternal(
+        argv, exec_argv, errors, kDisallowedInEnvironment);
+    if (exit_code != ExitCode::kNoFailure) return exit_code;
   }
 
   // Set the process.title immediately after processing argv if --title is set.
@@ -933,7 +807,7 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
     uv_set_process_title(per_process::cli_options->title.c_str());
 
 #if 0 //defined(NODE_HAVE_I18N_SUPPORT)
-  if (!(flags & ProcessFlags::kNoICU)) {
+  if (!(flags & ProcessInitializationFlags::kNoICU)) {
     // If the parameter isn't given, use the env variable.
     if (per_process::cli_options->icu_data_dir.empty())
       credentials::SafeGetenv("NODE_ICU_DATA",
@@ -962,7 +836,7 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
     if (!i18n::InitializeICUDirectory(per_process::cli_options->icu_data_dir)) {
       errors->push_back("could not initialize ICU "
                         "(check NODE_ICU_DATA or --icu-data-dir parameters)\n");
-      return 9;
+      return ExitCode::kInvalidCommandLineArgument;
     }
     per_process::metadata.versions.InitializeIntlVersions();
   }
@@ -980,7 +854,7 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
   // otherwise embedders using node::Init to initialize everything will not be
   // able to set it and native addons will not load for them.
   node_is_initialized = true;
-  return 0;
+  return ExitCode::kNoFailure;
 }
 
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
@@ -1092,82 +966,87 @@ void StartupDataHandler::Load(const char* blob_file,
 #endif  // V8_USE_EXTERNAL_STARTUP_DATA
 
 
-InitializationResult InitializeOncePerProcess(int argc, char** argv) {
-  return InitializeOncePerProcess(argc, argv, kDefaultInitialization);
+int InitializeNodeWithArgs(std::vector<std::string>* argv,
+                           std::vector<std::string>* exec_argv,
+                           std::vector<std::string>* errors,
+                           ProcessInitializationFlags::Flags flags) {
+  return static_cast<int>(
+      InitializeNodeWithArgsInternal(argv, exec_argv, errors, flags));
 }
 
-InitializationResult InitializeOncePerProcess(
-  int argc,
-  char** argv,
-  InitializationSettingsFlags flags,
-  ProcessFlags::Flags process_flags) {
-  uint64_t init_flags = flags;
-  if (init_flags & kDefaultInitialization) {
-    init_flags = init_flags | kInitializeV8 | kInitOpenSSL | kRunPlatformInit;
+static std::unique_ptr<InitializationResultImpl>
+InitializeOncePerProcessInternal(const std::vector<std::string>& args,
+                                 ProcessInitializationFlags::Flags flags =
+                                     ProcessInitializationFlags::kNoFlags) {
+  auto result = std::make_unique<InitializationResultImpl>();
+  result->args_ = args;
+
+  if (!(flags & ProcessInitializationFlags::kNoParseGlobalDebugVariables)) {
+    // Initialized the enabled list for Debug() calls with system
+    // environment variables.
+    per_process::enabled_debug_list.Parse();
   }
 
-  // Initialized the enabled list for Debug() calls with system
-  // environment variables.
-  per_process::enabled_debug_list.Parse();
-
-  atexit(ResetStdio);
-
-  if (init_flags & kRunPlatformInit)
-    PlatformInit();
-
-  CHECK_GT(argc, 0);
-
-  // Hack around with the argv pointer. Used for process.title = "blah".
-  argv = uv_setup_args(argc, argv);
-
-  InitializationResult result;
-  result.args = std::vector<std::string>(argv, argv + argc);
-  std::vector<std::string> errors;
+  PlatformInit(flags);
 
   // This needs to run *before* V8::Initialize().
   {
-    result.exit_code = InitializeNodeWithArgs(
-        &(result.args), &(result.exec_args), &errors, process_flags);
-    for (const std::string& error : errors)
-      fprintf(stderr, "%s: %s\n", result.args.at(0).c_str(), error.c_str());
-    if (result.exit_code != 0) {
-      result.early_return = true;
+    result->exit_code_ = InitializeNodeWithArgsInternal(
+        &result->args_, &result->exec_args_, &result->errors_, flags);
+    if (result->exit_code_enum() != ExitCode::kNoFailure) {
+      result->early_return_ = true;
       return result;
     }
   }
 
-  if (false) { //per_process::cli_options->use_largepages == "on" ||
-    //per_process::cli_options->use_largepages == "silent") {
-    int result = node::MapStaticCodeToLargePages();
-    if (per_process::cli_options->use_largepages == "on" && result != 0) {
-      fprintf(stderr, "%s\n", node::LargePagesError(result));
+  if (false) { //!(flags & ProcessInitializationFlags::kNoUseLargePages) &&
+    //      (per_process::cli_options->use_largepages == "on" ||
+    //   per_process::cli_options->use_largepages == "silent")) {
+    int lp_result = node::MapStaticCodeToLargePages();
+    if (per_process::cli_options->use_largepages == "on" && lp_result != 0) {
+      result->errors_.emplace_back(node::LargePagesError(lp_result));
     }
   }
 
-  if (per_process::cli_options->print_version) {
-    printf("%s\n", NODE_VERSION);
-    result.exit_code = 0;
-    result.early_return = true;
-    return result;
+  if (!(flags & ProcessInitializationFlags::kNoPrintHelpOrVersionOutput)) {
+    if (per_process::cli_options->print_version) {
+      printf("%s\n", NODE_VERSION);
+      result->exit_code_ = ExitCode::kNoFailure;
+      result->early_return_ = true;
+      return result;
+    }
+
+    if (per_process::cli_options->print_bash_completion) {
+      std::string completion = options_parser::GetBashCompletion();
+      printf("%s\n", completion.c_str());
+      result->exit_code_ = ExitCode::kNoFailure;
+      result->early_return_ = true;
+      return result;
+    }
+
+    if (per_process::cli_options->print_v8_help) {
+      V8::SetFlagsFromString("--help", static_cast<size_t>(6));
+      result->exit_code_ = ExitCode::kNoFailure;
+      result->early_return_ = true;
+      return result;
+    }
   }
 
-  if (per_process::cli_options->print_bash_completion) {
-    std::string completion = options_parser::GetBashCompletion();
-    printf("%s\n", completion.c_str());
-    result.exit_code = 0;
-    result.early_return = true;
-    return result;
-  }
-
-  if (per_process::cli_options->print_v8_help) {
-    V8::SetFlagsFromString("--help", static_cast<size_t>(6));
-    result.exit_code = 0;
-    result.early_return = true;
-    return result;
-  }
-
-  if (init_flags & kInitOpenSSL) {
+  if (!(flags & ProcessInitializationFlags::kNoInitOpenSSL)) {
 #if HAVE_OPENSSL && !defined(OPENSSL_IS_BORINGSSL)
+    auto GetOpenSSLErrorString = []() -> std::string {
+      std::string ret;
+      ERR_print_errors_cb(
+          [](const char* str, size_t len, void* opaque) {
+            std::string* ret = static_cast<std::string*>(opaque);
+            ret->append(str, len);
+            ret->append("\n");
+            return 0;
+          },
+          static_cast<void*>(&ret));
+      return ret;
+    };
+
     {
       std::string extra_ca_certs;
       if (credentials::SafeGetenv("NODE_EXTRA_CA_CERTS", &extra_ca_certs))
@@ -1222,10 +1101,13 @@ InitializationResult InitializeOncePerProcess(
     OPENSSL_INIT_free(settings);
 
     if (ERR_peek_error() != 0) {
-      result.exit_code = ERR_GET_REASON(ERR_peek_error());
-      result.early_return = true;
-      fprintf(stderr, "OpenSSL configuration error:\n");
-      ERR_print_errors_fp(stderr);
+      // XXX: ERR_GET_REASON does not return something that is
+      // useful as an exit code at all.
+      result->exit_code_ =
+          static_cast<ExitCode>(ERR_GET_REASON(ERR_peek_error()));
+      result->early_return_ = true;
+      result->errors_.emplace_back("OpenSSL configuration error:\n" +
+                                   GetOpenSSLErrorString());
       return result;
     }
 #else  // OPENSSL_VERSION_MAJOR < 3
@@ -1234,10 +1116,14 @@ InitializationResult InitializeOncePerProcess(
     }
 #endif
     if (!crypto::ProcessFipsOptions()) {
-      result.exit_code = ERR_GET_REASON(ERR_peek_error());
-      result.early_return = true;
-      fprintf(stderr, "OpenSSL error when trying to enable FIPS:\n");
-      ERR_print_errors_fp(stderr);
+      // XXX: ERR_GET_REASON does not return something that is
+      // useful as an exit code at all.
+      result->exit_code_ =
+          static_cast<ExitCode>(ERR_GET_REASON(ERR_peek_error()));
+      result->early_return_ = true;
+      result->errors_.emplace_back(
+          "OpenSSL error when trying to enable FIPS:\n" +
+          GetOpenSSLErrorString());
       return result;
     }
 
@@ -1256,23 +1142,28 @@ InitializationResult InitializeOncePerProcess(
   }
 
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
+  std::string argv0 = args[0];
   //StartupDataHandler startup_data(argv[0], nullptr, nullptr);
 #if defined(__APPLE__)
   V8::InitializeExternalStartupData(g_native_blob_path);
 #else
-  V8::InitializeExternalStartupData(argv[0]);
+  V8::InitializeExternalStartupData(argv0.c_str());
 #endif
 #endif
-  V8::InitializeICUDefaultLocation(argv[0]);
+  V8::InitializeICUDefaultLocation(argv0.c_str());
   UErrorCode err = U_ZERO_ERROR;
   void* icu_data = V8::RawICUData();
   if (icu_data)
     udata_setCommonData((uint8_t*)icu_data, &err);
 
-  per_process::v8_platform.Initialize(
-      static_cast<int>(per_process::cli_options->v8_thread_pool_size));
 
-  if (init_flags & kInitializeV8) {
+  if (!(flags & ProcessInitializationFlags::kNoInitializeNodeV8Platform)) {
+    per_process::v8_platform.Initialize(
+        static_cast<int>(per_process::cli_options->v8_thread_pool_size));
+    result->platform_ = per_process::v8_platform.Platform();
+  }
+
+  if (!(flags & ProcessInitializationFlags::kNoInitializeV8)) {
     V8::Initialize();
   }
 
@@ -1282,31 +1173,54 @@ InitializationResult InitializeOncePerProcess(
   return result;
 }
 
-void TearDownOncePerProcess() {
-  per_process::v8_initialized = false;
-  V8::Dispose();
-
-#if NODE_USE_V8_WASM_TRAP_HANDLER && defined(_WIN32)
-  RemoveVectoredExceptionHandler(per_process::old_vectored_exception_handler);
-#endif
-
-  // uv_run cannot be called from the time before the beforeExit callback
-  // runs until the program exits unless the event loop has any referenced
-  // handles after beforeExit terminates. This prevents unrefed timers
-  // that happen to terminate during shutdown from being run unsafely.
-  // Since uv_run cannot be called, uv_async handles held by the platform
-  // will never be fully cleaned up.
-  per_process::v8_platform.Dispose();
+std::unique_ptr<InitializationResult> InitializeOncePerProcess(
+    const std::vector<std::string>& args,
+    ProcessInitializationFlags::Flags flags) {
+  return InitializeOncePerProcessInternal(args, flags);
 }
 
-int GenerateAndWriteSnapshotData(const SnapshotData** snapshot_data_ptr,
-                                 InitializationResult* result) {
+void TearDownOncePerProcess() {
+  const uint64_t flags = init_process_flags.load();
+  ResetStdio();
+  if (!(flags & ProcessInitializationFlags::kNoDefaultSignalHandling)) {
+    ResetSignalHandlers();
+  }
+
+  per_process::v8_initialized = false;
+  if (!(flags & ProcessInitializationFlags::kNoInitializeV8)) {
+    V8::Dispose();
+  }
+
+#if NODE_USE_V8_WASM_TRAP_HANDLER && defined(_WIN32)
+  if (!(flags & ProcessInitializationFlags::kNoDefaultSignalHandling)) {
+    RemoveVectoredExceptionHandler(per_process::old_vectored_exception_handler);
+  }
+#endif
+
+  if (!(flags & ProcessInitializationFlags::kNoInitializeNodeV8Platform)) {
+    V8::DisposePlatform();
+    // uv_run cannot be called from the time before the beforeExit callback
+    // runs until the program exits unless the event loop has any referenced
+    // handles after beforeExit terminates. This prevents unrefed timers
+    // that happen to terminate during shutdown from being run unsafely.
+    // Since uv_run cannot be called, uv_async handles held by the platform
+    // will never be fully cleaned up.
+    per_process::v8_platform.Dispose();
+  }
+}
+
+InitializationResult::~InitializationResult() {}
+InitializationResultImpl::~InitializationResultImpl() {}
+
+ExitCode GenerateAndWriteSnapshotData(const SnapshotData** snapshot_data_ptr,
+                                      const InitializationResultImpl* result) {
+  ExitCode exit_code = result->exit_code_enum();
   // nullptr indicates there's no snapshot data.
   DCHECK_NULL(*snapshot_data_ptr);
 
   // node:embedded_snapshot_main indicates that we are using the
   // embedded snapshot and we are not supposed to clean it up.
-  if (result->args[1] == "node:embedded_snapshot_main") {
+  if (result->args()[1] == "node:embedded_snapshot_main") {
     *snapshot_data_ptr = SnapshotBuilder::GetEmbeddedSnapshotData();
     if (*snapshot_data_ptr == nullptr) {
       // The Node.js binary is built without embedded snapshot
@@ -1314,19 +1228,20 @@ int GenerateAndWriteSnapshotData(const SnapshotData** snapshot_data_ptr,
               "node:embedded_snapshot_main was specified as snapshot "
               "entry point but Node.js was built without embedded "
               "snapshot.\n");
-      result->exit_code = 1;
-      return result->exit_code;
+      // TODO(joyeecheung): should be kInvalidCommandLineArgument instead.
+      exit_code = ExitCode::kGenericUserError;
+      return exit_code;
     }
   } else {
     // Otherwise, load and run the specified main script.
     std::unique_ptr<SnapshotData> generated_data =
         std::make_unique<SnapshotData>();
-    result->exit_code = node::SnapshotBuilder::Generate(
-        generated_data.get(), result->args, result->exec_args);
-    if (result->exit_code == 0) {
+    exit_code = node::SnapshotBuilder::Generate(
+        generated_data.get(), result->args(), result->exec_args());
+    if (exit_code == ExitCode::kNoFailure) {
       *snapshot_data_ptr = generated_data.release();
     } else {
-      return result->exit_code;
+      return exit_code;
     }
   }
 
@@ -1347,13 +1262,15 @@ int GenerateAndWriteSnapshotData(const SnapshotData** snapshot_data_ptr,
     fprintf(stderr,
             "Cannot open %s for writing a snapshot.\n",
             snapshot_blob_path.c_str());
-    result->exit_code = 1;
+    // TODO(joyeecheung): should be kStartupSnapshotFailure.
+    exit_code = ExitCode::kGenericUserError;
   }
-  return result->exit_code;
+  return exit_code;
 }
 
-int LoadSnapshotDataAndRun(const SnapshotData** snapshot_data_ptr,
-                           InitializationResult* result) {
+ExitCode LoadSnapshotDataAndRun(const SnapshotData** snapshot_data_ptr,
+                                const InitializationResultImpl* result) {
+  ExitCode exit_code = result->exit_code_enum();
   // nullptr indicates there's no snapshot data.
   DCHECK_NULL(*snapshot_data_ptr);
   // --snapshot-blob indicates that we are reading a customized snapshot.
@@ -1362,17 +1279,29 @@ int LoadSnapshotDataAndRun(const SnapshotData** snapshot_data_ptr,
     FILE* fp = fopen(filename.c_str(), "rb");
     if (fp == nullptr) {
       fprintf(stderr, "Cannot open %s", filename.c_str());
-      result->exit_code = 1;
-      return result->exit_code;
+      // TODO(joyeecheung): should be kStartupSnapshotFailure.
+      exit_code = ExitCode::kGenericUserError;
+      return exit_code;
     }
     std::unique_ptr<SnapshotData> read_data = std::make_unique<SnapshotData>();
-    SnapshotData::FromBlob(read_data.get(), fp);
+    if (!SnapshotData::FromBlob(read_data.get(), fp)) {
+      // If we fail to read the customized snapshot, simply exit with 1.
+      // TODO(joyeecheung): should be kStartupSnapshotFailure.
+      exit_code = ExitCode::kGenericUserError;
+      return exit_code;
+    }
     *snapshot_data_ptr = read_data.release();
     fclose(fp);
   } else if (per_process::cli_options->node_snapshot) {
     // If --snapshot-blob is not specified, we are reading the embedded
     // snapshot, but we will skip it if --no-node-snapshot is specified.
-    *snapshot_data_ptr = SnapshotBuilder::GetEmbeddedSnapshotData();
+    const node::SnapshotData* read_data =
+        SnapshotBuilder::GetEmbeddedSnapshotData();
+    if (read_data != nullptr && read_data->Check()) {
+      // If we fail to read the embedded snapshot, treat it as if Node.js
+      // was built without one.
+      *snapshot_data_ptr = read_data;
+    }
   }
 
   if (false && (*snapshot_data_ptr) != nullptr) {
@@ -1381,19 +1310,29 @@ int LoadSnapshotDataAndRun(const SnapshotData** snapshot_data_ptr,
   NodeMainInstance main_instance(*snapshot_data_ptr,
                                  uv_default_loop(),
                                  per_process::v8_platform.Platform(),
-                                 result->args,
-                                 result->exec_args);
-  result->exit_code = main_instance.Run();
-  return result->exit_code;
+                                 result->args(),
+                                 result->exec_args());
+  exit_code = main_instance.Run();
+  return exit_code;
 }
 
-int Start(int argc, char** argv) {
-  InitializationResult result = InitializeOncePerProcess(argc, argv);
-  if (result.early_return) {
-    return result.exit_code;
+static ExitCode StartInternal(int argc, char** argv) {
+  CHECK_GT(argc, 0);
+
+  // Hack around with the argv pointer. Used for process.title = "blah".
+  argv = uv_setup_args(argc, argv);
+
+  std::unique_ptr<InitializationResultImpl> result =
+      InitializeOncePerProcessInternal(
+          std::vector<std::string>(argv, argv + argc));
+  for (const std::string& error : result->errors()) {
+    FPrintF(stderr, "%s: %s\n", result->args().at(0), error);
+  }
+  if (result->early_return()) {
+    return result->exit_code_enum();
   }
 
-  DCHECK_EQ(result.exit_code, 0);
+  DCHECK_EQ(result->exit_code_enum(), ExitCode::kNoFailure);
   const SnapshotData* snapshot_data = nullptr;
 
   auto cleanup_process = OnScopeLeave([&]() {
@@ -1409,17 +1348,21 @@ int Start(int argc, char** argv) {
 
   // --build-snapshot indicates that we are in snapshot building mode.
   if (per_process::cli_options->build_snapshot) {
-    if (result.args.size() < 2) {
+    if (result->args().size() < 2) {
       fprintf(stderr,
               "--build-snapshot must be used with an entry point script.\n"
               "Usage: node --build-snapshot /path/to/entry.js\n");
-      return 9;
+      return ExitCode::kInvalidCommandLineArgument;
     }
-    return GenerateAndWriteSnapshotData(&snapshot_data, &result);
+    return GenerateAndWriteSnapshotData(&snapshot_data, result.get());
   }
 
   // Without --build-snapshot, we are in snapshot loading mode.
-  return LoadSnapshotDataAndRun(&snapshot_data, &result);
+  return LoadSnapshotDataAndRun(&snapshot_data, result.get());
+}
+
+int Start(int argc, char** argv) {
+  return static_cast<int>(StartInternal(argc, argv));
 }
 
 int Stop(Environment* env) {

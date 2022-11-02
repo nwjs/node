@@ -1,10 +1,14 @@
+#include <cstdlib>
 #include "node.h"
 #include "node_builtins.h"
 #include "node_context_data.h"
 #include "node_errors.h"
+#include "node_exit_code.h"
 #include "node_internals.h"
 #include "node_options-inl.h"
 #include "node_platform.h"
+#include "node_realm-inl.h"
+#include "node_shadow_realm.h"
 #include "node_v8_platform-inl.h"
 #include "node_wasm_web_api.h"
 #include "uv.h"
@@ -272,6 +276,12 @@ void SetIsolateMiscHandlers(v8::Isolate* isolate, const IsolateSettings& s) {
     isolate->SetWasmStreamingCallback(wasm_web_api::StartStreamingCompilation);
   }
 
+  if (per_process::cli_options->get_per_isolate_options()
+          ->experimental_shadow_realm) {
+    isolate->SetHostCreateShadowRealmContextCallback(
+        shadow_realm::HostCreateShadowRealmContextCallback);
+  }
+
 #if 0
   if ((s.flags & SHOULD_NOT_SET_PROMISE_REJECTION_CALLBACK) == 0) {
     auto* promise_reject_cb = s.promise_reject_callback ?
@@ -372,6 +382,7 @@ Environment* CreateEnvironment(
   Environment* env = new Environment(
       isolate_data, context, args, exec_args, nullptr, flags, thread_id);
 #if HAVE_INSPECTOR
+  // TODO(joyeecheung): handle the exit code returned by InitializeInspector().
   if (env->should_create_inspector()) {
     if (inspector_parent_handle) {
       env->InitializeInspector(
@@ -383,7 +394,7 @@ Environment* CreateEnvironment(
   }
 #endif
 
-  if (env->RunBootstrapping().IsEmpty()) {
+  if (env->principal_realm()->RunBootstrapping().IsEmpty()) {
     FreeEnvironment(env);
     return nullptr;
   }
@@ -458,11 +469,9 @@ MaybeLocal<Value> LoadEnvironment(
         builtins::BuiltinLoader::Add(
             name.c_str(), UnionBytes(**main_utf16, main_utf16->length()));
         env->set_main_utf16(std::move(main_utf16));
-        // Arguments must match the parameters specified in
-        // BuiltinLoader::LookupAndCompile().
-        std::vector<Local<Value>> args = {env->process_object(),
-                                          env->builtin_module_require()};
-        return ExecuteBootstrapper(env, name.c_str(), &args);
+        Realm* realm = env->principal_realm();
+
+        return realm->ExecuteBootstrapper(name.c_str());
       });
 }
 
@@ -701,19 +710,11 @@ Maybe<bool> InitializePrimordials(Local<Context> context) {
                                         nullptr};
 
   for (const char** module = context_files; *module != nullptr; module++) {
-    // Arguments must match the parameters specified in
-    // BuiltinLoader::LookupAndCompile().
     Local<Value> arguments[] = {exports, primordials};
-    MaybeLocal<Function> maybe_fn =
-        builtins::BuiltinLoader::LookupAndCompile(context, *module, nullptr);
-    Local<Function> fn;
-    if (!maybe_fn.ToLocal(&fn)) {
-      return Nothing<bool>();
-    }
-    MaybeLocal<Value> result =
-        fn->Call(context, Undefined(isolate), arraysize(arguments), arguments);
-    // Execution failed during context creation.
-    if (result.IsEmpty()) {
+    if (builtins::BuiltinLoader::CompileAndCall(
+            context, *module, arraysize(arguments), arguments, nullptr)
+            .IsEmpty()) {
+      // Execution failed during context creation.
       return Nothing<bool>();
     }
   }
@@ -777,19 +778,34 @@ ThreadId AllocateEnvironmentThreadId() {
   return ThreadId { next_thread_id++ };
 }
 
-void DefaultProcessExitHandler(Environment* env, int exit_code) {
+[[noreturn]] void Exit(ExitCode exit_code) {
+  exit(static_cast<int>(exit_code));
+}
+
+void DefaultProcessExitHandlerInternal(Environment* env, ExitCode exit_code) {
   env->set_can_call_into_js(false);
   env->stop_sub_worker_contexts();
   env->isolate()->DumpAndResetStats();
   DisposePlatform();
   uv_library_shutdown();
-  exit(exit_code);
+  Exit(exit_code);
 }
 
+void DefaultProcessExitHandler(Environment* env, int exit_code) {
+  DefaultProcessExitHandlerInternal(env, static_cast<ExitCode>(exit_code));
+}
+
+void SetProcessExitHandler(
+    Environment* env, std::function<void(Environment*, ExitCode)>&& handler) {
+  env->set_process_exit_handler(std::move(handler));
+}
 
 void SetProcessExitHandler(Environment* env,
                            std::function<void(Environment*, int)>&& handler) {
-  env->set_process_exit_handler(std::move(handler));
+  auto movedHandler = std::move(handler);
+  env->set_process_exit_handler([=](Environment* env, ExitCode exit_code) {
+    movedHandler(env, static_cast<int>(exit_code));
+  });
 }
 
 }  // namespace node

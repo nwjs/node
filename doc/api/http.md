@@ -301,7 +301,9 @@ removed from the array on `'timeout'`.
 <!-- YAML
 added: v0.11.4
 changes:
-  - version: v17.7.0
+  - version:
+    - v17.7.0
+    - v16.15.0
     pr-url: https://github.com/nodejs/node/pull/41906
     description: The `options` parameter is now optional.
 -->
@@ -1309,8 +1311,9 @@ type other than {net.Socket}.
 
 Default behavior is to try close the socket with a HTTP '400 Bad Request',
 or a HTTP '431 Request Header Fields Too Large' in the case of a
-[`HPE_HEADER_OVERFLOW`][] error. If the socket is not writable or has already
-written data it is immediately destroyed.
+[`HPE_HEADER_OVERFLOW`][] error. If the socket is not writable or headers
+of the current attached [`http.ServerResponse`][] has been sent, it is
+immediately destroyed.
 
 `socket` is the [`net.Socket`][] object that the error originated from.
 
@@ -1411,7 +1414,9 @@ type other than {net.Socket}.
 ### Event: `'dropRequest'`
 
 <!-- YAML
-added: v18.7.0
+added:
+  - v18.7.0
+  - v16.17.0
 -->
 
 * `request` {http.IncomingMessage} Arguments for the HTTP request, as it is in
@@ -1465,11 +1470,20 @@ type other than {net.Socket}.
 
 <!-- YAML
 added: v0.1.90
+changes:
+  - version:
+      - v19.0.0
+    pr-url: https://github.com/nodejs/node/pull/43522
+    description: The method closes idle connections before returning.
+
 -->
 
 * `callback` {Function}
 
-Stops the server from accepting new connections. See [`net.Server.close()`][].
+Stops the server from accepting new connections and closes all connections
+connected to this server which are not sending a request or waiting for
+a response.
+See [`net.Server.close()`][].
 
 ### `server.closeAllConnections()`
 
@@ -2120,9 +2134,49 @@ buffer. Returns `false` if all or part of the data was queued in user memory.
 added: v0.3.0
 -->
 
-Sends a HTTP/1.1 100 Continue message to the client, indicating that
+Sends an HTTP/1.1 100 Continue message to the client, indicating that
 the request body should be sent. See the [`'checkContinue'`][] event on
 `Server`.
+
+### `response.writeEarlyHints(hints[, callback])`
+
+<!-- YAML
+added: v18.11.0
+changes:
+  - version: v18.11.0
+    pr-url: https://github.com/nodejs/node/pull/44820
+    description: Allow passing hints as an object.
+-->
+
+* `hints` {Object}
+* `callback` {Function}
+
+Sends an HTTP/1.1 103 Early Hints message to the client with a Link header,
+indicating that the user agent can preload/preconnect the linked resources.
+The `hints` is an object containing the values of headers to be sent with
+early hints message. The optional `callback` argument will be called when
+the response message has been written.
+
+**Example**
+
+```js
+const earlyHintsLink = '</styles.css>; rel=preload; as=style';
+response.writeEarlyHints({
+  'link': earlyHintsLink,
+});
+
+const earlyHintsLinks = [
+  '</styles.css>; rel=preload; as=style',
+  '</scripts.js>; rel=preload; as=script',
+];
+response.writeEarlyHints({
+  'link': earlyHintsLinks,
+  'x-trace-id': 'id for diagnostics'
+});
+
+const earlyHintsCallback = () => console.log('early hints message sent');
+response.writeEarlyHints(earlyHintsLinks, earlyHintsCallback);
+```
 
 ### `response.writeHead(statusCode[, statusMessage][, headers])`
 
@@ -2388,7 +2442,9 @@ header name:
 ### `message.headersDistinct`
 
 <!-- YAML
-added: v18.3.0
+added:
+  - v18.3.0
+  - v16.17.0
 -->
 
 * {Object}
@@ -2540,7 +2596,9 @@ The request/response trailers object. Only populated at the `'end'` event.
 ### `message.trailersDistinct`
 
 <!-- YAML
-added: v18.3.0
+added:
+  - v18.3.0
+  - v16.17.0
 -->
 
 * {Object}
@@ -2663,7 +2721,9 @@ will result in a `TypeError` being thrown.
 ### `outgoingMessage.appendHeader(name, value)`
 
 <!-- YAML
-added: v18.3.0
+added:
+  - v18.3.0
+  - v16.17.0
 -->
 
 * `name` {string} Header name
@@ -3037,7 +3097,9 @@ changes:
   - version: v18.0.0
     pr-url: https://github.com/nodejs/node/pull/42163
     description: The `noDelay` option now defaults to `true`.
-  - version: v17.7.0
+  - version:
+    - v17.7.0
+    - v16.15.0
     pr-url: https://github.com/nodejs/node/pull/41310
     description: The `noDelay`, `keepAlive` and `keepAliveInitialDelay`
                  options are supported now.
@@ -3228,6 +3290,11 @@ server.listen(8000);
 
 <!-- YAML
 added: v0.5.9
+changes:
+  - version:
+      - v19.0.0
+    pr-url: https://github.com/nodejs/node/pull/43522
+    description: The agent now uses HTTP Keep-Alive by default.
 -->
 
 * {http.Agent}
@@ -3622,7 +3689,9 @@ try {
 ## `http.setMaxIdleHTTPParsers`
 
 <!-- YAML
-added: v18.8.0
+added:
+  - v18.8.0
+  - v16.18.0
 -->
 
 * {number}

@@ -217,7 +217,10 @@ class ChannelImpl final : public v8_inspector::V8Inspector::Channel,
                        bool prevent_shutdown)
       : delegate_(std::move(delegate)), prevent_shutdown_(prevent_shutdown),
         retaining_context_(false) {
-    session_ = inspector->connect(CONTEXT_GROUP_ID, this, StringView());
+    session_ = inspector->connect(CONTEXT_GROUP_ID,
+                                  this,
+                                  StringView(),
+                                  V8Inspector::ClientTrustLevel::kFullyTrusted);
     node_dispatcher_ = std::make_unique<protocol::UberDispatcher>(this);
     tracing_agent_ =
         std::make_unique<protocol::TracingAgent>(env, main_thread_);
@@ -676,6 +679,9 @@ bool Agent::Start(const std::string& path,
                   const DebugOptions& options,
                   std::shared_ptr<ExclusiveAccess<HostPort>> host_port,
                   bool is_main) {
+  if (!options.allow_attaching_debugger) {
+    return false;
+  }
   path_ = path;
   debug_options_ = options;
   CHECK_NOT_NULL(host_port);

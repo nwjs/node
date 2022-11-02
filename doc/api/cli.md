@@ -341,22 +341,6 @@ when `Error.stack` is accessed. If you access `Error.stack` frequently
 in your application, take into account the performance implications
 of `--enable-source-maps`.
 
-### `--experimental-global-customevent`
-
-<!-- YAML
-added: v18.7.0
--->
-
-Expose the [CustomEvent Web API][] on the global scope.
-
-### `--experimental-global-webcrypto`
-
-<!-- YAML
-added: v17.6.0
--->
-
-Expose the [Web Crypto API][] on the global scope.
-
 ### `--experimental-import-meta-resolve`
 
 <!-- YAML
@@ -384,7 +368,9 @@ Specify the `module` of a custom experimental [ECMAScript module loader][].
 ### `--experimental-network-imports`
 
 <!-- YAML
-added: v17.6.0
+added:
+  - v17.6.0
+  - v16.15.0
 -->
 
 > Stability: 1 - Experimental
@@ -407,30 +393,37 @@ added: v18.0.0
 
 Disable experimental support for the [Fetch API][].
 
+### `--no-experimental-global-webcrypto`
+
+<!-- YAML
+added: v19.0.0
+-->
+
+Disable exposition of [Web Crypto API][] on the global scope.
+
+### `--no-experimental-global-customevent`
+
+<!-- YAML
+added: v19.0.0
+-->
+
+Disable exposition of [CustomEvent Web API][] on the global scope.
+
 ### `--no-experimental-repl-await`
 
 <!-- YAML
 added: v16.6.0
- -->
+-->
 
 Use this flag to disable top-level await in REPL.
 
-### `--experimental-specifier-resolution=mode`
+### `--experimental-shadow-realm`
 
 <!-- YAML
-added:
- - v13.4.0
- - v12.16.0
+added: v19.0.0
 -->
 
-Sets the resolution algorithm for resolving ES module specifiers. Valid options
-are `explicit` and `node`.
-
-The default is `explicit`, which requires providing the full path to a
-module. The `node` mode enables support for optional file extensions and
-the ability to import a directory that has an index file.
-
-See [customizing ESM specifier resolution][] for example usage.
+Use this flag to enable [ShadowRealm][] support.
 
 ### `--experimental-vm-modules`
 
@@ -494,12 +487,15 @@ Only the root context is supported. There is no guarantee that
 `globalThis.Array` is indeed the default intrinsic reference. Code may break
 under this flag.
 
-To allow polyfills to be added, `--require` runs before freezing intrinsics.
+To allow polyfills to be added,
+[`--require`][] and [`--import`][] both run before freezing intrinsics.
 
 ### `--force-node-api-uncaught-exceptions-policy`
 
 <!-- YAML
-added: v18.3.0
+added:
+  - v18.3.0
+  - v16.17.0
 -->
 
 Enforces `uncaughtException` event on Node-API asynchronous callbacks.
@@ -642,6 +638,20 @@ added: v0.11.15
 -->
 
 Specify ICU data load path. (Overrides `NODE_ICU_DATA`.)
+
+### `--import=module`
+
+<!-- YAML
+added: v19.0.0
+-->
+
+> Stability: 1 - Experimental
+
+Preload the specified module at startup.
+
+Follows [ECMAScript module][] resolution rules.
+Use [`--require`][] to load a [CommonJS module][].
+Modules preloaded with `--require` will run before modules preloaded with `--import`.
 
 ### `--input-type=type`
 
@@ -845,7 +855,9 @@ against FIPS-enabled OpenSSL.
 ### `--openssl-shared-config`
 
 <!-- YAML
-added: v18.5.0
+added:
+  - v18.5.0
+  - v16.17.0
 -->
 
 Enable OpenSSL default configuration section, `openssl_conf` to be read from
@@ -860,7 +872,9 @@ Node.js which is `nodejs_conf` and is default when this option is not used.
 ### `--openssl-legacy-provider`
 
 <!-- YAML
-added: v17.0.0
+added:
+  - v17.0.0
+  - v16.17.0
 -->
 
 Enable OpenSSL 3.0 legacy provider. For more information please see
@@ -956,7 +970,7 @@ however, for backward compatibility with older Node.js versions.
 `--preserve-symlinks` when it is not desirable to follow symlinks before
 resolving relative paths.
 
-See `--preserve-symlinks` for more information.
+See [`--preserve-symlinks`][] for more information.
 
 ### `--prof`
 
@@ -1107,7 +1121,9 @@ Default signal is `SIGUSR2`.
 <!-- YAML
 added: v11.8.0
 changes:
-  - version: v18.8.0
+  - version:
+      - v18.8.0
+      - v16.18.0
     pr-url: https://github.com/nodejs/node/pull/44208
     description: Report is not generated if the uncaught exception is handled.
   - version:
@@ -1177,20 +1193,43 @@ in the current working directory.
 When used without `--build-snapshot`, `--snapshot-blob` specifies the
 path to the blob that will be used to restore the application state.
 
+When loading a snapshot, Node.js checks that:
+
+1. The version, architecture and platform of the running Node.js binary
+   are exactly the same as that of the binary that generates the snapshot.
+2. The V8 flags and CPU features are compatible with that of the binary
+   that generates the snapshot.
+
+If they don't match, Node.js would refuse to load the snapshot and exit with 1.
+
 ### `--test`
 
 <!-- YAML
-added: v18.1.0
+added:
+  - v18.1.0
+  - v16.17.0
 -->
 
 Starts the Node.js command line test runner. This flag cannot be combined with
 `--check`, `--eval`, `--interactive`, or the inspector. See the documentation
 on [running tests from the command line][] for more details.
 
+### `--test-name-pattern`
+
+<!-- YAML
+added: v18.11.0
+-->
+
+A regular expression that configures the test runner to only execute tests
+whose name matches the provided pattern. See the documentation on
+[filtering tests by name][] for more details.
+
 ### `--test-only`
 
 <!-- YAML
-added: v18.0.0
+added:
+  - v18.0.0
+  - v16.17.0
 -->
 
 Configures the test runner to only execute top level tests that have the `only`
@@ -1300,7 +1339,9 @@ for TLSv1.2, which is not as secure as TLSv1.3.
 
 <!-- YAML
 added: v14.3.0
-deprecated: v18.8.0
+deprecated:
+  - v18.8.0
+  - v16.18.0
 -->
 
 > Stability: 0 - Deprecated
@@ -1529,6 +1570,53 @@ on the number of online processors.
 If the value provided is larger than V8's maximum, then the largest value
 will be chosen.
 
+### `--watch`
+
+<!-- YAML
+added: v18.11.0
+-->
+
+> Stability: 1 - Experimental
+
+Starts Node.js in watch mode.
+When in watch mode, changes in the watched files cause the Node.js process to
+restart.
+By default, watch mode will watch the entry point
+and any required or imported module.
+Use `--watch-path` to specify what paths to watch.
+
+This flag cannot be combined with
+`--check`, `--eval`, `--interactive`, or the REPL.
+
+```console
+$ node --watch index.js
+```
+
+### `--watch-path`
+
+<!-- YAML
+added: v18.11.0
+-->
+
+> Stability: 1 - Experimental
+
+Starts Node.js in watch mode and specifies what paths to watch.
+When in watch mode, changes in the watched paths cause the Node.js process to
+restart.
+This will turn off watching of required or imported modules, even when used in
+combination with `--watch`.
+
+This flag cannot be combined with
+`--check`, `--eval`, `--interactive`, or the REPL.
+
+```console
+$ node --watch-path=./src --watch-path=./tests index.js
+```
+
+This option is only supported on macOS and Windows.
+An `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM` exception will be thrown
+when the option is used on a platform that does not support it.
+
 ### `--zero-fill-buffers`
 
 <!-- YAML
@@ -1609,8 +1697,9 @@ Preload the specified module at startup.
 Follows `require()`'s module resolution
 rules. `module` may be either a path to a file, or a node module name.
 
-Only CommonJS modules are supported. Attempting to preload a
-ES6 Module using `--require` will fail with an error.
+Only CommonJS modules are supported.
+Use [`--import`][] to preload an [ECMAScript module][].
+Modules preloaded with `--require` will run before modules preloaded with `--import`.
 
 ### `-v`, `--version`
 
@@ -1742,14 +1831,13 @@ Node.js options that are allowed are:
 * `--enable-fips`
 * `--enable-source-maps`
 * `--experimental-abortcontroller`
-* `--experimental-global-customevent`
-* `--experimental-global-webcrypto`
 * `--experimental-import-meta-resolve`
 * `--experimental-json-modules`
 * `--experimental-loader`
 * `--experimental-modules`
 * `--experimental-network-imports`
 * `--experimental-policy`
+* `--experimental-shadow-realm`
 * `--experimental-specifier-resolution`
 * `--experimental-top-level-await`
 * `--experimental-vm-modules`
@@ -1763,6 +1851,7 @@ Node.js options that are allowed are:
 * `--heapsnapshot-signal`
 * `--http-parser`
 * `--icu-data-dir`
+* `--import`
 * `--input-type`
 * `--insecure-http-parser`
 * `--inspect-brk`
@@ -1774,6 +1863,8 @@ Node.js options that are allowed are:
 * `--no-addons`
 * `--no-deprecation`
 * `--no-experimental-fetch`
+* `--no-experimental-global-customevent`
+* `--no-experimental-global-webcrypto`
 * `--no-experimental-repl-await`
 * `--no-extra-info-on-fatal-exception`
 * `--no-force-async-hooks-checks`
@@ -1829,6 +1920,8 @@ Node.js options that are allowed are:
 * `--use-largepages`
 * `--use-openssl-ca`
 * `--v8-pool-size`
+* `--watch-path`
+* `--watch`
 * `--zero-fill-buffers`
 
 <!-- node-options-node end -->
@@ -2169,7 +2262,9 @@ done
 [#42511]: https://github.com/nodejs/node/issues/42511
 [Chrome DevTools Protocol]: https://chromedevtools.github.io/devtools-protocol/
 [CommonJS]: modules.md
+[CommonJS module]: modules.md
 [CustomEvent Web API]: https://dom.spec.whatwg.org/#customevent
+[ECMAScript module]: esm.md#modules-ecmascript-modules
 [ECMAScript module loader]: esm.md#loaders
 [Fetch API]: https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API
 [Modules loaders]: packages.md#modules-loaders
@@ -2177,6 +2272,7 @@ done
 [OSSL_PROVIDER-legacy]: https://www.openssl.org/docs/man3.0/man7/OSSL_PROVIDER-legacy.html
 [REPL]: repl.md
 [ScriptCoverage]: https://chromedevtools.github.io/devtools-protocol/tot/Profiler#type-ScriptCoverage
+[ShadowRealm]: https://github.com/tc39/proposal-shadowrealm
 [Source Map]: https://sourcemaps.info/spec.html
 [Subresource Integrity]: https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity
 [V8 JavaScript code coverage]: https://v8project.blogspot.com/2017/12/javascript-code-coverage.html
@@ -2186,8 +2282,11 @@ done
 [`--diagnostic-dir`]: #--diagnostic-dirdirectory
 [`--experimental-wasm-modules`]: #--experimental-wasm-modules
 [`--heap-prof-dir`]: #--heap-prof-dir
+[`--import`]: #--importmodule
 [`--openssl-config`]: #--openssl-configfile
+[`--preserve-symlinks`]: #--preserve-symlinks
 [`--redirect-warnings`]: #--redirect-warningsfile
+[`--require`]: #-r---require-module
 [`Atomics.wait()`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Atomics/wait
 [`Buffer`]: buffer.md#class-buffer
 [`CRYPTO_secure_malloc_init`]: https://www.openssl.org/docs/man1.1.0/man3/CRYPTO_secure_malloc_init.html
@@ -2208,10 +2307,10 @@ done
 [`worker_threads.threadId`]: worker_threads.md#workerthreadid
 [conditional exports]: packages.md#conditional-exports
 [context-aware]: addons.md#context-aware-addons
-[customizing ESM specifier resolution]: esm.md#customizing-esm-specifier-resolution-algorithm
 [debugger]: debugger.md
 [debugging security implications]: https://nodejs.org/en/docs/guides/debugging-getting-started/#security-implications
 [emit_warning]: process.md#processemitwarningwarning-options
+[filtering tests by name]: test.md#filtering-tests-by-name
 [jitless]: https://v8.dev/blog/jitless
 [libuv threadpool documentation]: https://docs.libuv.org/en/latest/threadpool.html
 [remote code execution]: https://www.owasp.org/index.php/Code_Injection

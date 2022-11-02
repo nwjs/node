@@ -10,7 +10,6 @@
 #if defined(V8_OS_WIN_X64)
 #include "src/codegen/x64/assembler-x64.h"
 #elif defined(V8_OS_WIN_ARM64)
-#include "src/base/platform/wrappers.h"
 #include "src/codegen/arm64/assembler-arm64-inl.h"
 #include "src/codegen/arm64/macro-assembler-arm64-inl.h"
 #else
@@ -317,7 +316,7 @@ struct V8UnwindData {
     // error is acceptable when the unwinding info for the caller frame also
     // depends on fp rather than sp, as is the case for V8 builtins and runtime-
     // generated code.
-    STATIC_ASSERT(kNumberOfUnwindCodeWords >= 1);
+    static_assert(kNumberOfUnwindCodeWords >= 1);
     unwind_codes[0] = Combine8BitUnwindCodes(
         OpSetFp, MakeOpSaveFpLrX(-CommonFrameConstants::kCallerSPOffset),
         OpEnd);
@@ -376,7 +375,7 @@ std::vector<uint8_t> GetUnwindInfoForBuiltinFunction(
 
   if (fp_adjustment.IsDefault()) {
     // One code word is plenty.
-    STATIC_ASSERT(kDefaultNumberOfUnwindCodeWords <
+    static_assert(kDefaultNumberOfUnwindCodeWords <
                   kMaxNumberOfUnwindCodeWords);
     xdata.unwind_info.CodeWords = kDefaultNumberOfUnwindCodeWords;
   } else {

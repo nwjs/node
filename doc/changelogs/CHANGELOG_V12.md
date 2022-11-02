@@ -67,6 +67,7 @@
 </table>
 
 * Other Versions
+  * [19.x](CHANGELOG_V19.md)
   * [18.x](CHANGELOG_V18.md)
   * [17.x](CHANGELOG_V17.md)
   * [16.x](CHANGELOG_V16.md)
@@ -93,7 +94,7 @@
 ### Notable Changes
 
 This is planned to be the final Node.js 12 release. Node.js 12 will
-reach End-of-Life status on 30 April 2022, after which it will no
+reach End-of-Life status on 30 April 2022, after which it will not
 receive updates. You are strongly advised to migrate your applications
 to Node.js 16 or 14 (both of which are Long Term Support (LTS) releases)
 to continue to receive future security updates beyond 30 April 2022.

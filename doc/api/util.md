@@ -490,6 +490,9 @@ changes:
     - v16.14.0
     pr-url: https://github.com/nodejs/node/pull/41003
     description: The `numericSeparator` option is supported now.
+  - version: v16.18.0
+    pr-url: https://github.com/nodejs/node/pull/43576
+    description: add support for `maxArrayLength` when inspecting `Set` and `Map`.
   - version:
     - v14.6.0
     - v12.19.0
@@ -586,8 +589,9 @@ changes:
   * `showProxy` {boolean} If `true`, `Proxy` inspection includes
     the [`target` and `handler`][] objects. **Default:** `false`.
   * `maxArrayLength` {integer} Specifies the maximum number of `Array`,
-    [`TypedArray`][], [`WeakMap`][], and [`WeakSet`][] elements to include when
-    formatting. Set to `null` or `Infinity` to show all elements. Set to `0` or
+    [`TypedArray`][], [`Map`][], [`Set`][], [`WeakMap`][],
+    and [`WeakSet`][] elements to include when formatting.
+    Set to `null` or `Infinity` to show all elements. Set to `0` or
     negative to show no elements. **Default:** `100`.
   * `maxStringLength` {integer} Specifies the maximum number of characters to
     include when formatting. Set to `null` or `Infinity` to show all elements.
@@ -1023,9 +1027,16 @@ equality.
 ## `util.parseArgs([config])`
 
 <!-- YAML
-added: v18.3.0
+added:
+  - v18.3.0
+  - v16.17.0
 changes:
-  - version: v18.7.0
+  - version: v18.11.0
+    pr-url: https://github.com/nodejs/node/pull/44631
+    description: Add support for default values in input `config`.
+  - version:
+    - v18.7.0
+    - v16.17.0
     pr-url: https://github.com/nodejs/node/pull/43459
     description: add support for returning detailed parse information
                  using `tokens` in input `config` and returned properties.
@@ -1045,6 +1056,9 @@ changes:
       times. If `true`, all values will be collected in an array. If
       `false`, values for the option are last-wins. **Default:** `false`.
     * `short` {string} A single character alias for the option.
+    * `default` {string | boolean | string\[] | boolean\[]} The default option
+      value when it is not set by args. It must be of the same type as the
+      the `type` property. When `multiple` is `true`, it must be an array.
   * `strict` {boolean} Should an error be thrown when unknown arguments
     are encountered, or when arguments are passed that do not match the
     `type` configured in `options`.
@@ -1588,6 +1602,37 @@ added:
 Returns the `string` after replacing any surrogate code points
 (or equivalently, any unpaired surrogate code units) with the
 Unicode "replacement character" U+FFFD.
+
+## `util.transferableAbortController()`
+
+<!-- YAML
+added: v18.11.0
+-->
+
+> Stability: 1 - Experimental
+
+Creates and returns an {AbortController} instance whose {AbortSignal} is marked
+as transferable and can be used with `structuredClone()` or `postMessage()`.
+
+## `util.transferableAbortSignal(signal)`
+
+<!-- YAML
+added: v18.11.0
+-->
+
+> Stability: 1 - Experimental
+
+* `signal` {AbortSignal}
+* Returns: {AbortSignal}
+
+Marks the given {AbortSignal} as transferable so that it can be used with
+`structuredClone()` and `postMessage()`.
+
+```js
+const signal = transferableAbortSignal(AbortSignal.timeout(100));
+const channel = new MessageChannel();
+channel.port2.postMessage(signal, [signal]);
+```
 
 ## `util.types`
 

@@ -8,8 +8,6 @@
     'v8_trace_maps%': 0,
     'v8_enable_pointer_compression': 0,
     'v8_enable_31bit_smis_on_64bit_arch': 0,
-    'node_use_dtrace%': 'false',
-    'node_use_etw%': 'false',
     'openssl_quic': 'false',
     'node_shared_libuv': 'false',
     'node_no_browser_globals%': 'false',
@@ -158,6 +156,7 @@
 'lib/internal/modules/run_main.js',
 'lib/internal/modules/cjs/helpers.js',
 'lib/internal/modules/cjs/loader.js',
+'lib/internal/util/colors.js',
 'lib/internal/util/comparisons.js',
 'lib/internal/util/types.js',
 'lib/internal/util/iterable_weak_map.js',
@@ -205,6 +204,8 @@
 'lib/internal/bootstrap/loaders.js',
 'lib/internal/bootstrap/node.js',
 'lib/internal/main/environment.js',
+'lib/internal/main/watch_mode.js',
+'lib/internal/watch_mode/files_watcher.js',
 'lib/internal/bootstrap/switches/is_main_thread.js',
 'lib/internal/bootstrap/switches/does_own_process_state.js',
 'lib/internal/bootstrap/switches/does_not_own_process_state.js',
@@ -213,12 +214,12 @@
 'lib/internal/policy/sri.js',
 'lib/internal/policy/manifest.js',
 'lib/internal/util.js',
+'lib/internal/webidl.js',
 'lib/internal/abort_controller.js',
 'lib/internal/http2/util.js',
 'lib/internal/http2/compat.js',
 'lib/internal/http2/core.js',
 'lib/internal/socket_list.js',
-'lib/internal/dtrace.js',
 'lib/internal/js_stream_socket.js',
 'lib/internal/validators.js',
 'lib/internal/per_context/messageport.js',
@@ -349,7 +350,7 @@
       'deps/acorn/acorn-walk/dist/walk.js',
       'deps/cjs-module-lexer/lexer.js',
       'deps/cjs-module-lexer/dist/lexer.js',
-      'deps/undici/undici.js',
+      'deps/undici/undici.js', #nwjs: reverting ca5be26b318affe7ee63a4b9c0489393c7dae661
     ],
     'node_mksnapshot_exec': '<(PRODUCT_DIR)/<(EXECUTABLE_PREFIX)node_mksnapshot<(EXECUTABLE_SUFFIX)',
     'conditions': [
@@ -534,16 +535,6 @@
                 '<(obj_dir)/<(STATIC_LIB_PREFIX)<(node_core_target_name)<(STATIC_LIB_SUFFIX)',
                 '<(obj_dir)/tools/v8_gypfiles/<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)',
                 '-Wl,--no-whole-archive',
-              ],
-            }],
-            [ 'OS=="win"', {
-              'sources': [ 'src/res/node.rc' ],
-              'conditions': [
-                [ 'node_use_etw=="true"', {
-                  'sources': [
-                    'tools/msvs/genfiles/node_etw_provider.rc'
-                  ],
-                }],
               ],
             }],
           ],
@@ -799,6 +790,7 @@
         'src/api/hooks.cc',
         'src/api/utils.cc',
         'src/async_wrap.cc',
+        'src/base_object.cc',
         'src/cares_wrap.cc',
         'src/cleanup_queue.cc',
         'src/connect_wrap.cc',
@@ -848,10 +840,12 @@
         'src/node_process_events.cc',
         'src/node_process_methods.cc',
         'src/node_process_object.cc',
+        'src/node_realm.cc',
         'src/node_report.cc',
         'src/node_report_module.cc',
         'src/node_report_utils.cc',
         'src/node_serdes.cc',
+        'src/node_shadow_realm.cc',
         'src/node_snapshotable.cc',
         'src/node_sockaddr.cc',
         'src/node_stat_watcher.cc',
@@ -907,6 +901,7 @@
         'src/connection_wrap.h',
         'src/debug_utils.h',
         'src/debug_utils-inl.h',
+        'src/env_properties.h',
         'src/env.h',
         'src/env-inl.h',
         'src/handle_wrap.h',
@@ -931,6 +926,7 @@
         'src/node_contextify.h',
         'src/node_dir.h',
         'src/node_errors.h',
+        'src/node_exit_code.h',
         'src/node_external_reference.h',
         'src/node_file.h',
         'src/node_file-inl.h',
@@ -954,9 +950,12 @@
         'src/node_platform.h',
         'src/node_process.h',
         'src/node_process-inl.h',
+        'src/node_realm.h',
+        'src/node_realm-inl.h',
         'src/node_report.h',
         'src/node_revert.h',
         'src/node_root_certs.h',
+        'src/node_shadow_realm.h',
         'src/node_snapshotable.h',
         'src/node_snapshot_builder.h',
         'src/node_sockaddr.h',
@@ -964,6 +963,7 @@
         'src/node_stat_watcher.h',
         'src/node_union_bytes.h',
         'src/node_url.h',
+        'src/node_util.h',
         'src/node_version.h',
         'src/node_v8.h',
         'src/node_v8_platform-inl.h',
@@ -1090,72 +1090,6 @@
             }],
           ],
         }],
-        [ 'node_use_etw=="true"', {
-          'defines': [ 'HAVE_ETW=1' ],
-          'dependencies': [ 'node_etw' ],
-          'include_dirs': [
-            'src',
-            'tools/msvs/genfiles',
-            '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
-          ],
-          'sources': [
-            'src/node_win32_etw_provider.h',
-            'src/node_win32_etw_provider-inl.h',
-            'src/node_win32_etw_provider.cc',
-            'src/node_dtrace.h',
-            'src/node_dtrace.cc',
-            'tools/msvs/genfiles/node_etw_provider.h',
-          ],
-          'conditions': [
-            ['node_intermediate_lib_type != "static_library"', {
-              'sources': [
-                'tools/msvs/genfiles/node_etw_provider.rc',
-              ],
-            }],
-          ],
-        }],
-        [ 'node_use_dtrace=="true"', {
-          'defines': [ 'HAVE_DTRACE=1' ],
-          'dependencies': [
-            'node_dtrace_header',
-            'specialize_node_d',
-          ],
-          'include_dirs': [ '<(SHARED_INTERMEDIATE_DIR)' ],
-          #
-          # DTrace is supported on linux, solaris, mac, and bsd.  There are
-          # three object files associated with DTrace support, but they're
-          # not all used all the time:
-          #
-          #   node_dtrace.o           all configurations
-          #   node_dtrace_ustack.o    not supported on mac and linux
-          #   node_dtrace_provider.o  All except OS X.  "dtrace -G" is not
-          #                           used on OS X.
-          #
-          # Note that node_dtrace_provider.cc and node_dtrace_ustack.cc do not
-          # actually exist.  They're listed here to trick GYP into linking the
-          # corresponding object files into the final "node" executable.  These
-          # object files are generated by "dtrace -G" using custom actions
-          # below, and the GYP-generated Makefiles will properly build them when
-          # needed.
-          #
-          'sources': [
-            'src/node_dtrace.h',
-            'src/node_dtrace.cc',
-          ],
-          'conditions': [
-            [ 'OS=="linux"', {
-              'sources': [
-                '<(SHARED_INTERMEDIATE_DIR)/node_dtrace_provider.o'
-              ],
-            }],
-            [ 'OS!="mac" and OS!="linux"', {
-              'sources': [
-                'src/node_dtrace_ustack.cc',
-                'src/node_dtrace_provider.cc',
-              ]
-            }
-          ] ]
-        } ],
         [ 'node_use_openssl=="true"', {
           'sources': [
             'src/crypto/crypto_aes.cc',
@@ -1289,164 +1223,6 @@
         },
       ],
     }, # node_lib_target_name
-    {
-       # generate ETW header and resource files
-      'target_name': 'node_etw',
-      'type': 'none',
-      'conditions': [
-        [ 'node_use_etw=="true"', {
-          'actions': [
-            {
-              'action_name': 'node_etw',
-              'inputs': [ 'src/res/node_etw_provider.man' ],
-              'outputs': [
-                'tools/msvs/genfiles/node_etw_provider.rc',
-                'tools/msvs/genfiles/node_etw_provider.h',
-                'tools/msvs/genfiles/node_etw_providerTEMP.BIN',
-              ],
-              'action': [ 'mc <@(_inputs) -h tools/msvs/genfiles -r tools/msvs/genfiles' ]
-            }
-          ]
-        } ]
-      ]
-    }, # node_etw
-    {
-      'target_name': 'node_dtrace_header',
-      'type': 'none',
-      'conditions': [
-        [ 'node_use_dtrace=="true" and OS!="linux"', {
-          'actions': [
-            {
-              'action_name': 'node_dtrace_header',
-              'inputs': [ 'src/node_provider.d' ],
-              'outputs': [ '<(SHARED_INTERMEDIATE_DIR)/node_provider.h' ],
-              'action': [ 'dtrace', '-h', '-xnolibs', '-s', '<@(_inputs)',
-                '-o', '<@(_outputs)' ]
-            }
-          ]
-        } ],
-        [ 'node_use_dtrace=="true" and OS=="linux"', {
-          'actions': [
-            {
-              'action_name': 'node_dtrace_header',
-              'inputs': [ 'src/node_provider.d' ],
-              'outputs': [ '<(SHARED_INTERMEDIATE_DIR)/node_provider.h' ],
-              'action': [ 'dtrace', '-h', '-s', '<@(_inputs)',
-                '-o', '<@(_outputs)' ]
-            }
-          ]
-        } ],
-      ]
-    }, # node_dtrace_header
-    {
-      'target_name': 'node_dtrace_provider',
-      'type': 'none',
-      'conditions': [
-        [ 'node_use_dtrace=="true" and OS!="mac" and OS!="linux"', {
-          'actions': [
-            {
-              'action_name': 'node_dtrace_provider_o',
-              'inputs': [
-                '<(obj_dir)/<(node_lib_target_name)/src/node_dtrace.o',
-              ],
-              'outputs': [
-                '<(obj_dir)/<(node_lib_target_name)/src/node_dtrace_provider.o'
-              ],
-              'action': [ 'dtrace', '-G', '-xnolibs', '-s', 'src/node_provider.d',
-                '<@(_inputs)', '-o', '<@(_outputs)' ]
-            }
-          ]
-        }],
-        [ 'node_use_dtrace=="true" and OS=="linux"', {
-          'actions': [
-            {
-              'action_name': 'node_dtrace_provider_o',
-              'inputs': [ 'src/node_provider.d' ],
-              'outputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/node_dtrace_provider.o'
-              ],
-              'action': [
-                'dtrace', '-C', '-G', '-s', '<@(_inputs)', '-o', '<@(_outputs)'
-              ],
-            }
-          ],
-        }],
-      ]
-    }, # node_dtrace_provider
-    {
-      'target_name': 'node_dtrace_ustack',
-      'type': 'none',
-      'conditions': [
-        [ 'node_use_dtrace=="true" and OS!="mac" and OS!="linux"', {
-          'actions': [
-            {
-              'action_name': 'node_dtrace_ustack_constants',
-              'inputs': [
-                '<(obj_dir)/tools/v8_gypfiles/<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)'
-              ],
-              'outputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/v8constants.h'
-              ],
-              'action': [
-                'tools/genv8constants.py',
-                '<@(_outputs)',
-                '<@(_inputs)'
-              ]
-            },
-            {
-              'action_name': 'node_dtrace_ustack',
-              'inputs': [
-                'src/v8ustack.d',
-                '<(SHARED_INTERMEDIATE_DIR)/v8constants.h'
-              ],
-              'outputs': [
-                '<(obj_dir)/<(node_lib_target_name)/src/node_dtrace_ustack.o'
-              ],
-              'conditions': [
-                [ 'target_arch=="ia32" or target_arch=="arm"', {
-                  'action': [
-                    'dtrace', '-32', '-I<(SHARED_INTERMEDIATE_DIR)', '-Isrc',
-                    '-C', '-G', '-s', 'src/v8ustack.d', '-o', '<@(_outputs)',
-                  ]
-                } ],
-                [ 'target_arch=="x64"', {
-                  'action': [
-                    'dtrace', '-64', '-I<(SHARED_INTERMEDIATE_DIR)', '-Isrc',
-                    '-C', '-G', '-s', 'src/v8ustack.d', '-o', '<@(_outputs)',
-                  ]
-                } ],
-              ]
-            },
-          ]
-        } ],
-      ]
-    }, # node_dtrace_ustack
-    {
-      'target_name': 'specialize_node_d',
-      'type': 'none',
-      'conditions': [
-        [ 'node_use_dtrace=="true"', {
-          'actions': [
-            {
-              'action_name': 'specialize_node_d',
-              'inputs': [
-                'src/node.d'
-              ],
-              'outputs': [
-                '<(PRODUCT_DIR)/node.d',
-              ],
-              'action': [
-                'tools/specialize_node_d.py',
-                '<@(_outputs)',
-                '<@(_inputs)',
-                '<@(OS)',
-                '<@(target_arch)',
-              ],
-            },
-          ],
-        } ],
-      ]
-    }, # specialize_node_d
     { # fuzz_url
       'target_name': 'fuzz_url',
       'type': 'executable',
@@ -1485,9 +1261,6 @@
         '<(node_lib_target_name)',
         'deps/histogram/histogram.gyp:histogram',
         'deps/uvwasi/uvwasi.gyp:uvwasi',
-        'node_dtrace_header',
-        'node_dtrace_ustack',
-        'node_dtrace_provider',
       ],
       'includes': [
         'node.gypi'
@@ -1531,9 +1304,6 @@
         'deps/googletest/googletest.gyp:gtest_main',
         'deps/histogram/histogram.gyp:histogram',
         'deps/uvwasi/uvwasi.gyp:uvwasi',
-        'node_dtrace_header',
-        'node_dtrace_ustack',
-        'node_dtrace_provider',
       ],
 
       'includes': [
@@ -1631,9 +1401,6 @@
         '<(node_lib_target_name)',
         'deps/histogram/histogram.gyp:histogram',
         'deps/uvwasi/uvwasi.gyp:uvwasi',
-        'node_dtrace_header',
-        'node_dtrace_ustack',
-        'node_dtrace_provider',
       ],
 
       'includes': [

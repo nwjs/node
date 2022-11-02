@@ -571,7 +571,7 @@ TryCatchScope::~TryCatchScope() {
     if (message.IsEmpty())
       message = Exception::CreateMessage(env_->isolate(), exception);
     ReportFatalException(env_, exception, message, enhance);
-    env_->Exit(7);
+    env_->Exit(ExitCode::kExceptionInFatalExceptionHandler);
   }
 }
 
@@ -1021,6 +1021,17 @@ void Initialize(Local<Object> target,
       context, target, "noSideEffectsToString", NoSideEffectsToString);
   SetMethod(
       context, target, "triggerUncaughtException", TriggerUncaughtException);
+
+  Isolate* isolate = context->GetIsolate();
+  Local<Object> exit_codes = Object::New(isolate);
+  READONLY_PROPERTY(target, "exitCodes", exit_codes);
+
+#define V(Name, Code)                                                          \
+  constexpr int k##Name = static_cast<int>(ExitCode::k##Name);                 \
+  NODE_DEFINE_CONSTANT(exit_codes, k##Name);
+
+  EXIT_CODE_LIST(V)
+#undef V
 }
 
 void DecorateErrorStack(Environment* env,
@@ -1098,7 +1109,7 @@ void TriggerUncaughtException(Isolate* isolate,
   if (!fatal_exception_function_value->IsFunction()) {
     ReportFatalException(
         env, error, message, EnhanceFatalException::kDontEnhance);
-    exit_code = 6;
+    exit_code = (int)ExitCode::kInvalidFatalExceptionMonkeyPatching;
     return;
   }
 
@@ -1151,7 +1162,7 @@ void TriggerUncaughtException(Isolate* isolate,
       code->IsInt32()) {
     exit_code = (code.As<Int32>()->Value());
   } else {
-    exit_code = 1;
+    exit_code = (int)ExitCode::kGenericUserError;
   }
   if (!node_is_nwjs && exit_code) {
     exit(exit_code);

@@ -599,7 +599,9 @@ the stream has not been destroyed, errored, or ended.
 ##### `writable.writableAborted`
 
 <!-- YAML
-added: v18.0.0
+added:
+  - v18.0.0
+  - v16.17.0
 -->
 
 > Stability: 1 - Experimental
@@ -1834,7 +1836,9 @@ for await (const result of dnsResults) {
 ##### `readable.forEach(fn[, options])`
 
 <!-- YAML
-added: v17.5.0
+added:
+  - v17.5.0
+  - v16.15.0
 -->
 
 > Stability: 1 - Experimental
@@ -1893,7 +1897,9 @@ console.log('done'); // Stream has finished
 ##### `readable.toArray([options])`
 
 <!-- YAML
-added: v17.5.0
+added:
+  - v17.5.0
+  - v16.15.0
 -->
 
 > Stability: 1 - Experimental
@@ -1931,7 +1937,9 @@ const dnsResults = await Readable.from([
 ##### `readable.some(fn[, options])`
 
 <!-- YAML
-added: v17.5.0
+added:
+  - v17.5.0
+  - v16.15.0
 -->
 
 > Stability: 1 - Experimental
@@ -1980,7 +1988,9 @@ console.log('done'); // Stream has finished
 ##### `readable.find(fn[, options])`
 
 <!-- YAML
-added: v17.5.0
+added:
+  - v17.5.0
+  - v16.17.0
 -->
 
 > Stability: 1 - Experimental
@@ -2030,7 +2040,9 @@ console.log('done'); // Stream has finished
 ##### `readable.every(fn[, options])`
 
 <!-- YAML
-added: v17.5.0
+added:
+  - v17.5.0
+  - v16.15.0
 -->
 
 > Stability: 1 - Experimental
@@ -2079,7 +2091,9 @@ console.log('done'); // Stream has finished
 ##### `readable.flatMap(fn[, options])`
 
 <!-- YAML
-added: v17.5.0
+added:
+  - v17.5.0
+  - v16.15.0
 -->
 
 > Stability: 1 - Experimental
@@ -2128,7 +2142,9 @@ for await (const result of concatResult) {
 ##### `readable.drop(limit[, options])`
 
 <!-- YAML
-added: v17.5.0
+added:
+  - v17.5.0
+  - v16.15.0
 -->
 
 > Stability: 1 - Experimental
@@ -2150,7 +2166,9 @@ await Readable.from([1, 2, 3, 4]).drop(2).toArray(); // [3, 4]
 ##### `readable.take(limit[, options])`
 
 <!-- YAML
-added: v17.5.0
+added:
+  - v17.5.0
+  - v16.15.0
 -->
 
 > Stability: 1 - Experimental
@@ -2172,7 +2190,9 @@ await Readable.from([1, 2, 3, 4]).take(2).toArray(); // [1, 2]
 ##### `readable.asIndexedPairs([options])`
 
 <!-- YAML
-added: v17.5.0
+added:
+  - v17.5.0
+  - v16.15.0
 -->
 
 > Stability: 1 - Experimental
@@ -2196,7 +2216,9 @@ console.log(pairs); // [[0, 'a'], [1, 'b'], [2, 'c']]
 ##### `readable.reduce(fn[, initial[, options]])`
 
 <!-- YAML
-added: v17.5.0
+added:
+  - v17.5.0
+  - v16.15.0
 -->
 
 > Stability: 1 - Experimental

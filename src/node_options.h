@@ -71,6 +71,7 @@ class DebugOptions : public Options {
   DebugOptions(DebugOptions&&) = default;
   DebugOptions& operator=(DebugOptions&&) = default;
 
+  bool allow_attaching_debugger = true;
   // --inspect
   bool inspector_enabled = false;
   // --debug
@@ -108,10 +109,9 @@ class EnvironmentOptions : public Options {
   std::string dns_result_order;
   bool enable_source_maps = false;
   bool experimental_fetch = true;
-  bool experimental_global_customevent = false;
-  bool experimental_global_web_crypto = false;
+  bool experimental_global_customevent = true;
+  bool experimental_global_web_crypto = true;
   bool experimental_https_modules = false;
-  std::string experimental_specifier_resolution;
   bool experimental_wasm_modules = false;
   bool experimental_import_meta_resolve = false;
   std::string module_type;
@@ -152,6 +152,7 @@ class EnvironmentOptions : public Options {
   std::string redirect_warnings;
   std::string diagnostic_dir;
   bool test_runner = false;
+  std::vector<std::string> test_name_pattern;
   bool test_only = false;
   bool test_udp_no_try_send = false;
   bool throw_deprecation = false;
@@ -172,6 +173,10 @@ class EnvironmentOptions : public Options {
       false;
 #endif  // DEBUG
 
+  bool watch_mode = false;
+  bool watch_mode_report_to_parent = false;
+  std::vector<std::string> watch_mode_paths;
+
   bool syntax_check_only = false;
   bool has_eval_string = false;
   bool experimental_wasi = false;
@@ -189,7 +194,9 @@ class EnvironmentOptions : public Options {
   bool tls_max_v1_3 = false;
   std::string tls_keylog;
 
-  std::vector<std::string> preload_modules;
+  std::vector<std::string> preload_cjs_modules;
+
+  std::vector<std::string> preload_esm_modules;
 
   std::vector<std::string> user_argv;
 
@@ -208,6 +215,7 @@ class PerIsolateOptions : public Options {
   bool track_heap_objects = false;
   bool report_uncaught_exception = false;
   bool report_on_signal = false;
+  bool experimental_shadow_realm = false;
   std::string report_signal = "SIGUSR2";
   inline EnvironmentOptions* get_per_env_options();
   void CheckOptions(std::vector<std::string>* errors) override;

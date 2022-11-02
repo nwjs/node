@@ -139,9 +139,6 @@ Requires Node.js to be built with
 .It Fl -enable-source-maps
 Enable Source Map V3 support for stack traces.
 .
-.It Fl -experimental-global-customevent
-Expose the CustomEvent on the global scope.
-.
 .It Fl -experimental-global-webcrypto
 Expose the Web Crypto API on the global scope.
 .
@@ -159,14 +156,20 @@ Enable experimental support for loading modules using `import` over `https:`.
 .It Fl -experimental-policy
 Use the specified file as a security policy.
 .
+.It Fl -experimental-shadow-realm
+Use this flag to enable ShadowRealm support.
+.
 .It Fl -no-experimental-fetch
 Disable experimental support for the Fetch API.
 .
+.It Fl -no-experimental-global-customevent
+Disable exposition of the CustomEvent on the global scope.
+.
+.It Fl -no-experimental-global-webcrypto
+Disable exposition of the Web Crypto API on the global scope.
+.
 .It Fl -no-experimental-repl-await
 Disable top-level await keyword support in REPL.
-.
-.It Fl -experimental-specifier-resolution
-Select extension resolution algorithm for ES Modules; either 'explicit' (default) or 'node'.
 .
 .It Fl -experimental-vm-modules
 Enable experimental ES module support in VM module.
@@ -386,6 +389,10 @@ Specify the minimum allocation from the OpenSSL secure heap. The default is 2. T
 .
 .It Fl -test
 Starts the Node.js command line test runner.
+.
+.It Fl -test-name-pattern
+A regular expression that configures the test runner to only execute tests
+whose name matches the provided pattern.
 .
 .It Fl -test-only
 Configures the test runner to only execute top level tests that have the `only`

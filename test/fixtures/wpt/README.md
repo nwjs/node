@@ -15,14 +15,16 @@ Last update:
 - dom/abort: https://github.com/web-platform-tests/wpt/tree/c49cafb491/dom/abort
 - dom/events: https://github.com/web-platform-tests/wpt/tree/f8821adb28/dom/events
 - encoding: https://github.com/web-platform-tests/wpt/tree/c1b24fce6e/encoding
+- fetch/data-urls/resources: https://github.com/web-platform-tests/wpt/tree/7c79d998ff/fetch/data-urls/resources
 - FileAPI: https://github.com/web-platform-tests/wpt/tree/3b279420d4/FileAPI
 - hr-time: https://github.com/web-platform-tests/wpt/tree/34cafd797e/hr-time
 - html/webappapis/atob: https://github.com/web-platform-tests/wpt/tree/f267e1dca6/html/webappapis/atob
 - html/webappapis/microtask-queuing: https://github.com/web-platform-tests/wpt/tree/2c5c3c4c27/html/webappapis/microtask-queuing
 - html/webappapis/structured-clone: https://github.com/web-platform-tests/wpt/tree/47d3fb280c/html/webappapis/structured-clone
 - html/webappapis/timers: https://github.com/web-platform-tests/wpt/tree/5873f2d8f1/html/webappapis/timers
-- interfaces: https://github.com/web-platform-tests/wpt/tree/fc086c82d5/interfaces
+- interfaces: https://github.com/web-platform-tests/wpt/tree/df731dab88/interfaces
 - performance-timeline: https://github.com/web-platform-tests/wpt/tree/17ebc3aea0/performance-timeline
+- resource-timing: https://github.com/web-platform-tests/wpt/tree/22d38586d0/resource-timing
 - resources: https://github.com/web-platform-tests/wpt/tree/c5b428f15a/resources
 - streams: https://github.com/web-platform-tests/wpt/tree/9e5ef42bd3/streams
 - url: https://github.com/web-platform-tests/wpt/tree/0e5b126cd0/url

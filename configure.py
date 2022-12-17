@@ -160,6 +160,13 @@ parser.add_argument("--partly-static",
     help="Generate an executable with libgcc and libstdc++ libraries. This "
          "will not work on OSX when using the default compilation environment")
 
+parser.add_argument("--enable-vtune-profiling",
+    action="store_true",
+    dest="enable_vtune_profiling",
+    help="Enable profiling support for Intel VTune profiler to profile "
+         "JavaScript code executed in Node.js. This feature is only available "
+         "for x32, x86, and x64 architectures.")
+
 parser.add_argument("--enable-pgo-generate",
     action="store_true",
     dest="enable_pgo_generate",
@@ -776,7 +783,13 @@ parser.add_argument('--v8-enable-object-print',
     action='store_true',
     dest='v8_enable_object_print',
     default=True,
-    help='compile V8 with auxiliar functions for native debuggers')
+    help='compile V8 with auxiliary functions for native debuggers')
+
+parser.add_argument('--v8-disable-object-print',
+    action='store_true',
+    dest='v8_disable_object_print',
+    default=False,
+    help='disable the V8 auxiliary functions for native debuggers')
 
 parser.add_argument('--v8-enable-hugepage',
     action='store_true',
@@ -791,6 +804,12 @@ parser.add_argument('--v8-enable-short-builtin-calls',
     default=None,
     help='Enable V8 short builtin calls support. This feature is enabled '+
          'on x86_64 platform by default.')
+
+parser.add_argument('--v8-enable-snapshot-compression',
+    action='store_true',
+    dest='v8_enable_snapshot_compression',
+    default=None,
+    help='Enable the built-in snapshot compression in V8.')
 
 parser.add_argument('--node-builtin-modules-path',
     action='store',
@@ -1237,6 +1256,7 @@ def configure_node(o):
   # Enable branch protection for arm64
   if target_arch == 'arm64':
     o['cflags']+=['-msign-return-address=all']
+    o['variables']['arm_fpu'] = options.arm_fpu or 'neon'
 
   if options.node_snapshot_main is not None:
     if options.shared:
@@ -1272,6 +1292,15 @@ def configure_node(o):
 
   if flavor == 'aix':
     o['variables']['node_target_type'] = 'static_library'
+
+  if target_arch in ('x86', 'x64', 'ia32', 'x32'):
+    o['variables']['node_enable_v8_vtunejit'] = b(options.enable_vtune_profiling)
+  elif options.enable_vtune_profiling:
+    raise Exception(
+       'The VTune profiler for JavaScript is only supported on x32, x86, and x64 '
+       'architectures.')
+  else:
+    o['variables']['node_enable_v8_vtunejit'] = 'false'
 
   if flavor != 'linux' and (options.enable_pgo_generate or options.enable_pgo_use):
     raise Exception(
@@ -1436,7 +1465,7 @@ def configure_v8(o):
   o['variables']['v8_no_strict_aliasing'] = 1  # Work around compiler bugs.
   o['variables']['v8_optimized_debug'] = 0 if options.v8_non_optimized_debug else 1
   o['variables']['dcheck_always_on'] = 1 if options.v8_with_dchecks else 0
-  o['variables']['v8_enable_object_print'] = 1 if options.v8_enable_object_print else 0
+  o['variables']['v8_enable_object_print'] = 0 if options.v8_disable_object_print else 1
   o['variables']['v8_random_seed'] = 0  # Use a random seed for hash tables.
   o['variables']['v8_promise_internal_field_count'] = 1 # Add internal field to promises for async hooks.
   o['variables']['v8_use_siphash'] = 0 if options.without_siphash else 1
@@ -1459,6 +1488,12 @@ def configure_v8(o):
   o['variables']['v8_enable_hugepage'] = 1 if options.v8_enable_hugepage else 0
   if options.v8_enable_short_builtin_calls or o['variables']['target_arch'] == 'x64':
     o['variables']['v8_enable_short_builtin_calls'] = 1
+  if options.v8_enable_snapshot_compression:
+    o['variables']['v8_enable_snapshot_compression'] = 1
+  if options.v8_enable_object_print and options.v8_disable_object_print:
+    raise Exception(
+        'Only one of the --v8-enable-object-print or --v8-disable-object-print options '
+        'can be specified at a time.')
 
 def configure_openssl(o):
   variables = o['variables']

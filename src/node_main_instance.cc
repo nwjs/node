@@ -185,8 +185,6 @@ NodeMainInstance::CreateMainEnvironment(ExitCode* exit_code) {
     SetIsolateErrorHandlers(isolate_, {});
     env->InitializeMainContext(context, &(snapshot_data_->env_info));
 #if HAVE_INSPECTOR
-    // TODO(joyeecheung): handle the exit code returned by
-    // InitializeInspector().
     env->InitializeInspector({});
 #endif
 
@@ -205,8 +203,6 @@ NodeMainInstance::CreateMainEnvironment(ExitCode* exit_code) {
                               EnvironmentFlags::kDefaultFlags,
                               {}));
 #if HAVE_INSPECTOR
-    // TODO(joyeecheung): handle the exit code returned by
-    // InitializeInspector().
     env->InitializeInspector({});
 #endif
     if (env->principal_realm()->RunBootstrapping().IsEmpty()) {

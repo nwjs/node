@@ -75,6 +75,8 @@
         'src/random.c',
         'src/strscpy.c',
         'src/strscpy.h',
+        'src/strtok.c',
+        'src/strtok.h',
         'src/threadpool.c',
         'src/timer.c',
         'src/uv-data-getter-setters.c',

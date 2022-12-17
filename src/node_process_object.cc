@@ -231,5 +231,5 @@ void RegisterProcessExternalReferences(ExternalReferenceRegistry* registry) {
 
 }  // namespace node
 
-NODE_MODULE_EXTERNAL_REFERENCE(process_object,
-                               node::RegisterProcessExternalReferences)
+NODE_BINDING_EXTERNAL_REFERENCE(process_object,
+                                node::RegisterProcessExternalReferences)

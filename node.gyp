@@ -37,10 +37,10 @@
     'openssl_is_fips': 'false',
     'node_use_large_pages': 'false',
     'node_v8_options%': '',
+    'node_enable_v8_vtunejit%': 'false',
     'node_core_target_name%': 'nodebin',
     'node_lib_target_name%': 'node',
     'node_intermediate_lib_type%': 'shared_library',
-    'node_target_type%': 'shared_library',
     'node_builtin_modules_path%': '',
     # We list the deps/ files out instead of globbing them in js2c.py since we
     # only include a subset of all the files under these directories.
@@ -537,6 +537,9 @@
                 '-Wl,--no-whole-archive',
               ],
             }],
+            [ 'OS=="win"', {
+              'sources': [ 'src/res/node.rc' ],
+            }],
           ],
         }],
         [ 'node_shared=="true"', {
@@ -731,7 +734,7 @@
                'inputs': [ '<(opensslconfig)', ],
                'outputs': [ '<(opensslconfig_internal)', ],
                'action': [
-                 'python', 'tools/copyfile.py',
+                 '<(python)', 'tools/copyfile.py',
                  '<(opensslconfig)',
                  '<(opensslconfig_internal)',
                ],
@@ -1194,6 +1197,9 @@
               ],
             },
           ],
+        }],
+        [ 'debug_nghttp2==1', {
+          'defines': [ 'NODE_DEBUG_NGHTTP2=1' ]
         }],
       ],
       'actions': [

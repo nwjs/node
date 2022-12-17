@@ -106,7 +106,7 @@ http.get({
   hostname: 'localhost',
   port: 80,
   path: '/',
-  agent: false  // Create a new agent just for this one request
+  agent: false,  // Create a new agent just for this one request
 }, (res) => {
   // Do stuff with response
 });
@@ -504,7 +504,7 @@ proxy.listen(1337, '127.0.0.1', () => {
     port: 1337,
     host: '127.0.0.1',
     method: 'CONNECT',
-    path: 'www.google.com:80'
+    path: 'www.google.com:80',
   };
 
   const req = http.request(options);
@@ -575,7 +575,7 @@ const http = require('node:http');
 const options = {
   host: '127.0.0.1',
   port: 8080,
-  path: '/length_request'
+  path: '/length_request',
 };
 
 // Make a request
@@ -673,8 +673,8 @@ server.listen(1337, '127.0.0.1', () => {
     host: '127.0.0.1',
     headers: {
       'Connection': 'Upgrade',
-      'Upgrade': 'websocket'
-    }
+      'Upgrade': 'websocket',
+    },
   };
 
   const req = http.request(options);
@@ -750,12 +750,15 @@ See [`writable.cork()`][].
 <!-- YAML
 added: v0.1.90
 changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/33155
+    description: The `data` parameter can now be a `Uint8Array`.
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/18780
     description: This method now returns a reference to `ClientRequest`.
 -->
 
-* `data` {string|Buffer}
+* `data` {string|Buffer|Uint8Array}
 * `encoding` {string}
 * `callback` {Function}
 * Returns: {this}
@@ -1205,9 +1208,13 @@ before the [`'finish'`][] event is emitted.
 
 <!-- YAML
 added: v0.1.29
+changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/33155
+    description: The `chunk` parameter can now be a `Uint8Array`.
 -->
 
-* `chunk` {string|Buffer}
+* `chunk` {string|Buffer|Uint8Array}
 * `encoding` {string}
 * `callback` {Function}
 * Returns: {boolean}
@@ -1740,12 +1747,15 @@ See [`writable.cork()`][].
 <!-- YAML
 added: v0.1.90
 changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/33155
+    description: The `data` parameter can now be a `Uint8Array`.
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/18780
     description: This method now returns a reference to `ServerResponse`.
 -->
 
-* `data` {string|Buffer}
+* `data` {string|Buffer|Uint8Array}
 * `encoding` {string}
 * `callback` {Function}
 * Returns: {this}
@@ -2094,9 +2104,13 @@ before the [`'finish'`][] event is emitted.
 
 <!-- YAML
 added: v0.1.29
+changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/33155
+    description: The `chunk` parameter can now be a `Uint8Array`.
 -->
 
-* `chunk` {string|Buffer}
+* `chunk` {string|Buffer|Uint8Array}
 * `encoding` {string} **Default:** `'utf8'`
 * `callback` {Function}
 * Returns: {boolean}
@@ -2171,11 +2185,13 @@ const earlyHintsLinks = [
 ];
 response.writeEarlyHints({
   'link': earlyHintsLinks,
-  'x-trace-id': 'id for diagnostics'
+  'x-trace-id': 'id for diagnostics',
 });
 
 const earlyHintsCallback = () => console.log('early hints message sent');
-response.writeEarlyHints(earlyHintsLinks, earlyHintsCallback);
+response.writeEarlyHints({
+  'link': earlyHintsLinks,
+}, earlyHintsCallback);
 ```
 
 ### `response.writeHead(statusCode[, statusMessage][, headers])`
@@ -2222,7 +2238,7 @@ const body = 'hello world';
 response
   .writeHead(200, {
     'Content-Length': Buffer.byteLength(body),
-    'Content-Type': 'text/plain'
+    'Content-Type': 'text/plain',
   })
   .end(body);
 ```
@@ -2359,7 +2375,7 @@ server fully transmitted a message before a connection was terminated:
 const req = http.request({
   host: '127.0.0.1',
   port: 8080,
-  method: 'POST'
+  method: 'POST',
 }, (res) => {
   res.resume();
   res.on('end', () => {
@@ -2782,11 +2798,14 @@ and is connected, that socket will be destroyed as well.
 <!-- YAML
 added: v0.1.90
 changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/33155
+    description: The `chunk` parameter can now be a `Uint8Array`.
   - version: v0.11.6
     description: add `callback` argument.
 -->
 
-* `chunk` {string | Buffer}
+* `chunk` {string|Buffer|Uint8Array}
 * `encoding` {string} Optional, **Default**: `utf8`
 * `callback` {Function} Optional
 * Returns: {this}
@@ -3042,11 +3061,14 @@ Always `false`.
 <!-- YAML
 added: v0.1.29
 changes:
+  - version: v15.0.0
+    pr-url: https://github.com/nodejs/node/pull/33155
+    description: The `chunk` parameter can now be a `Uint8Array`.
   - version: v0.11.6
     description: The `callback` argument was added.
 -->
 
-* `chunk` {string | Buffer}
+* `chunk` {string|Buffer|Uint8Array}
 * `encoding` {string} **Default**: `utf8`
 * `callback` {Function}
 * Returns {boolean}
@@ -3180,7 +3202,7 @@ const http = require('node:http');
 const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
-    data: 'Hello World!'
+    data: 'Hello World!',
   }));
 });
 
@@ -3197,7 +3219,7 @@ const server = http.createServer();
 server.on('request', (request, res) => {
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
-    data: 'Hello World!'
+    data: 'Hello World!',
   }));
 });
 
@@ -3279,7 +3301,7 @@ http.get('http://localhost:8000/', (res) => {
 const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
-    data: 'Hello World!'
+    data: 'Hello World!',
   }));
 });
 
@@ -3437,7 +3459,7 @@ upload a file with a POST request, then write to the `ClientRequest` object.
 const http = require('node:http');
 
 const postData = JSON.stringify({
-  'msg': 'Hello World!'
+  'msg': 'Hello World!',
 });
 
 const options = {
@@ -3447,8 +3469,8 @@ const options = {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    'Content-Length': Buffer.byteLength(postData)
-  }
+    'Content-Length': Buffer.byteLength(postData),
+  },
 };
 
 const req = http.request(options, (res) => {

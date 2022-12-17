@@ -298,6 +298,9 @@ class KVStore {
   virtual std::shared_ptr<KVStore> Clone(v8::Isolate* isolate) const;
   virtual v8::Maybe<bool> AssignFromObject(v8::Local<v8::Context> context,
                                            v8::Local<v8::Object> entries);
+  v8::Maybe<bool> AssignToObject(v8::Isolate* isolate,
+                                 v8::Local<v8::Context> context,
+                                 v8::Local<v8::Object> object);
 
   static std::shared_ptr<KVStore> CreateMapKVStore();
 };
@@ -506,6 +509,7 @@ class ArrayBufferViewContents {
   explicit inline ArrayBufferViewContents(v8::Local<v8::Object> value);
   explicit inline ArrayBufferViewContents(v8::Local<v8::ArrayBufferView> abv);
   inline void Read(v8::Local<v8::ArrayBufferView> abv);
+  inline void ReadValue(v8::Local<v8::Value> buf);
 
   inline const T* data() const { return data_; }
   inline size_t length() const { return length_; }

@@ -1186,12 +1186,11 @@ added: v18.8.0
 > Stability: 1 - Experimental
 
 When used with `--build-snapshot`, `--snapshot-blob` specifies the path
-where the generated snapshot blob will be written to. If not specified,
-the generated blob will be written, by default, to `snapshot.blob`
-in the current working directory.
+where the generated snapshot blob is written to. If not specified, the
+generated blob is written to `snapshot.blob` in the current working directory.
 
 When used without `--build-snapshot`, `--snapshot-blob` specifies the
-path to the blob that will be used to restore the application state.
+path to the blob that is used to restore the application state.
 
 When loading a snapshot, Node.js checks that:
 
@@ -1200,7 +1199,8 @@ When loading a snapshot, Node.js checks that:
 2. The V8 flags and CPU features are compatible with that of the binary
    that generates the snapshot.
 
-If they don't match, Node.js would refuse to load the snapshot and exit with 1.
+If they don't match, Node.js refuses to load the snapshot and exits with
+status code 1.
 
 ### `--test`
 
@@ -1208,11 +1208,16 @@ If they don't match, Node.js would refuse to load the snapshot and exit with 1.
 added:
   - v18.1.0
   - v16.17.0
+changes:
+  - version: v19.2.0
+    pr-url: https://github.com/nodejs/node/pull/45214
+    description: Test runner now supports running in watch mode.
 -->
 
 Starts the Node.js command line test runner. This flag cannot be combined with
-`--check`, `--eval`, `--interactive`, or the inspector. See the documentation
-on [running tests from the command line][] for more details.
+`--watch-path`, `--check`, `--eval`, `--interactive`, or the inspector.
+See the documentation on [running tests from the command line][]
+for more details.
 
 ### `--test-name-pattern`
 
@@ -1564,16 +1569,21 @@ added: v5.10.0
 
 Set V8's thread pool size which will be used to allocate background jobs.
 
-If set to `0` then V8 will choose an appropriate size of the thread pool based
-on the number of online processors.
+If set to `0` then Node.js will choose an appropriate size of the thread pool
+based on an estimate of the amount of parallelism.
 
-If the value provided is larger than V8's maximum, then the largest value
-will be chosen.
+The amount of parallelism refers to the number of computations that can be
+carried out simultaneously in a given machine. In general, it's the same as the
+amount of CPUs, but it may diverge in environments such as VMs or containers.
 
 ### `--watch`
 
 <!-- YAML
 added: v18.11.0
+changes:
+  - version: v19.2.0
+    pr-url: https://github.com/nodejs/node/pull/45214
+    description: Test runner now supports running in watch mode.
 -->
 
 > Stability: 1 - Experimental
@@ -1607,7 +1617,7 @@ This will turn off watching of required or imported modules, even when used in
 combination with `--watch`.
 
 This flag cannot be combined with
-`--check`, `--eval`, `--interactive`, or the REPL.
+`--check`, `--eval`, `--interactive`, `--test`, or the REPL.
 
 ```console
 $ node --watch-path=./src --watch-path=./tests index.js
@@ -1616,6 +1626,14 @@ $ node --watch-path=./src --watch-path=./tests index.js
 This option is only supported on macOS and Windows.
 An `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM` exception will be thrown
 when the option is used on a platform that does not support it.
+
+### `--watch-preserve-output`
+
+Disable the clearing of the console when watch mode restarts the process.
+
+```console
+$ node --watch --watch-preserve-output test.js
+```
 
 ### `--zero-fill-buffers`
 
@@ -1921,6 +1939,7 @@ Node.js options that are allowed are:
 * `--use-openssl-ca`
 * `--v8-pool-size`
 * `--watch-path`
+* `--watch-preserve-output`
 * `--watch`
 * `--zero-fill-buffers`
 
@@ -1936,6 +1955,7 @@ V8 options that are allowed are:
 * `--interpreted-frames-native-stack`
 * `--jitless`
 * `--max-old-space-size`
+* `--max-semi-space-size`
 * `--perf-basic-prof-only-functions`
 * `--perf-basic-prof`
 * `--perf-prof-unwinding-info`

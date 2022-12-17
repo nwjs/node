@@ -94,55 +94,10 @@ class Worker;
 
 namespace loader {
 class ModuleWrap;
-
-struct PackageConfig {
-  enum class Exists { Yes, No };
-  enum class IsValid { Yes, No };
-  enum class HasMain { Yes, No };
-  enum class HasName { Yes, No };
-  enum PackageType : uint32_t { None = 0, CommonJS, Module };
-
-  const Exists exists;
-  const IsValid is_valid;
-  const HasMain has_main;
-  const std::string main;
-  const HasName has_name;
-  const std::string name;
-  const PackageType type;
-
-  v8::Global<v8::Value> exports;
-};
 }  // namespace loader
 
 class Environment;
 class Realm;
-
-enum class FsStatsOffset {
-  kDev = 0,
-  kMode,
-  kNlink,
-  kUid,
-  kGid,
-  kRdev,
-  kBlkSize,
-  kIno,
-  kSize,
-  kBlocks,
-  kATimeSec,
-  kATimeNsec,
-  kMTimeSec,
-  kMTimeNsec,
-  kCTimeSec,
-  kCTimeNsec,
-  kBirthTimeSec,
-  kBirthTimeNsec,
-  kFsStatsFieldsNumber
-};
-
-// Stat fields buffers contain twice the number of entries in an uv_stat_t
-// because `fs.StatWatcher` needs room to store 2 `fs.Stats` instances.
-constexpr size_t kFsStatsBufferLength =
-    static_cast<size_t>(FsStatsOffset::kFsStatsFieldsNumber) * 2;
 
 // Disables zero-filling for ArrayBuffer allocations in this scope. This is
 // similar to how we implement Buffer.allocUnsafe() in JS land.
@@ -303,7 +258,8 @@ class AsyncHooks : public MemoryRetainer {
   // The `js_execution_async_resources` array contains the value in that case.
   inline v8::Local<v8::Object> native_execution_async_resource(size_t index);
 
-  void SetJSPromiseHooks(v8::Local<v8::Function> init,
+  void InstallPromiseHooks(v8::Local<v8::Context> ctx);
+  void ResetPromiseHooks(v8::Local<v8::Function> init,
                          v8::Local<v8::Function> before,
                          v8::Local<v8::Function> after,
                          v8::Local<v8::Function> resolve);
@@ -321,9 +277,6 @@ class AsyncHooks : public MemoryRetainer {
                           v8::Local<v8::Object> execution_async_resource);
   bool pop_async_context(double async_id);
   void clear_async_id_stack();  // Used in fatal exceptions.
-
-  void AddContext(v8::Local<v8::Context> ctx);
-  void RemoveContext(v8::Local<v8::Context> ctx);
 
   AsyncHooks(const AsyncHooks&) = delete;
   AsyncHooks& operator=(const AsyncHooks&) = delete;
@@ -386,8 +339,6 @@ class AsyncHooks : public MemoryRetainer {
 
   // Non-empty during deserialization
   const SerializeInfo* info_ = nullptr;
-
-  std::vector<v8::Global<v8::Context>> contexts_;
 
   std::array<v8::Global<v8::Function>, 4> js_promise_hooks_;
 };
@@ -503,9 +454,6 @@ struct DeserializeRequest {
   v8::Global<v8::Object> holder;
   int index;
   InternalFieldInfoBase* info = nullptr;  // Owned by the request
-
-  // Move constructor
-  DeserializeRequest(DeserializeRequest&& other) = default;
 };
 
 struct EnvSerializeInfo {
@@ -569,13 +517,6 @@ struct SnapshotData {
   static bool FromBlob(SnapshotData* out, FILE* in);
 
   ~SnapshotData();
-
-  SnapshotData(const SnapshotData&) = delete;
-  SnapshotData& operator=(const SnapshotData&) = delete;
-  SnapshotData(SnapshotData&&) = delete;
-  SnapshotData& operator=(SnapshotData&&) = delete;
-
-  SnapshotData() = default;
 };
 
 void DefaultProcessExitHandlerInternal(Environment* env, ExitCode exit_code);
@@ -617,7 +558,7 @@ class Environment : public MemoryRetainer {
 #if HAVE_INSPECTOR
   // If the environment is created for a worker, pass parent_handle and
   // the ownership if transferred into the Environment.
-  ExitCode InitializeInspector(
+  void InitializeInspector(
       std::unique_ptr<inspector::ParentInspectorHandle> parent_handle);
 #endif
 
@@ -701,9 +642,15 @@ class Environment : public MemoryRetainer {
   template <typename T, typename OnCloseCallback>
   inline void CloseHandle(T* handle, OnCloseCallback callback);
 
+  void ResetPromiseHooks(v8::Local<v8::Function> init,
+                         v8::Local<v8::Function> before,
+                         v8::Local<v8::Function> after,
+                         v8::Local<v8::Function> resolve);
   void AssignToContext(v8::Local<v8::Context> context,
                        Realm* realm,
                        const ContextInfo& info);
+  void TrackContext(v8::Local<v8::Context> context);
+  void UntrackContext(v8::Local<v8::Context> context);
 
   void StartProfilerIdleNotifier();
 
@@ -1146,6 +1093,7 @@ class Environment : public MemoryRetainer {
 
   EnabledDebugList enabled_debug_list_;
 
+  std::vector<v8::Global<v8::Context>> contexts_;
   std::list<node_module> extra_linked_bindings_;
   Mutex extra_linked_bindings_mutex_;
 

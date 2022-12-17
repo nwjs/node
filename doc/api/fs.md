@@ -941,7 +941,7 @@ try {
   await copyFile('source.txt', 'destination.txt');
   console.log('source.txt was copied to destination.txt');
 } catch {
-  console.log('The file could not be copied');
+  console.error('The file could not be copied');
 }
 
 // By using COPYFILE_EXCL, the operation will fail if destination.txt exists.
@@ -949,7 +949,7 @@ try {
   await copyFile('source.txt', 'destination.txt', constants.COPYFILE_EXCL);
   console.log('source.txt was copied to destination.txt');
 } catch {
-  console.log('The file could not be copied');
+  console.error('The file could not be copied');
 }
 ```
 
@@ -977,6 +977,9 @@ changes:
   * `filter` {Function} Function to filter copied files/directories. Return
     `true` to copy the item, `false` to ignore it. Can also return a `Promise`
     that resolves to `true` or `false` **Default:** `undefined`.
+    * `src` {string} source path to copy.
+    * `dest` {string} destination path to copy to.
+    * Returns: {boolean|Promise}
   * `force` {boolean} overwrite existing file or directory. The copy
     operation will ignore errors if you set this to false and the destination
     exists. Use the `errorOnExist` option to change this behavior.
@@ -1734,6 +1737,12 @@ system requests but rather the internal buffering `fs.writeFile` performs.
 
 ### `fsPromises.constants`
 
+<!-- YAML
+added:
+  - v18.4.0
+  - v16.17.0
+-->
+
 * {Object}
 
 Returns an object containing commonly used constants for file system
@@ -2276,6 +2285,9 @@ changes:
   * `filter` {Function} Function to filter copied files/directories. Return
     `true` to copy the item, `false` to ignore it. Can also return a `Promise`
     that resolves to `true` or `false` **Default:** `undefined`.
+    * `src` {string} source path to copy.
+    * `dest` {string} destination path to copy to.
+    * Returns: {boolean|Promise}
   * `force` {boolean} overwrite existing file or directory. The copy
     operation will ignore errors if you set this to false and the destination
     exists. Use the `errorOnExist` option to change this behavior.
@@ -4320,6 +4332,9 @@ The `atime` and `mtime` arguments follow these rules:
 <!-- YAML
 added: v0.5.10
 changes:
+  - version: v19.1.0
+    pr-url: https://github.com/nodejs/node/pull/45098
+    description: Added recursive support for Linux, AIX and IBMi.
   - version:
       - v15.9.0
       - v14.17.0
@@ -4376,10 +4391,6 @@ the returned {fs.FSWatcher}.
 
 The `fs.watch` API is not 100% consistent across platforms, and is
 unavailable in some situations.
-
-The recursive option is only supported on macOS and Windows.
-An `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM` exception will be thrown
-when the option is used on a platform that does not support it.
 
 On Windows, no events will be emitted if the watched directory is moved or
 renamed. An `EPERM` error is reported when the watched directory is deleted.
@@ -5102,6 +5113,9 @@ changes:
     exists, throw an error. **Default:** `false`.
   * `filter` {Function} Function to filter copied files/directories. Return
     `true` to copy the item, `false` to ignore it. **Default:** `undefined`
+    * `src` {string} source path to copy.
+    * `dest` {string} destination path to copy to.
+    * Returns: {boolean}
   * `force` {boolean} overwrite existing file or directory. The copy
     operation will ignore errors if you set this to false and the destination
     exists. Use the `errorOnExist` option to change this behavior.
@@ -7040,7 +7054,7 @@ import { open, constants } from 'node:fs';
 const {
   O_RDWR,
   O_CREAT,
-  O_EXCL
+  O_EXCL,
 } = constants;
 
 open('/path/to/my/file', O_RDWR | O_CREAT | O_EXCL, (err, fd) => {

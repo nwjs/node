@@ -978,7 +978,7 @@ static void WriteCodeCacheInitializer(std::ostream* ss, const std::string& id) {
   *ss << "    },\n";
 }
 
-void FormatBlob(std::ostream& ss, SnapshotData* data) {
+void FormatBlob(std::ostream& ss, const SnapshotData* data) {
   ss << R"(#include <cstddef>
 #include "env.h"
 #include "node_snapshot_builder.h"
@@ -1004,7 +1004,7 @@ static const int v8_snapshot_blob_size = )"
     WriteStaticCodeCacheData(&ss, item);
   }
 
-  ss << R"(SnapshotData snapshot_data {
+  ss << R"(const SnapshotData snapshot_data {
   // -- data_ownership begins --
   SnapshotData::DataOwnership::kNotOwned,
   // -- data_ownership ends --
@@ -1036,7 +1036,6 @@ static const int v8_snapshot_blob_size = )"
 };
 
 const SnapshotData* SnapshotBuilder::GetEmbeddedSnapshotData() {
-  Mutex::ScopedLock lock(snapshot_data_mutex_);
   return &snapshot_data;
 }
 }  // namespace node
@@ -1052,8 +1051,6 @@ static void ResetContextSettingsBeforeSnapshot(Local<Context> context) {
   // node::InitializeContextRuntime.
   context->AllowCodeGenerationFromStrings(true);
 }
-
-Mutex SnapshotBuilder::snapshot_data_mutex_;
 
 const std::vector<intptr_t>& SnapshotBuilder::CollectExternalReferences() {
   static auto registry = std::make_unique<ExternalReferenceRegistry>();
@@ -1173,8 +1170,6 @@ ExitCode SnapshotBuilder::Generate(SnapshotData* out,
       // in the future).
       if (snapshot_type == SnapshotMetadata::Type::kFullyCustomized) {
 #if HAVE_INSPECTOR
-        // TODO(joyeecheung): handle the exit code returned by
-        // InitializeInspector().
         env->InitializeInspector({});
 #endif
         if (LoadEnvironment(env, StartExecutionCallback{}).IsEmpty()) {
@@ -1505,6 +1500,6 @@ void RegisterExternalReferences(ExternalReferenceRegistry* registry) {
 }  // namespace mksnapshot
 }  // namespace node
 
-NODE_MODULE_CONTEXT_AWARE_INTERNAL(mksnapshot, node::mksnapshot::Initialize)
-NODE_MODULE_EXTERNAL_REFERENCE(mksnapshot,
-                               node::mksnapshot::RegisterExternalReferences)
+NODE_BINDING_CONTEXT_AWARE_INTERNAL(mksnapshot, node::mksnapshot::Initialize)
+NODE_BINDING_EXTERNAL_REFERENCE(mksnapshot,
+                                node::mksnapshot::RegisterExternalReferences)

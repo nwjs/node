@@ -18,10 +18,8 @@
 // for the sake of convenience.  Strings should be ASCII-only and have a
 // "node:" prefix to avoid name clashes with third-party code.
 #define PER_ISOLATE_PRIVATE_SYMBOL_PROPERTIES(V)                               \
-  V(alpn_buffer_private_symbol, "node:alpnBuffer")                             \
   V(arrow_message_private_symbol, "node:arrowMessage")                         \
   V(contextify_context_private_symbol, "node:contextify:context")              \
-  V(contextify_global_private_symbol, "node:contextify:global")                \
   V(decorated_private_symbol, "node:decorated")                                \
   V(napi_type_tag, "node:napi:type_tag")                                       \
   V(napi_wrapper, "node:napi:wrapper")                                         \
@@ -59,6 +57,7 @@
   V(bytes_parsed_string, "bytesParsed")                                        \
   V(bytes_read_string, "bytesRead")                                            \
   V(bytes_written_string, "bytesWritten")                                      \
+  V(ca_string, "ca")                                                           \
   V(cached_data_produced_string, "cachedDataProduced")                         \
   V(cached_data_rejected_string, "cachedDataRejected")                         \
   V(cached_data_string, "cachedData")                                          \
@@ -276,6 +275,7 @@
   V(sni_context_err_string, "Invalid SNI context")                             \
   V(sni_context_string, "sni_context")                                         \
   V(source_string, "source")                                                   \
+  V(source_map_url_string, "sourceMapURL")                                     \
   V(stack_string, "stack")                                                     \
   V(standard_name_string, "standardName")                                      \
   V(start_time_string, "startTime")                                            \
@@ -334,6 +334,8 @@
   V(contextify_global_template, v8::ObjectTemplate)                            \
   V(contextify_wrapper_template, v8::ObjectTemplate)                           \
   V(compiled_fn_entry_template, v8::ObjectTemplate)                            \
+  V(env_proxy_template, v8::ObjectTemplate)                                    \
+  V(env_proxy_ctor_template, v8::FunctionTemplate)                             \
   V(dir_instance_template, v8::ObjectTemplate)                                 \
   V(fd_constructor_template, v8::ObjectTemplate)                               \
   V(fdclose_constructor_template, v8::ObjectTemplate)                          \

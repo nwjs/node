@@ -306,13 +306,12 @@ void Blob::GetDataObject(const v8::FunctionCallbackInfo<v8::Value>& args) {
   }
 }
 
-FixedSizeBlobCopyJob::FixedSizeBlobCopyJob(
-    Environment* env,
-    Local<Object> object,
-    Blob* blob,
-    FixedSizeBlobCopyJob::Mode mode)
+FixedSizeBlobCopyJob::FixedSizeBlobCopyJob(Environment* env,
+                                           Local<Object> object,
+                                           Blob* blob,
+                                           FixedSizeBlobCopyJob::Mode mode)
     : AsyncWrap(env, object, AsyncWrap::PROVIDER_FIXEDSIZEBLOBCOPY),
-      ThreadPoolWork(env),
+      ThreadPoolWork(env, "blob"),
       mode_(mode) {
   if (mode == FixedSizeBlobCopyJob::Mode::SYNC) MakeWeak();
   source_ = blob->entries();
@@ -500,5 +499,5 @@ void Blob::RegisterExternalReferences(ExternalReferenceRegistry* registry) {
 
 }  // namespace node
 
-NODE_MODULE_CONTEXT_AWARE_INTERNAL(blob, node::Blob::Initialize)
-NODE_MODULE_EXTERNAL_REFERENCE(blob, node::Blob::RegisterExternalReferences)
+NODE_BINDING_CONTEXT_AWARE_INTERNAL(blob, node::Blob::Initialize)
+NODE_BINDING_EXTERNAL_REFERENCE(blob, node::Blob::RegisterExternalReferences)

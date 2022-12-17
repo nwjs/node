@@ -3055,7 +3055,7 @@ const w = new Writable({
   async final(callback) {
     await someOp();
     callback();
-  }
+  },
 });
 ```
 
@@ -3292,6 +3292,38 @@ Type: Documentation-only
 have security implications. Use the [WHATWG URL API][] instead. CVEs are not
 issued for `url.parse()` vulnerabilities.
 
+### DEP0170: Invalid port when using `url.parse()`
+
+<!-- YAML
+changes:
+  - version:
+    - v19.2.0
+    pr-url: https://github.com/nodejs/node/pull/45576
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only
+
+[`url.parse()`][] accepts URLs with ports that are not numbers. This behavior
+might result in host name spoofing with unexpected input. These URLs will throw
+an error in future versions of Node.js, as the [WHATWG URL API][] does already.
+
+### DEP0171: Setters for `http.IncomingMessage` headers and trailers
+
+<!-- YAML
+changes:
+  - version:
+      - v19.3.0
+    pr-url: https://github.com/nodejs/node/pull/45697
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only
+
+In a future version of Node.js, [`message.headers`][],
+[`message.headersDistinct`][], [`message.trailers`][], and
+[`message.trailersDistinct`][] will be read-only.
+
 [NIST SP 800-38D]: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf
 [RFC 6066]: https://tools.ietf.org/html/rfc6066#section-3
 [RFC 8247 Section 2.4]: https://www.rfc-editor.org/rfc/rfc8247#section-2.4
@@ -3368,7 +3400,11 @@ issued for `url.parse()` vulnerabilities.
 [`https.get()`]: https.md#httpsgetoptions-callback
 [`https.request()`]: https.md#httpsrequestoptions-callback
 [`message.connection`]: http.md#messageconnection
+[`message.headersDistinct`]: http.md#messageheadersdistinct
+[`message.headers`]: http.md#messageheaders
 [`message.socket`]: http.md#messagesocket
+[`message.trailersDistinct`]: http.md#messagetrailersdistinct
+[`message.trailers`]: http.md#messagetrailers
 [`module.createRequire()`]: module.md#modulecreaterequirefilename
 [`os.networkInterfaces()`]: os.md#osnetworkinterfaces
 [`os.tmpdir()`]: os.md#ostmpdir

@@ -32,6 +32,17 @@
                 }],
               ],
             }],
+            ['OS=="win"', {
+                  'msvs_settings': {
+                    'VCCLCompilerTool': {
+                      'AdditionalOptions': [
+                        '-mssse3',
+                        '-msse4.2',
+                        '-mpclmul',
+                      ],
+                    },
+                  },
+            }],
             ['arm_fpu=="neon"', {
               'defines': [ 'ADLER32_SIMD_NEON' ],
             }],
@@ -122,7 +133,18 @@
                   '-mpclmul',
                 ],
               },
-            }]
+            }],
+            ['OS=="win"', {
+                  'msvs_settings': {
+                    'VCCLCompilerTool': {
+                      'AdditionalOptions': [
+                        '-mssse3',
+                        '-msse4.2',
+                        '-mpclmul',
+                      ],
+                    },
+                  },
+            }],
           ],
           'defines': [ 'CRC32_SIMD_SSE42_PCLMUL' ],
           'include_dirs': [ '<(ZLIB_ROOT)' ],

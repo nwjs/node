@@ -65,7 +65,7 @@
 
     # Enable disassembler for `--print-code` v8 options
     'v8_enable_disassembler': 1,
-    'v8_host_byteorder': '<!(python -c "import sys; print sys.byteorder")',
+    'v8_host_byteorder': '<!(python -c "import sys; print(sys.byteorder)")',
 
     # Sets -dOBJECT_PRINT.
     'v8_enable_object_print%': 1,
@@ -126,13 +126,13 @@
         'v8_enable_31bit_smis_on_64bit_arch': 1,
       }],
       ['OS=="linux" and target_arch=="ia32" and <(building_nw)==1', {
-        'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_sid_i386-sysroot',
+        'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_bullseye_i386-sysroot',
       }],
       ['OS=="linux" and target_arch=="x64" and <(building_nw)==1', {
-        'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_sid_amd64-sysroot',
+        'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_bullseye_amd64-sysroot',
       }],
       ['OS=="linux" and target_arch=="arm" and <(building_nw)==1', {
-        'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_sid_arm-sysroot',
+        'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_bullseye_arm-sysroot',
       }],
       ['OS=="mac"', {
         'clang%': 1,

@@ -16,7 +16,7 @@
     "path": "dom/events"
   },
   "encoding": {
-    "commit": "c1b24fce6e625c1b79124a58f27bf9adce02d5d7",
+    "commit": "779d175c40efcb8f2c9512bebe25ffbeda485708",
     "path": "encoding"
   },
   "fetch/data-urls/resources": {
@@ -72,7 +72,7 @@
     "path": "streams"
   },
   "url": {
-    "commit": "0e5b126cd0a8da9186b738b8c9278d19b594c51f",
+    "commit": "0a187bc16933e67dfb8755935143a6dd5a9e12f2",
     "path": "url"
   },
   "user-timing": {
@@ -88,7 +88,7 @@
     "path": "wasm/webapi"
   },
   "WebCryptoAPI": {
-    "commit": "21ccdcd8143d494024639c9e53bad565c9733831",
+    "commit": "84456654f439f236f3470a36601ecbc4365f50c5",
     "path": "WebCryptoAPI"
   },
   "webidl/ecmascript-binding/es-exceptions": {

@@ -48,7 +48,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.8',
+    'v8_embedder_string': '-node.11',
 
     ##### V8 defaults for Node.js #####
 
@@ -609,9 +609,9 @@
           }],
           [ 'building_nw==1', {
             'cflags': [ '--sysroot=<(sysroot)', '-nostdinc++', 
-                        '-isystem<(DEPTH)/buildtools/third_party/libc++/trunk/include', 
-                        '-isystem<(DEPTH)/buildtools/third_party/libc++', 
-                        '-isystem<(DEPTH)/buildtools/third_party/libc++abi/trunk/include' ],
+                        '-isystem<(PRODUCT_DIR)/../../buildtools/third_party/libc++/trunk/include', 
+                        '-isystem<(PRODUCT_DIR)/../../buildtools/third_party/libc++', 
+                        '-isystem<(PRODUCT_DIR)/../../buildtools/third_party/libc++abi/trunk/include' ],
             'ldflags': [ '--sysroot=<(sysroot)','<!(<(DEPTH)/content/nw/tools/sysroot_ld_path.sh <(sysroot))', '-nostdlib++' ],
           }],
           [ 'OS=="linux" and target_arch=="arm"', {

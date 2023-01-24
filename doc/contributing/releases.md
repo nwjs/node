@@ -710,7 +710,7 @@ repository.
 ```console
 $ git checkout main
 $ git pull upstream main
-$ git cherry-pick v1.x^
+$ git cherry-pick --strategy-option=diff-algorithm=patience v1.x^
 ```
 
 Git should stop to let you fix conflicts.
@@ -827,6 +827,14 @@ or at runtime with:
 $ ./tools/release.sh -i ~/.ssh/node_id_rsa
 ```
 
+You can also specify a different ssh server address to connect to by defining
+a `NODEJS_RELEASE_HOST` environment variable:
+
+```console
+# Substitute proxy.xyz with whatever address you intend to use
+$ NODEJS_RELEASE_HOST=proxy.xyz ./tools/release.sh
+```
+
 `tools/release.sh` will perform the following actions when run:
 
 <details>
@@ -925,11 +933,7 @@ This script will use the promoted builds and changelog to generate the post. Run
   "Set as the latest release".
 * Click on the "Publish release" button.
 
-### 19. Cleanup
-
-Close your release proposal PR and delete the proposal branch.
-
-### 20. Announce
+### 19. Announce
 
 The nodejs.org website will automatically rebuild and include the new version.
 To announce the build on Twitter through the official @nodejs account, email
@@ -953,7 +957,7 @@ Let the security release steward know the releases are available.
 
 </details>
 
-### 21. Celebrate
+### 20. Celebrate
 
 _In whatever form you do this..._
 

@@ -1,6 +1,7 @@
 {
   'variables': {
     'v8_use_siphash%': 0,
+    'v8_enable_shared_ro_heap%': 0,
     'icu_gyp_path%': '../icu/icu.gyp',
     'coverage': 'false',
     'node_report': 'false',
@@ -153,8 +154,9 @@
 'lib/internal/modules/esm/assert.js',
 'lib/internal/modules/esm/load.js',
 'lib/internal/modules/esm/package_config.js',
+'lib/internal/modules/esm/utils.js',
 'lib/internal/modules/run_main.js',
-'lib/internal/modules/cjs/helpers.js',
+'lib/internal/modules/helpers.js',
 'lib/internal/modules/cjs/loader.js',
 'lib/internal/util/colors.js',
 'lib/internal/util/comparisons.js',
@@ -768,6 +770,7 @@
         'deps/googletest/googletest.gyp:gtest_prod',
         'deps/histogram/histogram.gyp:histogram',
         'deps/uvwasi/uvwasi.gyp:uvwasi',
+        'deps/simdutf/simdutf.gyp:simdutf',
       ],
 
       'direct_dependent_settings': {
@@ -1036,8 +1039,8 @@
       'conditions': [
         [ 'OS=="win" or OS=="linux"', {
           'include_dirs': [
-            '<(DEPTH)/buildtools/third_party/libc++/trunk/include',
-            '<(DEPTH)/buildtools/third_party/libc++',
+            '<(PRODUCT_DIR)/../../buildtools/third_party/libc++/trunk/include',
+            '<(PRODUCT_DIR)/../../buildtools/third_party/libc++',
           ],
         }],
         [ 'openssl_default_cipher_list!=""', {
@@ -1341,7 +1344,6 @@
         'test/cctest/test_base_object_ptr.cc',
         'test/cctest/test_node_postmortem_metadata.cc',
         'test/cctest/test_environment.cc',
-        'test/cctest/test_js_native_api_v8.cc',
         'test/cctest/test_linked_binding.cc',
         'test/cctest/test_node_api.cc',
         'test/cctest/test_per_process.cc',

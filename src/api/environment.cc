@@ -228,7 +228,8 @@ void SetIsolateCreateParamsForNode(Isolate::CreateParams* params) {
   const uint64_t total_memory = constrained_memory > 0 ?
       std::min(uv_get_total_memory(), constrained_memory) :
       uv_get_total_memory();
-  if (total_memory > 0) {
+  if (total_memory > 0 &&
+      params->constraints.max_old_generation_size_in_bytes() == 0) {
     // V8 defaults to 700MB or 1.4GB on 32 and 64 bit platforms respectively.
     // This default is based on browser use-cases. Tell V8 to configure the
     // heap based on the actual physical memory.
@@ -317,9 +318,21 @@ void SetIsolateUpForNode(v8::Isolate* isolate) {
 // careful about what we override in the params.
 Isolate* NewIsolate(Isolate::CreateParams* params,
                     uv_loop_t* event_loop,
-                    MultiIsolatePlatform* platform) {
+                    MultiIsolatePlatform* platform,
+                    bool has_snapshot_data) {
   Isolate* isolate = Isolate::Allocate();
   if (isolate == nullptr) return nullptr;
+#ifdef NODE_V8_SHARED_RO_HEAP
+  {
+    // In shared-readonly-heap mode, V8 requires all snapshots used for
+    // creating Isolates to be identical. This isn't really memory-safe
+    // but also otherwise just doesn't work, and the only real alternative
+    // is disabling shared-readonly-heap mode altogether.
+    static Isolate::CreateParams first_params = *params;
+    params->snapshot_blob = first_params.snapshot_blob;
+    params->external_references = first_params.external_references;
+  }
+#endif
 
   // Register the isolate on the platform before the isolate gets initialized,
   // so that the isolate can access the platform during initialization.
@@ -327,7 +340,13 @@ Isolate* NewIsolate(Isolate::CreateParams* params,
 
   SetIsolateCreateParamsForNode(params);
   Isolate::Initialize(isolate, *params);
-  SetIsolateUpForNode(isolate);
+  if (!has_snapshot_data) {
+    // If in deserialize mode, delay until after the deserialization is
+    // complete.
+    SetIsolateUpForNode(isolate);
+  } else {
+    SetIsolateMiscHandlers(isolate, {});
+  }
 
   return isolate;
 }
@@ -387,12 +406,13 @@ Environment* CreateEnvironment(
   // options than the global parse call.
   Environment* env = new Environment(
       isolate_data, context, args, exec_args, nullptr, flags, thread_id);
+
 #if HAVE_INSPECTOR
   if (env->should_create_inspector()) {
     if (inspector_parent_handle) {
-      env->InitializeInspector(
-          std::move(static_cast<InspectorParentHandleImpl*>(
-              inspector_parent_handle.get())->impl));
+      env->InitializeInspector(std::move(
+          static_cast<InspectorParentHandleImpl*>(inspector_parent_handle.get())
+              ->impl));
     } else {
       env->InitializeInspector({});
     }

@@ -1515,9 +1515,13 @@ or waiting for a response.
 added:
  - v11.3.0
  - v10.14.0
+changes:
+  - version: v19.4.0
+    pr-url: https://github.com/nodejs/node/pull/45778
+    description: The default is now set to the minimum between 60000 (60 seconds) or `requestTimeout`.
 -->
 
-* {number} **Default:** `60000`
+* {number} **Default:** The minimum between [`server.requestTimeout`][] or `60000`.
 
 Limit the amount of time the parser will wait to receive the complete HTTP
 headers.
@@ -3142,39 +3146,20 @@ changes:
 -->
 
 * `options` {Object}
-  * `IncomingMessage` {http.IncomingMessage} Specifies the `IncomingMessage`
-    class to be used. Useful for extending the original `IncomingMessage`.
-    **Default:** `IncomingMessage`.
-  * `ServerResponse` {http.ServerResponse} Specifies the `ServerResponse` class
-    to be used. Useful for extending the original `ServerResponse`. **Default:**
-    `ServerResponse`.
-  * `requestTimeout`: Sets the timeout value in milliseconds for receiving
-    the entire request from the client.
-    See [`server.requestTimeout`][] for more information.
-    **Default:** `300000`.
+  * `connectionsCheckingInterval`: Sets the interval value in milliseconds to
+    check for request and headers timeout in incomplete requests.
+    **Default:** `30000`.
   * `headersTimeout`: Sets the timeout value in milliseconds for receiving
     the complete HTTP headers from the client.
     See [`server.headersTimeout`][] for more information.
     **Default:** `60000`.
-  * `keepAliveTimeout`: The number of milliseconds of inactivity a server
-    needs to wait for additional incoming data, after it has finished writing
-    the last response, before a socket will be destroyed.
-    See [`server.keepAliveTimeout`][] for more information.
-    **Default:** `5000`.
-  * `connectionsCheckingInterval`: Sets the interval value in milliseconds to
-    check for request and headers timeout in incomplete requests.
-    **Default:** `30000`.
   * `insecureHTTPParser` {boolean} Use an insecure HTTP parser that accepts
     invalid HTTP headers when `true`. Using the insecure parser should be
     avoided. See [`--insecure-http-parser`][] for more information.
-    **Default:** `false`
-  * `maxHeaderSize` {number} Optionally overrides the value of
-    [`--max-http-header-size`][] for requests received by this server, i.e.
-    the maximum length of request headers in bytes.
-    **Default:** 16384 (16 KiB).
-  * `noDelay` {boolean} If set to `true`, it disables the use of Nagle's
-    algorithm immediately after a new incoming connection is received.
-    **Default:** `true`.
+    **Default:** `false`.
+  * `IncomingMessage` {http.IncomingMessage} Specifies the `IncomingMessage`
+    class to be used. Useful for extending the original `IncomingMessage`.
+    **Default:** `IncomingMessage`.
   * `keepAlive` {boolean} If set to `true`, it enables keep-alive functionality
     on the socket immediately after a new incoming connection is received,
     similarly on what is done in \[`socket.setKeepAlive([enable][, initialDelay])`]\[`socket.setKeepAlive(enable, initialDelay)`].
@@ -3182,6 +3167,25 @@ changes:
   * `keepAliveInitialDelay` {number} If set to a positive number, it sets the
     initial delay before the first keepalive probe is sent on an idle socket.
     **Default:** `0`.
+  * `keepAliveTimeout`: The number of milliseconds of inactivity a server
+    needs to wait for additional incoming data, after it has finished writing
+    the last response, before a socket will be destroyed.
+    See [`server.keepAliveTimeout`][] for more information.
+    **Default:** `5000`.
+  * `maxHeaderSize` {number} Optionally overrides the value of
+    [`--max-http-header-size`][] for requests received by this server, i.e.
+    the maximum length of request headers in bytes.
+    **Default:** 16384 (16 KiB).
+  * `noDelay` {boolean} If set to `true`, it disables the use of Nagle's
+    algorithm immediately after a new incoming connection is received.
+    **Default:** `true`.
+  * `requestTimeout`: Sets the timeout value in milliseconds for receiving
+    the entire request from the client.
+    See [`server.requestTimeout`][] for more information.
+  * `ServerResponse` {http.ServerResponse} Specifies the `ServerResponse` class
+    to be used. Useful for extending the original `ServerResponse`. **Default:**
+    `ServerResponse`.
+    **Default:** `300000`.
   * `uniqueHeaders` {Array} A list of response headers that should be sent only
     once. If the header's value is an array, the items will be joined
     using `; `.
@@ -3660,9 +3664,9 @@ const { validateHeaderName } = require('node:http');
 try {
   validateHeaderName('');
 } catch (err) {
-  err instanceof TypeError; // --> true
-  err.code; // --> 'ERR_INVALID_HTTP_TOKEN'
-  err.message; // --> 'Header name must be a valid HTTP token [""]'
+  console.error(err instanceof TypeError); // --> true
+  console.error(err.code); // --> 'ERR_INVALID_HTTP_TOKEN'
+  console.error(err.message); // --> 'Header name must be a valid HTTP token [""]'
 }
 ```
 
@@ -3694,17 +3698,17 @@ const { validateHeaderValue } = require('node:http');
 try {
   validateHeaderValue('x-my-header', undefined);
 } catch (err) {
-  err instanceof TypeError; // --> true
-  err.code === 'ERR_HTTP_INVALID_HEADER_VALUE'; // --> true
-  err.message; // --> 'Invalid value "undefined" for header "x-my-header"'
+  console.error(err instanceof TypeError); // --> true
+  console.error(err.code === 'ERR_HTTP_INVALID_HEADER_VALUE'); // --> true
+  console.error(err.message); // --> 'Invalid value "undefined" for header "x-my-header"'
 }
 
 try {
   validateHeaderValue('x-my-header', 'oʊmɪɡə');
 } catch (err) {
-  err instanceof TypeError; // --> true
-  err.code === 'ERR_INVALID_CHAR'; // --> true
-  err.message; // --> 'Invalid character in header content ["x-my-header"]'
+  console.error(err instanceof TypeError); // --> true
+  console.error(err.code === 'ERR_INVALID_CHAR'); // --> true
+  console.error(err.message); // --> 'Invalid character in header content ["x-my-header"]'
 }
 ```
 

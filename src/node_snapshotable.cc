@@ -99,6 +99,9 @@ std::ostream& operator<<(std::ostream& output,
 
 std::ostream& operator<<(std::ostream& output, const RealmSerializeInfo& i) {
   output << "{\n"
+         << "// -- builtins begins --\n"
+         << i.builtins << ",\n"
+         << "// -- builtins ends --\n"
          << "// -- persistent_values begins --\n"
          << i.persistent_values << ",\n"
          << "// -- persistent_values ends --\n"
@@ -112,9 +115,6 @@ std::ostream& operator<<(std::ostream& output, const RealmSerializeInfo& i) {
 
 std::ostream& operator<<(std::ostream& output, const EnvSerializeInfo& i) {
   output << "{\n"
-         << "// -- builtins begins --\n"
-         << i.builtins << ",\n"
-         << "// -- builtins ends --\n"
          << "// -- async_hooks begins --\n"
          << i.async_hooks << ",\n"
          << "// -- async_hooks ends --\n"
@@ -704,6 +704,7 @@ template <>
 RealmSerializeInfo FileReader::Read() {
   per_process::Debug(DebugCategory::MKSNAPSHOT, "Read<RealmSerializeInfo>()\n");
   RealmSerializeInfo result;
+  result.builtins = ReadVector<std::string>();
   result.persistent_values = ReadVector<PropInfo>();
   result.native_objects = ReadVector<PropInfo>();
   result.context = Read<SnapshotIndex>();
@@ -718,7 +719,8 @@ size_t FileWriter::Write(const RealmSerializeInfo& data) {
   }
 
   // Use += here to ensure order of evaluation.
-  size_t written_total = WriteVector<PropInfo>(data.persistent_values);
+  size_t written_total = WriteVector<std::string>(data.builtins);
+  written_total += WriteVector<PropInfo>(data.persistent_values);
   written_total += WriteVector<PropInfo>(data.native_objects);
   written_total += Write<SnapshotIndex>(data.context);
 
@@ -730,7 +732,6 @@ template <>
 EnvSerializeInfo FileReader::Read() {
   per_process::Debug(DebugCategory::MKSNAPSHOT, "Read<EnvSerializeInfo>()\n");
   EnvSerializeInfo result;
-  result.builtins = ReadVector<std::string>();
   result.async_hooks = Read<AsyncHooks::SerializeInfo>();
   result.tick_info = Read<TickInfo::SerializeInfo>();
   result.immediate_info = Read<ImmediateInfo::SerializeInfo>();
@@ -751,8 +752,7 @@ size_t FileWriter::Write(const EnvSerializeInfo& data) {
   }
 
   // Use += here to ensure order of evaluation.
-  size_t written_total = WriteVector<std::string>(data.builtins);
-  written_total += Write<AsyncHooks::SerializeInfo>(data.async_hooks);
+  size_t written_total = Write<AsyncHooks::SerializeInfo>(data.async_hooks);
   written_total += Write<TickInfo::SerializeInfo>(data.tick_info);
   written_total += Write<ImmediateInfo::SerializeInfo>(data.immediate_info);
   written_total += Write<performance::PerformanceState::SerializeInfo>(
@@ -1151,16 +1151,21 @@ ExitCode SnapshotBuilder::Generate(SnapshotData* out,
       Context::Scope context_scope(main_context);
 
       // Create the environment.
-      env = new Environment(main_instance->isolate_data(),
-                            main_context,
-                            args,
-                            exec_args,
-                            nullptr,
-                            node::EnvironmentFlags::kDefaultFlags,
-                            {});
+      // It's not guaranteed that a context that goes through
+      // v8_inspector::V8Inspector::contextCreated() is runtime-independent,
+      // so do not start the inspector on the main context when building
+      // the default snapshot.
+      uint64_t env_flags = EnvironmentFlags::kDefaultFlags |
+                           EnvironmentFlags::kNoCreateInspector;
 
-      // Run scripts in lib/internal/bootstrap/
-      if (env->principal_realm()->RunBootstrapping().IsEmpty()) {
+      env = CreateEnvironment(main_instance->isolate_data(),
+                              main_context,
+                              args,
+                              exec_args,
+                              static_cast<EnvironmentFlags::Flags>(env_flags));
+
+      // This already ran scripts in lib/internal/bootstrap/, if it fails return
+      if (env == nullptr) {
         return ExitCode::kBootstrapFailure;
       }
       // If --build-snapshot is true, lib/internal/main/mksnapshot.js would be
@@ -1275,11 +1280,11 @@ SnapshotableObject::SnapshotableObject(Environment* env,
     : BaseObject(env, wrap), type_(type) {
 }
 
-const char* SnapshotableObject::GetTypeNameChars() const {
+std::string_view SnapshotableObject::GetTypeName() const {
   switch (type_) {
 #define V(PropertyName, NativeTypeName)                                        \
   case EmbedderObjectType::k_##PropertyName: {                                 \
-    return NativeTypeName::type_name.c_str();                                  \
+    return NativeTypeName::type_name.as_string_view();                         \
   }
     SERIALIZABLE_OBJECT_TYPES(V)
 #undef V
@@ -1320,7 +1325,7 @@ void DeserializeNodeInternalFields(Local<Object> holder,
     per_process::Debug(DebugCategory::MKSNAPSHOT,                              \
                        "Object %p is %s\n",                                    \
                        (*holder),                                              \
-                       NativeTypeName::type_name.c_str());                     \
+                       NativeTypeName::type_name.as_string_view());            \
     env_ptr->EnqueueDeserializeRequest(                                        \
         NativeTypeName::Deserialize,                                           \
         holder,                                                                \
@@ -1382,7 +1387,7 @@ StartupData SerializeNodeContextInternalFields(Local<Object> holder,
   per_process::Debug(DebugCategory::MKSNAPSHOT,
                      "Object %p is %s, ",
                      *holder,
-                     obj->GetTypeNameChars());
+                     obj->GetTypeName());
   InternalFieldInfoBase* info = obj->Serialize(index);
 
   per_process::Debug(DebugCategory::MKSNAPSHOT,
@@ -1407,7 +1412,7 @@ void SerializeSnapshotableObjects(Realm* realm,
     }
     SnapshotableObject* ptr = static_cast<SnapshotableObject*>(obj);
 
-    const char* type_name = ptr->GetTypeNameChars();
+    std::string type_name{ptr->GetTypeName()};
     per_process::Debug(DebugCategory::MKSNAPSHOT,
                        "Serialize snapshotable object %i (%p), "
                        "object=%p, type=%s\n",

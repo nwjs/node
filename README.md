@@ -7,6 +7,12 @@ For information on using Node.js, see the [Node.js website][].
 The Node.js project uses an [open governance model](./GOVERNANCE.md). The
 [OpenJS Foundation][] provides support for the project.
 
+Contributors are expected to act in a collaborative manner to move
+the project forward. We encourage the constructive exchange of contrary
+opinions and compromise. The [TSC](./GOVERNANCE.md#technical-steering-committee)
+reserves the right to limit or block contributors who repeatedly act in ways
+that discourage, exhaust, or otherwise negatively affect other participants.
+
 **This project has a [Code of Conduct][].**
 
 ## Table of contents
@@ -399,7 +405,7 @@ For information about the governance of the Node.js project, see
 * [oyyd](https://github.com/oyyd) -
   **Ouyang Yadong** <<oyydoibh@gmail.com>> (he/him)
 * [panva](https://github.com/panva) -
-  **Filip Skokan** <<panva.ip@gmail.com>>
+  **Filip Skokan** <<panva.ip@gmail.com>> (he/him)
 * [puzpuzpuz](https://github.com/puzpuzpuz) -
   **Andrey Pechkurov** <<apechkurov@gmail.com>> (he/him)
 * [Qard](https://github.com/Qard) -

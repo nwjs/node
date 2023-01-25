@@ -63,7 +63,6 @@
 'lib/assert.js',
 'lib/internal/constants.js',
 'lib/internal/assert.js',
-'lib/internal/assert/snapshot.js',
 'lib/internal/crypto/keys.js',
 'lib/internal/crypto/webcrypto.js',
 'lib/internal/crypto/diffiehellman.js',
@@ -399,6 +398,7 @@
         '-W',
         '-Wno-unused-parameter',
         '-Werror=undefined-inline',
+        '-Werror=extra-semi',
       ],
     },
 
@@ -1313,6 +1313,7 @@
         'deps/googletest/googletest.gyp:gtest_main',
         'deps/histogram/histogram.gyp:histogram',
         'deps/uvwasi/uvwasi.gyp:uvwasi',
+        'deps/simdutf/simdutf.gyp:simdutf',
       ],
 
       'includes': [

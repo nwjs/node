@@ -84,7 +84,7 @@ class AgentWriterHandle {
 class Agent {
  public:
   Agent();
-  ~Agent() {};
+  ~Agent() {}
 
   TracingController* GetTracingController() {
     TracingController* controller = tracing_controller_.get();

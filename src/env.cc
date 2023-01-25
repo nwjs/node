@@ -656,6 +656,7 @@ Environment::Environment(IsolateData* isolate_data,
       isolate_data_(isolate_data),
       async_hooks_(isolate, MAYBE_FIELD_PTR(env_info, async_hooks)),
       immediate_info_(isolate, MAYBE_FIELD_PTR(env_info, immediate_info)),
+      timeout_info_(isolate_, 1, MAYBE_FIELD_PTR(env_info, timeout_info)),
       tick_info_(isolate, MAYBE_FIELD_PTR(env_info, tick_info)),
       timer_base_(uv_now(isolate_data->event_loop())),
       exec_argv_(exec_args),
@@ -675,6 +676,15 @@ Environment::Environment(IsolateData* isolate_data,
       thread_id_(thread_id.id == static_cast<uint64_t>(-1)
                      ? AllocateEnvironmentThreadId().id
                      : thread_id.id) {
+#ifdef NODE_V8_SHARED_RO_HEAP
+  if (!is_main_thread()) {
+    CHECK_NOT_NULL(isolate_data->worker_context());
+    // TODO(addaleax): Adjust for the embedder API snapshot support changes
+    builtin_loader()->CopySourceAndCodeCacheReferenceFrom(
+        isolate_data->worker_context()->env()->builtin_loader());
+  }
+#endif
+
   // We'll be creating new objects so make sure we've entered the context.
   HandleScope handle_scope(isolate);
 
@@ -915,10 +925,13 @@ void Environment::InitializeLibuv() {
 }
 
 void Environment::ExitEnv() {
-  set_can_call_into_js(false);
+  // Should not access non-thread-safe methods here.
   set_stopping(true);
   isolate_->TerminateExecution();
-  SetImmediateThreadsafe([](Environment* env) { uv_stop(env->event_loop()); });
+  SetImmediateThreadsafe([](Environment* env) {
+    env->set_can_call_into_js(false);
+    uv_stop(env->event_loop());
+  });
 }
 
 void Environment::RegisterHandleCleanups() {
@@ -1600,6 +1613,7 @@ EnvSerializeInfo Environment::Serialize(SnapshotCreator* creator) {
 
   info.async_hooks = async_hooks_.Serialize(ctx, creator);
   info.immediate_info = immediate_info_.Serialize(ctx, creator);
+  info.timeout_info = timeout_info_.Serialize(ctx, creator);
   info.tick_info = tick_info_.Serialize(ctx, creator);
   info.performance_state = performance_state_->Serialize(ctx, creator);
   info.exiting = exiting_.Serialize(ctx, creator);
@@ -1645,6 +1659,7 @@ void Environment::DeserializeProperties(const EnvSerializeInfo* info) {
 
   async_hooks_.Deserialize(ctx);
   immediate_info_.Deserialize(ctx);
+  timeout_info_.Deserialize(ctx);
   tick_info_.Deserialize(ctx);
   performance_state_->Deserialize(ctx);
   exiting_.Deserialize(ctx);
@@ -1842,6 +1857,7 @@ void Environment::MemoryInfo(MemoryTracker* tracker) const {
   tracker->TrackField("cleanup_queue", cleanup_queue_);
   tracker->TrackField("async_hooks", async_hooks_);
   tracker->TrackField("immediate_info", immediate_info_);
+  tracker->TrackField("timeout_info", timeout_info_);
   tracker->TrackField("tick_info", tick_info_);
   tracker->TrackField("principal_realm", principal_realm_);
 

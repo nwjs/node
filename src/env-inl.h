@@ -333,6 +333,10 @@ inline ImmediateInfo* Environment::immediate_info() {
   return &immediate_info_;
 }
 
+inline AliasedInt32Array& Environment::timeout_info() {
+  return timeout_info_;
+}
+
 inline TickInfo* Environment::tick_info() {
   return &tick_info_;
 }
@@ -434,6 +438,10 @@ inline bool Environment::inside_should_not_abort_on_uncaught_scope() const {
 
 inline std::vector<double>* Environment::destroy_async_id_list() {
   return &destroy_async_id_list_;
+}
+
+inline builtins::BuiltinLoader* Environment::builtin_loader() {
+  return &builtin_loader_;
 }
 
 inline double Environment::new_async_id() {
@@ -803,11 +811,6 @@ void Environment::AddCleanupHook(CleanupQueue::Callback fn, void* arg) {
 
 void Environment::RemoveCleanupHook(CleanupQueue::Callback fn, void* arg) {
   cleanup_queue_.Remove(fn, arg);
-}
-
-void Environment::set_main_utf16(std::unique_ptr<v8::String::Value> str) {
-  CHECK(!main_utf16_);
-  main_utf16_ = std::move(str);
 }
 
 void Environment::set_process_exit_handler(

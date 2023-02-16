@@ -629,7 +629,7 @@ added: v16.5.0
 Returns the amount of data remaining to fill the {ReadableStream}'s
 queue.
 
-#### `readableStreamDefaultController.enqueue(chunk)`
+#### `readableStreamDefaultController.enqueue([chunk])`
 
 <!-- YAML
 added: v16.5.0
@@ -639,7 +639,7 @@ added: v16.5.0
 
 Appends a new chunk of data to the {ReadableStream}'s queue.
 
-#### `readableStreamDefaultController.error(error)`
+#### `readableStreamDefaultController.error([error])`
 
 <!-- YAML
 added: v16.5.0
@@ -700,7 +700,7 @@ added: v16.5.0
 
 Appends a new chunk of data to the {ReadableStream}'s queue.
 
-#### `readableByteStreamController.error(error)`
+#### `readableByteStreamController.error([error])`
 
 <!-- YAML
 added: v16.5.0
@@ -984,7 +984,7 @@ changes:
 The `WritableStreamDefaultController` manage's the {WritableStream}'s
 internal state.
 
-#### `writableStreamDefaultController.error(error)`
+#### `writableStreamDefaultController.error([error])`
 
 <!-- YAML
 added: v16.5.0
@@ -1482,7 +1482,7 @@ const { Readable } = require('node:stream');
 const { TextEncoder } = require('node:util');
 
 const encoder = new TextEncoder();
-const dataArray = encoder.encode(['hello world from consumers!']);
+const dataArray = encoder.encode('hello world from consumers!');
 const readable = Readable.from(dataArray);
 arrayBuffer(readable).then((data) => {
   console.log(`from readable: ${data.byteLength}`);

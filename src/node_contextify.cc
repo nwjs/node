@@ -118,9 +118,7 @@ BaseObjectPtr<ContextifyContext> ContextifyContext::New(
   InitializeGlobalTemplates(env->isolate_data());
   Local<ObjectTemplate> object_template = env->contextify_global_template();
   DCHECK(!object_template.IsEmpty());
-  bool use_node_snapshot = per_process::cli_options->node_snapshot;
-  const SnapshotData* snapshot_data =
-      use_node_snapshot ? SnapshotBuilder::GetEmbeddedSnapshotData() : nullptr;
+  const SnapshotData* snapshot_data = env->isolate_data()->snapshot_data();
 
   MicrotaskQueue* queue =
       options.microtask_queue_wrap
@@ -536,7 +534,9 @@ void ContextifyContext::PropertySetterCallback(
     return;
 
   USE(ctx->sandbox()->Set(context, property, value));
-  args.GetReturnValue().Set(value);
+  if (is_contextual_store || is_function) {
+    args.GetReturnValue().Set(value);
+  }
 }
 
 // static

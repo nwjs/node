@@ -146,6 +146,12 @@ parser.add_argument('--no-ifaddrs',
     default=None,
     help='use on deprecated SunOS systems that do not support ifaddrs.h')
 
+parser.add_argument('--disable-single-executable-application',
+    action='store_true',
+    dest='disable_single_executable_application',
+    default=None,
+    help='Disable Single Executable Application support.')
+
 parser.add_argument("--fully-static",
     action="store_true",
     dest="fully_static",
@@ -571,7 +577,7 @@ intl_optgroup.add_argument('--without-intl',
     action='store_const',
     dest='with_intl',
     const='none',
-    help='Disable Intl, same as --with-intl=none (disables inspector)')
+    help='Disable Intl, same as --with-intl=none')
 
 intl_optgroup.add_argument('--with-icu-path',
     action='store',
@@ -1357,6 +1363,10 @@ def configure_node(o):
   if options.no_ifaddrs:
     o['defines'] += ['SUNOS_NO_IFADDRS']
 
+  o['variables']['single_executable_application'] = b(not options.disable_single_executable_application)
+  if options.disable_single_executable_application:
+    o['defines'] += ['DISABLE_SINGLE_EXECUTABLE_APPLICATION']
+
   o['variables']['node_with_ltcg'] = b(options.with_ltcg)
   if flavor != 'win' and options.with_ltcg:
     raise Exception('Link Time Code Generation is only supported on Windows.')
@@ -1924,7 +1934,6 @@ def configure_intl(o):
 
 def configure_inspector(o):
   disable_inspector = (options.without_inspector or
-                       options.with_intl in (None, 'none') or
                        options.without_ssl)
   o['variables']['v8_enable_inspector'] = 0 if disable_inspector else 1
 

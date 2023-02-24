@@ -31,34 +31,6 @@ using v8::Locker;
 
 extern bool node_is_nwjs;
 
-NodeMainInstance::NodeMainInstance(Isolate* isolate,
-                                   uv_loop_t* event_loop,
-                                   MultiIsolatePlatform* platform,
-                                   const std::vector<std::string>& args,
-                                   const std::vector<std::string>& exec_args)
-    : args_(args),
-      exec_args_(exec_args),
-      array_buffer_allocator_(nullptr),
-      isolate_(isolate),
-      platform_(platform),
-      isolate_data_(nullptr),
-      snapshot_data_(nullptr) {
-  isolate_data_ =
-      std::make_unique<IsolateData>(isolate_, event_loop, platform, nullptr);
-
-  SetIsolateMiscHandlers(isolate_, {});
-}
-
-std::unique_ptr<NodeMainInstance> NodeMainInstance::Create(
-    Isolate* isolate,
-    uv_loop_t* event_loop,
-    MultiIsolatePlatform* platform,
-    const std::vector<std::string>& args,
-    const std::vector<std::string>& exec_args) {
-  return std::unique_ptr<NodeMainInstance>(
-      new NodeMainInstance(isolate, event_loop, platform, args, exec_args));
-}
-
 NodeMainInstance::NodeMainInstance(const SnapshotData* snapshot_data,
                                    uv_loop_t* event_loop,
                                    MultiIsolatePlatform* platform,
@@ -75,32 +47,21 @@ NodeMainInstance::NodeMainInstance(const SnapshotData* snapshot_data,
   if (node_is_nwjs)
     array_buffer_allocator_.reset();
   isolate_params_->array_buffer_allocator = array_buffer_allocator_.get();
-  if (snapshot_data != nullptr) {
-    SnapshotBuilder::InitializeIsolateParams(snapshot_data,
-                                             isolate_params_.get());
-  }
 
-  isolate_ = NewIsolate(
-      isolate_params_.get(), event_loop, platform, snapshot_data != nullptr);
+  isolate_ =
+      NewIsolate(isolate_params_.get(), event_loop, platform, snapshot_data);
   CHECK_NOT_NULL(isolate_);
 
   // If the indexes are not nullptr, we are not deserializing
-  isolate_data_ = std::make_unique<IsolateData>(
-      isolate_,
-      event_loop,
-      platform,
-      array_buffer_allocator_.get(),
-      snapshot_data == nullptr ? nullptr : &(snapshot_data->isolate_data_info));
+  isolate_data_.reset(
+      CreateIsolateData(isolate_,
+                        event_loop,
+                        platform,
+                        array_buffer_allocator_.get(),
+                        snapshot_data->AsEmbedderWrapper().get()));
 
   isolate_data_->max_young_gen_size =
       isolate_params_->constraints.max_young_generation_size_in_bytes();
-}
-
-void NodeMainInstance::Dispose() {
-  // This should only be called on a main instance that does not own its
-  // isolate.
-  CHECK_NULL(isolate_params_);
-  platform_->DrainTasks(isolate_);
 }
 
 NodeMainInstance::~NodeMainInstance() {
@@ -156,33 +117,10 @@ NodeMainInstance::CreateMainEnvironment(ExitCode* exit_code) {
   DeleteFnPtr<Environment, FreeEnvironment> env;
 
   if (snapshot_data_ != nullptr) {
-    env.reset(new Environment(isolate_data_.get(),
-                              isolate_,
-                              args_,
-                              exec_args_,
-                              &(snapshot_data_->env_info),
-                              EnvironmentFlags::kDefaultFlags,
-                              {}));
-#ifdef NODE_V8_SHARED_RO_HEAP
-    // TODO(addaleax): Do this as part of creating the Environment
-    // once we store the SnapshotData* itself on IsolateData.
-    //env->builtin_loader()->RefreshCodeCache(snapshot_data_->code_cache);
-#endif
-    context = Context::FromSnapshot(isolate_,
-                                    SnapshotData::kNodeMainContextIndex,
-                                    {DeserializeNodeInternalFields, env.get()})
-                  .ToLocalChecked();
-
-    CHECK(!context.IsEmpty());
-    Context::Scope context_scope(context);
-
-    CHECK(InitializeContextRuntime(context).IsJust());
-    SetIsolateErrorHandlers(isolate_, {});
-    env->InitializeMainContext(context, &(snapshot_data_->env_info));
-#if HAVE_INSPECTOR
-    env->InitializeInspector({});
-#endif
-
+    env.reset(CreateEnvironment(isolate_data_.get(),
+                                Local<Context>(),  // read from snapshot
+                                args_,
+                                exec_args_));
 #if HAVE_OPENSSL
     crypto::InitCryptoOnce(isolate_);
 #endif  // HAVE_OPENSSL

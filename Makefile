@@ -170,7 +170,7 @@ with-code-cache test-code-cache:
 
 out/Makefile: config.gypi common.gypi node.gyp \
 	deps/uv/uv.gyp deps/llhttp/llhttp.gyp deps/zlib/zlib.gyp \
-	deps/simdutf/simdutf.gyp \
+	deps/simdutf/simdutf.gyp deps/ada/ada.gyp \
 	tools/v8_gypfiles/toolchain.gypi tools/v8_gypfiles/features.gypi \
 	tools/v8_gypfiles/inspector.gypi tools/v8_gypfiles/v8.gyp
 	$(PYTHON) tools/gyp_node.py -f make
@@ -594,6 +594,12 @@ test-message: test-build
 .PHONY: test-wpt
 test-wpt: all
 	$(PYTHON) tools/test.py $(PARALLEL_ARGS) wpt
+
+.PHONY: test-wpt-report
+test-wpt-report:
+	$(RM) -r out/wpt
+	mkdir -p out/wpt
+	WPT_REPORT=1 $(PYTHON) tools/test.py --shell $(NODE) $(PARALLEL_ARGS) wpt
 
 .PHONY: test-simple
 test-simple: | cctest # Depends on 'all'.

@@ -5,6 +5,7 @@
 #include "node_binding.h"
 #include "node_external_reference.h"
 #include "node_internals.h"
+#include "node_sea.h"
 #if HAVE_OPENSSL
 #include "openssl/opensslv.h"
 #endif
@@ -140,6 +141,13 @@ void EnvironmentOptions::CheckOptions(std::vector<std::string>* errors,
   }
 
   if (test_runner) {
+    if (test_runner_coverage) {
+      // TODO(cjihrig): This restriction can be removed once multi-process
+      // code coverage is supported.
+      errors->push_back(
+          "--experimental-test-coverage cannot be used with --test");
+    }
+
     if (syntax_check_only) {
       errors->push_back("either --test or --check can be used, not both");
     }
@@ -293,6 +301,10 @@ void Parse(
 // TODO(addaleax): Make that unnecessary.
 
 DebugOptionsParser::DebugOptionsParser() {
+#ifndef DISABLE_SINGLE_EXECUTABLE_APPLICATION
+  if (sea::IsSingleExecutable()) return;
+#endif
+
   AddOption("--inspect-port",
             "set host:port for inspector",
             &DebugOptions::host_port,
@@ -549,6 +561,9 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
   AddOption("--test",
             "launch test runner on startup",
             &EnvironmentOptions::test_runner);
+  AddOption("--experimental-test-coverage",
+            "enable code coverage in the test runner",
+            &EnvironmentOptions::test_runner_coverage);
   AddOption("--test-name-pattern",
             "run tests whose name matches this regular expression",
             &EnvironmentOptions::test_name_pattern);
@@ -767,6 +782,10 @@ PerIsolateOptionsParser::PerIsolateOptionsParser(
   Implies("--experimental-shadow-realm", "--harmony-shadow-realm");
   Implies("--harmony-shadow-realm", "--experimental-shadow-realm");
   ImpliesNot("--no-harmony-shadow-realm", "--experimental-shadow-realm");
+  AddOption("--build-snapshot",
+            "Generate a snapshot blob when the process exits.",
+            &PerIsolateOptions::build_snapshot,
+            kDisallowedInEnvvar);
 
   Insert(eop, &PerIsolateOptions::get_per_env_options);
 }
@@ -805,11 +824,6 @@ PerProcessOptionsParser::PerProcessOptionsParser(
             "disable Object.prototype.__proto__",
             &PerProcessOptions::disable_proto,
             kAllowedInEnvvar);
-  AddOption("--build-snapshot",
-            "Generate a snapshot blob when the process exits."
-            " Currently only supported in the node_mksnapshot binary.",
-            &PerProcessOptions::build_snapshot,
-            kDisallowedInEnvvar);
   AddOption("--node-snapshot",
             "",  // It's a debug-only option.
             &PerProcessOptions::node_snapshot,

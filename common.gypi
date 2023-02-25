@@ -572,7 +572,7 @@
             'include_dirs': [ '<(DEPTH)/buildtools/third_party/libc++/trunk/include'],
           }],
           [ 'building_nw==1 and component!="shared_library"', {
-            'defines': [ '_LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS', '_LIBCPP_NO_AUTO_LINK' ],
+            'defines': [ '_LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS' ],
             'include_dirs': [ #'<(DEPTH)/buildtools/third_party/libc++/trunk/include',
                               #'<(DEPTH)/buildtools/third_party/libc++',
                             ],

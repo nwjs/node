@@ -761,6 +761,7 @@
       'include_dirs': [
         'src',
         'deps/postject',
+        'deps/ada',
         '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
         '../../v8', # include/v8_platform.h
         '../../v8/include'
@@ -771,7 +772,7 @@
         'deps/histogram/histogram.gyp:histogram',
         'deps/uvwasi/uvwasi.gyp:uvwasi',
         'deps/simdutf/simdutf.gyp:simdutf',
-        'deps/ada/ada.gyp:ada',
+        #'deps/ada/ada.gyp:ada',
       ],
 
       'direct_dependent_settings': {
@@ -788,6 +789,7 @@
       },
 
       'sources': [
+        'deps/ada/ada.cpp',
         'src/api/async_resource.cc',
         'src/api/callback.cc',
         'src/api/embed_helpers.cc',

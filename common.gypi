@@ -129,7 +129,7 @@
         'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_bullseye_i386-sysroot',
       }],
       ['OS=="linux" and target_arch=="x64" and <(building_nw)==1', {
-        'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_bulleye_amd64-sysroot',
+        'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_bullseye_amd64-sysroot',
       }],
       ['OS=="linux" and target_arch=="arm" and <(building_nw)==1', {
         'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_bullseye_arm-sysroot',

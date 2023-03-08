@@ -318,8 +318,7 @@
     }],
     [ 'OS=="linux" and component != "shared_library"', {
           'ldflags': [ '-L<(PRODUCT_DIR)/../nw/lib/',
-                      # '-lnw',
-                      '-L<(PRODUCT_DIR)/../nw/'
+                      '-lnw',
                       '-Wl,--whole-archive',
                       '<(LIBCXX)',
                       '-Wl,--no-whole-archive'

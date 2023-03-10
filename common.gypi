@@ -166,11 +166,6 @@
           ['CXX.host', '$(CXX)'],
         ],
       }],
-      [ 'OS == "linux" and building_nw==1', {
-        'make_global_settings': [
-          ['LD', 'third_party/llvm-build/Release+Asserts/bin/lld-link'],
-        ],
-      }],
       [ 'clang==1 and OS == "win" and building_nw==1', {
         'make_global_settings': [
           ['CC', 'third_party/llvm-build/Release+Asserts/bin/clang-cl'],

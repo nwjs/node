@@ -10,11 +10,11 @@ const { createConnection, createServer } = require('net');
 
 // Test that happy eyeballs algorithm is properly implemented.
 
-let autoSelectFamilyAttemptTimeout = common.platformTimeout(250);
-if (common.isWindows) {
-  // Some of the windows machines in the CI need more time to establish connection
-  autoSelectFamilyAttemptTimeout = common.platformTimeout(1500);
-}
+// Purposely not using setDefaultAutoSelectFamilyAttemptTimeout here to test the
+// parameter is correctly used in options.
+//
+// Some of the windows machines in the CI need more time to establish connection
+const autoSelectFamilyAttemptTimeout = common.platformTimeout(common.isWindows ? 1500 : 250);
 
 function _lookup(resolver, hostname, options, cb) {
   resolver.resolve(hostname, 'ANY', (err, replies) => {
@@ -217,6 +217,10 @@ if (common.hasIPv6) {
           assert.strictEqual(error.message, `connect ECONNREFUSED ::1:${port}`);
         } else if (error.code === 'EAFNOSUPPORT') {
           assert.strictEqual(error.message, `connect EAFNOSUPPORT ::1:${port} - Local (undefined:undefined)`);
+        } else if (common.isIBMi) {
+          // IBMi returns EUNATCH (ERRNO 42) when IPv6 is disabled
+          // keep this errno assertion until EUNATCH is recognized by libuv
+          assert.strictEqual(error.errno, -42);
         } else {
           assert.strictEqual(error.code, 'EADDRNOTAVAIL');
           assert.strictEqual(error.message, `connect EADDRNOTAVAIL ::1:${port} - Local (:::0)`);

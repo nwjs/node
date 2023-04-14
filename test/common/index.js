@@ -120,6 +120,7 @@ const isFreeBSD = process.platform === 'freebsd';
 const isOpenBSD = process.platform === 'openbsd';
 const isLinux = process.platform === 'linux';
 const isOSX = process.platform === 'darwin';
+const isAsan = process.env.ASAN !== undefined;
 const isPi = (() => {
   try {
     // Normal Raspberry Pi detection is to find the `Raspberry Pi` string in
@@ -900,6 +901,7 @@ const common = {
   invalidArgTypeHelper,
   isAIX,
   isAlive,
+  isAsan,
   isDumbTerminal,
   isFreeBSD,
   isLinux,
@@ -940,7 +942,14 @@ const common = {
 
   get hasIPv6() {
     const iFaces = require('os').networkInterfaces();
-    const re = isWindows ? /Loopback Pseudo-Interface/ : /lo/;
+    let re;
+    if (isWindows) {
+      re = /Loopback Pseudo-Interface/;
+    } else if (this.isIBMi) {
+      re = /\*LOOPBACK/;
+    } else {
+      re = /lo/;
+    }
     return Object.keys(iFaces).some((name) => {
       return re.test(name) &&
              iFaces[name].some(({ family }) => family === 'IPv6');

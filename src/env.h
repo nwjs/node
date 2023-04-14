@@ -587,25 +587,6 @@ class Environment : public MemoryRetainer {
   static inline Environment* GetCurrent(
       const v8::PropertyCallbackInfo<T>& info);
 
-  // Methods created using SetMethod(), SetPrototypeMethod(), etc. inside
-  // this scope can access the created T* object using
-  // GetBindingData<T>(args) later.
-  template <typename T>
-  T* AddBindingData(v8::Local<v8::Context> context,
-                    v8::Local<v8::Object> target);
-  template <typename T, typename U>
-  static inline T* GetBindingData(const v8::PropertyCallbackInfo<U>& info);
-  template <typename T>
-  static inline T* GetBindingData(
-      const v8::FunctionCallbackInfo<v8::Value>& info);
-  template <typename T>
-  static inline T* GetBindingData(v8::Local<v8::Context> context);
-
-  typedef std::unordered_map<
-      FastStringKey,
-      BaseObjectPtr<BaseObject>,
-      FastStringKey::Hash> BindingDataStore;
-
   // Create an Environment without initializing a main Context. Use
   // InitializeMainContext() to initialize a main context for it.
   Environment(IsolateData* isolate_data,
@@ -861,9 +842,11 @@ class Environment : public MemoryRetainer {
   inline HandleWrapQueue* handle_wrap_queue() { return &handle_wrap_queue_; }
   inline ReqWrapQueue* req_wrap_queue() { return &req_wrap_queue_; }
 
+  // https://w3c.github.io/hr-time/#dfn-time-origin
   inline uint64_t time_origin() {
     return time_origin_;
   }
+  // https://w3c.github.io/hr-time/#dfn-get-time-origin-timestamp
   inline double time_origin_timestamp() {
     return time_origin_timestamp_;
   }
@@ -906,6 +889,8 @@ class Environment : public MemoryRetainer {
   static inline Environment* ForAsyncHooks(AsyncHooks* hooks);
 
   v8::Local<v8::Value> GetNow();
+  uint64_t GetNowUint64();
+
   void ScheduleTimer(int64_t duration);
   void ToggleTimerRef(bool ref);
 
@@ -1062,10 +1047,17 @@ class Environment : public MemoryRetainer {
 
   AliasedInt32Array stream_base_state_;
 
-  // https://w3c.github.io/hr-time/#dfn-time-origin
-  uint64_t time_origin_;
-  // https://w3c.github.io/hr-time/#dfn-get-time-origin-timestamp
-  double time_origin_timestamp_;
+  // As PerformanceNodeTiming is exposed in worker_threads, the per_process
+  // time origin is exposed in the worker threads. This is an intentional
+  // diverge from the HTML spec of web workers.
+  // Process start time from the monotonic clock. This should not be used as an
+  // absolute time, but only as a time relative to another monotonic clock time.
+  const uint64_t time_origin_;
+  // Process start timestamp from the wall clock. This is an absolute time
+  // exposed as `performance.timeOrigin`.
+  const double time_origin_timestamp_;
+  // This is the time when the environment is created.
+  const uint64_t environment_start_;
   std::unique_ptr<performance::PerformanceState> performance_state_;
 
   bool has_serialized_options_ = false;
@@ -1124,8 +1116,6 @@ class Environment : public MemoryRetainer {
   std::atomic<Environment**> interrupt_data_ {nullptr};
   void RequestInterruptFromV8();
   static void CheckImmediate(uv_check_t* handle);
-
-  BindingDataStore bindings_;
 
   CleanupQueue cleanup_queue_;
   bool started_cleanup_ = false;

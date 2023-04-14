@@ -3,6 +3,7 @@
 
 #if defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
 
+#include <optional>
 #include "aliased_buffer.h"
 #include "node_messaging.h"
 #include "node_snapshotable.h"
@@ -56,7 +57,7 @@ constexpr size_t kFsStatFsBufferLength =
 
 class BindingData : public SnapshotableObject {
  public:
-  explicit BindingData(Environment* env, v8::Local<v8::Object> wrap);
+  explicit BindingData(Realm* realm, v8::Local<v8::Object> wrap);
 
   AliasedFloat64Array stats_field_array;
   AliasedBigInt64Array stats_field_bigint_array;
@@ -69,9 +70,7 @@ class BindingData : public SnapshotableObject {
 
   using InternalFieldInfo = InternalFieldInfoBase;
   SERIALIZABLE_OBJECT_METHODS()
-  static constexpr FastStringKey type_name{"node::fs::BindingData"};
-  static constexpr EmbedderObjectType type_int =
-      EmbedderObjectType::k_fs_binding_data;
+  SET_BINDING_ID(fs_binding_data)
 
   void MemoryInfo(MemoryTracker* tracker) const override;
   SET_SELF_SIZE(BindingData)
@@ -302,12 +301,16 @@ class FileHandle final : public AsyncWrap, public StreamBase {
 
   static FileHandle* New(BindingData* binding_data,
                          int fd,
-                         v8::Local<v8::Object> obj = v8::Local<v8::Object>());
+                         v8::Local<v8::Object> obj = v8::Local<v8::Object>(),
+                         std::optional<int64_t> maybeOffset = std::nullopt,
+                         std::optional<int64_t> maybeLength = std::nullopt);
   ~FileHandle() override;
 
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
 
   int GetFD() override { return fd_; }
+
+  int Release();
 
   // Will asynchronously close the FD and return a Promise that will
   // be resolved once closing is complete.

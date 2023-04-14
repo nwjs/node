@@ -47,12 +47,6 @@ void Realm::MemoryInfo(MemoryTracker* tracker) const {
   tracker->TrackField("cleanup_queue", cleanup_queue_);
   tracker->TrackField("builtins_with_cache", builtins_with_cache);
   tracker->TrackField("builtins_without_cache", builtins_without_cache);
-
-  ForEachBaseObject([&](BaseObject* obj) {
-    if (obj->IsDoneInitializing()) {
-      tracker->Track(obj);
-    }
-  });
 }
 
 void Realm::CreateProperties() {
@@ -302,7 +296,9 @@ void Realm::DoneBootstrapping() {
 
 void Realm::RunCleanup() {
   TRACE_EVENT0(TRACING_CATEGORY_NODE1(realm), "RunCleanup");
-
+  for (size_t i = 0; i < binding_data_store_.size(); ++i) {
+    binding_data_store_[i].reset();
+  }
   cleanup_queue_.Drain();
 }
 

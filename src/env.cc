@@ -547,7 +547,8 @@ void Environment::AssignToContext(Local<v8::Context> context,
   context->SetAlignedPointerInEmbedderData(ContextEmbedderIndex::kRealm, realm);
   // Used to retrieve bindings
   context->SetAlignedPointerInEmbedderData(
-      ContextEmbedderIndex::kBindingListIndex, &(this->bindings_));
+      ContextEmbedderIndex::kBindingDataStoreIndex,
+      realm->binding_data_store());
 
   // ContextifyContexts will update this to a pointer to the native object.
   context->SetAlignedPointerInEmbedderData(
@@ -671,8 +672,9 @@ Environment::Environment(IsolateData* isolate_data,
       stream_base_state_(isolate_,
                          StreamBase::kNumStreamBaseStateFields,
                          MAYBE_FIELD_PTR(env_info, stream_base_state)),
-      time_origin_(PERFORMANCE_NOW()),
-      time_origin_timestamp_(GetCurrentTimeInMicroseconds()),
+      time_origin_(performance::performance_process_start),
+      time_origin_timestamp_(performance::performance_process_start_timestamp),
+      environment_start_(PERFORMANCE_NOW()),
       flags_(flags),
       thread_id_(thread_id.id == static_cast<uint64_t>(-1)
                      ? AllocateEnvironmentThreadId().id
@@ -782,7 +784,7 @@ void Environment::InitializeMainContext(Local<Context> context,
   set_exiting(false);
 
   performance_state_->Mark(performance::NODE_PERFORMANCE_MILESTONE_ENVIRONMENT,
-                           time_origin_);
+                           environment_start_);
   performance_state_->Mark(performance::NODE_PERFORMANCE_MILESTONE_NODE_START,
                            per_process::node_start_time);
 
@@ -1025,7 +1027,6 @@ MaybeLocal<Value> Environment::RunSnapshotDeserializeMain() const {
 void Environment::RunCleanup() {
   started_cleanup_ = true;
   TRACE_EVENT0(TRACING_CATEGORY_NODE1(environment), "RunCleanup");
-  bindings_.clear();
   // Only BaseObject's cleanups are registered as per-realm cleanup hooks now.
   // Defer the BaseObject cleanup after handles are cleaned up.
   CleanupHandles();
@@ -1280,12 +1281,16 @@ void Environment::ToggleImmediateRef(bool ref) {
   }
 }
 
-
-Local<Value> Environment::GetNow() {
+uint64_t Environment::GetNowUint64() {
   uv_update_time(event_loop());
   uint64_t now = uv_now(event_loop());
   CHECK_GE(now, timer_base());
   now -= timer_base();
+  return now;
+}
+
+Local<Value> Environment::GetNow() {
+  uint64_t now = GetNowUint64();
   if (now <= 0xffffffff)
     return Integer::NewFromUnsigned(isolate(), static_cast<uint32_t>(now));
   else

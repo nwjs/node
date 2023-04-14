@@ -482,22 +482,36 @@ Which explains that the unregistered external reference is
 
 Some internal bindings, such as the HTTP parser, maintain internal state that
 only affects that particular binding. In that case, one common way to store
-that state is through the use of `Environment::AddBindingData`, which gives
+that state is through the use of `Realm::AddBindingData`, which gives
 binding functions access to an object for storing such state.
 That object is always a [`BaseObject`][].
 
-Its class needs to have a static `type_name` field based on a
-constant string, in order to disambiguate it from other classes of this type,
-and which could e.g. match the binding's name (in the example above, that would
-be `cares_wrap`).
+In the binding, call `SET_BINDING_ID()` with an identifier for the binding
+type. For example, for `http_parser::BindingData`, the identifier can be
+`http_parser_binding_data`.
+
+If the binding should be supported in a snapshot, the id and the
+fully-specified class name should be added to the `SERIALIZABLE_BINDING_TYPES`
+list in `base_object_types.h`, and the class should implement the serialization
+and deserialization methods. See the comments of `SnapshotableObject` on how to
+implement them. Otherwise, add the id and the class name to the
+`UNSERIALIZABLE_BINDING_TYPES` list instead.
 
 ```cpp
+// In base_object_types.h, add the binding to either
+// UNSERIALIZABLE_BINDING_TYPES or SERIALIZABLE_BINDING_TYPES.
+// The second parameter is a descriptive name of the class, which is
+// usually the fully-specified class name.
+
+#define UNSERIALIZABLE_BINDING_TYPES(V)                                         \
+  V(http_parser_binding_data, http_parser::BindingData)
+
 // In the HTTP parser source code file:
 class BindingData : public BaseObject {
  public:
   BindingData(Environment* env, Local<Object> obj) : BaseObject(env, obj) {}
 
-  static constexpr FastStringKey type_name { "http_parser" };
+  SET_BINDING_ID(http_parser_binding_data)
 
   std::vector<char> parser_buffer;
   bool parser_buffer_in_use = false;
@@ -507,7 +521,7 @@ class BindingData : public BaseObject {
 
 // Available for binding functions, e.g. the HTTP Parser constructor:
 static void New(const FunctionCallbackInfo<Value>& args) {
-  BindingData* binding_data = Environment::GetBindingData<BindingData>(args);
+  BindingData* binding_data = Realm::GetBindingData<BindingData>(args);
   new Parser(binding_data, args.This());
 }
 
@@ -517,21 +531,15 @@ void InitializeHttpParser(Local<Object> target,
                           Local<Value> unused,
                           Local<Context> context,
                           void* priv) {
-  Environment* env = Environment::GetCurrent(context);
+  Realm* realm = Realm::GetCurrent(context);
   BindingData* const binding_data =
-      env->AddBindingData<BindingData>(context, target);
+      realm->AddBindingData<BindingData>(context, target);
   if (binding_data == nullptr) return;
 
-  Local<FunctionTemplate> t = env->NewFunctionTemplate(Parser::New);
+  Local<FunctionTemplate> t = NewFunctionTemplate(realm->isolate(), Parser::New);
   ...
 }
 ```
-
-If the binding is loaded during bootstrap, add it to the
-`SERIALIZABLE_OBJECT_TYPES` list in `src/node_snapshotable.h` and
-inherit from the `SnapshotableObject` class instead. See the comments
-of `SnapshotableObject` on how to implement its serialization and
-deserialization.
 
 <a id="exception-handling"></a>
 

@@ -18,14 +18,12 @@ struct InternalFieldInfoBase;
 namespace v8_utils {
 class BindingData : public SnapshotableObject {
  public:
-  BindingData(Environment* env, v8::Local<v8::Object> obj);
+  BindingData(Realm* realm, v8::Local<v8::Object> obj);
 
   using InternalFieldInfo = InternalFieldInfoBase;
 
   SERIALIZABLE_OBJECT_METHODS()
-  static constexpr FastStringKey type_name{"node::v8::BindingData"};
-  static constexpr EmbedderObjectType type_int =
-      EmbedderObjectType::k_v8_binding_data;
+  SET_BINDING_ID(v8_binding_data)
 
   AliasedFloat64Array heap_statistics_buffer;
   AliasedFloat64Array heap_space_statistics_buffer;

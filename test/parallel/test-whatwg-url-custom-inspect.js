@@ -49,16 +49,13 @@ assert.strictEqual(
     href: 'https://username:password@host.name:8080/path/name/?que=ry#hash',
     origin: 'https://host.name:8080',
     protocol: 'https:',
-    host: 'host.name:8080',
     hostname: 'host.name',
     pathname: '/path/name/',
     search: '?que=ry',
     username: 'username',
     password: 'password',
     port: '8080',
-    hash: '#hash',
-    hasHost: true,
-    hasOpaquePath: false
+    hash: '#hash'
   }
 }`);
 

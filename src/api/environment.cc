@@ -541,11 +541,17 @@ NODE_EXTERN std::unique_ptr<InspectorParentHandle> GetInspectorParentHandle(
     Environment* env,
     ThreadId thread_id,
     const char* url) {
+  return GetInspectorParentHandle(env, thread_id, url, "");
+}
+
+NODE_EXTERN std::unique_ptr<InspectorParentHandle> GetInspectorParentHandle(
+    Environment* env, ThreadId thread_id, const char* url, const char* name) {
   CHECK_NOT_NULL(env);
+  if (name == nullptr) name = "";
   CHECK_NE(thread_id.id, static_cast<uint64_t>(-1));
 #if HAVE_INSPECTOR
   return std::make_unique<InspectorParentHandleImpl>(
-      env->inspector_agent()->GetParentHandle(thread_id.id, url));
+      env->inspector_agent()->GetParentHandle(thread_id.id, url, name));
 #else
   return {};
 #endif
@@ -893,6 +899,7 @@ ThreadId AllocateEnvironmentThreadId() {
 }
 
 void DefaultProcessExitHandlerInternal(Environment* env, ExitCode exit_code) {
+  env->set_stopping(true);
   env->set_can_call_into_js(false);
   env->stop_sub_worker_contexts();
   env->isolate()->DumpAndResetStats();

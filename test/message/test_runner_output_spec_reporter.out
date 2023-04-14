@@ -20,8 +20,8 @@
   *
   *
 
- sync skip pass (*ms)
- sync skip pass with message (*ms)
+ sync skip pass (*ms) # SKIP
+ sync skip pass with message (*ms) # SKIP
  sync pass (*ms)
  this test should pass
  sync throw fail (*ms)
@@ -34,7 +34,7 @@
   *
   *
 
- async skip pass (*ms)
+ async skip pass (*ms) # SKIP
  async pass (*ms)
  async throw fail (*ms)
   Error: thrown from async throw fail
@@ -46,7 +46,7 @@
   *
   *
 
- async skip fail (*ms)
+ async skip fail (*ms) # SKIP
   Error: thrown from async throw fail
   *
   *
@@ -129,8 +129,8 @@
  top level (*ms)
 
  invalid subtest - pass but subtest fails (*ms)
- sync skip option (*ms)
- sync skip option with message (*ms)
+ sync skip option (*ms) # SKIP
+ sync skip option with message (*ms) # SKIP
  sync skip option is false fail (*ms)
   Error: this should be executed
   *
@@ -146,13 +146,13 @@
  <anonymous> (*ms)
  test with only a name provided (*ms)
  <anonymous> (*ms)
- <anonymous> (*ms)
- test with a name and options provided (*ms)
- functionAndOptions (*ms)
+ <anonymous> (*ms) # SKIP
+ test with a name and options provided (*ms) # SKIP
+ functionAndOptions (*ms) # SKIP
  escaped description \ # *
  	 *
  (*ms)
- escaped skip message (*ms)
+ escaped skip message (*ms) # SKIP
  escaped todo message (*ms)
  escaped diagnostic (*ms)
  #diagnostic
@@ -199,9 +199,12 @@
  only is set but not in only mode
    running subtest 1 (*ms)
    running subtest 2 (*ms)
+   'only' and 'runOnly' require the --test-only command-line option.
    running subtest 3 (*ms)
+   'only' and 'runOnly' require the --test-only command-line option.
    running subtest 4 (*ms)
  only is set but not in only mode (*ms)
+ 'only' and 'runOnly' require the --test-only command-line option.
 
  custom inspect symbol fail (*ms)
   customized
@@ -267,6 +270,7 @@
 
  Warning: Test "unhandled rejection - passes but warns" generated asynchronous activity after the test ended. This activity created the error "Error: rejected from unhandled rejection fail" and would have caused the test to fail, but instead triggered an unhandledRejection event.
  Warning: Test "async unhandled rejection - passes but warns" generated asynchronous activity after the test ended. This activity created the error "Error: rejected from async unhandled rejection fail" and would have caused the test to fail, but instead triggered an unhandledRejection event.
+ Warning: A resource generated asynchronous activity after the test ended. This activity created the error "Error: uncaught from outside of a test" which triggered an uncaughtException event, caught by the test runner.
  Warning: Test "immediate throw - passes but warns" generated asynchronous activity after the test ended. This activity created the error "Error: thrown from immediate throw fail" and would have caused the test to fail, but instead triggered an uncaughtException event.
  Warning: Test "immediate reject - passes but warns" generated asynchronous activity after the test ended. This activity created the error "Error: rejected from immediate reject fail" and would have caused the test to fail, but instead triggered an unhandledRejection event.
  Warning: Test "callback called twice in different ticks" generated asynchronous activity after the test ended. This activity created the error "Error [ERR_TEST_FAILURE]: callback invoked multiple times" and would have caused the test to fail, but instead triggered an uncaughtException event.

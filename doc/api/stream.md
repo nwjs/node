@@ -2237,7 +2237,7 @@ const anyBigFile = await Readable.from([
   'file3',
 ]).some(async (fileName) => {
   const stats = await stat(fileName);
-  return stat.size > 1024 * 1024;
+  return stats.size > 1024 * 1024;
 }, { concurrency: 2 });
 console.log(anyBigFile); // `true` if any file in the list is bigger than 1MB
 console.log('done'); // Stream has finished
@@ -2289,7 +2289,7 @@ const foundBigFile = await Readable.from([
   'file3',
 ]).find(async (fileName) => {
   const stats = await stat(fileName);
-  return stat.size > 1024 * 1024;
+  return stats.size > 1024 * 1024;
 }, { concurrency: 2 });
 console.log(foundBigFile); // File name of large file, if any file in the list is bigger than 1MB
 console.log('done'); // Stream has finished
@@ -2339,7 +2339,7 @@ const allBigFiles = await Readable.from([
   'file3',
 ]).every(async (fileName) => {
   const stats = await stat(fileName);
-  return stat.size > 1024 * 1024;
+  return stats.size > 1024 * 1024;
 }, { concurrency: 2 });
 // `true` if all files in the list are bigger than 1MiB
 console.log(allBigFiles);
@@ -2796,11 +2796,16 @@ const server = http.createServer((req, res) => {
 
 <!-- YAML
 added: v16.9.0
+changes:
+  - version: v19.8.0
+    pr-url: https://github.com/nodejs/node/pull/46675
+    description: Added support for webstreams.
 -->
 
 > Stability: 1 - `stream.compose` is experimental.
 
-* `streams` {Stream\[]|Iterable\[]|AsyncIterable\[]|Function\[]}
+* `streams` {Stream\[]|Iterable\[]|AsyncIterable\[]|Function\[]|
+  ReadableStream\[]|WritableStream\[]|TransformStream\[]}
 * Returns: {stream.Duplex}
 
 Combines two or more streams into a `Duplex` stream that writes to the
@@ -3003,8 +3008,14 @@ added: v17.0.0
 * `streamReadable` {stream.Readable}
 * `options` {Object}
   * `strategy` {Object}
-    * `highWaterMark` {number}
-    * `size` {Function}
+    * `highWaterMark` {number} The maximum internal queue size (of the created
+      `ReadableStream`) before backpressure is applied in reading from the given
+      `stream.Readable`. If no value is provided, it will be taken from the
+      given `stream.Readable`.
+    * `size` {Function} A function that size of the given chunk of data.
+      If no value is provided, the size will be `1` for all the chunks.
+      * `chunk` {any}
+      * Returns: {number}
 * Returns: {ReadableStream}
 
 ### `stream.Writable.fromWeb(writableStream[, options])`

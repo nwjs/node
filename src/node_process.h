@@ -54,11 +54,9 @@ class BindingData : public SnapshotableObject {
   using InternalFieldInfo = InternalFieldInfoBase;
 
   SERIALIZABLE_OBJECT_METHODS()
-  static constexpr FastStringKey type_name{"node::process::BindingData"};
-  static constexpr EmbedderObjectType type_int =
-      EmbedderObjectType::k_process_binding_data;
+  SET_BINDING_ID(process_binding_data)
 
-  BindingData(Environment* env, v8::Local<v8::Object> object);
+  BindingData(Realm* realm, v8::Local<v8::Object> object);
 
   void MemoryInfo(MemoryTracker* tracker) const override;
   SET_MEMORY_INFO_NAME(BindingData)

@@ -1117,7 +1117,7 @@ try {
 
 ```cjs
 const { mkdir } = require('node:fs/promises');
-const { resolve, join } = require('node:path');
+const { join } = require('node:path');
 
 async function makeDirectory() {
   const projectFolder = join(__dirname, 'test', 'project');
@@ -1159,9 +1159,11 @@ object with an `encoding` property specifying the character encoding to use.
 
 ```mjs
 import { mkdtemp } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 try {
-  await mkdtemp(path.join(os.tmpdir(), 'foo-'));
+  await mkdtemp(join(tmpdir(), 'foo-'));
 } catch (err) {
   console.error(err);
 }
@@ -3237,8 +3239,10 @@ object with an `encoding` property specifying the character encoding to use.
 
 ```mjs
 import { mkdtemp } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
-mkdtemp(path.join(os.tmpdir(), 'foo-'), (err, directory) => {
+mkdtemp(join(tmpdir(), 'foo-'), (err, directory) => {
   if (err) throw err;
   console.log(directory);
   // Prints: /tmp/foo-itXde2 or C:\Users\...\AppData\Local\Temp\foo-itXde2
@@ -3323,6 +3327,45 @@ a colon, Node.js will open a file system stream, as described by
 
 Functions based on `fs.open()` exhibit this behavior as well:
 `fs.writeFile()`, `fs.readFile()`, etc.
+
+### `fs.openAsBlob(path[, options])`
+
+<!-- YAML
+added: v19.8.0
+-->
+
+> Stability: 1 - Experimental
+
+* `path` {string|Buffer|URL}
+* `options` {Object}
+  * `type` {string} An optional mime type for the blob.
+* Return: {Promise} containing {Blob}
+
+Returns a {Blob} whose data is backed by the given file.
+
+The file must not be modified after the {Blob} is created. Any modifications
+will cause reading the {Blob} data to fail with a `DOMException`.
+error. Synchronous stat operations on the file when the `Blob` is created, and
+before each read in order to detect whether the file data has been modified
+on disk.
+
+```mjs
+import { openAsBlob } from 'node:fs';
+
+const blob = await openAsBlob('the.file.txt');
+const ab = await blob.arrayBuffer();
+blob.stream();
+```
+
+```cjs
+const { openAsBlob } = require('node:fs');
+
+(async () => {
+  const blob = await openAsBlob('the.file.txt');
+  const ab = await blob.arrayBuffer();
+  blob.stream();
+})();
+```
 
 ### `fs.opendir(path[, options], callback)`
 
@@ -7503,6 +7546,8 @@ For example, the following is prone to error because the `fs.stat()`
 operation might complete before the `fs.rename()` operation:
 
 ```js
+const fs = require('node:fs');
+
 fs.rename('/tmp/hello', '/tmp/world', (err) => {
   if (err) throw err;
   console.log('renamed complete');
@@ -7519,12 +7564,12 @@ of one before invoking the other:
 ```mjs
 import { rename, stat } from 'node:fs/promises';
 
-const from = '/tmp/hello';
-const to = '/tmp/world';
+const oldPath = '/tmp/hello';
+const newPath = '/tmp/world';
 
 try {
-  await rename(from, to);
-  const stats = await stat(to);
+  await rename(oldPath, newPath);
+  const stats = await stat(newPath);
   console.log(`stats: ${JSON.stringify(stats)}`);
 } catch (error) {
   console.error('there was an error:', error.message);
@@ -7534,10 +7579,10 @@ try {
 ```cjs
 const { rename, stat } = require('node:fs/promises');
 
-(async function(from, to) {
+(async function(oldPath, newPath) {
   try {
-    await rename(from, to);
-    const stats = await stat(to);
+    await rename(oldPath, newPath);
+    const stats = await stat(newPath);
     console.log(`stats: ${JSON.stringify(stats)}`);
   } catch (error) {
     console.error('there was an error:', error.message);
@@ -7593,7 +7638,7 @@ try {
   fd = await open('/open/some/file.txt', 'r');
   // Do something with the file
 } finally {
-  await fd.close();
+  await fd?.close();
 }
 ```
 
@@ -7607,7 +7652,7 @@ try {
   fd = await open('file.txt', 'r');
   // Do something with the file
 } finally {
-  await fd.close();
+  await fd?.close();
 }
 ```
 
@@ -7722,7 +7767,7 @@ try {
   fd = await open(Buffer.from('/open/some/file.txt'), 'r');
   // Do something with the file
 } finally {
-  await fd.close();
+  await fd?.close();
 }
 ```
 

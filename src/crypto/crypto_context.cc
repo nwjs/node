@@ -854,6 +854,14 @@ void SecureContext::SetDHParam(const FunctionCallbackInfo<Value>& args) {
 
   CHECK_GE(args.Length(), 1);  // DH argument is mandatory
 
+  // If the user specified "auto" for dhparams, the JavaScript layer will pass
+  // true to this function instead of the original string. Any other string
+  // value will be interpreted as custom DH parameters below.
+  if (args[0]->IsTrue()) {
+    CHECK(SSL_CTX_set_dh_auto(sc->ctx_.get(), true));
+    return;
+  }
+
   DHPointer dh;
   {
     BIOPointer bio(LoadBIO(env, args[0]));
@@ -864,6 +872,7 @@ void SecureContext::SetDHParam(const FunctionCallbackInfo<Value>& args) {
   }
 
   // Invalid dhparam is silently discarded and DHE is no longer used.
+  // TODO(tniessen): don't silently discard invalid dhparam.
   if (!dh)
     return;
 
@@ -877,8 +886,6 @@ void SecureContext::SetDHParam(const FunctionCallbackInfo<Value>& args) {
     args.GetReturnValue().Set(FIXED_ONE_BYTE_STRING(
         env->isolate(), "DH parameter is less than 2048 bits"));
   }
-
-  SSL_CTX_set_options(sc->ctx_.get(), SSL_OP_SINGLE_DH_USE);
 
   if (!SSL_CTX_set_tmp_dh(sc->ctx_.get(), dh.get())) {
     return THROW_ERR_CRYPTO_OPERATION_FAILED(

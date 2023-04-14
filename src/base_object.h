@@ -25,6 +25,7 @@
 #if defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
 
 #include <type_traits>  // std::remove_reference
+#include "base_object_types.h"
 #include "memory_tracker.h"
 #include "v8.h"
 
@@ -249,7 +250,7 @@ inline T* Unwrap(v8::Local<v8::Value> obj) {
 // reset to nullptr once the BaseObject is destroyed.
 // The API matches std::shared_ptr closely. However, this class is not thread
 // safe, that is, we can't have different BaseObjectPtrImpl instances in
-// different threads refering to the same BaseObject instance.
+// different threads referring to the same BaseObject instance.
 template <typename T, bool kIsWeak>
 class BaseObjectPtrImpl final {
  public:

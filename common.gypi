@@ -48,7 +48,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.11',
+    'v8_embedder_string': '-node.12',
 
     ##### V8 defaults for Node.js #####
 
@@ -295,7 +295,7 @@
         'defines': [ 'DEBUG', '_DEBUG', 'V8_ENABLE_CHECKS', '_HAS_ITERATOR_DEBUGGING=0' ],
         'cflags': [ '-g', '-O0' ],
         'conditions': [
-          ['OS=="aix"', {
+          ['OS in "aix os400"', {
             'cflags': [ '-gxcoff' ],
             'ldflags': [ '-Wl,-bbigtoc' ],
           }],
@@ -579,11 +579,11 @@
           }],
         ],
       }],
-      [ 'OS in "linux freebsd openbsd solaris aix"', {
+      [ 'OS in "linux freebsd openbsd solaris aix os400"', {
         'cflags': [ '-pthread' ],
         'ldflags': [ '-pthread' ],
       }],
-      [ 'OS in "linux freebsd openbsd solaris android aix cloudabi"', {
+      [ 'OS in "linux freebsd openbsd solaris android aix os400 cloudabi"', {
         'cflags': [ '-Wall', '-Wextra', '-Wno-unused-parameter', ],
         'cflags_cc': [ '-fno-rtti', '-fno-exceptions', '-std=gnu++17' ],
         'defines': [ '__STDC_FORMAT_MACROS' ],
@@ -618,11 +618,11 @@
             'cflags': [ '--target=arm-linux-gnueabihf' ],
             'ldflags': [ '--target=arm-linux-gnueabihf' ],
           }],
-          [ 'target_arch=="ppc" and OS!="aix"', {
+          [ 'target_arch=="ppc" and OS not in "aix os400"', {
             'cflags': [ '-m32' ],
             'ldflags': [ '-m32' ],
           }],
-          [ 'target_arch=="ppc64" and OS!="aix"', {
+          [ 'target_arch=="ppc64" and OS not in "aix os400"', {
             'cflags': [ '-m64', '-mminimal-toc' ],
             'ldflags': [ '-m64' ],
           }],
@@ -641,7 +641,7 @@
           }],
         ],
       }],
-      [ 'OS=="aix"', {
+      [ 'OS in "aix os400"', {
         'variables': {
           # Used to differentiate `AIX` and `OS400`(IBM i).
           'aix_variant_name': '<!(uname -s)',

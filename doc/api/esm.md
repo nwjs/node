@@ -736,7 +736,7 @@ prevent unintentional breaks in the chain.
 Hooks are run in a separate thread, isolated from the main. That means it is a
 different [realm](https://tc39.es/ecma262/#realm). The hooks thread may be
 terminated by the main thread at any time, so do not depend on asynchronous
-operations to (like `console.log`) complete.
+operations (like `console.log`) to complete.
 
 #### `resolve(specifier, context, nextResolve)`
 
@@ -1058,6 +1058,7 @@ export function load(url, context, nextLoad) {
     return new Promise((resolve, reject) => {
       get(url, (res) => {
         let data = '';
+        res.setEncoding('utf8');
         res.on('data', (chunk) => data += chunk);
         res.on('end', () => resolve({
           // This example assumes all network-provided JavaScript is ES module

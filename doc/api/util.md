@@ -1481,7 +1481,7 @@ console.log(values, positionals);
 
 ### `parseArgs` `tokens`
 
-Detailed parse information is available for adding custom behaviours by
+Detailed parse information is available for adding custom behaviors by
 specifying `tokens: true` in the configuration.
 The returned tokens have properties describing:
 
@@ -2539,7 +2539,7 @@ for these errors:
 ```js
 const vm = require('node:vm');
 const context = vm.createContext({});
-const myError = vm.runInContext('new Error', context);
+const myError = vm.runInContext('new Error()', context);
 console.log(util.types.isNativeError(myError)); // true
 console.log(myError instanceof Error); // false
 ```

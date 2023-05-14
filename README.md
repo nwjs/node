@@ -166,8 +166,6 @@ For information about the governance of the Node.js project, see
   **Antoine du Hamel** <<duhamelantoine1995@gmail.com>> (he/him)
 * [apapirovski](https://github.com/apapirovski) -
   **Anatoli Papirovski** <<apapirovski@mac.com>> (he/him)
-* [BethGriggs](https://github.com/BethGriggs) -
-  **Beth Griggs** <<bethanyngriggs@gmail.com>> (she/her)
 * [BridgeAR](https://github.com/BridgeAR) -
   **Ruben Bridgewater** <<ruben@bridgewater.de>> (he/him)
 * [cjihrig](https://github.com/cjihrig) -
@@ -207,8 +205,8 @@ For information about the governance of the Node.js project, see
 
 #### TSC regular members
 
-* [addaleax](https://github.com/addaleax) -
-  **Anna Henningsen** <<anna@addaleax.net>> (she/her)
+* [BethGriggs](https://github.com/BethGriggs) -
+  **Beth Griggs** <<bethanyngriggs@gmail.com>> (she/her)
 * [bnoordhuis](https://github.com/bnoordhuis) -
   **Ben Noordhuis** <<info@bnoordhuis.nl>>
 * [ChALkeR](https://github.com/ChALkeR) -
@@ -236,6 +234,8 @@ For information about the governance of the Node.js project, see
 
 #### TSC emeriti members
 
+* [addaleax](https://github.com/addaleax) -
+  **Anna Henningsen** <<anna@addaleax.net>> (she/her)
 * [chrisdickinson](https://github.com/chrisdickinson) -
   **Chris Dickinson** <<christopher.s.dickinson@gmail.com>>
 * [evanlucas](https://github.com/evanlucas) -
@@ -371,6 +371,8 @@ For information about the governance of the Node.js project, see
   **Juan José Arboleda** <<soyjuanarbol@gmail.com>> (he/him)
 * [JungMinu](https://github.com/JungMinu) -
   **Minwoo Jung** <<nodecorelab@gmail.com>> (he/him)
+* [KhafraDev](https://github.com/KhafraDev) -
+  **Matthew Aitken** <<maitken033380023@gmail.com>> (he/him)
 * [kuriyosh](https://github.com/kuriyosh) -
   **Yoshiki Kurihara** <<yosyos0306@gmail.com>> (he/him)
 * [legendecas](https://github.com/legendecas) -
@@ -705,8 +707,6 @@ maintaining the Node.js project.
   **Xuguang Mei** <<meixuguang@gmail.com>> (he/him)
 * [Mesteery](https://github.com/Mesteery) -
   **Mestery** <<mestery@protonmail.com>> (he/him)
-* [MoLow](https://github.com/MoLow) -
-  **Moshe Atlow** <<moshe@atlow.co.il>> (he/him)
 * [PoojaDurgad](https://github.com/PoojaDurgad) -
   **Pooja Durgad** <<Pooja.D.P@ibm.com>>
 * [RaisinTen](https://github.com/RaisinTen) -

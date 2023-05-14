@@ -154,8 +154,9 @@ the [Permission Model][].
 
 The valid arguments for the `--allow-fs-read` flag are:
 
-* `*` - To allow the `FileSystemRead` operations.
-* Paths delimited by comma (,) to manage `FileSystemRead` (reading) operations.
+* `*` - To allow all `FileSystemRead` operations.
+* Paths delimited by comma (`,`) to allow only matching `FileSystemRead`
+  operations.
 
 Examples can be found in the [File System Permissions][] documentation.
 
@@ -200,8 +201,9 @@ the [Permission Model][].
 
 The valid arguments for the `--allow-fs-write` flag are:
 
-* `*` - To allow the `FileSystemWrite` operations.
-* Paths delimited by comma (,) to manage `FileSystemWrite` (writing) operations.
+* `*` - To allow all `FileSystemWrite` operations.
+* Paths delimited by comma (`,`) to allow only matching `FileSystemWrite`
+  operations.
 
 Examples can be found in the [File System Permissions][] documentation.
 
@@ -267,7 +269,7 @@ the path specified by `--snapshot-blob`.
 ```console
 $ echo "globalThis.foo = 'I am from the snapshot'" > snapshot.js
 
-# Run snapshot.js to intialize the application and snapshot the
+# Run snapshot.js to initialize the application and snapshot the
 # state of it into snapshot.blob.
 $ node --snapshot-blob snapshot.blob --build-snapshot snapshot.js
 
@@ -550,9 +552,9 @@ Enable the Permission Model for current process. When enabled, the
 following permissions are restricted:
 
 * File System - manageable through
-  \[`--allow-fs-read`]\[],\[`allow-fs-write`]\[] flags
-* Child Process - manageable through \[`--allow-child-process`]\[] flag
-* Worker Threads - manageable through \[`--allow-worker`]\[] flag
+  [`--allow-fs-read`][], [`--allow-fs-write`][] flags
+* Child Process - manageable through [`--allow-child-process`][] flag
+* Worker Threads - manageable through [`--allow-worker`][] flag
 
 ### `--experimental-policy`
 
@@ -622,6 +624,10 @@ Use this flag to enable [ShadowRealm][] support.
 added:
   - v19.7.0
   - v18.15.0
+changes:
+  - version: v20.1.0
+    pr-url: https://github.com/nodejs/node/pull/47686
+    description: This option can be used with `--test`.
 -->
 
 When used in conjunction with the `node:test` module, a code coverage report is
@@ -2566,6 +2572,10 @@ done
 [V8 JavaScript code coverage]: https://v8project.blogspot.com/2017/12/javascript-code-coverage.html
 [Web Crypto API]: webcrypto.md
 [`"type"`]: packages.md#type
+[`--allow-child-process`]: #--allow-child-process
+[`--allow-fs-read`]: #--allow-fs-read
+[`--allow-fs-write`]: #--allow-fs-write
+[`--allow-worker`]: #--allow-worker
 [`--cpu-prof-dir`]: #--cpu-prof-dir
 [`--diagnostic-dir`]: #--diagnostic-dirdirectory
 [`--experimental-sea-config`]: single-executable-applications.md#generating-single-executable-preparation-blobs

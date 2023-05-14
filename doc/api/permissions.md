@@ -388,7 +388,7 @@ The following example, would allow access to `fs` for all `data:` resources:
 }
 ```
 
-##### Example: [import maps][] emulation
+##### Example: import maps emulation
 
 Given an import map:
 
@@ -425,7 +425,7 @@ Given an import map:
 }
 ```
 
-Import maps assume you can get any resource by default. This means
+[Import maps][] assume you can get any resource by default. This means
 `"dependencies"` at the top level of the policy should be set to `true`.
 Policies require this to be opt-in since it enables all resources of the
 application cross linkage which doesn't make sense for many scenarios. They also
@@ -465,8 +465,8 @@ The available permissions are documented by the [`--experimental-permission`][]
 flag.
 
 When starting Node.js with `--experimental-permission`,
-the ability to access the file system, spawn processes, and
-use `node:worker_threads` will be restricted.
+the ability to access the file system through the `fs` module, spawn processes,
+and use `node:worker_threads` will be restricted.
 
 ```console
 $ node --experimental-permission index.js
@@ -520,8 +520,10 @@ Hello world!
 
 The valid arguments for both flags are:
 
-* `*` - To allow the all operations to given scope (read/write).
-* Paths delimited by comma (,) to manage reading/writing operations.
+* `*` - To allow all `FileSystemRead` or `FileSystemWrite` operations,
+  respectively.
+* Paths delimited by comma (`,`) to allow only matching `FileSystemRead` or
+  `FileSystemWrite` operations, respectively.
 
 Example:
 
@@ -534,7 +536,7 @@ Example:
 
 Wildcards are supported too:
 
-* `--allow-fs-read:/home/test*` will allow read access to everything
+* `--allow-fs-read=/home/test*` will allow read access to everything
   that matches the wildcard. e.g: `/home/test/file1` or `/home/test2`
 
 There are constraints you need to know before using this system:
@@ -547,6 +549,7 @@ There are constraints you need to know before using this system:
   write access.
 * Permission changes are not retroactively applied to existing resources.
 
+[Import maps]: https://url.spec.whatwg.org/#relative-url-with-fragment-string
 [Security Policy]: https://github.com/nodejs/node/blob/main/SECURITY.md
 [`--allow-child-process`]: cli.md#--allow-child-process
 [`--allow-fs-read`]: cli.md#--allow-fs-read
@@ -554,6 +557,5 @@ There are constraints you need to know before using this system:
 [`--allow-worker`]: cli.md#--allow-worker
 [`--experimental-permission`]: cli.md#--experimental-permission
 [`permission.has()`]: process.md#processpermissionhasscope-reference
-[import maps]: https://url.spec.whatwg.org/#relative-url-with-fragment-string
 [relative-url string]: https://url.spec.whatwg.org/#relative-url-with-fragment-string
 [special schemes]: https://url.spec.whatwg.org/#special-scheme

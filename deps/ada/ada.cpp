@@ -1,4 +1,4 @@
-/* auto-generated on 2023-03-30 17:00:48 -0400. Do not edit! */
+/* auto-generated on 2023-04-26 16:43:37 -0400. Do not edit! */
 /* begin file src/ada.cpp */
 #include "ada.h"
 /* begin file src/checkers.cpp */
@@ -116,12 +116,13 @@ ada_really_inline constexpr bool verify_dns_length(
 
 ADA_PUSH_DISABLE_ALL_WARNINGS
 /* begin file src/ada_idna.cpp */
-/* auto-generated on 2023-03-28 11:03:13 -0400. Do not edit! */
+/* auto-generated on 2023-04-26 14:14:42 -0400. Do not edit! */
 /* begin file src/idna.cpp */
 /* begin file src/unicode_transcoding.cpp */
 
 #include <cstdint>
 #include <cstring>
+
 namespace ada::idna {
 
 size_t utf8_to_utf32(const char* buf, size_t len, char32_t* utf32_output) {
@@ -2750,10 +2751,12 @@ uint32_t find_range_index(uint32_t key) {
 }
 
 bool ascii_has_upper_case(char* input, size_t length) {
-  auto broadcast = [](uint8_t v) -> uint64_t { return 0x101010101010101 * v; };
+  auto broadcast = [](uint8_t v) -> uint64_t {
+    return 0x101010101010101ull * v;
+  };
   uint64_t broadcast_80 = broadcast(0x80);
   uint64_t broadcast_Ap = broadcast(128 - 'A');
-  uint64_t broadcast_Zp = broadcast(128 - 'Z');
+  uint64_t broadcast_Zp = broadcast(128 - 'Z' - 1);
   size_t i = 0;
 
   uint64_t runner{0};
@@ -2772,10 +2775,12 @@ bool ascii_has_upper_case(char* input, size_t length) {
 }
 
 void ascii_map(char* input, size_t length) {
-  auto broadcast = [](uint8_t v) -> uint64_t { return 0x101010101010101 * v; };
+  auto broadcast = [](uint8_t v) -> uint64_t {
+    return 0x101010101010101ull * v;
+  };
   uint64_t broadcast_80 = broadcast(0x80);
   uint64_t broadcast_Ap = broadcast(128 - 'A');
-  uint64_t broadcast_Zp = broadcast(128 - 'Z');
+  uint64_t broadcast_Zp = broadcast(128 - 'Z' - 1);
   size_t i = 0;
 
   for (; i + 7 < length; i += 8) {
@@ -7999,9 +8004,10 @@ const char32_t uninorms::decomposition_data[] = {
 namespace ada::idna {
 
 void normalize(std::u32string& input) {
-  //    [Normalize](https://www.unicode.org/reports/tr46/#ProcessingStepNormalize).
-  //    Normalize
-  //     the domain_name string to Unicode Normalization Form C.
+  /**
+   * Normalize the domain_name string to Unicode Normalization Form C.
+   * @see https://www.unicode.org/reports/tr46/#ProcessingStepNormalize
+   */
   ufal::unilib::uninorms::nfc(input);
 }
 
@@ -8229,7 +8235,6 @@ bool utf32_to_punycode(std::u32string_view input, std::string &out) {
 }  // namespace ada::idna
 /* end file src/punycode.cpp */
 /* begin file src/validity.cpp */
-
 #include <algorithm>
 #include <string_view>
 
@@ -9617,18 +9622,18 @@ constexpr static uint8_t is_forbidden_domain_code_point_table[] = {
 
 static_assert(sizeof(is_forbidden_domain_code_point_table) == 256);
 
-inline constexpr bool is_forbidden_domain_code_point(const char c) noexcept {
+inline bool is_forbidden_domain_code_point(const char c) noexcept {
   return is_forbidden_domain_code_point_table[uint8_t(c)];
 }
 
-// We return "" on error. For now.
-std::string from_ascii_to_ascii(std::string_view ut8_string) {
-  static const std::string error = "";
-  if (std::any_of(ut8_string.begin(), ut8_string.end(),
-                  is_forbidden_domain_code_point)) {
-    return error;
-  }
+bool contains_forbidden_domain_code_point(std::string_view view) {
+  return (
+      std::any_of(view.begin(), view.end(), is_forbidden_domain_code_point));
+}
 
+// We return "" on error.
+static std::string from_ascii_to_ascii(std::string_view ut8_string) {
+  static const std::string error = "";
   // copy and map
   // we could be more efficient by avoiding the copy when unnecessary.
   std::string mapped_string = std::string(ut8_string);
@@ -9682,7 +9687,7 @@ std::string from_ascii_to_ascii(std::string_view ut8_string) {
   return out;
 }
 
-// We return "" on error. For now.
+// We return "" on error.
 std::string to_ascii(std::string_view ut8_string) {
   if (is_ascii(ut8_string)) {
     return from_ascii_to_ascii(ut8_string);
@@ -9769,11 +9774,6 @@ std::string to_ascii(std::string_view ut8_string) {
       out.push_back('.');
     }
   }
-
-  if (std::any_of(out.begin(), out.end(), is_forbidden_domain_code_point)) {
-    return error;
-  }
-
   return out;
 }
 }  // namespace ada::idna
@@ -9842,10 +9842,12 @@ ADA_POP_DISABLE_WARNINGS
 namespace ada::unicode {
 
 constexpr bool to_lower_ascii(char* input, size_t length) noexcept {
-  auto broadcast = [](uint8_t v) -> uint64_t { return 0x101010101010101 * v; };
+  auto broadcast = [](uint8_t v) -> uint64_t {
+    return 0x101010101010101ull * v;
+  };
   uint64_t broadcast_80 = broadcast(0x80);
   uint64_t broadcast_Ap = broadcast(128 - 'A');
-  uint64_t broadcast_Zp = broadcast(128 - 'Z');
+  uint64_t broadcast_Zp = broadcast(128 - 'Z' - 1);
   uint64_t non_ascii = 0;
   size_t i = 0;
 
@@ -9873,7 +9875,9 @@ ada_really_inline constexpr bool has_tabs_or_newline(
   auto has_zero_byte = [](uint64_t v) {
     return ((v - 0x0101010101010101) & ~(v)&0x8080808080808080);
   };
-  auto broadcast = [](uint8_t v) -> uint64_t { return 0x101010101010101 * v; };
+  auto broadcast = [](uint8_t v) -> uint64_t {
+    return 0x101010101010101ull * v;
+  };
   size_t i = 0;
   uint64_t mask1 = broadcast('\r');
   uint64_t mask2 = broadcast('\n');
@@ -9961,7 +9965,7 @@ ada_really_inline constexpr bool is_forbidden_domain_code_point(
 }
 
 ada_really_inline constexpr bool contains_forbidden_domain_code_point(
-    char* input, size_t length) noexcept {
+    const char* input, size_t length) noexcept {
   size_t i = 0;
   uint8_t accumulator{};
   for (; i + 4 <= length; i += 4) {
@@ -9972,6 +9976,44 @@ ada_really_inline constexpr bool contains_forbidden_domain_code_point(
   }
   for (; i < length; i++) {
     accumulator |= is_forbidden_domain_code_point_table[uint8_t(input[i])];
+  }
+  return accumulator;
+}
+
+constexpr static uint8_t is_forbidden_domain_code_point_table_or_upper[] = {
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2,
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+
+static_assert(sizeof(is_forbidden_domain_code_point_table_or_upper) == 256);
+static_assert(is_forbidden_domain_code_point_table_or_upper[uint8_t('A')] == 2);
+static_assert(is_forbidden_domain_code_point_table_or_upper[uint8_t('Z')] == 2);
+
+ada_really_inline constexpr bool contains_forbidden_domain_code_point_or_upper(
+    const char* input, size_t length) noexcept {
+  size_t i = 0;
+  uint8_t accumulator{};
+  for (; i + 4 <= length; i += 4) {
+    accumulator |=
+        is_forbidden_domain_code_point_table_or_upper[uint8_t(input[i])];
+    accumulator |=
+        is_forbidden_domain_code_point_table_or_upper[uint8_t(input[i + 1])];
+    accumulator |=
+        is_forbidden_domain_code_point_table_or_upper[uint8_t(input[i + 2])];
+    accumulator |=
+        is_forbidden_domain_code_point_table_or_upper[uint8_t(input[i + 3])];
+  }
+  for (; i < length; i++) {
+    accumulator |=
+        is_forbidden_domain_code_point_table_or_upper[uint8_t(input[i])];
   }
   return accumulator;
 }
@@ -10214,7 +10256,8 @@ bool to_ascii(std::optional<std::string>& out, const std::string_view plain,
   }
   // input is a non-empty UTF-8 string, must be percent decoded
   std::string idna_ascii = ada::idna::to_ascii(input);
-  if (idna_ascii.empty()) {
+  if (idna_ascii.empty() || contains_forbidden_domain_code_point(
+                                idna_ascii.data(), idna_ascii.size())) {
     return false;
   }
   out = std::move(idna_ascii);
@@ -10463,7 +10506,7 @@ ada_unused std::string get_state(ada::state s) {
   }
 }
 
-ada_really_inline std::optional<std::string_view> prune_fragment(
+ada_really_inline std::optional<std::string_view> prune_hash(
     std::string_view& input) noexcept {
   // compiles down to 20--30 instructions including a class to memchr (C
   // function). this function should be quite fast.
@@ -10471,10 +10514,10 @@ ada_really_inline std::optional<std::string_view> prune_fragment(
   if (location_of_first == std::string_view::npos) {
     return std::nullopt;
   }
-  std::string_view fragment = input;
-  fragment.remove_prefix(location_of_first + 1);
+  std::string_view hash = input;
+  hash.remove_prefix(location_of_first + 1);
   input.remove_suffix(input.size() - location_of_first);
-  return fragment;
+  return hash;
 }
 
 ada_really_inline bool shorten_path(std::string& path,
@@ -10485,9 +10528,9 @@ ada_really_inline bool shorten_path(std::string& path,
   // If url’s scheme is "file", path’s size is 1, and path[0] is a normalized
   // Windows drive letter, then return.
   if (type == ada::scheme::type::FILE &&
-      first_delimiter == std::string_view::npos) {
+      first_delimiter == std::string_view::npos && !path.empty()) {
     if (checkers::is_normalized_windows_drive_letter(
-            std::string_view(path.data() + 1, first_delimiter - 1))) {
+            helpers::substring(path, 1))) {
       return false;
     }
   }
@@ -10509,9 +10552,9 @@ ada_really_inline bool shorten_path(std::string_view& path,
   // If url’s scheme is "file", path’s size is 1, and path[0] is a normalized
   // Windows drive letter, then return.
   if (type == ada::scheme::type::FILE &&
-      first_delimiter == std::string_view::npos) {
+      first_delimiter == std::string_view::npos && !path.empty()) {
     if (checkers::is_normalized_windows_drive_letter(
-            std::string_view(path.data() + 1, first_delimiter - 1))) {
+            helpers::substring(path, 1))) {
       return false;
     }
   }
@@ -10589,7 +10632,9 @@ ada_really_inline size_t find_next_host_delimiter_special(
   auto index_of_first_set_byte = [](uint64_t v) {
     return ((((v - 1) & 0x101010101010101) * 0x101010101010101) >> 56) - 1;
   };
-  auto broadcast = [](uint8_t v) -> uint64_t { return 0x101010101010101 * v; };
+  auto broadcast = [](uint8_t v) -> uint64_t {
+    return 0x101010101010101ull * v;
+  };
   size_t i = location;
   uint64_t mask1 = broadcast(':');
   uint64_t mask2 = broadcast('/');
@@ -10652,7 +10697,9 @@ ada_really_inline size_t find_next_host_delimiter(std::string_view view,
   auto index_of_first_set_byte = [](uint64_t v) {
     return ((((v - 1) & 0x101010101010101) * 0x101010101010101) >> 56) - 1;
   };
-  auto broadcast = [](uint8_t v) -> uint64_t { return 0x101010101010101 * v; };
+  auto broadcast = [](uint8_t v) -> uint64_t {
+    return 0x101010101010101ull * v;
+  };
   size_t i = location;
   uint64_t mask1 = broadcast(':');
   uint64_t mask2 = broadcast('/');
@@ -10960,8 +11007,8 @@ ada_really_inline void strip_trailing_spaces_from_opaque_path(
     url_type& url) noexcept {
   ada_log("helpers::strip_trailing_spaces_from_opaque_path");
   if (!url.has_opaque_path) return;
-  if (url.base_fragment_has_value()) return;
-  if (url.base_search_has_value()) return;
+  if (url.has_hash()) return;
+  if (url.has_search()) return;
 
   auto path = std::string(url.get_pathname());
   while (!path.empty() && path.back() == ' ') {
@@ -10978,7 +11025,9 @@ find_authority_delimiter_special(std::string_view view) noexcept {
   auto index_of_first_set_byte = [](uint64_t v) {
     return ((((v - 1) & 0x101010101010101) * 0x101010101010101) >> 56) - 1;
   };
-  auto broadcast = [](uint8_t v) -> uint64_t { return 0x101010101010101 * v; };
+  auto broadcast = [](uint8_t v) -> uint64_t {
+    return 0x101010101010101ull * v;
+  };
   size_t i = 0;
   uint64_t mask1 = broadcast('@');
   uint64_t mask2 = broadcast('/');
@@ -11026,7 +11075,9 @@ find_authority_delimiter(std::string_view view) noexcept {
   auto index_of_first_set_byte = [](uint64_t v) {
     return ((((v - 1) & 0x101010101010101) * 0x101010101010101) >> 56) - 1;
   };
-  auto broadcast = [](uint8_t v) -> uint64_t { return 0x101010101010101 * v; };
+  auto broadcast = [](uint8_t v) -> uint64_t {
+    return 0x101010101010101ull * v;
+  };
   size_t i = 0;
   uint64_t mask1 = broadcast('@');
   uint64_t mask2 = broadcast('/');
@@ -11413,7 +11464,7 @@ ada_really_inline bool url::parse_scheme(const std::string_view input) {
 
       // If url includes credentials or has a non-null port, and buffer is
       // "file", then return.
-      if ((includes_credentials() || port.has_value()) &&
+      if ((has_credentials() || port.has_value()) &&
           parsed_type == ada::scheme::type::FILE) {
         return true;
       }
@@ -11458,7 +11509,7 @@ ada_really_inline bool url::parse_scheme(const std::string_view input) {
 
       // If url includes credentials or has a non-null port, and buffer is
       // "file", then return.
-      if ((includes_credentials() || port.has_value()) && _buffer == "file") {
+      if ((has_credentials() || port.has_value()) && _buffer == "file") {
         return true;
       }
 
@@ -11610,7 +11661,7 @@ std::string url::to_string() const {
   answer.append("\t\"protocol\":\"");
   helpers::encode_json(get_protocol(), back);
   answer.append("\",\n");
-  if (includes_credentials()) {
+  if (has_credentials()) {
     answer.append("\t\"username\":\"");
     helpers::encode_json(username, back);
     answer.append("\",\n");
@@ -11633,16 +11684,16 @@ std::string url::to_string() const {
   answer.append("\",\n");
   answer.append("\t\"opaque path\":");
   answer.append((has_opaque_path ? "true" : "false"));
-  if (base_search_has_value()) {
+  if (has_search()) {
     answer.append(",\n");
     answer.append("\t\"query\":\"");
     helpers::encode_json(query.value(), back);
     answer.append("\"");
   }
-  if (fragment.has_value()) {
+  if (hash.has_value()) {
     answer.append(",\n");
-    answer.append("\t\"fragment\":\"");
-    helpers::encode_json(fragment.value(), back);
+    answer.append("\t\"hash\":\"");
+    helpers::encode_json(hash.value(), back);
     answer.append("\"");
   }
   answer.append("\n}");
@@ -11743,9 +11794,8 @@ namespace ada {
 [[nodiscard]] std::string url::get_hash() const noexcept {
   // If this’s URL’s fragment is either null or the empty string, then return
   // the empty string. Return U+0023 (#), followed by this’s URL’s fragment.
-  return (!fragment.has_value() || (fragment.value().empty()))
-             ? ""
-             : "#" + fragment.value();
+  return (!hash.has_value() || (hash.value().empty())) ? ""
+                                                       : "#" + hash.value();
 }
 
 }  // namespace ada
@@ -11801,7 +11851,7 @@ bool url::set_host_or_hostname(const std::string_view input) {
     // empty string, and either url includes credentials or url’s port is
     // non-null, return.
     else if (host_view.empty() &&
-             (is_special() || includes_credentials() || port.has_value())) {
+             (is_special() || has_credentials() || port.has_value())) {
       return false;
     }
 
@@ -11901,7 +11951,7 @@ bool url::set_port(const std::string_view input) {
 
 void url::set_hash(const std::string_view input) {
   if (input.empty()) {
-    fragment = std::nullopt;
+    hash = std::nullopt;
     helpers::strip_trailing_spaces_from_opaque_path(*this);
     return;
   }
@@ -11909,8 +11959,8 @@ void url::set_hash(const std::string_view input) {
   std::string new_value;
   new_value = input[0] == '#' ? input.substr(1) : input;
   helpers::remove_ascii_tab_or_newline(new_value);
-  fragment = unicode::percent_encode(
-      new_value, ada::character_sets::FRAGMENT_PERCENT_ENCODE);
+  hash = unicode::percent_encode(new_value,
+                                 ada::character_sets::FRAGMENT_PERCENT_ENCODE);
   return;
 }
 
@@ -11976,7 +12026,7 @@ bool url::set_href(const std::string_view input) {
     port = out->port;
     path = out->path;
     query = out->query;
-    fragment = out->fragment;
+    hash = out->hash;
     type = out->type;
     non_special_scheme = out->non_special_scheme;
     has_opaque_path = out->has_opaque_path;
@@ -12068,7 +12118,7 @@ result_type parse_url(std::string_view user_input,
   helpers::trim_c0_whitespace(url_data);
 
   // Optimization opportunity. Most websites do not have fragment.
-  std::optional<std::string_view> fragment = helpers::prune_fragment(url_data);
+  std::optional<std::string_view> fragment = helpers::prune_hash(url_data);
   // We add it last so that an implementation like ada::url_aggregator
   // can append it last to its internal buffer, thus improving performance.
 
@@ -12425,7 +12475,7 @@ result_type parse_url(std::string_view user_input,
           // Otherwise, if c is not the EOF code point:
           else if (input_position != input_size) {
             // Set url’s query to null.
-            url.clear_base_search();
+            url.clear_search();
             if constexpr (result_type_is_ada_url) {
               // Shorten url’s path.
               helpers::shorten_path(url.path, url.type);
@@ -12840,7 +12890,7 @@ result_type parse_url(std::string_view user_input,
           // Otherwise, if c is not the EOF code point:
           else if (input_position != input_size) {
             // Set url’s query to null.
-            url.clear_base_search();
+            url.clear_search();
 
             // If the code point substring from pointer to the end of input does
             // not start with a Windows drive letter, then shorten url’s path.
@@ -12857,11 +12907,7 @@ result_type parse_url(std::string_view user_input,
             // Otherwise:
             else {
               // Set url’s path to an empty list.
-              if constexpr (result_type_is_ada_url) {
-                url.path.clear();
-              } else {
-                url.clear_base_pathname();
-              }
+              url.clear_pathname();
               url.has_opaque_path = true;
             }
 
@@ -13053,8 +13099,7 @@ template <bool has_state_override>
 
       // If url includes credentials or has a non-null port, and buffer is
       // "file", then return.
-      if ((includes_credentials() ||
-           components.port != url_components::omitted) &&
+      if ((has_credentials() || components.port != url_components::omitted) &&
           parsed_type == ada::scheme::type::FILE) {
         return true;
       }
@@ -13077,7 +13122,7 @@ template <bool has_state_override>
       // If url’s port is url’s scheme’s default port, then set url’s port to
       // null.
       if (components.port == urls_scheme_port) {
-        clear_base_port();
+        clear_port();
       }
     }
   } else {  // slow path
@@ -13097,8 +13142,7 @@ template <bool has_state_override>
 
       // If url includes credentials or has a non-null port, and buffer is
       // "file", then return.
-      if ((includes_credentials() ||
-           components.port != url_components::omitted) &&
+      if ((has_credentials() || components.port != url_components::omitted) &&
           _buffer == "file") {
         return true;
       }
@@ -13120,7 +13164,7 @@ template <bool has_state_override>
       // If url’s port is url’s scheme’s default port, then set url’s port to
       // null.
       if (components.port == urls_scheme_port) {
-        clear_base_port();
+        clear_port();
       }
     }
   }
@@ -13301,7 +13345,7 @@ bool url_aggregator::set_port(const std::string_view input) {
   std::string trimmed(input);
   helpers::remove_ascii_tab_or_newline(trimmed);
   if (trimmed.empty()) {
-    clear_base_port();
+    clear_port();
     return true;
   }
   // Input should not start with control characters.
@@ -13332,7 +13376,7 @@ bool url_aggregator::set_pathname(const std::string_view input) {
   if (has_opaque_path) {
     return false;
   }
-  clear_base_pathname();
+  clear_pathname();
   parse_path(input);
   if (checkers::begins_with(input, "//") && !has_authority() &&
       !has_dash_dot()) {
@@ -13389,7 +13433,7 @@ void url_aggregator::set_search(const std::string_view input) {
   ADA_ASSERT_TRUE(validate());
   ADA_ASSERT_TRUE(!helpers::overlaps(input, buffer));
   if (input.empty()) {
-    clear_base_search();
+    clear_search();
     helpers::strip_trailing_spaces_from_opaque_path(*this);
     return;
   }
@@ -13473,23 +13517,50 @@ ada_really_inline bool url_aggregator::parse_host(std::string_view input) {
   // to ASCII with domain and false. The most common case is an ASCII input, in
   // which case we do not need to call the expensive 'to_ascii' if a few
   // conditions are met: no '%' and no 'xn-' subsequence.
-  std::string _buffer = std::string(input);
-  // This next function checks that the result is ascii, but we are going to
-  // to check anyhow with is_forbidden.
-  // bool is_ascii =
-  unicode::to_lower_ascii(_buffer.data(), _buffer.size());
-  bool is_forbidden = unicode::contains_forbidden_domain_code_point(
-      _buffer.data(), _buffer.size());
-  if (is_forbidden == 0 && _buffer.find("xn-") == std::string_view::npos) {
+
+  // Often, the input does not contain any forbidden code points, and no upper
+  // case ASCII letter, then we can just copy it to the buffer. We want to
+  // optimize for such a common case.
+  uint8_t is_forbidden_or_upper =
+      unicode::contains_forbidden_domain_code_point_or_upper(input.data(),
+                                                             input.size());
+  // Minor optimization opportunity:
+  // contains_forbidden_domain_code_point_or_upper could be extend to check for
+  // the presence of characters that cannot appear in the ipv4 address and we
+  // could also check whether x and n and - are present, and so we could skip
+  // some of the checks below. However, the gains are likely to be small, and
+  // the code would be more complex.
+  if (is_forbidden_or_upper == 0 &&
+      input.find("xn-") == std::string_view::npos) {
     // fast path
-    update_base_hostname(_buffer);
+    update_base_hostname(input);
     if (checkers::is_ipv4(get_hostname())) {
       ada_log("parse_host fast path ipv4");
       return parse_ipv4(get_hostname());
     }
     ada_log("parse_host fast path ", get_hostname());
     return true;
+  } else if (is_forbidden_or_upper == 2) {
+    // We have encountered at least one upper case ASCII letter, let us
+    // try to convert it to lower case. If there is no 'xn-' in the result,
+    // we can then use a secondary fast path.
+    std::string _buffer = std::string(input);
+    unicode::to_lower_ascii(_buffer.data(), _buffer.size());
+    if (input.find("xn-") == std::string_view::npos) {
+      // secondary fast path when input is not all lower case
+      update_base_hostname(input);
+      if (checkers::is_ipv4(get_hostname())) {
+        ada_log("parse_host fast path ipv4");
+        return parse_ipv4(get_hostname());
+      }
+      ada_log("parse_host fast path ", get_hostname());
+      return true;
+    }
   }
+  // We have encountered at least one forbidden code point or the input contains
+  // 'xn-' (case insensitive), so we need to call 'to_ascii' to perform the full
+  // conversion.
+
   ada_log("parse_host calling to_ascii");
   std::optional<std::string> host = std::string(get_hostname());
   is_valid = ada::unicode::to_ascii(host, input, input.find('%'));
@@ -13558,7 +13629,7 @@ bool url_aggregator::set_host_or_hostname(const std::string_view input) {
     // empty string, and either url includes credentials or url’s port is
     // non-null, return.
     else if (host_view.empty() &&
-             (is_special() || includes_credentials() ||
+             (is_special() || has_credentials() ||
               components.port != url_components::omitted)) {
       return false;
     }
@@ -13566,7 +13637,7 @@ bool url_aggregator::set_host_or_hostname(const std::string_view input) {
     // Let host be the result of host parsing host_view with url is not special.
     if (host_view.empty()) {
       if (has_hostname()) {
-        clear_base_hostname();  // easy!
+        clear_hostname();  // easy!
       } else if (has_dash_dot()) {
         add_authority_slashes_if_needed();
         delete_dash_dot();
@@ -13592,7 +13663,7 @@ bool url_aggregator::set_host_or_hostname(const std::string_view input) {
 
   if (new_host.empty()) {
     // Set url’s host to the empty string.
-    clear_base_hostname();
+    clear_hostname();
   } else {
     // Let host be the result of host parsing buffer with url is not special.
     if (!parse_host(new_host)) {
@@ -13604,7 +13675,7 @@ bool url_aggregator::set_host_or_hostname(const std::string_view input) {
     // If host is "localhost", then set host to the empty string.
     if (helpers::substring(buffer, components.host_start,
                            components.host_end) == "localhost") {
-      clear_base_hostname();
+      clear_hostname();
     }
   }
   ADA_ASSERT_TRUE(validate());
@@ -13771,7 +13842,7 @@ std::string ada::url_aggregator::to_string() const {
   helpers::encode_json(get_protocol(), back);
   answer.append("\",\n");
 
-  if (includes_credentials()) {
+  if (has_credentials()) {
     answer.append("\t\"username\":\"");
     helpers::encode_json(get_username(), back);
     answer.append("\",\n");

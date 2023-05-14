@@ -1,4 +1,5 @@
 #include "encoding_binding.h"
+#include "ada.h"
 #include "env-inl.h"
 #include "node_errors.h"
 #include "node_external_reference.h"
@@ -28,21 +29,32 @@ void BindingData::MemoryInfo(MemoryTracker* tracker) const {
                       encode_into_results_buffer_);
 }
 
-BindingData::BindingData(Realm* realm, v8::Local<v8::Object> object)
+BindingData::BindingData(Realm* realm,
+                         v8::Local<v8::Object> object,
+                         InternalFieldInfo* info)
     : SnapshotableObject(realm, object, type_int),
-      encode_into_results_buffer_(realm->isolate(), kEncodeIntoResultsLength) {
-  object
-      ->Set(realm->context(),
-            FIXED_ONE_BYTE_STRING(realm->isolate(), "encodeIntoResults"),
-            encode_into_results_buffer_.GetJSArray())
-      .Check();
+      encode_into_results_buffer_(
+          realm->isolate(),
+          kEncodeIntoResultsLength,
+          MAYBE_FIELD_PTR(info, encode_into_results_buffer)) {
+  if (info == nullptr) {
+    object
+        ->Set(realm->context(),
+              FIXED_ONE_BYTE_STRING(realm->isolate(), "encodeIntoResults"),
+              encode_into_results_buffer_.GetJSArray())
+        .Check();
+  } else {
+    encode_into_results_buffer_.Deserialize(realm->context());
+  }
+  encode_into_results_buffer_.MakeWeak();
 }
 
 bool BindingData::PrepareForSerialization(Local<Context> context,
                                           v8::SnapshotCreator* creator) {
-  // We'll just re-initialize the buffers in the constructor since their
-  // contents can be thrown away once consumed in the previous call.
-  encode_into_results_buffer_.Release();
+  DCHECK_NULL(internal_field_info_);
+  internal_field_info_ = InternalFieldInfoBase::New<InternalFieldInfo>(type());
+  internal_field_info_->encode_into_results_buffer =
+      encode_into_results_buffer_.Serialize(context, creator);
   // Return true because we need to maintain the reference to the binding from
   // JS land.
   return true;
@@ -50,8 +62,8 @@ bool BindingData::PrepareForSerialization(Local<Context> context,
 
 InternalFieldInfoBase* BindingData::Serialize(int index) {
   DCHECK_EQ(index, BaseObject::kEmbedderType);
-  InternalFieldInfo* info =
-      InternalFieldInfoBase::New<InternalFieldInfo>(type());
+  InternalFieldInfo* info = internal_field_info_;
+  internal_field_info_ = nullptr;
   return info;
 }
 
@@ -63,7 +75,9 @@ void BindingData::Deserialize(Local<Context> context,
   v8::HandleScope scope(context->GetIsolate());
   Realm* realm = Realm::GetCurrent(context);
   // Recreate the buffer in the constructor.
-  BindingData* binding = realm->AddBindingData<BindingData>(context, holder);
+  InternalFieldInfo* casted_info = static_cast<InternalFieldInfo*>(info);
+  BindingData* binding =
+      realm->AddBindingData<BindingData>(context, holder, casted_info);
   CHECK_NOT_NULL(binding);
 }
 
@@ -180,6 +194,28 @@ void BindingData::DecodeUTF8(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(ret);
 }
 
+void BindingData::ToASCII(const v8::FunctionCallbackInfo<v8::Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+  CHECK_GE(args.Length(), 1);
+  CHECK(args[0]->IsString());
+
+  Utf8Value input(env->isolate(), args[0]);
+  auto out = ada::idna::to_ascii(input.ToStringView());
+  args.GetReturnValue().Set(
+      String::NewFromUtf8(env->isolate(), out.c_str()).ToLocalChecked());
+}
+
+void BindingData::ToUnicode(const v8::FunctionCallbackInfo<v8::Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+  CHECK_GE(args.Length(), 1);
+  CHECK(args[0]->IsString());
+
+  Utf8Value input(env->isolate(), args[0]);
+  auto out = ada::idna::to_unicode(input.ToStringView());
+  args.GetReturnValue().Set(
+      String::NewFromUtf8(env->isolate(), out.c_str()).ToLocalChecked());
+}
+
 void BindingData::Initialize(Local<Object> target,
                              Local<Value> unused,
                              Local<Context> context,
@@ -192,6 +228,8 @@ void BindingData::Initialize(Local<Object> target,
   SetMethod(context, target, "encodeInto", EncodeInto);
   SetMethodNoSideEffect(context, target, "encodeUtf8String", EncodeUtf8String);
   SetMethodNoSideEffect(context, target, "decodeUTF8", DecodeUTF8);
+  SetMethodNoSideEffect(context, target, "toASCII", ToASCII);
+  SetMethodNoSideEffect(context, target, "toUnicode", ToUnicode);
 }
 
 void BindingData::RegisterTimerExternalReferences(
@@ -199,6 +237,8 @@ void BindingData::RegisterTimerExternalReferences(
   registry->Register(EncodeInto);
   registry->Register(EncodeUtf8String);
   registry->Register(DecodeUTF8);
+  registry->Register(ToASCII);
+  registry->Register(ToUnicode);
 }
 
 }  // namespace encoding_binding

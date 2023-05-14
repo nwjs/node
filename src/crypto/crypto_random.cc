@@ -13,7 +13,7 @@ namespace node {
 
 using v8::ArrayBuffer;
 using v8::BackingStore;
-using v8::False;
+using v8::Boolean;
 using v8::FunctionCallbackInfo;
 using v8::Int32;
 using v8::Just;
@@ -21,7 +21,6 @@ using v8::Local;
 using v8::Maybe;
 using v8::Nothing;
 using v8::Object;
-using v8::True;
 using v8::Uint32;
 using v8::Value;
 
@@ -40,7 +39,6 @@ Maybe<bool> RandomBytesTraits::AdditionalConfig(
     const FunctionCallbackInfo<Value>& args,
     unsigned int offset,
     RandomBytesConfig* params) {
-  Environment* env = Environment::GetCurrent(args);
   CHECK(IsAnyByteSource(args[offset]));  // Buffer to fill
   CHECK(args[offset + 1]->IsUint32());  // Offset
   CHECK(args[offset + 2]->IsUint32());  // Size
@@ -51,11 +49,6 @@ Maybe<bool> RandomBytesTraits::AdditionalConfig(
   const uint32_t size = args[offset + 2].As<Uint32>()->Value();
   CHECK_GE(byte_offset + size, byte_offset);  // Overflow check.
   CHECK_LE(byte_offset + size, in.size());  // Bounds check.
-
-  if (UNLIKELY(size > INT_MAX)) {
-    THROW_ERR_OUT_OF_RANGE(env, "buffer is too large");
-    return Nothing<bool>();
-  }
 
   params->buffer = in.data() + byte_offset;
   params->size = size;
@@ -225,7 +218,7 @@ Maybe<bool> CheckPrimeTraits::EncodeOutput(
     const CheckPrimeConfig& params,
     ByteSource* out,
     v8::Local<v8::Value>* result) {
-  *result = out->data<char>()[0] ? True(env->isolate()) : False(env->isolate());
+  *result = Boolean::New(env->isolate(), out->data<char>()[0] != 0);
   return Just(true);
 }
 

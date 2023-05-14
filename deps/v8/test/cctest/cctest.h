@@ -706,7 +706,6 @@ class V8_NODISCARD ManualGCScope {
   const bool flag_concurrent_marking_;
   const bool flag_concurrent_sweeping_;
   const bool flag_concurrent_minor_mc_marking_;
-  const bool flag_concurrent_minor_mc_sweeping_;
   const bool flag_stress_concurrent_allocation_;
   const bool flag_stress_incremental_marking_;
   const bool flag_parallel_marking_;
@@ -775,12 +774,20 @@ class SimulatorHelper {
     state->sp = reinterpret_cast<void*>(simulator_->sp());
     state->fp = reinterpret_cast<void*>(simulator_->fp());
     state->lr = reinterpret_cast<void*>(simulator_->lr());
-#elif V8_TARGET_ARCH_MIPS64
+#elif V8_TARGET_ARCH_MIPS64 || V8_TARGET_ARCH_LOONG64
     state->pc = reinterpret_cast<void*>(simulator_->get_pc());
     state->sp = reinterpret_cast<void*>(
         simulator_->get_register(v8::internal::Simulator::sp));
     state->fp = reinterpret_cast<void*>(
         simulator_->get_register(v8::internal::Simulator::fp));
+#elif V8_TARGET_ARCH_RISCV64 || V8_TARGET_ARCH_RISCV32
+    state->pc = reinterpret_cast<void*>(simulator_->get_pc());
+    state->sp = reinterpret_cast<void*>(
+        simulator_->get_register(v8::internal::Simulator::sp));
+    state->fp = reinterpret_cast<void*>(
+        simulator_->get_register(v8::internal::Simulator::fp));
+    state->lr = reinterpret_cast<void*>(
+        simulator_->get_register(v8::internal::Simulator::ra));
 #elif V8_TARGET_ARCH_PPC || V8_TARGET_ARCH_PPC64
     state->pc = reinterpret_cast<void*>(simulator_->get_pc());
     state->sp = reinterpret_cast<void*>(

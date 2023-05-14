@@ -127,7 +127,7 @@ Local<ArrayBuffer> CallbackInfo::CreateTrackedArrayBuffer(
   // V8 simply ignores the BackingStore deleter callback if data == nullptr,
   // but our API contract requires it being called.
   if (data == nullptr) {
-    ab->Detach();
+    ab->Detach(Local<Value>()).Check();
     self->OnBackingStoreFree();  // This calls `callback` asynchronously.
   } else {
     // Store the ArrayBuffer so that we can detach it later.
@@ -158,7 +158,7 @@ void CallbackInfo::CleanupHook(void* data) {
     HandleScope handle_scope(self->env_->isolate());
     Local<ArrayBuffer> ab = self->persistent_.Get(self->env_->isolate());
     if (!ab.IsEmpty() && ab->IsDetachable()) {
-      ab->Detach();
+      ab->Detach(Local<Value>()).Check();
       self->persistent_.Reset();
     }
   }
@@ -1150,11 +1150,14 @@ static void IsAscii(const FunctionCallbackInfo<Value>& args) {
 }
 
 void SetBufferPrototype(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
+  Realm* realm = Realm::GetCurrent(args);
+
+  // TODO(legendecas): Remove this check once the binding supports sub-realms.
+  CHECK_EQ(realm->kind(), Realm::Kind::kPrincipal);
 
   CHECK(args[0]->IsObject());
   Local<Object> proto = args[0].As<Object>();
-  env->set_buffer_prototype_object(proto);
+  realm->set_buffer_prototype_object(proto);
 }
 
 void GetZeroFillToggle(const FunctionCallbackInfo<Value>& args) {
@@ -1192,7 +1195,7 @@ void DetachArrayBuffer(const FunctionCallbackInfo<Value>& args) {
     Local<ArrayBuffer> buf = args[0].As<ArrayBuffer>();
     if (buf->IsDetachable()) {
       std::shared_ptr<BackingStore> store = buf->GetBackingStore();
-      buf->Detach();
+      buf->Detach(Local<Value>()).Check();
       args.GetReturnValue().Set(ArrayBuffer::New(env->isolate(), store));
     }
   }

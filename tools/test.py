@@ -44,6 +44,7 @@ import utils
 import multiprocessing
 import errno
 import copy
+import io
 
 
 if sys.version_info >= (3, 5):
@@ -68,7 +69,7 @@ else:
 
 from io import open
 from os.path import join, dirname, abspath, basename, isdir, exists
-from datetime import datetime
+from datetime import datetime, timedelta
 try:
     from queue import Queue, Empty  # Python 3
 except ImportError:
@@ -399,16 +400,8 @@ class TapProgressIndicator(SimpleProgressIndicator):
 
 
     duration = output.test.duration
-
-    # total_seconds() was added in 2.7
-    total_seconds = (duration.microseconds +
-      (duration.seconds + duration.days * 24 * 3600) * 10**6) / 10**6
-
-    # duration_ms is measured in seconds and is read as such by TAP parsers.
-    # It should read as "duration including ms" rather than "duration in ms"
     logger.info('  ---')
-    logger.info('  duration_ms: %d.%d' %
-      (total_seconds, duration.microseconds / 1000))
+    logger.info('  duration_ms: %.5f' % (duration  / timedelta(milliseconds=1)))
     if self.severity != 'ok' or self.traceback != '':
       if output.HasTimedOut():
         self.traceback = 'timeout\n' + output.output.stdout + output.output.stderr
@@ -1595,7 +1588,13 @@ def Main():
     parser.print_help()
     return 1
 
-  ch = logging.StreamHandler(sys.stdout)
+  stream = sys.stdout
+  try:
+    sys.stdout.reconfigure(encoding='utf8')
+  except AttributeError:
+    # Python < 3.7 does not have reconfigure
+    stream = io.TextIOWrapper(sys.stdout.buffer,encoding='utf8')
+  ch = logging.StreamHandler(stream)
   logger.addHandler(ch)
   logger.setLevel(logging.INFO)
   if options.logfile:

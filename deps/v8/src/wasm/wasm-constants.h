@@ -48,7 +48,7 @@ enum ValueTypeCode : uint8_t {
   kRefNullCode = 0x6c,
   kRefCode = 0x6b,
   kI31RefCode = 0x6a,
-  kDataRefCode = 0x67,
+  kStructRefCode = 0x67,
   kArrayRefCode = 0x66,
   kNoneCode = 0x65,
   kStringRefCode = 0x64,
@@ -62,6 +62,7 @@ constexpr uint8_t kWasmFunctionTypeCode = 0x60;
 constexpr uint8_t kWasmStructTypeCode = 0x5f;
 constexpr uint8_t kWasmArrayTypeCode = 0x5e;
 constexpr uint8_t kWasmSubtypeCode = 0x50;
+constexpr uint8_t kWasmSubtypeFinalCode = 0x4e;
 constexpr uint8_t kWasmRecursiveTypeGroupCode = 0x4f;
 
 // Binary encoding of import/export kinds.
@@ -74,12 +75,14 @@ enum ImportExportKindCode : uint8_t {
 };
 
 enum LimitsFlags : uint8_t {
-  kNoMaximum = 0x00,           // Also valid for table limits.
-  kWithMaximum = 0x01,         // Also valid for table limits.
-  kSharedNoMaximum = 0x02,     // Only valid for memory limits.
-  kSharedWithMaximum = 0x03,   // Only valid for memory limits.
-  kMemory64NoMaximum = 0x04,   // Only valid for memory limits.
-  kMemory64WithMaximum = 0x05  // Only valid for memory limits.
+  kNoMaximum = 0x00,                 // Also valid for table limits.
+  kWithMaximum = 0x01,               // Also valid for table limits.
+  kSharedNoMaximum = 0x02,           // Only valid for memory limits.
+  kSharedWithMaximum = 0x03,         // Only valid for memory limits.
+  kMemory64NoMaximum = 0x04,         // Only valid for memory limits.
+  kMemory64WithMaximum = 0x05,       // Only valid for memory limits.
+  kMemory64SharedNoMaximum = 0x06,   // Only valid for memory limits.
+  kMemory64SharedWithMaximum = 0x07  // Only valid for memory limits.
 };
 
 // Flags for data and element segments.

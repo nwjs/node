@@ -56,6 +56,11 @@ constexpr auto StaticJSCallInterfaceDescriptor<DerivedDescriptor>::registers() {
   return CallInterfaceDescriptor::DefaultJSRegisterArray();
 }
 
+// static
+constexpr auto CompareNoContextDescriptor::registers() {
+  return CompareDescriptor::registers();
+}
+
 template <typename DerivedDescriptor>
 void StaticCallInterfaceDescriptor<DerivedDescriptor>::Initialize(
     CallInterfaceDescriptorData* data) {
@@ -189,6 +194,14 @@ StaticCallInterfaceDescriptor<DerivedDescriptor>::GetRegisterParameter(int i) {
 
 // static
 template <typename DerivedDescriptor>
+constexpr int
+StaticCallInterfaceDescriptor<DerivedDescriptor>::GetStackParameterIndex(
+    int i) {
+  return i - DerivedDescriptor::GetRegisterParameterCount();
+}
+
+// static
+template <typename DerivedDescriptor>
 constexpr DoubleRegister
 StaticCallInterfaceDescriptor<DerivedDescriptor>::GetDoubleRegisterParameter(
     int i) {
@@ -318,6 +331,20 @@ constexpr auto StoreGlobalDescriptor::registers() {
 // static
 constexpr auto StoreGlobalBaselineDescriptor::registers() {
   return StoreGlobalDescriptor::registers();
+}
+
+// static
+constexpr auto DefineKeyedOwnDescriptor::registers() {
+  return RegisterArray(StoreDescriptor::ReceiverRegister(),
+                       StoreDescriptor::NameRegister(),
+                       StoreDescriptor::ValueRegister(),
+                       DefineKeyedOwnDescriptor::FlagsRegister(),
+                       StoreDescriptor::SlotRegister());
+}
+
+// static
+constexpr auto DefineKeyedOwnBaselineDescriptor::registers() {
+  return DefineKeyedOwnDescriptor::registers();
 }
 
 // static
@@ -516,6 +543,15 @@ constexpr auto StoreWithVectorDescriptor::registers() {
                        StoreDescriptor::NameRegister(),
                        StoreDescriptor::ValueRegister(),
                        StoreDescriptor::SlotRegister(), VectorRegister());
+}
+
+// static
+constexpr auto DefineKeyedOwnWithVectorDescriptor::registers() {
+  return RegisterArray(StoreDescriptor::ReceiverRegister(),
+                       StoreDescriptor::NameRegister(),
+                       StoreDescriptor::ValueRegister(),
+                       DefineKeyedOwnDescriptor::FlagsRegister(),
+                       StoreDescriptor::SlotRegister());
 }
 
 // static

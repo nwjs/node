@@ -73,8 +73,9 @@ void AdvanceStartupState(V8StartupState expected_next_state) {
     // isolate->Dispose();
     // v8::V8::Dispose();
     // v8::V8::DisposePlatform();
-    FATAL("Wrong initialization order: got %d expected %d!",
-          static_cast<int>(current_state), static_cast<int>(next_state));
+    FATAL("Wrong initialization order: from %d to %d, expected to %d!",
+          static_cast<int>(current_state), static_cast<int>(next_state),
+          static_cast<int>(expected_next_state));
   }
   if (!v8_startup_state_.compare_exchange_strong(current_state, next_state)) {
     FATAL(
@@ -91,6 +92,7 @@ void AdvanceStartupState(V8StartupState expected_next_state) {
 V8_DECLARE_ONCE(init_snapshot_once);
 #endif
 
+// static
 void V8::InitializePlatform(v8::Platform* platform) {
   AdvanceStartupState(V8StartupState::kPlatformInitializing);
   CHECK(!platform_);
@@ -111,6 +113,16 @@ void V8::InitializePlatform(v8::Platform* platform) {
   CppHeap::InitializeOncePerProcess();
 
   AdvanceStartupState(V8StartupState::kPlatformInitialized);
+}
+
+// static
+void V8::InitializePlatformForTesting(v8::Platform* platform) {
+  if (v8_startup_state_ != V8StartupState::kIdle) {
+    FATAL(
+        "The platform was initialized before. Note that running multiple tests "
+        "in the same process is not supported.");
+  }
+  V8::InitializePlatform(platform);
 }
 
 #define DISABLE_FLAG(flag)                                                    \
@@ -280,7 +292,6 @@ void V8::Dispose() {
   CallDescriptors::TearDown();
   ElementsAccessor::TearDown();
   RegisteredExtension::UnregisterAll();
-  Isolate::DisposeOncePerProcess();
   FlagList::ReleaseDynamicAllocations();
   AdvanceStartupState(V8StartupState::kV8Disposed);
 }

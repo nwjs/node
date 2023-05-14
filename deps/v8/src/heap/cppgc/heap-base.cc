@@ -4,7 +4,11 @@
 
 #include "src/heap/cppgc/heap-base.h"
 
+#include <memory>
+
 #include "include/cppgc/heap-consistency.h"
+#include "include/cppgc/platform.h"
+#include "src/base/logging.h"
 #include "src/base/platform/platform.h"
 #include "src/base/sanitizer/lsan-page-allocator.h"
 #include "src/heap/base/stack.h"
@@ -169,10 +173,13 @@ size_t HeapBase::ExecutePreFinalizers() {
 #if defined(CPPGC_YOUNG_GENERATION)
 void HeapBase::EnableGenerationalGC() {
   DCHECK(in_atomic_pause());
+  if (HeapHandle::is_young_generation_enabled_) return;
   // Notify the global flag that the write barrier must always be enabled.
   YoungGenerationEnabler::Enable();
   // Enable young generation for the current heap.
   HeapHandle::is_young_generation_enabled_ = true;
+  // Assume everything that has so far been allocated is young.
+  object_allocator_.MarkAllPagesAsYoung();
 }
 
 void HeapBase::ResetRememberedSet() {

@@ -395,15 +395,32 @@ void MarkerBase::ProcessWeakness() {
   }
 #endif  // defined(CPPGC_YOUNG_GENERATION)
 
-  MarkingWorklists::WeakCallbackItem item;
-  MarkingWorklists::WeakCallbackWorklist::Local& local =
-      mutator_marking_state_.weak_callback_worklist();
-  while (local.Pop(&item)) {
-    item.callback(broker, item.parameter);
+  {
+    // First, process weak container callbacks.
+    StatsCollector::EnabledScope stats_scope(
+        heap().stats_collector(),
+        StatsCollector::kWeakContainerCallbacksProcessing);
+    MarkingWorklists::WeakCallbackItem item;
+    MarkingWorklists::WeakCallbackWorklist::Local& collections_local =
+        mutator_marking_state_.weak_container_callback_worklist();
+    while (collections_local.Pop(&item)) {
+      item.callback(broker, item.parameter);
+    }
+  }
+  {
+    // Then, process custom weak callbacks.
+    StatsCollector::EnabledScope stats_scope(
+        heap().stats_collector(), StatsCollector::kCustomCallbacksProcessing);
+    MarkingWorklists::WeakCallbackItem item;
+    MarkingWorklists::WeakCustomCallbackWorklist::Local& custom_callbacks =
+        mutator_marking_state_.weak_custom_callback_worklist();
+    while (custom_callbacks.Pop(&item)) {
+      item.callback(broker, item.parameter);
 #if defined(CPPGC_YOUNG_GENERATION)
-    if (heap().generational_gc_supported())
-      heap().remembered_set().AddWeakCallback(item);
+      if (heap().generational_gc_supported())
+        heap().remembered_set().AddWeakCallback(item);
 #endif  // defined(CPPGC_YOUNG_GENERATION)
+    }
   }
 
   if (job_handle) {
@@ -443,11 +460,13 @@ void MarkerBase::VisitRoots(StackState stack_state) {
         heap().stats_collector(), StatsCollector::kMarkVisitStack);
     heap().stack()->IteratePointers(&stack_visitor());
   }
+
 #if defined(CPPGC_YOUNG_GENERATION)
   if (config_.collection_type == CollectionType::kMinor) {
     StatsCollector::EnabledScope stats_scope(
         heap().stats_collector(), StatsCollector::kMarkVisitRememberedSets);
-    heap().remembered_set().Visit(visitor(), mutator_marking_state_);
+    heap().remembered_set().Visit(visitor(), conservative_visitor(),
+                                  mutator_marking_state_);
   }
 #endif  // defined(CPPGC_YOUNG_GENERATION)
 }

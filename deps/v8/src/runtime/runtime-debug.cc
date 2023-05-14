@@ -18,6 +18,7 @@
 #include "src/objects/js-collection-inl.h"
 #include "src/objects/js-generator-inl.h"
 #include "src/objects/js-promise-inl.h"
+#include "src/objects/js-weak-refs-inl.h"
 #include "src/runtime/runtime-utils.h"
 #include "src/runtime/runtime.h"
 #include "src/snapshot/embedded/embedded-data.h"
@@ -47,7 +48,7 @@ RUNTIME_FUNCTION_RETURN_PAIR(Runtime_DebugBreakOnBytecode) {
   isolate->debug()->set_return_value(*value);
 
   // Get the top-most JavaScript frame.
-  JavaScriptFrameIterator it(isolate);
+  JavaScriptStackFrameIterator it(isolate);
   if (isolate->debug_execution_mode() == DebugInfo::kBreakpoints) {
     isolate->debug()->Break(it.frame(),
                             handle(it.frame()->function(), isolate));
@@ -118,7 +119,7 @@ RUNTIME_FUNCTION(Runtime_DebugBreakAtEntry) {
   DCHECK(function->shared().GetDebugInfo().BreakAtEntry());
 
   // Get the top-most JavaScript frame. This is the debug target function.
-  JavaScriptFrameIterator it(isolate);
+  JavaScriptStackFrameIterator it(isolate);
   DCHECK_EQ(*function, it.frame()->function());
   // Check whether the next JS frame is closer than the last API entry.
   // if yes, then the call to the debug target came from JavaScript. Otherwise,
@@ -207,6 +208,12 @@ MaybeHandle<JSArray> Runtime::GetInternalProperties(Isolate* isolate,
     if (iter.HasAccess()) {
       iter.Advance();
       Handle<Object> prototype = PrototypeIterator::GetCurrent(iter);
+      if (!iter.IsAtEnd() && iter.HasAccess() && object->IsJSGlobalProxy()) {
+        // Skip JSGlobalObject as the [[Prototype]].
+        DCHECK(prototype->IsJSGlobalObject());
+        iter.Advance();
+        prototype = PrototypeIterator::GetCurrent(iter);
+      }
       if (!prototype->IsNull(isolate)) {
         result = ArrayList::Add(
             isolate, result,
@@ -300,6 +307,13 @@ MaybeHandle<JSArray> Runtime::GetInternalProperties(Isolate* isolate,
         isolate, result,
         isolate->factory()->NewStringFromAsciiChecked("[[PrimitiveValue]]"),
         handle(js_value->value(), isolate));
+  } else if (object->IsJSWeakRef()) {
+    Handle<JSWeakRef> js_weak_ref = Handle<JSWeakRef>::cast(object);
+
+    result = ArrayList::Add(
+        isolate, result,
+        isolate->factory()->NewStringFromAsciiChecked("[[WeakRefTarget]]"),
+        handle(js_weak_ref->target(), isolate));
   } else if (object->IsJSArrayBuffer()) {
     Handle<JSArrayBuffer> js_array_buffer = Handle<JSArrayBuffer>::cast(object);
     if (js_array_buffer->was_detached()) {
@@ -897,6 +911,9 @@ RUNTIME_FUNCTION(Runtime_LiveEditPatchScript) {
     case v8::debug::LiveEditResult::BLOCKED_BY_ACTIVE_FUNCTION:
       return isolate->Throw(*isolate->factory()->NewStringFromAsciiChecked(
           "LiveEdit failed: BLOCKED_BY_ACTIVE_FUNCTION"));
+    case v8::debug::LiveEditResult::BLOCKED_BY_TOP_LEVEL_ES_MODULE_CHANGE:
+      return isolate->Throw(*isolate->factory()->NewStringFromAsciiChecked(
+          "LiveEdit failed: BLOCKED_BY_TOP_LEVEL_ES_MODULE_CHANGE"));
     case v8::debug::LiveEditResult::OK:
       return ReadOnlyRoots(isolate).undefined_value();
   }

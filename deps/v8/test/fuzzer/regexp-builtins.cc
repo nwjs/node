@@ -183,6 +183,9 @@ std::string PickRandomPresetPattern(FuzzerArgs* args) {
       "\\p{General_Category=Decimal_Number}", "\\P{gc=Decimal_Number}",
       "\\p{gc=Nd}", "\\P{Decimal_Number}", "\\p{Nd}", "\\P{Any}",
       "\\p{Changes_When_NFKC_Casefolded}",
+      "[\\p{Script_Extensions=Greek}--[α-γ]]",
+      "[\\p{Script_Extensions=Mongolian}&&\\p{Number}]",
+      "[\\q{abc|def|0|5}--\\d]",
   };
   static constexpr int preset_pattern_count = arraysize(preset_patterns);
   static_assert(preset_pattern_count < 0xFF);
@@ -453,7 +456,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
   // Flag definitions.
 
-  FLAG_allow_natives_syntax = true;
+  v8_flags.allow_natives_syntax = true;
 
   // V8 setup.
 

@@ -1,15 +1,16 @@
 #include "node_worker.h"
+#include "async_wrap-inl.h"
 #include "debug_utils-inl.h"
 #include "histogram-inl.h"
 #include "memory_tracker-inl.h"
+#include "node_buffer.h"
 #include "node_errors.h"
 #include "node_external_reference.h"
-#include "node_buffer.h"
 #include "node_options-inl.h"
 #include "node_perf.h"
 #include "node_snapshot_builder.h"
+#include "permission/permission.h"
 #include "util-inl.h"
-#include "async_wrap-inl.h"
 
 #include <memory>
 #include <string>
@@ -464,6 +465,12 @@ Worker::~Worker() {
 
 void Worker::New(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
+  auto is_internal = args[5];
+  CHECK(is_internal->IsBoolean());
+  if (is_internal->IsFalse()) {
+    THROW_IF_INSUFFICIENT_PERMISSIONS(
+        env, permission::PermissionScope::kWorkerThreads, "");
+  }
   Isolate* isolate = args.GetIsolate();
 
   CHECK(args.IsConstructCall());
@@ -487,9 +494,9 @@ void Worker::New(const FunctionCallbackInfo<Value>& args) {
     url.append(value.out(), value.length());
   }
 
-  if (!args[5]->IsNullOrUndefined()) {
+  if (!args[6]->IsNullOrUndefined()) {
     Utf8Value value(
-        isolate, args[5]->ToString(env->context()).FromMaybe(Local<String>()));
+        isolate, args[6]->ToString(env->context()).FromMaybe(Local<String>()));
     name.append(value.out(), value.length());
   }
 

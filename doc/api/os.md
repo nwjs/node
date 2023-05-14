@@ -29,7 +29,9 @@ The operating system-specific end-of-line marker.
 ## `os.availableParallelism()`
 
 <!-- YAML
-added: v19.4.0
+added:
+  - v19.4.0
+  - v18.14.0
 -->
 
 * Returns: {integer}
@@ -74,6 +76,8 @@ added: v0.3.3
 * Returns: {Object\[]}
 
 Returns an array of objects containing information about each logical CPU core.
+The array will be empty if no CPU information is available, such as if the
+`/proc` file system is unavailable.
 
 The properties included on each object include:
 

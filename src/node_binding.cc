@@ -15,12 +15,6 @@
 #define NODE_BUILTIN_OPENSSL_BINDINGS(V)
 #endif
 
-#if NODE_HAVE_I18N_SUPPORT
-#define NODE_BUILTIN_ICU_BINDINGS(V) V(icu)
-#else
-#define NODE_BUILTIN_ICU_BINDINGS(V)
-#endif
-
 #if HAVE_INSPECTOR
 #define NODE_BUILTIN_PROFILER_BINDINGS(V) V(profiler)
 #else
@@ -60,6 +54,7 @@
   V(options)                                                                   \
   V(os)                                                                        \
   V(performance)                                                               \
+  V(permission)                                                                \
   V(pipe_wrap)                                                                 \
   V(process_wrap)                                                              \
   V(process_methods)                                                           \
@@ -594,7 +589,6 @@ void CreateInternalBindingTemplates(IsolateData* isolate_data) {
         FunctionTemplate::New(isolate_data->isolate());                        \
     templ->InstanceTemplate()->SetInternalFieldCount(                          \
         BaseObject::kInternalFieldCount);                                      \
-    templ->Inherit(BaseObject::GetConstructorTemplate(isolate_data));          \
     _register_isolate_##modname(isolate_data, templ);                          \
     isolate_data->set_##modname##_binding(templ);                              \
   } while (0);

@@ -6,9 +6,13 @@
 added:
   - v18.0.0
   - v16.17.0
+changes:
+  - version: v20.0.0
+    pr-url: https://github.com/nodejs/node/pull/46983
+    description: The test runner is now stable.
 -->
 
-> Stability: 1 - Experimental
+> Stability: 2 - Stable
 
 <!-- source_link=lib/test.js -->
 
@@ -296,7 +300,9 @@ test('a test that creates asynchronous activity', (t) => {
 ## Watch mode
 
 <!-- YAML
-added: v19.2.0
+added:
+  - v19.2.0
+  - v18.13.0
 -->
 
 > Stability: 1 - Experimental
@@ -374,6 +380,8 @@ executable by Node.js, but are not required to use the `node:test` module
 internally.
 
 ## Collecting code coverage
+
+> Stability: 1 - Experimental
 
 When Node.js is started with the [`--experimental-test-coverage`][]
 command-line flag, code coverage is collected and statistics are reported once
@@ -509,7 +517,13 @@ test('spies on an object method', (t) => {
 ## Test reporters
 
 <!-- YAML
-added: v19.6.0
+added:
+  - v19.6.0
+  - v18.15.0
+changes:
+  - version: v19.9.0
+    pr-url: https://github.com/nodejs/node/pull/47238
+    description: Reporters are now exposed at `node:test/reporters`.
 -->
 
 The `node:test` module supports passing [`--test-reporter`][]
@@ -530,6 +544,21 @@ The following built-reporters are supported:
 
 When `stdout` is a [TTY][], the `spec` reporter is used by default.
 Otherwise, the `tap` reporter is used by default.
+
+The exact output of these reporters is subject to change between versions of
+Node.js, and should not be relied on programmatically. If programmatic access
+to the test runner's output is required, use the events emitted by the
+{TestsStream}.
+
+The reporters are available via the `node:test/reporters` module:
+
+```mjs
+import { tap, spec, dot } from 'node:test/reporters';
+```
+
+```cjs
+const { tap, spec, dot } = require('node:test/reporters');
+```
 
 ### Custom reporters
 
@@ -694,7 +723,9 @@ unless a destination is explicitly provided.
 ## `run([options])`
 
 <!-- YAML
-added: v18.9.0
+added:
+  - v18.9.0
+  - v16.19.0
 -->
 
 * `options` {Object} Configuration options for running tests. The following
@@ -722,8 +753,20 @@ added: v18.9.0
     **Default:** `undefined`.
 * Returns: {TestsStream}
 
-```js
+```mjs
+import { tap } from 'node:test/reporters';
+import process from 'node:process';
+
 run({ files: [path.resolve('./tests/test.js')] })
+  .compose(tap)
+  .pipe(process.stdout);
+```
+
+```cjs
+const { tap } = require('node:test/reporters');
+
+run({ files: [path.resolve('./tests/test.js')] })
+  .compose(tap)
   .pipe(process.stdout);
 ```
 
@@ -840,7 +883,9 @@ Shorthand for marking a suite as `TODO`, same as
 ## `describe.only([name][, options][, fn])`
 
 <!-- YAML
-added: v19.8.0
+added:
+  - v19.8.0
+  - v18.15.0
 -->
 
 Shorthand for marking a suite as `only`, same as
@@ -875,7 +920,9 @@ same as [`it([name], { todo: true }[, fn])`][it options].
 ## `it.only([name][, options][, fn])`
 
 <!-- YAML
-added: v19.8.0
+added:
+  - v19.8.0
+  - v18.15.0
 -->
 
 Shorthand for marking a test as `only`,
@@ -1006,7 +1053,9 @@ describe('tests', async () => {
 ## Class: `MockFunctionContext`
 
 <!-- YAML
-added: v19.1.0
+added:
+  - v19.1.0
+  - v18.13.0
 -->
 
 The `MockFunctionContext` class is used to inspect or manipulate the behavior of
@@ -1015,7 +1064,9 @@ mocks created via the [`MockTracker`][] APIs.
 ### `ctx.calls`
 
 <!-- YAML
-added: v19.1.0
+added:
+  - v19.1.0
+  - v18.13.0
 -->
 
 * {Array}
@@ -1037,7 +1088,9 @@ mock. Each entry in the array is an object with the following properties.
 ### `ctx.callCount()`
 
 <!-- YAML
-added: v19.1.0
+added:
+  - v19.1.0
+  - v18.13.0
 -->
 
 * Returns: {integer} The number of times that this mock has been invoked.
@@ -1049,7 +1102,9 @@ is a getter that creates a copy of the internal call tracking array.
 ### `ctx.mockImplementation(implementation)`
 
 <!-- YAML
-added: v19.1.0
+added:
+  - v19.1.0
+  - v18.13.0
 -->
 
 * `implementation` {Function|AsyncFunction} The function to be used as the
@@ -1086,7 +1141,9 @@ test('changes a mock behavior', (t) => {
 ### `ctx.mockImplementationOnce(implementation[, onCall])`
 
 <!-- YAML
-added: v19.1.0
+added:
+  - v19.1.0
+  - v18.13.0
 -->
 
 * `implementation` {Function|AsyncFunction} The function to be used as the
@@ -1130,7 +1187,9 @@ test('changes a mock behavior once', (t) => {
 ### `ctx.resetCalls()`
 
 <!-- YAML
-added: v19.3.0
+added:
+  - v19.3.0
+  - v18.13.0
 -->
 
 Resets the call history of the mock function.
@@ -1138,7 +1197,9 @@ Resets the call history of the mock function.
 ### `ctx.restore()`
 
 <!-- YAML
-added: v19.1.0
+added:
+  - v19.1.0
+  - v18.13.0
 -->
 
 Resets the implementation of the mock function to its original behavior. The
@@ -1147,7 +1208,9 @@ mock can still be used after calling this function.
 ## Class: `MockTracker`
 
 <!-- YAML
-added: v19.1.0
+added:
+  - v19.1.0
+  - v18.13.0
 -->
 
 The `MockTracker` class is used to manage mocking functionality. The test runner
@@ -1158,7 +1221,9 @@ Each test also provides its own `MockTracker` instance via the test context's
 ### `mock.fn([original[, implementation]][, options])`
 
 <!-- YAML
-added: v19.1.0
+added:
+  - v19.1.0
+  - v18.13.0
 -->
 
 * `original` {Function|AsyncFunction} An optional function to create a mock on.
@@ -1209,7 +1274,9 @@ test('mocks a counting function', (t) => {
 ### `mock.getter(object, methodName[, implementation][, options])`
 
 <!-- YAML
-added: v19.3.0
+added:
+  - v19.3.0
+  - v18.13.0
 -->
 
 This function is syntax sugar for [`MockTracker.method`][] with `options.getter`
@@ -1218,7 +1285,9 @@ set to `true`.
 ### `mock.method(object, methodName[, implementation][, options])`
 
 <!-- YAML
-added: v19.1.0
+added:
+  - v19.1.0
+  - v18.13.0
 -->
 
 * `object` {Object} The object whose method is being mocked.
@@ -1272,7 +1341,9 @@ test('spies on an object method', (t) => {
 ### `mock.reset()`
 
 <!-- YAML
-added: v19.1.0
+added:
+  - v19.1.0
+  - v18.13.0
 -->
 
 This function restores the default behavior of all mocks that were previously
@@ -1288,7 +1359,9 @@ function manually is recommended.
 ### `mock.restoreAll()`
 
 <!-- YAML
-added: v19.1.0
+added:
+  - v19.1.0
+  - v18.13.0
 -->
 
 This function restores the default behavior of all mocks that were previously
@@ -1298,7 +1371,9 @@ not disassociate the mocks from the `MockTracker` instance.
 ### `mock.setter(object, methodName[, implementation][, options])`
 
 <!-- YAML
-added: v19.3.0
+added:
+  - v19.3.0
+  - v18.13.0
 -->
 
 This function is syntax sugar for [`MockTracker.method`][] with `options.setter`
@@ -1307,7 +1382,9 @@ set to `true`.
 ## Class: `TestsStream`
 
 <!-- YAML
-added: v18.9.0
+added:
+  - v18.9.0
+  - v16.19.0
 -->
 
 * Extends {ReadableStream}
@@ -1462,7 +1539,9 @@ test('top level test', async (t) => {
 ### `context.after([fn][, options])`
 
 <!-- YAML
-added: v19.3.0
+added:
+  - v19.3.0
+  - v18.13.0
 -->
 
 * `fn` {Function|AsyncFunction} The hook function. The first argument

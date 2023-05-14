@@ -32,6 +32,7 @@
 #include <memory>
 
 #include "include/v8-function.h"
+#include "include/v8-json.h"
 #include "include/v8-profiler.h"
 #include "src/api/api-inl.h"
 #include "src/base/hashmap.h"
@@ -48,6 +49,7 @@
 #include "test/cctest/cctest.h"
 #include "test/cctest/collector.h"
 #include "test/cctest/heap/heap-utils.h"
+#include "test/cctest/jsonstream-helper.h"
 
 using i::AllocationTraceNode;
 using i::AllocationTraceTree;
@@ -1043,52 +1045,6 @@ TEST(HeapEntryIdsAndGC) {
   CHECK_EQ(b1->GetId(), b2->GetId());
 }
 
-namespace {
-
-class TestJSONStream : public v8::OutputStream {
- public:
-  TestJSONStream() : eos_signaled_(0), abort_countdown_(-1) {}
-  explicit TestJSONStream(int abort_countdown)
-      : eos_signaled_(0), abort_countdown_(abort_countdown) {}
-  ~TestJSONStream() override = default;
-  void EndOfStream() override { ++eos_signaled_; }
-  WriteResult WriteAsciiChunk(char* buffer, int chars_written) override {
-    if (abort_countdown_ > 0) --abort_countdown_;
-    if (abort_countdown_ == 0) return kAbort;
-    CHECK_GT(chars_written, 0);
-    v8::base::Vector<char> chunk = buffer_.AddBlock(chars_written, '\0');
-    i::MemCopy(chunk.begin(), buffer, chars_written);
-    return kContinue;
-  }
-  virtual WriteResult WriteUint32Chunk(uint32_t* buffer, int chars_written) {
-    UNREACHABLE();
-  }
-  void WriteTo(v8::base::Vector<char> dest) { buffer_.WriteTo(dest); }
-  int eos_signaled() { return eos_signaled_; }
-  int size() { return buffer_.size(); }
-
- private:
-  i::Collector<char> buffer_;
-  int eos_signaled_;
-  int abort_countdown_;
-};
-
-class OneByteResource : public v8::String::ExternalOneByteStringResource {
- public:
-  explicit OneByteResource(v8::base::Vector<char> string)
-      : data_(string.begin()) {
-    length_ = string.length();
-  }
-  const char* data() const override { return data_; }
-  size_t length() const override { return length_; }
-
- private:
-  const char* data_;
-  size_t length_;
-};
-
-}  // namespace
-
 TEST(HeapSnapshotJSONSerialization) {
   v8::Isolate* isolate = CcTest::isolate();
   LocalContext env;
@@ -1105,7 +1061,7 @@ TEST(HeapSnapshotJSONSerialization) {
   const v8::HeapSnapshot* snapshot = heap_profiler->TakeHeapSnapshot();
   CHECK(ValidateSnapshot(snapshot));
 
-  TestJSONStream stream;
+  v8::internal::TestJSONStream stream;
   snapshot->Serialize(&stream, v8::HeapSnapshot::kJSON);
   CHECK_GT(stream.size(), 0);
   CHECK_EQ(1, stream.eos_signaled());
@@ -1113,31 +1069,37 @@ TEST(HeapSnapshotJSONSerialization) {
   stream.WriteTo(json);
 
   // Verify that snapshot string is valid JSON.
-  OneByteResource* json_res = new OneByteResource(json);
+  v8::internal::OneByteResource* json_res =
+      new v8::internal::OneByteResource(json);
   v8::Local<v8::String> json_string =
       v8::String::NewExternalOneByte(env->GetIsolate(), json_res)
           .ToLocalChecked();
-  env->Global()
-      ->Set(env.local(), v8_str("json_snapshot"), json_string)
-      .FromJust();
-  v8::Local<v8::Value> snapshot_parse_result = CompileRun(
-      "var parsed = JSON.parse(json_snapshot); true;");
-  CHECK(!snapshot_parse_result.IsEmpty());
+  v8::Local<v8::Context> context = v8::Context::New(env->GetIsolate());
+  v8::Local<v8::Value> snapshot_parse_result =
+      v8::JSON::Parse(context, json_string).ToLocalChecked();
+  CHECK(snapshot_parse_result->IsObject());
 
   // Verify that snapshot object has required fields.
   v8::Local<v8::Object> parsed_snapshot =
-      env->Global()
-          ->Get(env.local(), v8_str("parsed"))
-          .ToLocalChecked()
-          ->ToObject(env.local())
-          .ToLocalChecked();
-  CHECK(parsed_snapshot->Has(env.local(), v8_str("snapshot")).FromJust());
-  CHECK(parsed_snapshot->Has(env.local(), v8_str("nodes")).FromJust());
-  CHECK(parsed_snapshot->Has(env.local(), v8_str("edges")).FromJust());
-  CHECK(parsed_snapshot->Has(env.local(), v8_str("locations")).FromJust());
-  CHECK(parsed_snapshot->Has(env.local(), v8_str("strings")).FromJust());
+      snapshot_parse_result.As<v8::Object>();
+  CHECK(parsed_snapshot->Get(env.local(), v8_str("snapshot"))
+            .ToLocalChecked()
+            ->IsObject());
+  CHECK(parsed_snapshot->Get(env.local(), v8_str("nodes"))
+            .ToLocalChecked()
+            ->IsArray());
+  CHECK(parsed_snapshot->Get(env.local(), v8_str("edges"))
+            .ToLocalChecked()
+            ->IsArray());
+  CHECK(parsed_snapshot->Get(env.local(), v8_str("locations"))
+            .ToLocalChecked()
+            ->IsArray());
+  CHECK(parsed_snapshot->Get(env.local(), v8_str("strings"))
+            .ToLocalChecked()
+            ->IsArray());
 
   // Get node and edge "member" offsets.
+  env->Global()->Set(env.local(), v8_str("parsed"), parsed_snapshot).FromJust();
   v8::Local<v8::Value> meta_analysis_result = CompileRun(
       "var meta = parsed.snapshot.meta;\n"
       "var edge_count_offset = meta.node_fields.indexOf('edge_count');\n"
@@ -1224,7 +1186,7 @@ TEST(HeapSnapshotJSONSerializationAborting) {
   v8::HeapProfiler* heap_profiler = env->GetIsolate()->GetHeapProfiler();
   const v8::HeapSnapshot* snapshot = heap_profiler->TakeHeapSnapshot();
   CHECK(ValidateSnapshot(snapshot));
-  TestJSONStream stream(5);
+  v8::internal::TestJSONStream stream(5);
   snapshot->Serialize(&stream, v8::HeapSnapshot::kJSON);
   CHECK_GT(stream.size(), 0);
   CHECK_EQ(0, stream.eos_signaled());
@@ -1296,8 +1258,10 @@ static TestStatsStream GetHeapStatsUpdate(
 
 
 TEST(HeapSnapshotObjectsStats) {
-  // Concurrent allocation might break results
+  // Concurrent allocation and conservative stack scanning might break results.
   i::v8_flags.stress_concurrent_allocation = false;
+  i::DisableConservativeStackScanningScopeForTesting no_stack_scanning(
+      CcTest::heap());
 
   LocalContext env;
   v8::HandleScope scope(env->GetIsolate());
@@ -1645,8 +1609,6 @@ class EmbedderGraphBuilder : public v8::PersistentHandleVisitor {
         graph->AddNode(std::unique_ptr<Group>(new Group("ccc-group")));
   }
 
-  START_ALLOW_USE_DEPRECATED()
-
   static void BuildEmbedderGraph(v8::Isolate* isolate, v8::EmbedderGraph* graph,
                                  void* data) {
     EmbedderGraphBuilder builder(isolate, graph);
@@ -1654,8 +1616,6 @@ class EmbedderGraphBuilder : public v8::PersistentHandleVisitor {
         ->global_handles()
         ->IterateAllRootsForTesting(&builder);
   }
-
-  END_ALLOW_USE_DEPRECATED()
 
   void VisitPersistentHandle(v8::Persistent<v8::Value>* value,
                              uint16_t class_id) override {
@@ -2677,11 +2637,11 @@ TEST(AllocationSitesAreVisible) {
   const v8::HeapGraphNode* vector = GetProperty(
       env->GetIsolate(), feedback_cell, v8::HeapGraphEdge::kInternal, "value");
   CHECK_EQ(v8::HeapGraphNode::kCode, vector->GetType());
-  CHECK_EQ(4, vector->GetChildrenCount());
+  CHECK_EQ(5, vector->GetChildrenCount());
 
   // The last value in the feedback vector should be the boilerplate,
   // found in AllocationSite.transition_info.
-  const v8::HeapGraphEdge* prop = vector->GetChild(3);
+  const v8::HeapGraphEdge* prop = vector->GetChild(4);
   const v8::HeapGraphNode* allocation_site = prop->GetToNode();
   v8::String::Utf8Value name(env->GetIsolate(), allocation_site->GetName());
   CHECK_EQ(0, strcmp("system / AllocationSite", *name));
@@ -2771,38 +2731,24 @@ TEST(CheckCodeNames) {
   CHECK(ValidateSnapshot(snapshot));
 
   const char* builtin_path1[] = {
-    "::(GC roots)",
-    "::(Builtins)",
-#ifdef V8_EXTERNAL_CODE_SPACE
-    "::(KeyedLoadIC_PolymorphicName builtin handle)",
-#endif
-#if !V8_REMOVE_BUILTINS_CODE_OBJECTS
-    "::(KeyedLoadIC_PolymorphicName builtin)"
-#endif
+      "::(GC roots)",
+      "::(Builtins)",
+      "::(KeyedLoadIC_PolymorphicName builtin handle)",
   };
   const v8::HeapGraphNode* node = GetNodeByPath(
       env->GetIsolate(), snapshot, builtin_path1, arraysize(builtin_path1));
   CHECK(node);
 
   const char* builtin_path2[] = {
-    "::(GC roots)",
-    "::(Builtins)",
-#ifdef V8_EXTERNAL_CODE_SPACE
-    "::(CompileLazy builtin handle)",
-#endif
-#if !V8_REMOVE_BUILTINS_CODE_OBJECTS
-    "::(CompileLazy builtin)"
-#endif
+      "::(GC roots)",
+      "::(Builtins)",
+      "::(CompileLazy builtin handle)",
   };
   node = GetNodeByPath(env->GetIsolate(), snapshot, builtin_path2,
                        arraysize(builtin_path2));
   CHECK(node);
   v8::String::Utf8Value node_name(env->GetIsolate(), node->GetName());
-  if (V8_REMOVE_BUILTINS_CODE_OBJECTS) {
-    CHECK_EQ(0, strcmp("(CompileLazy builtin handle)", *node_name));
-  } else {
-    CHECK_EQ(0, strcmp("(CompileLazy builtin)", *node_name));
-  }
+  CHECK_EQ(0, strcmp("(CompileLazy builtin handle)", *node_name));
 }
 
 
@@ -3010,7 +2956,7 @@ TEST(TrackBumpPointerAllocations) {
     // Now check that not all allocations are tracked if we manually reenable
     // inline allocations.
     CHECK(i::v8_flags.single_generation ||
-          !CcTest::heap()->new_space()->IsInlineAllocationEnabled());
+          !CcTest::heap()->IsInlineAllocationEnabled());
     CcTest::heap()->EnableInlineAllocation();
 
     CompileRun(inline_heap_allocation_source);
@@ -4136,10 +4082,11 @@ TEST(WeakReference) {
                                        i_isolate);
   i::Handle<i::ClosureFeedbackCellArray> feedback_cell_array =
       i::ClosureFeedbackCellArray::New(i_isolate, shared_function);
-  i::Handle<i::FeedbackVector> fv =
-      factory->NewFeedbackVector(shared_function, feedback_cell_array);
+  i::Handle<i::FeedbackVector> fv = factory->NewFeedbackVector(
+      shared_function, feedback_cell_array,
+      handle(i::JSFunction::cast(*obj).raw_feedback_cell(), i_isolate));
 
-  // Create a Code.
+  // Create a Code object.
   i::Assembler assm(i::AssemblerOptions{});
   assm.nop();  // supported on all architectures
   i::CodeDesc desc;
@@ -4151,8 +4098,7 @@ TEST(WeakReference) {
 
   // Manually inlined version of FeedbackVector::SetOptimizedCode (needed due
   // to the FOR_TESTING code kind).
-  fv->set_maybe_optimized_code(i::HeapObjectReference::Weak(ToCodeT(*code)),
-                               v8::kReleaseStore);
+  fv->set_maybe_optimized_code(i::HeapObjectReference::Weak(*code));
   fv->set_flags(
       i::FeedbackVector::MaybeHasTurbofanCodeBit::encode(true) |
       i::FeedbackVector::TieringStateBits::encode(i::TieringState::kNone));

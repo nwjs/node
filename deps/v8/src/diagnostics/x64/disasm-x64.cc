@@ -767,7 +767,8 @@ int DisassemblerX64::F6F7Instruction(byte* data) {
       AppendToBuffer("%s%c %s", mnem, operand_size_code(),
                      NameOfCPURegister(rm));
       return 2;
-    } else if (mod == 1) {
+    } else if (mod == 1 ||
+               mod == 2) {  // Byte displacement or 32-bit displacement
       AppendToBuffer("%s%c ", mnem, operand_size_code());
       int count = PrintRightOperand(data + 1);  // Use name of 64-bit register.
       return 1 + count;
@@ -950,16 +951,16 @@ int DisassemblerX64::AVXInstruction(byte* data) {
         // have the same opcodes but differ by rex_w.
         if (rex_w()) {
           switch (opcode) {
-            FMA_SS_INSTRUCTION_LIST(DECLARE_FMA_DISASM)
-            FMA_PS_INSTRUCTION_LIST(DECLARE_FMA_DISASM)
+            FMA_SD_INSTRUCTION_LIST(DECLARE_FMA_DISASM)
+            FMA_PD_INSTRUCTION_LIST(DECLARE_FMA_DISASM)
             default: {
               UnimplementedInstruction();
             }
           }
         } else {
           switch (opcode) {
-            FMA_SD_INSTRUCTION_LIST(DECLARE_FMA_DISASM)
-            FMA_PD_INSTRUCTION_LIST(DECLARE_FMA_DISASM)
+            FMA_SS_INSTRUCTION_LIST(DECLARE_FMA_DISASM)
+            FMA_PS_INSTRUCTION_LIST(DECLARE_FMA_DISASM)
             default: {
               UnimplementedInstruction();
             }
@@ -1161,7 +1162,7 @@ int DisassemblerX64::AVXInstruction(byte* data) {
         break;
       case 0xE6:
         AppendToBuffer("vcvtdq2pd %s,", NameOfAVXRegister(regop));
-        current += PrintRightAVXOperand(current);
+        current += PrintRightXMMOperand(current);
         break;
       case 0xC2:
         AppendToBuffer("vcmpss %s,%s,", NameOfAVXRegister(regop),

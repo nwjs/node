@@ -49,6 +49,7 @@ namespace compiler {
 //
 //   Constant(x) < T  iff instance_type(map(x)) < T
 //
+//    None <= Machine <= Any
 //
 // RANGE TYPES
 //
@@ -140,7 +141,8 @@ namespace compiler {
 // We split the macro list into two parts because the Torque equivalent in
 // turbofan-types.tq uses two 32bit bitfield structs.
 #define PROPER_ATOMIC_BITSET_TYPE_HIGH_LIST(V) \
-  V(SandboxedPointer,         uint64_t{1} << 32)
+  V(SandboxedPointer,         uint64_t{1} << 32) \
+  V(Machine,                  uint64_t{1} << 33)
 
 #define PROPER_BITSET_TYPE_LIST(V) \
   V(None,                     uint64_t{0}) \
@@ -203,11 +205,12 @@ namespace compiler {
   V(NonCallableOrNull,            kNonCallable | kNull) \
   V(DetectableObject,             kArray | kFunction | kBoundFunction | \
                                   kOtherCallable | kOtherObject) \
-  V(DetectableReceiver,           kDetectableObject | kProxy) \
+  V(DetectableReceiver,           kDetectableObject | kProxy | kWasmObject) \
   V(DetectableReceiverOrNull,     kDetectableReceiver | kNull) \
   V(Object,                       kDetectableObject | kOtherUndetectable) \
   V(Receiver,                     kObject | kProxy | kWasmObject) \
   V(ReceiverOrUndefined,          kReceiver | kUndefined) \
+  V(ReceiverOrNull,               kReceiver | kNull) \
   V(ReceiverOrNullOrUndefined,    kReceiver | kNull | kUndefined) \
   V(SymbolOrReceiver,             kSymbol | kReceiver) \
   V(StringOrReceiver,             kString | kReceiver) \
@@ -276,10 +279,12 @@ class V8_EXPORT_PRIVATE BitsetType {
   static double Max(bitset);
 
   static bitset Glb(double min, double max);
-  static bitset Lub(HeapObjectType const& type) {
-    return Lub<HeapObjectType>(type);
+  static bitset Lub(HeapObjectType const& type, JSHeapBroker* broker) {
+    return Lub<HeapObjectType>(type, broker);
   }
-  static bitset Lub(MapRef const& map) { return Lub<MapRef>(map); }
+  static bitset Lub(MapRef const& map, JSHeapBroker* broker) {
+    return Lub<MapRef>(map, broker);
+  }
   static bitset Lub(double value);
   static bitset Lub(double min, double max);
   static bitset ExpandInternals(bitset bits);
@@ -303,7 +308,7 @@ class V8_EXPORT_PRIVATE BitsetType {
   static inline size_t BoundariesSize();
 
   template <typename MapRefLike>
-  static bitset Lub(MapRefLike const& map);
+  static bitset Lub(MapRefLike const& map, JSHeapBroker* broker);
 };
 
 // -----------------------------------------------------------------------------
@@ -420,6 +425,7 @@ class V8_EXPORT_PRIVATE Type {
 
   static Type Constant(JSHeapBroker* broker, Handle<i::Object> value,
                        Zone* zone);
+  static Type Constant(JSHeapBroker* broker, ObjectRef value, Zone* zone);
   static Type Constant(double value, Zone* zone);
   static Type Range(double min, double max, Zone* zone);
   static Type Tuple(Type first, Type second, Type third, Zone* zone);
@@ -433,8 +439,9 @@ class V8_EXPORT_PRIVATE Type {
   static Type Wasm(wasm::TypeInModule type_in_module, Zone* zone);
 #endif
 
-  static Type For(MapRef const& type) {
-    return NewBitset(BitsetType::ExpandInternals(BitsetType::Lub(type)));
+  static Type For(MapRef const& type, JSHeapBroker* broker) {
+    return NewBitset(
+        BitsetType::ExpandInternals(BitsetType::Lub(type, broker)));
   }
 
   // Predicates.
@@ -552,7 +559,8 @@ class V8_EXPORT_PRIVATE Type {
 
   static Type Range(RangeType::Limits lims, Zone* zone);
   static Type OtherNumberConstant(double value, Zone* zone);
-  static Type HeapConstant(const HeapObjectRef& value, Zone* zone);
+  static Type HeapConstant(const HeapObjectRef& value, JSHeapBroker* broker,
+                           Zone* zone);
 
   static bool Overlap(const RangeType* lhs, const RangeType* rhs);
   static bool Contains(const RangeType* lhs, const RangeType* rhs);

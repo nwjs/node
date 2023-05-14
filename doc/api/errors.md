@@ -232,14 +232,27 @@ The `constructorOpt` argument is useful for hiding implementation
 details of error generation from the user. For instance:
 
 ```js
-function MyError() {
-  Error.captureStackTrace(this, MyError);
+function a() {
+  b();
 }
 
-// Without passing MyError to captureStackTrace, the MyError
-// frame would show up in the .stack property. By passing
-// the constructor, we omit that frame, and retain all frames below it.
-new MyError().stack;
+function b() {
+  c();
+}
+
+function c() {
+  // Create an error without stack trace to avoid calculating the stack trace twice.
+  const { stackTraceLimit } = Error;
+  Error.stackTraceLimit = 0;
+  const error = new Error();
+  Error.stackTraceLimit = stackTraceLimit;
+
+  // Capture the stack trace above function b
+  Error.captureStackTrace(error, b); // Neither function c, nor b is included in the stack trace
+  throw error;
+}
+
+a();
 ```
 
 ### `Error.stackTraceLimit`
@@ -678,6 +691,13 @@ APIs _not_ using `AbortSignal`s typically do not raise an error with this code.
 
 This code does not use the regular `ERR_*` convention Node.js errors use in
 order to be compatible with the web platform's `AbortError`.
+
+<a id="ERR_ACCESS_DENIED"></a>
+
+### `ERR_ACCESS_DENIED`
+
+A special type of error that is triggered whenever Node.js tries to get access
+to a resource restricted by the [Permission Model][].
 
 <a id="ERR_AMBIGUOUS_ARGUMENT"></a>
 
@@ -2573,6 +2593,13 @@ An attempt was made to operate on an already closed socket.
 When calling [`net.Socket.write()`][] on a connecting socket and the socket was
 closed before the connection was established.
 
+<a id="ERR_SOCKET_CONNECTION_TIMEOUT"></a>
+
+### `ERR_SOCKET_CONNECTION_TIMEOUT`
+
+The socket was unable to connect to any address returned by the DNS within the
+allowed timeout when using the family autoselection algorithm.
+
 <a id="ERR_SOCKET_DGRAM_IS_CONNECTED"></a>
 
 ### `ERR_SOCKET_DGRAM_IS_CONNECTED`
@@ -3542,6 +3569,7 @@ The native call from `process.cpuUsage` could not be processed.
 [JSON Web Key Elliptic Curve Registry]: https://www.iana.org/assignments/jose/jose.xhtml#web-key-elliptic-curve
 [JSON Web Key Types Registry]: https://www.iana.org/assignments/jose/jose.xhtml#web-key-types
 [Node.js error codes]: #nodejs-error-codes
+[Permission Model]: permissions.md#permission-model
 [RFC 7230 Section 3]: https://tools.ietf.org/html/rfc7230#section-3
 [Subresource Integrity specification]: https://www.w3.org/TR/SRI/#the-integrity-attribute
 [V8's stack trace API]: https://v8.dev/docs/stack-trace-api

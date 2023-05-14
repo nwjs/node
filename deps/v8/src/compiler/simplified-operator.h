@@ -24,6 +24,10 @@
 #include "src/objects/objects.h"
 #include "src/zone/zone-handle-set.h"
 
+#ifdef V8_ENABLE_WEBASSEMBLY
+#include "src/compiler/wasm-compiler-definitions.h"
+#endif
+
 namespace v8 {
 class CFunctionInfo;
 
@@ -40,8 +44,6 @@ class CallDescriptor;
 class Operator;
 struct SimplifiedOperatorGlobalCache;
 struct WasmTypeCheckConfig;
-
-enum BaseTaggedness : uint8_t { kUntaggedBase, kTaggedBase };
 
 size_t hash_value(BaseTaggedness);
 
@@ -67,6 +69,34 @@ size_t hash_value(ConstFieldInfo const&);
 
 V8_EXPORT_PRIVATE std::ostream& operator<<(std::ostream&,
                                            ConstFieldInfo const&);
+
+#if V8_ENABLE_WEBASSEMBLY
+struct WasmFieldInfo {
+  const wasm::StructType* type;
+  int field_index;
+  bool is_signed;
+  CheckForNull null_check;
+};
+
+V8_EXPORT_PRIVATE bool operator==(WasmFieldInfo const&, WasmFieldInfo const&);
+
+size_t hash_value(WasmFieldInfo const&);
+
+V8_EXPORT_PRIVATE std::ostream& operator<<(std::ostream&, WasmFieldInfo const&);
+
+struct WasmElementInfo {
+  const wasm::ArrayType* type;
+  bool is_signed;
+};
+
+V8_EXPORT_PRIVATE bool operator==(WasmElementInfo const&,
+                                  WasmElementInfo const&);
+
+size_t hash_value(WasmElementInfo const&);
+
+V8_EXPORT_PRIVATE std::ostream& operator<<(std::ostream&,
+                                           WasmElementInfo const&);
+#endif
 
 // An access descriptor for loads/stores of fixed structures like field
 // accesses of heap objects. Accesses from either tagged or untagged base
@@ -565,6 +595,28 @@ bool operator==(NumberOperationParameters const&,
 const NumberOperationParameters& NumberOperationParametersOf(const Operator* op)
     V8_WARN_UNUSED_RESULT;
 
+class BigIntOperationParameters {
+ public:
+  BigIntOperationParameters(BigIntOperationHint hint,
+                            const FeedbackSource& feedback)
+      : hint_(hint), feedback_(feedback) {}
+
+  BigIntOperationHint hint() const { return hint_; }
+  const FeedbackSource& feedback() const { return feedback_; }
+
+ private:
+  BigIntOperationHint hint_;
+  FeedbackSource feedback_;
+};
+
+size_t hash_value(BigIntOperationParameters const&);
+V8_EXPORT_PRIVATE std::ostream& operator<<(std::ostream&,
+                                           const BigIntOperationParameters&);
+bool operator==(BigIntOperationParameters const&,
+                BigIntOperationParameters const&);
+const BigIntOperationParameters& BigIntOperationParametersOf(const Operator* op)
+    V8_WARN_UNUSED_RESULT;
+
 class SpeculativeBigIntAsNParameters {
  public:
   SpeculativeBigIntAsNParameters(int bits, const FeedbackSource& feedback)
@@ -696,6 +748,21 @@ size_t hash_value(FastApiCallParameters const&);
 
 bool operator==(FastApiCallParameters const&, FastApiCallParameters const&);
 
+#if V8_ENABLE_WEBASSEMBLY
+struct AssertNotNullParameters {
+  wasm::ValueType type;
+  TrapId trap_id;
+};
+
+V8_EXPORT_PRIVATE std::ostream& operator<<(std::ostream&,
+                                           AssertNotNullParameters const&);
+
+size_t hash_value(AssertNotNullParameters const&);
+
+bool operator==(AssertNotNullParameters const&, AssertNotNullParameters const&);
+
+#endif
+
 // Interface for building simplified operators, which represent the
 // medium-level operations of V8, including adding numbers, allocating objects,
 // indexing into objects and arrays, etc.
@@ -781,6 +848,7 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
   const Operator* NumberToString();
   const Operator* NumberToUint32();
   const Operator* NumberToUint8Clamped();
+  const Operator* Integral32OrMinusZeroToBigInt();
 
   const Operator* NumberSilenceNaN();
 
@@ -788,8 +856,17 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
   const Operator* BigIntSubtract();
   const Operator* BigIntMultiply();
   const Operator* BigIntDivide();
+  const Operator* BigIntModulus();
   const Operator* BigIntBitwiseAnd();
+  const Operator* BigIntBitwiseOr();
+  const Operator* BigIntBitwiseXor();
+  const Operator* BigIntShiftLeft();
+  const Operator* BigIntShiftRight();
   const Operator* BigIntNegate();
+
+  const Operator* BigIntEqual();
+  const Operator* BigIntLessThan();
+  const Operator* BigIntLessThanOrEqual();
 
   const Operator* SpeculativeSafeIntegerAdd(NumberOperationHint hint);
   const Operator* SpeculativeSafeIntegerSubtract(NumberOperationHint hint);
@@ -815,12 +892,21 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
   const Operator* SpeculativeBigIntSubtract(BigIntOperationHint hint);
   const Operator* SpeculativeBigIntMultiply(BigIntOperationHint hint);
   const Operator* SpeculativeBigIntDivide(BigIntOperationHint hint);
+  const Operator* SpeculativeBigIntModulus(BigIntOperationHint hint);
   const Operator* SpeculativeBigIntBitwiseAnd(BigIntOperationHint hint);
+  const Operator* SpeculativeBigIntBitwiseOr(BigIntOperationHint hint);
+  const Operator* SpeculativeBigIntBitwiseXor(BigIntOperationHint hint);
+  const Operator* SpeculativeBigIntShiftLeft(BigIntOperationHint hint);
+  const Operator* SpeculativeBigIntShiftRight(BigIntOperationHint hint);
   const Operator* SpeculativeBigIntNegate(BigIntOperationHint hint);
   const Operator* SpeculativeBigIntAsIntN(int bits,
                                           const FeedbackSource& feedback);
   const Operator* SpeculativeBigIntAsUintN(int bits,
                                            const FeedbackSource& feedback);
+
+  const Operator* SpeculativeBigIntEqual(BigIntOperationHint hint);
+  const Operator* SpeculativeBigIntLessThan(BigIntOperationHint hint);
+  const Operator* SpeculativeBigIntLessThanOrEqual(BigIntOperationHint hint);
 
   const Operator* ReferenceEqual();
   const Operator* SameValue();
@@ -849,6 +935,9 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
   const Operator* FindOrderedCollectionEntry(CollectionKind collection_kind);
 
   const Operator* SpeculativeToNumber(NumberOperationHint hint,
+                                      const FeedbackSource& feedback);
+
+  const Operator* SpeculativeToBigInt(BigIntOperationHint hint,
                                       const FeedbackSource& feedback);
 
   const Operator* StringToNumber();
@@ -917,7 +1006,11 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
   const Operator* CheckedInt32Mod();
   const Operator* CheckedInt32Mul(CheckForMinusZeroMode);
   const Operator* CheckedInt32Sub();
-  const Operator* CheckedBigInt64Add();
+  const Operator* CheckedInt64Add();
+  const Operator* CheckedInt64Sub();
+  const Operator* CheckedInt64Mul();
+  const Operator* CheckedInt64Div();
+  const Operator* CheckedInt64Mod();
   const Operator* CheckedInt32ToTaggedSigned(const FeedbackSource& feedback);
   const Operator* CheckedInt64ToInt32(const FeedbackSource& feedback);
   const Operator* CheckedInt64ToTaggedSigned(const FeedbackSource& feedback);
@@ -932,7 +1025,7 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
   const Operator* CheckedTaggedToTaggedPointer(const FeedbackSource& feedback);
   const Operator* CheckedTaggedToTaggedSigned(const FeedbackSource& feedback);
   const Operator* CheckBigInt(const FeedbackSource& feedback);
-  const Operator* CheckBigInt64(const FeedbackSource& feedback);
+  const Operator* CheckedBigIntToBigInt64(const FeedbackSource& feedback);
   const Operator* CheckedTruncateTaggedToWord32(CheckTaggedInputMode,
                                                 const FeedbackSource& feedback);
   const Operator* CheckedUint32Div();
@@ -1070,20 +1163,37 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
   // Abort if the value does not match the node's computed type after
   // SimplifiedLowering.
   const Operator* VerifyType();
+  const Operator* CheckTurboshaftTypeOf();
 
 #if V8_ENABLE_WEBASSEMBLY
-  const Operator* AssertNotNull();
-  const Operator* IsNull();
-  const Operator* IsNotNull();
-  const Operator* Null();
+  const Operator* AssertNotNull(wasm::ValueType type, TrapId trap_id);
+  const Operator* IsNull(wasm::ValueType type);
+  const Operator* IsNotNull(wasm::ValueType type);
+  const Operator* Null(wasm::ValueType type);
   const Operator* RttCanon(int index);
   const Operator* WasmTypeCheck(WasmTypeCheckConfig config);
   const Operator* WasmTypeCast(WasmTypeCheckConfig config);
   const Operator* WasmExternInternalize();
   const Operator* WasmExternExternalize();
+  // TODO(manoskouk): Use {CheckForNull} over bool.
+  const Operator* WasmStructGet(const wasm::StructType* type, int field_index,
+                                bool is_signed, CheckForNull null_check);
+  const Operator* WasmStructSet(const wasm::StructType* type, int field_index,
+                                CheckForNull null_check);
+  const Operator* WasmArrayGet(const wasm::ArrayType* type, bool is_signed);
+  const Operator* WasmArraySet(const wasm::ArrayType* type);
+  const Operator* WasmArrayLength(CheckForNull);
+  const Operator* WasmArrayInitializeLength();
+  const Operator* StringAsWtf16();
+  const Operator* StringPrepareForGetCodeunit();
 #endif
 
   const Operator* DateNow();
+
+  // Math.min/max for JSArray with PACKED_DOUBLE_ELEMENTS.
+  const Operator* DoubleArrayMin();
+  const Operator* DoubleArrayMax();
+
   // Unsigned32Divide is a special operator to express the division of two
   // Unsigned32 inputs and truncating the result to Unsigned32. It's semantics
   // is equivalent to NumberFloor(NumberDivide(x:Unsigned32, y:Unsigned32)) but

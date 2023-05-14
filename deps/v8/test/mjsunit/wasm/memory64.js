@@ -13,26 +13,31 @@ const GB = 1024 * 1024 * 1024;
 // The current limit is 16GB. Adapt this test if this changes.
 const max_num_pages = 16 * GB / kPageSize;
 
-function BasicMemory64Tests(num_pages) {
+function BasicMemory64Tests(num_pages, use_atomic_ops) {
   const num_bytes = num_pages * kPageSize;
-  print(`Testing ${num_bytes} bytes (${num_pages} pages)`);
+  print(`Testing ${num_bytes} bytes (${num_pages} pages) on ${
+      use_atomic_ops ? '' : 'non-'}atomic memory`);
 
   let builder = new WasmModuleBuilder();
   builder.addMemory64(num_pages, num_pages, true);
 
+  // A memory operation with alignment (0) and offset (0).
+  let op = (non_atomic, atomic) => use_atomic_ops ?
+      [kAtomicPrefix, atomic, 0, 0] :
+      [non_atomic, 0, 0];
   builder.addFunction('load', makeSig([kWasmF64], [kWasmI32]))
       .addBody([
-        kExprLocalGet, 0,       // local.get 0
-        kExprI64UConvertF64,    // i64.uconvert_sat.f64
-        kExprI32LoadMem, 0, 0,  // i32.load_mem align=1 offset=0
+        kExprLocalGet, 0,                           // local.get 0
+        kExprI64UConvertF64,                        // i64.uconvert_sat.f64
+        ...op(kExprI32LoadMem, kExprI32AtomicLoad)  // load
       ])
       .exportFunc();
   builder.addFunction('store', makeSig([kWasmF64, kWasmI32], []))
       .addBody([
-        kExprLocalGet, 0,        // local.get 0
-        kExprI64UConvertF64,     // i64.uconvert_sat.f64
-        kExprLocalGet, 1,        // local.get 1
-        kExprI32StoreMem, 0, 0,  // i32.store_mem align=1 offset=0
+        kExprLocalGet, 0,                             // local.get 0
+        kExprI64UConvertF64,                          // i64.uconvert_sat.f64
+        kExprLocalGet, 1,                             // local.get 1
+        ...op(kExprI32StoreMem, kExprI32AtomicStore)  // store
       ])
       .exportFunc();
 
@@ -56,19 +61,42 @@ function BasicMemory64Tests(num_pages) {
     assertEquals(num_bytes, array.length);
   }
 
+  const GB = Math.pow(2, 30);
   assertEquals(0, load(num_bytes - 4));
-  assertThrows(() => load(num_bytes - 3));
+  assertTraps(kTrapMemOutOfBounds, () => load(num_bytes));
+  assertTraps(kTrapMemOutOfBounds, () => load(num_bytes - 3));
+  assertTraps(kTrapMemOutOfBounds, () => load(num_bytes - 4 + 4 * GB));
+  assertTraps(kTrapMemOutOfBounds, () => store(num_bytes));
+  assertTraps(kTrapMemOutOfBounds, () => store(num_bytes - 3));
+  assertTraps(kTrapMemOutOfBounds, () => store(num_bytes - 4 + 4 * GB));
+  if (use_atomic_ops) {
+    assertTraps(kTrapUnalignedAccess, () => load(num_bytes - 7));
+    assertTraps(kTrapUnalignedAccess, () => store(num_bytes - 7));
+  }
 
   store(num_bytes - 4, 0x12345678);
   assertEquals(0x12345678, load(num_bytes - 4));
 
-  let kStoreOffset = 27;
+  let kStoreOffset = use_atomic_ops ? 40 : 27;
   store(kStoreOffset, 11);
   assertEquals(11, load(kStoreOffset));
 
-  // Now check 100 random positions.
-  for (let i = 0; i < 100; ++i) {
-    let position = Math.floor(Math.random() * num_bytes);
+  // Now check some interesting positions, plus 100 random positions.
+  const positions = [
+    // Nothing at the beginning.
+    0, 1,
+    // Check positions around the store offset.
+    kStoreOffset - 1, kStoreOffset, kStoreOffset + 1,
+    // Check the end.
+    num_bytes - 5, num_bytes - 4, num_bytes - 3, num_bytes - 2, num_bytes - 1,
+    // Check positions at the end, truncated to 32 bit (might be
+    // redundant).
+    (num_bytes - 5) >>> 0, (num_bytes - 4) >>> 0, (num_bytes - 3) >>> 0,
+    (num_bytes - 2) >>> 0, (num_bytes - 1) >>> 0
+  ];
+  const random_positions =
+      Array.from({length: 100}, () => Math.floor(Math.random() * num_bytes));
+  for (let position of positions.concat(random_positions)) {
     let expected = 0;
     if (position == kStoreOffset) {
       expected = 11;
@@ -277,4 +305,109 @@ function allowOOM(fn) {
   assertTraps(kTrapMemOutOfBounds, () => fill(-1n, 0, 1n));
   assertTraps(kTrapMemOutOfBounds, () => fill(1n << 62n, 0, 1n));
   assertTraps(kTrapMemOutOfBounds, () => fill(1n << 63n, 0, 1n));
+})();
+
+(function TestMemory64SharedBasic() {
+  print(arguments.callee.name);
+  let builder = new WasmModuleBuilder();
+  builder.addMemory64(1, 10, true, true);
+  builder.addFunction('load', makeSig([kWasmI64], [kWasmI32]))
+      .addBody([
+        kExprLocalGet, 0,       // local.get 0
+        kExprI32LoadMem, 0, 0,  // i32.load_mem align=1 offset=0
+      ])
+      .exportFunc();
+  let instance = builder.instantiate();
+
+  assertTrue(instance.exports.memory instanceof WebAssembly.Memory);
+  assertTrue(instance.exports.memory.buffer instanceof SharedArrayBuffer);
+  assertEquals(0, instance.exports.load(0n));
+})();
+
+(function TestMemory64SharedBetweenWorkers() {
+  print(arguments.callee.name);
+  // Generate a shared memory64 by instantiating an module that exports one.
+  // TODO(clemensb): Use the proper API once that's decided.
+  let shared_mem64 = (function() {
+    let builder = new WasmModuleBuilder();
+    builder.addMemory64(1, 10, true, true);
+    return builder.instantiate().exports.memory;
+  })();
+
+  let builder = new WasmModuleBuilder();
+  builder.addImportedMemory('imp', 'mem', 1, 10, true, true);
+
+  builder.addFunction('grow', makeSig([kWasmI64], [kWasmI64]))
+      .addBody([
+        kExprLocalGet, 0,    // local.get 0
+        kExprMemoryGrow, 0,  // memory.grow 0
+      ])
+      .exportFunc();
+  builder.addFunction('load', makeSig([kWasmI64], [kWasmI32]))
+      .addBody([
+        kExprLocalGet, 0,       // local.get 0
+        kExprI32LoadMem, 0, 0,  // i32.load_mem align=1 offset=0
+      ])
+      .exportFunc();
+  builder.addFunction('store', makeSig([kWasmI64, kWasmI32], []))
+      .addBody([
+        kExprLocalGet, 0,        // local.get 0
+        kExprLocalGet, 1,        // local.get 1
+        kExprI32StoreMem, 0, 0,  // i32.store_mem align=1 offset=0
+      ])
+      .exportFunc();
+
+  let module = builder.toModule();
+  let instance = new WebAssembly.Instance(module, {imp: {mem: shared_mem64}});
+
+  assertEquals(1n, instance.exports.grow(2n));
+  assertEquals(3n, instance.exports.grow(1n));
+  const kOffset1 = 47n;
+  const kOffset2 = 128n;
+  const kValue = 21;
+  assertEquals(0, instance.exports.load(kOffset1));
+  instance.exports.store(kOffset1, kValue);
+  assertEquals(kValue, instance.exports.load(kOffset1));
+  let worker = new Worker(function() {
+    onmessage = function([mem, module]) {
+      function workerAssert(condition, message) {
+        if (!condition) postMessage(`Check failed: ${message}`);
+      }
+
+      function workerAssertEquals(expected, actual, message) {
+        if (expected != actual)
+          postMessage(`Check failed (${message}): ${expected} != ${actual}`);
+      }
+
+      const kOffset1 = 47n;
+      const kOffset2 = 128n;
+      const kValue = 21;
+      workerAssert(mem instanceof WebAssembly.Memory, 'Wasm memory');
+      workerAssert(mem.buffer instanceof SharedArrayBuffer);
+      workerAssertEquals(4, mem.grow(1), 'grow');
+      let instance = new WebAssembly.Instance(module, {imp: {mem: mem}});
+      let exports = instance.exports;
+      workerAssertEquals(kValue, exports.load(kOffset1), 'load 1');
+      workerAssertEquals(0, exports.load(kOffset2), 'load 2');
+      exports.store(kOffset2, kValue);
+      workerAssertEquals(kValue, exports.load(kOffset2), 'load 3');
+      postMessage('OK');
+    }
+  }, {type: 'function'});
+  worker.postMessage([shared_mem64, module]);
+  assertEquals('OK', worker.getMessage());
+  assertEquals(kValue, instance.exports.load(kOffset2));
+  assertEquals(5n, instance.exports.grow(1n));
+})();
+
+(function TestAtomics_SmallMemory() {
+  print(arguments.callee.name);
+  BasicMemory64Tests(4, true);
+})();
+
+(function TestAtomics_5GB() {
+  print(arguments.callee.name);
+  let num_pages = 5 * GB / kPageSize;
+  // This test can fail if 5GB of memory cannot be allocated.
+  allowOOM(() => BasicMemory64Tests(num_pages, true));
 })();

@@ -525,35 +525,53 @@ inline uint16_t ExtractPrefixedOpcodeBytes(WasmOpcode opcode) {
   ref, WASM_GC_OP(kExprRefTestDeprecated), static_cast<byte>(typeidx)
 #define WASM_REF_TEST(ref, typeidx) \
   ref, WASM_GC_OP(kExprRefTest), static_cast<byte>(typeidx)
+#define WASM_REF_TEST_NULL(ref, typeidx) \
+  ref, WASM_GC_OP(kExprRefTestNull), static_cast<byte>(typeidx)
+#define WASM_REF_CAST_DEPRECATED(ref, typeidx) \
+  ref, WASM_GC_OP(kExprRefCastDeprecated), static_cast<byte>(typeidx)
 #define WASM_REF_CAST(ref, typeidx) \
   ref, WASM_GC_OP(kExprRefCast), static_cast<byte>(typeidx)
+#define WASM_REF_CAST_NULL(ref, typeidx) \
+  ref, WASM_GC_OP(kExprRefCastNull), static_cast<byte>(typeidx)
 // Takes a reference value from the value stack to allow sequences of
 // conditional branches.
 #define WASM_BR_ON_CAST(depth, typeidx)                \
   WASM_GC_OP(kExprBrOnCast), static_cast<byte>(depth), \
       static_cast<byte>(typeidx)
+#define WASM_BR_ON_CAST_NULL(depth, typeidx)               \
+  WASM_GC_OP(kExprBrOnCastNull), static_cast<byte>(depth), \
+      static_cast<byte>(typeidx)
+#define WASM_BR_ON_CAST_DEPRECATED(depth, typeidx)               \
+  WASM_GC_OP(kExprBrOnCastDeprecated), static_cast<byte>(depth), \
+      static_cast<byte>(typeidx)
 #define WASM_BR_ON_CAST_FAIL(depth, typeidx)               \
   WASM_GC_OP(kExprBrOnCastFail), static_cast<byte>(depth), \
+      static_cast<byte>(typeidx)
+#define WASM_BR_ON_CAST_FAIL_NULL(depth, typeidx)              \
+  WASM_GC_OP(kExprBrOnCastFailNull), static_cast<byte>(depth), \
+      static_cast<byte>(typeidx)
+#define WASM_BR_ON_CAST_FAIL_DEPRECATED(depth, typeidx)              \
+  WASM_GC_OP(kExprBrOnCastFailDeprecated), static_cast<byte>(depth), \
       static_cast<byte>(typeidx)
 
 #define WASM_GC_INTERNALIZE(extern) extern, WASM_GC_OP(kExprExternInternalize)
 #define WASM_GC_EXTERNALIZE(ref) ref, WASM_GC_OP(kExprExternExternalize)
 
-#define WASM_REF_IS_DATA(ref) ref, WASM_GC_OP(kExprRefIsData)
+#define WASM_REF_IS_STRUCT(ref) ref, WASM_GC_OP(kExprRefIsStruct)
 #define WASM_REF_IS_ARRAY(ref) ref, WASM_GC_OP(kExprRefIsArray)
 #define WASM_REF_IS_I31(ref) ref, WASM_GC_OP(kExprRefIsI31)
-#define WASM_REF_AS_DATA(ref) ref, WASM_GC_OP(kExprRefAsData)
+#define WASM_REF_AS_STRUCT(ref) ref, WASM_GC_OP(kExprRefAsStruct)
 #define WASM_REF_AS_ARRAY(ref) ref, WASM_GC_OP(kExprRefAsArray)
 #define WASM_REF_AS_I31(ref) ref, WASM_GC_OP(kExprRefAsI31)
 #define WASM_BR_ON_ARRAY(depth) \
   WASM_GC_OP(kExprBrOnArray), static_cast<byte>(depth)
-#define WASM_BR_ON_DATA(depth) \
-  WASM_GC_OP(kExprBrOnData), static_cast<byte>(depth)
+#define WASM_BR_ON_STRUCT(depth) \
+  WASM_GC_OP(kExprBrOnStruct), static_cast<byte>(depth)
 #define WASM_BR_ON_I31(depth) WASM_GC_OP(kExprBrOnI31), static_cast<byte>(depth)
 #define WASM_BR_ON_NON_ARRAY(depth) \
   WASM_GC_OP(kExprBrOnNonArray), static_cast<byte>(depth)
-#define WASM_BR_ON_NON_DATA(depth) \
-  WASM_GC_OP(kExprBrOnNonData), static_cast<byte>(depth)
+#define WASM_BR_ON_NON_STRUCT(depth) \
+  WASM_GC_OP(kExprBrOnNonStruct), static_cast<byte>(depth)
 #define WASM_BR_ON_NON_I31(depth) \
   WASM_GC_OP(kExprBrOnNonI31), static_cast<byte>(depth)
 

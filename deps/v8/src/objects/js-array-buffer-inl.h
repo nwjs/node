@@ -21,7 +21,9 @@ namespace internal {
 TQ_OBJECT_CONSTRUCTORS_IMPL(JSArrayBuffer)
 TQ_OBJECT_CONSTRUCTORS_IMPL(JSArrayBufferView)
 TQ_OBJECT_CONSTRUCTORS_IMPL(JSTypedArray)
+TQ_OBJECT_CONSTRUCTORS_IMPL(JSDataViewOrRabGsabDataView)
 TQ_OBJECT_CONSTRUCTORS_IMPL(JSDataView)
+TQ_OBJECT_CONSTRUCTORS_IMPL(JSRabGsabDataView)
 
 ACCESSORS(JSTypedArray, base_pointer, Object, kBasePointerOffset)
 RELEASE_ACQUIRE_ACCESSORS(JSTypedArray, base_pointer, Object,
@@ -64,7 +66,16 @@ size_t JSArrayBuffer::GetByteLength() const {
     // BackingStore).
     DCHECK_EQ(0, byte_length());
 
-    return GetBackingStore()->byte_length(std::memory_order_seq_cst);
+    // If the byte length is read after the JSArrayBuffer object is allocated
+    // but before it's attached to the backing store, GetBackingStore returns
+    // nullptr. This is rare, but can happen e.g., when memory measurements
+    // are enabled (via performance.measureMemory()).
+    auto backing_store = GetBackingStore();
+    if (!backing_store) {
+      return 0;
+    }
+
+    return backing_store->byte_length(std::memory_order_seq_cst);
   }
   return byte_length();
 }
@@ -141,6 +152,8 @@ void JSArrayBuffer::clear_padding() {
            FIELD_SIZE(kOptionalPaddingOffset));
   }
 }
+
+ACCESSORS(JSArrayBuffer, detach_key, Object, kDetachKeyOffset)
 
 void JSArrayBuffer::set_bit_field(uint32_t bits) {
   RELAXED_WRITE_UINT32_FIELD(*this, kBitFieldOffset, bits);
@@ -228,9 +241,13 @@ bool JSTypedArray::IsDetachedOrOutOfBounds() const {
   if (WasDetached()) {
     return true;
   }
-  bool out_of_bounds = false;
-  GetLengthOrOutOfBounds(out_of_bounds);
-  return out_of_bounds;
+  if (!is_backed_by_rab()) {
+    // TypedArrays backed by GSABs or regular AB/SABs are never out of bounds.
+    // This shortcut is load-bearing; this enables determining
+    // IsDetachedOrOutOfBounds without consulting the BackingStore.
+    return false;
+  }
+  return IsOutOfBounds();
 }
 
 // static
@@ -374,14 +391,37 @@ MaybeHandle<JSTypedArray> JSTypedArray::Validate(Isolate* isolate,
   return array;
 }
 
-DEF_GETTER(JSDataView, data_pointer, void*) {
+DEF_GETTER(JSDataViewOrRabGsabDataView, data_pointer, void*) {
   Address value = ReadSandboxedPointerField(kDataPointerOffset, cage_base);
   return reinterpret_cast<void*>(value);
 }
 
-void JSDataView::set_data_pointer(Isolate* isolate, void* ptr) {
+void JSDataViewOrRabGsabDataView::set_data_pointer(Isolate* isolate,
+                                                   void* ptr) {
   Address value = reinterpret_cast<Address>(ptr);
   WriteSandboxedPointerField(kDataPointerOffset, isolate, value);
+}
+
+size_t JSRabGsabDataView::GetByteLength() const {
+  if (IsOutOfBounds()) {
+    return 0;
+  }
+  if (is_length_tracking()) {
+    // Invariant: byte_length of length tracking DataViews is 0.
+    DCHECK_EQ(0, byte_length());
+    return buffer().GetByteLength() - byte_offset();
+  }
+  return byte_length();
+}
+
+bool JSRabGsabDataView::IsOutOfBounds() const {
+  if (!is_backed_by_rab()) {
+    return false;
+  }
+  if (is_length_tracking()) {
+    return byte_offset() > buffer().GetByteLength();
+  }
+  return byte_offset() + byte_length() > buffer().GetByteLength();
 }
 
 }  // namespace internal

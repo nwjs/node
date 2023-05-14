@@ -2,13 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --experimental-wasm-gc --wasm-gc-js-interop --allow-natives-syntax
+// Flags: --experimental-wasm-gc --allow-natives-syntax
 
 import {struct, array} from 'gc-js-interop-export.mjs';
 
 // Read struct and array with new wasm module.
 let builder = new WasmModuleBuilder();
-builder.setSingletonRecGroups();
 let struct_type = builder.addStruct([makeField(kWasmI32, true)]);
 let array_type = builder.addArray(kWasmI32, true);
 builder.addFunction('readStruct', makeSig([kWasmExternRef], [kWasmI32]))
@@ -16,7 +15,7 @@ builder.addFunction('readStruct', makeSig([kWasmExternRef], [kWasmI32]))
     .addBody([
       kExprLocalGet, 0,                           // --
       kGCPrefix, kExprExternInternalize,          // --
-      kGCPrefix, kExprRefAsData,                  // --
+      kGCPrefix, kExprRefAsStruct,                // --
       kGCPrefix, kExprRefCast, struct_type,       // --
       kGCPrefix, kExprStructGet, struct_type, 0,  // --
     ]);

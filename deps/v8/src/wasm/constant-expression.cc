@@ -35,8 +35,11 @@ ValueOrError EvaluateConstantExpression(Zone* zone, ConstantExpression expr,
     case ConstantExpression::kI32Const:
       return WasmValue(expr.i32_value());
     case ConstantExpression::kRefNull:
-      return WasmValue(isolate->factory()->null_value(),
-                       ValueType::RefNull(expr.repr()));
+      return WasmValue(
+          expected == kWasmExternRef || expected == kWasmNullExternRef
+              ? Handle<Object>::cast(isolate->factory()->null_value())
+              : Handle<Object>::cast(isolate->factory()->wasm_null()),
+          ValueType::RefNull(expr.repr()));
     case ConstantExpression::kRefFunc: {
       uint32_t index = expr.index();
       Handle<Object> value =
@@ -56,10 +59,10 @@ ValueOrError EvaluateConstantExpression(Zone* zone, ConstantExpression expr,
       auto sig = FixedSizeSignature<ValueType>::Returns(expected);
       FunctionBody body(&sig, ref.offset(), start, end);
       WasmFeatures detected;
-      // We use kFullValidation so we do not have to create another template
+      // We use FullValidationTag so we do not have to create another template
       // instance of WasmFullDecoder, which would cost us >50Kb binary code
       // size.
-      WasmFullDecoder<Decoder::kFullValidation, ConstantExpressionInterface,
+      WasmFullDecoder<Decoder::FullValidationTag, ConstantExpressionInterface,
                       kConstantExpression>
           decoder(zone, instance->module(), WasmFeatures::All(), &detected,
                   body, instance->module(), isolate, instance);

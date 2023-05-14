@@ -608,7 +608,8 @@ Handle<BigInt> SystemUTCEpochNanoseconds(Isolate* isolate) {
   TEMPORAL_ENTER_FUNC();
   // 1. Let ns be the approximate current UTC date and time, in nanoseconds
   // since the epoch.
-  double ms = V8::GetCurrentPlatform()->CurrentClockTimeMillis();
+  double ms =
+      V8::GetCurrentPlatform()->CurrentClockTimeMillisecondsHighResolution();
   // 2. Set ns to the result of clamping ns between −8.64 × 10^21 and 8.64 ×
   // 10^21.
 
@@ -3106,16 +3107,8 @@ MaybeHandle<JSTemporalZonedDateTime> SystemZonedDateTime(
 }
 
 int CompareResultToSign(ComparisonResult r) {
-  switch (r) {
-    case ComparisonResult::kEqual:
-      return 0;
-    case ComparisonResult::kLessThan:
-      return -1;
-    case ComparisonResult::kGreaterThan:
-      return 1;
-    case ComparisonResult::kUndefined:
-      UNREACHABLE();
-  }
+  DCHECK_NE(r, ComparisonResult::kUndefined);
+  return static_cast<int>(r);
 }
 
 // #sec-temporal-formattimezoneoffsetstring
@@ -4610,13 +4603,13 @@ class CalendarMap final {
 
 DEFINE_LAZY_LEAKY_OBJECT_GETTER(CalendarMap, GetCalendarMap)
 
-// #sec-temporal-isbuiltincalendar
-bool IsBuiltinCalendar(Isolate* isolate, const std::string& id) {
-  return GetCalendarMap()->Contains(id);
-}
-
 bool IsBuiltinCalendar(Isolate* isolate, Handle<String> id) {
-  return IsBuiltinCalendar(isolate, id->ToCString().get());
+  // 1. Let calendars be AvailableCalendars().
+  // 2. If calendars contains the ASCII-lowercase of id, return true.
+  // 3. Return false.
+  id = Intl::ConvertToLower(isolate, String::Flatten(isolate, id))
+           .ToHandleChecked();
+  return GetCalendarMap()->Contains(id->ToCString().get());
 }
 
 Handle<String> CalendarIdentifier(Isolate* isolate, int32_t index) {
@@ -4625,6 +4618,8 @@ Handle<String> CalendarIdentifier(Isolate* isolate, int32_t index) {
 }
 
 int32_t CalendarIndex(Isolate* isolate, Handle<String> id) {
+  id = Intl::ConvertToLower(isolate, String::Flatten(isolate, id))
+           .ToHandleChecked();
   return GetCalendarMap()->Index(id->ToCString().get());
 }
 
@@ -4645,9 +4640,24 @@ Handle<String> CalendarIdentifier(Isolate* isolate, int32_t index) {
 
 // #sec-temporal-isbuiltincalendar
 bool IsBuiltinCalendar(Isolate* isolate, Handle<String> id) {
-  // 1. If id is not "iso8601", return false.
-  // 2. Return true
-  return isolate->factory()->iso8601_string()->Equals(*id);
+  // Note: For build without intl support, the only item in AvailableCalendars()
+  // is "iso8601".
+  // 1. Let calendars be AvailableCalendars().
+  // 2. If calendars contains the ASCII-lowercase of id, return true.
+  // 3. Return false.
+
+  // Fast path
+  if (isolate->factory()->iso8601_string()->Equals(*id)) return true;
+  if (id->length() != 7) return false;
+  id = String::Flatten(isolate, id);
+
+  DisallowGarbageCollection no_gc;
+  const String::FlatContent& flat = id->GetFlatContent(no_gc);
+  // Return true if id is case insensitive equals to "iso8601".
+  return AsciiAlphaToLower(flat.Get(0)) == 'i' &&
+         AsciiAlphaToLower(flat.Get(1)) == 's' &&
+         AsciiAlphaToLower(flat.Get(2)) == 'o' && flat.Get(3) == '8' &&
+         flat.Get(4) == '6' && flat.Get(5) == '0' && flat.Get(6) == '1';
 }
 
 int32_t CalendarIndex(Isolate* isolate, Handle<String> id) { return 0; }

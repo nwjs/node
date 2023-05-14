@@ -358,10 +358,13 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             "returned)",
             &EnvironmentOptions::dns_result_order,
             kAllowedInEnvvar);
-  AddOption("--enable-network-family-autoselection",
-            "Enable network address family autodetection algorithm",
-            &EnvironmentOptions::enable_network_family_autoselection,
-            kAllowedInEnvvar);
+  AddOption("--network-family-autoselection",
+            "Disable network address family autodetection algorithm",
+            &EnvironmentOptions::network_family_autoselection,
+            kAllowedInEnvvar,
+            true);
+  AddAlias("--enable-network-family-autoselection",
+           "--network-family-autoselection");
   AddOption("--enable-source-maps",
             "Source Map V3 support for stack traces",
             &EnvironmentOptions::enable_source_maps,
@@ -401,6 +404,11 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             "experimental ES Module import.meta.resolve() support",
             &EnvironmentOptions::experimental_import_meta_resolve,
             kAllowedInEnvvar);
+  AddOption("--experimental-permission",
+            "enable the permission system",
+            &EnvironmentOptions::experimental_permission,
+            kAllowedInEnvvar,
+            false);
   AddOption("--experimental-policy",
             "use the specified file as a "
             "security policy",
@@ -415,6 +423,22 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             &EnvironmentOptions::experimental_policy_integrity,
             kAllowedInEnvvar);
   Implies("--policy-integrity", "[has_policy_integrity_string]");
+  AddOption("--allow-fs-read",
+            "allow permissions to read the filesystem",
+            &EnvironmentOptions::allow_fs_read,
+            kAllowedInEnvvar);
+  AddOption("--allow-fs-write",
+            "allow permissions to write in the filesystem",
+            &EnvironmentOptions::allow_fs_write,
+            kAllowedInEnvvar);
+  AddOption("--allow-child-process",
+            "allow use of child process when any permissions are set",
+            &EnvironmentOptions::allow_child_process,
+            kAllowedInEnvvar);
+  AddOption("--allow-worker",
+            "allow worker threads when any permissions are set",
+            &EnvironmentOptions::allow_worker_threads,
+            kAllowedInEnvvar);
   AddOption("--experimental-repl-await",
             "experimental await keyword support in REPL",
             &EnvironmentOptions::experimental_repl_await,
@@ -426,10 +450,8 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             kAllowedInEnvvar);
   AddOption("--experimental-worker", "", NoOp{}, kAllowedInEnvvar);
   AddOption("--experimental-report", "", NoOp{}, kAllowedInEnvvar);
-  AddOption("--experimental-wasi-unstable-preview1",
-            "experimental WASI support",
-            &EnvironmentOptions::experimental_wasi,
-            kAllowedInEnvvar);
+  AddOption(
+      "--experimental-wasi-unstable-preview1", "", NoOp{}, kAllowedInEnvvar);
   AddOption("--expose-internals", "", &EnvironmentOptions::expose_internals);
   AddOption("--frozen-intrinsics",
             "experimental frozen intrinsics support",
@@ -569,10 +591,12 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             &EnvironmentOptions::test_name_pattern);
   AddOption("--test-reporter",
             "report test output using the given reporter",
-            &EnvironmentOptions::test_reporter);
+            &EnvironmentOptions::test_reporter,
+            kAllowedInEnvvar);
   AddOption("--test-reporter-destination",
             "report given reporter to the given destination",
-            &EnvironmentOptions::test_reporter_destination);
+            &EnvironmentOptions::test_reporter_destination,
+            kAllowedInEnvvar);
   AddOption("--test-only",
             "run tests with 'only' option set",
             &EnvironmentOptions::test_only,
@@ -967,6 +991,11 @@ PerProcessOptionsParser::PerProcessOptionsParser(
             kAllowedInEnvvar);
   Implies("--node-memory-debug", "--debug-arraybuffer-allocations");
   Implies("--node-memory-debug", "--verify-base-objects");
+
+  AddOption("--experimental-sea-config",
+            "Generate a blob that can be embedded into the single executable "
+            "application",
+            &PerProcessOptions::experimental_sea_config);
 #endif
 }
 

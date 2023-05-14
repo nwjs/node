@@ -92,13 +92,13 @@ MaybeLocal<Object> CreateProcessObject(Realm* realm, bool node_is_nwjs) {
     return MaybeLocal<Object>();
   }
 
+  // process[exit_info_private_symbol]
   if (node_is_nwjs)
     READONLY_PROPERTY(process, "__nwjs", Integer::New(realm->env()->isolate(), 1));
-  // process[exiting_aliased_Uint32Array]
   if (process
           ->SetPrivate(context,
-                       realm->env()->exiting_aliased_Uint32Array(),
-                       realm->env()->exiting().GetJSArray())
+                       realm->env()->exit_info_private_symbol(),
+                       realm->env()->exit_info().GetJSArray())
           .IsNothing()) {
     return {};
   }

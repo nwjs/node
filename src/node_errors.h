@@ -30,6 +30,7 @@ void OOMErrorHandler(const char* location, const v8::OOMDetails& details);
 // a `Local<Value>` containing the TypeError with proper code and message
 
 #define ERRORS_WITH_CODE(V)                                                    \
+  V(ERR_ACCESS_DENIED, Error)                                                  \
   V(ERR_BUFFER_CONTEXT_NOT_AVAILABLE, Error)                                   \
   V(ERR_BUFFER_OUT_OF_BOUNDS, RangeError)                                      \
   V(ERR_BUFFER_TOO_LARGE, Error)                                               \
@@ -124,6 +125,7 @@ ERRORS_WITH_CODE(V)
 // Errors with predefined static messages
 
 #define PREDEFINED_ERROR_MESSAGES(V)                                           \
+  V(ERR_ACCESS_DENIED, "Access to this API has been restricted")               \
   V(ERR_BUFFER_CONTEXT_NOT_AVAILABLE,                                          \
     "Buffer is not available for the current Context")                         \
   V(ERR_CLOSED_MESSAGE_PORT, "Cannot send data on closed MessagePort")         \
@@ -273,6 +275,22 @@ void PerIsolateMessageListener(v8::Local<v8::Message> message,
 
 void DecorateErrorStack(Environment* env,
                         const errors::TryCatchScope& try_catch);
+
+class PrinterTryCatch : public v8::TryCatch {
+ public:
+  enum PrintSourceLine { kPrintSourceLine, kDontPrintSourceLine };
+  explicit PrinterTryCatch(v8::Isolate* isolate,
+                           PrintSourceLine print_source_line)
+      : v8::TryCatch(isolate),
+        isolate_(isolate),
+        print_source_line_(print_source_line) {}
+  ~PrinterTryCatch();
+
+ private:
+  v8::Isolate* isolate_;
+  PrintSourceLine print_source_line_;
+};
+
 }  // namespace errors
 
 v8::ModifyCodeGenerationFromStringsResult ModifyCodeGenerationFromStrings(

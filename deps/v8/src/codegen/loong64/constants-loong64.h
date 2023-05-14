@@ -71,7 +71,6 @@ const uint32_t kFCSRExceptionCauseMask = kFCSRCauseMask ^ kFCSRInexactCauseMask;
 
 // Actual value of root register is offset from the root array's start
 // to take advantage of negative displacement values.
-// TODO(sigurds): Choose best value.
 constexpr int kRootRegisterBias = 256;
 
 // Helper functions for converting between register numbers and names.
@@ -580,6 +579,22 @@ enum Condition {
   uge = Ugreater_equal,
   ule = Uless_equal,
   ugt = Ugreater,
+
+  // Unified cross-platform condition names/aliases.
+  kEqual = equal,
+  kNotEqual = not_equal,
+  kLessThan = less,
+  kGreaterThan = greater,
+  kLessThanEqual = less_equal,
+  kGreaterThanEqual = greater_equal,
+  kUnsignedLessThan = Uless,
+  kUnsignedGreaterThan = Ugreater,
+  kUnsignedLessThanEqual = Uless_equal,
+  kUnsignedGreaterThanEqual = Ugreater_equal,
+  kOverflow = overflow,
+  kNoOverflow = no_overflow,
+  kZero = equal,
+  kNotZero = not_equal,
 };
 
 // Returns the equivalent of !cc.
@@ -693,7 +708,8 @@ inline Hint NegateHint(Hint hint) { return no_hint; }
 // registers and other constants.
 
 // Break 0xfffff, reserved for redirected real time call.
-const Instr rtCallRedirInstr = BREAK | call_rt_redirected;
+const Instr rtCallRedirInstr =
+    static_cast<uint32_t>(BREAK) | call_rt_redirected;
 // A nop instruction. (Encoding of addi_w 0 0 0).
 const Instr nopInstr = ADDI_W;
 

@@ -23,6 +23,24 @@
 namespace v8 {
 namespace internal {
 
+// static
+V8_INLINE Isolate::PerIsolateThreadData*
+Isolate::CurrentPerIsolateThreadData() {
+  return g_current_per_isolate_thread_data_;
+}
+
+// static
+V8_INLINE Isolate* Isolate::TryGetCurrent() { return g_current_isolate_; }
+
+// static
+V8_INLINE Isolate* Isolate::Current() {
+  Isolate* isolate = TryGetCurrent();
+  DCHECK_NOT_NULL(isolate);
+  return isolate;
+}
+
+bool Isolate::IsCurrent() const { return this == TryGetCurrent(); }
+
 void Isolate::set_context(Context context) {
   DCHECK(context.is_null() || context.IsContext());
   thread_local_top()->context_ = context;
@@ -115,7 +133,7 @@ Object Isolate::VerifyBuiltinsResult(Object result) {
   // because that's the assumption in generated code (which might call this
   // builtin).
   if (!result.IsSmi()) {
-    DCHECK_EQ(result.ptr(), V8HeapCompressionScheme::DecompressTaggedPointer(
+    DCHECK_EQ(result.ptr(), V8HeapCompressionScheme::DecompressTagged(
                                 this, static_cast<Tagged_t>(result.ptr())));
   }
 #endif
@@ -131,11 +149,11 @@ ObjectPair Isolate::VerifyBuiltinsResult(ObjectPair pair) {
   // because that's the assumption in generated code (which might call this
   // builtin).
   if (!HAS_SMI_TAG(pair.x)) {
-    DCHECK_EQ(pair.x, V8HeapCompressionScheme::DecompressTaggedPointer(
+    DCHECK_EQ(pair.x, V8HeapCompressionScheme::DecompressTagged(
                           this, static_cast<Tagged_t>(pair.x)));
   }
   if (!HAS_SMI_TAG(pair.y)) {
-    DCHECK_EQ(pair.y, V8HeapCompressionScheme::DecompressTaggedPointer(
+    DCHECK_EQ(pair.y, V8HeapCompressionScheme::DecompressTagged(
                           this, static_cast<Tagged_t>(pair.y)));
   }
 #endif  // V8_COMPRESS_POINTERS

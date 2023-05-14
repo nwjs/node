@@ -26,12 +26,9 @@ MaglevCompilationUnit::MaglevCompilationUnit(
     : info_(info),
       caller_(caller),
       function_(function),
-      shared_function_info_(function_.shared()),
-      bytecode_(shared_function_info_.GetBytecodeArray()),
-      feedback_(
-          function_.feedback_vector(info_->broker()->dependencies()).value()),
-      bytecode_analysis_(bytecode_.object(), zone(), BytecodeOffset::None(),
-                         true),
+      shared_function_info_(function_.shared(broker())),
+      bytecode_(shared_function_info_.GetBytecodeArray(broker())),
+      feedback_(function_.feedback_vector(info_->broker()).value()),
       register_count_(bytecode_.register_count()),
       parameter_count_(bytecode_.parameter_count()),
       inlining_depth_(caller == nullptr ? 0 : caller->inlining_depth_ + 1) {}

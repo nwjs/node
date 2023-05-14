@@ -136,9 +136,10 @@ static void VerifyMemoryChunk(Isolate* isolate, Heap* heap,
       memory_allocator->AllocateLargePage(space, area_size, executable);
   size_t reserved_size =
       ((executable == EXECUTABLE))
-          ? allocatable_memory_area_offset +
-                RoundUp(area_size, page_allocator->CommitPageSize()) +
-                guard_size
+          ? RoundUp(allocatable_memory_area_offset +
+                        RoundUp(area_size, page_allocator->CommitPageSize()) +
+                        guard_size,
+                    page_allocator->CommitPageSize())
           : RoundUp(allocatable_memory_area_offset + area_size,
                     page_allocator->CommitPageSize());
   CHECK(memory_chunk->size() == reserved_size);
@@ -161,7 +162,7 @@ static unsigned int PseudorandomAreaSize() {
 TEST(MemoryChunk) {
   Isolate* isolate = CcTest::i_isolate();
   Heap* heap = isolate->heap();
-  SafepointScope safepoint(heap);
+  IsolateSafepointScope safepoint(heap);
 
   v8::PageAllocator* page_allocator = GetPlatformPageAllocator();
   size_t area_size;
@@ -318,6 +319,7 @@ TEST(SemiSpaceNewSpace) {
 
 TEST(PagedNewSpace) {
   if (v8_flags.single_generation) return;
+  ManualGCScope manual_gc_scope;
   Isolate* isolate = CcTest::i_isolate();
   Heap* heap = isolate->heap();
   TestMemoryAllocatorScope test_allocator_scope(isolate, heap->MaxReserved());
@@ -329,6 +331,7 @@ TEST(PagedNewSpace) {
       CcTest::heap()->InitialSemiSpaceSize(), allocation_info);
   CHECK(new_space->MaximumCapacity());
   CHECK(new_space->EnsureCurrentCapacity());
+  CHECK_LT(0, new_space->Capacity());
   CHECK_LT(0, new_space->TotalCapacity());
 
   AllocationResult allocation_result;
@@ -663,7 +666,8 @@ HEAP_TEST(Regress777177) {
         old_space->AllocateRaw(max_object_size, kTaggedAligned);
     HeapObject obj = result.ToObjectChecked();
     // Simulate allocation folding moving the top pointer back.
-    old_space->SetTopAndLimit(obj.address(), old_space->limit());
+    old_space->SetTopAndLimit(obj.address(), old_space->limit(),
+                              old_space->limit());
   }
 
   {
@@ -912,17 +916,19 @@ TEST(ReadOnlySpaceMetrics_OnePage) {
   // Allocated objects size.
   CHECK_EQ(faked_space->Size(), 16);
 
-  size_t committed_memory = RoundUp(
-      MemoryChunkLayout::ObjectStartOffsetInDataPage() + faked_space->Size(),
-      MemoryAllocator::GetCommitPageSize());
+  size_t committed_memory =
+      RoundUp(MemoryChunkLayout::ObjectStartOffsetInReadOnlyPage() +
+                  faked_space->Size(),
+              MemoryAllocator::GetCommitPageSize());
 
   // Amount of OS allocated memory.
   CHECK_EQ(faked_space->CommittedMemory(), committed_memory);
   CHECK_EQ(faked_space->CommittedPhysicalMemory(), committed_memory);
 
   // Capacity will be one OS page minus the page header.
-  CHECK_EQ(faked_space->Capacity(),
-           committed_memory - MemoryChunkLayout::ObjectStartOffsetInDataPage());
+  CHECK_EQ(
+      faked_space->Capacity(),
+      committed_memory - MemoryChunkLayout::ObjectStartOffsetInReadOnlyPage());
 }
 
 TEST(ReadOnlySpaceMetrics_AlignedAllocations) {
@@ -967,16 +973,18 @@ TEST(ReadOnlySpaceMetrics_AlignedAllocations) {
   // with pointer compression.
   CHECK_EQ(faked_space->Size(), expected_size);
 
-  size_t committed_memory = RoundUp(
-      MemoryChunkLayout::ObjectStartOffsetInDataPage() + faked_space->Size(),
-      MemoryAllocator::GetCommitPageSize());
+  size_t committed_memory =
+      RoundUp(MemoryChunkLayout::ObjectStartOffsetInReadOnlyPage() +
+                  faked_space->Size(),
+              MemoryAllocator::GetCommitPageSize());
 
   CHECK_EQ(faked_space->CommittedMemory(), committed_memory);
   CHECK_EQ(faked_space->CommittedPhysicalMemory(), committed_memory);
 
   // Capacity will be 3 OS pages minus the page header.
-  CHECK_EQ(faked_space->Capacity(),
-           committed_memory - MemoryChunkLayout::ObjectStartOffsetInDataPage());
+  CHECK_EQ(
+      faked_space->Capacity(),
+      committed_memory - MemoryChunkLayout::ObjectStartOffsetInReadOnlyPage());
 }
 
 TEST(ReadOnlySpaceMetrics_TwoPages) {
@@ -1015,9 +1023,9 @@ TEST(ReadOnlySpaceMetrics_TwoPages) {
   CHECK_EQ(faked_space->Size(), object_size * 2);
 
   // Amount of OS allocated memory.
-  size_t committed_memory_per_page =
-      RoundUp(MemoryChunkLayout::ObjectStartOffsetInDataPage() + object_size,
-              MemoryAllocator::GetCommitPageSize());
+  size_t committed_memory_per_page = RoundUp(
+      MemoryChunkLayout::ObjectStartOffsetInReadOnlyPage() + object_size,
+      MemoryAllocator::GetCommitPageSize());
   CHECK_EQ(faked_space->CommittedMemory(), 2 * committed_memory_per_page);
   CHECK_EQ(faked_space->CommittedPhysicalMemory(),
            2 * committed_memory_per_page);
@@ -1025,9 +1033,10 @@ TEST(ReadOnlySpaceMetrics_TwoPages) {
   // Capacity will be the space up to the amount of committed memory minus the
   // page headers.
   size_t capacity_per_page =
-      RoundUp(MemoryChunkLayout::ObjectStartOffsetInDataPage() + object_size,
-              MemoryAllocator::GetCommitPageSize()) -
-      MemoryChunkLayout::ObjectStartOffsetInDataPage();
+      RoundUp(
+          MemoryChunkLayout::ObjectStartOffsetInReadOnlyPage() + object_size,
+          MemoryAllocator::GetCommitPageSize()) -
+      MemoryChunkLayout::ObjectStartOffsetInReadOnlyPage();
   CHECK_EQ(faked_space->Capacity(), 2 * capacity_per_page);
 }
 

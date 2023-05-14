@@ -152,7 +152,16 @@ uint32_t ExternalPointerTable::FreelistSize() {
 void ExternalPointerTable::Mark(ExternalPointerHandle handle,
                                 Address handle_location) {
   static_assert(sizeof(base::Atomic64) == sizeof(Address));
-  DCHECK_EQ(handle, *reinterpret_cast<ExternalPointerHandle*>(handle_location));
+  // The handle_location must contain the given handle. The only exception to
+  // this is when the handle is zero, which means that it hasn't yet been
+  // initialized. In that case, the handle may be initialized between the
+  // caller loading it and this DCHECK loading it again, in which case the two
+  // values would not be the same. This scenario is unproblematic though as the
+  // new entry will already be marked as alive as it has just been allocated.
+  DCHECK(handle == kNullExternalPointerHandle ||
+         handle ==
+             base::AsAtomic32::Acquire_Load(
+                 reinterpret_cast<ExternalPointerHandle*>(handle_location)));
 
   uint32_t index = HandleToIndex(handle);
 
@@ -169,9 +178,12 @@ void ExternalPointerTable::Mark(ExternalPointerHandle handle,
     if (new_handle) {
       DCHECK_LT(HandleToIndex(new_handle), current_start_of_evacuation_area);
       uint32_t index = HandleToIndex(new_handle);
-      // No need for an atomic store as the entry will only be accessed during
-      // sweeping.
-      Store(index, Entry::MakeEvacuationEntry(handle_location));
+      // Even though the new entry will only be accessed during sweeping, this
+      // still needs to be an atomic write as another thread may attempt (and
+      // fail) to allocate the same table entry, thereby causing a read from
+      // this memory location. Without an atomic store here, TSan would then
+      // complain about a data race.
+      RelaxedStore(index, Entry::MakeEvacuationEntry(handle_location));
 #ifdef DEBUG
       // Mark the handle as visited in debug builds to detect double
       // initialization of external pointer fields.

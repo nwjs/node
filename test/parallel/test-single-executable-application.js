@@ -5,21 +5,17 @@ const common = require('../common');
 
 const fixtures = require('../common/fixtures');
 const tmpdir = require('../common/tmpdir');
-const { copyFileSync, readFileSync, writeFileSync } = require('fs');
+const { copyFileSync, readFileSync, writeFileSync, existsSync } = require('fs');
 const { execFileSync } = require('child_process');
 const { join } = require('path');
 const { strictEqual } = require('assert');
+const assert = require('assert');
 
 if (!process.config.variables.single_executable_application)
   common.skip('Single Executable Application support has been disabled.');
 
 if (!['darwin', 'win32', 'linux'].includes(process.platform))
   common.skip(`Unsupported platform ${process.platform}.`);
-
-if (process.platform === 'linux' && process.config.variables.asan) {
-  // Source of the memory leak - https://github.com/nodejs/node/blob/da0bc6db98cef98686122ea1e2cd2dbd2f52d123/src/node_sea.cc#L94.
-  common.skip('Running the resultant binary fails because of a memory leak ASAN error.');
-}
 
 if (process.platform === 'linux' && process.config.variables.is_debug === 1)
   common.skip('Running the resultant binary fails with `Couldn\'t read target executable"`.');
@@ -56,6 +52,8 @@ if (process.platform === 'linux') {
 
 const inputFile = fixtures.path('sea.js');
 const requirableFile = join(tmpdir.path, 'requirable.js');
+const configFile = join(tmpdir.path, 'sea-config.json');
+const seaPrepBlob = join(tmpdir.path, 'sea-prep.blob');
 const outputFile = join(tmpdir.path, process.platform === 'win32' ? 'sea.exe' : 'sea');
 
 tmpdir.refresh();
@@ -66,15 +64,30 @@ module.exports = {
 };
 `);
 
+writeFileSync(configFile, `
+{
+  "main": "sea.js",
+  "output": "sea-prep.blob"
+}
+`);
+
+// Copy input to working directory
+copyFileSync(inputFile, join(tmpdir.path, 'sea.js'));
+execFileSync(process.execPath, ['--experimental-sea-config', 'sea-config.json'], {
+  cwd: tmpdir.path
+});
+
+assert(existsSync(seaPrepBlob));
+
 copyFileSync(process.execPath, outputFile);
 const postjectFile = fixtures.path('postject-copy', 'node_modules', 'postject', 'dist', 'cli.js');
 execFileSync(process.execPath, [
   postjectFile,
   outputFile,
-  'NODE_JS_CODE',
-  inputFile,
-  '--sentinel-fuse', 'NODE_JS_FUSE_fce680ab2cc467b6e072b8b5df1996b2',
-  ...process.platform === 'darwin' ? [ '--macho-segment-name', 'NODE_JS' ] : [],
+  'NODE_SEA_BLOB',
+  seaPrepBlob,
+  '--sentinel-fuse', 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2',
+  ...process.platform === 'darwin' ? [ '--macho-segment-name', 'NODE_SEA' ] : [],
 ]);
 
 if (process.platform === 'darwin') {

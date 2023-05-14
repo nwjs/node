@@ -131,7 +131,6 @@ Local<FunctionTemplate> Blob::GetConstructorTemplate(Environment* env) {
     tmpl = NewFunctionTemplate(isolate, nullptr);
     tmpl->InstanceTemplate()->SetInternalFieldCount(
         BaseObject::kInternalFieldCount);
-    tmpl->Inherit(BaseObject::GetConstructorTemplate(env));
     tmpl->SetClassName(
         FIXED_ONE_BYTE_STRING(env->isolate(), "Blob"));
     SetProtoMethod(isolate, tmpl, "getReader", GetReader);
@@ -178,7 +177,7 @@ void Blob::New(const FunctionCallbackInfo<Value>& args) {
                                             size_t byte_offset = 0) {
       if (buf->IsDetachable()) {
         std::shared_ptr<BackingStore> store = buf->GetBackingStore();
-        buf->Detach();
+        USE(buf->Detach(Local<Value>()));
         return DataQueue::CreateInMemoryEntryFromBackingStore(
             store, byte_offset, byte_length);
       }
@@ -281,7 +280,6 @@ Local<FunctionTemplate> Blob::Reader::GetConstructorTemplate(Environment* env) {
     tmpl = NewFunctionTemplate(isolate, nullptr);
     tmpl->InstanceTemplate()->SetInternalFieldCount(
         BaseObject::kInternalFieldCount);
-    tmpl->Inherit(BaseObject::GetConstructorTemplate(env));
     tmpl->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "BlobReader"));
     SetProtoMethod(env->isolate(), tmpl, "pull", Pull);
     env->set_blob_reader_constructor_template(tmpl);

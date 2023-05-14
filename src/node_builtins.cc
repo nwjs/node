@@ -185,17 +185,14 @@ static std::string OnDiskFileName(const char* id) {
 MaybeLocal<String> BuiltinLoader::LoadBuiltinSource(Isolate* isolate,
                                                     const char* id) const {
   auto source = source_.read();
-#ifdef NODE_BUILTIN_MODULES_PATH
-  if (strncmp(id, "embedder_main_", strlen("embedder_main_")) == 0) {
-#endif  // NODE_BUILTIN_MODULES_PATH
-    const auto source_it = source->find(id);
-    if (UNLIKELY(source_it == source->end())) {
-      fprintf(stderr, "Cannot find native builtin: \"%s\".\n", id);
-      ABORT();
-    }
-    return source_it->second.ToStringChecked(isolate);
-#ifdef NODE_BUILTIN_MODULES_PATH
+#ifndef NODE_BUILTIN_MODULES_PATH
+  const auto source_it = source->find(id);
+  if (UNLIKELY(source_it == source->end())) {
+    fprintf(stderr, "Cannot find native builtin: \"%s\".\n", id);
+    ABORT();
   }
+  return source_it->second.ToStringChecked(isolate);
+#else   // !NODE_BUILTIN_MODULES_PATH
   std::string filename = OnDiskFileName(id);
 
   std::string contents;
@@ -227,8 +224,7 @@ void BuiltinLoader::AddExternalizedBuiltin(const char* id,
     auto it = externalized_builtin_sources.find(id);
     if (it != externalized_builtin_sources.end()) {
       source = it->second;
-    }
-    {
+    } else {
       int r = ReadFileSync(&source, filename);
       if (r != 0) {
         fprintf(stderr,
@@ -256,9 +252,6 @@ bool BuiltinLoader::Add(const char* id, std::string_view utf8source) {
   return Add(id, UnionBytes(out));
 }
 
-// Returns Local<Function> of the compiled module if return_code_cache
-// is false (we are only compiling the function).
-// Otherwise return a Local<Object> containing the cache.
 MaybeLocal<Function> BuiltinLoader::LookupAndCompileInternal(
     Local<Context> context,
     const char* id,
@@ -359,9 +352,6 @@ MaybeLocal<Function> BuiltinLoader::LookupAndCompileInternal(
   return scope.Escape(fun);
 }
 
-// Returns Local<Function> of the compiled module if return_code_cache
-// is false (we are only compiling the function).
-// Otherwise return a Local<Object> containing the cache.
 MaybeLocal<Function> BuiltinLoader::LookupAndCompile(Local<Context> context,
                                                      const char* id,
                                                      Realm* optional_realm) {
@@ -369,9 +359,9 @@ MaybeLocal<Function> BuiltinLoader::LookupAndCompile(Local<Context> context,
   std::vector<Local<String>> parameters;
   Isolate* isolate = context->GetIsolate();
   // Detects parameters of the scripts based on module ids.
-  // internal/bootstrap/loaders: process, getLinkedBinding,
-  //                             getInternalBinding, primordials
-  if (strcmp(id, "internal/bootstrap/loaders") == 0) {
+  // internal/bootstrap/realm: process, getLinkedBinding,
+  //                           getInternalBinding, primordials
+  if (strcmp(id, "internal/bootstrap/realm") == 0) {
     parameters = {
         FIXED_ONE_BYTE_STRING(isolate, "process"),
         FIXED_ONE_BYTE_STRING(isolate, "getLinkedBinding"),
@@ -397,12 +387,6 @@ MaybeLocal<Function> BuiltinLoader::LookupAndCompile(Local<Context> context,
         FIXED_ONE_BYTE_STRING(isolate, "require"),
         FIXED_ONE_BYTE_STRING(isolate, "internalBinding"),
         FIXED_ONE_BYTE_STRING(isolate, "primordials"),
-    };
-  } else if (strncmp(id, "embedder_main_", strlen("embedder_main_")) == 0) {
-    // Synthetic embedder main scripts from LoadEnvironment(): process, require
-    parameters = {
-        FIXED_ONE_BYTE_STRING(isolate, "process"),
-        FIXED_ONE_BYTE_STRING(isolate, "require"),
     };
   } else {
     // others: exports, require, module, process, internalBinding, primordials
@@ -433,9 +417,9 @@ MaybeLocal<Value> BuiltinLoader::CompileAndCall(Local<Context> context,
   // BuiltinLoader::LookupAndCompile().
   std::vector<Local<Value>> arguments;
   // Detects parameters of the scripts based on module ids.
-  // internal/bootstrap/loaders: process, getLinkedBinding,
-  //                             getInternalBinding, primordials
-  if (strcmp(id, "internal/bootstrap/loaders") == 0) {
+  // internal/bootstrap/realm: process, getLinkedBinding,
+  //                           getInternalBinding, primordials
+  if (strcmp(id, "internal/bootstrap/realm") == 0) {
     Local<Value> get_linked_binding;
     Local<Value> get_internal_binding;
     if (!NewFunctionTemplate(isolate, binding::GetLinkedBinding)
@@ -460,12 +444,6 @@ MaybeLocal<Value> BuiltinLoader::CompileAndCall(Local<Context> context,
                  realm->builtin_module_require(),
                  realm->internal_binding_loader(),
                  realm->primordials()};
-  } else if (strncmp(id, "embedder_main_", strlen("embedder_main_")) == 0) {
-    // Synthetic embedder main scripts from LoadEnvironment(): process, require
-    arguments = {
-        realm->process_object(),
-        realm->builtin_module_require(),
-    };
   } else {
     // This should be invoked with the other CompileAndCall() methods, as
     // we are unable to generate the arguments.
@@ -672,6 +650,16 @@ void BuiltinLoader::HasCachedBuiltins(const FunctionCallbackInfo<Value>& args) {
       args.GetIsolate(), instance->code_cache_->has_code_cache));
 }
 
+void SetInternalLoaders(const FunctionCallbackInfo<Value>& args) {
+  Realm* realm = Realm::GetCurrent(args);
+  CHECK(args[0]->IsFunction());
+  CHECK(args[1]->IsFunction());
+  DCHECK(realm->internal_binding_loader().IsEmpty());
+  DCHECK(realm->builtin_module_require().IsEmpty());
+  realm->set_internal_binding_loader(args[0].As<Function>());
+  realm->set_builtin_module_require(args[1].As<Function>());
+}
+
 void BuiltinLoader::CopySourceAndCodeCacheReferenceFrom(
     const BuiltinLoader* other) {
   code_cache_ = other->code_cache_;
@@ -710,6 +698,7 @@ void BuiltinLoader::CreatePerIsolateProperties(IsolateData* isolate_data,
   SetMethod(isolate, proto, "getCacheUsage", BuiltinLoader::GetCacheUsage);
   SetMethod(isolate, proto, "compileFunction", BuiltinLoader::CompileFunction);
   SetMethod(isolate, proto, "hasCachedBuiltins", HasCachedBuiltins);
+  SetMethod(isolate, proto, "setInternalLoaders", SetInternalLoaders);
 }
 
 void BuiltinLoader::CreatePerContextProperties(Local<Object> target,
@@ -728,6 +717,7 @@ void BuiltinLoader::RegisterExternalReferences(
   registry->Register(GetCacheUsage);
   registry->Register(CompileFunction);
   registry->Register(HasCachedBuiltins);
+  registry->Register(SetInternalLoaders);
 }
 
 }  // namespace builtins

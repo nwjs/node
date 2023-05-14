@@ -642,6 +642,12 @@ environment variables.
 If set, `NODE_COMMON_PORT`'s value overrides the `common.PORT` default value of
 12346\.
 
+### `NODE_REGENERATE_SNAPSHOTS`
+
+If set, test snapshots for a the current test are regenerated.
+for example `NODE_REGENERATE_SNAPSHOTS=1 out/Release/node test/parallel/test-runner-output.mjs`
+will update all the test runner output snapshots.
+
 ### `NODE_SKIP_FLAG_CHECK`
 
 If set, command line arguments passed to individual tests are not validated.
@@ -1005,9 +1011,12 @@ The `tmpdir` module supports the use of a temporary directory for testing.
 
 The realpath of the testing temporary directory.
 
-### `refresh()`
+### `refresh(useSpawn)`
 
-Deletes and recreates the testing temporary directory.
+* `useSpawn` [\<boolean>][<boolean>] default = false
+
+Deletes and recreates the testing temporary directory. When `useSpawn` is true
+this action is performed using `child_process.spawnSync`.
 
 The first time `refresh()` runs, it adds a listener to process `'exit'` that
 cleans the temporary directory. Thus, every file under `tmpdir.path` needs to

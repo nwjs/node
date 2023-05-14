@@ -43,18 +43,22 @@ from testrunner.outproc import test262
 FEATURE_FLAGS = {
     'Intl.NumberFormat-v3': '--harmony-intl-number-format-v3',
     'Intl.DurationFormat': '--harmony-intl-duration-format',
-    'Symbol.prototype.description': '--harmony-symbol-description',
     'FinalizationRegistry': '--harmony-weak-refs-with-cleanup-some',
     'WeakRef': '--harmony-weak-refs-with-cleanup-some',
     'host-gc-required': '--expose-gc-as=v8GC',
     'IsHTMLDDA': '--allow-natives-syntax',
     'import-assertions': '--harmony-import-assertions',
-    'resizable-arraybuffer': '--harmony-rab-gsab',
+    'resizable-arraybuffer': '--harmony-rab-gsab-transfer',
     'Temporal': '--harmony-temporal',
     'array-find-from-last': '--harmony-array-find-last',
     'ShadowRealm': '--harmony-shadow-realm',
     'regexp-v-flag': '--harmony-regexp-unicode-sets',
     'array-grouping': '--harmony-array-grouping',
+    'change-array-by-copy': '--harmony-change-array-by-copy',
+    'symbols-as-weakmap-keys': '--harmony-symbol-as-weakmap-key',
+    'String.prototype.isWellFormed': '--harmony-string-is-well-formed',
+    'String.prototype.toWellFormed': '--harmony-string-is-well-formed',
+    'arraybuffer-transfer': '--harmony-rab-gsab-transfer',
 }
 
 SKIPPED_FEATURES = set([])
@@ -195,18 +199,20 @@ class TestCase(testcase.D8TestCase):
     return tokens[:2] == ["built-ins", "Atomics"]
 
   def _get_files_params(self):
-    return (
-        list(self.suite.harness) +
-        ([os.path.join(self.suite.root, "harness-agent.js")]
-         if self.__needs_harness_agent() else []) +
-        ([os.path.join(self.suite.root, "harness-ishtmldda.js")]
-         if "IsHTMLDDA" in self.test_record.get("features", []) else []) +
-        ([os.path.join(self.suite.root, "harness-adapt-donotevaluate.js")]
-         if self.fail_phase_only and not self._fail_phase_reverse else []) +
-        self._get_includes() +
-        (["--module"] if "module" in self.test_record else []) +
-        [self._get_source_path()]
-    )
+    harness_args = []
+    if "raw" not in self.test_record.get("flags", []):
+      harness_args = list(self.suite.harness)
+    return (harness_args + ([os.path.join(self.suite.root, "harness-agent.js")]
+                            if self.__needs_harness_agent() else []) +
+            ([os.path.join(self.suite.root, "harness-ishtmldda.js")]
+             if "IsHTMLDDA" in self.test_record.get("features", []) else []) +
+            ([os.path.join(self.suite.root, "harness-adapt-donotevaluate.js")]
+             if self.fail_phase_only and not self._fail_phase_reverse else []) +
+            ([os.path.join(self.suite.root, "harness-done.js")]
+             if "async" in self.test_record.get("flags", []) else []) +
+            self._get_includes() +
+            (["--module"] if "module" in self.test_record else []) +
+            [self._get_source_path()])
 
   def _get_suite_flags(self):
     return (

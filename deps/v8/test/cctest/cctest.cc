@@ -44,7 +44,10 @@
 #include "src/codegen/compiler.h"
 #include "src/codegen/optimized-compilation-info.h"
 #include "src/common/globals.h"
+#include "src/init/v8.h"
+#ifdef V8_ENABLE_TURBOFAN
 #include "src/compiler/pipeline.h"
+#endif  // V8_ENABLE_TURBOFAN
 #include "src/flags/flags.h"
 #include "src/objects/objects-inl.h"
 #include "src/trap-handler/trap-handler.h"
@@ -117,7 +120,7 @@ void CcTest::Run(const char* snapshot_directory) {
   } else {
     platform = std::move(underlying_default_platform);
   }
-  v8::V8::InitializePlatform(platform.get());
+  i::V8::InitializePlatformForTesting(platform.get());
   cppgc::InitializeProcess(platform->GetPageAllocator());
 
   // Allow changing flags in cctests.
@@ -311,6 +314,7 @@ HandleAndZoneScope::HandleAndZoneScope(bool support_zone_compression)
 
 HandleAndZoneScope::~HandleAndZoneScope() = default;
 
+#ifdef V8_ENABLE_TURBOFAN
 i::Handle<i::JSFunction> Optimize(
     i::Handle<i::JSFunction> function, i::Zone* zone, i::Isolate* isolate,
     uint32_t flags, std::unique_ptr<i::compiler::JSHeapBroker>* out_broker) {
@@ -333,14 +337,13 @@ i::Handle<i::JSFunction> Optimize(
   CHECK(info.shared_info()->HasBytecodeArray());
   i::JSFunction::EnsureFeedbackVector(isolate, function, &is_compiled_scope);
 
-  i::Handle<i::CodeT> code = i::ToCodeT(
+  i::Handle<i::Code> code =
       i::compiler::Pipeline::GenerateCodeForTesting(&info, isolate, out_broker)
-          .ToHandleChecked(),
-      isolate);
-  info.native_context().AddOptimizedCode(*code);
+          .ToHandleChecked();
   function->set_code(*code, v8::kReleaseStore);
   return function;
 }
+#endif  // V8_ENABLE_TURBOFAN
 
 static void PrintTestList() {
   int test_num = 0;
@@ -440,8 +443,6 @@ ManualGCScope::ManualGCScope(i::Isolate* isolate)
       flag_concurrent_sweeping_(i::v8_flags.concurrent_sweeping),
       flag_concurrent_minor_mc_marking_(
           i::v8_flags.concurrent_minor_mc_marking),
-      flag_concurrent_minor_mc_sweeping_(
-          i::v8_flags.concurrent_minor_mc_sweeping),
       flag_stress_concurrent_allocation_(
           i::v8_flags.stress_concurrent_allocation),
       flag_stress_incremental_marking_(i::v8_flags.stress_incremental_marking),
@@ -458,7 +459,6 @@ ManualGCScope::ManualGCScope(i::Isolate* isolate)
   i::v8_flags.concurrent_marking = false;
   i::v8_flags.concurrent_sweeping = false;
   i::v8_flags.concurrent_minor_mc_marking = false;
-  i::v8_flags.concurrent_minor_mc_sweeping = false;
   i::v8_flags.stress_incremental_marking = false;
   i::v8_flags.stress_concurrent_allocation = false;
   // Parallel marking has a dependency on concurrent marking.
@@ -470,7 +470,6 @@ ManualGCScope::~ManualGCScope() {
   i::v8_flags.concurrent_marking = flag_concurrent_marking_;
   i::v8_flags.concurrent_sweeping = flag_concurrent_sweeping_;
   i::v8_flags.concurrent_minor_mc_marking = flag_concurrent_minor_mc_marking_;
-  i::v8_flags.concurrent_minor_mc_sweeping = flag_concurrent_minor_mc_sweeping_;
   i::v8_flags.stress_concurrent_allocation = flag_stress_concurrent_allocation_;
   i::v8_flags.stress_incremental_marking = flag_stress_incremental_marking_;
   i::v8_flags.parallel_marking = flag_parallel_marking_;

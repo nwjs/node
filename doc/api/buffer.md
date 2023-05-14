@@ -5051,10 +5051,14 @@ See [`Buffer.from(string[, encoding])`][`Buffer.from(string)`].
 ## Class: `File`
 
 <!-- YAML
-added: v19.2.0
+added:
+  - v19.2.0
+  - v18.13.0
+changes:
+  - version: v20.0.0
+    pr-url: https://github.com/nodejs/node/pull/47153
+    description: No longer experimental.
 -->
-
-> Stability: 1 - Experimental
 
 * Extends: {Blob}
 
@@ -5063,7 +5067,9 @@ A [`File`][] provides information about files.
 ### `new buffer.File(sources, fileName[, options])`
 
 <!-- YAML
-added: v19.2.0
+added:
+  - v19.2.0
+  - v18.13.0
 -->
 
 * `sources` {string\[]|ArrayBuffer\[]|TypedArray\[]|DataView\[]|Blob\[]|File\[]}
@@ -5081,7 +5087,9 @@ added: v19.2.0
 ### `file.name`
 
 <!-- YAML
-added: v19.2.0
+added:
+  - v19.2.0
+  - v18.13.0
 -->
 
 * Type: {string}
@@ -5091,7 +5099,9 @@ The name of the `File`.
 ### `file.lastModified`
 
 <!-- YAML
-added: v19.2.0
+added:
+  - v19.2.0
+  - v18.13.0
 -->
 
 * Type: {number}
@@ -5155,7 +5165,9 @@ and binary data should be performed using `Buffer.from(str, 'base64')` and
 ### `buffer.isAscii(input)`
 
 <!-- YAML
-added: v19.6.0
+added:
+  - v19.6.0
+  - v18.15.0
 -->
 
 * input {Buffer | ArrayBuffer | TypedArray} The input to validate.
@@ -5169,7 +5181,9 @@ Throws if the `input` is a detached array buffer.
 ### `buffer.isUtf8(input)`
 
 <!-- YAML
-added: v19.4.0
+added:
+  - v19.4.0
+  - v18.14.0
 -->
 
 * input {Buffer | ArrayBuffer | TypedArray} The input to validate.

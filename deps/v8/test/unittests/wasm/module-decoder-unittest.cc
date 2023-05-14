@@ -78,12 +78,6 @@ namespace module_decoder_unittest {
                     'i', 'n', 't'),                                        \
           __VA_ARGS__)
 
-#define FAIL_IF_NO_EXPERIMENTAL_EH(data)                                 \
-  do {                                                                   \
-    ModuleResult result = DecodeModule((data), (data) + sizeof((data))); \
-    EXPECT_FALSE(result.ok());                                           \
-  } while (false)
-
 #define X1(...) __VA_ARGS__
 #define X2(...) __VA_ARGS__, __VA_ARGS__
 #define X3(...) __VA_ARGS__, __VA_ARGS__, __VA_ARGS__
@@ -122,27 +116,27 @@ namespace module_decoder_unittest {
   kWasmArrayTypeCode, type, (mutability ? 1 : 0)
 #define WASM_FUNCTION_DEF(...) kWasmFunctionTypeCode, __VA_ARGS__
 
-#define EXPECT_VERIFIES(data)                                       \
-  do {                                                              \
-    ModuleResult _result = DecodeModule(data, data + sizeof(data)); \
-    EXPECT_OK(_result);                                             \
+#define EXPECT_VERIFIES(data)                                     \
+  do {                                                            \
+    ModuleResult _result = DecodeModule(base::ArrayVector(data)); \
+    EXPECT_OK(_result);                                           \
   } while (false)
 
-#define EXPECT_FAILURE_LEN(data, length)                      \
-  do {                                                        \
-    ModuleResult _result = DecodeModule(data, data + length); \
-    EXPECT_FALSE(_result.ok());                               \
+#define EXPECT_FAILURE_LEN(data, length)                               \
+  do {                                                                 \
+    ModuleResult _result = DecodeModule(base::VectorOf(data, length)); \
+    EXPECT_FALSE(_result.ok());                                        \
   } while (false)
 
 #define EXPECT_FAILURE(data) EXPECT_FAILURE_LEN(data, sizeof(data))
 
-#define EXPECT_FAILURE_WITH_MSG(data, msg)                          \
-  do {                                                              \
-    ModuleResult _result = DecodeModule(data, data + sizeof(data)); \
-    EXPECT_FALSE(_result.ok());                                     \
-    if (!_result.ok()) {                                            \
-      EXPECT_THAT(_result.error().message(), HasSubstr(msg));       \
-    }                                                               \
+#define EXPECT_FAILURE_WITH_MSG(data, msg)                        \
+  do {                                                            \
+    ModuleResult _result = DecodeModule(base::ArrayVector(data)); \
+    EXPECT_FALSE(_result.ok());                                   \
+    if (!_result.ok()) {                                          \
+      EXPECT_THAT(_result.error().message(), HasSubstr(msg));     \
+    }                                                             \
   } while (false)
 
 #define EXPECT_OFF_END_FAILURE(data, min)                              \
@@ -193,7 +187,7 @@ struct ValueTypePair {
     {kAnyRefCode, kWasmAnyRef},                    // --
     {kEqRefCode, kWasmEqRef},                      // --
     {kI31RefCode, kWasmI31Ref},                    // --
-    {kDataRefCode, kWasmDataRef},                  // --
+    {kStructRefCode, kWasmStructRef},              // --
     {kArrayRefCode, kWasmArrayRef},                // --
     {kNoneCode, kWasmNullRef},                     // --
     {kStringRefCode, kWasmStringRef},              // --
@@ -206,38 +200,30 @@ class WasmModuleVerifyTest : public TestWithIsolateAndZone {
  public:
   WasmFeatures enabled_features_ = WasmFeatures::None();
 
-  ModuleResult DecodeModule(const byte* module_start, const byte* module_end) {
+  ModuleResult DecodeModule(base::Vector<const uint8_t> module_bytes) {
     // Add the wasm magic and version number automatically.
-    size_t size = static_cast<size_t>(module_end - module_start);
+    size_t size = module_bytes.size();
     byte header[] = {WASM_MODULE_HEADER};
     size_t total = sizeof(header) + size;
     auto temp = new byte[total];
     memcpy(temp, header, sizeof(header));
     if (size > 0) {
-      memcpy(temp + sizeof(header), module_start, size);
+      memcpy(temp + sizeof(header), module_bytes.begin(), size);
     }
     ModuleResult result = DecodeWasmModule(
-        enabled_features_, temp, temp + total, false, kWasmOrigin,
-        isolate()->counters(), isolate()->metrics_recorder(),
-        v8::metrics::Recorder::ContextId::Empty(), DecodingMethod::kSync,
-        GetWasmEngine()->allocator());
+        enabled_features_, base::VectorOf(temp, total), false, kWasmOrigin);
     delete[] temp;
     return result;
   }
-  ModuleResult DecodeModuleNoHeader(const byte* module_start,
-                                    const byte* module_end) {
-    return DecodeWasmModule(
-        enabled_features_, module_start, module_end, false, kWasmOrigin,
-        isolate()->counters(), isolate()->metrics_recorder(),
-        v8::metrics::Recorder::ContextId::Empty(), DecodingMethod::kSync,
-        GetWasmEngine()->allocator());
+  ModuleResult DecodeModuleNoHeader(base::Vector<const uint8_t> bytes) {
+    return DecodeWasmModule(enabled_features_, bytes, false, kWasmOrigin);
   }
 };
 
 TEST_F(WasmModuleVerifyTest, WrongMagic) {
   for (uint32_t x = 1; x; x <<= 1) {
     const byte data[] = {U32_LE(kWasmMagic ^ x), U32_LE(kWasmVersion)};
-    ModuleResult result = DecodeModuleNoHeader(data, data + sizeof(data));
+    ModuleResult result = DecodeModuleNoHeader(base::ArrayVector(data));
     EXPECT_FALSE(result.ok());
   }
 }
@@ -245,7 +231,7 @@ TEST_F(WasmModuleVerifyTest, WrongMagic) {
 TEST_F(WasmModuleVerifyTest, WrongVersion) {
   for (uint32_t x = 1; x; x <<= 1) {
     const byte data[] = {U32_LE(kWasmMagic), U32_LE(kWasmVersion ^ x)};
-    ModuleResult result = DecodeModuleNoHeader(data, data + sizeof(data));
+    ModuleResult result = DecodeModuleNoHeader(base::ArrayVector(data));
     EXPECT_FALSE(result.ok());
   }
 }
@@ -253,12 +239,12 @@ TEST_F(WasmModuleVerifyTest, WrongVersion) {
 TEST_F(WasmModuleVerifyTest, WrongSection) {
   constexpr byte kInvalidSection = 0x1c;
   const byte data[] = {kInvalidSection, 0};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_FALSE(result.ok());
 }
 
 TEST_F(WasmModuleVerifyTest, DecodeEmpty) {
-  ModuleResult result = DecodeModule(nullptr, nullptr);
+  ModuleResult result = DecodeModule(base::VectorOf<uint8_t>(nullptr, 0));
   EXPECT_TRUE(result.ok());
 }
 
@@ -273,7 +259,7 @@ TEST_F(WasmModuleVerifyTest, OneGlobal) {
 
   {
     // Should decode to exactly one global.
-    ModuleResult result = DecodeModule(data, data + sizeof(data));
+    ModuleResult result = DecodeModule(base::ArrayVector(data));
     EXPECT_OK(result);
     EXPECT_EQ(1u, result.value()->globals.size());
     EXPECT_EQ(0u, result.value()->functions.size());
@@ -298,7 +284,7 @@ TEST_F(WasmModuleVerifyTest, S128Global) {
                                       kS128Code,       // memory type
                                       0,               // immutable
                                       WASM_SIMD_CONSTANT(v.data()), kExprEnd)};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   if (!CheckHardwareSupportsSimd()) {
     EXPECT_NOT_OK(result, "Wasm SIMD unsupported");
   } else {
@@ -338,7 +324,7 @@ TEST_F(WasmModuleVerifyTest, ExternRefGlobal) {
 
   {
     // Should decode to two globals.
-    ModuleResult result = DecodeModule(data, data + sizeof(data));
+    ModuleResult result = DecodeModule(base::ArrayVector(data));
     EXPECT_OK(result);
     EXPECT_EQ(2u, result.value()->globals.size());
     EXPECT_EQ(2u, result.value()->functions.size());
@@ -381,7 +367,7 @@ TEST_F(WasmModuleVerifyTest, FuncRefGlobal) {
       TWO_EMPTY_BODIES};
   {
     // Should decode to two globals.
-    ModuleResult result = DecodeModule(data, data + sizeof(data));
+    ModuleResult result = DecodeModule(base::ArrayVector(data));
     EXPECT_OK(result);
     EXPECT_EQ(2u, result.value()->globals.size());
     EXPECT_EQ(2u, result.value()->functions.size());
@@ -430,7 +416,7 @@ TEST_F(WasmModuleVerifyTest, ExternRefGlobalWithGlobalInit) {
 
   {
     // Should decode to exactly one global.
-    ModuleResult result = DecodeModule(data, data + sizeof(data));
+    ModuleResult result = DecodeModule(base::ArrayVector(data));
     EXPECT_OK(result);
     EXPECT_EQ(2u, result.value()->globals.size());
     EXPECT_EQ(0u, result.value()->functions.size());
@@ -461,7 +447,7 @@ TEST_F(WasmModuleVerifyTest, NullGlobalWithGlobalInit) {
 
   {
     // Should decode to exactly one global.
-    ModuleResult result = DecodeModule(data, data + sizeof(data));
+    ModuleResult result = DecodeModule(base::ArrayVector(data));
     std::cout << result.error().message() << std::endl;
     EXPECT_OK(result);
     EXPECT_EQ(2u, result.value()->globals.size());
@@ -660,7 +646,7 @@ TEST_F(WasmModuleVerifyTest, GlobalInitializer) {
 
 TEST_F(WasmModuleVerifyTest, ZeroGlobals) {
   static const byte data[] = {SECTION(Global, ENTRY_COUNT(0))};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
 }
 
@@ -730,7 +716,7 @@ TEST_F(WasmModuleVerifyTest, NGlobals) {
       buffer.insert(buffer.end(), data, data + sizeof(data));
     }
 
-    ModuleResult result = DecodeModule(&buffer[0], &buffer[0] + buffer.size());
+    ModuleResult result = DecodeModule(base::VectorOf(buffer));
     EXPECT_OK(result);
   }
 }
@@ -747,7 +733,7 @@ TEST_F(WasmModuleVerifyTest, TwoGlobals) {
 
   {
     // Should decode to exactly two globals.
-    ModuleResult result = DecodeModule(data, data + sizeof(data));
+    ModuleResult result = DecodeModule(base::ArrayVector(data));
     EXPECT_OK(result);
     EXPECT_EQ(2u, result.value()->globals.size());
     EXPECT_EQ(0u, result.value()->functions.size());
@@ -772,7 +758,7 @@ TEST_F(WasmModuleVerifyTest, TwoGlobals) {
 TEST_F(WasmModuleVerifyTest, RefNullGlobal) {
   static const byte data[] = {SECTION(Global, ENTRY_COUNT(1), kFuncRefCode, 1,
                                       WASM_REF_NULL(kFuncRefCode), kExprEnd)};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
 }
 
@@ -780,7 +766,7 @@ TEST_F(WasmModuleVerifyTest, RefNullGlobalInvalid1) {
   WASM_FEATURE_SCOPE(typed_funcref);
   static const byte data[] = {SECTION(Global, ENTRY_COUNT(1), kRefNullCode, 0,
                                       1, WASM_REF_NULL(0), kExprEnd)};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result, "Type index 0 is out of bounds");
 }
 
@@ -788,7 +774,7 @@ TEST_F(WasmModuleVerifyTest, RefNullGlobalInvalid2) {
   WASM_FEATURE_SCOPE(typed_funcref);
   static const byte data[] = {SECTION(Global, ENTRY_COUNT(1), kFuncRefCode, 1,
                                       kExprRefNull, U32V_5(1000001), kExprEnd)};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result,
                 "Type index 1000001 is greater than the maximum number 1000000 "
                 "of type definitions supported by V8");
@@ -1072,20 +1058,68 @@ TEST_F(WasmModuleVerifyTest, InvalidSupertypeInRecGroup) {
   static const byte invalid_supertype[] = {
       SECTION(Type, ENTRY_COUNT(1),                         // --
               kWasmRecursiveTypeGroupCode, ENTRY_COUNT(2),  // --
-              kWasmArrayTypeCode, kI32Code, 0,              // --
-              kWasmSubtypeCode, 1, 0,  // supertype count, supertype
+              kWasmSubtypeCode, 0,              // 0 supertypes, non-final
+              kWasmArrayTypeCode, kI32Code, 0,  // --
+              kWasmSubtypeCode, 1, 0,           // supertype count, supertype
               kWasmArrayTypeCode, kI64Code, 0)};
 
   EXPECT_FAILURE_WITH_MSG(invalid_supertype,
                           "type 1 has invalid explicit supertype 0");
 }
 
+// Tests supertype declaration with 0 supertypes.
+TEST_F(WasmModuleVerifyTest, SuperTypeDeclarationWith0Supertypes) {
+  WASM_FEATURE_SCOPE(typed_funcref);
+  WASM_FEATURE_SCOPE(gc);
+  static const byte zero_supertypes[] = {
+      SECTION(Type, ENTRY_COUNT(1),  // --
+              kWasmSubtypeCode, 0,   // supertype count
+              kWasmArrayTypeCode, kI32Code, 0)};
+
+  EXPECT_VERIFIES(zero_supertypes);
+}
+
+TEST_F(WasmModuleVerifyTest, NoSupertypeSupertype) {
+  WASM_FEATURE_SCOPE(typed_funcref);
+  WASM_FEATURE_SCOPE(gc);
+  static const byte no_supertype[] = {
+      SECTION(Type, ENTRY_COUNT(1),          // --
+              kWasmSubtypeCode, 1,           // supertype count
+              0xff, 0xff, 0xff, 0xff, 0x0f,  // supertype = "kNoSuperType"
+              kWasmArrayTypeCode, kI32Code, 0)};
+
+  EXPECT_FAILURE_WITH_MSG(
+      no_supertype, "is greater than the maximum number of type definitions");
+}
+
+TEST_F(WasmModuleVerifyTest, NonSpecifiedFinalType) {
+  WASM_FEATURE_SCOPE(typed_funcref);
+  WASM_FEATURE_SCOPE(gc);
+  FLAG_SCOPE(wasm_final_types);
+  static const byte final_supertype[] = {
+      SECTION(Type, ENTRY_COUNT(2),                 // --
+              kWasmStructTypeCode, 1, kI32Code, 1,  // --
+              kWasmSubtypeCode, 1, 0,               // --
+              kWasmStructTypeCode, 2, kI32Code, 1, kI32Code, 1)};
+  EXPECT_FAILURE_WITH_MSG(final_supertype, "type 1 extends final type 0");
+}
+
+TEST_F(WasmModuleVerifyTest, SpecifiedFinalType) {
+  WASM_FEATURE_SCOPE(typed_funcref);
+  WASM_FEATURE_SCOPE(gc);
+  FLAG_SCOPE(wasm_final_types);
+  static const byte final_supertype[] = {
+      SECTION(Type, ENTRY_COUNT(2),                 // --
+              kWasmSubtypeFinalCode, 0,             // --
+              kWasmStructTypeCode, 1, kI32Code, 1,  // --
+              kWasmSubtypeCode, 1, 0,               // --
+              kWasmStructTypeCode, 2, kI32Code, 1, kI32Code, 1)};
+  EXPECT_FAILURE_WITH_MSG(final_supertype, "type 1 extends final type 0");
+}
+
 TEST_F(WasmModuleVerifyTest, ZeroExceptions) {
   static const byte data[] = {SECTION(Tag, ENTRY_COUNT(0))};
-  FAIL_IF_NO_EXPERIMENTAL_EH(data);
-
-  WASM_FEATURE_SCOPE(eh);
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
   EXPECT_EQ(0u, result.value()->tags.size());
 }
@@ -1095,10 +1129,7 @@ TEST_F(WasmModuleVerifyTest, OneI32Exception) {
       SECTION(Type, ENTRY_COUNT(1), SIG_ENTRY_v_x(kI32Code)),  // sig#0 (i32)
       SECTION(Tag, ENTRY_COUNT(1),
               EXCEPTION_ENTRY(SIG_INDEX(0)))};  // except[0] (sig#0)
-  FAIL_IF_NO_EXPERIMENTAL_EH(data);
-
-  WASM_FEATURE_SCOPE(eh);
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
   EXPECT_EQ(1u, result.value()->tags.size());
 
@@ -1115,10 +1146,7 @@ TEST_F(WasmModuleVerifyTest, TwoExceptions) {
       SECTION(Tag, ENTRY_COUNT(2),
               EXCEPTION_ENTRY(SIG_INDEX(1)),    // except[0] (sig#1)
               EXCEPTION_ENTRY(SIG_INDEX(0)))};  // except[1] (sig#0)
-  FAIL_IF_NO_EXPERIMENTAL_EH(data);
-
-  WASM_FEATURE_SCOPE(eh);
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
   EXPECT_EQ(2u, result.value()->tags.size());
   const WasmTag& e0 = result.value()->tags.front();
@@ -1135,12 +1163,9 @@ TEST_F(WasmModuleVerifyTest, Exception_invalid_sig_index) {
       SECTION(Tag, ENTRY_COUNT(1),
               EXCEPTION_ENTRY(
                   SIG_INDEX(23)))};  // except[0] (sig#23 [out-of-bounds])
-  FAIL_IF_NO_EXPERIMENTAL_EH(data);
-
   // Should fail decoding exception section.
-  WASM_FEATURE_SCOPE(eh);
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
-  EXPECT_NOT_OK(result, "signature index 23 out of bounds");
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
+  EXPECT_NOT_OK(result, "no signature at index 23 (1 signatures)");
 }
 
 TEST_F(WasmModuleVerifyTest, Exception_invalid_sig_return) {
@@ -1149,11 +1174,8 @@ TEST_F(WasmModuleVerifyTest, Exception_invalid_sig_return) {
       SECTION(Tag, ENTRY_COUNT(1),
               EXCEPTION_ENTRY(
                   SIG_INDEX(0)))};  // except[0] (sig#0 [invalid-return-type])
-  FAIL_IF_NO_EXPERIMENTAL_EH(data);
-
   // Should fail decoding exception section.
-  WASM_FEATURE_SCOPE(eh);
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result, "tag signature 0 has non-void return");
 }
 
@@ -1162,11 +1184,8 @@ TEST_F(WasmModuleVerifyTest, Exception_invalid_attribute) {
       SECTION(Type, ENTRY_COUNT(1), SIG_ENTRY_i_i),
       SECTION(Tag, ENTRY_COUNT(1), 23,
               SIG_INDEX(0))};  // except[0] (sig#0) [invalid-attribute]
-  FAIL_IF_NO_EXPERIMENTAL_EH(data);
-
   // Should fail decoding exception section.
-  WASM_FEATURE_SCOPE(eh);
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result, "exception attribute 23 not supported");
 }
 
@@ -1174,20 +1193,14 @@ TEST_F(WasmModuleVerifyTest, TagSectionCorrectPlacement) {
   static const byte data[] = {SECTION(Memory, ENTRY_COUNT(0)),
                               SECTION(Tag, ENTRY_COUNT(0)),
                               SECTION(Global, ENTRY_COUNT(0))};
-  FAIL_IF_NO_EXPERIMENTAL_EH(data);
-
-  WASM_FEATURE_SCOPE(eh);
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
 }
 
 TEST_F(WasmModuleVerifyTest, TagSectionAfterGlobal) {
   static const byte data[] = {SECTION(Global, ENTRY_COUNT(0)),
                               SECTION(Tag, ENTRY_COUNT(0))};
-  FAIL_IF_NO_EXPERIMENTAL_EH(data);
-
-  WASM_FEATURE_SCOPE(eh);
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result,
                 "The Tag section must appear before the Global section");
 }
@@ -1195,10 +1208,7 @@ TEST_F(WasmModuleVerifyTest, TagSectionAfterGlobal) {
 TEST_F(WasmModuleVerifyTest, TagSectionBeforeMemory) {
   static const byte data[] = {SECTION(Tag, ENTRY_COUNT(0)),
                               SECTION(Memory, ENTRY_COUNT(0))};
-  FAIL_IF_NO_EXPERIMENTAL_EH(data);
-
-  WASM_FEATURE_SCOPE(eh);
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result, "unexpected section <Memory>");
 }
 
@@ -1207,10 +1217,7 @@ TEST_F(WasmModuleVerifyTest, TagSectionAfterTableBeforeMemory) {
   static const byte data[] = {SECTION(Table, ENTRY_COUNT(0)),
                               SECTION(Tag, ENTRY_COUNT(0)),
                               SECTION(Memory, ENTRY_COUNT(0))};
-  FAIL_IF_NO_EXPERIMENTAL_EH(data);
-
-  WASM_FEATURE_SCOPE(eh);
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result, "unexpected section <Memory>");
 }
 
@@ -1223,10 +1230,7 @@ TEST_F(WasmModuleVerifyTest, TagImport) {
               ADD_COUNT('e', 'x'),              // tag name
               kExternalTag,                     // import kind
               EXCEPTION_ENTRY(SIG_INDEX(0)))};  // except[0] (sig#0)
-  FAIL_IF_NO_EXPERIMENTAL_EH(data);
-
-  WASM_FEATURE_SCOPE(eh);
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
   EXPECT_EQ(1u, result.value()->tags.size());
   EXPECT_EQ(1u, result.value()->import_table.size());
@@ -1241,10 +1245,7 @@ TEST_F(WasmModuleVerifyTest, ExceptionExport) {
               NO_NAME,                         // --
               kExternalTag,                    // --
               EXCEPTION_INDEX(0))};
-  FAIL_IF_NO_EXPERIMENTAL_EH(data);
-
-  WASM_FEATURE_SCOPE(eh);
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
   EXPECT_EQ(1u, result.value()->tags.size());
   EXPECT_EQ(1u, result.value()->export_table.size());
@@ -1271,7 +1272,7 @@ TEST_F(WasmModuleVerifyTest, MultipleSignatures) {
               SIG_ENTRY_x_xx(kI32Code, kF64Code, kF64Code)),  // f64,f64 -> i32
   };
 
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
   EXPECT_EQ(3u, result.value()->types.size());
   if (result.value()->types.size() == 3) {
@@ -1303,7 +1304,7 @@ TEST_F(WasmModuleVerifyTest, CanonicalTypeIds) {
               WASM_ARRAY_DEF(kI32Code, true))     // Array definition
   };
 
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
   const WasmModule* module = result.value().get();
 
@@ -1338,7 +1339,7 @@ TEST_F(WasmModuleVerifyTest, DataSegmentWithImmutableImportedGlobal) {
               U32V_1(3),                 // source size
               'a', 'b', 'c')             // data bytes
   };
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
 }
 
@@ -1388,7 +1389,7 @@ TEST_F(WasmModuleVerifyTest, OneDataSegment) {
 
   {
     EXPECT_VERIFIES(data);
-    ModuleResult result = DecodeModule(data, data + sizeof(data));
+    ModuleResult result = DecodeModule(base::ArrayVector(data));
     EXPECT_OK(result);
     EXPECT_EQ(0u, result.value()->globals.size());
     EXPECT_EQ(0u, result.value()->functions.size());
@@ -1422,7 +1423,7 @@ TEST_F(WasmModuleVerifyTest, TwoDataSegments) {
   };
 
   {
-    ModuleResult result = DecodeModule(data, data + sizeof(data));
+    ModuleResult result = DecodeModule(base::ArrayVector(data));
     EXPECT_OK(result);
     EXPECT_EQ(0u, result.value()->globals.size());
     EXPECT_EQ(0u, result.value()->functions.size());
@@ -1510,7 +1511,7 @@ TEST_F(WasmModuleVerifyTest, OneIndirectFunction) {
       // code ----------------------------------------------------------------
       ONE_EMPTY_BODY};
 
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
   if (result.ok()) {
     EXPECT_EQ(1u, result.value()->types.size());
@@ -1597,7 +1598,7 @@ TEST_F(WasmModuleVerifyTest, OneIndirectFunction_one_entry) {
       // code ----------------------------------------------------------------
       ONE_EMPTY_BODY};
 
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
   EXPECT_EQ(1u, result.value()->types.size());
   EXPECT_EQ(1u, result.value()->functions.size());
@@ -1625,7 +1626,7 @@ TEST_F(WasmModuleVerifyTest, MultipleIndirectFunctions) {
                         FUNC_INDEX(2), FUNC_INDEX(3))),
       FOUR_EMPTY_BODIES};
 
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
   EXPECT_EQ(2u, result.value()->types.size());
   EXPECT_EQ(4u, result.value()->functions.size());
@@ -2029,7 +2030,7 @@ TEST_F(WasmModuleVerifyTest, MultipleTables) {
               11),             // table 2: minimum size
   };
 
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
 
   EXPECT_EQ(2u, result.value()->tables.size());
@@ -2051,7 +2052,7 @@ TEST_F(WasmModuleVerifyTest, TypedFunctionTable) {
               kRefNullCode, 0,  // table 0: type
               0, 10)};          // table 0: limits
 
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
   EXPECT_EQ(ValueType::RefNull(0), result.value()->tables[0].type);
 }
@@ -2094,7 +2095,7 @@ TEST_F(WasmModuleVerifyTest, IllegalTableTypes) {
     // Add table limits
     data.insert(data.end(), {byte{0}, byte{10}});
 
-    auto result = DecodeModule(data.data(), data.data() + data.size());
+    auto result = DecodeModule(base::VectorOf(data));
     EXPECT_NOT_OK(result, "Only reference types can be used as table types");
   }
 }
@@ -2112,7 +2113,7 @@ TEST_F(WasmModuleVerifyTest, TableWithInitializer) {
               0, 10,                                 // table 0: limits
               kExprRefFunc, 0, kExprEnd),            // table 0: initial value
       SECTION(Code, ENTRY_COUNT(1), NOP_BODY)};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
   EXPECT_EQ(ValueType::RefNull(0), result.value()->tables[0].type);
 }
@@ -2130,7 +2131,7 @@ TEST_F(WasmModuleVerifyTest, NonNullableTable) {
               0, 10,                                 // table 0: limits
               kExprRefFunc, 0, kExprEnd),            // table 0: initial value
       SECTION(Code, ENTRY_COUNT(1), NOP_BODY)};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
   EXPECT_EQ(ValueType::Ref(0), result.value()->tables[0].type);
 }
@@ -2162,7 +2163,7 @@ TEST_F(WasmModuleVerifyTest, TieringCompilationHints) {
       SECTION(Code, ENTRY_COUNT(3), NOP_BODY, NOP_BODY, NOP_BODY),
   };
 
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
 
   EXPECT_EQ(3u, result.value()->compilation_hints.size());
@@ -2200,7 +2201,7 @@ TEST_F(WasmModuleVerifyTest, BranchHinting) {
               ADD_COUNT(0, /*no locals*/
                         WASM_BLOCK(WASM_BR_IF(0, WASM_I32V_1(1))), WASM_END))};
 
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
 
   EXPECT_EQ(2u, result.value()->branch_hints.size());
@@ -2214,18 +2215,18 @@ class WasmSignatureDecodeTest : public TestWithZone {
  public:
   WasmFeatures enabled_features_ = WasmFeatures::None();
 
-  const FunctionSig* DecodeSig(const byte* start, const byte* end) {
+  const FunctionSig* DecodeSig(base::Vector<const uint8_t> bytes) {
     Result<const FunctionSig*> res =
-        DecodeWasmSignatureForTesting(enabled_features_, zone(), start, end);
+        DecodeWasmSignatureForTesting(enabled_features_, zone(), bytes);
     EXPECT_TRUE(res.ok()) << res.error().message() << " at offset "
                           << res.error().offset();
     return res.ok() ? res.value() : nullptr;
   }
 
-  V8_NODISCARD testing::AssertionResult DecodeSigError(const byte* start,
-                                                       const byte* end) {
+  V8_NODISCARD testing::AssertionResult DecodeSigError(
+      base::Vector<const uint8_t> bytes) {
     Result<const FunctionSig*> res =
-        DecodeWasmSignatureForTesting(enabled_features_, zone(), start, end);
+        DecodeWasmSignatureForTesting(enabled_features_, zone(), bytes);
     if (res.ok()) {
       return testing::AssertionFailure() << "unexpected valid signature";
     }
@@ -2237,7 +2238,7 @@ TEST_F(WasmSignatureDecodeTest, Ok_v_v) {
   static const byte data[] = {SIG_ENTRY_v_v};
   v8::internal::AccountingAllocator allocator;
   Zone zone(&allocator, ZONE_NAME);
-  const FunctionSig* sig = DecodeSig(data, data + sizeof(data));
+  const FunctionSig* sig = DecodeSig(base::ArrayVector(data));
 
   ASSERT_TRUE(sig != nullptr);
   EXPECT_EQ(0u, sig->parameter_count());
@@ -2251,7 +2252,7 @@ TEST_F(WasmSignatureDecodeTest, Ok_t_v) {
   for (size_t i = 0; i < arraysize(kValueTypes); i++) {
     ValueTypePair ret_type = kValueTypes[i];
     const byte data[] = {SIG_ENTRY_x(ret_type.code)};
-    const FunctionSig* sig = DecodeSig(data, data + sizeof(data));
+    const FunctionSig* sig = DecodeSig(base::ArrayVector(data));
 
     SCOPED_TRACE("Return type " + ret_type.type.name());
     ASSERT_TRUE(sig != nullptr);
@@ -2268,7 +2269,7 @@ TEST_F(WasmSignatureDecodeTest, Ok_v_t) {
   for (size_t i = 0; i < arraysize(kValueTypes); i++) {
     ValueTypePair param_type = kValueTypes[i];
     const byte data[] = {SIG_ENTRY_v_x(param_type.code)};
-    const FunctionSig* sig = DecodeSig(data, data + sizeof(data));
+    const FunctionSig* sig = DecodeSig(base::ArrayVector(data));
 
     SCOPED_TRACE("Param type " + param_type.type.name());
     ASSERT_TRUE(sig != nullptr);
@@ -2287,7 +2288,7 @@ TEST_F(WasmSignatureDecodeTest, Ok_t_t) {
     for (size_t j = 0; j < arraysize(kValueTypes); j++) {
       ValueTypePair param_type = kValueTypes[j];
       const byte data[] = {SIG_ENTRY_x_x(ret_type.code, param_type.code)};
-      const FunctionSig* sig = DecodeSig(data, data + sizeof(data));
+      const FunctionSig* sig = DecodeSig(base::ArrayVector(data));
 
       SCOPED_TRACE("Param type " + param_type.type.name());
       ASSERT_TRUE(sig != nullptr);
@@ -2309,7 +2310,7 @@ TEST_F(WasmSignatureDecodeTest, Ok_i_tt) {
       ValueTypePair p1_type = kValueTypes[j];
       const byte data[] = {
           SIG_ENTRY_x_xx(kI32Code, p0_type.code, p1_type.code)};
-      const FunctionSig* sig = DecodeSig(data, data + sizeof(data));
+      const FunctionSig* sig = DecodeSig(base::ArrayVector(data));
 
       SCOPED_TRACE("Signature i32(" + p0_type.type.name() + ", " +
                    p1_type.type.name() + ")");
@@ -2332,7 +2333,7 @@ TEST_F(WasmSignatureDecodeTest, Ok_tt_tt) {
       ValueTypePair p1_type = kValueTypes[j];
       const byte data[] = {SIG_ENTRY_xx_xx(p0_type.code, p1_type.code,
                                            p0_type.code, p1_type.code)};
-      const FunctionSig* sig = DecodeSig(data, data + sizeof(data));
+      const FunctionSig* sig = DecodeSig(base::ArrayVector(data));
 
       SCOPED_TRACE("p0 = " + p0_type.type.name() +
                    ", p1 = " + p1_type.type.name());
@@ -2351,10 +2352,10 @@ TEST_F(WasmSignatureDecodeTest, Simd) {
   WASM_FEATURE_SCOPE(simd);
   const byte data[] = {SIG_ENTRY_x(kS128Code)};
   if (!CheckHardwareSupportsSimd()) {
-    EXPECT_TRUE(DecodeSigError(data, data + sizeof(data)))
+    EXPECT_TRUE(DecodeSigError(base::ArrayVector(data)))
         << "Type S128 should not be allowed on this hardware";
   } else {
-    const FunctionSig* sig = DecodeSig(data, data + sizeof(data));
+    const FunctionSig* sig = DecodeSig(base::ArrayVector(data));
     ASSERT_TRUE(sig != nullptr);
     EXPECT_EQ(0u, sig->parameter_count());
     EXPECT_EQ(1u, sig->return_count());
@@ -2366,14 +2367,14 @@ TEST_F(WasmSignatureDecodeTest, TooManyParams) {
   static const byte data[] = {kWasmFunctionTypeCode,
                               WASM_I32V_3(kV8MaxWasmFunctionParams + 1),
                               kI32Code, 0};
-  EXPECT_TRUE(DecodeSigError(data, data + sizeof(data)));
+  EXPECT_TRUE(DecodeSigError(base::ArrayVector(data)));
 }
 
 TEST_F(WasmSignatureDecodeTest, TooManyReturns) {
   for (int i = 0; i < 2; i++) {
     byte data[] = {kWasmFunctionTypeCode, 0,
                    WASM_I32V_3(kV8MaxWasmFunctionReturns + 1), kI32Code};
-    EXPECT_TRUE(DecodeSigError(data, data + sizeof(data)));
+    EXPECT_TRUE(DecodeSigError(base::ArrayVector(data)));
   }
 }
 
@@ -2385,7 +2386,7 @@ TEST_F(WasmSignatureDecodeTest, Fail_off_end) {
 
     for (int i = 0; i < p + 1; i++) {
       // Should fall off the end for all signatures.
-      EXPECT_TRUE(DecodeSigError(data, data + sizeof(data)));
+      EXPECT_TRUE(DecodeSigError(base::ArrayVector(data)));
     }
   }
 }
@@ -2396,35 +2397,32 @@ TEST_F(WasmSignatureDecodeTest, Fail_invalid_type) {
     byte data[] = {SIG_ENTRY_x_xx(kI32Code, kI32Code, kI32Code)};
     if (i >= arraysize(data)) break;
     data[i] = kInvalidType;
-    EXPECT_TRUE(DecodeSigError(data, data + sizeof(data)));
+    EXPECT_TRUE(DecodeSigError(base::ArrayVector(data)));
   }
 }
 
 TEST_F(WasmSignatureDecodeTest, Fail_invalid_ret_type1) {
   static const byte data[] = {SIG_ENTRY_x_x(kVoidCode, kI32Code)};
-  EXPECT_TRUE(DecodeSigError(data, data + sizeof(data)));
+  EXPECT_TRUE(DecodeSigError(base::ArrayVector(data)));
 }
 
 TEST_F(WasmSignatureDecodeTest, Fail_invalid_param_type1) {
   static const byte data[] = {SIG_ENTRY_x_x(kI32Code, kVoidCode)};
-  EXPECT_TRUE(DecodeSigError(data, data + sizeof(data)));
+  EXPECT_TRUE(DecodeSigError(base::ArrayVector(data)));
 }
 
 TEST_F(WasmSignatureDecodeTest, Fail_invalid_param_type2) {
   static const byte data[] = {SIG_ENTRY_x_xx(kI32Code, kI32Code, kVoidCode)};
-  EXPECT_TRUE(DecodeSigError(data, data + sizeof(data)));
+  EXPECT_TRUE(DecodeSigError(base::ArrayVector(data)));
 }
 
 class WasmFunctionVerifyTest : public TestWithIsolateAndZone {
  public:
-  FunctionResult DecodeWasmFunction(const ModuleWireBytes& wire_bytes,
-                                    const WasmModule* module,
-                                    const byte* function_start,
-                                    const byte* function_end) {
-    WasmFeatures enabled_features;
-    return DecodeWasmFunctionForTesting(enabled_features, zone(), wire_bytes,
-                                        module, function_start, function_end,
-                                        isolate()->counters());
+  FunctionResult DecodeWasmFunction(
+      ModuleWireBytes wire_bytes, const WasmModule* module,
+      base::Vector<const uint8_t> function_bytes) {
+    return DecodeWasmFunctionForTesting(WasmFeatures::All(), zone(), wire_bytes,
+                                        module, function_bytes);
   }
 };
 
@@ -2444,8 +2442,8 @@ TEST_F(WasmFunctionVerifyTest, Ok_v_v_empty) {
   };
 
   WasmModule module;
-  FunctionResult result = DecodeWasmFunction(ModuleWireBytes({}), &module, data,
-                                             data + sizeof(data));
+  FunctionResult result =
+      DecodeWasmFunction(ModuleWireBytes({}), &module, base::ArrayVector(data));
   EXPECT_OK(result);
 
   if (result.value() && result.ok()) {
@@ -2563,7 +2561,7 @@ TEST_F(WasmModuleVerifyTest, UnknownSectionSkipped) {
               0,                           // exported
               WASM_INIT_EXPR_I32V_1(33)),  // init
   };
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
 
   EXPECT_EQ(1u, result.value()->globals.size());
@@ -2700,7 +2698,7 @@ TEST_F(WasmModuleVerifyTest, ExportTable_empty1) {
                               SECTION(Export, ENTRY_COUNT(0)),  // --
                               ONE_EMPTY_BODY};
 
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
 
   EXPECT_EQ(1u, result.value()->functions.size());
@@ -2728,7 +2726,7 @@ TEST_F(WasmModuleVerifyTest, ExportTableOne) {
               kExternalFunction,  // --
               FUNC_INDEX(0)),     // --
       ONE_EMPTY_BODY};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
 
   EXPECT_EQ(1u, result.value()->functions.size());
@@ -2765,7 +2763,7 @@ TEST_F(WasmModuleVerifyTest, ExportTableTwo) {
               FUNC_INDEX(0)),                 // --
       ONE_EMPTY_BODY};
 
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
 
   EXPECT_EQ(1u, result.value()->functions.size());
@@ -2788,7 +2786,7 @@ TEST_F(WasmModuleVerifyTest, ExportTableThree) {
               kExternalFunction,
               FUNC_INDEX(2)),  // --
       THREE_EMPTY_BODIES};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
 
   EXPECT_EQ(3u, result.value()->functions.size());
@@ -2866,7 +2864,7 @@ TEST_F(WasmModuleVerifyTest, FunctionBodySizeLimit) {
     size_t total = sizeof(data) + body_size;
     byte* buffer = reinterpret_cast<byte*>(calloc(1, total));
     memcpy(buffer, data, sizeof(data));
-    ModuleResult result = DecodeModule(buffer, buffer + total);
+    ModuleResult result = DecodeModule(base::VectorOf(buffer, total));
     if (body_size <= kV8MaxWasmFunctionSize) {
       EXPECT_TRUE(result.ok());
     } else {
@@ -2982,13 +2980,13 @@ TEST_F(WasmModuleVerifyTest, FunctionSectionWithoutCodeSection) {
       TYPE_SECTION(1, SIG_ENTRY_v_v),  // Type section.
       FUNCTION_SECTION(1, 0),          // Function section.
   };
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result, "function count is 1, but code section is absent");
 }
 
 TEST_F(WasmModuleVerifyTest, CodeSectionWithoutFunctionSection) {
   static const byte data[] = {ONE_EMPTY_BODY};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result, "function body count 1 mismatch (0 expected)");
 }
 
@@ -3030,10 +3028,10 @@ TEST_F(WasmModuleVerifyTest, Section_Name_No_UTF8) {
 
 class WasmModuleCustomSectionTest : public TestWithIsolateAndZone {
  public:
-  void CheckSections(const byte* module_start, const byte* module_end,
+  void CheckSections(base::Vector<const uint8_t> wire_bytes,
                      const CustomSectionOffset* expected, size_t num_expected) {
     std::vector<CustomSectionOffset> custom_sections =
-        DecodeCustomSections(module_start, module_end);
+        DecodeCustomSections(wire_bytes);
 
     CHECK_EQ(num_expected, custom_sections.size());
 
@@ -3068,7 +3066,7 @@ TEST_F(WasmModuleCustomSectionTest, ThreeUnknownSections) {
       {{27, 8}, {28, 5}, {33, 2}},  // --
   };
 
-  CheckSections(data, data + sizeof(data), expected, arraysize(expected));
+  CheckSections(base::ArrayVector(data), expected, arraysize(expected));
 }
 
 TEST_F(WasmModuleCustomSectionTest, TwoKnownTwoUnknownSections) {
@@ -3087,18 +3085,18 @@ TEST_F(WasmModuleCustomSectionTest, TwoKnownTwoUnknownSections) {
       {{29, 8}, {30, 5}, {35, 2}},  // --
   };
 
-  CheckSections(data, data + sizeof(data), expected, arraysize(expected));
+  CheckSections(base::ArrayVector(data), expected, arraysize(expected));
 }
 
 TEST_F(WasmModuleVerifyTest, SourceMappingURLSection) {
   static const byte data[] = {
       WASM_MODULE_HEADER,
       SECTION_SRC_MAP('s', 'r', 'c', '/', 'x', 'y', 'z', '.', 'c')};
-  ModuleResult result = DecodeModuleNoHeader(data, data + sizeof(data));
+  ModuleResult result = DecodeModuleNoHeader(base::ArrayVector(data));
   EXPECT_TRUE(result.ok());
   EXPECT_EQ(WasmDebugSymbols::Type::SourceMap,
             result.value()->debug_symbols.type);
-  ModuleWireBytes wire_bytes(data, data + sizeof(data));
+  ModuleWireBytes wire_bytes(base::ArrayVector(data));
   WasmName external_url =
       wire_bytes.GetNameOrNull(result.value()->debug_symbols.external_url);
   EXPECT_EQ("src/xyz.c", std::string(external_url.data(), external_url.size()));
@@ -3108,7 +3106,7 @@ TEST_F(WasmModuleVerifyTest, BadSourceMappingURLSection) {
   static const byte data[] = {
       WASM_MODULE_HEADER,
       SECTION_SRC_MAP('s', 'r', 'c', '/', 'x', 0xff, 'z', '.', 'c')};
-  ModuleResult result = DecodeModuleNoHeader(data, data + sizeof(data));
+  ModuleResult result = DecodeModuleNoHeader(base::ArrayVector(data));
   EXPECT_TRUE(result.ok());
   EXPECT_EQ(WasmDebugSymbols::Type::None, result.value()->debug_symbols.type);
   EXPECT_EQ(0u, result.value()->debug_symbols.external_url.length());
@@ -3118,11 +3116,11 @@ TEST_F(WasmModuleVerifyTest, MultipleSourceMappingURLSections) {
   static const byte data[] = {WASM_MODULE_HEADER,
                               SECTION_SRC_MAP('a', 'b', 'c'),
                               SECTION_SRC_MAP('p', 'q', 'r')};
-  ModuleResult result = DecodeModuleNoHeader(data, data + sizeof(data));
+  ModuleResult result = DecodeModuleNoHeader(base::ArrayVector(data));
   EXPECT_TRUE(result.ok());
   EXPECT_EQ(WasmDebugSymbols::Type::SourceMap,
             result.value()->debug_symbols.type);
-  ModuleWireBytes wire_bytes(data, data + sizeof(data));
+  ModuleWireBytes wire_bytes(base::ArrayVector(data));
   WasmName external_url =
       wire_bytes.GetNameOrNull(result.value()->debug_symbols.external_url);
   EXPECT_EQ("abc", std::string(external_url.data(), external_url.size()));
@@ -3132,7 +3130,7 @@ TEST_F(WasmModuleVerifyTest, MultipleNameSections) {
   static const byte data[] = {
       SECTION_NAMES(0, ADD_COUNT(ADD_COUNT('a', 'b', 'c'))),
       SECTION_NAMES(0, ADD_COUNT(ADD_COUNT('p', 'q', 'r', 's')))};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_TRUE(result.ok());
   EXPECT_EQ(3u, result.value()->name.length());
 }
@@ -3140,7 +3138,7 @@ TEST_F(WasmModuleVerifyTest, MultipleNameSections) {
 TEST_F(WasmModuleVerifyTest, BadNameSection) {
   static const byte data[] = {SECTION_NAMES(
       0, ADD_COUNT(ADD_COUNT('s', 'r', 'c', '/', 'x', 0xff, 'z', '.', 'c')))};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_TRUE(result.ok());
   EXPECT_EQ(0u, result.value()->name.length());
 }
@@ -3271,7 +3269,7 @@ TEST_F(WasmModuleVerifyTest, DataCountSectionCorrectPlacement) {
 TEST_F(WasmModuleVerifyTest, DataCountSectionAfterCode) {
   static const byte data[] = {SECTION(Code, ENTRY_COUNT(0)),
                               SECTION(DataCount, ENTRY_COUNT(0))};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result,
                 "The DataCount section must appear before the Code section");
 }
@@ -3279,7 +3277,7 @@ TEST_F(WasmModuleVerifyTest, DataCountSectionAfterCode) {
 TEST_F(WasmModuleVerifyTest, DataCountSectionBeforeElement) {
   static const byte data[] = {SECTION(DataCount, ENTRY_COUNT(0)),
                               SECTION(Element, ENTRY_COUNT(0))};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result, "unexpected section <Element>");
 }
 
@@ -3295,14 +3293,14 @@ TEST_F(WasmModuleVerifyTest, DataCountSectionAfterStartBeforeElement) {
       SECTION(DataCount, ENTRY_COUNT(0)),  // DataCount section.
       SECTION(Element, ENTRY_COUNT(0))     // Element section.
   };
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result, "unexpected section <Element>");
 }
 
 TEST_F(WasmModuleVerifyTest, MultipleDataCountSections) {
   static const byte data[] = {SECTION(DataCount, ENTRY_COUNT(0)),
                               SECTION(DataCount, ENTRY_COUNT(0))};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result, "Multiple DataCount sections not allowed");
 }
 
@@ -3321,7 +3319,7 @@ TEST_F(WasmModuleVerifyTest, DataCountSegmentCount_greater) {
       SECTION(Memory, ENTRY_COUNT(1), 0, 1),  // Memory section.
       SECTION(DataCount, ENTRY_COUNT(3)),     // DataCount section.
       SECTION(Data, ENTRY_COUNT(0))};         // Data section.
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result, "data segments count 0 mismatch (3 expected)");
 }
 
@@ -3331,14 +3329,14 @@ TEST_F(WasmModuleVerifyTest, DataCountSegmentCount_less) {
       SECTION(DataCount, ENTRY_COUNT(0)),     // DataCount section.
       SECTION(Data, ENTRY_COUNT(1), LINEAR_MEMORY_INDEX_0,  // Data section.
               WASM_INIT_EXPR_I32V_1(12), ADD_COUNT('a', 'b', 'c'))};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result, "data segments count 1 mismatch (0 expected)");
 }
 
 TEST_F(WasmModuleVerifyTest, DataCountSegmentCount_omitted) {
   static const byte data[] = {SECTION(Memory, ENTRY_COUNT(1), 0, 1),
                               SECTION(DataCount, ENTRY_COUNT(1))};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result, "data segments count 0 mismatch (1 expected)");
 }
 
@@ -3355,7 +3353,7 @@ TEST_F(WasmModuleVerifyTest, GcStructIdsPass) {
       WASM_STRUCT_DEF(FIELD_COUNT(2), STRUCT_FIELD(WASM_OPT_REF(0), true),
                       STRUCT_FIELD(WASM_OPT_REF(2), true)),
       WASM_ARRAY_DEF(WASM_OPT_REF(0), true))};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_OK(result);
 }
 
@@ -3363,28 +3361,64 @@ TEST_F(WasmModuleVerifyTest, OutOfBoundsTypeInGlobal) {
   WASM_FEATURE_SCOPE(typed_funcref);
   static const byte data[] = {
       SECTION(Global, ENTRY_COUNT(1), kRefCode, 0, WASM_REF_NULL(0), kExprEnd)};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result, "Type index 0 is out of bounds");
 }
 
 TEST_F(WasmModuleVerifyTest, OutOfBoundsTypeInType) {
   WASM_FEATURE_SCOPE(typed_funcref);
   WASM_FEATURE_SCOPE(gc);
-  static const byte data[] = {
-      SECTION(Type, ENTRY_COUNT(1),
-              WASM_STRUCT_DEF(FIELD_COUNT(1), STRUCT_FIELD(kRefCode, true)))};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  static const byte data[] = {SECTION(
+      Type, ENTRY_COUNT(1),
+      WASM_STRUCT_DEF(FIELD_COUNT(1),
+                      STRUCT_FIELD(WASM_REF_TYPE(ValueType::Ref(1)), true)))};
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result, "Type index 1 is out of bounds");
 }
 
-TEST_F(WasmModuleVerifyTest, ForwardSupertype) {
+TEST_F(WasmModuleVerifyTest, RecursiveTypeOutsideRecursiveGroup) {
+  WASM_FEATURE_SCOPE(typed_funcref);
+  WASM_FEATURE_SCOPE(gc);
+  static const byte data[] = {
+      SECTION(Type, ENTRY_COUNT(1),
+              WASM_STRUCT_DEF(
+                  FIELD_COUNT(1),
+                  STRUCT_FIELD(WASM_REF_TYPE(ValueType::RefNull(0)), true)))};
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
+  EXPECT_OK(result);
+}
+
+TEST_F(WasmModuleVerifyTest, OutOfBoundsSupertype) {
+  WASM_FEATURE_SCOPE(typed_funcref);
+  WASM_FEATURE_SCOPE(gc);
+  static const byte data[] = {
+      SECTION(Type, ENTRY_COUNT(1), kWasmRecursiveTypeGroupCode, ENTRY_COUNT(1),
+              kWasmSubtypeCode, ENTRY_COUNT(1), 1,
+              WASM_STRUCT_DEF(FIELD_COUNT(1), STRUCT_FIELD(kI32Code, true)))};
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
+  EXPECT_NOT_OK(result, "type 0: supertype 1 out of bounds");
+}
+
+TEST_F(WasmModuleVerifyTest, ForwardSupertypeSameType) {
   WASM_FEATURE_SCOPE(typed_funcref);
   WASM_FEATURE_SCOPE(gc);
   static const byte data[] = {
       SECTION(Type, ENTRY_COUNT(1), kWasmRecursiveTypeGroupCode, ENTRY_COUNT(1),
               kWasmSubtypeCode, ENTRY_COUNT(1), 0,
-              WASM_STRUCT_DEF(FIELD_COUNT(1), STRUCT_FIELD(kRefCode, true)))};
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+              WASM_STRUCT_DEF(FIELD_COUNT(1), STRUCT_FIELD(kI32Code, true)))};
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
+  EXPECT_NOT_OK(result, "type 0: forward-declared supertype 0");
+}
+
+TEST_F(WasmModuleVerifyTest, ForwardSupertypeSameRecGroup) {
+  WASM_FEATURE_SCOPE(typed_funcref);
+  WASM_FEATURE_SCOPE(gc);
+  static const byte data[] = {
+      SECTION(Type, ENTRY_COUNT(1), kWasmRecursiveTypeGroupCode, ENTRY_COUNT(2),
+              kWasmSubtypeCode, ENTRY_COUNT(1), 0,
+              WASM_STRUCT_DEF(FIELD_COUNT(1), STRUCT_FIELD(kI32Code, true)),
+              WASM_STRUCT_DEF(FIELD_COUNT(1), STRUCT_FIELD(kI32Code, true)))};
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
   EXPECT_NOT_OK(result, "type 0: forward-declared supertype 0");
 }
 
@@ -3395,7 +3429,7 @@ TEST_F(WasmModuleVerifyTest, IllegalPackedFields) {
   static const byte data[] = {
       SECTION(Global, ENTRY_COUNT(1), kI16Code, 0, WASM_INIT_EXPR_I32V_1(13))};
 
-  ModuleResult result = DecodeModule(data, data + sizeof(data));
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
 
   EXPECT_NOT_OK(result, "invalid value type");
 }
@@ -3459,7 +3493,6 @@ TEST_F(WasmModuleVerifyTest, Memory64DataSegment) {
 #undef EMPTY_NAMES_SECTION
 #undef SECTION_SRC_MAP
 #undef SECTION_COMPILATION_HINTS
-#undef FAIL_IF_NO_EXPERIMENTAL_EH
 #undef X1
 #undef X2
 #undef X3

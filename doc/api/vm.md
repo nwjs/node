@@ -347,7 +347,9 @@ console.log(globalVar);
 ### `script.sourceMapURL`
 
 <!-- YAML
-added: v19.1.0
+added:
+  - v19.1.0
+  - v18.13.0
 -->
 
 * {string|undefined}
@@ -745,6 +747,8 @@ changes:
     `cachedData` was created.
   * `context` {Object} The [contextified][] object as returned by the
     `vm.createContext()` method, to compile and evaluate this `Module` in.
+    If no context is specified, the module is evaluated in the current
+    execution context.
   * `lineOffset` {integer} Specifies the line number offset that is displayed
     in stack traces produced by this `Module`. **Default:** `0`.
   * `columnOffset` {integer} Specifies the first-line column number offset that
@@ -964,6 +968,7 @@ added: v10.10.0
 changes:
   - version:
     - v19.6.0
+    - v18.15.0
     pr-url: https://github.com/nodejs/node/pull/46320
     description: The return value now includes `cachedDataRejected`
                  with the same semantics as the `vm.Script` version

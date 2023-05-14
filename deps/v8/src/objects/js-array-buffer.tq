@@ -12,6 +12,7 @@ bitfield struct JSArrayBufferFlags extends uint32 {
 }
 
 extern class JSArrayBuffer extends JSObjectWithEmbedderSlots {
+  detach_key: Object;
   // A BoundedSize if the sandbox is enabled
   raw_byte_length: uintptr;
   // A BoundedSize if the sandbox is enabled
@@ -123,10 +124,15 @@ macro IsOnHeapTypedArray(array: JSTypedArray): bool {
   return TaggedNotEqual(array.base_pointer, SmiConstant(0));
 }
 
-extern class JSDataView extends JSArrayBufferView {
+@abstract
+extern class JSDataViewOrRabGsabDataView extends JSArrayBufferView {
   // A SandboxedPtr if the sandbox is enabled
   data_pointer: RawPtr;
 }
+
+extern class JSDataView extends JSDataViewOrRabGsabDataView {}
+
+extern class JSRabGsabDataView extends JSDataViewOrRabGsabDataView {}
 
 @abstract
 @doNotGenerateCast extern class TypedArrayConstructor extends JSFunction

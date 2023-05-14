@@ -72,8 +72,12 @@ class V8_EXPORT_PRIVATE JSCallReducer final : public AdvancedReducer {
   JSGraph* JSGraphForGraphAssembler() const { return jsgraph(); }
 
   bool has_wasm_calls() const { return has_wasm_calls_; }
+  const wasm::WasmModule* wasm_module_for_inlining() const {
+    return wasm_module_for_inlining_;
+  }
 
   CompilationDependencies* dependencies() const;
+  JSHeapBroker* broker() const { return broker_; }
 
  private:
   Reduction ReduceBooleanConstructor(Node* node);
@@ -181,6 +185,9 @@ class V8_EXPORT_PRIVATE JSCallReducer final : public AdvancedReducer {
   Reduction ReduceTypedArrayConstructor(Node* node,
                                         const SharedFunctionInfoRef& shared);
   Reduction ReduceTypedArrayPrototypeToStringTag(Node* node);
+  Reduction ReduceArrayBufferViewByteLengthAccessor(Node* node,
+                                                    InstanceType instance_type);
+  Reduction ReduceTypedArrayPrototypeLength(Node* node);
 
   Reduction ReduceForInsufficientFeedback(Node* node, DeoptimizeReason reason);
 
@@ -216,7 +223,8 @@ class V8_EXPORT_PRIVATE JSCallReducer final : public AdvancedReducer {
   Reduction ReduceArrayBufferIsView(Node* node);
   Reduction ReduceArrayBufferViewAccessor(Node* node,
                                           InstanceType instance_type,
-                                          FieldAccess const& access);
+                                          FieldAccess const& access,
+                                          Builtin builtin);
 
   enum class DataViewAccess { kGet, kSet };
   Reduction ReduceDataViewAccess(Node* node, DataViewAccess access,
@@ -227,10 +235,16 @@ class V8_EXPORT_PRIVATE JSCallReducer final : public AdvancedReducer {
   Reduction ReduceNumberParseInt(Node* node);
 
   Reduction ReduceNumberConstructor(Node* node);
+  Reduction ReduceBigIntConstructor(Node* node);
   Reduction ReduceBigIntAsN(Node* node, Builtin builtin);
+
+  base::Optional<Reduction> TryReduceJSCallMathMinMaxWithArrayLike(Node* node);
+  Reduction ReduceJSCallMathMinMaxWithArrayLike(Node* node, Builtin builtin);
 
   // The pendant to ReplaceWithValue when using GraphAssembler-based reductions.
   Reduction ReplaceWithSubgraph(JSCallReducerAssembler* gasm, Node* subgraph);
+  std::pair<Node*, Node*> ReleaseEffectAndControlFromAssembler(
+      JSCallReducerAssembler* gasm);
 
   // Helper to verify promise receiver maps are as expected.
   // On bailout from a reduction, be sure to return inference.NoChange().
@@ -258,7 +272,6 @@ class V8_EXPORT_PRIVATE JSCallReducer final : public AdvancedReducer {
 
   Graph* graph() const;
   JSGraph* jsgraph() const { return jsgraph_; }
-  JSHeapBroker* broker() const { return broker_; }
   Zone* temp_zone() const { return temp_zone_; }
   Isolate* isolate() const;
   Factory* factory() const;
@@ -278,6 +291,7 @@ class V8_EXPORT_PRIVATE JSCallReducer final : public AdvancedReducer {
   std::unordered_set<Node*> generated_calls_with_array_like_or_spread_;
 
   bool has_wasm_calls_ = false;
+  const wasm::WasmModule* wasm_module_for_inlining_ = nullptr;
 };
 
 }  // namespace compiler

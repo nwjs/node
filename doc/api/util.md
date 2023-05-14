@@ -1027,7 +1027,9 @@ equality.
 ## Class: `util.MIMEType`
 
 <!-- YAML
-added: v19.1.0
+added:
+  - v19.1.0
+  - v18.13.0
 -->
 
 > Stability: 1 - Experimental
@@ -1226,7 +1228,9 @@ console.log(JSON.stringify(myMIMES));
 ### Class: `util.MIMEParams`
 
 <!-- YAML
-added: v19.1.0
+added:
+  - v19.1.0
+  - v18.13.0
 -->
 
 The `MIMEParams` API provides read and write access to the parameters of a
@@ -1380,7 +1384,13 @@ added:
   - v18.3.0
   - v16.17.0
 changes:
-  - version: v18.11.0
+  - version:
+    - v20.0.0
+    pr-url: https://github.com/nodejs/node/pull/46718
+    description: The API is no longer experimental.
+  - version:
+    - v18.11.0
+    - v16.19.0
     pr-url: https://github.com/nodejs/node/pull/44631
     description: Add support for default values in input `config`.
   - version:
@@ -1390,8 +1400,6 @@ changes:
     description: add support for returning detailed parse information
                  using `tokens` in input `config` and returned properties.
 -->
-
-> Stability: 1 - Experimental
 
 * `config` {Object} Used to provide arguments for parsing and to configure
   the parser. `config` supports the following properties:
@@ -1470,9 +1478,6 @@ const {
 console.log(values, positionals);
 // Prints: [Object: null prototype] { foo: true, bar: 'b' } []
 ```
-
-`util.parseArgs` is experimental and behavior may change. Join the
-conversation in [pkgjs/parseargs][] to contribute to the design.
 
 ### `parseArgs` `tokens`
 
@@ -2510,12 +2515,43 @@ added: v10.0.0
 * `value` {any}
 * Returns: {boolean}
 
-Returns `true` if the value is an instance of a built-in [`Error`][] type.
+Returns `true` if the value was returned by the constructor of a
+[built-in `Error` type][].
 
 ```js
-util.types.isNativeError(new Error());  // Returns true
-util.types.isNativeError(new TypeError());  // Returns true
-util.types.isNativeError(new RangeError());  // Returns true
+console.log(util.types.isNativeError(new Error()));  // true
+console.log(util.types.isNativeError(new TypeError()));  // true
+console.log(util.types.isNativeError(new RangeError()));  // true
+```
+
+Subclasses of the native error types are also native errors:
+
+```js
+class MyError extends Error {}
+console.log(util.types.isNativeError(new MyError()));  // true
+```
+
+A value being `instanceof` a native error class is not equivalent to `isNativeError()`
+returning `true` for that value. `isNativeError()` returns `true` for errors
+which come from a different [realm][] while `instanceof Error` returns `false`
+for these errors:
+
+```js
+const vm = require('node:vm');
+const context = vm.createContext({});
+const myError = vm.runInContext('new Error', context);
+console.log(util.types.isNativeError(myError)); // true
+console.log(myError instanceof Error); // false
+```
+
+Conversely, `isNativeError()` returns `false` for all objects which were not
+returned by the constructor of a native error. That includes values
+which are `instanceof` native errors:
+
+```js
+const myError = { __proto__: Error.prototype };
+console.log(util.types.isNativeError(myError)); // false
+console.log(myError instanceof Error); // true
 ```
 
 ### `util.types.isNumberObject(value)`
@@ -3330,11 +3366,12 @@ util.log('Timestamped message.');
 [`util.types.isNativeError()`]: #utiltypesisnativeerrorvalue
 [`util.types.isSharedArrayBuffer()`]: #utiltypesissharedarraybuffervalue
 [async function]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function
+[built-in `Error` type]: https://tc39.es/ecma262/#sec-error-objects
 [compare function]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort#Parameters
 [constructor]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/constructor
 [default sort]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort
 [global symbol registry]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/for
 [list of deprecated APIS]: deprecations.md#list-of-deprecated-apis
-[pkgjs/parseargs]: https://github.com/pkgjs/parseargs
+[realm]: https://tc39.es/ecma262/#realm
 [semantically incompatible]: https://github.com/nodejs/node/issues/4179
 [util.inspect.custom]: #utilinspectcustom

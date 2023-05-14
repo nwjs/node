@@ -24,7 +24,7 @@
   V(napi_type_tag, "node:napi:type_tag")                                       \
   V(napi_wrapper, "node:napi:wrapper")                                         \
   V(untransferable_object_private_symbol, "node:untransferableObject")         \
-  V(exiting_aliased_Uint32Array, "node:exiting_aliased_Uint32Array")           \
+  V(exit_info_private_symbol, "node:exit_info_private_symbol")                 \
   V(require_private_symbol, "node:require_private_symbol")
 
 // Symbols are per-isolate primitives but Environment proxies them
@@ -115,7 +115,6 @@
   V(errno_string, "errno")                                                     \
   V(error_string, "error")                                                     \
   V(exchange_string, "exchange")                                               \
-  V(exit_code_string, "exitCode")                                              \
   V(expire_string, "expire")                                                   \
   V(exponent_string, "exponent")                                               \
   V(exports_string, "exports")                                                 \
@@ -136,6 +135,7 @@
   V(frames_received_string, "framesReceived")                                  \
   V(frames_sent_string, "framesSent")                                          \
   V(function_string, "function")                                               \
+  V(get_string, "get")                                                         \
   V(get_data_clone_error_string, "_getDataCloneError")                         \
   V(get_shared_array_buffer_id_string, "_getSharedArrayBufferId")              \
   V(gid_string, "gid")                                                         \
@@ -233,6 +233,7 @@
   V(password_string, "password")                                               \
   V(path_string, "path")                                                       \
   V(pending_handle_string, "pendingHandle")                                    \
+  V(permission_string, "permission")                                           \
   V(pid_string, "pid")                                                         \
   V(ping_rtt_string, "pingRTT")                                                \
   V(pipe_source_string, "pipeSource")                                          \
@@ -260,6 +261,7 @@
   V(rename_string, "rename")                                                   \
   V(replacement_string, "replacement")                                         \
   V(require_string, "require")                                                 \
+  V(resource_string, "resource")                                               \
   V(retry_string, "retry")                                                     \
   V(salt_length_string, "saltLength")                                          \
   V(scheme_string, "scheme")                                                   \
@@ -269,6 +271,7 @@
   V(servername_string, "servername")                                           \
   V(service_string, "service")                                                 \
   V(session_id_string, "sessionId")                                            \
+  V(set_string, "set")                                                         \
   V(shell_string, "shell")                                                     \
   V(signal_string, "signal")                                                   \
   V(sink_string, "sink")                                                       \
@@ -327,7 +330,6 @@
 #define PER_ISOLATE_TEMPLATE_PROPERTIES(V)                                     \
   V(async_wrap_ctor_template, v8::FunctionTemplate)                            \
   V(async_wrap_object_ctor_template, v8::FunctionTemplate)                     \
-  V(base_object_ctor_template, v8::FunctionTemplate)                           \
   V(binding_data_ctor_template, v8::FunctionTemplate)                          \
   V(blob_constructor_template, v8::FunctionTemplate)                           \
   V(blob_reader_constructor_template, v8::FunctionTemplate)                    \
@@ -414,7 +416,6 @@
   V(message_port, v8::Object)                                                  \
   V(builtin_module_require, v8::Function)                                      \
   V(performance_entry_callback, v8::Function)                                  \
-  V(performance_entry_template, v8::Function)                                  \
   V(prepare_stack_trace_callback, v8::Function)                                \
   V(process_object, v8::Object)                                                \
   V(primordials, v8::Object)                                                   \

@@ -67,6 +67,21 @@ describe('Loader hooks', { concurrency: true }, () => {
       assert.strictEqual(code, 0);
       assert.strictEqual(signal, null);
     });
+
+    it('import.meta.resolve of a never-settling resolve', async () => {
+      const { code, signal, stdout, stderr } = await spawnPromisified(execPath, [
+        '--no-warnings',
+        '--experimental-import-meta-resolve',
+        '--experimental-loader',
+        fixtures.fileURL('es-module-loaders/never-settling-resolve-step/loader.mjs'),
+        fixtures.path('es-module-loaders/never-settling-resolve-step/import.meta.never-resolve.mjs'),
+      ]);
+
+      assert.strictEqual(stderr, '');
+      assert.match(stdout, /^should be output\r?\n$/);
+      assert.strictEqual(code, 13);
+      assert.strictEqual(signal, null);
+    });
   });
 
   describe('should handle never-settling hooks in CJS files', { concurrency: true }, () => {
@@ -112,5 +127,72 @@ describe('Loader hooks', { concurrency: true }, () => {
       assert.strictEqual(code, 0);
       assert.strictEqual(signal, null);
     });
+  });
+
+  it('should work without worker permission', async () => {
+    const { code, signal, stdout, stderr } = await spawnPromisified(execPath, [
+      '--no-warnings',
+      '--experimental-permission',
+      '--allow-fs-read',
+      '*',
+      '--experimental-loader',
+      fixtures.fileURL('empty.js'),
+      fixtures.path('es-modules/esm-top-level-await.mjs'),
+    ]);
+
+    assert.strictEqual(stderr, '');
+    assert.match(stdout, /^1\r?\n2\r?\n$/);
+    assert.strictEqual(code, 0);
+    assert.strictEqual(signal, null);
+  });
+
+  it('should allow loader hooks to spawn workers when allowed by the CLI flags', async () => {
+    const { code, signal, stdout, stderr } = await spawnPromisified(execPath, [
+      '--no-warnings',
+      '--experimental-permission',
+      '--allow-worker',
+      '--allow-fs-read',
+      '*',
+      '--experimental-loader',
+      `data:text/javascript,import{Worker}from"worker_threads";new Worker(${encodeURIComponent(JSON.stringify(fixtures.path('empty.js')))}).unref()`,
+      fixtures.path('es-modules/esm-top-level-await.mjs'),
+    ]);
+
+    assert.strictEqual(stderr, '');
+    assert.match(stdout, /^1\r?\n2\r?\n$/);
+    assert.strictEqual(code, 0);
+    assert.strictEqual(signal, null);
+  });
+
+  it('should not allow loader hooks to spawn workers if restricted by the CLI flags', async () => {
+    const { code, signal, stdout, stderr } = await spawnPromisified(execPath, [
+      '--no-warnings',
+      '--experimental-permission',
+      '--allow-fs-read',
+      '*',
+      '--experimental-loader',
+      `data:text/javascript,import{Worker}from"worker_threads";new Worker(${encodeURIComponent(JSON.stringify(fixtures.path('empty.js')))}).unref()`,
+      fixtures.path('es-modules/esm-top-level-await.mjs'),
+    ]);
+
+    assert.match(stderr, /code: 'ERR_ACCESS_DENIED'/);
+    assert.strictEqual(stdout, '');
+    assert.strictEqual(code, 1);
+    assert.strictEqual(signal, null);
+  });
+
+  it('should not leak internals or expose import.meta.resolve', async () => {
+    const { code, signal, stdout, stderr } = await spawnPromisified(execPath, [
+      '--no-warnings',
+      '--experimental-import-meta-resolve',
+      '--experimental-loader',
+      fixtures.fileURL('es-module-loaders/loader-edge-cases.mjs'),
+      fixtures.path('empty.js'),
+    ]);
+
+    assert.strictEqual(stderr, '');
+    assert.strictEqual(stdout, '');
+    assert.strictEqual(code, 0);
+    assert.strictEqual(signal, null);
   });
 });

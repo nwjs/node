@@ -5,14 +5,17 @@
 
 #if !defined(DISABLE_SINGLE_EXECUTABLE_APPLICATION)
 
+#include <string_view>
 #include <tuple>
+#include "node_exit_code.h"
 
 namespace node {
 namespace sea {
 
 bool IsSingleExecutable();
+std::string_view FindSingleExecutableCode();
 std::tuple<int, char**> FixupArgsForSEA(int argc, char** argv);
-
+node::ExitCode BuildSingleExecutableBlob(const std::string& config_path);
 }  // namespace sea
 }  // namespace node
 

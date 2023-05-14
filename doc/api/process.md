@@ -1106,7 +1106,9 @@ over the IPC channel using `process.send()`.
 ## `process.constrainedMemory()`
 
 <!-- YAML
-added: v19.6.0
+added:
+  - v19.6.0
+  - v18.15.0
 -->
 
 > Stability: 1 - Experimental
@@ -1725,9 +1727,15 @@ that started the Node.js process. Symbolic links, if any, are resolved.
 
 <!-- YAML
 added: v0.1.13
+changes:
+  - version: v20.0.0
+    pr-url: https://github.com/nodejs/node/pull/43716
+    description: Only accepts a code of type number, or of type string if it
+                 represents an integer.
 -->
 
-* `code` {integer} The exit code. **Default:** `0`.
+* `code` {integer|string|null|undefined} The exit code. For string type, only
+  integer strings (e.g.,'1') are allowed. **Default:** `0`.
 
 The `process.exit()` method instructs Node.js to terminate the process
 synchronously with an exit status of `code`. If `code` is omitted, exit uses
@@ -1827,9 +1835,15 @@ than the current process.
 
 <!-- YAML
 added: v0.11.8
+changes:
+  - version: v20.0.0
+    pr-url: https://github.com/nodejs/node/pull/43716
+    description: Only accepts a code of type number, or of type string if it
+                 represents an integer.
 -->
 
-* {integer}
+* {integer|string|null|undefined} The exit code. For string type, only
+  integer strings (e.g.,'1') are allowed. **Default:** `undefined`.
 
 A number which will be the process exit code, when the process either
 exits gracefully, or is exited via [`process.exit()`][] without specifying
@@ -2361,7 +2375,7 @@ console.log(memoryUsage.rss());
 ```
 
 ```cjs
-const { rss } = require('node:process');
+const { memoryUsage } = require('node:process');
 
 console.log(memoryUsage.rss());
 // 35655680
@@ -2605,6 +2619,51 @@ flag is set on the current Node.js process. See the documentation for
 the [`'warning'` event][process_warning] and the
 [`emitWarning()` method][process_emit_warning] for more information about this
 flag's behavior.
+
+## `process.permission`
+
+<!-- YAML
+added: v20.0.0
+-->
+
+* {Object}
+
+This API is available through the [`--experimental-permission`][] flag.
+
+`process.permission` is an object whose methods are used to manage permissions
+for the current process. Additional documentation is available in the
+[Permission Model][].
+
+### `process.permission.has(scope[, reference])`
+
+<!-- YAML
+added: v20.0.0
+-->
+
+* `scopes` {string}
+* `reference` {string}
+* Returns: {boolean}
+
+Verifies that the process is able to access the given scope and reference.
+If no reference is provided, a global scope is assumed, for instance,
+`process.permission.has('fs.read')` will check if the process has ALL
+file system read permissions.
+
+The reference has a meaning based on the provided scope. For example,
+the reference when the scope is File System means files and folders.
+
+The available scopes are:
+
+* `fs` - All File System
+* `fs.read` - File System read operations
+* `fs.write` - File System write operations
+
+```js
+// Check if the process has permission to read the README file
+process.permission.has('fs.read', './README.md');
+// Check if the process has read permission operations
+process.permission.has('fs.read');
+```
 
 ## `process.pid`
 
@@ -2873,6 +2932,7 @@ present.
 
 ```mjs
 import { report } from 'node:process';
+import util from 'node:util';
 
 const data = report.getReport();
 console.log(data.header.nodejsVersion);
@@ -2884,6 +2944,7 @@ fs.writeFileSync('my-report.log', util.inspect(data), 'utf8');
 
 ```cjs
 const { report } = require('node:process');
+const util = require('node:util');
 
 const data = report.getReport();
 console.log(data.header.nodejsVersion);
@@ -3856,6 +3917,7 @@ cases:
 [Duplex]: stream.md#duplex-and-transform-streams
 [Event Loop]: https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick/#process-nexttick
 [LTS]: https://github.com/nodejs/Release
+[Permission Model]: permissions.md#permission-model
 [Readable]: stream.md#readable-streams
 [Signal Events]: #signal-events
 [Source Map]: https://sourcemaps.info/spec.html
@@ -3865,6 +3927,7 @@ cases:
 [`'exit'`]: #event-exit
 [`'message'`]: child_process.md#event-message
 [`'uncaughtException'`]: #event-uncaughtexception
+[`--experimental-permission`]: cli.md#--experimental-permission
 [`--unhandled-rejections`]: cli.md#--unhandled-rejectionsmode
 [`Buffer`]: buffer.md
 [`ChildProcess.disconnect()`]: child_process.md#subprocessdisconnect

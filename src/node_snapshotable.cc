@@ -18,6 +18,7 @@
 #include "node_metadata.h"
 #include "node_process.h"
 #include "node_snapshot_builder.h"
+#include "node_url.h"
 #include "node_util.h"
 #include "node_v8.h"
 #include "node_v8_platform-inl.h"
@@ -128,7 +129,7 @@ std::ostream& operator<<(std::ostream& output, const EnvSerializeInfo& i) {
          << "// -- performance_state begins --\n"
          << i.performance_state << ",\n"
          << "// -- performance_state ends --\n"
-         << i.exiting << ",  // exiting\n"
+         << i.exit_info << ",  // exit_info\n"
          << i.stream_base_state << ",  // stream_base_state\n"
          << i.should_abort_on_uncaught_toggle
          << ",  // should_abort_on_uncaught_toggle\n"
@@ -166,22 +167,19 @@ class SnapshotSerializerDeserializer {
   V(std::string)
 
 #define V(TypeName)                                                            \
-  if (std::is_same_v<T, TypeName>) {                                           \
+  if constexpr (std::is_same_v<T, TypeName>) {                                 \
     return #TypeName;                                                          \
-  }
+  } else  // NOLINT(readability/braces)
     TYPE_LIST(V)
 #undef V
 
-    std::string name;
-    if (std::is_arithmetic_v<T>) {
-      if (!std::is_signed_v<T>) {
-        name += "u";
-      }
-      name += std::is_integral_v<T> ? "int" : "float";
-      name += std::to_string(sizeof(T) * 8);
-      name += "_t";
+    if constexpr (std::is_arithmetic_v<T>) {
+      return (std::is_unsigned_v<T>   ? "uint"
+              : std::is_integral_v<T> ? "int"
+                                      : "float") +
+             std::to_string(sizeof(T) * 8) + "_t";
     }
-    return name;
+    return "";
   }
 
   bool is_debug = false;
@@ -749,7 +747,7 @@ EnvSerializeInfo SnapshotDeserializer::Read() {
   result.timeout_info = Read<AliasedBufferIndex>();
   result.performance_state =
       Read<performance::PerformanceState::SerializeInfo>();
-  result.exiting = Read<AliasedBufferIndex>();
+  result.exit_info = Read<AliasedBufferIndex>();
   result.stream_base_state = Read<AliasedBufferIndex>();
   result.should_abort_on_uncaught_toggle = Read<AliasedBufferIndex>();
   result.principal_realm = Read<RealmSerializeInfo>();
@@ -770,7 +768,7 @@ size_t SnapshotSerializer::Write(const EnvSerializeInfo& data) {
   written_total += Write<AliasedBufferIndex>(data.timeout_info);
   written_total += Write<performance::PerformanceState::SerializeInfo>(
       data.performance_state);
-  written_total += Write<AliasedBufferIndex>(data.exiting);
+  written_total += Write<AliasedBufferIndex>(data.exit_info);
   written_total += Write<AliasedBufferIndex>(data.stream_base_state);
   written_total +=
       Write<AliasedBufferIndex>(data.should_abort_on_uncaught_toggle);
@@ -1369,18 +1367,7 @@ StartupData SerializeNodeContextInternalFields(Local<Object> holder,
   // (most importantly, BaseObject::kSlot).
   // For Node.js this design is enough for all the native binding that are
   // serializable.
-  if (index != BaseObject::kEmbedderType) {
-    return StartupData{nullptr, 0};
-  }
-
-  void* type_ptr = holder->GetAlignedPointerFromInternalField(index);
-  if (type_ptr == nullptr) {
-    return StartupData{nullptr, 0};
-  }
-
-  uint16_t type = *(static_cast<uint16_t*>(type_ptr));
-  per_process::Debug(DebugCategory::MKSNAPSHOT, "type = 0x%x\n", type);
-  if (type != kNodeEmbedderId) {
+  if (index != BaseObject::kEmbedderType || !BaseObject::IsBaseObject(holder)) {
     return StartupData{nullptr, 0};
   }
 
@@ -1445,19 +1432,25 @@ void SerializeSnapshotableObjects(Realm* realm,
 
 namespace mksnapshot {
 
+// NB: This is also used by the regular embedding codepath.
 void GetEmbedderEntryFunction(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
   Isolate* isolate = env->isolate();
-  if (!env->embedder_mksnapshot_entry_point()) return;
+  if (!env->embedder_entry_point()) return;
   MaybeLocal<Function> jsfn =
       Function::New(isolate->GetCurrentContext(),
                     [](const FunctionCallbackInfo<Value>& args) {
                       Environment* env = Environment::GetCurrent(args);
                       Local<Value> require_fn = args[0];
+                      Local<Value> runcjs_fn = args[1];
                       CHECK(require_fn->IsFunction());
-                      CHECK(env->embedder_mksnapshot_entry_point());
-                      env->embedder_mksnapshot_entry_point()(
-                          {env->process_object(), require_fn.As<Function>()});
+                      CHECK(runcjs_fn->IsFunction());
+                      MaybeLocal<Value> retval = env->embedder_entry_point()(
+                          {env->process_object(),
+                           require_fn.As<Function>(),
+                           runcjs_fn.As<Function>()});
+                      if (!retval.IsEmpty())
+                        args.GetReturnValue().Set(retval.ToLocalChecked());
                     });
   if (!jsfn.IsEmpty()) args.GetReturnValue().Set(jsfn.ToLocalChecked());
 }

@@ -23,6 +23,7 @@ using v8::Isolate;
 using v8::KeyCollectionMode;
 using v8::Local;
 using v8::Object;
+using v8::ObjectTemplate;
 using v8::ONLY_CONFIGURABLE;
 using v8::ONLY_ENUMERABLE;
 using v8::ONLY_WRITABLE;
@@ -262,18 +263,13 @@ void WeakReference::Get(const FunctionCallbackInfo<Value>& args) {
     args.GetReturnValue().Set(weak_ref->target_.Get(isolate));
 }
 
-void WeakReference::GetRef(const FunctionCallbackInfo<Value>& args) {
-  WeakReference* weak_ref = Unwrap<WeakReference>(args.Holder());
-  Isolate* isolate = args.GetIsolate();
-  args.GetReturnValue().Set(
-      v8::Number::New(isolate, weak_ref->reference_count_));
-}
-
 void WeakReference::IncRef(const FunctionCallbackInfo<Value>& args) {
   WeakReference* weak_ref = Unwrap<WeakReference>(args.Holder());
   weak_ref->reference_count_++;
   if (weak_ref->target_.IsEmpty()) return;
   if (weak_ref->reference_count_ == 1) weak_ref->target_.ClearWeak();
+  args.GetReturnValue().Set(
+      v8::Number::New(args.GetIsolate(), weak_ref->reference_count_));
 }
 
 void WeakReference::DecRef(const FunctionCallbackInfo<Value>& args) {
@@ -282,6 +278,8 @@ void WeakReference::DecRef(const FunctionCallbackInfo<Value>& args) {
   weak_ref->reference_count_--;
   if (weak_ref->target_.IsEmpty()) return;
   if (weak_ref->reference_count_ == 0) weak_ref->target_.SetWeak();
+  args.GetReturnValue().Set(
+      v8::Number::New(args.GetIsolate(), weak_ref->reference_count_));
 }
 
 static void GuessHandleType(const FunctionCallbackInfo<Value>& args) {
@@ -365,7 +363,6 @@ void RegisterExternalReferences(ExternalReferenceRegistry* registry) {
   registry->Register(ArrayBufferViewHasBuffer);
   registry->Register(WeakReference::New);
   registry->Register(WeakReference::Get);
-  registry->Register(WeakReference::GetRef);
   registry->Register(WeakReference::IncRef);
   registry->Register(WeakReference::DecRef);
   registry->Register(GuessHandleType);
@@ -380,7 +377,7 @@ void Initialize(Local<Object> target,
   Isolate* isolate = env->isolate();
 
   {
-    Local<v8::ObjectTemplate> tmpl = v8::ObjectTemplate::New(isolate);
+    Local<ObjectTemplate> tmpl = ObjectTemplate::New(isolate);
 #define V(PropertyName, _)                                                     \
   tmpl->Set(FIXED_ONE_BYTE_STRING(env->isolate(), #PropertyName),              \
             env->PropertyName());
@@ -407,6 +404,18 @@ void Initialize(Local<Object> target,
     V(kPending);
     V(kFulfilled);
     V(kRejected);
+#undef V
+
+#define V(name)                                                                \
+  constants                                                                    \
+      ->Set(context,                                                           \
+            FIXED_ONE_BYTE_STRING(isolate, #name),                             \
+            Integer::New(isolate, Environment::ExitInfoField::name))           \
+      .Check();
+
+    V(kExiting);
+    V(kExitCode);
+    V(kHasExitCode);
 #undef V
 
 #define V(name)                                                                \
@@ -455,9 +464,7 @@ void Initialize(Local<Object> target,
       NewFunctionTemplate(isolate, WeakReference::New);
   weak_ref->InstanceTemplate()->SetInternalFieldCount(
       WeakReference::kInternalFieldCount);
-  weak_ref->Inherit(BaseObject::GetConstructorTemplate(env));
   SetProtoMethod(isolate, weak_ref, "get", WeakReference::Get);
-  SetProtoMethod(isolate, weak_ref, "getRef", WeakReference::GetRef);
   SetProtoMethod(isolate, weak_ref, "incRef", WeakReference::IncRef);
   SetProtoMethod(isolate, weak_ref, "decRef", WeakReference::DecRef);
   SetConstructorFunction(context, target, "WeakReference", weak_ref);

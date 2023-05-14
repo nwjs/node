@@ -478,11 +478,11 @@ may be called multiple times, from multiple contexts, and even concurrently from
 multiple threads.
 
 Native addons may need to allocate global state which they use during
-their entire life cycle such that the state must be unique to each instance of
-the addon.
+their life cycle of an Node.js environment such that the state can be
+unique to each instance of the addon.
 
-To this end, Node-API provides a way to allocate data such that its life cycle
-is tied to the life cycle of the Agent.
+To this end, Node-API provides a way to associate data such that its life cycle
+is tied to the life cycle of a Node.js environment.
 
 ### `napi_set_instance_data`
 
@@ -510,11 +510,11 @@ napi_status napi_set_instance_data(napi_env env,
 
 Returns `napi_ok` if the API succeeded.
 
-This API associates `data` with the currently running Agent. `data` can later
-be retrieved using `napi_get_instance_data()`. Any existing data associated with
-the currently running Agent which was set by means of a previous call to
-`napi_set_instance_data()` will be overwritten. If a `finalize_cb` was provided
-by the previous call, it will not be called.
+This API associates `data` with the currently running Node.js environment. `data`
+can later be retrieved using `napi_get_instance_data()`. Any existing data
+associated with the currently running Node.js environment which was set by means
+of a previous call to `napi_set_instance_data()` will be overwritten. If a
+`finalize_cb` was provided by the previous call, it will not be called.
 
 ### `napi_get_instance_data`
 
@@ -532,13 +532,13 @@ napi_status napi_get_instance_data(napi_env env,
 
 * `[in] env`: The environment that the Node-API call is invoked under.
 * `[out] data`: The data item that was previously associated with the currently
-  running Agent by a call to `napi_set_instance_data()`.
+  running Node.js environment by a call to `napi_set_instance_data()`.
 
 Returns `napi_ok` if the API succeeded.
 
 This API retrieves data that was previously associated with the currently
-running Agent via `napi_set_instance_data()`. If no data is set, the call will
-succeed and `data` will be set to `NULL`.
+running Node.js environment via `napi_set_instance_data()`. If no data is set,
+the call will succeed and `data` will be set to `NULL`.
 
 ## Basic Node-API data types
 
@@ -733,13 +733,13 @@ napiVersion: 8
 -->
 
 A 128-bit value stored as two unsigned 64-bit integers. It serves as a UUID
-with which JavaScript objects can be "tagged" in order to ensure that they are
-of a certain type. This is a stronger check than [`napi_instanceof`][], because
-the latter can report a false positive if the object's prototype has been
-manipulated. Type-tagging is most useful in conjunction with [`napi_wrap`][]
-because it ensures that the pointer retrieved from a wrapped object can be
-safely cast to the native type corresponding to the type tag that had been
-previously applied to the JavaScript object.
+with which JavaScript objects or [externals][] can be "tagged" in order to
+ensure that they are of a certain type. This is a stronger check than
+[`napi_instanceof`][], because the latter can report a false positive if the
+object's prototype has been manipulated. Type-tagging is most useful in
+conjunction with [`napi_wrap`][] because it ensures that the pointer retrieved
+from a wrapped object can be safely cast to the native type corresponding to the
+type tag that had been previously applied to the JavaScript object.
 
 ```c
 typedef struct {
@@ -902,7 +902,9 @@ handle and/or callback scope inside the function body is not necessary.
 #### `napi_cleanup_hook`
 
 <!-- YAML
-added: v19.2.0
+added:
+  - v19.2.0
+  - v18.13.0
 napiVersion: 3
 -->
 
@@ -1799,11 +1801,11 @@ If still valid, this API returns the `napi_value` representing the
 JavaScript `Object` associated with the `napi_ref`. Otherwise, result
 will be `NULL`.
 
-### Cleanup on exit of the current Node.js instance
+### Cleanup on exit of the current Node.js environment
 
 While a Node.js process typically releases all its resources when exiting,
 embedders of Node.js, or future Worker support, may require addons to register
-clean-up hooks that will be run once the current Node.js instance exits.
+clean-up hooks that will be run once the current Node.js environment exits.
 
 Node-API provides functions for registering and un-registering such callbacks.
 When those callbacks are run, all resources that are being held by the addon
@@ -1928,6 +1930,22 @@ Unregisters the cleanup hook corresponding to `remove_handle`. This will prevent
 the hook from being executed, unless it has already started executing.
 This must be called on any `napi_async_cleanup_hook_handle` value obtained
 from [`napi_add_async_cleanup_hook`][].
+
+### Finalization on the exit of the Node.js environment
+
+The Node.js environment may be torn down at an arbitrary time as soon as
+possible with JavaScript execution disallowed, like on the request of
+[`worker.terminate()`][]. When the environment is being torn down, the
+registered `napi_finalize` callbacks of JavaScript objects, Thread-safe
+functions and environment instance data are invoked immediately and
+independently.
+
+The invocation of `napi_finalize` callbacks are scheduled after the manually
+registered cleanup hooks. In order to ensure a proper order of addon
+finalization during environment shutdown to avoid use-after-free in the
+`napi_finalize` callback, addons should register a cleanup hook with
+`napi_add_env_cleanup_hook` and `napi_add_async_cleanup_hook` to manually
+release the allocated resource in a proper order.
 
 ## Module registration
 
@@ -4951,7 +4969,7 @@ To this end, Node-API provides type-tagging capabilities.
 
 A type tag is a 128-bit integer unique to the addon. Node-API provides the
 `napi_type_tag` structure for storing a type tag. When such a value is passed
-along with a JavaScript object stored in a `napi_value` to
+along with a JavaScript object or [external][] stored in a `napi_value` to
 `napi_type_tag_object()`, the JavaScript object will be "marked" with the
 type tag. The "mark" is invisible on the JavaScript side. When a JavaScript
 object arrives into a native binding, `napi_check_object_type_tag()` can be used
@@ -5237,15 +5255,15 @@ napi_status napi_type_tag_object(napi_env env,
 ```
 
 * `[in] env`: The environment that the API is invoked under.
-* `[in] js_object`: The JavaScript object to be marked.
+* `[in] js_object`: The JavaScript object or [external][] to be marked.
 * `[in] type_tag`: The tag with which the object is to be marked.
 
 Returns `napi_ok` if the API succeeded.
 
-Associates the value of the `type_tag` pointer with the JavaScript object.
-`napi_check_object_type_tag()` can then be used to compare the tag that was
-attached to the object with one owned by the addon to ensure that the object
-has the right type.
+Associates the value of the `type_tag` pointer with the JavaScript object or
+[external][]. `napi_check_object_type_tag()` can then be used to compare the tag
+that was attached to the object with one owned by the addon to ensure that the
+object has the right type.
 
 If the object already has an associated type tag, this API will return
 `napi_invalid_arg`.
@@ -5267,7 +5285,8 @@ napi_status napi_check_object_type_tag(napi_env env,
 ```
 
 * `[in] env`: The environment that the API is invoked under.
-* `[in] js_object`: The JavaScript object whose type tag to examine.
+* `[in] js_object`: The JavaScript object or [external][] whose type tag to
+  examine.
 * `[in] type_tag`: The tag with which to compare any tag found on the object.
 * `[out] result`: Whether the type tag given matched the type tag on the
   object. `false` is also returned if no type tag was found on the object.
@@ -6433,9 +6452,12 @@ the add-on's file name during loading.
 [`process.release`]: process.md#processrelease
 [`uv_ref`]: https://docs.libuv.org/en/v1.x/handle.html#c.uv_ref
 [`uv_unref`]: https://docs.libuv.org/en/v1.x/handle.html#c.uv_unref
+[`worker.terminate()`]: worker_threads.md#workerterminate
 [async_hooks `type`]: async_hooks.md#type
 [context-aware addons]: addons.md#context-aware-addons
 [docs]: https://github.com/nodejs/node-addon-api#api-documentation
+[external]: #napi_create_external
+[externals]: #napi_create_external
 [global scope]: globals.md
 [gyp-next]: https://github.com/nodejs/gyp-next
 [module scope]: modules.md#the-module-scope

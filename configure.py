@@ -5,7 +5,6 @@ import sys
 import errno
 import argparse
 import os
-import pipes
 import pprint
 import re
 import shlex
@@ -1032,8 +1031,8 @@ def check_compiler(o):
                 ('clang ' if is_clang else '', CXX, version_str))
   if not ok:
     warn('failed to autodetect C++ compiler version (CXX=%s)' % CXX)
-  elif clang_version < (8, 0, 0) if is_clang else gcc_version < (8, 3, 0):
-    warn('C++ compiler (CXX=%s, %s) too old, need g++ 8.3.0 or clang++ 8.0.0' %
+  elif clang_version < (8, 0, 0) if is_clang else gcc_version < (10, 1, 0):
+    warn('C++ compiler (CXX=%s, %s) too old, need g++ 10.1.0 or clang++ 8.0.0' %
          (CXX, version_str))
 
   ok, is_clang, clang_version, gcc_version = try_check_compiler(CC, 'c')
@@ -2074,7 +2073,7 @@ write('config.gypi', do_not_edit +
       pprint.pformat(output, indent=2, width=1024) + '\n')
 
 write('config.status', '#!/bin/sh\nset -x\nexec ./configure ' +
-      ' '.join([pipes.quote(arg) for arg in original_argv]) + '\n')
+      ' '.join([shlex.quote(arg) for arg in original_argv]) + '\n')
 os.chmod('config.status', 0o775)
 
 

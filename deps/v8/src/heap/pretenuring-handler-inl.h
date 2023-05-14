@@ -11,11 +11,12 @@
 #include "src/heap/pretenuring-handler.h"
 #include "src/heap/spaces.h"
 #include "src/objects/allocation-site-inl.h"
+#include "src/objects/allocation-site.h"
 
 namespace v8 {
 namespace internal {
 
-void PretenturingHandler::UpdateAllocationSite(
+void PretenuringHandler::UpdateAllocationSite(
     Map map, HeapObject object, PretenuringFeedbackMap* pretenuring_feedback) {
   DCHECK_NE(pretenuring_feedback, &global_pretenuring_feedback_);
 #ifdef DEBUG
@@ -23,7 +24,7 @@ void PretenturingHandler::UpdateAllocationSite(
   DCHECK_IMPLIES(chunk->IsToPage(),
                  v8_flags.minor_mc ||
                      chunk->IsFlagSet(MemoryChunk::PAGE_NEW_NEW_PROMOTION));
-  DCHECK_IMPLIES(!chunk->InYoungGeneration(),
+  DCHECK_IMPLIES(!v8_flags.minor_mc && !chunk->InYoungGeneration(),
                  chunk->IsFlagSet(MemoryChunk::PAGE_NEW_OLD_PROMOTION));
 #endif
   if (!v8_flags.allocation_site_pretenuring ||
@@ -33,6 +34,7 @@ void PretenturingHandler::UpdateAllocationSite(
   AllocationMemento memento_candidate =
       FindAllocationMemento<kForGC>(map, object);
   if (memento_candidate.is_null()) return;
+  DCHECK(map.IsJSObjectMap());
 
   // Entering cached feedback is used in the parallel case. We are not allowed
   // to dereference the allocation site and rather have to postpone all checks
@@ -41,9 +43,9 @@ void PretenturingHandler::UpdateAllocationSite(
   (*pretenuring_feedback)[AllocationSite::unchecked_cast(Object(key))]++;
 }
 
-template <PretenturingHandler::FindMementoMode mode>
-AllocationMemento PretenturingHandler::FindAllocationMemento(
-    Map map, HeapObject object) {
+template <PretenuringHandler::FindMementoMode mode>
+AllocationMemento PretenuringHandler::FindAllocationMemento(Map map,
+                                                            HeapObject object) {
   Address object_address = object.address();
   Address memento_address =
       object_address + ALIGN_TO_ALLOCATION_ALIGNMENT(object.SizeFromMap(map));
@@ -52,6 +54,13 @@ AllocationMemento PretenturingHandler::FindAllocationMemento(
   if (!Page::OnSamePage(object_address, last_memento_word_address)) {
     return AllocationMemento();
   }
+
+  Page* object_page = Page::FromAddress(object_address);
+  // If the page is being swept, treat it as if the memento was already swept
+  // and bail out.
+  if (mode != FindMementoMode::kForGC && !object_page->SweepingDone())
+    return AllocationMemento();
+
   HeapObject candidate = HeapObject::FromAddress(memento_address);
   ObjectSlot candidate_map_slot = candidate.map_slot();
   // This fast check may peek at an uninitialized word. However, the slow check
@@ -65,7 +74,6 @@ AllocationMemento PretenturingHandler::FindAllocationMemento(
 
   // Bail out if the memento is below the age mark, which can happen when
   // mementos survived because a page got moved within new space.
-  Page* object_page = Page::FromAddress(object_address);
   if (object_page->IsFlagSet(Page::NEW_SPACE_BELOW_AGE_MARK)) {
     Address age_mark =
         reinterpret_cast<SemiSpace*>(object_page->owner())->age_mark();

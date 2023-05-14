@@ -18,7 +18,7 @@ class ParseInfo;
 // The iteration proceeds from the innermost visible nested scope outwards.
 // All scopes are backed by an actual context except the local scope,
 // which is inserted "artificially" in the context chain.
-class ScopeIterator {
+class V8_EXPORT_PRIVATE ScopeIterator {
  public:
   enum ScopeType {
     ScopeTypeGlobal = 0,
@@ -41,12 +41,10 @@ class ScopeIterator {
   static const int kScopeDetailsSize = 6;
 
   enum class ReparseStrategy {
-    kScript,
     kFunctionLiteral,
     // Checks whether the paused function (and its scope chain) already has
     // its blocklist calculated and re-parses the whole script if not.
     // Otherwise only the function literal is re-parsed.
-    // Only vaild with enabled "experimental_reuse_locals_blocklists" flag.
     kScriptIfNeeded,
   };
 

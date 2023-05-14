@@ -68,13 +68,12 @@ void SharedFunctionInfo::Init(ReadOnlyRoots ro_roots, int unique_id) {
   clear_padding();
 }
 
-CodeT SharedFunctionInfo::GetCode() const {
+Code SharedFunctionInfo::GetCode(Isolate* isolate) const {
   // ======
   // NOTE: This chain of checks MUST be kept in sync with the equivalent CSA
   // GetSharedFunctionInfoCode method in code-stub-assembler.cc.
   // ======
 
-  Isolate* isolate = GetIsolate();
   Object data = function_data(kAcquireLoad);
   if (data.IsSmi()) {
     // Holding a Smi means we are a builtin.
@@ -86,10 +85,10 @@ CodeT SharedFunctionInfo::GetCode() const {
     DCHECK(HasBytecodeArray());
     return isolate->builtins()->code(Builtin::kInterpreterEntryTrampoline);
   }
-  if (data.IsCodeT()) {
+  if (data.IsCode()) {
     // Having baseline Code means we are a compiled, baseline function.
     DCHECK(HasBaselineCode());
-    return CodeT::cast(data);
+    return Code::cast(data);
   }
 #if V8_ENABLE_WEBASSEMBLY
   if (data.IsAsmWasmData()) {
@@ -128,8 +127,8 @@ CodeT SharedFunctionInfo::GetCode() const {
     return isolate->builtins()->code(Builtin::kHandleApiCall);
   }
   if (data.IsInterpreterData()) {
-    CodeT code = InterpreterTrampoline();
-    DCHECK(code.IsCodeT());
+    Code code = InterpreterTrampoline();
+    DCHECK(code.IsCode());
     DCHECK(code.is_interpreter_trampoline_builtin());
     return code;
   }
@@ -314,11 +313,10 @@ std::unique_ptr<char[]> SharedFunctionInfo::DebugNameCStr() const {
 
 // static
 Handle<String> SharedFunctionInfo::DebugName(
-    Handle<SharedFunctionInfo> shared) {
+    Isolate* isolate, Handle<SharedFunctionInfo> shared) {
 #if V8_ENABLE_WEBASSEMBLY
   if (shared->HasWasmExportedFunctionData()) {
-    return shared->GetIsolate()
-        ->factory()
+    return isolate->factory()
         ->NewStringFromUtf8(base::CStrVector(shared->DebugNameCStr().get()))
         .ToHandleChecked();
   }
@@ -326,7 +324,7 @@ Handle<String> SharedFunctionInfo::DebugName(
   DisallowHeapAllocation no_gc;
   String function_name = shared->Name();
   if (function_name.length() == 0) function_name = shared->inferred_name();
-  return handle(function_name, shared->GetIsolate());
+  return handle(function_name, isolate);
 }
 
 bool SharedFunctionInfo::PassesFilter(const char* raw_filter) {
@@ -347,9 +345,9 @@ void SharedFunctionInfo::DiscardCompiledMetadata(
     std::function<void(HeapObject object, ObjectSlot slot, HeapObject target)>
         gc_notify_updated_slot) {
   DisallowGarbageCollection no_gc;
-  if (is_compiled()) {
+  if (HasFeedbackMetadata()) {
     if (v8_flags.trace_flush_bytecode) {
-      CodeTracer::Scope scope(GetIsolate()->GetCodeTracer());
+      CodeTracer::Scope scope(isolate->GetCodeTracer());
       PrintF(scope.file(), "[discarding compiled metadata for ");
       ShortPrint(scope.file());
       PrintF(scope.file(), "]\n");
@@ -386,6 +384,17 @@ void SharedFunctionInfo::DiscardCompiled(
   int start_position = shared_info->StartPosition();
   int end_position = shared_info->EndPosition();
 
+  MaybeHandle<UncompiledData> data;
+  if (!shared_info->HasUncompiledDataWithPreparseData()) {
+    // Create a new UncompiledData, without pre-parsed scope.
+    data = isolate->factory()->NewUncompiledDataWithoutPreparseData(
+        inferred_name_val, start_position, end_position);
+  }
+
+  // If the GC runs after changing one but not both fields below, it could see
+  // the SharedFunctionInfo in an unexpected state.
+  DisallowGarbageCollection no_gc;
+
   shared_info->DiscardCompiledMetadata(isolate);
 
   // Replace compiled data with a new UncompiledData object.
@@ -393,21 +402,18 @@ void SharedFunctionInfo::DiscardCompiled(
     // If this is uncompiled data with a pre-parsed scope data, we can just
     // clear out the scope data and keep the uncompiled data.
     shared_info->ClearPreparseData();
+    DCHECK(data.is_null());
   } else {
-    // Create a new UncompiledData, without pre-parsed scope, and update the
-    // function data to point to it. Use the raw function data setter to avoid
-    // validity checks, since we're performing the unusual task of decompiling.
-    Handle<UncompiledData> data =
-        isolate->factory()->NewUncompiledDataWithoutPreparseData(
-            inferred_name_val, start_position, end_position);
-    shared_info->set_function_data(*data, kReleaseStore);
+    // Update the function data to point to the UncompiledData without preparse
+    // data created above. Use the raw function data setter to avoid validity
+    // checks, since we're performing the unusual task of decompiling.
+    shared_info->set_function_data(*data.ToHandleChecked(), kReleaseStore);
   }
 }
 
 // static
 Handle<Object> SharedFunctionInfo::GetSourceCode(
-    Handle<SharedFunctionInfo> shared) {
-  Isolate* isolate = shared->GetIsolate();
+    Isolate* isolate, Handle<SharedFunctionInfo> shared) {
   if (!shared->HasSourceCode()) return isolate->factory()->undefined_value();
   Handle<String> source(String::cast(Script::cast(shared->script()).source()),
                         isolate);
@@ -417,8 +423,7 @@ Handle<Object> SharedFunctionInfo::GetSourceCode(
 
 // static
 Handle<Object> SharedFunctionInfo::GetSourceCodeHarmony(
-    Handle<SharedFunctionInfo> shared) {
-  Isolate* isolate = shared->GetIsolate();
+    Isolate* isolate, Handle<SharedFunctionInfo> shared) {
   if (!shared->HasSourceCode()) return isolate->factory()->undefined_value();
   Handle<String> script_source(
       String::cast(Script::cast(shared->script()).source()), isolate);
@@ -481,13 +486,13 @@ std::ostream& operator<<(std::ostream& os, const SourceCodeOf& v) {
   }
 }
 
-void SharedFunctionInfo::DisableOptimization(BailoutReason reason) {
+void SharedFunctionInfo::DisableOptimization(Isolate* isolate,
+                                             BailoutReason reason) {
   DCHECK_NE(reason, BailoutReason::kNoReason);
 
   set_flags(DisabledOptimizationReasonBits::update(flags(kRelaxedLoad), reason),
             kRelaxedStore);
   // Code should be the lazy compilation stub or else interpreted.
-  Isolate* isolate = GetIsolate();
   if constexpr (DEBUG_BOOL) {
     CodeKind kind = abstract_code(isolate).kind(isolate);
     CHECK(kind == CodeKind::INTERPRETED_FUNCTION || kind == CodeKind::BUILTIN);

@@ -5,6 +5,7 @@ const http = require('http');
 
 {
   const server = http.createServer({
+    requireHostHeader: false,
     joinDuplicateHeaders: true
   }, common.mustCall((req, res) => {
     assert.strictEqual(req.headers.authorization, '1, 2');
@@ -32,6 +33,7 @@ const http = require('http');
 {
   // Server joinDuplicateHeaders false
   const server = http.createServer({
+    requireHostHeader: false,
     joinDuplicateHeaders: false
   }, common.mustCall((req, res) => {
     assert.strictEqual(req.headers.authorization, '1'); // non joined value
@@ -57,6 +59,7 @@ const http = require('http');
 {
   // Client joinDuplicateHeaders false
   const server = http.createServer({
+    requireHostHeader: false,
     joinDuplicateHeaders: true
   }, common.mustCall((req, res) => {
     assert.strictEqual(req.headers.authorization, '1, 2');

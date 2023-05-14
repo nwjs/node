@@ -24,10 +24,9 @@ namespace wasm {
 class WasmFeatures;
 struct WasmModule;
 
-std::ostream& operator<<(std::ostream& os, const FunctionSig& function);
-bool V8_EXPORT_PRIVATE IsJSCompatibleSignature(const FunctionSig* sig,
-                                               const WasmModule* module,
-                                               const WasmFeatures&);
+V8_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& os,
+                                           const FunctionSig& function);
+V8_EXPORT_PRIVATE bool IsJSCompatibleSignature(const FunctionSig* sig);
 
 // Format of all opcode macros: kExprName, binary, signature, wat name
 
@@ -60,9 +59,8 @@ bool V8_EXPORT_PRIVATE IsJSCompatibleSignature(const FunctionSig* sig,
   V(CallIndirect, 0x11, _, "call_indirect")                                  \
   V(ReturnCall, 0x12, _, "return_call")                                      \
   V(ReturnCallIndirect, 0x13, _, "return_call_indirect")                     \
-  V(CallRefDeprecated, 0x14, _, "call_ref")    /* typed_funcref prototype */ \
+  V(CallRef, 0x14, _, "call_ref")              /* typed_funcref prototype */ \
   V(ReturnCallRef, 0x15, _, "return_call_ref") /* typed_funcref prototype */ \
-  V(CallRef, 0x17, _, "call_ref")              /* temporary, for compat.*/   \
   V(Drop, 0x1a, _, "drop")                                                   \
   V(Select, 0x1b, _, "select")                                               \
   V(SelectWithType, 0x1c, _, "select")                                       \
@@ -695,35 +693,40 @@ bool V8_EXPORT_PRIVATE IsJSCompatibleSignature(const FunctionSig* sig,
   V(ArrayGetS, 0xfb14, _, "array.get_s")                                       \
   V(ArrayGetU, 0xfb15, _, "array.get_u")                                       \
   V(ArraySet, 0xfb16, _, "array.set")                                          \
-  V(ArrayLenDeprecated, 0xfb17, _, "array.len")                                \
-  V(ArrayCopy, 0xfb18, _,                                                      \
-    "array.copy") /* not standardized - V8 experimental */                     \
+  V(ArrayCopy, 0xfb18, _, "array.copy")                                        \
   V(ArrayLen, 0xfb19, _, "array.len")                                          \
   V(ArrayNewFixed, 0xfb1a, _, "array.new_fixed")                               \
   V(ArrayNew, 0xfb1b, _, "array.new")                                          \
   V(ArrayNewDefault, 0xfb1c, _, "array.new_default")                           \
   V(ArrayNewData, 0xfb1d, _, "array.new_data")                                 \
   V(ArrayNewElem, 0xfb1f, _, "array.new_elem")                                 \
+  V(ArrayFill, 0xfb0f, _, "array.init")                                        \
   V(I31New, 0xfb20, _, "i31.new")                                              \
   V(I31GetS, 0xfb21, _, "i31.get_s")                                           \
   V(I31GetU, 0xfb22, _, "i31.get_u")                                           \
   V(RefTest, 0xfb40, _, "ref.test")                                            \
   V(RefTestNull, 0xfb48, _, "ref.test null")                                   \
   V(RefTestDeprecated, 0xfb44, _, "ref.test")                                  \
-  V(RefCast, 0xfb45, _, "ref.cast")                                            \
-  V(BrOnCast, 0xfb46, _, "br_on_cast")                                         \
-  V(BrOnCastFail, 0xfb47, _, "br_on_cast_fail")                                \
+  V(RefCast, 0xfb41, _, "ref.cast")                                            \
+  V(RefCastNull, 0xfb49, _, "ref.cast null")                                   \
+  V(RefCastDeprecated, 0xfb45, _, "ref.cast")                                  \
+  V(BrOnCast, 0xfb42, _, "br_on_cast")                                         \
+  V(BrOnCastNull, 0xfb4a, _, "br_on_cast null")                                \
+  V(BrOnCastDeprecated, 0xfb46, _, "br_on_cast")                               \
+  V(BrOnCastFail, 0xfb43, _, "br_on_cast_fail")                                \
+  V(BrOnCastFailNull, 0xfb4b, _, "br_on_cast_fail null")                       \
+  V(BrOnCastFailDeprecated, 0xfb47, _, "br_on_cast_fail")                      \
   V(RefCastNop, 0xfb4c, _, "ref.cast_nop")                                     \
-  V(RefIsData, 0xfb51, _, "ref.is_data")                                       \
+  V(RefIsStruct, 0xfb51, _, "ref.is_struct")                                   \
   V(RefIsI31, 0xfb52, _, "ref.is_i31")                                         \
   V(RefIsArray, 0xfb53, _, "ref.is_array")                                     \
-  V(RefAsData, 0xfb59, _, "ref.as_data")                                       \
+  V(RefAsStruct, 0xfb59, _, "ref.as_struct")                                   \
   V(RefAsI31, 0xfb5a, _, "ref.as_i31")                                         \
   V(RefAsArray, 0xfb5b, _, "ref.as_array")                                     \
-  V(BrOnData, 0xfb61, _, "br_on_data")                                         \
+  V(BrOnStruct, 0xfb61, _, "br_on_struct")                                     \
   V(BrOnI31, 0xfb62, _, "br_on_i31")                                           \
   V(BrOnArray, 0xfb66, _, "br_on_array")                                       \
-  V(BrOnNonData, 0xfb64, _, "br_on_non_data")                                  \
+  V(BrOnNonStruct, 0xfb64, _, "br_on_non_struct")                              \
   V(BrOnNonI31, 0xfb65, _, "br_on_non_i31")                                    \
   V(BrOnNonArray, 0xfb67, _, "br_on_non_array")                                \
   V(ExternInternalize, 0xfb70, _, "extern.internalize")                        \
@@ -743,6 +746,7 @@ bool V8_EXPORT_PRIVATE IsJSCompatibleSignature(const FunctionSig* sig,
   V(StringNewWtf8, 0xfb8c, _, "string.new_wtf8")                               \
   V(StringEncodeLossyUtf8, 0xfb8d, _, "string.encode_lossy_utf8")              \
   V(StringEncodeWtf8, 0xfb8e, _, "string.encode_wtf8")                         \
+  V(StringNewUtf8Try, 0xfb8f, _, "string.new_utf8_try")                        \
   V(StringAsWtf8, 0xfb90, _, "string.as_wtf8")                                 \
   V(StringViewWtf8Advance, 0xfb91, _, "stringview_wtf8.advance")               \
   V(StringViewWtf8EncodeUtf8, 0xfb92, _, "stringview_wtf8.encode_utf8")        \
@@ -760,6 +764,9 @@ bool V8_EXPORT_PRIVATE IsJSCompatibleSignature(const FunctionSig* sig,
   V(StringViewIterAdvance, 0xfba2, _, "stringview_iter.advance")               \
   V(StringViewIterRewind, 0xfba3, _, "stringview_iter.rewind")                 \
   V(StringViewIterSlice, 0xfba4, _, "stringview_iter.slice")                   \
+  V(StringCompare, 0xfba8, _, "string.compare")                                \
+  V(StringFromCodePoint, 0xfba9, _, "string.from_code_point")                  \
+  V(StringHash, 0xfbaa, _, "string.hash")                                      \
   V(StringNewUtf8Array, 0xfbb0, _, "string.new_utf8_array")                    \
   V(StringNewWtf16Array, 0xfbb1, _, "string.new_wtf16_array")                  \
   V(StringEncodeUtf8Array, 0xfbb2, _, "string.encode_utf8_array")              \
@@ -767,7 +774,8 @@ bool V8_EXPORT_PRIVATE IsJSCompatibleSignature(const FunctionSig* sig,
   V(StringNewLossyUtf8Array, 0xfbb4, _, "string.new_lossy_utf8_array")         \
   V(StringNewWtf8Array, 0xfbb5, _, "string.new_wtf8_array")                    \
   V(StringEncodeLossyUtf8Array, 0xfbb6, _, "string.encode_lossy_utf8_array")   \
-  V(StringEncodeWtf8Array, 0xfbb7, _, "string.encode_wtf8_array")
+  V(StringEncodeWtf8Array, 0xfbb7, _, "string.encode_wtf8_array")              \
+  V(StringNewUtf8ArrayTry, 0xfbb8, _, "string.new_utf8_array_try")
 
 // All opcodes.
 #define FOREACH_OPCODE(V)            \

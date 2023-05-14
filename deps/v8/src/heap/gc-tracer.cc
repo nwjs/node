@@ -190,8 +190,9 @@ void GCTracer::ResetForTesting() {
   current_.end_time = MonotonicallyIncreasingTimeInMs();
   previous_ = current_;
   start_of_observable_pause_ = 0.0;
-  notified_sweeping_completed_ = false;
+  notified_full_sweeping_completed_ = false;
   notified_full_cppgc_completed_ = false;
+  notified_young_sweeping_completed_ = false;
   notified_young_cppgc_completed_ = false;
   notified_young_cppgc_running_ = false;
   young_gc_while_full_gc_ = false;
@@ -261,8 +262,6 @@ void GCTracer::StartCycle(GarbageCollector collector,
   DCHECK_IMPLIES(young_gc_while_full_gc_,
                  Heap::IsYoungGenerationCollector(collector) &&
                      !Event::IsYoungGenerationEvent(current_.type));
-  DCHECK_IMPLIES(collector != GarbageCollector::SCAVENGER,
-                 !young_gc_while_full_gc_);
 
   Event::Type type;
   switch (collector) {
@@ -410,6 +409,7 @@ void GCTracer::UpdateStatistics(GarbageCollector collector) {
 
   if (V8_UNLIKELY(TracingFlags::gc.load(std::memory_order_relaxed) &
                   v8::tracing::TracingCategoryObserver::ENABLED_BY_TRACING)) {
+    TRACE_EVENT0(TRACE_GC_CATEGORIES, "V8.GC_HEAP_DUMP_STATISTICS");
     std::stringstream heap_stats;
     heap_->DumpJSONHeapStatistics(heap_stats);
 
@@ -462,7 +462,12 @@ void GCTracer::StopCycle(GarbageCollector collector) {
     // If a young generation GC interrupted an unfinished full GC cycle, restore
     // the event corresponding to the full GC cycle.
     if (young_gc_while_full_gc_) {
-      DCHECK_EQ(current_.type, Event::Type::SCAVENGER);
+      // Sweeping for full GC could have occured during the young GC. Copy over
+      // any sweeping scope values to the previous_ event. The full GC sweeping
+      // scopes are never reported by young cycles.
+      previous_.scopes[Scope::MC_SWEEP] += current_.scopes[Scope::MC_SWEEP];
+      previous_.scopes[Scope::MC_BACKGROUND_SWEEPING] +=
+          current_.scopes[Scope::MC_BACKGROUND_SWEEPING];
       std::swap(current_, previous_);
       young_gc_while_full_gc_ = false;
     }
@@ -482,40 +487,57 @@ void GCTracer::StopCycle(GarbageCollector collector) {
 
 void GCTracer::StopFullCycleIfNeeded() {
   if (current_.state != Event::State::SWEEPING) return;
-  if (!notified_sweeping_completed_) return;
+  if (!notified_full_sweeping_completed_) return;
   if (heap_->cpp_heap() && !notified_full_cppgc_completed_) return;
   StopCycle(GarbageCollector::MARK_COMPACTOR);
-  notified_sweeping_completed_ = false;
+  notified_full_sweeping_completed_ = false;
   notified_full_cppgc_completed_ = false;
 }
 
 void GCTracer::StopYoungCycleIfNeeded() {
-  // We rely here on the fact that young GCs in V8 are atomic and by the time
-  // this is called, the Scavenger or Minor MC has already finished.
   DCHECK(Event::IsYoungGenerationEvent(current_.type));
   if (current_.state != Event::State::SWEEPING) return;
+  if (current_.type == Event::MINOR_MARK_COMPACTOR &&
+      !notified_young_sweeping_completed_)
+    return;
   // Check if young cppgc was scheduled but hasn't completed yet.
   if (heap_->cpp_heap() && notified_young_cppgc_running_ &&
       !notified_young_cppgc_completed_)
     return;
+  bool was_young_gc_while_full_gc_ = young_gc_while_full_gc_;
   StopCycle(current_.type == Event::SCAVENGER
                 ? GarbageCollector::SCAVENGER
                 : GarbageCollector::MINOR_MARK_COMPACTOR);
+  notified_young_sweeping_completed_ = false;
   notified_young_cppgc_running_ = false;
   notified_young_cppgc_completed_ = false;
+  if (was_young_gc_while_full_gc_) {
+    // Check if the full gc cycle is ready to be stopped.
+    StopFullCycleIfNeeded();
+  }
 }
 
-void GCTracer::NotifySweepingCompleted() {
-  if (v8_flags.verify_heap) {
-    // If heap verification is enabled, sweeping finalization can also be
-    // triggered from inside a full GC cycle's atomic pause.
-    DCHECK((current_.type == Event::MARK_COMPACTOR ||
-            current_.type == Event::INCREMENTAL_MARK_COMPACTOR) &&
-           (current_.state == Event::State::SWEEPING ||
-            current_.state == Event::State::ATOMIC));
-  } else {
-    DCHECK(IsSweepingInProgress());
+void GCTracer::NotifyFullSweepingCompleted() {
+  // Notifying twice that V8 sweeping is finished for the same cycle is possible
+  // only if Oilpan sweeping is still in progress.
+  DCHECK_IMPLIES(notified_full_sweeping_completed_,
+                 !notified_full_cppgc_completed_);
+
+  if (Event::IsYoungGenerationEvent(current_.type)) {
+    bool was_young_gc_while_full_gc = young_gc_while_full_gc_;
+    bool was_full_sweeping_notified = notified_full_sweeping_completed_;
+    NotifyYoungSweepingCompleted();
+    // NotifyYoungSweepingCompleted checks if the full cycle needs to be stopped
+    // as well. If full sweeping was already notified, nothing more needs to be
+    // done here.
+    if (!was_young_gc_while_full_gc || was_full_sweeping_notified) return;
   }
+
+  DCHECK(!Event::IsYoungGenerationEvent(current_.type));
+  // Sweeping finalization can also be triggered from inside a full GC cycle's
+  // atomic pause.
+  DCHECK(current_.state == Event::State::SWEEPING ||
+         current_.state == Event::State::ATOMIC);
 
   // Stop a full GC cycle only when both v8 and cppgc (if available) GCs have
   // finished sweeping. This method is invoked by v8.
@@ -528,11 +550,27 @@ void GCTracer::NotifySweepingCompleted() {
     heap_->new_space()->PrintAllocationsOrigins();
     heap_->old_space()->PrintAllocationsOrigins();
     heap_->code_space()->PrintAllocationsOrigins();
-    heap_->map_space()->PrintAllocationsOrigins();
   }
-  DCHECK(!notified_sweeping_completed_);
-  notified_sweeping_completed_ = true;
+  notified_full_sweeping_completed_ = true;
   StopFullCycleIfNeeded();
+}
+
+void GCTracer::NotifyYoungSweepingCompleted() {
+  if (!Event::IsYoungGenerationEvent(current_.type)) return;
+  if (v8_flags.verify_heap) {
+    // If heap verification is enabled, sweeping finalization can also be
+    // triggered from inside a full GC cycle's atomic pause.
+    DCHECK(current_.type == Event::MINOR_MARK_COMPACTOR ||
+           current_.type == Event::INCREMENTAL_MINOR_MARK_COMPACTOR);
+    DCHECK(current_.state == Event::State::SWEEPING ||
+           current_.state == Event::State::ATOMIC);
+  } else {
+    DCHECK(IsSweepingInProgress());
+  }
+
+  DCHECK(!notified_young_sweeping_completed_);
+  notified_young_sweeping_completed_ = true;
+  StopYoungCycleIfNeeded();
 }
 
 void GCTracer::NotifyFullCppGCCompleted() {
@@ -545,6 +583,12 @@ void GCTracer::NotifyFullCppGCCompleted() {
   DCHECK(metric_recorder->FullGCMetricsReportPending());
   DCHECK(!notified_full_cppgc_completed_);
   notified_full_cppgc_completed_ = true;
+  // Cppgc sweeping may finalize during MinorMC sweeping. In that case, delay
+  // stopping the cycle until the nested MinorMC cycle is stopped.
+  if (Event::IsYoungGenerationEvent(current_.type)) {
+    DCHECK(young_gc_while_full_gc_);
+    return;
+  }
   StopFullCycleIfNeeded();
 }
 
@@ -686,12 +730,11 @@ void GCTracer::Print() const {
   Output(
       "[%d:%p] "
       "%8.0f ms: "
-      "%s%s%s %.1f (%.1f) -> %.1f (%.1f) MB, "
-      "%.1f / %.1f ms %s (average mu = %.3f, current mu = %.3f) %s; %s\n",
+      "%s%s %.1f (%.1f) -> %.1f (%.1f) MB, "
+      "%.2f / %.2f ms %s (average mu = %.3f, current mu = %.3f) %s; %s\n",
       base::OS::GetCurrentProcessId(),
       reinterpret_cast<void*>(heap_->isolate()),
-      heap_->isolate()->time_millis_since_init(),
-      heap_->IsShared() ? "Shared " : "", current_.TypeName(false),
+      heap_->isolate()->time_millis_since_init(), current_.TypeName(false),
       current_.reduce_memory ? " (reduce)" : "",
       static_cast<double>(current_.start_object_size) / MB,
       static_cast<double>(current_.start_memory_size) / MB,
@@ -817,28 +860,24 @@ void GCTracer::PrintNVP() const {
           "mark.seed=%.2f "
           "mark.closure_parallel=%.2f "
           "mark.closure=%.2f "
-          "mark.global_handles=%.2f "
           "clear=%.2f "
+          "clear.string_forwarding_table=%.2f "
           "clear.string_table=%.2f "
+          "clear.global_handles=%.2f "
           "complete.sweep_array_buffers=%.2f "
-          "evacuate=%.2f "
-          "evacuate.clean_up=%.2f "
-          "evacuate.copy=%.2f "
-          "evacuate.prologue=%.2f "
-          "evacuate.epilogue=%.2f "
-          "evacuate.rebalance=%.2f "
-          "evacuate.update_pointers=%.2f "
-          "evacuate.update_pointers.slots=%.2f "
-          "evacuate.update_pointers.weak=%.2f "
+          "complete.sweeping=%.2f "
           "sweep=%.2f "
           "sweep.new=%.2f "
           "sweep.new_lo=%.2f "
+          "sweep.update_string_table=%.2f "
+          "sweep.start_jobs=%.2f "
+          "sweep.array_buffers=%.2f "
           "finish=%.2f "
-          "finish.sweep_array_buffers=%.2f "
+          "finish.ensure_capacity=%.2f "
           "background.mark=%.2f "
           "background.sweep=%.2f "
+          "background.sweep.array_buffers=%.2f "
           "background.evacuate.copy=%.2f "
-          "background.evacuate.update_pointers=%.2f "
           "background.unmapper=%.2f "
           "unmapper=%.2f "
           "total_size_before=%zu "
@@ -865,28 +904,24 @@ void GCTracer::PrintNVP() const {
           current_scope(Scope::MINOR_MC_MARK_SEED),
           current_scope(Scope::MINOR_MC_MARK_CLOSURE_PARALLEL),
           current_scope(Scope::MINOR_MC_MARK_CLOSURE),
-          current_scope(Scope::MINOR_MC_MARK_GLOBAL_HANDLES),
           current_scope(Scope::MINOR_MC_CLEAR),
+          current_scope(Scope::MINOR_MC_CLEAR_STRING_FORWARDING_TABLE),
           current_scope(Scope::MINOR_MC_CLEAR_STRING_TABLE),
+          current_scope(Scope::MINOR_MC_CLEAR_WEAK_GLOBAL_HANDLES),
           current_scope(Scope::MINOR_MC_COMPLETE_SWEEP_ARRAY_BUFFERS),
-          current_scope(Scope::MINOR_MC_EVACUATE),
-          current_scope(Scope::MINOR_MC_EVACUATE_CLEAN_UP),
-          current_scope(Scope::MINOR_MC_EVACUATE_COPY),
-          current_scope(Scope::MINOR_MC_EVACUATE_PROLOGUE),
-          current_scope(Scope::MINOR_MC_EVACUATE_EPILOGUE),
-          current_scope(Scope::MINOR_MC_EVACUATE_REBALANCE),
-          current_scope(Scope::MINOR_MC_EVACUATE_UPDATE_POINTERS),
-          current_scope(Scope::MINOR_MC_EVACUATE_UPDATE_POINTERS_SLOTS),
-          current_scope(Scope::MINOR_MC_EVACUATE_UPDATE_POINTERS_WEAK),
+          current_scope(Scope::MINOR_MC_COMPLETE_SWEEPING),
           current_scope(Scope::MINOR_MC_SWEEP),
           current_scope(Scope::MINOR_MC_SWEEP_NEW),
           current_scope(Scope::MINOR_MC_SWEEP_NEW_LO),
+          current_scope(Scope::MINOR_MC_SWEEP_UPDATE_STRING_TABLE),
+          current_scope(Scope::MINOR_MC_SWEEP_START_JOBS),
+          current_scope(Scope::YOUNG_ARRAY_BUFFER_SWEEP),
           current_scope(Scope::MINOR_MC_FINISH),
-          current_scope(Scope::MINOR_MC_FINISH_SWEEP_ARRAY_BUFFERS),
+          current_scope(Scope::MINOR_MC_FINISH_ENSURE_CAPACITY),
           current_scope(Scope::MINOR_MC_BACKGROUND_MARKING),
           current_scope(Scope::MINOR_MC_BACKGROUND_SWEEPING),
+          current_scope(Scope::BACKGROUND_YOUNG_ARRAY_BUFFER_SWEEP),
           current_scope(Scope::MINOR_MC_BACKGROUND_EVACUATE_COPY),
-          current_scope(Scope::MINOR_MC_BACKGROUND_EVACUATE_UPDATE_POINTERS),
           current_scope(Scope::BACKGROUND_UNMAPPER),
           current_scope(Scope::UNMAPPER), current_.start_object_size,
           current_.end_object_size, current_.start_holes_size,
@@ -926,6 +961,7 @@ void GCTracer::PrintNVP() const {
           "clear.weak_references=%.1f "
           "clear.join_job=%.1f "
           "complete.sweep_array_buffers=%.1f "
+          "complete.sweeping=%.1f "
           "epilogue=%.1f "
           "evacuate=%.1f "
           "evacuate.candidates=%.1f "
@@ -1014,6 +1050,7 @@ void GCTracer::PrintNVP() const {
           current_scope(Scope::MC_CLEAR_WEAK_REFERENCES),
           current_scope(Scope::MC_CLEAR_JOIN_JOB),
           current_scope(Scope::MC_COMPLETE_SWEEP_ARRAY_BUFFERS),
+          current_scope(Scope::MC_COMPLETE_SWEEPING),
           current_scope(Scope::MC_EPILOGUE), current_scope(Scope::MC_EVACUATE),
           current_scope(Scope::MC_EVACUATE_CANDIDATES),
           current_scope(Scope::MC_EVACUATE_CLEAN_UP),
@@ -1314,10 +1351,6 @@ void GCTracer::NotifyIncrementalMarkingStart() {
 void GCTracer::FetchBackgroundMarkCompactCounters() {
   FetchBackgroundCounters(Scope::FIRST_MC_BACKGROUND_SCOPE,
                           Scope::LAST_MC_BACKGROUND_SCOPE);
-  heap_->isolate()->counters()->background_marking()->AddSample(
-      static_cast<int>(current_.scopes[Scope::MC_BACKGROUND_MARKING]));
-  heap_->isolate()->counters()->background_sweeping()->AddSample(
-      static_cast<int>(current_.scopes[Scope::MC_BACKGROUND_SWEEPING]));
 }
 
 void GCTracer::FetchBackgroundMinorGCCounters() {
@@ -1724,8 +1757,7 @@ void GCTracer::ReportYoungCycleToRecorder() {
        current_.scopes[Scope::MINOR_MARK_COMPACTOR] +
        current_.scopes[Scope::SCAVENGER_BACKGROUND_SCAVENGE_PARALLEL] +
        current_.scopes[Scope::MINOR_MC_BACKGROUND_EVACUATE_COPY] +
-       current_.scopes[Scope::MINOR_MC_BACKGROUND_MARKING] +
-       current_.scopes[Scope::MINOR_MC_BACKGROUND_EVACUATE_UPDATE_POINTERS]) *
+       current_.scopes[Scope::MINOR_MC_BACKGROUND_MARKING]) *
       base::Time::kMicrosecondsPerMillisecond;
   // TODO(chromium:1154636): Consider adding BACKGROUND_YOUNG_ARRAY_BUFFER_SWEEP
   // (both for the case of the scavenger and the minor mark-compactor), and
@@ -1768,6 +1800,21 @@ void GCTracer::ReportYoungCycleToRecorder() {
   }
 
   recorder->AddMainThreadEvent(event, GetContextId(heap_->isolate()));
+}
+
+GarbageCollector GCTracer::GetCurrentCollector() const {
+  switch (current_.type) {
+    case Event::Type::SCAVENGER:
+      return GarbageCollector::SCAVENGER;
+    case Event::Type::MARK_COMPACTOR:
+    case Event::Type::INCREMENTAL_MARK_COMPACTOR:
+      return GarbageCollector::MARK_COMPACTOR;
+    case Event::Type::MINOR_MARK_COMPACTOR:
+    case Event::Type::INCREMENTAL_MINOR_MARK_COMPACTOR:
+      return GarbageCollector::MINOR_MARK_COMPACTOR;
+    case Event::Type::START:
+      UNREACHABLE();
+  }
 }
 
 }  // namespace internal

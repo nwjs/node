@@ -38,7 +38,7 @@ class WithDefaultPlatformMixin : public TMixin {
     platform_ = v8::platform::NewDefaultPlatform(
         0, v8::platform::IdleTaskSupport::kEnabled);
     CHECK_NOT_NULL(platform_.get());
-    v8::V8::InitializePlatform(platform_.get());
+    i::V8::InitializePlatformForTesting(platform_.get());
     // Allow changing flags in unit tests.
     // TODO(12887): Fix tests to avoid changing flag values after
     // initialization.
@@ -165,7 +165,6 @@ class WithIsolateScopeMixin : public TMixin {
 
   static MaybeLocal<Value> TryRunJS(Local<Context> context,
                                     Local<String> source) {
-    v8::Local<v8::Value> result;
     Local<Script> script =
         v8::Script::Compile(context, source).ToLocalChecked();
     return script->Run(context);
@@ -186,17 +185,16 @@ class WithIsolateScopeMixin : public TMixin {
         .ToLocalChecked();
   }
 
+  // By default, the GC methods do not scan the stack conservatively.
   void CollectGarbage(i::AllocationSpace space, i::Isolate* isolate = nullptr) {
     i::Isolate* iso = isolate ? isolate : i_isolate();
-    iso->heap()->CollectGarbage(space, i::GarbageCollectionReason::kTesting,
-                                kNoGCCallbackFlags);
+    iso->heap()->CollectGarbage(space, i::GarbageCollectionReason::kTesting);
   }
 
   void CollectAllGarbage(i::Isolate* isolate = nullptr) {
     i::Isolate* iso = isolate ? isolate : i_isolate();
     iso->heap()->CollectAllGarbage(i::Heap::kNoGCFlags,
-                                   i::GarbageCollectionReason::kTesting,
-                                   kNoGCCallbackFlags);
+                                   i::GarbageCollectionReason::kTesting);
   }
 
   void CollectAllAvailableGarbage(i::Isolate* isolate = nullptr) {
@@ -208,8 +206,7 @@ class WithIsolateScopeMixin : public TMixin {
   void PreciseCollectAllGarbage(i::Isolate* isolate = nullptr) {
     i::Isolate* iso = isolate ? isolate : i_isolate();
     iso->heap()->PreciseCollectAllGarbage(i::Heap::kNoGCFlags,
-                                          i::GarbageCollectionReason::kTesting,
-                                          kNoGCCallbackFlags);
+                                          i::GarbageCollectionReason::kTesting);
   }
 
   v8::Local<v8::String> NewString(const char* string) {
@@ -289,6 +286,18 @@ using TestWithContext =                    //
             WithIsolateMixin<              //
                 WithDefaultPlatformMixin<  //
                     ::testing::Test>>>>;
+
+// Use v8::internal::TestJSSharedMemoryWithNativeContext if you are testing
+// internals, aka. directly work with Handles.
+//
+// Using this will FATAL when !V8_CAN_CREATE_SHARED_HEAP_BOOL
+using TestJSSharedMemoryWithContext =                     //
+    WithContextMixin<                                     //
+        WithIsolateScopeMixin<                            //
+            WithIsolateMixin<                             //
+                WithDefaultPlatformMixin<                 //
+                    WithJSSharedMemoryFeatureFlagsMixin<  //
+                        ::testing::Test>>>>>;
 
 class PrintExtension : public v8::Extension {
  public:
@@ -564,18 +573,7 @@ class FeedbackVectorHelper {
 
 template <typename Spec>
 Handle<FeedbackVector> NewFeedbackVector(Isolate* isolate, Spec* spec) {
-  Handle<FeedbackMetadata> metadata = FeedbackMetadata::New(isolate, spec);
-  Handle<SharedFunctionInfo> shared =
-      isolate->factory()->NewSharedFunctionInfoForBuiltin(
-          isolate->factory()->empty_string(), Builtin::kIllegal);
-  // Set the raw feedback metadata to circumvent checks that we are not
-  // overwriting existing metadata.
-  shared->set_raw_outer_scope_info_or_feedback_metadata(*metadata);
-  Handle<ClosureFeedbackCellArray> closure_feedback_cell_array =
-      ClosureFeedbackCellArray::New(isolate, shared);
-  IsCompiledScope is_compiled_scope(shared->is_compiled_scope(isolate));
-  return FeedbackVector::New(isolate, shared, closure_feedback_cell_array,
-                             &is_compiled_scope);
+  return FeedbackVector::NewForTesting(isolate, spec);
 }
 
 class ParkingThread : public v8::base::Thread {

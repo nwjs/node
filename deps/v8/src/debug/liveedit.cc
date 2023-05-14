@@ -654,7 +654,8 @@ class FunctionDataMap : public ThreadVisitor {
   }
 
   void VisitThread(Isolate* isolate, ThreadLocalTop* top) override {
-    for (JavaScriptFrameIterator it(isolate, top); !it.done(); it.Advance()) {
+    for (JavaScriptStackFrameIterator it(isolate, top); !it.done();
+         it.Advance()) {
       std::vector<Handle<SharedFunctionInfo>> sfis;
       it.frame()->GetFunctions(&sfis);
       for (auto& sfi : sfis) {
@@ -701,6 +702,11 @@ bool CanPatchScript(const LiteralMap& changed, Handle<Script> script,
     Handle<SharedFunctionInfo> sfi;
     if (!data->shared.ToHandle(&sfi)) {
       continue;
+    } else if (IsModule(sfi->kind())) {
+      DCHECK(script->origin_options().IsModule() && sfi->is_toplevel());
+      result->status =
+          debug::LiveEditResult::BLOCKED_BY_TOP_LEVEL_ES_MODULE_CHANGE;
+      return false;
     } else if (data->stack_position == FunctionData::ON_STACK) {
       result->status = debug::LiveEditResult::BLOCKED_BY_ACTIVE_FUNCTION;
       return false;
@@ -821,7 +827,7 @@ MaybeHandle<ScopeInfo> DetermineOuterScopeInfo(Isolate* isolate,
 
 void LiveEdit::PatchScript(Isolate* isolate, Handle<Script> script,
                            Handle<String> new_source, bool preview,
-                           bool allow_top_frame_live_editing_param,
+                           bool allow_top_frame_live_editing,
                            debug::LiveEditResult* result) {
   std::vector<SourceChangeRange> diffs;
   LiveEdit::CompareStrings(isolate,
@@ -878,8 +884,6 @@ void LiveEdit::PatchScript(Isolate* isolate, Handle<Script> script,
   }
   function_data_map.Fill(isolate);
 
-  const bool allow_top_frame_live_editing =
-      allow_top_frame_live_editing_param && v8_flags.live_edit_top_frame;
   if (!CanPatchScript(changed, script, new_script, function_data_map,
                       allow_top_frame_live_editing, result)) {
     return;
@@ -977,7 +981,7 @@ void LiveEdit::PatchScript(Isolate* isolate, Handle<Script> script,
     isolate->compilation_cache()->Remove(sfi);
     for (auto& js_function : data->js_functions) {
       js_function->set_shared(*new_sfi);
-      js_function->set_code(js_function->shared().GetCode(), kReleaseStore);
+      js_function->set_code(js_function->shared().GetCode(isolate));
 
       js_function->set_raw_feedback_cell(
           *isolate->factory()->many_closures_cell());

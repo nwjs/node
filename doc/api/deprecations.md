@@ -1864,14 +1864,18 @@ bits are allowed. Authentication tags of other lengths are invalid per
 
 <!-- YAML
 changes:
+  - version: v20.0.0
+    pr-url: https://github.com/nodejs/node/pull/47182
+    description: End-of-Life.
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/18333
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`crypto.DEFAULT_ENCODING`][] property is deprecated.
+The `crypto.DEFAULT_ENCODING` property only existed for compatibility with
+Node.js releases prior to versions 0.9.3 and has been removed.
 
 ### DEP0092: Top-level `this` bound to `module.exports`
 
@@ -2288,7 +2292,9 @@ future release.
 
 <!-- YAML
 changes:
-  - version: v19.0.0
+  - version:
+      - v19.0.0
+      - v18.13.0
     pr-url: https://github.com/nodejs/node/pull/44919
     description: \`url.parse()` is deprecated again in DEP0169.
   - version:
@@ -2973,12 +2979,15 @@ option, or a non-nullish non-boolean value for `verbatim` option in
 
 <!-- YAML
 changes:
+  - version: v20.0.0
+    pr-url: https://github.com/nodejs/node/pull/45653
+    description: Runtime deprecation.
   - version: v16.10.0
     pr-url: https://github.com/nodejs/node/pull/39927
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only (supports [`--pending-deprecation`][])
+Type: Runtime
 
 The `'hash'` and `'mgf1Hash'` options are replaced with `'hashAlgorithm'`
 and `'mgf1HashAlgorithm'`.
@@ -3178,6 +3187,9 @@ thing instead.
 
 <!-- YAML
 changes:
+  - version: v20.0.0
+    pr-url: https://github.com/nodejs/node/pull/43716
+    description: End-of-Life.
   - version: v19.0.0
     pr-url: https://github.com/nodejs/node/pull/44711
     description: Runtime deprecation.
@@ -3195,7 +3207,7 @@ changes:
                  coercion.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 Values other than `undefined`, `null`, integer numbers, and integer strings
 (e.g., `'1'`) are deprecated as value for the `code` parameter in
@@ -3280,13 +3292,17 @@ Node-API callbacks.
 
 <!-- YAML
 changes:
+  - version: v19.9.0
+    pr-url: https://github.com/nodejs/node/pull/47203
+    description: Added support for `--pending-deprecation`.
   - version:
       - v19.0.0
+      - v18.13.0
     pr-url: https://github.com/nodejs/node/pull/44919
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Documentation-only (supports [`--pending-deprecation`][])
 
 [`url.parse()`][] behavior is not standardized and prone to errors that
 have security implications. Use the [WHATWG URL API][] instead. CVEs are not
@@ -3297,12 +3313,17 @@ issued for `url.parse()` vulnerabilities.
 <!-- YAML
 changes:
   - version:
-    - v19.2.0
+    - v20.0.0
+    pr-url: https://github.com/nodejs/node/pull/45526
+    description: Runtime deprecation.
+  - version:
+      - v19.2.0
+      - v18.13.0
     pr-url: https://github.com/nodejs/node/pull/45576
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 [`url.parse()`][] accepts URLs with ports that are not numbers. This behavior
 might result in host name spoofing with unexpected input. These URLs will throw
@@ -3314,6 +3335,7 @@ an error in future versions of Node.js, as the [WHATWG URL API][] does already.
 changes:
   - version:
       - v19.3.0
+      - v18.13.0
     pr-url: https://github.com/nodejs/node/pull/45697
     description: Documentation-only deprecation.
 -->
@@ -3323,6 +3345,20 @@ Type: Documentation-only
 In a future version of Node.js, [`message.headers`][],
 [`message.headersDistinct`][], [`message.trailers`][], and
 [`message.trailersDistinct`][] will be read-only.
+
+### DEP0172: The `asyncResource` property of `AsyncResource` bound functions
+
+<!-- YAML
+changes:
+  - version: v20.0.0
+    pr-url: https://github.com/nodejs/node/pull/46432
+    description: Runtime-deprecation.
+-->
+
+Type: Runtime
+
+In a future version of Node.js, the `asyncResource` property will no longer
+be added when a function is bound to an `AsyncResource`.
 
 [NIST SP 800-38D]: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf
 [RFC 6066]: https://tools.ietf.org/html/rfc6066#section-3
@@ -3356,7 +3392,6 @@ In a future version of Node.js, [`message.headers`][],
 [`console.error()`]: console.md#consoleerrordata-args
 [`console.log()`]: console.md#consolelogdata-args
 [`crypto.Certificate()` constructor]: crypto.md#legacy-api
-[`crypto.DEFAULT_ENCODING`]: crypto.md#cryptodefault_encoding
 [`crypto.createCipher()`]: crypto.md#cryptocreatecipheralgorithm-password-options
 [`crypto.createCipheriv()`]: crypto.md#cryptocreatecipherivalgorithm-key-iv-options
 [`crypto.createDecipher()`]: crypto.md#cryptocreatedecipheralgorithm-password-options

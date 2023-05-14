@@ -75,6 +75,9 @@
 #include "v8-platform.h"  // NOLINT(build/include_order)
 #include "node_version.h"  // NODE_MODULE_VERSION
 
+#define NAPI_EXPERIMENTAL
+#include "node_api.h"
+
 #include <functional>
 #include <memory>
 #include <ostream>
@@ -120,8 +123,6 @@
 
 // Forward-declare libuv loop
 struct uv_loop_s;
-
-struct napi_module;
 
 // Forward-declare these functions now to stop MSVS from becoming
 // terminally confused when it's done in node_internals.h
@@ -229,10 +230,8 @@ class Environment;
 class MultiIsolatePlatform;
 class InitializationResultImpl;
 
-namespace ProcessFlags {
-// TODO(addaleax): Switch to uint32_t to match std::atomic<uint32_t>
-// init_process_flags in node.cc
-enum Flags : uint64_t {
+namespace ProcessInitializationFlags {
+enum Flags : uint32_t {
   kNoFlags = 0,
   // Enable stdio inheritance, which is disabled by default.
   // This flag is also implied by kNoStdioInitialization.
@@ -272,9 +271,8 @@ enum Flags : uint64_t {
       kNoParseGlobalDebugVariables | kNoAdjustResourceLimits |
       kNoUseLargePages | kNoPrintHelpOrVersionOutput,
 };
-}  // namespace ProcessFlags
-// TODO(addaleax): Make this the canonical name, as it is more descriptive.
-namespace ProcessInitializationFlags = ProcessFlags;
+}  // namespace ProcessInitializationFlags
+namespace ProcessFlags = ProcessInitializationFlags;  // Legacy alias.
 
 namespace StopFlags {
 enum Flags : uint32_t {
@@ -320,8 +318,8 @@ NODE_EXTERN int Start(int argc, char* argv[]);
 
 // Tear down Node.js while it is running (there are active handles
 // in the loop and / or actively executing JavaScript code).
-NODE_EXTERN int Stop(Environment* env);
-NODE_EXTERN int Stop(Environment* env, StopFlags::Flags flags);
+NODE_EXTERN int Stop(Environment* env,
+                     StopFlags::Flags flags = StopFlags::kNoFlags);
 
 // Set up per-process state needed to run Node.js. This will consume arguments
 // from argv, fill exec_argv, and possibly add errors resulting from parsing
@@ -466,7 +464,7 @@ enum IsolateSettingsFlags {
   DETAILED_SOURCE_POSITIONS_FOR_PROFILING = 1 << 1,
   SHOULD_NOT_SET_PROMISE_REJECTION_CALLBACK = 1 << 2,
   SHOULD_NOT_SET_PREPARE_STACK_TRACE_CALLBACK = 1 << 3,
-  ALLOW_MODIFY_CODE_GENERATION_FROM_STRINGS_CALLBACK = 1 << 4,
+  ALLOW_MODIFY_CODE_GENERATION_FROM_STRINGS_CALLBACK = 0, /* legacy no-op */
 };
 
 struct IsolateSettings {
@@ -568,25 +566,17 @@ NODE_EXTERN void SetIsolateUpForNode(v8::Isolate* isolate);
 // This is a convenience method equivalent to using SetIsolateCreateParams(),
 // Isolate::Allocate(), MultiIsolatePlatform::RegisterIsolate(),
 // Isolate::Initialize(), and SetIsolateUpForNode().
-NODE_EXTERN v8::Isolate* NewIsolate(ArrayBufferAllocator* allocator,
-                                    struct uv_loop_s* event_loop,
-                                    MultiIsolatePlatform* platform = nullptr);
-// TODO(addaleax): Merge with the function definition above.
-NODE_EXTERN v8::Isolate* NewIsolate(ArrayBufferAllocator* allocator,
-                                    struct uv_loop_s* event_loop,
-                                    MultiIsolatePlatform* platform,
-                                    const EmbedderSnapshotData* snapshot_data,
-                                    const IsolateSettings& settings = {});
 NODE_EXTERN v8::Isolate* NewIsolate(
-    std::shared_ptr<ArrayBufferAllocator> allocator,
+    ArrayBufferAllocator* allocator,
     struct uv_loop_s* event_loop,
-    MultiIsolatePlatform* platform);
-// TODO(addaleax): Merge with the function definition above.
+    MultiIsolatePlatform* platform,
+    const EmbedderSnapshotData* snapshot_data = nullptr,
+    const IsolateSettings& settings = {});
 NODE_EXTERN v8::Isolate* NewIsolate(
     std::shared_ptr<ArrayBufferAllocator> allocator,
     struct uv_loop_s* event_loop,
     MultiIsolatePlatform* platform,
-    const EmbedderSnapshotData* snapshot_data,
+    const EmbedderSnapshotData* snapshot_data = nullptr,
     const IsolateSettings& settings = {});
 
 // Creates a new context with Node.js-specific tweaks.
@@ -606,14 +596,8 @@ NODE_EXTERN IsolateData* CreateIsolateData(
     v8::Isolate* isolate,
     struct uv_loop_s* loop,
     MultiIsolatePlatform* platform = nullptr,
-    ArrayBufferAllocator* allocator = nullptr);
-// TODO(addaleax): Merge with the function definition above.
-NODE_EXTERN IsolateData* CreateIsolateData(
-    v8::Isolate* isolate,
-    struct uv_loop_s* loop,
-    MultiIsolatePlatform* platform,
-    ArrayBufferAllocator* allocator,
-    const EmbedderSnapshotData* snapshot_data);
+    ArrayBufferAllocator* allocator = nullptr,
+    const EmbedderSnapshotData* snapshot_data = nullptr);
 NODE_EXTERN void FreeIsolateData(IsolateData* isolate_data);
 
 struct ThreadId {
@@ -705,6 +689,7 @@ NODE_EXTERN std::unique_ptr<InspectorParentHandle> GetInspectorParentHandle(
 struct StartExecutionCallbackInfo {
   v8::Local<v8::Object> process_object;
   v8::Local<v8::Function> native_require;
+  v8::Local<v8::Function> run_cjs;
 };
 
 using StartExecutionCallback =
@@ -714,8 +699,7 @@ NODE_EXTERN v8::MaybeLocal<v8::Value> LoadEnvironment(
     Environment* env,
     StartExecutionCallback cb);
 NODE_EXTERN v8::MaybeLocal<v8::Value> LoadEnvironment(
-    Environment* env,
-    const char* main_script_source_utf8);
+    Environment* env, std::string_view main_script_source_utf8);
 NODE_EXTERN void FreeEnvironment(Environment* env);
 
 // Set a callback that is called when process.exit() is called from JS,
@@ -1262,6 +1246,9 @@ NODE_EXTERN void AddLinkedBinding(Environment* env,
                                   const char* name,
                                   addon_context_register_func fn,
                                   void* priv);
+NODE_EXTERN void AddLinkedBinding(Environment* env,
+                                  const char* name,
+                                  napi_addon_register_func fn);
 
 /* Registers a callback with the passed-in Environment instance. The callback
  * is called after the event loop exits, but before the VM is disposed.

@@ -77,15 +77,7 @@ void DecompressionAnalyzer::ProcessOperation(const Operation& op) {
     case Opcode::kStore: {
       auto& store = op.Cast<StoreOp>();
       MarkAsNeedsDecompression(store.base());
-      if (!store.stored_rep.IsTagged()) {
-        MarkAsNeedsDecompression(store.value());
-      }
-      break;
-    }
-    case Opcode::kIndexedStore: {
-      auto& store = op.Cast<IndexedStoreOp>();
-      MarkAsNeedsDecompression(store.base());
-      MarkAsNeedsDecompression(store.index());
+      if (store.index().valid()) MarkAsNeedsDecompression(store.index());
       if (!store.stored_rep.IsTagged()) {
         MarkAsNeedsDecompression(store.value());
       }
@@ -148,10 +140,11 @@ void DecompressionAnalyzer::ProcessOperation(const Operation& op) {
       auto& bitcast = op.Cast<TaggedBitcastOp>();
       if (NeedsDecompression(op)) {
         MarkAsNeedsDecompression(bitcast.input());
+      } else {
+        candidates.push_back(graph.Index(op));
       }
       break;
     }
-    case Opcode::kIndexedLoad:
     case Opcode::kLoad:
     case Opcode::kConstant:
       if (!NeedsDecompression(op)) {
@@ -188,7 +181,7 @@ void RunDecompressionOptimization(Graph& graph, Zone* phase_zone) {
       case Opcode::kPhi: {
         auto& phi = op.Cast<PhiOp>();
         if (phi.rep == RegisterRepresentation::Tagged()) {
-          phi.rep = RegisterRepresentation::Tagged();
+          phi.rep = RegisterRepresentation::Compressed();
         }
         break;
       }
@@ -202,13 +195,12 @@ void RunDecompressionOptimization(Graph& graph, Zone* phase_zone) {
         }
         break;
       }
-      case Opcode::kIndexedLoad: {
-        auto& load = op.Cast<IndexedLoadOp>();
-        if (load.loaded_rep.IsTagged()) {
-          DCHECK_EQ(load.result_rep,
-                    any_of(RegisterRepresentation::Tagged(),
-                           RegisterRepresentation::Compressed()));
-          load.result_rep = RegisterRepresentation::Compressed();
+      case Opcode::kTaggedBitcast: {
+        auto& bitcast = op.Cast<TaggedBitcastOp>();
+        if (bitcast.from == RegisterRepresentation::Tagged() &&
+            bitcast.to == RegisterRepresentation::PointerSized()) {
+          bitcast.from = RegisterRepresentation::Compressed();
+          bitcast.to = RegisterRepresentation::Word32();
         }
         break;
       }

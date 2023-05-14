@@ -5,6 +5,7 @@
 #include "src/objects/keys.h"
 
 #include "src/api/api-arguments-inl.h"
+#include "src/common/assert-scope.h"
 #include "src/common/globals.h"
 #include "src/execution/isolate-inl.h"
 #include "src/handles/handles-inl.h"
@@ -17,6 +18,7 @@
 #include "src/objects/objects-inl.h"
 #include "src/objects/ordered-hash-table-inl.h"
 #include "src/objects/property-descriptor.h"
+#include "src/objects/prototype-info.h"
 #include "src/objects/prototype.h"
 #include "src/objects/slots-atomic-inl.h"
 #include "src/utils/identity-map.h"
@@ -148,9 +150,8 @@ ExceptionStatus KeyAccumulator::AddKey(Handle<Object> key,
       OrderedHashSet::Add(isolate(), keys(), key);
   Handle<OrderedHashSet> new_set;
   if (!new_set_candidate.ToHandle(&new_set)) {
-    THROW_NEW_ERROR_RETURN_VALUE(
-        isolate_, NewRangeError(MessageTemplate::kTooManyProperties),
-        ExceptionStatus::kException);
+    CHECK(isolate_->has_pending_exception());
+    return ExceptionStatus::kException;
   }
   if (*new_set != *keys_) {
     // The keys_ Set is converted directly to a FixedArray in GetKeys which can
@@ -182,7 +183,8 @@ ExceptionStatus KeyAccumulator::AddKeys(Handle<JSObject> array_like,
 MaybeHandle<FixedArray> FilterProxyKeys(KeyAccumulator* accumulator,
                                         Handle<JSProxy> owner,
                                         Handle<FixedArray> keys,
-                                        PropertyFilter filter) {
+                                        PropertyFilter filter,
+                                        bool skip_indices) {
   if (filter == ALL_PROPERTIES) {
     // Nothing to do.
     return keys;
@@ -192,6 +194,10 @@ MaybeHandle<FixedArray> FilterProxyKeys(KeyAccumulator* accumulator,
   for (int i = 0; i < keys->length(); ++i) {
     Handle<Name> key(Name::cast(keys->get(i)), isolate);
     if (key->FilterKey(filter)) continue;  // Skip this key.
+    if (skip_indices) {
+      uint32_t index;
+      if (key->AsArrayIndex(&index)) continue;  // Skip this key.
+    }
     if (filter & ONLY_ENUMERABLE) {
       PropertyDescriptor desc;
       Maybe<bool> found =
@@ -218,7 +224,8 @@ Maybe<bool> KeyAccumulator::AddKeysFromJSProxy(Handle<JSProxy> proxy,
   // Postpone the enumerable check for for-in to the ForInFilter step.
   if (!is_for_in_) {
     ASSIGN_RETURN_ON_EXCEPTION_VALUE(
-        isolate_, keys, FilterProxyKeys(this, proxy, keys, filter_),
+        isolate_, keys,
+        FilterProxyKeys(this, proxy, keys, filter_, skip_indices_),
         Nothing<bool>());
   }
   // https://tc39.es/ecma262/#sec-proxy-object-internal-methods-and-internal-slots-ownpropertykeys
@@ -312,7 +319,7 @@ void TrySettingEmptyEnumCache(JSReceiver object) {
   map.SetEnumLength(0);
 }
 
-bool CheckAndInitalizeEmptyEnumCache(JSReceiver object) {
+bool CheckAndInitializeEmptyEnumCache(JSReceiver object) {
   if (object.map().EnumLength() == kInvalidEnumCacheSentinel) {
     TrySettingEmptyEnumCache(object);
   }
@@ -342,7 +349,7 @@ void FastKeyAccumulator::Prepare() {
         only_own_has_simple_elements_ = false;
       }
     }
-    bool has_no_properties = CheckAndInitalizeEmptyEnumCache(current);
+    bool has_no_properties = CheckAndInitializeEmptyEnumCache(current);
     if (has_no_properties) continue;
     last_prototype = current;
     has_empty_prototype_ = false;
@@ -368,7 +375,7 @@ Handle<FixedArray> ReduceFixedArrayTo(Isolate* isolate,
   return isolate->factory()->CopyFixedArrayUpTo(array, length);
 }
 
-// Initializes and directly returns the enume cache. Users of this function
+// Initializes and directly returns the enum cache. Users of this function
 // have to make sure to never directly leak the enum cache.
 Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
                                            Handle<JSObject> object) {
@@ -398,51 +405,8 @@ Handle<FixedArray> GetFastEnumPropertyKeys(Isolate* isolate,
     return ReduceFixedArrayTo(isolate, keys, enum_length);
   }
 
-  Handle<DescriptorArray> descriptors =
-      Handle<DescriptorArray>(map->instance_descriptors(isolate), isolate);
-  isolate->counters()->enum_cache_misses()->Increment();
-
-  // Create the keys array.
-  int index = 0;
-  bool fields_only = true;
-  keys = isolate->factory()->NewFixedArray(enum_length);
-  for (InternalIndex i : map->IterateOwnDescriptors()) {
-    DisallowGarbageCollection no_gc;
-    PropertyDetails details = descriptors->GetDetails(i);
-    if (details.IsDontEnum()) continue;
-    Object key = descriptors->GetKey(i);
-    if (key.IsSymbol()) continue;
-    keys->set(index, key);
-    if (details.location() != PropertyLocation::kField) fields_only = false;
-    index++;
-  }
-  DCHECK_EQ(index, keys->length());
-
-  // Optionally also create the indices array.
-  Handle<FixedArray> indices = isolate->factory()->empty_fixed_array();
-  if (fields_only) {
-    indices = isolate->factory()->NewFixedArray(enum_length);
-    index = 0;
-    for (InternalIndex i : map->IterateOwnDescriptors()) {
-      DisallowGarbageCollection no_gc;
-      PropertyDetails details = descriptors->GetDetails(i);
-      if (details.IsDontEnum()) continue;
-      Object key = descriptors->GetKey(i);
-      if (key.IsSymbol()) continue;
-      DCHECK_EQ(PropertyKind::kData, details.kind());
-      DCHECK_EQ(PropertyLocation::kField, details.location());
-      FieldIndex field_index = FieldIndex::ForDescriptor(*map, i);
-      indices->set(index, Smi::FromInt(field_index.GetLoadByFieldIndex()));
-      index++;
-    }
-    DCHECK_EQ(index, indices->length());
-  }
-
-  DescriptorArray::InitializeOrChangeEnumCache(descriptors, isolate, keys,
-                                               indices);
-  if (map->OnlyHasSimpleProperties()) map->SetEnumLength(enum_length);
-
-  return keys;
+  return FastKeyAccumulator::InitializeFastPropertyEnumCache(isolate, map,
+                                                             enum_length);
 }
 
 template <bool fast_properties>
@@ -451,7 +415,6 @@ MaybeHandle<FixedArray> GetOwnKeysWithElements(Isolate* isolate,
                                                GetKeysConversion convert,
                                                bool skip_indices) {
   Handle<FixedArray> keys;
-  ElementsAccessor* accessor = object->GetElementsAccessor();
   if (fast_properties) {
     keys = GetFastEnumPropertyKeys(isolate, object);
   } else {
@@ -463,6 +426,7 @@ MaybeHandle<FixedArray> GetOwnKeysWithElements(Isolate* isolate,
   if (skip_indices) {
     result = keys;
   } else {
+    ElementsAccessor* accessor = object->GetElementsAccessor(isolate);
     result = accessor->PrependElementIndices(isolate, object, keys, convert,
                                              ONLY_ENUMERABLE);
   }
@@ -518,7 +482,7 @@ MaybeHandle<FixedArray> FastKeyAccumulator::GetKeysFast(
   if (enum_length == kInvalidEnumCacheSentinel) {
     Handle<FixedArray> keys;
     // Try initializing the enum cache and return own properties.
-    if (GetOwnKeysWithUninitializedEnumCache().ToHandle(&keys)) {
+    if (GetOwnKeysWithUninitializedEnumLength().ToHandle(&keys)) {
       if (v8_flags.trace_for_in_enumerate) {
         PrintF("| strings=%d symbols=0 elements=0 || prototypes>=1 ||\n",
                keys->length());
@@ -534,10 +498,73 @@ MaybeHandle<FixedArray> FastKeyAccumulator::GetKeysFast(
                                       skip_indices_);
 }
 
+// static
+Handle<FixedArray> FastKeyAccumulator::InitializeFastPropertyEnumCache(
+    Isolate* isolate, Handle<Map> map, int enum_length,
+    AllocationType allocation) {
+  DCHECK_EQ(kInvalidEnumCacheSentinel, map->EnumLength());
+  DCHECK_GT(enum_length, 0);
+  DCHECK_EQ(enum_length, map->NumberOfEnumerableProperties());
+  DCHECK(!map->is_dictionary_map());
+
+  Handle<DescriptorArray> descriptors =
+      Handle<DescriptorArray>(map->instance_descriptors(isolate), isolate);
+
+  // The enum cache should have been a hit if the number of enumerable
+  // properties is fewer than what's already in the cache.
+  DCHECK_LT(descriptors->enum_cache().keys().length(), enum_length);
+  isolate->counters()->enum_cache_misses()->Increment();
+
+  // Create the keys array.
+  int index = 0;
+  bool fields_only = true;
+  Handle<FixedArray> keys =
+      isolate->factory()->NewFixedArray(enum_length, allocation);
+  for (InternalIndex i : map->IterateOwnDescriptors()) {
+    DisallowGarbageCollection no_gc;
+    PropertyDetails details = descriptors->GetDetails(i);
+    if (details.IsDontEnum()) continue;
+    Object key = descriptors->GetKey(i);
+    if (key.IsSymbol()) continue;
+    keys->set(index, key);
+    if (details.location() != PropertyLocation::kField) fields_only = false;
+    index++;
+  }
+  DCHECK_EQ(index, keys->length());
+
+  // Optionally also create the indices array.
+  Handle<FixedArray> indices = isolate->factory()->empty_fixed_array();
+  if (fields_only) {
+    indices = isolate->factory()->NewFixedArray(enum_length, allocation);
+    index = 0;
+    DisallowGarbageCollection no_gc;
+    auto raw_map = *map;
+    auto raw_indices = *indices;
+    auto raw_descriptors = *descriptors;
+    for (InternalIndex i : raw_map.IterateOwnDescriptors()) {
+      PropertyDetails details = raw_descriptors.GetDetails(i);
+      if (details.IsDontEnum()) continue;
+      Object key = raw_descriptors.GetKey(i);
+      if (key.IsSymbol()) continue;
+      DCHECK_EQ(PropertyKind::kData, details.kind());
+      DCHECK_EQ(PropertyLocation::kField, details.location());
+      FieldIndex field_index = FieldIndex::ForDetails(raw_map, details);
+      raw_indices.set(index, Smi::FromInt(field_index.GetLoadByFieldIndex()));
+      index++;
+    }
+    DCHECK_EQ(index, indices->length());
+  }
+
+  DescriptorArray::InitializeOrChangeEnumCache(descriptors, isolate, keys,
+                                               indices, allocation);
+  if (map->OnlyHasSimpleProperties()) map->SetEnumLength(enum_length);
+  return keys;
+}
+
 MaybeHandle<FixedArray>
-FastKeyAccumulator::GetOwnKeysWithUninitializedEnumCache() {
+FastKeyAccumulator::GetOwnKeysWithUninitializedEnumLength() {
   Handle<JSObject> object = Handle<JSObject>::cast(receiver_);
-  // Uninitalized enum cache
+  // Uninitialized enum length
   Map map = object->map();
   if (object->elements() != ReadOnlyRoots(isolate_).empty_fixed_array() &&
       object->elements() !=
@@ -639,19 +666,19 @@ bool FastKeyAccumulator::TryPrototypeInfoCache(Handle<JSReceiver> receiver) {
       !isolate_->MayAccess(handle(isolate_->context(), isolate_), object)) {
     return false;
   }
-  HeapObject prototype = receiver->map().prototype();
+  DisallowGarbageCollection no_gc;
+  HeapObject prototype = receiver->map(isolate_).prototype();
   if (prototype.is_null()) return false;
-  if (!prototype.map().is_prototype_map() ||
-      !prototype.map().prototype_info().IsPrototypeInfo()) {
-    return false;
-  }
+  Map maybe_proto_map = prototype.map(isolate_);
+  if (!maybe_proto_map.is_prototype_map()) return false;
+  PrototypeInfo prototype_info;
+  if (!maybe_proto_map.TryGetPrototypeInfo(&prototype_info)) return false;
+
   first_prototype_ = handle(JSReceiver::cast(prototype), isolate_);
-  Handle<Map> map(prototype.map(), isolate_);
-  first_prototype_map_ = map;
-  has_prototype_info_cache_ = map->IsPrototypeValidityCellValid() &&
-                              PrototypeInfo::cast(map->prototype_info())
-                                  .prototype_chain_enum_cache()
-                                  .IsFixedArray();
+  first_prototype_map_ = handle(maybe_proto_map, isolate_);
+  has_prototype_info_cache_ =
+      maybe_proto_map.IsPrototypeValidityCellValid() &&
+      prototype_info.prototype_chain_enum_cache().IsFixedArray();
   return true;
 }
 
@@ -1270,7 +1297,7 @@ Maybe<bool> KeyAccumulator::CollectOwnJSProxyKeys(Handle<JSReceiver> receiver,
     }
   }
   // 10. Let extensibleTarget be ? IsExtensible(target).
-  Maybe<bool> maybe_extensible = JSReceiver::IsExtensible(target);
+  Maybe<bool> maybe_extensible = JSReceiver::IsExtensible(isolate_, target);
   MAYBE_RETURN(maybe_extensible, Nothing<bool>());
   bool extensible_target = maybe_extensible.FromJust();
   // 11. Let targetKeys be ? target.[[OwnPropertyKeys]]().

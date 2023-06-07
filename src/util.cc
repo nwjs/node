@@ -144,7 +144,7 @@ std::string GetProcessTitle(const char* default_title) {
   std::string buf(16, '\0');
 
   for (;;) {
-    const int rc = uv_get_process_title(&buf[0], buf.size());
+    const int rc = uv_get_process_title(buf.data(), buf.size());
 
     if (rc == 0)
       break;
@@ -160,7 +160,7 @@ std::string GetProcessTitle(const char* default_title) {
 
   // Strip excess trailing nul bytes. Using strlen() here is safe,
   // uv_get_process_title() always zero-terminates the result.
-  buf.resize(strlen(&buf[0]));
+  buf.resize(strlen(buf.data()));
 
   return buf;
 }
@@ -392,6 +392,25 @@ void SetMethod(v8::Isolate* isolate,
   that->Set(name_string, t);
 }
 
+void SetFastMethod(Isolate* isolate,
+                   Local<Template> that,
+                   const char* name,
+                   v8::FunctionCallback slow_callback,
+                   const v8::CFunction* c_function) {
+  Local<v8::FunctionTemplate> t =
+      NewFunctionTemplate(isolate,
+                          slow_callback,
+                          Local<v8::Signature>(),
+                          v8::ConstructorBehavior::kThrow,
+                          v8::SideEffectType::kHasSideEffect,
+                          c_function);
+  // kInternalized strings are created in the old space.
+  const v8::NewStringType type = v8::NewStringType::kInternalized;
+  Local<v8::String> name_string =
+      v8::String::NewFromUtf8(isolate, name, type).ToLocalChecked();
+  that->Set(name_string, t);
+}
+
 void SetFastMethod(Local<v8::Context> context,
                    Local<v8::Object> that,
                    const char* name,
@@ -434,6 +453,25 @@ void SetFastMethodNoSideEffect(Local<v8::Context> context,
   that->Set(context, name_string, function).Check();
 }
 
+void SetFastMethodNoSideEffect(Isolate* isolate,
+                               Local<Template> that,
+                               const char* name,
+                               v8::FunctionCallback slow_callback,
+                               const v8::CFunction* c_function) {
+  Local<v8::FunctionTemplate> t =
+      NewFunctionTemplate(isolate,
+                          slow_callback,
+                          Local<v8::Signature>(),
+                          v8::ConstructorBehavior::kThrow,
+                          v8::SideEffectType::kHasNoSideEffect,
+                          c_function);
+  // kInternalized strings are created in the old space.
+  const v8::NewStringType type = v8::NewStringType::kInternalized;
+  Local<v8::String> name_string =
+      v8::String::NewFromUtf8(isolate, name, type).ToLocalChecked();
+  that->Set(name_string, t);
+}
+
 void SetMethodNoSideEffect(Local<v8::Context> context,
                            Local<v8::Object> that,
                            const char* name,
@@ -453,6 +491,23 @@ void SetMethodNoSideEffect(Local<v8::Context> context,
       v8::String::NewFromUtf8(isolate, name, type).ToLocalChecked();
   that->Set(context, name_string, function).Check();
   function->SetName(name_string);  // NODE_SET_METHOD() compatibility.
+}
+
+void SetMethodNoSideEffect(Isolate* isolate,
+                           Local<v8::Template> that,
+                           const char* name,
+                           v8::FunctionCallback callback) {
+  Local<v8::FunctionTemplate> t =
+      NewFunctionTemplate(isolate,
+                          callback,
+                          Local<v8::Signature>(),
+                          v8::ConstructorBehavior::kThrow,
+                          v8::SideEffectType::kHasNoSideEffect);
+  // kInternalized strings are created in the old space.
+  const v8::NewStringType type = v8::NewStringType::kInternalized;
+  Local<v8::String> name_string =
+      v8::String::NewFromUtf8(isolate, name, type).ToLocalChecked();
+  that->Set(name_string, t);
 }
 
 void SetProtoMethod(v8::Isolate* isolate,
@@ -551,61 +606,15 @@ void SetConstructorFunction(Isolate* isolate,
   that->Set(name, tmpl);
 }
 
-namespace {
-
-class NonOwningExternalOneByteResource
-    : public v8::String::ExternalOneByteStringResource {
- public:
-  explicit NonOwningExternalOneByteResource(const UnionBytes& source)
-      : source_(source) {}
-  ~NonOwningExternalOneByteResource() override = default;
-
-  const char* data() const override {
-    return reinterpret_cast<const char*>(source_.one_bytes_data());
-  }
-  size_t length() const override { return source_.length(); }
-
-  NonOwningExternalOneByteResource(const NonOwningExternalOneByteResource&) =
-      delete;
-  NonOwningExternalOneByteResource& operator=(
-      const NonOwningExternalOneByteResource&) = delete;
-
- private:
-  const UnionBytes source_;
-};
-
-class NonOwningExternalTwoByteResource
-    : public v8::String::ExternalStringResource {
- public:
-  explicit NonOwningExternalTwoByteResource(const UnionBytes& source)
-      : source_(source) {}
-  ~NonOwningExternalTwoByteResource() override = default;
-
-  const uint16_t* data() const override { return source_.two_bytes_data(); }
-  size_t length() const override { return source_.length(); }
-
-  NonOwningExternalTwoByteResource(const NonOwningExternalTwoByteResource&) =
-      delete;
-  NonOwningExternalTwoByteResource& operator=(
-      const NonOwningExternalTwoByteResource&) = delete;
-
- private:
-  const UnionBytes source_;
-};
-
-}  // anonymous namespace
-
 Local<String> UnionBytes::ToStringChecked(Isolate* isolate) const {
-  if (UNLIKELY(length() == 0)) {
-    // V8 requires non-null data pointers for empty external strings,
-    // but we don't guarantee that. Solve this by not creating an
-    // external string at all in that case.
-    return String::Empty(isolate);
-  }
   if (is_one_byte()) {
-    return v8::String::NewFromOneByte(isolate, one_bytes_data(), v8::NewStringType::kNormal, length_).ToLocalChecked();
+    return v8::String::NewFromOneByte(isolate, (const uint8_t *)one_byte_resource_->data(),
+				      v8::NewStringType::kNormal,
+				      one_byte_resource_->length()).ToLocalChecked();
   } else {
-    return v8::String::NewFromTwoByte(isolate, two_bytes_data(), v8::NewStringType::kNormal, length_).ToLocalChecked();
+    return v8::String::NewFromTwoByte(isolate, two_byte_resource_->data(),
+				      v8::NewStringType::kNormal,
+				      two_byte_resource_->length()).ToLocalChecked();
   }
 }
 

@@ -115,7 +115,6 @@ BaseObjectPtr<ContextifyContext> ContextifyContext::New(
     Local<Object> sandbox_obj,
     const ContextOptions& options) {
   HandleScope scope(env->isolate());
-  InitializeGlobalTemplates(env->isolate_data());
   Local<ObjectTemplate> object_template = env->contextify_global_template();
   DCHECK(!object_template.IsEmpty());
   const SnapshotData* snapshot_data = env->isolate_data()->snapshot_data();
@@ -170,9 +169,6 @@ ContextifyContext::~ContextifyContext() {
 }
 
 void ContextifyContext::InitializeGlobalTemplates(IsolateData* isolate_data) {
-  if (!isolate_data->contextify_global_template().IsEmpty()) {
-    return;
-  }
   DCHECK(isolate_data->contextify_wrapper_template().IsEmpty());
   Local<FunctionTemplate> global_func_template =
       FunctionTemplate::New(isolate_data->isolate());
@@ -328,11 +324,12 @@ BaseObjectPtr<ContextifyContext> ContextifyContext::New(
   return result;
 }
 
-void ContextifyContext::Init(Environment* env, Local<Object> target) {
-  Local<Context> context = env->context();
-  SetMethod(context, target, "makeContext", MakeContext);
-  SetMethod(context, target, "isContext", IsContext);
-  SetMethod(context, target, "compileFunction", CompileFunction);
+void ContextifyContext::CreatePerIsolateProperties(
+    IsolateData* isolate_data, Local<ObjectTemplate> target) {
+  Isolate* isolate = isolate_data->isolate();
+  SetMethod(isolate, target, "makeContext", MakeContext);
+  SetMethod(isolate, target, "isContext", IsContext);
+  SetMethod(isolate, target, "compileFunction", CompileFunction);
 }
 
 void ContextifyContext::RegisterExternalReferences(
@@ -539,7 +536,8 @@ void ContextifyContext::PropertySetterCallback(
   if (is_declared_on_sandbox &&
       ctx->sandbox()
           ->GetOwnPropertyDescriptor(context, property)
-          .ToLocal(&desc)) {
+          .ToLocal(&desc) &&
+      !desc->IsUndefined()) {
     Environment* env = Environment::GetCurrent(context);
     Local<Object> desc_obj = desc.As<Object>();
 
@@ -741,11 +739,10 @@ void ContextifyContext::IndexedPropertyDeleterCallback(
   args.GetReturnValue().Set(false);
 }
 
-void ContextifyScript::Init(Environment* env, Local<Object> target) {
-  Isolate* isolate = env->isolate();
-  HandleScope scope(env->isolate());
-  Local<String> class_name =
-      FIXED_ONE_BYTE_STRING(env->isolate(), "ContextifyScript");
+void ContextifyScript::CreatePerIsolateProperties(
+    IsolateData* isolate_data, Local<ObjectTemplate> target) {
+  Isolate* isolate = isolate_data->isolate();
+  Local<String> class_name = FIXED_ONE_BYTE_STRING(isolate, "ContextifyScript");
 
   Local<FunctionTemplate> script_tmpl = NewFunctionTemplate(isolate, New);
   script_tmpl->InstanceTemplate()->SetInternalFieldCount(
@@ -754,11 +751,8 @@ void ContextifyScript::Init(Environment* env, Local<Object> target) {
   SetProtoMethod(isolate, script_tmpl, "createCachedData", CreateCachedData);
   SetProtoMethod(isolate, script_tmpl, "runInContext", RunInContext);
 
-  Local<Context> context = env->context();
-
-  target->Set(context, class_name,
-      script_tmpl->GetFunction(context).ToLocalChecked()).Check();
-  env->set_script_context_constructor_template(script_tmpl);
+  target->Set(isolate, "ContextifyScript", script_tmpl);
+  isolate_data->set_script_context_constructor_template(script_tmpl);
 }
 
 void ContextifyScript::RegisterExternalReferences(
@@ -1390,15 +1384,15 @@ void MicrotaskQueueWrap::New(const FunctionCallbackInfo<Value>& args) {
   new MicrotaskQueueWrap(Environment::GetCurrent(args), args.This());
 }
 
-void MicrotaskQueueWrap::Init(Environment* env, Local<Object> target) {
-  Isolate* isolate = env->isolate();
+void MicrotaskQueueWrap::CreatePerIsolateProperties(
+    IsolateData* isolate_data, Local<ObjectTemplate> target) {
+  Isolate* isolate = isolate_data->isolate();
   HandleScope scope(isolate);
-  Local<Context> context = env->context();
   Local<FunctionTemplate> tmpl = NewFunctionTemplate(isolate, New);
   tmpl->InstanceTemplate()->SetInternalFieldCount(
       ContextifyScript::kInternalFieldCount);
-  env->set_microtask_queue_ctor_template(tmpl);
-  SetConstructorFunction(context, target, "MicrotaskQueue", tmpl);
+  isolate_data->set_microtask_queue_ctor_template(tmpl);
+  SetConstructorFunction(isolate, target, "MicrotaskQueue", tmpl);
 }
 
 void MicrotaskQueueWrap::RegisterExternalReferences(
@@ -1406,30 +1400,37 @@ void MicrotaskQueueWrap::RegisterExternalReferences(
   registry->Register(New);
 }
 
-void Initialize(Local<Object> target,
-                Local<Value> unused,
-                Local<Context> context,
-                void* priv) {
-  Environment* env = Environment::GetCurrent(context);
-  Isolate* isolate = env->isolate();
-  ContextifyContext::Init(env, target);
-  ContextifyScript::Init(env, target);
-  MicrotaskQueueWrap::Init(env, target);
+void CreatePerIsolateProperties(IsolateData* isolate_data,
+                                Local<FunctionTemplate> ctor) {
+  Isolate* isolate = isolate_data->isolate();
+  Local<ObjectTemplate> target = ctor->InstanceTemplate();
+  ContextifyContext::CreatePerIsolateProperties(isolate_data, target);
+  ContextifyScript::CreatePerIsolateProperties(isolate_data, target);
+  MicrotaskQueueWrap::CreatePerIsolateProperties(isolate_data, target);
 
-  SetMethod(context, target, "startSigintWatchdog", StartSigintWatchdog);
-  SetMethod(context, target, "stopSigintWatchdog", StopSigintWatchdog);
+  SetMethod(isolate, target, "startSigintWatchdog", StartSigintWatchdog);
+  SetMethod(isolate, target, "stopSigintWatchdog", StopSigintWatchdog);
   // Used in tests.
   SetMethodNoSideEffect(
-      context, target, "watchdogHasPendingSigint", WatchdogHasPendingSigint);
+      isolate, target, "watchdogHasPendingSigint", WatchdogHasPendingSigint);
 
   {
-    Local<FunctionTemplate> tpl = FunctionTemplate::New(env->isolate());
-    tpl->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "CompiledFnEntry"));
+    Local<FunctionTemplate> tpl = FunctionTemplate::New(isolate);
+    tpl->SetClassName(FIXED_ONE_BYTE_STRING(isolate, "CompiledFnEntry"));
     tpl->InstanceTemplate()->SetInternalFieldCount(
         CompiledFnEntry::kInternalFieldCount);
 
-    env->set_compiled_fn_entry_template(tpl->InstanceTemplate());
+    isolate_data->set_compiled_fn_entry_template(tpl->InstanceTemplate());
   }
+  SetMethod(isolate, target, "measureMemory", MeasureMemory);
+}
+
+static void CreatePerContextProperties(Local<Object> target,
+                                       Local<Value> unused,
+                                       Local<Context> context,
+                                       void* priv) {
+  Environment* env = Environment::GetCurrent(context);
+  Isolate* isolate = env->isolate();
 
   Local<Object> constants = Object::New(env->isolate());
   Local<Object> measure_memory = Object::New(env->isolate());
@@ -1455,8 +1456,6 @@ void Initialize(Local<Object> target,
   READONLY_PROPERTY(constants, "measureMemory", measure_memory);
 
   target->Set(context, env->constants_string(), constants).Check();
-
-  SetMethod(context, target, "measureMemory", MeasureMemory);
 }
 
 void RegisterExternalReferences(ExternalReferenceRegistry* registry) {
@@ -1472,6 +1471,9 @@ void RegisterExternalReferences(ExternalReferenceRegistry* registry) {
 }  // namespace contextify
 }  // namespace node
 
-NODE_BINDING_CONTEXT_AWARE_INTERNAL(contextify, node::contextify::Initialize)
+NODE_BINDING_CONTEXT_AWARE_INTERNAL(
+    contextify, node::contextify::CreatePerContextProperties)
+NODE_BINDING_PER_ISOLATE_INIT(contextify,
+                              node::contextify::CreatePerIsolateProperties)
 NODE_BINDING_EXTERNAL_REFERENCE(contextify,
                                 node::contextify::RegisterExternalReferences)

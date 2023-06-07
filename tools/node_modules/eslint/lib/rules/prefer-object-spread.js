@@ -1,7 +1,6 @@
 /**
  * @fileoverview Prefers object spread property over Object.assign
  * @author Sharmila Jesupaul
- * See LICENSE file in root directory for full license.
  */
 
 "use strict";
@@ -249,7 +248,7 @@ module.exports = {
             description:
                 "Disallow using Object.assign with an object literal as the first argument and prefer the use of object spread instead",
             recommended: false,
-            url: "https://eslint.org/docs/rules/prefer-object-spread"
+            url: "https://eslint.org/docs/latest/rules/prefer-object-spread"
         },
 
         schema: [],
@@ -262,7 +261,7 @@ module.exports = {
     },
 
     create(context) {
-        const sourceCode = context.getSourceCode();
+        const sourceCode = context.sourceCode;
 
         return {
             Program(node) {

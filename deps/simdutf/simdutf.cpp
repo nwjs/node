@@ -1,4 +1,4 @@
-/* auto-generated on 2023-05-12 15:20:29 -0400. Do not edit! */
+/* auto-generated on 2023-06-05 08:58:28 -0400. Do not edit! */
 // dofile: invoked with prepath=/Users/lemire/CVS/github/simdutf/src, filename=simdutf.cpp
 /* begin file src/simdutf.cpp */
 #include "simdutf.h"
@@ -333,7 +333,7 @@ simdutf_really_inline int16x8_t make_int16x8_t(int16_t x1,  int16_t x2,  int16_t
     simdutf_really_inline simd8<T>& operator&=(const simd8<T> other) { auto this_cast = static_cast<simd8<T>*>(this); *this_cast = *this_cast & other; return *this_cast; }
     simdutf_really_inline simd8<T>& operator^=(const simd8<T> other) { auto this_cast = static_cast<simd8<T>*>(this); *this_cast = *this_cast ^ other; return *this_cast; }
 
-    simdutf_really_inline Mask operator==(const simd8<T> other) const { return vceqq_u8(*this, other); }
+    friend simdutf_really_inline Mask operator==(const simd8<T> lhs, const simd8<T> rhs) { return vceqq_u8(lhs, rhs); }
 
     template<int N=1>
     simdutf_really_inline simd8<T> prev(const simd8<T> prev_chunk) const {
@@ -807,7 +807,7 @@ struct simd16;
     simdutf_really_inline simd16<T>& operator&=(const simd16<T> other) { auto this_cast = static_cast<simd16<T>*>(this); *this_cast = *this_cast & other; return *this_cast; }
     simdutf_really_inline simd16<T>& operator^=(const simd16<T> other) { auto this_cast = static_cast<simd16<T>*>(this); *this_cast = *this_cast ^ other; return *this_cast; }
 
-    simdutf_really_inline Mask operator==(const simd16<T> other) const { return vceqq_u16(*this, other); }
+    friend simdutf_really_inline Mask operator==(const simd16<T> lhs, const simd16<T> rhs) { return vceqq_u16(lhs, rhs); }
 
     template<int N=1>
     simdutf_really_inline simd16<T> prev(const simd16<T> prev_chunk) const {
@@ -824,8 +824,6 @@ struct base16: base_u16<T> {
   simdutf_really_inline base16(const uint16x8_t _value) : base_u16<T>(_value) {}
   template <typename Pointer>
   simdutf_really_inline base16(const Pointer* ptr) : base16(vld1q_u16(ptr)) {}
-
-  simdutf_really_inline Mask operator==(const simd16<T> other) const { return vceqq_u16(*this, other); }
 
   static const int SIZE = sizeof(base_u16<T>::value);
 
@@ -1144,7 +1142,7 @@ simdutf_really_inline simd16<int16_t>::operator simd16<uint16_t>() const { retur
 #if SIMDUTF_CAN_ALWAYS_RUN_ICELAKE
 #define SIMDUTF_TARGET_ICELAKE
 #else
-#define SIMDUTF_TARGET_ICELAKE SIMDUTF_TARGET_REGION("avx512f,avx512dq,avx512cd,avx512bw,avx512vbmi,avx512vbmi2,avx512vl,avx2,bmi,bmi2,pclmul,lzcnt")
+#define SIMDUTF_TARGET_ICELAKE SIMDUTF_TARGET_REGION("avx512f,avx512dq,avx512cd,avx512bw,avx512vbmi,avx512vbmi2,avx512vl,avx2,bmi,bmi2,pclmul,lzcnt,popcnt")
 #endif
 
 namespace simdutf {
@@ -1444,7 +1442,7 @@ SIMDUTF_POP_DISABLE_WARNINGS
 
 #if SIMDUTF_IMPLEMENTATION_HASWELL
 
-#define SIMDUTF_TARGET_HASWELL SIMDUTF_TARGET_REGION("avx2,bmi,lzcnt")
+#define SIMDUTF_TARGET_HASWELL SIMDUTF_TARGET_REGION("avx2,bmi,lzcnt,popcnt")
 
 namespace simdutf {
 /**
@@ -1713,7 +1711,7 @@ namespace simd {
     simdutf_really_inline base8(const __m256i _value) : base<simd8<T>>(_value) {}
     simdutf_really_inline T first() const { return _mm256_extract_epi8(*this,0); }
     simdutf_really_inline T last() const { return _mm256_extract_epi8(*this,31); }
-    simdutf_really_inline Mask operator==(const simd8<T> other) const { return _mm256_cmpeq_epi8(*this, other); }
+    friend simdutf_really_inline Mask operator==(const simd8<T> lhs, const simd8<T> rhs) { return _mm256_cmpeq_epi8(lhs, rhs); }
 
     static const int SIZE = sizeof(base<T>::value);
 
@@ -2063,8 +2061,7 @@ struct base16: base<simd16<T>> {
   simdutf_really_inline base16(const __m256i _value) : base<simd16<T>>(_value) {}
   template <typename Pointer>
   simdutf_really_inline base16(const Pointer* ptr) : base16(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(ptr))) {}
-
-  simdutf_really_inline Mask operator==(const simd16<T> other) const { return _mm256_cmpeq_epi16(*this, other); }
+  friend simdutf_really_inline Mask operator==(const simd16<T> lhs, const simd16<T> rhs) { return _mm256_cmpeq_epi16(lhs, rhs); }
 
   /// the size of vector in bytes
   static const int SIZE = sizeof(base<simd16<T>>::value);
@@ -2368,7 +2365,7 @@ SIMDUTF_POP_DISABLE_WARNINGS
 
 #if SIMDUTF_IMPLEMENTATION_WESTMERE
 
-#define SIMDUTF_TARGET_WESTMERE SIMDUTF_TARGET_REGION("sse4.2")
+#define SIMDUTF_TARGET_WESTMERE SIMDUTF_TARGET_REGION("sse4.2,popcnt")
 
 namespace simdutf {
 /**
@@ -2610,7 +2607,7 @@ namespace simd {
     simdutf_really_inline base8() : base<simd8<T>>() {}
     simdutf_really_inline base8(const __m128i _value) : base<simd8<T>>(_value) {}
 
-    simdutf_really_inline Mask operator==(const simd8<T> other) const { return _mm_cmpeq_epi8(*this, other); }
+    friend simdutf_really_inline Mask operator==(const simd8<T> lhs, const simd8<T> rhs) { return _mm_cmpeq_epi8(lhs, rhs); }
 
     static const int SIZE = sizeof(base<simd8<T>>::value);
 
@@ -3005,7 +3002,7 @@ struct base16: base<simd16<T>> {
   template <typename Pointer>
   simdutf_really_inline base16(const Pointer* ptr) : base16(_mm_loadu_si128(reinterpret_cast<const __m128i*>(ptr))) {}
 
-  simdutf_really_inline Mask operator==(const simd16<T> other) const { return _mm_cmpeq_epi16(*this, other); }
+  friend simdutf_really_inline Mask operator==(const simd16<T> lhs, const simd16<T> rhs) { return _mm_cmpeq_epi16(lhs, rhs); }
 
   static const int SIZE = sizeof(base<simd16<T>>::value);
 
@@ -3510,8 +3507,8 @@ struct base8 : base<simd8<T>> {
   simdutf_really_inline base8() : base<simd8<T>>() {}
   simdutf_really_inline base8(const __m128i _value) : base<simd8<T>>(_value) {}
 
-  simdutf_really_inline Mask operator==(const simd8<T> other) const {
-    return (__m128i)vec_cmpeq(this->value, (__m128i)other);
+  friend simdutf_really_inline Mask operator==(const simd8<T> lhs, const simd8<T> rhs) {
+    return (__m128i)vec_cmpeq(lhs.value, (__m128i)rhs);
   }
 
   static const int SIZE = sizeof(base<simd8<T>>::value);
@@ -11303,7 +11300,7 @@ inline result rewind_and_convert_with_errors(size_t prior_bytes, const char* buf
   bool found_leading_bytes{false};
   // important: it is i <= how_far_back and not 'i < how_far_back'.
   for(size_t i = 0; i <= how_far_back; i++) {
-    unsigned char byte = buf[-i];
+    unsigned char byte = buf[0-i];
     found_leading_bytes = ((byte & 0b11000000) != 0b10000000);
     if(found_leading_bytes) {
       buf -= i;
@@ -11322,7 +11319,7 @@ inline result rewind_and_convert_with_errors(size_t prior_bytes, const char* buf
     // If how_far_back == 3, we may have four consecutive continuation bytes!!!
     // [....] [continuation] [continuation] [continuation] | [buf is continuation]
     // Or we possibly have a stream that does not start with a leading byte.
-    return result(error_code::TOO_LONG, -how_far_back);
+    return result(error_code::TOO_LONG, 0-how_far_back);
   }
   result res = convert_with_errors<endian>(buf, len + extra_len, utf16_output);
   if (res.error) {
@@ -11581,7 +11578,7 @@ inline result rewind_and_convert_with_errors(size_t prior_bytes, const char* buf
   bool found_leading_bytes{false};
   // important: it is i <= how_far_back and not 'i < how_far_back'.
   for(size_t i = 0; i <= how_far_back; i++) {
-    unsigned char byte = buf[-i];
+    unsigned char byte = buf[0-i];
     found_leading_bytes = ((byte & 0b11000000) != 0b10000000);
     if(found_leading_bytes) {
       buf -= i;
@@ -11600,7 +11597,7 @@ inline result rewind_and_convert_with_errors(size_t prior_bytes, const char* buf
     // If how_far_back == 3, we may have four consecutive continuation bytes!!!
     // [....] [continuation] [continuation] [continuation] | [buf is continuation]
     // Or we possibly have a stream that does not start with a leading byte.
-    return result(error_code::TOO_LONG, -how_far_back);
+    return result(error_code::TOO_LONG, 0-how_far_back);
   }
 
   result res = convert_with_errors(buf, len + extra_len, utf32_output);

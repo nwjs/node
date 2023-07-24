@@ -1,5 +1,6 @@
 #include "fs_permission.h"
 #include "base_object-inl.h"
+#include "debug_utils-inl.h"
 #include "util.h"
 #include "v8.h"
 
@@ -9,6 +10,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -71,11 +73,52 @@ namespace node {
 
 namespace permission {
 
+void PrintTree(FSPermission::RadixTree::Node* node, int spaces = 0) {
+  std::string whitespace(spaces, ' ');
+
+  if (node == nullptr) {
+    return;
+  }
+  if (node->wildcard_child != nullptr) {
+    per_process::Debug(DebugCategory::PERMISSION_MODEL,
+                       "%s Wildcard: %s\n",
+                       whitespace,
+                       node->prefix);
+  } else {
+    per_process::Debug(DebugCategory::PERMISSION_MODEL,
+                       "%s Prefix: %s\n",
+                       whitespace,
+                       node->prefix);
+    if (node->children.size()) {
+      int child = 0;
+      for (const auto pair : node->children) {
+        ++child;
+        per_process::Debug(DebugCategory::PERMISSION_MODEL,
+                           "%s Child(%s): %s\n",
+                           whitespace,
+                           child,
+                           std::string(1, pair.first));
+        PrintTree(pair.second, spaces + 2);
+      }
+      per_process::Debug(DebugCategory::PERMISSION_MODEL,
+                         "%s End of tree - child(%s)\n",
+                         whitespace,
+                         child);
+    } else {
+      per_process::Debug(DebugCategory::PERMISSION_MODEL,
+                         "%s End of tree: %s\n",
+                         whitespace,
+                         node->prefix);
+    }
+  }
+}
+
 // allow = '*'
 // allow = '/tmp/,/home/example.js'
 void FSPermission::Apply(const std::string& allow, PermissionScope scope) {
-  for (const auto& res : SplitString(allow, ',')) {
-    if (res == "*") {
+  using std::string_view_literals::operator""sv;
+  for (const std::string_view res : SplitString(allow, ","sv)) {
+    if (res == "*"sv) {
       if (scope == PermissionScope::kFileSystemRead) {
         deny_all_in_ = false;
         allow_all_in_ = true;
@@ -85,7 +128,7 @@ void FSPermission::Apply(const std::string& allow, PermissionScope scope) {
       }
       return;
     }
-    GrantAccess(scope, res);
+    GrantAccess(scope, std::string(res.data(), res.size()));
   }
 }
 
@@ -130,7 +173,6 @@ bool FSPermission::RadixTree::Lookup(const std::string_view& s,
   if (current_node->children.size() == 0) {
     return when_empty_return;
   }
-
   unsigned int parent_node_prefix_len = current_node->prefix.length();
   const std::string path(s);
   auto path_len = path.length();
@@ -173,6 +215,12 @@ void FSPermission::RadixTree::Insert(const std::string& path) {
       current_node = current_node->CreateWildcardChild();
       parent_node_prefix_len = i;
     }
+  }
+
+  if (UNLIKELY(per_process::enabled_debug_list.enabled(
+          DebugCategory::PERMISSION_MODEL))) {
+    per_process::Debug(DebugCategory::PERMISSION_MODEL, "Inserting %s\n", path);
+    PrintTree(root_node_);
   }
 }
 

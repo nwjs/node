@@ -19,7 +19,6 @@ using v8::CFunction;
 using v8::Context;
 using v8::FastOneByteString;
 using v8::FunctionCallbackInfo;
-using v8::FunctionTemplate;
 using v8::HandleScope;
 using v8::Isolate;
 using v8::Local;
@@ -41,6 +40,7 @@ BindingData::BindingData(Realm* realm, v8::Local<v8::Object> object)
             FIXED_ONE_BYTE_STRING(realm->isolate(), "urlComponents"),
             url_components_buffer_.GetJSArray())
       .Check();
+  url_components_buffer_.MakeWeak();
 }
 
 bool BindingData::PrepareForSerialization(v8::Local<v8::Context> context,
@@ -118,6 +118,30 @@ void BindingData::DomainToUnicode(const FunctionCallbackInfo<Value>& args) {
                                 .ToLocalChecked());
 }
 
+void BindingData::GetOrigin(const v8::FunctionCallbackInfo<Value>& args) {
+  CHECK_GE(args.Length(), 1);
+  CHECK(args[0]->IsString());  // input
+
+  Environment* env = Environment::GetCurrent(args);
+  HandleScope handle_scope(env->isolate());
+
+  Utf8Value input(env->isolate(), args[0]);
+  std::string_view input_view = input.ToStringView();
+  auto out = ada::parse<ada::url_aggregator>(input_view);
+
+  if (!out) {
+    THROW_ERR_INVALID_URL(env, "Invalid URL");
+    return;
+  }
+
+  std::string origin = out->get_origin();
+  args.GetReturnValue().Set(String::NewFromUtf8(env->isolate(),
+                                                origin.data(),
+                                                NewStringType::kNormal,
+                                                origin.length())
+                                .ToLocalChecked());
+}
+
 void BindingData::CanParse(const FunctionCallbackInfo<Value>& args) {
   CHECK_GE(args.Length(), 1);
   CHECK(args[0]->IsString());  // input
@@ -125,35 +149,38 @@ void BindingData::CanParse(const FunctionCallbackInfo<Value>& args) {
 
   Environment* env = Environment::GetCurrent(args);
   HandleScope handle_scope(env->isolate());
-  Context::Scope context_scope(env->context());
 
   Utf8Value input(env->isolate(), args[0]);
-  ada::result<ada::url_aggregator> base;
-  ada::url_aggregator* base_pointer = nullptr;
-  if (args[1]->IsString()) {
-    base = ada::parse<ada::url_aggregator>(
-        Utf8Value(env->isolate(), args[1]).ToString());
-    if (!base) {
-      return args.GetReturnValue().Set(false);
-    }
-    base_pointer = &base.value();
-  }
-  auto out =
-      ada::parse<ada::url_aggregator>(input.ToStringView(), base_pointer);
+  std::string_view input_view = input.ToStringView();
 
-  args.GetReturnValue().Set(out.has_value());
+  bool can_parse{};
+  if (args[1]->IsString()) {
+    Utf8Value base(env->isolate(), args[1]);
+    std::string_view base_view = base.ToStringView();
+    can_parse = ada::can_parse(input_view, &base_view);
+  } else {
+    can_parse = ada::can_parse(input_view);
+  }
+
+  args.GetReturnValue().Set(can_parse);
 }
 
 bool BindingData::FastCanParse(Local<Value> receiver,
                                const FastOneByteString& input) {
-  std::string_view input_view(input.data, input.length);
-
-  auto output = ada::parse<ada::url_aggregator>(input_view);
-
-  return output.has_value();
+  return ada::can_parse(std::string_view(input.data, input.length));
 }
 
 CFunction BindingData::fast_can_parse_(CFunction::Make(FastCanParse));
+
+bool BindingData::FastCanParseWithBase(Local<Value> receiver,
+                                       const FastOneByteString& input,
+                                       const FastOneByteString& base) {
+  auto base_view = std::string_view(base.data, base.length);
+  return ada::can_parse(std::string_view(input.data, input.length), &base_view);
+}
+
+CFunction BindingData::fast_can_parse_with_base_(
+    CFunction::Make(FastCanParseWithBase));
 
 void BindingData::Format(const FunctionCallbackInfo<Value>& args) {
   CHECK_GT(args.Length(), 4);
@@ -325,16 +352,21 @@ void BindingData::UpdateComponents(const ada::url_components& components,
 }
 
 void BindingData::CreatePerIsolateProperties(IsolateData* isolate_data,
-                                             Local<FunctionTemplate> ctor) {
+                                             Local<ObjectTemplate> target) {
   Isolate* isolate = isolate_data->isolate();
-  Local<ObjectTemplate> target = ctor->InstanceTemplate();
   SetMethodNoSideEffect(isolate, target, "domainToASCII", DomainToASCII);
   SetMethodNoSideEffect(isolate, target, "domainToUnicode", DomainToUnicode);
   SetMethodNoSideEffect(isolate, target, "format", Format);
+  SetMethodNoSideEffect(isolate, target, "getOrigin", GetOrigin);
   SetMethod(isolate, target, "parse", Parse);
   SetMethod(isolate, target, "update", Update);
   SetFastMethodNoSideEffect(
       isolate, target, "canParse", CanParse, &fast_can_parse_);
+  SetFastMethodNoSideEffect(isolate,
+                            target,
+                            "canParseWithBase",
+                            CanParse,
+                            &fast_can_parse_with_base_);
 }
 
 void BindingData::CreatePerContextProperties(Local<Object> target,
@@ -350,11 +382,14 @@ void BindingData::RegisterExternalReferences(
   registry->Register(DomainToASCII);
   registry->Register(DomainToUnicode);
   registry->Register(Format);
+  registry->Register(GetOrigin);
   registry->Register(Parse);
   registry->Register(Update);
   registry->Register(CanParse);
   registry->Register(FastCanParse);
   registry->Register(fast_can_parse_.GetTypeInfo());
+  registry->Register(FastCanParseWithBase);
+  registry->Register(fast_can_parse_with_base_.GetTypeInfo());
 }
 
 std::string FromFilePath(const std::string_view file_path) {

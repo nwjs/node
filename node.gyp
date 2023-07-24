@@ -43,7 +43,9 @@
     'node_lib_target_name%': 'node',
     'node_intermediate_lib_type%': 'shared_library',
     'node_builtin_modules_path%': '',
-    # We list the deps/ files out instead of globbing them in js2c.py since we
+    'linked_module_files': [
+    ],
+    # We list the deps/ files out instead of globbing them in js2c.cc since we
     # only include a subset of all the files under these directories.
     # The lengths of their file names combined should not exceed the
     # Windows command length limit or there would be an error.
@@ -59,6 +61,7 @@
     'LIBCXX%': '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libcpp.a',
     'LIBCXXABI%': '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++abi/libc++abi.a',
     'library_files': [
+    '<@(linked_module_files)',
 'lib/constants.js',
 'lib/assert.js',
 'lib/internal/constants.js',
@@ -182,9 +185,10 @@
 'lib/internal/main/run_main_module.js',
 'lib/internal/main/inspect.js',
 'lib/internal/main/repl.js',
-'lib/internal/fs/read_file_context.js',
+'lib/internal/fs/read/context.js',
 'lib/internal/fs/utils.js',
 'lib/internal/fs/promises.js',
+'lib/internal/fs/read/utf8.js',
 'lib/internal/fs/dir.js',
 'lib/internal/fs/watchers.js',
 'lib/internal/fs/cp/cp-sync.js',
@@ -450,6 +454,7 @@
       'src/node_zlib.cc',
       'src/permission/child_process_permission.cc',
       'src/permission/fs_permission.cc',
+      'src/permission/inspector_permission.cc',
       'src/permission/permission.cc',
       'src/permission/worker_permission.cc',
       'src/pipe_wrap.cc',
@@ -569,6 +574,7 @@
       'src/node_worker.h',
       'src/permission/child_process_permission.h',
       'src/permission/fs_permission.h',
+      'src/permission/inspector_permission.h',
       'src/permission/permission.h',
       'src/permission/worker_permission.h',
       'src/pipe_wrap.h',
@@ -673,6 +679,7 @@
       'src/quic/transportparams.h',
     ],
     'node_mksnapshot_exec': '<(PRODUCT_DIR)/<(EXECUTABLE_PREFIX)node_mksnapshot<(EXECUTABLE_SUFFIX)',
+    'node_js2c_exec': '<(PRODUCT_DIR)/<(EXECUTABLE_PREFIX)node_js2c<(EXECUTABLE_SUFFIX)',
     'conditions': [
       ['GENERATOR == "ninja"', {
         'node_text_start_object_path': 'src/large_pages/node_text_start.node_text_start.o'
@@ -1091,6 +1098,7 @@
         'deps/histogram/histogram.gyp:histogram',
         'deps/uvwasi/uvwasi.gyp:uvwasi',
         'deps/simdutf/simdutf.gyp:simdutf',
+        'node_js2c#host',
         #'deps/ada/ada.gyp:ada',
       ],
 
@@ -1216,6 +1224,9 @@
           'node_target_type=="executable"', {
           'defines': [ 'NODE_ENABLE_LARGE_CODE_PAGES=1' ],
         }],
+        ['OS in "linux mac"', {
+          'defines': [ 'NODE_MKSNAPSHOT_USE_STRING_LITERALS' ],
+        }],
         [ 'use_openssl_def==1', {
           # TODO(bnoordhuis) Make all platforms export the same list of symbols.
           # Teach mkssldef.py to generate linker maps that UNIX linkers understand.
@@ -1271,8 +1282,7 @@
           'action_name': 'node_js2c',
           'process_outputs_as_sources': 1,
           'inputs': [
-            # Put the code first so it's a dependency and can be used for invocation.
-            'tools/js2c.py',
+            '<(node_js2c_exec)',
             '<@(library_files)',
             '<@(deps_files)',
             'config.gypi'
@@ -1281,14 +1291,12 @@
             '<(SHARED_INTERMEDIATE_DIR)/node_javascript.cc',
           ],
           'action': [
-            '<(python)',
-            'tools/js2c.py',
-            '--directory',
-            'lib',
-            '--target',
+            '<(node_js2c_exec)',
             '<@(_outputs)',
+            'lib',
             'config.gypi',
             '<@(deps_files)',
+            '<@(linked_module_files)',
           ],
         },
       ],
@@ -1400,6 +1408,7 @@
           'sources': [
             'test/cctest/test_crypto_clienthello.cc',
             'test/cctest/test_node_crypto.cc',
+            'test/cctest/test_node_crypto_env.cc',
             'test/cctest/test_quic_cid.cc',
             'test/cctest/test_quic_tokens.cc',
           ]
@@ -1521,6 +1530,40 @@
         }],
       ]
     }, # overlapped-checker
+    {
+      'target_name': 'node_js2c',
+      'type': 'executable',
+      'toolsets': ['host'],
+      'dependencies': [
+        'deps/simdutf/simdutf.gyp:simdutf#host',
+      ],
+      'include_dirs': [
+        'tools'
+      ],
+      'sources': [
+        'tools/js2c.cc',
+        'tools/executable_wrapper.h'
+      ],
+      'conditions': [
+        [ 'node_shared_libuv=="false"', {
+          'dependencies': [ 'deps/uv/uv.gyp:libuv#host' ],
+        }],
+        [ 'OS in "linux mac"', {
+          'defines': ['NODE_JS2C_USE_STRING_LITERALS'],
+	  'ldflags': [ '-lstdc++' ],
+        }],
+        [ 'debug_node=="true"', {
+          'cflags!': [ '-O3' ],
+          'cflags': [ '-g', '-O0' ],
+          'defines': [ 'DEBUG' ],
+          'xcode_settings': {
+            'OTHER_CFLAGS': [
+              '-g', '-O0'
+            ],
+          },
+        }],
+      ]
+    },
     {
       'target_name': 'node_mksnapshot',
       'type': 'executable',

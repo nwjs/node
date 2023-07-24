@@ -1,4 +1,4 @@
-/* auto-generated on 2023-05-08 12:41:03 -0400. Do not edit! */
+/* auto-generated on 2023-06-03 12:40:57 -0400. Do not edit! */
 /* begin file src/ada.cpp */
 #include "ada.h"
 /* begin file src/checkers.cpp */
@@ -9313,7 +9313,7 @@ bool is_label_valid(const std::u32string_view label) {
   // - For Nontransitional Processing, each value must be either valid or
   // deviation.
 
-  // If CheckJoiners, the label must satisify the ContextJ rules from Appendix
+  // If CheckJoiners, the label must satisfy the ContextJ rules from Appendix
   // A, in The Unicode Code Points and Internationalized Domain Names for
   // Applications (IDNA) [IDNA2008].
   constexpr static uint32_t virama[] = {
@@ -9786,6 +9786,11 @@ std::string to_unicode(std::string_view input) {
 ADA_POP_DISABLE_WARNINGS
 
 #include <algorithm>
+#if ADA_NEON
+#include <arm_neon.h>
+#elif ADA_SSE2
+#include <emmintrin.h>
+#endif
 
 namespace ada::unicode {
 
@@ -9817,8 +9822,58 @@ constexpr bool to_lower_ascii(char* input, size_t length) noexcept {
   }
   return non_ascii == 0;
 }
-
-ada_really_inline constexpr bool has_tabs_or_newline(
+#if ADA_NEON
+ada_really_inline bool has_tabs_or_newline(
+    std::string_view user_input) noexcept {
+  size_t i = 0;
+  const uint8x16_t mask1 = vmovq_n_u8('\r');
+  const uint8x16_t mask2 = vmovq_n_u8('\n');
+  const uint8x16_t mask3 = vmovq_n_u8('\t');
+  uint8x16_t running{0};
+  for (; i + 15 < user_input.size(); i += 16) {
+    uint8x16_t word = vld1q_u8((const uint8_t*)user_input.data() + i);
+    running = vorrq_u8(vorrq_u8(running, vorrq_u8(vceqq_u8(word, mask1),
+                                                  vceqq_u8(word, mask2))),
+                       vceqq_u8(word, mask3));
+  }
+  if (i < user_input.size()) {
+    uint8_t buffer[16]{};
+    memcpy(buffer, user_input.data() + i, user_input.size() - i);
+    uint8x16_t word = vld1q_u8((const uint8_t*)user_input.data() + i);
+    running = vorrq_u8(vorrq_u8(running, vorrq_u8(vceqq_u8(word, mask1),
+                                                  vceqq_u8(word, mask2))),
+                       vceqq_u8(word, mask3));
+  }
+  return vmaxvq_u8(running) != 0;
+}
+#elif ADA_SSE2
+ada_really_inline bool has_tabs_or_newline(
+    std::string_view user_input) noexcept {
+  size_t i = 0;
+  const __m128i mask1 = _mm_set1_epi8('\r');
+  const __m128i mask2 = _mm_set1_epi8('\n');
+  const __m128i mask3 = _mm_set1_epi8('\t');
+  __m128i running{0};
+  for (; i + 15 < user_input.size(); i += 16) {
+    __m128i word = _mm_loadu_si128((const __m128i*)(user_input.data() + i));
+    running = _mm_or_si128(
+        _mm_or_si128(running, _mm_or_si128(_mm_cmpeq_epi8(word, mask1),
+                                           _mm_cmpeq_epi8(word, mask2))),
+        _mm_cmpeq_epi8(word, mask3));
+  }
+  if (i < user_input.size()) {
+    uint8_t buffer[16]{};
+    memcpy(buffer, user_input.data() + i, user_input.size() - i);
+    __m128i word = _mm_loadu_si128((const __m128i*)buffer);
+    running = _mm_or_si128(
+        _mm_or_si128(running, _mm_or_si128(_mm_cmpeq_epi8(word, mask1),
+                                           _mm_cmpeq_epi8(word, mask2))),
+        _mm_cmpeq_epi8(word, mask3));
+  }
+  return _mm_movemask_epi8(running) != 0;
+}
+#else
+ada_really_inline bool has_tabs_or_newline(
     std::string_view user_input) noexcept {
   auto has_zero_byte = [](uint64_t v) {
     return ((v - 0x0101010101010101) & ~(v)&0x8080808080808080);
@@ -9849,6 +9904,7 @@ ada_really_inline constexpr bool has_tabs_or_newline(
   }
   return running;
 }
+#endif
 
 // A forbidden host code point is U+0000 NULL, U+0009 TAB, U+000A LF, U+000D CR,
 // U+0020 SPACE, U+0023 (#), U+002F (/), U+003A (:), U+003C (<), U+003E (>),
@@ -9945,8 +10001,9 @@ static_assert(sizeof(is_forbidden_domain_code_point_table_or_upper) == 256);
 static_assert(is_forbidden_domain_code_point_table_or_upper[uint8_t('A')] == 2);
 static_assert(is_forbidden_domain_code_point_table_or_upper[uint8_t('Z')] == 2);
 
-ada_really_inline constexpr bool contains_forbidden_domain_code_point_or_upper(
-    const char* input, size_t length) noexcept {
+ada_really_inline constexpr uint8_t
+contains_forbidden_domain_code_point_or_upper(const char* input,
+                                              size_t length) noexcept {
   size_t i = 0;
   uint8_t accumulator{};
   for (; i + 4 <= length; i += 4) {
@@ -10547,7 +10604,7 @@ ada_really_inline void remove_ascii_tab_or_newline(
 ada_really_inline std::string_view substring(std::string_view input,
                                              size_t pos) noexcept {
   ADA_ASSERT_TRUE(pos <= input.size());
-  // The following is safer but uneeded if we have the above line:
+  // The following is safer but unneeded if we have the above line:
   // return pos > input.size() ? std::string_view() : input.substr(pos);
   return input.substr(pos);
 }
@@ -10621,7 +10678,7 @@ ada_really_inline size_t find_next_host_delimiter_special(
                         has_zero_byte(xor3) | has_zero_byte(xor4) |
                         has_zero_byte(xor5);
     if (is_match) {
-      return i + index_of_first_set_byte(is_match);
+      return size_t(i + index_of_first_set_byte(is_match));
     }
   }
   if (i < view.size()) {
@@ -10639,7 +10696,7 @@ ada_really_inline size_t find_next_host_delimiter_special(
                         has_zero_byte(xor3) | has_zero_byte(xor4) |
                         has_zero_byte(xor5);
     if (is_match) {
-      return i + index_of_first_set_byte(is_match);
+      return size_t(i + index_of_first_set_byte(is_match));
     }
   }
   return view.size();
@@ -10683,7 +10740,7 @@ ada_really_inline size_t find_next_host_delimiter(std::string_view view,
     uint64_t is_match = has_zero_byte(xor1) | has_zero_byte(xor2) |
                         has_zero_byte(xor4) | has_zero_byte(xor5);
     if (is_match) {
-      return i + index_of_first_set_byte(is_match);
+      return size_t(i + index_of_first_set_byte(is_match));
     }
   }
   if (i < view.size()) {
@@ -10701,7 +10758,7 @@ ada_really_inline size_t find_next_host_delimiter(std::string_view view,
     uint64_t is_match = has_zero_byte(xor1) | has_zero_byte(xor2) |
                         has_zero_byte(xor4) | has_zero_byte(xor5);
     if (is_match) {
-      return i + index_of_first_set_byte(is_match);
+      return size_t(i + index_of_first_set_byte(is_match));
     }
   }
   return view.size();
@@ -11008,7 +11065,7 @@ find_authority_delimiter_special(std::string_view view) noexcept {
     uint64_t is_match = has_zero_byte(xor1) | has_zero_byte(xor2) |
                         has_zero_byte(xor3) | has_zero_byte(xor4);
     if (is_match) {
-      return i + index_of_first_set_byte(is_match);
+      return size_t(i + index_of_first_set_byte(is_match));
     }
   }
 
@@ -11023,7 +11080,7 @@ find_authority_delimiter_special(std::string_view view) noexcept {
     uint64_t is_match = has_zero_byte(xor1) | has_zero_byte(xor2) |
                         has_zero_byte(xor3) | has_zero_byte(xor4);
     if (is_match) {
-      return i + index_of_first_set_byte(is_match);
+      return size_t(i + index_of_first_set_byte(is_match));
     }
   }
 
@@ -11056,7 +11113,7 @@ find_authority_delimiter(std::string_view view) noexcept {
     uint64_t is_match =
         has_zero_byte(xor1) | has_zero_byte(xor2) | has_zero_byte(xor3);
     if (is_match) {
-      return i + index_of_first_set_byte(is_match);
+      return size_t(i + index_of_first_set_byte(is_match));
     }
   }
 
@@ -11070,7 +11127,7 @@ find_authority_delimiter(std::string_view view) noexcept {
     uint64_t is_match =
         has_zero_byte(xor1) | has_zero_byte(xor2) | has_zero_byte(xor3);
     if (is_match) {
-      return i + index_of_first_set_byte(is_match);
+      return size_t(i + index_of_first_set_byte(is_match));
     }
   }
 
@@ -11694,7 +11751,10 @@ namespace ada {
   if (non_special_scheme == "blob") {
     if (!path.empty()) {
       auto result = ada::parse<ada::url>(path);
-      if (result && result->is_special()) {
+      if (result &&
+          (result->type == scheme::HTTP || result->type == scheme::HTTPS)) {
+        // If pathURL’s scheme is not "http" and not "https", then return a
+        // new opaque origin.
         return ada::helpers::concat(result->get_protocol(), "//",
                                     result->get_host());
       }
@@ -12032,8 +12092,7 @@ result_type parse_url(std::string_view user_input,
 
   // We refuse to parse URL strings that exceed 4GB. Such strings are almost
   // surely the result of a bug or are otherwise a security concern.
-  if (user_input.size() >=
-      std::string_view::size_type(std::numeric_limits<uint32_t>::max)) {
+  if (user_input.size() > std::numeric_limits<uint32_t>::max()) {
     url.is_valid = false;
   }
   // Going forward, user_input.size() is in [0,
@@ -13509,22 +13568,6 @@ ada_really_inline bool url_aggregator::parse_host(std::string_view input) {
     }
     ada_log("parse_host fast path ", get_hostname());
     return true;
-  } else if (is_forbidden_or_upper == 2) {
-    // We have encountered at least one upper case ASCII letter, let us
-    // try to convert it to lower case. If there is no 'xn-' in the result,
-    // we can then use a secondary fast path.
-    std::string _buffer = std::string(input);
-    unicode::to_lower_ascii(_buffer.data(), _buffer.size());
-    if (input.find("xn-") == std::string_view::npos) {
-      // secondary fast path when input is not all lower case
-      update_base_hostname(input);
-      if (checkers::is_ipv4(get_hostname())) {
-        ada_log("parse_host fast path ipv4");
-        return parse_ipv4(get_hostname());
-      }
-      ada_log("parse_host fast path ", get_hostname());
-      return true;
-    }
   }
   // We have encountered at least one forbidden code point or the input contains
   // 'xn-' (case insensitive), so we need to call 'to_ascii' to perform the full
@@ -13680,7 +13723,9 @@ bool url_aggregator::set_hostname(const std::string_view input) {
     std::string_view path = get_pathname();
     if (!path.empty()) {
       auto out = ada::parse<ada::url_aggregator>(path);
-      if (out && out->is_special()) {
+      if (out && (out->type == scheme::HTTP || out->type == scheme::HTTPS)) {
+        // If pathURL’s scheme is not "http" and not "https", then return a
+        // new opaque origin.
         return helpers::concat(out->get_protocol(), "//", out->get_host());
       }
     }
@@ -13732,8 +13777,11 @@ bool url_aggregator::set_hostname(const std::string_view input) {
 
 [[nodiscard]] std::string_view url_aggregator::get_host() const noexcept {
   ada_log("url_aggregator::get_host");
+  // Technically, we should check if there is a hostname, but
+  // the code below works even if there isn't.
+  // if(!has_hostname()) { return ""; }
   size_t start = components.host_start;
-  if (buffer.size() > components.host_start &&
+  if (components.host_end > components.host_start &&
       buffer[components.host_start] == '@') {
     start++;
   }
@@ -13747,9 +13795,12 @@ bool url_aggregator::set_hostname(const std::string_view input) {
 
 [[nodiscard]] std::string_view url_aggregator::get_hostname() const noexcept {
   ada_log("url_aggregator::get_hostname");
+  // Technically, we should check if there is a hostname, but
+  // the code below works even if there isn't.
+  // if(!has_hostname()) { return ""; }
   size_t start = components.host_start;
   // So host_start is not where the host begins.
-  if (buffer.size() > components.host_start &&
+  if (components.host_end > components.host_start &&
       buffer[components.host_start] == '@') {
     start++;
   }
@@ -14807,17 +14858,32 @@ struct ada_url_components {
   uint32_t hash_start;
 };
 
-ada_url ada_parse(const char* input) noexcept {
+ada_url ada_parse(const char* input, size_t length) noexcept {
   return new ada::result<ada::url_aggregator>(
-      ada::parse<ada::url_aggregator>(input));
+      ada::parse<ada::url_aggregator>(std::string_view(input, length)));
 }
 
-bool ada_can_parse(const char* input, const char* base) noexcept {
-  if (base == nullptr) {
-    return ada::can_parse(input);
+ada_url ada_parse_with_base(const char* input, size_t input_length,
+                            const char* base, size_t base_length) noexcept {
+  auto base_out =
+      ada::parse<ada::url_aggregator>(std::string_view(base, base_length));
+
+  if (!base_out) {
+    return new ada::result<ada::url_aggregator>(base_out);
   }
-  std::string_view sv(base);
-  return ada::can_parse(input, &sv);
+
+  return new ada::result<ada::url_aggregator>(ada::parse<ada::url_aggregator>(
+      std::string_view(input, input_length), &base_out.value()));
+}
+
+bool ada_can_parse(const char* input, size_t length) noexcept {
+  return ada::can_parse(std::string_view(input, length));
+}
+
+bool ada_can_parse_with_base(const char* input, size_t input_length,
+                             const char* base, size_t base_length) noexcept {
+  auto base_view = std::string_view(base, base_length);
+  return ada::can_parse(std::string_view(input, input_length), &base_view);
 }
 
 void ada_free(ada_url result) noexcept {
@@ -14943,81 +15009,86 @@ ada_string ada_get_protocol(ada_url result) noexcept {
   return ada_string_create(out.data(), out.length());
 }
 
-bool ada_set_href(ada_url result, const char* input) noexcept {
+bool ada_set_href(ada_url result, const char* input, size_t length) noexcept {
   ada::result<ada::url_aggregator>& r = get_instance(result);
   if (!r) {
     return false;
   }
-  return r->set_href(input);
+  return r->set_href(std::string_view(input, length));
 }
 
-bool ada_set_host(ada_url result, const char* input) noexcept {
+bool ada_set_host(ada_url result, const char* input, size_t length) noexcept {
   ada::result<ada::url_aggregator>& r = get_instance(result);
   if (!r) {
     return false;
   }
-  return r->set_host(input);
+  return r->set_host(std::string_view(input, length));
 }
 
-bool ada_set_hostname(ada_url result, const char* input) noexcept {
+bool ada_set_hostname(ada_url result, const char* input,
+                      size_t length) noexcept {
   ada::result<ada::url_aggregator>& r = get_instance(result);
   if (!r) {
     return false;
   }
-  return r->set_hostname(input);
+  return r->set_hostname(std::string_view(input, length));
 }
 
-bool ada_set_protocol(ada_url result, const char* input) noexcept {
+bool ada_set_protocol(ada_url result, const char* input,
+                      size_t length) noexcept {
   ada::result<ada::url_aggregator>& r = get_instance(result);
   if (!r) {
     return false;
   }
-  return r->set_protocol(input);
+  return r->set_protocol(std::string_view(input, length));
 }
 
-bool ada_set_username(ada_url result, const char* input) noexcept {
+bool ada_set_username(ada_url result, const char* input,
+                      size_t length) noexcept {
   ada::result<ada::url_aggregator>& r = get_instance(result);
   if (!r) {
     return false;
   }
-  return r->set_username(input);
+  return r->set_username(std::string_view(input, length));
 }
 
-bool ada_set_password(ada_url result, const char* input) noexcept {
+bool ada_set_password(ada_url result, const char* input,
+                      size_t length) noexcept {
   ada::result<ada::url_aggregator>& r = get_instance(result);
   if (!r) {
     return false;
   }
-  return r->set_password(input);
+  return r->set_password(std::string_view(input, length));
 }
 
-bool ada_set_port(ada_url result, const char* input) noexcept {
+bool ada_set_port(ada_url result, const char* input, size_t length) noexcept {
   ada::result<ada::url_aggregator>& r = get_instance(result);
   if (!r) {
     return false;
   }
-  return r->set_port(input);
+  return r->set_port(std::string_view(input, length));
 }
 
-bool ada_set_pathname(ada_url result, const char* input) noexcept {
+bool ada_set_pathname(ada_url result, const char* input,
+                      size_t length) noexcept {
   ada::result<ada::url_aggregator>& r = get_instance(result);
   if (!r) {
     return false;
   }
-  return r->set_pathname(input);
+  return r->set_pathname(std::string_view(input, length));
 }
 
-void ada_set_search(ada_url result, const char* input) noexcept {
+void ada_set_search(ada_url result, const char* input, size_t length) noexcept {
   ada::result<ada::url_aggregator>& r = get_instance(result);
   if (r) {
-    r->set_search(input);
+    r->set_search(std::string_view(input, length));
   }
 }
 
-void ada_set_hash(ada_url result, const char* input) noexcept {
+void ada_set_hash(ada_url result, const char* input, size_t length) noexcept {
   ada::result<ada::url_aggregator>& r = get_instance(result);
   if (r) {
-    r->set_hash(input);
+    r->set_hash(std::string_view(input, length));
   }
 }
 

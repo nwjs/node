@@ -357,6 +357,17 @@ The optional `callback` will be called once the `'close'` event occurs. Unlike
 that event, it will be called with an `Error` as its only argument if the server
 was not open when it was closed.
 
+### `server[Symbol.asyncDispose]()`
+
+<!-- YAML
+added: v20.5.0
+-->
+
+> Stability: 1 - Experimental
+
+Calls [`server.close()`][] and returns a promise that fulfills when the
+server has closed.
+
 ### `server.getConnections(callback)`
 
 <!-- YAML
@@ -1171,7 +1182,8 @@ added: v0.11.14
 
 * {string}
 
-The string representation of the remote IP family. `'IPv4'` or `'IPv6'`.
+The string representation of the remote IP family. `'IPv4'` or `'IPv6'`. Value may be `undefined` if
+the socket is destroyed (for example, if the client disconnected).
 
 ### `socket.remotePort`
 
@@ -1181,7 +1193,8 @@ added: v0.5.10
 
 * {integer}
 
-The numeric representation of the remote port. For example, `80` or `21`.
+The numeric representation of the remote port. For example, `80` or `21`. Value may be `undefined` if
+the socket is destroyed (for example, if the client disconnected).
 
 ### `socket.resetAndDestroy()`
 
@@ -1616,8 +1629,8 @@ server.listen(8124, () => {
 
 Test this by using `telnet`:
 
-```console
-$ telnet localhost 8124
+```bash
+telnet localhost 8124
 ```
 
 To listen on the socket `/tmp/echo.sock`:
@@ -1630,8 +1643,8 @@ server.listen('/tmp/echo.sock', () => {
 
 Use `nc` to connect to a Unix domain socket server:
 
-```console
-$ nc -U /tmp/echo.sock
+```bash
+nc -U /tmp/echo.sock
 ```
 
 ## `net.getDefaultAutoSelectFamily()`

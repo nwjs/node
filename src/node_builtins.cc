@@ -15,7 +15,6 @@ using v8::DEFAULT;
 using v8::EscapableHandleScope;
 using v8::Function;
 using v8::FunctionCallbackInfo;
-using v8::FunctionTemplate;
 using v8::IntegrityLevel;
 using v8::Isolate;
 using v8::Local;
@@ -64,15 +63,19 @@ bool BuiltinLoader::Add(const char* id, const UnionBytes& source) {
   return result.second;
 }
 
-Local<Object> BuiltinLoader::GetSourceObject(Local<Context> context) {
-  Isolate* isolate = context->GetIsolate();
+void BuiltinLoader::GetNatives(Local<Name> property,
+                               const PropertyCallbackInfo<Value>& info) {
+  Environment* env = Environment::GetCurrent(info);
+  Isolate* isolate = env->isolate();
+  Local<Context> context = env->context();
+
   Local<Object> out = Object::New(isolate);
-  auto source = source_.read();
+  auto source = env->builtin_loader()->source_.read();
   for (auto const& x : *source) {
     Local<String> key = OneByteString(isolate, x.first.c_str(), x.first.size());
     out->Set(context, key, x.second.ToStringChecked(isolate)).FromJust();
   }
-  return out;
+  info.GetReturnValue().Set(out);
 }
 
 Local<String> BuiltinLoader::GetConfigString(Isolate* isolate) {
@@ -282,7 +285,7 @@ MaybeLocal<Function> BuiltinLoader::LookupAndCompileInternal(
   const bool has_cache = false; //cached_data.data != nullptr;
   ScriptCompiler::CompileOptions options =
       has_cache ? ScriptCompiler::kConsumeCodeCache
-                : ScriptCompiler::kEagerCompile;
+                : ScriptCompiler::kNoCompileOptions;
   ScriptCompiler::Source script_source(
       source,
       origin,
@@ -665,38 +668,45 @@ void BuiltinLoader::CopySourceAndCodeCacheReferenceFrom(
 }
 
 void BuiltinLoader::CreatePerIsolateProperties(IsolateData* isolate_data,
-                                               Local<FunctionTemplate> target) {
+                                               Local<ObjectTemplate> target) {
   Isolate* isolate = isolate_data->isolate();
-  Local<ObjectTemplate> proto = target->PrototypeTemplate();
 
-  proto->SetAccessor(isolate_data->config_string(),
-                     ConfigStringGetter,
-                     nullptr,
-                     Local<Value>(),
-                     DEFAULT,
-                     None,
-                     SideEffectType::kHasNoSideEffect);
+  target->SetAccessor(isolate_data->config_string(),
+                      ConfigStringGetter,
+                      nullptr,
+                      Local<Value>(),
+                      DEFAULT,
+                      None,
+                      SideEffectType::kHasNoSideEffect);
 
-  proto->SetAccessor(FIXED_ONE_BYTE_STRING(isolate, "builtinIds"),
-                     BuiltinIdsGetter,
-                     nullptr,
-                     Local<Value>(),
-                     DEFAULT,
-                     None,
-                     SideEffectType::kHasNoSideEffect);
+  target->SetAccessor(FIXED_ONE_BYTE_STRING(isolate, "builtinIds"),
+                      BuiltinIdsGetter,
+                      nullptr,
+                      Local<Value>(),
+                      DEFAULT,
+                      None,
+                      SideEffectType::kHasNoSideEffect);
 
-  proto->SetAccessor(FIXED_ONE_BYTE_STRING(isolate, "builtinCategories"),
-                     GetBuiltinCategories,
-                     nullptr,
-                     Local<Value>(),
-                     DEFAULT,
-                     None,
-                     SideEffectType::kHasNoSideEffect);
+  target->SetAccessor(FIXED_ONE_BYTE_STRING(isolate, "builtinCategories"),
+                      GetBuiltinCategories,
+                      nullptr,
+                      Local<Value>(),
+                      DEFAULT,
+                      None,
+                      SideEffectType::kHasNoSideEffect);
 
-  SetMethod(isolate, proto, "getCacheUsage", BuiltinLoader::GetCacheUsage);
-  SetMethod(isolate, proto, "compileFunction", BuiltinLoader::CompileFunction);
-  SetMethod(isolate, proto, "hasCachedBuiltins", HasCachedBuiltins);
-  SetMethod(isolate, proto, "setInternalLoaders", SetInternalLoaders);
+  target->SetAccessor(FIXED_ONE_BYTE_STRING(isolate, "natives"),
+                      GetNatives,
+                      nullptr,
+                      Local<Value>(),
+                      DEFAULT,
+                      None,
+                      SideEffectType::kHasNoSideEffect);
+
+  SetMethod(isolate, target, "getCacheUsage", BuiltinLoader::GetCacheUsage);
+  SetMethod(isolate, target, "compileFunction", BuiltinLoader::CompileFunction);
+  SetMethod(isolate, target, "hasCachedBuiltins", HasCachedBuiltins);
+  SetMethod(isolate, target, "setInternalLoaders", SetInternalLoaders);
 }
 
 void BuiltinLoader::CreatePerContextProperties(Local<Object> target,
@@ -716,6 +726,7 @@ void BuiltinLoader::RegisterExternalReferences(
   registry->Register(CompileFunction);
   registry->Register(HasCachedBuiltins);
   registry->Register(SetInternalLoaders);
+  registry->Register(GetNatives);
 
   RegisterExternalReferencesForInternalizedBuiltinCode(registry);
 }

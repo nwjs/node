@@ -48,7 +48,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.9',
+    'v8_embedder_string': '-node.10',
 
     ##### V8 defaults for Node.js #####
 
@@ -597,38 +597,73 @@
             'cflags': [ '-I/usr/local/include' ],
             'ldflags': [ '-Wl,-z,wxneeded' ],
           }],
-        ],
-        'conditions': [
-          [ 'target_arch=="ia32"', {
-            'cflags': [ '-m32' ],
-            'ldflags': [ '-m32' ],
+          ['_toolset=="host"', {
+            'conditions': [
+              ['clang==1 and OS=="linux"', {
+                'cflags': ['-I/usr/include/c++/12', '-I/usr/include/x86_64-linux-gnu/' ],
+              }],
+              [ 'host_arch=="ia32"', {
+                'cflags': [ '-m32' ],
+                'ldflags': [ '-m32' ],
+              }],
+              [ 'host_arch=="x64"', {
+                'cflags': [ '-m64' ],
+                'ldflags': [ '-m64' ],
+              }],
+              [ 'host_arch=="ppc" and OS not in "aix os400"', {
+                'cflags': [ '-m32' ],
+                'ldflags': [ '-m32' ],
+              }],
+              [ 'host_arch=="ppc64" and OS not in "aix os400"', {
+                'cflags': [ '-m64', '-mminimal-toc' ],
+                'ldflags': [ '-m64' ],
+              }],
+              [ 'host_arch=="s390x" and OS=="linux"', {
+                'cflags': [ '-m64', '-march=z196' ],
+                'ldflags': [ '-m64', '-march=z196' ],
+              }],
+            ],
           }],
-          [ 'target_arch=="x64"', {
-            'cflags': [ '-m64' ],
-            'ldflags': [ '-m64' ],
-          }],
-          [ 'building_nw==1', {
-            'cflags': [ '--sysroot=<(sysroot)', '-nostdinc++', 
+          ['_toolset=="target"', {
+            'conditions': [
+              [ 'building_nw==1 and OS=="linux"', {
+                'cflags': [ '--sysroot=<(sysroot)', '-nostdinc++', 
                         '-isystem<(PRODUCT_DIR)/../../buildtools/third_party/libc++/trunk/include', 
                         '-isystem<(PRODUCT_DIR)/../../buildtools/third_party/libc++', 
                         '-isystem<(PRODUCT_DIR)/../../buildtools/third_party/libc++abi/trunk/include' ],
-            'ldflags': [ '--sysroot=<(sysroot)','<!(<(DEPTH)/content/nw/tools/sysroot_ld_path.sh <(sysroot))', '-nostdlib++' ],
+                'ldflags': [ '--sysroot=<(sysroot)','<!(<(DEPTH)/content/nw/tools/sysroot_ld_path.sh <(sysroot))', '-nostdlib++' ],
+              }],
+              ['clang==1', {
+                'cflags': ['-Wno-error=missing-declarations', '-Wno-error=array-bounds'],
+                'defines': [ '_LIBCPP_ABI_NAMESPACE=__1' ],
+              }],
+              [ 'target_arch=="ia32"', {
+                'cflags': [ '-m32' ],
+                'ldflags': [ '-m32' ],
+              }],
+              [ 'target_arch=="x64"', {
+                'cflags': [ '-m64' ],
+                'ldflags': [ '-m64' ],
+              }],
+              [ 'target_arch=="ppc" and OS not in "aix os400"', {
+                'cflags': [ '-m32' ],
+                'ldflags': [ '-m32' ],
+              }],
+              [ 'target_arch=="ppc64" and OS not in "aix os400"', {
+                'cflags': [ '-m64', '-mminimal-toc' ],
+                'ldflags': [ '-m64' ],
+              }],
+              [ 'target_arch=="s390x" and OS=="linux"', {
+                'cflags': [ '-m64', '-march=z196' ],
+                'ldflags': [ '-m64', '-march=z196' ],
+              }],
+            ],
           }],
+        ],
+        'conditions': [
           [ 'OS=="linux" and target_arch=="arm"', {
             'cflags': [ '--target=arm-linux-gnueabihf' ],
             'ldflags': [ '--target=arm-linux-gnueabihf' ],
-          }],
-          [ 'target_arch=="ppc" and OS not in "aix os400"', {
-            'cflags': [ '-m32' ],
-            'ldflags': [ '-m32' ],
-          }],
-          [ 'target_arch=="ppc64" and OS not in "aix os400"', {
-            'cflags': [ '-m64', '-mminimal-toc' ],
-            'ldflags': [ '-m64' ],
-          }],
-          [ 'target_arch=="s390x" and OS=="linux"', {
-            'cflags': [ '-m64', '-march=z196' ],
-            'ldflags': [ '-m64', '-march=z196' ],
           }],
           [ 'OS=="solaris"', {
             'cflags': [ '-pthreads' ],

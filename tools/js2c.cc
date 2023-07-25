@@ -340,7 +340,9 @@ int WriteIfChanged(const Fragment& out, const std::string& dest) {
   return WriteFileSync(out, dest.c_str());
 }
 
-std::string GetFileId(const std::string& filename) {
+std::string GetFileId(const std::string& fn) {
+  std::string filename = fn;
+  std::replace(filename.begin(), filename.end(), '\\', '/');
   size_t end = filename.size();
   size_t start = 0;
   std::string prefix;
@@ -369,7 +371,7 @@ std::string GetVariableName(const std::string& id) {
   size_t length = result.size();
 
   for (size_t i = 0; i < length; ++i) {
-    if (result[i] == '.' || result[i] == '-' || result[i] == '/') {
+    if (result[i] == '.' || result[i] == '-' || result[i] == '/' || result[i] == '\\') {
       result[i] = '_';
     }
   }

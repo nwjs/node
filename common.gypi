@@ -600,7 +600,7 @@
           ['_toolset=="host"', {
             'conditions': [
               ['clang==1 and OS=="linux"', {
-                'cflags': ['-I/usr/include/c++/12', '-I/usr/include/x86_64-linux-gnu/' ],
+                'cflags': ['-I/usr/include/c++/13', '-I/usr/include/x86_64-linux-gnu/' ],
               }],
               [ 'host_arch=="ia32"', {
                 'cflags': [ '-m32' ],

@@ -871,7 +871,7 @@ added: v0.5.0
 
 The operating system CPU architecture for which the Node.js binary was compiled.
 Possible values are: `'arm'`, `'arm64'`, `'ia32'`, `'mips'`,`'mipsel'`, `'ppc'`,
-`'ppc64'`, `'s390'`, `'s390x'`, and `'x64'`.
+`'ppc64'`, `'riscv64'`, `'s390'`, `'s390x'`, and `'x64'`.
 
 ```mjs
 import { arch } from 'node:process';
@@ -1666,7 +1666,9 @@ each [`Worker`][] thread has its own copy of `process.env`, based on its
 parent thread's `process.env`, or whatever was specified as the `env` option
 to the [`Worker`][] constructor. Changes to `process.env` will not be visible
 across [`Worker`][] threads, and only the main thread can make changes that
-are visible to the operating system or to native add-ons.
+are visible to the operating system or to native add-ons. On Windows, a copy of
+`process.env` on a [`Worker`][] instance operates in a case-sensitive manner
+unlike the main thread.
 
 ## `process.execArgv`
 
@@ -3514,6 +3516,19 @@ throw an error.
 
 Using this function is mutually exclusive with using the deprecated
 [`domain`][] built-in module.
+
+## `process.sourceMapsEnabled`
+
+<!-- YAML
+added: v20.7.0
+-->
+
+> Stability: 1 - Experimental
+
+* {boolean}
+
+The `process.sourceMapsEnabled` property returns whether the
+[Source Map v3][Source Map] support for stack traces is enabled.
 
 ## `process.stderr`
 

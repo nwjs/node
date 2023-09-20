@@ -54,7 +54,7 @@ bool BindingData::PrepareForSerialization(v8::Local<v8::Context> context,
 }
 
 InternalFieldInfoBase* BindingData::Serialize(int index) {
-  DCHECK_EQ(index, BaseObject::kEmbedderType);
+  DCHECK_IS_SNAPSHOT_SLOT(index);
   InternalFieldInfo* info =
       InternalFieldInfoBase::New<InternalFieldInfo>(type());
   return info;
@@ -64,10 +64,10 @@ void BindingData::Deserialize(v8::Local<v8::Context> context,
                               v8::Local<v8::Object> holder,
                               int index,
                               InternalFieldInfoBase* info) {
-  DCHECK_EQ(index, BaseObject::kEmbedderType);
+  DCHECK_IS_SNAPSHOT_SLOT(index);
   v8::HandleScope scope(context->GetIsolate());
   Realm* realm = Realm::GetCurrent(context);
-  BindingData* binding = realm->AddBindingData<BindingData>(context, holder);
+  BindingData* binding = realm->AddBindingData<BindingData>(holder);
   CHECK_NOT_NULL(binding);
 }
 
@@ -78,7 +78,7 @@ void BindingData::DomainToASCII(const FunctionCallbackInfo<Value>& args) {
 
   std::string input = Utf8Value(env->isolate(), args[0]).ToString();
   if (input.empty()) {
-    return args.GetReturnValue().Set(FIXED_ONE_BYTE_STRING(env->isolate(), ""));
+    return args.GetReturnValue().Set(String::Empty(env->isolate()));
   }
 
   // It is important to have an initial value that contains a special scheme.
@@ -87,7 +87,7 @@ void BindingData::DomainToASCII(const FunctionCallbackInfo<Value>& args) {
   auto out = ada::parse<ada::url>("ws://x");
   DCHECK(out);
   if (!out->set_hostname(input)) {
-    return args.GetReturnValue().Set(FIXED_ONE_BYTE_STRING(env->isolate(), ""));
+    return args.GetReturnValue().Set(String::Empty(env->isolate()));
   }
   std::string host = out->get_hostname();
   args.GetReturnValue().Set(
@@ -100,14 +100,17 @@ void BindingData::DomainToUnicode(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[0]->IsString());
 
   std::string input = Utf8Value(env->isolate(), args[0]).ToString();
+  if (input.empty()) {
+    return args.GetReturnValue().Set(String::Empty(env->isolate()));
+  }
+
   // It is important to have an initial value that contains a special scheme.
   // Since it will change the implementation of `set_hostname` according to URL
   // spec.
   auto out = ada::parse<ada::url>("ws://x");
   DCHECK(out);
   if (!out->set_hostname(input)) {
-    return args.GetReturnValue().Set(
-        String::NewFromUtf8(env->isolate(), "").ToLocalChecked());
+    return args.GetReturnValue().Set(String::Empty(env->isolate()));
   }
   std::string result = ada::unicode::to_unicode(out->get_hostname());
 
@@ -170,8 +173,6 @@ bool BindingData::FastCanParse(Local<Value> receiver,
   return ada::can_parse(std::string_view(input.data, input.length));
 }
 
-CFunction BindingData::fast_can_parse_(CFunction::Make(FastCanParse));
-
 bool BindingData::FastCanParseWithBase(Local<Value> receiver,
                                        const FastOneByteString& input,
                                        const FastOneByteString& base) {
@@ -179,8 +180,8 @@ bool BindingData::FastCanParseWithBase(Local<Value> receiver,
   return ada::can_parse(std::string_view(input.data, input.length), &base_view);
 }
 
-CFunction BindingData::fast_can_parse_with_base_(
-    CFunction::Make(FastCanParseWithBase));
+CFunction BindingData::fast_can_parse_methods_[] = {
+    CFunction::Make(FastCanParse), CFunction::Make(FastCanParseWithBase)};
 
 void BindingData::Format(const FunctionCallbackInfo<Value>& args) {
   CHECK_GT(args.Length(), 4);
@@ -205,7 +206,7 @@ void BindingData::Format(const FunctionCallbackInfo<Value>& args) {
     out->hash = std::nullopt;
   }
 
-  if (unicode) {
+  if (unicode && out->has_hostname()) {
     out->host = ada::idna::to_unicode(out->get_hostname());
   }
 
@@ -231,17 +232,16 @@ void BindingData::Parse(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[0]->IsString());  // input
   // args[1] // base url
 
-  BindingData* binding_data = Realm::GetBindingData<BindingData>(args);
-  Environment* env = Environment::GetCurrent(args);
-  HandleScope handle_scope(env->isolate());
-  Context::Scope context_scope(env->context());
+  Realm* realm = Realm::GetCurrent(args);
+  BindingData* binding_data = realm->GetBindingData<BindingData>();
+  Isolate* isolate = realm->isolate();
 
-  Utf8Value input(env->isolate(), args[0]);
+  Utf8Value input(isolate, args[0]);
   ada::result<ada::url_aggregator> base;
   ada::url_aggregator* base_pointer = nullptr;
   if (args[1]->IsString()) {
-    base = ada::parse<ada::url_aggregator>(
-        Utf8Value(env->isolate(), args[1]).ToString());
+    base =
+        ada::parse<ada::url_aggregator>(Utf8Value(isolate, args[1]).ToString());
     if (!base) {
       return args.GetReturnValue().Set(false);
     }
@@ -257,8 +257,7 @@ void BindingData::Parse(const FunctionCallbackInfo<Value>& args) {
   binding_data->UpdateComponents(out->get_components(), out->type);
 
   args.GetReturnValue().Set(
-      ToV8Value(env->context(), out->get_href(), env->isolate())
-          .ToLocalChecked());
+      ToV8Value(realm->context(), out->get_href(), isolate).ToLocalChecked());
 }
 
 void BindingData::Update(const FunctionCallbackInfo<Value>& args) {
@@ -266,12 +265,12 @@ void BindingData::Update(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[1]->IsNumber());    // action type
   CHECK(args[2]->IsString());    // new value
 
-  BindingData* binding_data = Realm::GetBindingData<BindingData>(args);
-  Environment* env = Environment::GetCurrent(args);
-  Isolate* isolate = env->isolate();
+  Realm* realm = Realm::GetCurrent(args);
+  BindingData* binding_data = realm->GetBindingData<BindingData>();
+  Isolate* isolate = realm->isolate();
 
   enum url_update_action action = static_cast<enum url_update_action>(
-      args[1]->Uint32Value(env->context()).FromJust());
+      args[1]->Uint32Value(realm->context()).FromJust());
   Utf8Value input(isolate, args[0].As<String>());
   Utf8Value new_value(isolate, args[2].As<String>());
 
@@ -332,8 +331,7 @@ void BindingData::Update(const FunctionCallbackInfo<Value>& args) {
 
   binding_data->UpdateComponents(out->get_components(), out->type);
   args.GetReturnValue().Set(
-      ToV8Value(env->context(), out->get_href(), env->isolate())
-          .ToLocalChecked());
+      ToV8Value(realm->context(), out->get_href(), isolate).ToLocalChecked());
 }
 
 void BindingData::UpdateComponents(const ada::url_components& components,
@@ -361,12 +359,7 @@ void BindingData::CreatePerIsolateProperties(IsolateData* isolate_data,
   SetMethod(isolate, target, "parse", Parse);
   SetMethod(isolate, target, "update", Update);
   SetFastMethodNoSideEffect(
-      isolate, target, "canParse", CanParse, &fast_can_parse_);
-  SetFastMethodNoSideEffect(isolate,
-                            target,
-                            "canParseWithBase",
-                            CanParse,
-                            &fast_can_parse_with_base_);
+      isolate, target, "canParse", CanParse, {fast_can_parse_methods_, 2});
 }
 
 void BindingData::CreatePerContextProperties(Local<Object> target,
@@ -374,7 +367,7 @@ void BindingData::CreatePerContextProperties(Local<Object> target,
                                              Local<Context> context,
                                              void* priv) {
   Realm* realm = Realm::GetCurrent(context);
-  realm->AddBindingData<BindingData>(context, target);
+  realm->AddBindingData<BindingData>(target);
 }
 
 void BindingData::RegisterExternalReferences(
@@ -387,9 +380,11 @@ void BindingData::RegisterExternalReferences(
   registry->Register(Update);
   registry->Register(CanParse);
   registry->Register(FastCanParse);
-  registry->Register(fast_can_parse_.GetTypeInfo());
   registry->Register(FastCanParseWithBase);
-  registry->Register(fast_can_parse_with_base_.GetTypeInfo());
+
+  for (const CFunction& method : fast_can_parse_methods_) {
+    registry->Register(method.GetTypeInfo());
+  }
 }
 
 std::string FromFilePath(const std::string_view file_path) {

@@ -24,18 +24,42 @@ function replaceSpecDuration(str) {
     .replaceAll(/duration_ms [0-9.]+/g, 'duration_ms *')
     .replace(stackTraceBasePath, '$3');
 }
-const defaultTransform = snapshot
-  .transform(snapshot.replaceWindowsLineEndings, snapshot.replaceStackTrace, replaceTestDuration);
-const specTransform = snapshot
-  .transform(replaceSpecDuration, snapshot.replaceWindowsLineEndings, snapshot.replaceStackTrace);
 
+function removeWindowsPathEscaping(str) {
+  return common.isWindows ? str.replaceAll(/\\\\/g, '\\') : str;
+}
+
+function replaceTestLocationLine(str) {
+  return str.replaceAll(/(js:)(\d+)(:\d+)/g, '$1(LINE)$3');
+}
+
+const defaultTransform = snapshot.transform(
+  snapshot.replaceWindowsLineEndings,
+  snapshot.replaceStackTrace,
+  removeWindowsPathEscaping,
+  snapshot.replaceFullPaths,
+  snapshot.replaceWindowsPaths,
+  replaceTestDuration,
+  replaceTestLocationLine,
+);
+const specTransform = snapshot.transform(
+  replaceSpecDuration,
+  snapshot.replaceWindowsLineEndings,
+  snapshot.replaceStackTrace,
+);
 
 const tests = [
   { name: 'test-runner/output/abort.js' },
   { name: 'test-runner/output/abort_suite.js' },
+  { name: 'test-runner/output/abort_hooks.js' },
   { name: 'test-runner/output/describe_it.js' },
   { name: 'test-runner/output/describe_nested.js' },
   { name: 'test-runner/output/hooks.js' },
+  { name: 'test-runner/output/timeout_in_before_each_should_not_affect_further_tests.js' },
+  { name: 'test-runner/output/hooks-with-no-global-test.js' },
+  { name: 'test-runner/output/before-and-after-each-too-many-listeners.js' },
+  { name: 'test-runner/output/before-and-after-each-with-timeout-too-many-listeners.js' },
+  { name: 'test-runner/output/global_after_should_fail_the_test.js' },
   { name: 'test-runner/output/no_refs.js' },
   { name: 'test-runner/output/no_tests.js' },
   { name: 'test-runner/output/only_tests.js' },
@@ -50,11 +74,19 @@ const tests = [
   { name: 'test-runner/output/unresolved_promise.js' },
   { name: 'test-runner/output/default_output.js', transform: specTransform, tty: true },
   { name: 'test-runner/output/arbitrary-output.js' },
+  { name: 'test-runner/output/async-test-scheduling.mjs' },
   !skipForceColors ? {
     name: 'test-runner/output/arbitrary-output-colored.js',
     transform: snapshot.transform(specTransform, replaceTestDuration), tty: true
   } : false,
   { name: 'test-runner/output/dot_output_custom_columns.js', transform: specTransform, tty: true },
+  {
+    name: 'test-runner/output/tap_escape.js',
+    transform: snapshot.transform(
+      snapshot.replaceWindowsLineEndings,
+      replaceTestDuration,
+    ),
+  },
 ]
 .filter(Boolean)
 .map(({ name, tty, transform }) => ({

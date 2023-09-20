@@ -10,8 +10,8 @@ namespace v8impl {
 
 class RefTracker {
  public:
-  RefTracker() {}
-  virtual ~RefTracker() {}
+  RefTracker() = default;
+  virtual ~RefTracker() = default;
   virtual void Finalize() {}
 
   typedef RefTracker RefList;
@@ -265,14 +265,6 @@ inline napi_status napi_set_last_error(napi_env env,
     if (!(condition)) {                                                        \
       napi_throw_range_error((env), (error), (message));                       \
       return napi_set_last_error((env), napi_generic_failure);                 \
-    }                                                                          \
-  } while (0)
-
-#define RETURN_STATUS_IF_FALSE_WITH_PREAMBLE(env, condition, status)           \
-  do {                                                                         \
-    if (!(condition)) {                                                        \
-      return napi_set_last_error(                                              \
-          (env), try_catch.HasCaught() ? napi_pending_exception : (status));   \
     }                                                                          \
   } while (0)
 

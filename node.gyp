@@ -412,6 +412,7 @@
       'src/node_contextify.cc',
       'src/node_credentials.cc',
       'src/node_dir.cc',
+      'src/node_dotenv.cc',
       'src/node_env_var.cc',
       'src/node_errors.cc',
       'src/node_external_reference.cc',
@@ -526,6 +527,7 @@
       'src/node_context_data.h',
       'src/node_contextify.h',
       'src/node_dir.h',
+      'src/node_dotenv.h',
       'src/node_errors.h',
       'src/node_exit_code.h',
       'src/node_external_reference.h',
@@ -565,7 +567,6 @@
       'src/node_stat_watcher.h',
       'src/node_union_bytes.h',
       'src/node_url.h',
-      'src/node_util.h',
       'src/node_version.h',
       'src/node_v8.h',
       'src/node_v8_platform-inl.h',
@@ -1224,9 +1225,6 @@
           'node_target_type=="executable"', {
           'defines': [ 'NODE_ENABLE_LARGE_CODE_PAGES=1' ],
         }],
-        ['OS in "linux mac"', {
-          'defines': [ 'NODE_MKSNAPSHOT_USE_STRING_LITERALS' ],
-        }],
         [ 'use_openssl_def==1', {
           # TODO(bnoordhuis) Make all platforms export the same list of symbols.
           # Teach mkssldef.py to generate linker maps that UNIX linkers understand.
@@ -1386,6 +1384,7 @@
         'test/cctest/test_aliased_buffer.cc',
         'test/cctest/test_base64.cc',
         'test/cctest/test_base_object_ptr.cc',
+        'test/cctest/test_cppgc.cc',
         'test/cctest/test_node_postmortem_metadata.cc',
         'test/cctest/test_environment.cc',
         'test/cctest/test_linked_binding.cc',
@@ -1596,6 +1595,9 @@
       ],
 
       'conditions': [
+        ['OS in "linux mac"', {
+          'defines': [ 'NODE_MKSNAPSHOT_USE_STRING_LITERALS=1' ],
+        }],
         [ 'node_use_openssl=="true"', {
           'defines': [
             'HAVE_OPENSSL=1',

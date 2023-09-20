@@ -82,8 +82,8 @@ Local<String> BuiltinLoader::GetConfigString(Isolate* isolate) {
   return config_.ToStringChecked(isolate);
 }
 
-std::vector<std::string> BuiltinLoader::GetBuiltinIds() const {
-  std::vector<std::string> ids;
+std::vector<std::string_view> BuiltinLoader::GetBuiltinIds() const {
+  std::vector<std::string_view> ids;
   auto source = source_.read();
   ids.reserve(source->size());
   for (auto const& x : *source) {
@@ -95,7 +95,7 @@ std::vector<std::string> BuiltinLoader::GetBuiltinIds() const {
 BuiltinLoader::BuiltinCategories BuiltinLoader::GetBuiltinCategories() const {
   BuiltinCategories builtin_categories;
 
-  std::vector<std::string> prefixes = {
+  const std::vector<std::string_view> prefixes = {
 #if !HAVE_OPENSSL
     "internal/crypto/",
     "internal/debugger/",
@@ -254,7 +254,7 @@ MaybeLocal<Function> BuiltinLoader::LookupAndCompileInternal(
     Local<Context> context,
     const char* id,
     std::vector<Local<String>>* parameters,
-    BuiltinLoader::Result* result) {
+    Realm* optional_realm) {
   Isolate* isolate = context->GetIsolate();
   EscapableHandleScope scope(isolate);
 
@@ -320,9 +320,13 @@ MaybeLocal<Function> BuiltinLoader::LookupAndCompileInternal(
   // will never be in any of these two sets, but the two sets are only for
   // testing anyway.
 
-  *result = (has_cache && !script_source.GetCachedData()->rejected)
-                ? Result::kWithCache
-                : Result::kWithoutCache;
+  Result result = (has_cache && !script_source.GetCachedData()->rejected)
+                      ? Result::kWithCache
+                      : Result::kWithoutCache;
+  if (optional_realm != nullptr) {
+    DCHECK_EQ(this, optional_realm->env()->builtin_loader());
+    RecordResult(id, result, optional_realm);
+  }
 
   if (has_cache) {
     per_process::Debug(DebugCategory::CODE_CACHE,
@@ -337,29 +341,36 @@ MaybeLocal<Function> BuiltinLoader::LookupAndCompileInternal(
   }
 
 #if 0
-  if (*result == Result::kWithoutCache) {
+  if (result == Result::kWithoutCache && optional_realm != nullptr &&
+      !optional_realm->env()->isolate_data()->is_building_snapshot()) {
     // We failed to accept this cache, maybe because it was rejected, maybe
     // because it wasn't present. Either way, we'll attempt to replace this
     // code cache info with a new one.
-    std::shared_ptr<ScriptCompiler::CachedData> new_cached_data(
-        ScriptCompiler::CreateCodeCacheForFunction(fun));
-    CHECK_NOT_NULL(new_cached_data);
-
-    {
-      RwLock::ScopedLock lock(code_cache_->mutex);
-      code_cache_->map.insert_or_assign(
-          id, BuiltinCodeCacheData(std::move(new_cached_data)));
-    }
+    // This is only done when the isolate is not being serialized because
+    // V8 does not support serializing code cache with an unfinalized read-only
+    // space (which is what isolates pending to be serialized have).
+    SaveCodeCache(id, fun);
   }
 #endif
 
   return scope.Escape(fun);
 }
 
+void BuiltinLoader::SaveCodeCache(const char* id, Local<Function> fun) {
+  std::shared_ptr<ScriptCompiler::CachedData> new_cached_data(
+      ScriptCompiler::CreateCodeCacheForFunction(fun));
+  CHECK_NOT_NULL(new_cached_data);
+
+  {
+    RwLock::ScopedLock lock(code_cache_->mutex);
+    code_cache_->map.insert_or_assign(
+        id, BuiltinCodeCacheData(std::move(new_cached_data)));
+  }
+}
+
 MaybeLocal<Function> BuiltinLoader::LookupAndCompile(Local<Context> context,
                                                      const char* id,
                                                      Realm* optional_realm) {
-  Result result;
   std::vector<Local<String>> parameters;
   Isolate* isolate = context->GetIsolate();
   // Detects parameters of the scripts based on module ids.
@@ -405,11 +416,7 @@ MaybeLocal<Function> BuiltinLoader::LookupAndCompile(Local<Context> context,
   }
 
   MaybeLocal<Function> maybe =
-      LookupAndCompileInternal(context, id, &parameters, &result);
-  if (optional_realm != nullptr) {
-    DCHECK_EQ(this, optional_realm->env()->builtin_loader());
-    RecordResult(id, result, optional_realm);
-  }
+      LookupAndCompileInternal(context, id, &parameters, optional_realm);
   return maybe;
 }
 
@@ -477,7 +484,7 @@ MaybeLocal<Value> BuiltinLoader::CompileAndCall(Local<Context> context,
 }
 
 bool BuiltinLoader::CompileAllBuiltins(Local<Context> context) {
-  std::vector<std::string> ids = GetBuiltinIds();
+  std::vector<std::string_view> ids = GetBuiltinIds();
   bool all_succeeded = true;
   std::string v8_tools_prefix = "internal/deps/v8/tools/";
   for (const auto& id : ids) {
@@ -485,13 +492,17 @@ bool BuiltinLoader::CompileAllBuiltins(Local<Context> context) {
       continue;
     }
     v8::TryCatch bootstrapCatch(context->GetIsolate());
-    USE(LookupAndCompile(context, id.c_str(), nullptr));
+    auto fn = LookupAndCompile(context, id.data(), nullptr);
     if (bootstrapCatch.HasCaught()) {
       per_process::Debug(DebugCategory::CODE_CACHE,
                          "Failed to compile code cache for %s\n",
-                         id.c_str());
+                         id.data());
       all_succeeded = false;
       PrintCaughtException(context->GetIsolate(), context, bootstrapCatch);
+    } else {
+      // This is used by the snapshot builder, so save the code cache
+      // unconditionally.
+      SaveCodeCache(id.data(), fn.ToLocalChecked());
     }
   }
   return all_succeeded;
@@ -609,7 +620,7 @@ void BuiltinLoader::BuiltinIdsGetter(Local<Name> property,
   Environment* env = Environment::GetCurrent(info);
   Isolate* isolate = env->isolate();
 
-  std::vector<std::string> ids = env->builtin_loader()->GetBuiltinIds();
+  std::vector<std::string_view> ids = env->builtin_loader()->GetBuiltinIds();
   info.GetReturnValue().Set(
       ToV8Value(isolate->GetCurrentContext(), ids).ToLocalChecked());
 }

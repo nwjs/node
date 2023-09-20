@@ -121,8 +121,8 @@ class EnvironmentOptions : public Options {
   std::string experimental_policy_integrity;
   bool has_policy_integrity_string = false;
   bool experimental_permission = false;
-  std::string allow_fs_read;
-  std::string allow_fs_write;
+  std::vector<std::string> allow_fs_read;
+  std::vector<std::string> allow_fs_write;
   bool allow_child_process = false;
   bool allow_worker_threads = false;
   bool experimental_repl_await = true;
@@ -158,6 +158,8 @@ class EnvironmentOptions : public Options {
 #endif  // HAVE_INSPECTOR
   std::string redirect_warnings;
   std::string diagnostic_dir;
+  std::string env_file;
+  bool has_env_file_string = false;
   bool test_runner = false;
   bool test_runner_coverage = false;
   std::vector<std::string> test_name_pattern;

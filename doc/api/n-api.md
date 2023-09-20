@@ -245,106 +245,54 @@ from version 3 with some additions. This means that it is not necessary
 to recompile for new versions of Node.js which are
 listed as supporting a later version.
 
+This table may not be up to date in older streams, the most up to date
+information is in the latest API documentation in:
+[Node-API version matrix](https://nodejs.org/docs/latest/api/n-api.html#node-api-version-matrix)
+
 <!-- For accessibility purposes, this table needs row headers. That means we
      can't do it in markdown. Hence, the raw HTML. -->
 
 <table>
   <tr>
-    <td></td>
-    <th scope="col">1</th>
-    <th scope="col">2</th>
-    <th scope="col">3</th>
+    <th>Node-API version</th>
+    <th scope="col">Supported In</th>
   </tr>
   <tr>
-    <th scope="row">v6.x</th>
-    <td></td>
-    <td></td>
-    <td>v6.14.2*</td>
+    <th scope="row">9</th>
+    <td>v18.17.0+, 20.3.0+, 21.0.0 and all later versions</td>
   </tr>
   <tr>
-    <th scope="row">v8.x</th>
-    <td>v8.6.0**</td>
-    <td>v8.10.0*</td>
-    <td>v8.11.2</td>
+    <th scope="row">8</th>
+    <td>v12.22.0+, v14.17.0+, v15.12.0+, 16.0.0 and all later versions</td>
   </tr>
   <tr>
-    <th scope="row">v9.x</th>
-    <td>v9.0.0*</td>
-    <td>v9.3.0*</td>
-    <td>v9.11.0*</td>
+    <th scope="row">7</th>
+    <td>v10.23.0+, v12.19.0+, v14.12.0+, 15.0.0 and all later versions</td>
   </tr>
   <tr>
-    <th scope="row">≥ v10.x</th>
-    <td>all releases</td>
-    <td>all releases</td>
-    <td>all releases</td>
-  </tr>
-</table>
-
-<table>
-  <tr>
-    <td></td>
-    <th scope="col">4</th>
-    <th scope="col">5</th>
-    <th scope="col">6</th>
-    <th scope="col">7</th>
-    <th scope="col">8</th>
+    <th scope="row">6</th>
+    <td>v10.20.0+, v12.17.0+, 14.0.0 and all later versions</td>
   </tr>
   <tr>
-    <th scope="row">v10.x</th>
-    <td>v10.16.0</td>
-    <td>v10.17.0</td>
-    <td>v10.20.0</td>
-    <td>v10.23.0</td>
-    <td></td>
+    <th scope="row">5</th>
+    <td>v10.17.0+, v12.11.0+, 13.0.0 and all later versions</td>
   </tr>
   <tr>
-    <th scope="row">v11.x</th>
-    <td>v11.8.0</td>
-    <td></td>
-    <td></td>
-    <td></td>
-    <td></td>
+    <th scope="row">4</th>
+    <td>v10.16.0+, v11.8.0+, 12.0.0 and all later versions</td>
+  </tr>
+  </tr>
+    <tr>
+    <th scope="row">3</th>
+    <td>v6.14.2*, 8.11.2+, v9.11.0+*, 10.0.0 and all later versions</td>
   </tr>
   <tr>
-    <th scope="row">v12.x</th>
-    <td>v12.0.0</td>
-    <td>v12.11.0</td>
-    <td>v12.17.0</td>
-    <td>v12.19.0</td>
-    <td>v12.22.0</td>
+    <th scope="row">2</th>
+    <td>v8.10.0+*, v9.3.0+*, 10.0.0 and all later versions</td>
   </tr>
   <tr>
-    <th scope="row">v13.x</th>
-    <td>v13.0.0</td>
-    <td>v13.0.0</td>
-    <td></td>
-    <td></td>
-    <td></td>
-  </tr>
-  <tr>
-    <th scope="row">v14.x</th>
-    <td>v14.0.0</td>
-    <td>v14.0.0</td>
-    <td>v14.0.0</td>
-    <td>v14.12.0</td>
-    <td>v14.17.0</td>
-  </tr>
-  <tr>
-    <th scope="row">v15.x</th>
-    <td>v15.0.0</td>
-    <td>v15.0.0</td>
-    <td>v15.0.0</td>
-    <td>v15.0.0</td>
-    <td>v15.12.0</td>
-  </tr>
-  <tr>
-    <th scope="row">v16.x</th>
-    <td>v16.0.0</td>
-    <td>v16.0.0</td>
-    <td>v16.0.0</td>
-    <td>v16.0.0</td>
-    <td>v16.0.0</td>
+    <th scope="row">1</th>
+    <td>v8.6.0+**, v9.0.0+*, 10.0.0 and all later versions</td>
   </tr>
 </table>
 
@@ -398,7 +346,7 @@ napi_value create_addon(napi_env env);
 // addon.c
 #include "addon.h"
 
-#define NAPI_CALL(env, call)                                      \
+#define NODE_API_CALL(env, call)                                  \
   do {                                                            \
     napi_status status = (call);                                  \
     if (status != napi_ok) {                                      \
@@ -407,13 +355,14 @@ napi_value create_addon(napi_env env);
       const char* err_message = error_info->error_message;        \
       bool is_pending;                                            \
       napi_is_exception_pending((env), &is_pending);              \
+      /* If an exception is already pending, don't rethrow it */  \
       if (!is_pending) {                                          \
         const char* message = (err_message == NULL)               \
             ? "empty error message"                               \
             : err_message;                                        \
         napi_throw_error((env), NULL, message);                   \
-        return NULL;                                              \
       }                                                           \
+      return NULL;                                                \
     }                                                             \
   } while(0)
 
@@ -425,20 +374,20 @@ DoSomethingUseful(napi_env env, napi_callback_info info) {
 
 napi_value create_addon(napi_env env) {
   napi_value result;
-  NAPI_CALL(env, napi_create_object(env, &result));
+  NODE_API_CALL(env, napi_create_object(env, &result));
 
   napi_value exported_function;
-  NAPI_CALL(env, napi_create_function(env,
-                                      "doSomethingUseful",
-                                      NAPI_AUTO_LENGTH,
-                                      DoSomethingUseful,
-                                      NULL,
-                                      &exported_function));
+  NODE_API_CALL(env, napi_create_function(env,
+                                          "doSomethingUseful",
+                                          NAPI_AUTO_LENGTH,
+                                          DoSomethingUseful,
+                                          NULL,
+                                          &exported_function));
 
-  NAPI_CALL(env, napi_set_named_property(env,
-                                         result,
-                                         "doSomethingUseful",
-                                         exported_function));
+  NODE_API_CALL(env, napi_set_named_property(env,
+                                             result,
+                                             "doSomethingUseful",
+                                             exported_function));
 
   return result;
 }
@@ -3122,12 +3071,17 @@ napi_status napi_get_buffer_info(napi_env env,
 ```
 
 * `[in] env`: The environment that the API is invoked under.
-* `[in] value`: `napi_value` representing the `node::Buffer` being queried.
-* `[out] data`: The underlying data buffer of the `node::Buffer`.
-  If length is `0`, this may be `NULL` or any other pointer value.
+* `[in] value`: `napi_value` representing the `node::Buffer` or `Uint8Array`
+  being queried.
+* `[out] data`: The underlying data buffer of the `node::Buffer` or
+  `Uint8Array`. If length is `0`, this may be `NULL` or any other pointer value.
 * `[out] length`: Length in bytes of the underlying data buffer.
 
 Returns `napi_ok` if the API succeeded.
+
+This method returns the identical `data` and `byte_length` as
+[`napi_get_typedarray_info`][]. And `napi_get_typedarray_info` accepts a
+`node::Buffer` (a Uint8Array) as the value too.
 
 This API is used to retrieve the underlying data buffer of a `node::Buffer`
 and its length.
@@ -3879,12 +3833,14 @@ napi_status napi_is_buffer(napi_env env, napi_value value, bool* result)
 
 * `[in] env`: The environment that the API is invoked under.
 * `[in] value`: The JavaScript value to check.
-* `[out] result`: Whether the given `napi_value` represents a `node::Buffer`
-  object.
+* `[out] result`: Whether the given `napi_value` represents a `node::Buffer` or
+  `Uint8Array` object.
 
 Returns `napi_ok` if the API succeeded.
 
-This API checks if the `Object` passed in is a buffer.
+This API checks if the `Object` passed in is a buffer or Uint8Array.
+[`napi_is_typedarray`][] should be preferred if the caller needs to check if the
+value is a Uint8Array.
 
 ### `napi_is_date`
 
@@ -5685,7 +5641,7 @@ problems like loss of async context when using the `AsyncLocalStorage` API.
 
 In order to retain ABI compatibility with previous versions, passing `NULL`
 for `async_resource` does not result in an error. However, this is not
-recommended as this will result poor results with  `async_hooks`
+recommended as this will result in undesirable behavior with  `async_hooks`
 [`init` hooks][] and `async_hooks.executionAsyncResource()` as the resource is
 now required by the underlying `async_hooks` implementation in order to provide
 the linkage between async callbacks.
@@ -6554,11 +6510,13 @@ the add-on's file name during loading.
 [`napi_get_last_error_info`]: #napi_get_last_error_info
 [`napi_get_property`]: #napi_get_property
 [`napi_get_reference_value`]: #napi_get_reference_value
+[`napi_get_typedarray_info`]: #napi_get_typedarray_info
 [`napi_get_value_external`]: #napi_get_value_external
 [`napi_has_property`]: #napi_has_property
 [`napi_instanceof`]: #napi_instanceof
 [`napi_is_error`]: #napi_is_error
 [`napi_is_exception_pending`]: #napi_is_exception_pending
+[`napi_is_typedarray`]: #napi_is_typedarray
 [`napi_make_callback`]: #napi_make_callback
 [`napi_open_callback_scope`]: #napi_open_callback_scope
 [`napi_open_escapable_handle_scope`]: #napi_open_escapable_handle_scope

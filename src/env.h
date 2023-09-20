@@ -62,6 +62,10 @@
 #include <unordered_set>
 #include <vector>
 
+namespace v8 {
+class CppHeap;
+}
+
 namespace node {
 
 namespace shadow_realm {
@@ -124,6 +128,11 @@ struct IsolateDataSerializeInfo {
                                   const IsolateDataSerializeInfo& i);
 };
 
+struct PerIsolateWrapperData {
+  uint16_t cppgc_id;
+  uint16_t non_cppgc_id;
+};
+
 class NODE_EXTERN_PRIVATE IsolateData : public MemoryRetainer {
  public:
   IsolateData(v8::Isolate* isolate,
@@ -131,6 +140,8 @@ class NODE_EXTERN_PRIVATE IsolateData : public MemoryRetainer {
               MultiIsolatePlatform* platform = nullptr,
               ArrayBufferAllocator* node_allocator = nullptr,
               const SnapshotData* snapshot_data = nullptr);
+  ~IsolateData();
+
   SET_MEMORY_INFO_NAME(IsolateData)
   SET_SELF_SIZE(IsolateData)
   void MemoryInfo(MemoryTracker* tracker) const override;
@@ -138,6 +149,13 @@ class NODE_EXTERN_PRIVATE IsolateData : public MemoryRetainer {
 
   bool is_building_snapshot() const { return is_building_snapshot_; }
   void set_is_building_snapshot(bool value) { is_building_snapshot_ = value; }
+
+  uint16_t* embedder_id_for_cppgc() const;
+  uint16_t* embedder_id_for_non_cppgc() const;
+
+  static inline void SetCppgcReference(v8::Isolate* isolate,
+                                       v8::Local<v8::Object> object,
+                                       void* wrappable);
 
   inline uv_loop_t* event_loop() const;
   inline MultiIsolatePlatform* platform() const;
@@ -220,9 +238,15 @@ class NODE_EXTERN_PRIVATE IsolateData : public MemoryRetainer {
   NodeArrayBufferAllocator* const node_allocator_;
   MultiIsolatePlatform* platform_;
   const SnapshotData* snapshot_data_;
+  std::unique_ptr<v8::CppHeap> cpp_heap_;
   std::shared_ptr<PerIsolateOptions> options_;
   worker::Worker* worker_context_ = nullptr;
   bool is_building_snapshot_ = false;
+  PerIsolateWrapperData* wrapper_data_;
+
+  static Mutex isolate_data_mutex_;
+  static std::unordered_map<uint16_t, std::unique_ptr<PerIsolateWrapperData>>
+      wrapper_data_map_;
 };
 
 struct ContextInfo {
@@ -564,6 +588,9 @@ class Environment : public MemoryRetainer {
 
   SET_MEMORY_INFO_NAME(Environment)
 
+  static std::string GetExecPath(const std::vector<std::string>& argv);
+  static std::string GetCwd(const std::string& exec_path);
+
   inline size_t SelfSize() const override;
   bool IsRootNode() const override { return true; }
   void MemoryInfo(MemoryTracker* tracker) const override;
@@ -579,8 +606,6 @@ class Environment : public MemoryRetainer {
   void RunDeserializeRequests();
   // Should be called before InitializeInspector()
   void InitializeDiagnostics();
-
-  std::string GetCwd();
 
 #if HAVE_INSPECTOR
   // If the environment is created for a worker, pass parent_handle and

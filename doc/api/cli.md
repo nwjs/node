@@ -28,8 +28,8 @@ absolute path, it's resolved as a relative path from the current working
 directory. That path is then resolved by [CommonJS][] module loader. If no
 corresponding file is found, an error is thrown.
 
-If a file is found, its path will be passed to the [ECMAScript module loader][]
-under any of the following conditions:
+If a file is found, its path will be passed to the
+[ES module loader][Modules loaders] under any of the following conditions:
 
 * The program was started with a command-line flag that forces the entry
   point to be loaded with ECMAScript module loader.
@@ -43,9 +43,9 @@ Otherwise, the file is loaded using the CommonJS module loader. See
 
 ### ECMAScript modules loader entry point caveat
 
-When loading [ECMAScript module loader][] loads the program entry point, the `node`
-command will only accept as input only files with `.js`, `.mjs`, or `.cjs`
-extensions; and with `.wasm` extensions when
+When loading, the [ES module loader][Modules loaders] loads the program
+entry point, the `node` command will accept as input only files with `.js`,
+`.mjs`, or `.cjs` extensions; and with `.wasm` extensions when
 [`--experimental-wasm-modules`][] is enabled.
 
 ## Options
@@ -145,6 +145,10 @@ Error: Access to this API has been restricted
 
 <!-- YAML
 added: v20.0.0
+changes:
+  - version: v20.7.0
+    pr-url: https://github.com/nodejs/node/pull/49047
+    description: Paths delimited by comma (`,`) are no longer allowed.
 -->
 
 > Stability: 1 - Experimental
@@ -155,8 +159,11 @@ the [Permission Model][].
 The valid arguments for the `--allow-fs-read` flag are:
 
 * `*` - To allow all `FileSystemRead` operations.
-* Paths delimited by comma (`,`) to allow only matching `FileSystemRead`
-  operations.
+* Multiple paths can be allowed using multiple `--allow-fs-read` flags.
+  Example `--allow-fs-read=/folder1/ --allow-fs-read=/folder1/`
+
+Paths delimited by comma (`,`) are no longer allowed.
+When passing a single flag with a comma a warning will be diplayed
 
 Examples can be found in the [File System Permissions][] documentation.
 
@@ -192,6 +199,10 @@ node --experimental-permission --allow-fs-read=/path/to/index.js index.js
 
 <!-- YAML
 added: v20.0.0
+changes:
+  - version: v20.7.0
+    pr-url: https://github.com/nodejs/node/pull/49047
+    description: Paths delimited by comma (`,`) are no longer allowed.
 -->
 
 > Stability: 1 - Experimental
@@ -202,8 +213,11 @@ the [Permission Model][].
 The valid arguments for the `--allow-fs-write` flag are:
 
 * `*` - To allow all `FileSystemWrite` operations.
-* Paths delimited by comma (`,`) to allow only matching `FileSystemWrite`
-  operations.
+* Multiple paths can be allowed using multiple `--allow-fs-read` flags.
+  Example `--allow-fs-read=/folder1/ --allow-fs-read=/folder1/`
+
+Paths delimited by comma (`,`) are no longer allowed.
+When passing a single flag with a comma a warning will be diplayed
 
 Examples can be found in the [File System Permissions][] documentation.
 
@@ -512,9 +526,18 @@ of `--enable-source-maps`.
 added:
   - v13.9.0
   - v12.16.2
+changes:
+  - version: v20.6.0
+    pr-url: https://github.com/nodejs/node/pull/49028
+    description: synchronous import.meta.resolve made available by default, with
+                 the flag retained for enabling the experimental second argument
+                 as previously supported.
 -->
 
-Enable experimental `import.meta.resolve()` support.
+Enable experimental `import.meta.resolve()` parent URL support, which allows
+passing a second `parentURL` argument for contextual resolution.
+
+Previously gated the entire `import.meta.resolve` feature.
 
 ### `--experimental-loader=module`
 
@@ -527,7 +550,11 @@ changes:
                  `--experimental-loader`.
 -->
 
-Specify the `module` of a custom experimental [ECMAScript module loader][].
+> This flag is discouraged and may be removed in a future version of Node.js.
+> Please use
+> [`--import` with `register()`][module customization hooks: enabling] instead.
+
+Specify the `module` containing exported [module customization hooks][].
 `module` may be any string accepted as an [`import` specifier][].
 
 ### `--experimental-network-imports`
@@ -970,6 +997,48 @@ surface on other platforms, but the performance impact may be severe.
 
 This flag is inherited from V8 and is subject to change upstream. It may
 disappear in a non-semver-major release.
+
+### `--env-file=config`
+
+> Stability: 1.1 - Active development
+
+<!-- YAML
+added: v20.6.0
+-->
+
+Loads environment variables from a file relative to the current directory,
+making them available to applications on `process.env`. The [environment
+variables which configure Node.js][environment_variables], such as `NODE_OPTIONS`,
+are parsed and applied. If the same variable is defined in the environment and
+in the file, the value from the environment takes precedence.
+
+You can pass multiple `--env-file` arguments. Subsequent files override
+pre-existing variables defined in previous files.
+
+```bash
+node --env-file=.env --env-file=.development.env index.js
+```
+
+The format of the file should be one line per key-value pair of environment
+variable name and value separated by `=`:
+
+```text
+PORT=3000
+```
+
+Any text after a `#` is treated as a comment:
+
+```text
+# This is a comment
+PORT=3000 # This is also a comment
+```
+
+Values can start and end with the following quotes: `\`, `"` or `'`.
+They are omitted from the values.
+
+```text
+USERNAME="nodejs" # will result in `nodejs` as the value.
+```
 
 ### `--max-http-header-size=size`
 
@@ -2582,9 +2651,10 @@ done
 [CommonJS module]: modules.md
 [CustomEvent Web API]: https://dom.spec.whatwg.org/#customevent
 [ECMAScript module]: esm.md#modules-ecmascript-modules
-[ECMAScript module loader]: esm.md#loaders
 [Fetch API]: https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API
 [File System Permissions]: permissions.md#file-system-permissions
+[Module customization hooks]: module.md#customization-hooks
+[Module customization hooks: enabling]: module.md#enabling
 [Modules loaders]: packages.md#modules-loaders
 [Node.js issue tracker]: https://github.com/nodejs/node/issues
 [OSSL_PROVIDER-legacy]: https://www.openssl.org/docs/man3.0/man7/OSSL_PROVIDER-legacy.html
@@ -2634,6 +2704,7 @@ done
 [debugger]: debugger.md
 [debugging security implications]: https://nodejs.org/en/docs/guides/debugging-getting-started/#security-implications
 [emit_warning]: process.md#processemitwarningwarning-options
+[environment_variables]: #environment-variables
 [filtering tests by name]: test.md#filtering-tests-by-name
 [jitless]: https://v8.dev/blog/jitless
 [libuv threadpool documentation]: https://docs.libuv.org/en/latest/threadpool.html

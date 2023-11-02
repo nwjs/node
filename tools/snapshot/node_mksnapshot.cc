@@ -50,8 +50,6 @@ int main(int argc, char* argv[]) {
   setvbuf(stderr, nullptr, _IONBF, 0);
 #endif  // _WIN32
 
-  v8::V8::SetFlagsFromString("--random_seed=42");
-  v8::V8::SetFlagsFromString("--harmony-import-assertions");
   return BuildSnapshot(argc, argv);
 }
 
@@ -65,7 +63,8 @@ int BuildSnapshot(int argc, char* argv[]) {
 
   std::unique_ptr<node::InitializationResult> result =
       node::InitializeOncePerProcess(
-          std::vector<std::string>(argv, argv + argc));
+          std::vector<std::string>(argv, argv + argc),
+          node::ProcessInitializationFlags::kGeneratePredictableSnapshot);
 
   CHECK(!result->early_return());
   CHECK_EQ(result->exit_code(), 0);
@@ -79,10 +78,10 @@ int BuildSnapshot(int argc, char* argv[]) {
     out_path = result->args()[1];
   }
 
-#ifdef NODE_MKSNAPSHOT_USE_STRING_LITERALS
-  bool use_string_literals = true;
+#ifdef NODE_MKSNAPSHOT_USE_ARRAY_LITERALS
+  bool use_array_literals = true;
 #else
-  bool use_string_literals = false;
+  bool use_array_literals = false;
 #endif
 
   node::ExitCode exit_code =
@@ -90,7 +89,7 @@ int BuildSnapshot(int argc, char* argv[]) {
                                               result->args(),
                                               result->exec_args(),
                                               main_script_path,
-                                              use_string_literals);
+                                              use_array_literals);
 
   node::TearDownOncePerProcess();
   return static_cast<int>(exit_code);

@@ -609,6 +609,14 @@ parser.add_argument('--with-ltcg',
     default=None,
     help='Use Link Time Code Generation. This feature is only available on Windows.')
 
+parser.add_argument('--write-snapshot-as-array-literals',
+    action='store_true',
+    dest='write_snapshot_as_array_literals',
+    default=None,
+    help='Write the snapshot data as array literals for readability.'
+         'By default the snapshot data may be written as string literals on some '
+         'platforms to speed up compilation.')
+
 parser.add_argument('--without-node-snapshot',
     action='store_true',
     dest='without_node_snapshot',
@@ -1290,6 +1298,11 @@ def configure_node(o):
     o['variables']['node_use_node_code_cache'] = b(
       not cross_compiling and not options.shared)
 
+  if options.write_snapshot_as_array_literals is not None:
+     o['variables']['node_write_snapshot_as_array_literals'] = b(options.write_snapshot_as_array_literals)
+  else:
+     o['variables']['node_write_snapshot_as_array_literals'] = b(flavor != 'mac' and flavor != 'linux')
+
   if target_arch == 'arm':
     configure_arm(o)
   elif target_arch in ('mips', 'mipsel', 'mips64el'):
@@ -1485,6 +1498,7 @@ def configure_v8(o):
   o['variables']['v8_enable_pointer_compression'] = 1 if options.enable_pointer_compression else 0
   o['variables']['v8_enable_31bit_smis_on_64bit_arch'] = 1 if options.enable_pointer_compression else 0
   o['variables']['v8_enable_shared_ro_heap'] = 0 if options.enable_pointer_compression or options.disable_shared_ro_heap else 1
+  o['variables']['v8_enable_extensible_ro_snapshot'] = 0
   o['variables']['v8_trace_maps'] = 1 if options.trace_maps else 0
   o['variables']['node_use_v8_platform'] = b(not options.without_v8_platform)
   o['variables']['node_use_bundled_v8'] = b(not options.without_bundled_v8)

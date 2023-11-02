@@ -44,7 +44,7 @@ processed in one of three ways:
 1. A synchronous function that is considered failing if it throws an exception,
    and is considered passing otherwise.
 2. A function that returns a `Promise` that is considered failing if the
-   `Promise` rejects, and is considered passing if the `Promise` resolves.
+   `Promise` rejects, and is considered passing if the `Promise` fulfills.
 3. A function that receives a callback function. If the callback receives any
    truthy value as its first argument, the test is considered failing. If a
    falsy value is passed as the first argument to the callback, the test is
@@ -67,7 +67,7 @@ test('synchronous failing test', (t) => {
 
 test('asynchronous passing test', async (t) => {
   // This test passes because the Promise returned by the async
-  // function is not rejected.
+  // function is settled and not rejected.
   assert.strictEqual(1, 1);
 });
 
@@ -327,57 +327,35 @@ The Node.js test runner can be invoked from the command line by passing the
 node --test
 ```
 
-By default, Node.js will recursively search the current directory for
-JavaScript source files matching a specific naming convention. Matching files
-are executed as test files. More information on the expected test file naming
-convention and behavior can be found in the [test runner execution model][]
-section.
+By default Node.js will run all files matching these patterns:
 
-Alternatively, one or more paths can be provided as the final argument(s) to
-the Node.js command, as shown below.
+* `**/*.test.?(c|m)js`
+* `**/*-test.?(c|m)js`
+* `**/*_test.?(c|m)js`
+* `**/test-*.?(c|m)js`
+* `**/test.?(c|m)js`
+* `**/test/**/*.?(c|m)js`
+
+Alternatively, one or more glob patterns can be provided as the
+final argument(s) to the Node.js command, as shown below.
+Glob patterns follow the behavior of [`glob(7)`][].
 
 ```bash
-node --test test1.js test2.mjs custom_test_dir/
+node --test **/*.test.js **/*.spec.js
 ```
 
-In this example, the test runner will execute the files `test1.js` and
-`test2.mjs`. The test runner will also recursively search the
-`custom_test_dir/` directory for test files to execute.
+Matching files are executed as test files.
+More information on the test file execution can be found
+in the [test runner execution model][] section.
 
 ### Test runner execution model
 
-When searching for test files to execute, the test runner behaves as follows:
-
-* Any files explicitly provided by the user are executed.
-* If the user did not explicitly specify any paths, the current working
-  directory is recursively searched for files as specified in the following
-  steps.
-* `node_modules` directories are skipped unless explicitly provided by the
-  user.
-* If a directory named `test` is encountered, the test runner will search it
-  recursively for all all `.js`, `.cjs`, and `.mjs` files. All of these files
-  are treated as test files, and do not need to match the specific naming
-  convention detailed below. This is to accommodate projects that place all of
-  their tests in a single `test` directory.
-* In all other directories, `.js`, `.cjs`, and `.mjs` files matching the
-  following patterns are treated as test files:
-  * `^test$` - Files whose basename is the string `'test'`. Examples:
-    `test.js`, `test.cjs`, `test.mjs`.
-  * `^test-.+` - Files whose basename starts with the string `'test-'`
-    followed by one or more characters. Examples: `test-example.js`,
-    `test-another-example.mjs`.
-  * `.+[\.\-\_]test$` - Files whose basename ends with `.test`, `-test`, or
-    `_test`, preceded by one or more characters. Examples: `example.test.js`,
-    `example-test.cjs`, `example_test.mjs`.
-  * Other file types understood by Node.js such as `.node` and `.json` are not
-    automatically executed by the test runner, but are supported if explicitly
-    provided on the command line.
-
-Each matching test file is executed in a separate child process. If the child
-process finishes with an exit code of 0, the test is considered passing.
-Otherwise, the test is considered to be a failure. Test files must be
-executable by Node.js, but are not required to use the `node:test` module
-internally.
+Each matching test file is executed in a separate child process. The maximum
+number of child processes running at any time is controlled by the
+[`--test-concurrency`][] flag. If the child process finishes with an exit code
+of 0, the test is considered passing. Otherwise, the test is considered to be a
+failure. Test files must be executable by Node.js, but are not required to use
+the `node:test` module internally.
 
 Each test file is executed as if it was a regular script. That is, if the test
 file itself uses `node:test` to define tests, all of those tests will be
@@ -632,7 +610,9 @@ added:
   - v19.6.0
   - v18.15.0
 changes:
-  - version: v19.9.0
+  - version:
+    - v19.9.0
+    - v18.17.0
     pr-url: https://github.com/nodejs/node/pull/47238
     description: Reporters are now exposed at `node:test/reporters`.
 -->
@@ -653,6 +633,9 @@ The following built-reporters are supported:
   where each passing test is represented by a `.`,
   and each failing test is represented by a `X`.
 
+* `junit`
+  The junit reporter outputs test results in a jUnit XML format
+
 When `stdout` is a [TTY][], the `spec` reporter is used by default.
 Otherwise, the `tap` reporter is used by default.
 
@@ -664,11 +647,11 @@ to the test runner's output is required, use the events emitted by the
 The reporters are available via the `node:test/reporters` module:
 
 ```mjs
-import { tap, spec, dot } from 'node:test/reporters';
+import { tap, spec, dot, junit } from 'node:test/reporters';
 ```
 
 ```cjs
-const { tap, spec, dot } = require('node:test/reporters');
+const { tap, spec, dot, junit } = require('node:test/reporters');
 ```
 
 ### Custom reporters
@@ -882,7 +865,9 @@ added:
   - v18.9.0
   - v16.19.0
 changes:
-  - version: v20.1.0
+  - version:
+    - v20.1.0
+    - v18.17.0
     pr-url: https://github.com/nodejs/node/pull/47628
     description: Add a testNamePatterns option.
 -->
@@ -903,6 +888,8 @@ changes:
     number. If a nullish value is provided, each process gets its own port,
     incremented from the primary's `process.debugPort`.
     **Default:** `undefined`.
+  * `only`: {boolean} If truthy, the test context will only run tests that
+    have the `only` option set
   * `setup` {Function} A function that accepts the `TestsStream` instance
     and can be used to setup listeners before any tests are run.
     **Default:** `undefined`.
@@ -927,7 +914,9 @@ changes:
 
 ```mjs
 import { tap } from 'node:test/reporters';
+import { run } from 'node:test';
 import process from 'node:process';
+import path from 'node:path';
 
 run({ files: [path.resolve('./tests/test.js')] })
   .compose(tap)
@@ -936,6 +925,8 @@ run({ files: [path.resolve('./tests/test.js')] })
 
 ```cjs
 const { tap } = require('node:test/reporters');
+const { run } = require('node:test');
+const path = require('node:path');
 
 run({ files: [path.resolve('./tests/test.js')] })
   .compose(tap)
@@ -949,7 +940,9 @@ added:
   - v18.0.0
   - v16.17.0
 changes:
-  - version: v20.2.0
+  - version:
+    - v20.2.0
+    - v18.17.0
     pr-url: https://github.com/nodejs/node/pull/47909
     description: Added the `skip`, `todo`, and `only` shorthands.
   - version:
@@ -992,7 +985,7 @@ changes:
   to this function is a [`TestContext`][] object. If the test uses callbacks,
   the callback function is passed as the second argument. **Default:** A no-op
   function.
-* Returns: {Promise} Resolved with `undefined` once
+* Returns: {Promise} Fulfilled with `undefined` once
   the test completes, or immediately if the test runs within [`describe()`][].
 
 The `test()` function is the value imported from the `test` module. Each
@@ -1002,8 +995,8 @@ The `TestContext` object passed to the `fn` argument can be used to perform
 actions related to the current test. Examples include skipping the test, adding
 additional diagnostic information, or creating subtests.
 
-`test()` returns a `Promise` that resolves once the test completes.
-if `test()` is called within a `describe()` block, it resolve immediately.
+`test()` returns a `Promise` that fulfills once the test completes.
+if `test()` is called within a `describe()` block, it fulfills immediately.
 The return value can usually be discarded for top level tests.
 However, the return value from subtests should be used to prevent the parent
 test from finishing first and cancelling the subtest
@@ -1087,7 +1080,9 @@ added:
   - v18.6.0
   - v16.17.0
 changes:
-  - version: v19.8.0
+  - version:
+    - v19.8.0
+    - v18.16.0
     pr-url: https://github.com/nodejs/node/pull/46889
     description: Calling `it()` is now equivalent to calling `test()`.
 -->
@@ -2210,7 +2205,9 @@ added:
   - v18.0.0
   - v16.17.0
 changes:
-  - version: v20.1.0
+  - version:
+    - v20.1.0
+    - v18.17.0
     pr-url: https://github.com/nodejs/node/pull/47586
     description: The `before` function was added to TestContext.
 -->
@@ -2222,7 +2219,9 @@ exposed as part of the API.
 ### `context.before([fn][, options])`
 
 <!-- YAML
-added: v20.1.0
+added:
+  - v20.1.0
+  - v18.17.0
 -->
 
 * `fn` {Function|AsyncFunction} The hook function. The first argument
@@ -2499,7 +2498,7 @@ changes:
   to this function is a [`TestContext`][] object. If the test uses callbacks,
   the callback function is passed as the second argument. **Default:** A no-op
   function.
-* Returns: {Promise} Resolved with `undefined` once the test completes.
+* Returns: {Promise} Fulfilled with `undefined` once the test completes.
 
 This function is used to create subtests under the current test. This function
 behaves in the same fashion as the top level [`test()`][] function.
@@ -2553,6 +2552,7 @@ added:
 [TTY]: tty.md
 [`--experimental-test-coverage`]: cli.md#--experimental-test-coverage
 [`--import`]: cli.md#--importmodule
+[`--test-concurrency`]: cli.md#--test-concurrency
 [`--test-name-pattern`]: cli.md#--test-name-pattern
 [`--test-only`]: cli.md#--test-only
 [`--test-reporter-destination`]: cli.md#--test-reporter-destination
@@ -2569,6 +2569,7 @@ added:
 [`context.skip`]: #contextskipmessage
 [`context.todo`]: #contexttodomessage
 [`describe()`]: #describename-options-fn
+[`glob(7)`]: https://man7.org/linux/man-pages/man7/glob.7.html
 [`run()`]: #runoptions
 [`test()`]: #testname-options-fn
 [describe options]: #describename-options-fn

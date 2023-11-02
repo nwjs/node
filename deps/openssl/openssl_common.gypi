@@ -15,7 +15,7 @@
   'cflags!': ['-fvisibility=hidden'],
   'cflags_cc!': ['-fvisibility-inlines-hidden'],
   'conditions': [
-    [ 'OS=="aix"', {
+    [ 'OS in ("aix", "os400")', {
       # AIX is missing /usr/include/endian.h
       'defines': [
         '__LITTLE_ENDIAN=1234',

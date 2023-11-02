@@ -8,7 +8,6 @@ import assert from 'node:assert';
 const testFixtures = fixtures.path('test-runner');
 
 describe('require(\'node:test\').run', { concurrency: true }, () => {
-
   it('should run with no tests', async () => {
     const stream = run({ files: [] });
     stream.on('test:fail', common.mustNotCall());
@@ -65,13 +64,6 @@ describe('require(\'node:test\').run', { concurrency: true }, () => {
     for await (const _ of stream);
   });
 
-  it('should validate files', async () => {
-    [Symbol(), {}, () => {}, 0, 1, 0n, 1n, '', '1', Promise.resolve([]), true, false]
-      .forEach((files) => assert.throws(() => run({ files }), {
-        code: 'ERR_INVALID_ARG_TYPE'
-      }));
-  });
-
   it('should be piped with dot', async () => {
     const result = await run({
       files: [join(testFixtures, 'default-behavior/test/random.cjs')]
@@ -99,6 +91,16 @@ describe('require(\'node:test\').run', { concurrency: true }, () => {
       const result = await run({
         files: [join(testFixtures, 'default-behavior/test/random.cjs')]
       }).compose(specReporter).toArray();
+      const stringResults = result.map((bfr) => bfr.toString());
+      assert.match(stringResults[0], /this should pass/);
+      assert.match(stringResults[1], /tests 1/);
+      assert.match(stringResults[1], /pass 1/);
+    });
+
+    it('spec', async () => {
+      const result = await run({
+        files: [join(testFixtures, 'default-behavior/test/random.cjs')]
+      }).compose(spec).toArray();
       const stringResults = result.map((bfr) => bfr.toString());
       assert.match(stringResults[0], /this should pass/);
       assert.match(stringResults[1], /tests 1/);
@@ -145,6 +147,18 @@ describe('require(\'node:test\').run', { concurrency: true }, () => {
       .compose(tap)
       .toArray();
     assert.strictEqual(result[2], 'ok 1 - this should be skipped # SKIP test name does not match pattern\n');
+    assert.strictEqual(result[5], 'ok 2 - this should be executed\n');
+  });
+
+  it('should pass only to children', async () => {
+    const result = await run({
+      files: [join(testFixtures, 'test_only.js')],
+      only: true
+    })
+      .compose(tap)
+      .toArray();
+
+    assert.strictEqual(result[2], 'ok 1 - this should be skipped # SKIP \'only\' option not set\n');
     assert.strictEqual(result[5], 'ok 2 - this should be executed\n');
   });
 
@@ -423,6 +437,22 @@ describe('require(\'node:test\').run', { concurrency: true }, () => {
       }));
 
       assert.deepStrictEqual(executedTestFiles.sort(), [...shardsTestsFiles].sort());
+    });
+  });
+
+  describe('validation', () => {
+    it('should only allow array in options.files', async () => {
+      [Symbol(), {}, () => {}, 0, 1, 0n, 1n, '', '1', Promise.resolve([]), true, false]
+        .forEach((files) => assert.throws(() => run({ files }), {
+          code: 'ERR_INVALID_ARG_TYPE'
+        }));
+    });
+
+    it('should only allow object as options', () => {
+      [Symbol(), [], () => {}, 0, 1, 0n, 1n, '', '1', true, false]
+        .forEach((options) => assert.throws(() => run(options), {
+          code: 'ERR_INVALID_ARG_TYPE'
+        }));
     });
   });
 });

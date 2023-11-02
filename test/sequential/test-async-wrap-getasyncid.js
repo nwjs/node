@@ -68,6 +68,10 @@ const { getSystemErrorName } = require('util');
     delete providers.CHECKPRIMEREQUEST;
     delete providers.QUIC_LOGSTREAM;
     delete providers.QUIC_PACKET;
+    delete providers.QUIC_UDP;
+    delete providers.QUIC_ENDPOINT;
+    delete providers.QUIC_SESSION;
+    delete providers.QUIC_STREAM;
 
     const objKeys = Object.keys(providers);
     if (objKeys.length > 0)
@@ -161,7 +165,7 @@ if (common.hasCrypto) { // eslint-disable-line node-core/crypto-check
   req.oncomplete = () => { };
 
   testInitialized(req, 'FSReqCallback');
-  binding.access(path.toNamespacedPath('../'), fs.F_OK, req);
+  binding.access(path.toNamespacedPath('../'), fs.constants.F_OK, req);
 
   const StatWatcher = binding.StatWatcher;
   testInitialized(new StatWatcher(), 'StatWatcher');

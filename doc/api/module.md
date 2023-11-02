@@ -84,14 +84,18 @@ isBuiltin('wss'); // false
 
 <!-- YAML
 added: v20.6.0
+changes:
+  - version: v20.8.0
+    pr-url: https://github.com/nodejs/node/pull/49655
+    description: Add support for WHATWG URL instances.
 -->
 
-> Stability: 1.1 - Active development
+> Stability: 1.2 - Release candidate
 
-* `specifier` {string} Customization hooks to be registered; this should be the
-  same string that would be passed to `import()`, except that if it is relative,
-  it is resolved relative to `parentURL`.
-* `parentURL` {string} If you want to resolve `specifier` relative to a base
+* `specifier` {string|URL} Customization hooks to be registered; this should be
+  the same string that would be passed to `import()`, except that if it is
+  relative, it is resolved relative to `parentURL`.
+* `parentURL` {string|URL} If you want to resolve `specifier` relative to a base
   URL, such as `import.meta.url`, you can pass that URL here. **Default:**
   `'data:'`
 * `options` {Object}
@@ -99,7 +103,6 @@ added: v20.6.0
     [`initialize`][] hook.
   * `transferList` {Object\[]} [transferrable objects][] to be passed into the
     `initialize` hook.
-* Returns: {any} returns whatever was returned by the `initialize` hook.
 
 Register a module that exports [hooks][] that customize Node.js module
 resolution and loading behavior. See [Customization hooks][].
@@ -150,7 +153,7 @@ import('node:fs').then((esmFS) => {
 <!-- YAML
 added: v8.8.0
 changes:
-  - version: v20.7.0
+  - version: v20.6.0
     pr-url: https://github.com/nodejs/node/pull/48842
     description: Added `initialize` hook to replace `globalPreload`.
   - version:
@@ -164,7 +167,7 @@ changes:
                  `globalPreload`; added `load` hook and `getGlobalPreload` hook.
 -->
 
-> Stability: 1.1 - Active development
+> Stability: 1.2 - Release candidate
 
 <!-- type=misc -->
 
@@ -348,7 +351,7 @@ names and signatures, and they must be exported as named exports.
 
 ```mjs
 export async function initialize({ number, port }) {
-  // Receive data from `register`, return data to `register`.
+  // Receives data from `register`.
 }
 
 export async function resolve(specifier, context, nextResolve) {
@@ -380,26 +383,21 @@ asynchronous operations (like `console.log`) to complete.
 #### `initialize()`
 
 <!-- YAML
-added: v20.7.0
+added: v20.6.0
 -->
 
-> Stability: 1.1 - Active development
+> Stability: 1.2 - Release candidate
 
 * `data` {any} The data from `register(loader, import.meta.url, { data })`.
-* Returns: {any} The data to be returned to the caller of `register`.
 
 The `initialize` hook provides a way to define a custom function that runs in
 the hooks thread when the hooks module is initialized. Initialization happens
 when the hooks module is registered via [`register`][].
 
-This hook can send and receive data from a [`register`][] invocation, including
-ports and other transferrable objects. The return value of `initialize` must be
-either:
-
-* `undefined`,
-* something that can be posted as a message between threads (e.g. the input to
-  [`port.postMessage`][]),
-* a `Promise` resolving to one of the aforementioned values.
+This hook can receive data from a [`register`][] invocation, including
+ports and other transferrable objects. The return value of `initialize` can be a
+{Promise}, in which case it will be awaited before the main application thread
+execution resumes.
 
 Module customization code:
 
@@ -408,7 +406,6 @@ Module customization code:
 
 export async function initialize({ number, port }) {
   port.postMessage(`increment: ${number + 1}`);
-  return 'ok';
 }
 ```
 
@@ -428,13 +425,11 @@ port1.on('message', (msg) => {
   assert.strictEqual(msg, 'increment: 2');
 });
 
-const result = register('./path-to-my-hooks.js', {
+register('./path-to-my-hooks.js', {
   parentURL: import.meta.url,
   data: { number: 1, port: port2 },
   transferList: [port2],
 });
-
-assert.strictEqual(result, 'ok');
 ```
 
 ```cjs
@@ -452,19 +447,22 @@ port1.on('message', (msg) => {
   assert.strictEqual(msg, 'increment: 2');
 });
 
-const result = register('./path-to-my-hooks.js', {
+register('./path-to-my-hooks.js', {
   parentURL: pathToFileURL(__filename),
   data: { number: 1, port: port2 },
   transferList: [port2],
 });
-
-assert.strictEqual(result, 'ok');
 ```
 
 #### `resolve(specifier, context, nextResolve)`
 
 <!-- YAML
 changes:
+  - version: v21.0.0
+    pr-url: https://github.com/nodejs/node/pull/50140
+    description: The property `context.importAssertions` is replaced with
+                 `context.importAttributes`. Using the old name is still
+                 supported and will emit an experimental warning.
   - version:
     - v18.6.0
     - v16.17.0
@@ -484,8 +482,8 @@ changes:
 * `specifier` {string}
 * `context` {Object}
   * `conditions` {string\[]} Export conditions of the relevant `package.json`
-  * `importAssertions` {Object} An object whose key-value pairs represent the
-    assertions for the module to import
+  * `importAttributes` {Object} An object whose key-value pairs represent the
+    attributes for the module to import
   * `parentURL` {string|undefined} The module importing this one, or undefined
     if this is the Node.js entry point
 * `nextResolve` {Function} The subsequent `resolve` hook in the chain, or the
@@ -496,7 +494,7 @@ changes:
   * `format` {string|null|undefined} A hint to the load hook (it might be
     ignored)
     `'builtin' | 'commonjs' | 'json' | 'module' | 'wasm'`
-  * `importAssertions` {Object|undefined} The import assertions to use when
+  * `importAttributes` {Object|undefined} The import attributes to use when
     caching the module (optional; if excluded the input will be used)
   * `shortCircuit` {undefined|boolean} A signal that this hook intends to
     terminate the chain of `resolve` hooks. **Default:** `false`
@@ -513,10 +511,10 @@ the final `format` value (and it is free to ignore the hint provided by
 `resolve`); if `resolve` provides a `format`, a custom `load` hook is required
 even if only to pass the value to the Node.js default `load` hook.
 
-Import type assertions are part of the cache key for saving loaded modules into
+Import type attributes are part of the cache key for saving loaded modules into
 the internal module cache. The `resolve` hook is responsible for returning an
-`importAssertions` object if the module should be cached with different
-assertions than were present in the source code.
+`importAttributes` object if the module should be cached with different
+attributes than were present in the source code.
 
 The `conditions` property in `context` is an array of conditions for
 [package exports conditions][Conditional exports] that apply to this resolution
@@ -563,7 +561,7 @@ export async function resolve(specifier, context, nextResolve) {
 
 <!-- YAML
 changes:
-  - version: v20.7.0
+  - version: v20.6.0
     pr-url: https://github.com/nodejs/node/pull/47999
     description: Add support for `source` with format `commonjs`.
   - version:
@@ -582,7 +580,7 @@ changes:
   * `conditions` {string\[]} Export conditions of the relevant `package.json`
   * `format` {string|null|undefined} The format optionally supplied by the
     `resolve` hook chain
-  * `importAssertions` {Object}
+  * `importAttributes` {Object}
 * `nextLoad` {Function} The subsequent `load` hook in the chain, or the
   Node.js default `load` hook after the last user-supplied `load` hook
   * `specifier` {string}
@@ -684,79 +682,6 @@ export async function load(url, context, nextLoad) {
 
 In a more advanced scenario, this can also be used to transform an unsupported
 source to a supported one (see [Examples](#examples) below).
-
-#### `globalPreload()`
-
-<!-- YAML
-changes:
-  - version:
-    - v18.6.0
-    - v16.17.0
-    pr-url: https://github.com/nodejs/node/pull/42623
-    description: Add support for chaining globalPreload hooks.
--->
-
-> Stability: 1.0 - Early development
-
-> **Warning:** This hook will be removed in a future version. Use
-> [`initialize`][] instead. When a hooks module has an `initialize` export,
-> `globalPreload` will be ignored.
-
-* `context` {Object} Information to assist the preload code
-  * `port` {MessagePort}
-* Returns: {string} Code to run before application startup
-
-Sometimes it might be necessary to run some code inside of the same global
-scope that the application runs in. This hook allows the return of a string
-that is run as a sloppy-mode script on startup.
-
-Similar to how CommonJS wrappers work, the code runs in an implicit function
-scope. The only argument is a `require`-like function that can be used to load
-builtins like "fs": `getBuiltin(request: string)`.
-
-If the code needs more advanced `require` features, it has to construct
-its own `require` using  `module.createRequire()`.
-
-```mjs
-export function globalPreload(context) {
-  return `\
-globalThis.someInjectedProperty = 42;
-console.log('I just set some globals!');
-
-const { createRequire } = getBuiltin('module');
-const { cwd } = getBuiltin('process');
-
-const require = createRequire(cwd() + '/<preload>');
-// [...]
-`;
-}
-```
-
-Another argument is provided to the preload code: `port`. This is available as a
-parameter to the hook and inside of the source text returned by the hook. This
-functionality has been moved to the `initialize` hook.
-
-Care must be taken in order to properly call [`port.ref()`][] and
-[`port.unref()`][] to prevent a process from being in a state where it won't
-close normally.
-
-```mjs
-/**
- * This example has the application context send a message to the hook
- * and sends the message back to the application context
- */
-export function globalPreload({ port }) {
-  port.onmessage = (evt) => {
-    port.postMessage(evt.data);
-  };
-  return `\
-    port.postMessage('console.log("I went to the hook and back");');
-    port.onmessage = (evt) => {
-      eval(evt.data);
-    };
-  `;
-}
-```
 
 ### Examples
 
@@ -1116,9 +1041,6 @@ returned object contains the following keys:
 [`Uint8Array`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint8Array
 [`initialize`]: #initialize
 [`module`]: modules.md#the-module-object
-[`port.postMessage`]: worker_threads.md#portpostmessagevalue-transferlist
-[`port.ref()`]: worker_threads.md#portref
-[`port.unref()`]: worker_threads.md#portunref
 [`register`]: #moduleregisterspecifier-parenturl-options
 [`string`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String
 [`util.TextDecoder`]: util.md#class-utiltextdecoder

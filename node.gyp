@@ -1557,13 +1557,6 @@
         'tools/executable_wrapper.h'
       ],
       'conditions': [
-        [ 'OS=="linux"', {
-          'ldflags': [ '-L<(PRODUCT_DIR)/../nw/lib/',
-                      '-Wl,--whole-archive',
-                      '<(LIBCXX)',
-                      '-Wl,--no-whole-archive'
-                     ]
-        }],
         [ 'node_shared_libuv=="false"', {
           'dependencies': [ 'deps/uv/uv.gyp:libuv#host' ],
         }],

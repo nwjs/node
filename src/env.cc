@@ -4,6 +4,7 @@
 #include "debug_utils-inl.h"
 #include "diagnosticfilename-inl.h"
 #include "memory_tracker-inl.h"
+#include "module_wrap.h"
 #include "node_buffer.h"
 #include "node_context_data.h"
 #include "node_contextify.h"
@@ -30,6 +31,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 
 namespace node {
@@ -49,12 +51,15 @@ using v8::HeapSpaceStatistics;
 using v8::Integer;
 using v8::Isolate;
 using v8::Local;
+using v8::Maybe;
 using v8::MaybeLocal;
 using v8::NewStringType;
 using v8::Number;
 using v8::Object;
 using v8::ObjectTemplate;
 using v8::Private;
+using v8::Promise;
+using v8::PromiseHookType;
 using v8::Script;
 using v8::SnapshotCreator;
 using v8::StackTrace;
@@ -62,6 +67,7 @@ using v8::String;
 using v8::Symbol;
 using v8::TracingController;
 using v8::TryCatch;
+using v8::Uint32;
 using v8::Undefined;
 using v8::Value;
 using v8::WrapperDescriptor;
@@ -287,6 +293,12 @@ std::ostream& operator<<(std::ostream& output,
   return output;
 }
 
+std::ostream& operator<<(std::ostream& output, const SnapshotFlags& flags) {
+  output << "static_cast<SnapshotFlags>(" << static_cast<uint32_t>(flags)
+         << ")";
+  return output;
+}
+
 std::ostream& operator<<(std::ostream& output, const SnapshotMetadata& i) {
   output << "{\n"
          << "  "
@@ -298,6 +310,7 @@ std::ostream& operator<<(std::ostream& output, const SnapshotMetadata& i) {
          << "  \"" << i.node_arch << "\", // node_arch\n"
          << "  \"" << i.node_platform << "\", // node_platform\n"
          << "  " << i.v8_cache_version_tag << ", // v8_cache_version_tag\n"
+         << "  " << i.flags << ", // flags\n"
          << "}";
   return output;
 }
@@ -351,6 +364,8 @@ IsolateDataSerializeInfo IsolateData::Serialize(SnapshotCreator* creator) {
 
 void IsolateData::DeserializeProperties(const IsolateDataSerializeInfo* info) {
   size_t i = 0;
+
+  v8::Isolate::Scope isolate_scope(isolate_);
   HandleScope handle_scope(isolate_);
 
   if (per_process::enabled_debug_list.enabled(DebugCategory::MKSNAPSHOT)) {
@@ -433,6 +448,7 @@ void IsolateData::CreateProperties() {
   // One byte because our strings are ASCII and we can safely skip V8's UTF-8
   // decoding step.
 
+  v8::Isolate::Scope isolate_scope(isolate_);
   HandleScope handle_scope(isolate_);
 
 #define V(PropertyName, StringValue)                                           \
@@ -503,6 +519,7 @@ void IsolateData::CreateProperties() {
   binding::CreateInternalBindingTemplates(this);
 
   contextify::ContextifyContext::InitializeGlobalTemplates(this);
+  CreateEnvProxyTemplate(this);
 }
 
 constexpr uint16_t kDefaultCppGCEmebdderID = 0x90de;
@@ -804,9 +821,26 @@ Environment::Environment(IsolateData* isolate_data,
         isolate_data->worker_context()->env()->builtin_loader());
   } else if (isolate_data->snapshot_data() != nullptr) {
     // ... otherwise, if a snapshot was provided, use its code cache.
-    //builtin_loader()->RefreshCodeCache(
-    //    isolate_data->snapshot_data()->code_cache);
+#if 0
+    size_t cache_size = isolate_data->snapshot_data()->code_cache.size();
+    per_process::Debug(DebugCategory::CODE_CACHE,
+                       "snapshot contains %zu code cache\n",
+                       cache_size);
+    if (cache_size > 0) {
+      builtin_loader()->RefreshCodeCache(
+          isolate_data->snapshot_data()->code_cache);
+    }
+#endif
   }
+
+  // We are supposed to call builtin_loader_.SetEagerCompile() in
+  // snapshot mode here because it's beneficial to compile built-ins
+  // loaded in the snapshot eagerly and include the code of inner functions
+  // that are likely to be used by user since they are part of the core
+  // startup. But this requires us to start the coverage collections
+  // before Environment/Context creation which is not currently possible.
+  // TODO(joyeecheung): refactor V8ProfilerConnection classes to parse
+  // JSON without v8 and lift this restriction.
 
   // We'll be creating new objects so make sure we've entered the context.
   HandleScope handle_scope(isolate);
@@ -820,7 +854,7 @@ Environment::Environment(IsolateData* isolate_data,
   }
 
   set_env_vars(per_process::system_environment);
-  enabled_debug_list_.Parse(env_vars(), isolate);
+  enabled_debug_list_.Parse(env_vars());
 
   // We create new copies of the per-Environment option sets, so that it is
   // easier to modify them after Environment creation. The defaults are
@@ -854,7 +888,10 @@ Environment::Environment(IsolateData* isolate_data,
   destroy_async_id_list_.reserve(512);
 
   performance_state_ = std::make_unique<performance::PerformanceState>(
-      isolate, time_origin_, MAYBE_FIELD_PTR(env_info, performance_state));
+      isolate,
+      time_origin_,
+      time_origin_timestamp_,
+      MAYBE_FIELD_PTR(env_info, performance_state));
 #if 0
 
   if (*TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
@@ -879,23 +916,29 @@ Environment::Environment(IsolateData* isolate_data,
     // The process shouldn't be able to neither
     // spawn/worker nor use addons or enable inspector
     // unless explicitly allowed by the user
-    options_->allow_native_addons = false;
+    if (!options_->allow_addons) {
+      options_->allow_native_addons = false;
+    }
     flags_ = flags_ | EnvironmentFlags::kNoCreateInspector;
-    permission()->Apply({"*"}, permission::PermissionScope::kInspector);
+    permission()->Apply(this, {"*"}, permission::PermissionScope::kInspector);
     if (!options_->allow_child_process) {
-      permission()->Apply({"*"}, permission::PermissionScope::kChildProcess);
+      permission()->Apply(
+          this, {"*"}, permission::PermissionScope::kChildProcess);
     }
     if (!options_->allow_worker_threads) {
-      permission()->Apply({"*"}, permission::PermissionScope::kWorkerThreads);
+      permission()->Apply(
+          this, {"*"}, permission::PermissionScope::kWorkerThreads);
     }
 
     if (!options_->allow_fs_read.empty()) {
-      permission()->Apply(options_->allow_fs_read,
+      permission()->Apply(this,
+                          options_->allow_fs_read,
                           permission::PermissionScope::kFileSystemRead);
     }
 
     if (!options_->allow_fs_write.empty()) {
-      permission()->Apply(options_->allow_fs_write,
+      permission()->Apply(this,
+                          options_->allow_fs_write,
                           permission::PermissionScope::kFileSystemWrite);
     }
   }
@@ -1194,6 +1237,41 @@ void Environment::RunAtExitCallbacks() {
 
 void Environment::AtExit(void (*cb)(void* arg), void* arg) {
   at_exit_functions_.push_front(ExitCallback{cb, arg});
+}
+
+Maybe<bool> Environment::CheckUnsettledTopLevelAwait() {
+  HandleScope scope(isolate_);
+  Local<Context> ctx = context();
+  Local<Value> value;
+
+  Local<Value> entry_point_promise;
+  if (!ctx->Global()
+           ->GetPrivate(ctx, entry_point_promise_private_symbol())
+           .ToLocal(&entry_point_promise)) {
+    return v8::Nothing<bool>();
+  }
+  if (!entry_point_promise->IsPromise()) {
+    return v8::Just(true);
+  }
+  if (entry_point_promise.As<Promise>()->State() !=
+      Promise::PromiseState::kPending) {
+    return v8::Just(true);
+  }
+
+  if (!ctx->Global()
+           ->GetPrivate(ctx, entry_point_module_private_symbol())
+           .ToLocal(&value)) {
+    return v8::Nothing<bool>();
+  }
+  if (!value->IsObject()) {
+    return v8::Just(true);
+  }
+  Local<Object> object = value.As<Object>();
+  CHECK(BaseObject::IsBaseObject(isolate_data_, object));
+  CHECK_EQ(object->InternalFieldCount(),
+           loader::ModuleWrap::kInternalFieldCount);
+  auto* wrap = BaseObject::FromJSObject<loader::ModuleWrap>(object);
+  return wrap->CheckUnsettledTopLevelAwait();
 }
 
 void Environment::RunAndClearInterrupts() {
@@ -1657,10 +1735,13 @@ void AsyncHooks::MemoryInfo(MemoryTracker* tracker) const {
 void AsyncHooks::grow_async_ids_stack() {
   async_ids_stack_.reserve(async_ids_stack_.Length() * 3);
 
-  env()->async_hooks_binding()->Set(
-      env()->context(),
-      env()->async_ids_stack_string(),
-      async_ids_stack_.GetJSArray()).Check();
+  env()
+      ->principal_realm()
+      ->async_hooks_binding()
+      ->Set(env()->context(),
+            env()->async_ids_stack_string(),
+            async_ids_stack_.GetJSArray())
+      .Check();
 }
 
 void AsyncHooks::FailWithCorruptedAsyncStack(double expected_async_id) {
@@ -1669,7 +1750,8 @@ void AsyncHooks::FailWithCorruptedAsyncStack(double expected_async_id) {
           "actual: %.f, expected: %.f)\n",
           async_id_fields_.GetValue(kExecutionAsyncId),
           expected_async_id);
-  DumpBacktrace(stderr);
+  DumpNativeBacktrace(stderr);
+  DumpJavaScriptBacktrace(stderr);
   fflush(stderr);
   // TODO(joyeecheung): should this exit code be more specific?
   if (!env()->abort_on_uncaught_exception()) Exit(ExitCode::kGenericUserError);
@@ -1804,29 +1886,10 @@ void Environment::DeserializeProperties(const EnvSerializeInfo* info) {
   immediate_info_.Deserialize(ctx);
   timeout_info_.Deserialize(ctx);
   tick_info_.Deserialize(ctx);
-  performance_state_->Deserialize(ctx, time_origin_);
+  performance_state_->Deserialize(ctx, time_origin_, time_origin_timestamp_);
   exit_info_.Deserialize(ctx);
   stream_base_state_.Deserialize(ctx);
   should_abort_on_uncaught_toggle_.Deserialize(ctx);
-}
-
-uint64_t GuessMemoryAvailableToTheProcess() {
-  uint64_t free_in_system = uv_get_free_memory();
-  size_t allowed = uv_get_constrained_memory();
-  if (allowed == 0) {
-    return free_in_system;
-  }
-  size_t rss;
-  int err = uv_resident_set_memory(&rss);
-  if (err) {
-    return free_in_system;
-  }
-  if (allowed < rss) {
-    // Something is probably wrong. Fallback to the free memory.
-    return free_in_system;
-  }
-  // There may still be room for swap, but we will just leave it here.
-  return allowed - rss;
 }
 
 void Environment::BuildEmbedderGraph(Isolate* isolate,
@@ -1836,6 +1899,60 @@ void Environment::BuildEmbedderGraph(Isolate* isolate,
   Environment* env = static_cast<Environment*>(data);
   // Start traversing embedder objects from the root Environment object.
   tracker.Track(env);
+}
+
+std::optional<uint32_t> GetPromiseId(Environment* env, Local<Promise> promise) {
+  Local<Value> id_val;
+  if (!promise->GetPrivate(env->context(), env->promise_trace_id())
+           .ToLocal(&id_val) ||
+      !id_val->IsUint32()) {
+    return std::nullopt;
+  }
+  return id_val.As<Uint32>()->Value();
+}
+
+void Environment::TracePromises(PromiseHookType type,
+                                Local<Promise> promise,
+                                Local<Value> parent) {
+  // We don't care about the execution of promises, just the
+  // creation/resolution.
+  if (type == PromiseHookType::kBefore || type == PromiseHookType::kAfter) {
+    return;
+  }
+  Isolate* isolate = Isolate::GetCurrent();
+  Local<Context> context = isolate->GetCurrentContext();
+  Environment* env = Environment::GetCurrent(context);
+  if (env == nullptr) return;
+
+  std::optional<uint32_t> parent_id;
+  if (!parent.IsEmpty() && parent->IsPromise()) {
+    parent_id = GetPromiseId(env, parent.As<Promise>());
+  }
+
+  uint32_t id = 0;
+  std::string action;
+  if (type == PromiseHookType::kInit) {
+    id = env->trace_promise_id_counter_++;
+    promise->SetPrivate(
+        context, env->promise_trace_id(), Uint32::New(isolate, id));
+    action = "created";
+  } else if (type == PromiseHookType::kResolve) {
+    auto opt = GetPromiseId(env, promise);
+    if (!opt.has_value()) return;
+    id = opt.value();
+    action = "resolved";
+  } else {
+    UNREACHABLE();
+  }
+
+  FPrintF(stderr, "[--trace-promises] ");
+  if (parent_id.has_value()) {
+    FPrintF(stderr, "promise #%d ", parent_id.value());
+  }
+  FPrintF(stderr, "%s promise #%d\n", action, id);
+  // TODO(joyeecheung): we can dump the native stack trace too if the
+  // JS stack trace is empty i.e. it may be resolved on the native side.
+  PrintCurrentStackTrace(isolate);
 }
 
 size_t Environment::NearHeapLimitCallback(void* data,
@@ -1879,7 +1996,7 @@ size_t Environment::NearHeapLimitCallback(void* data,
         static_cast<uint64_t>(old_gen_size),
         static_cast<uint64_t>(young_gen_size + old_gen_size));
 
-  uint64_t available = GuessMemoryAvailableToTheProcess();
+  uint64_t available = uv_get_available_memory();
   // TODO(joyeecheung): get a better estimate about the native memory
   // usage into the overhead, e.g. based on the count of objects.
   uint64_t estimated_overhead = max_young_gen_size;

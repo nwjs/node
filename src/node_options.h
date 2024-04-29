@@ -105,11 +105,14 @@ class EnvironmentOptions : public Options {
   bool abort_on_uncaught_exception = false;
   std::vector<std::string> conditions;
   bool detect_module = false;
+  bool print_required_tla = false;
+  bool require_module = false;
   std::string dns_result_order;
   bool enable_source_maps = false;
   bool experimental_fetch = true;
-  bool experimental_websocket = false;
+  bool experimental_websocket = true;
   bool experimental_global_customevent = true;
+  bool experimental_global_navigator = true;
   bool experimental_global_web_crypto = true;
   bool experimental_https_modules = false;
   bool experimental_wasm_modules = false;
@@ -122,6 +125,7 @@ class EnvironmentOptions : public Options {
   bool experimental_permission = false;
   std::vector<std::string> allow_fs_read;
   std::vector<std::string> allow_fs_write;
+  bool allow_addons = false;
   bool allow_child_process = false;
   bool allow_worker_threads = false;
   bool experimental_repl_await = true;
@@ -138,6 +142,7 @@ class EnvironmentOptions : public Options {
   bool allow_native_addons = true;
   bool global_search_paths = true;
   bool warnings = true;
+  std::vector<std::string> disable_warnings;
   bool force_context_aware = false;
   bool pending_deprecation = false;
   bool preserve_symlinks = false;
@@ -156,12 +161,15 @@ class EnvironmentOptions : public Options {
   bool heap_prof = false;
 #endif  // HAVE_INSPECTOR
   std::string redirect_warnings;
+  std::string run;
   std::string diagnostic_dir;
   std::string env_file;
   bool has_env_file_string = false;
   bool test_runner = false;
   uint64_t test_runner_concurrency = 0;
+  uint64_t test_runner_timeout = 0;
   bool test_runner_coverage = false;
+  bool test_runner_force_exit = false;
   std::vector<std::string> test_name_pattern;
   std::vector<std::string> test_reporter;
   std::vector<std::string> test_reporter_destination;
@@ -176,6 +184,7 @@ class EnvironmentOptions : public Options {
   bool trace_tls = false;
   bool trace_uncaught = false;
   bool trace_warnings = false;
+  bool trace_promises = false;
   bool extra_info_on_fatal_exception = true;
   std::string unhandled_rejections;
   std::vector<std::string> userland_loaders;
@@ -213,6 +222,8 @@ class EnvironmentOptions : public Options {
 
   std::vector<std::string> user_argv;
 
+  bool report_exclude_network = false;
+
   inline DebugOptions* get_debug_options() { return &debug_options_; }
   inline const DebugOptions& debug_options() const { return debug_options_; }
 
@@ -232,6 +243,7 @@ class PerIsolateOptions : public Options {
   bool experimental_shadow_realm = false;
   std::string report_signal = "SIGUSR2";
   bool build_snapshot = false;
+  std::string build_snapshot_config;
   inline EnvironmentOptions* get_per_env_options();
   void CheckOptions(std::vector<std::string>* errors,
                     std::vector<std::string>* argv) override;

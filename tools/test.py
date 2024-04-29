@@ -915,6 +915,7 @@ class LiteralTestSuite(TestSuite):
 TIMEOUT_SCALEFACTOR = {
     'arm'       : { 'debug' :  8, 'release' : 3 }, # The ARM buildbots are slow.
     'riscv64'   : { 'debug' :  8, 'release' : 3 }, # The riscv devices are slow.
+    'loong64'   : { 'debug' :  4, 'release' : 1 },
     'ia32'      : { 'debug' :  4, 'release' : 1 },
     'ppc'       : { 'debug' :  4, 'release' : 1 },
     's390'      : { 'debug' :  4, 'release' : 1 } }
@@ -1587,8 +1588,9 @@ def get_env_type(vm, options_type, context):
   return env_type
 
 
-def get_asan_state():
-  return "on" if os.environ.get('ASAN') is not None else "off"
+def get_asan_state(vm, context):
+  asan = Execute([vm, '-p', 'process.config.variables.asan'], context).stdout
+  return "on" if asan == "1" else "off"
 
 
 def Main():
@@ -1683,7 +1685,7 @@ def Main():
           'system': utils.GuessOS(),
           'arch': vmArch,
           'type': get_env_type(vm, options.type, context),
-          'asan': get_asan_state(),
+          'asan': get_asan_state(vm, context),
         }
         test_list = root.ListTests([], path, context, arch, mode)
         unclassified_tests += test_list

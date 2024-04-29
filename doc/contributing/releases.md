@@ -20,7 +20,7 @@ official release builds for Node.js, hosted on <https://nodejs.org/>.
   * [5. Create release commit](#5-create-release-commit)
   * [6. Propose release on GitHub](#6-propose-release-on-github)
   * [7. Ensure that the release branch is stable](#7-ensure-that-the-release-branch-is-stable)
-    * [7.1 Updating the release _(optional)_](#7-1-updating-the-release-optional)
+    * [7.1 Updating the release _(optional)_](#71-updating-the-release-optional)
   * [8. Produce a nightly build _(optional)_](#8-produce-a-nightly-build-optional)
   * [9. Produce release builds](#9-produce-release-builds)
   * [10. Test the build](#10-test-the-build)
@@ -90,10 +90,11 @@ responsible for that release. In order to be able to verify downloaded binaries,
 the public should be able to check that the `SHASUMS256.txt` file has been
 signed by someone who has been authorized to create a release.
 
-The GPG keys should be fetchable from a known third-party keyserver. The SKS
-Keyservers at <https://sks-keyservers.net> are recommended. Use the
-[submission](https://pgp.mit.edu/) form to submit a new GPG key. You'll need to
-do an ASCII-armored export of your key first:
+The public keys should be fetchable from a known third-party keyserver.
+The OpenPGP keyserver at <https://keys.openpgp.org/> is recommended.
+Use the [submission](https://keys.openpgp.org/upload) form to submit
+a new public key, and make sure to verify the associated email.
+You'll need to do an ASCII-armored export of your key first:
 
 ```bash
 gpg --armor --export email@server.com > ~/nodekey.asc
@@ -102,7 +103,7 @@ gpg --armor --export email@server.com > ~/nodekey.asc
 Keys should be fetchable via:
 
 ```bash
-gpg --keyserver pool.sks-keyservers.net --recv-keys <FINGERPRINT>
+gpg --keyserver hkps://keys.openpgp.org --recv-keys <FINGERPRINT>
 ```
 
 The key you use may be a child/subkey of an existing key.
@@ -882,6 +883,12 @@ same GPG key!**
 
 Use `tools/release.sh` to promote and sign the build. Before doing this, you'll
 need to ensure you've loaded the correct ssh key, or you'll see the following:
+
+If your GPG key is protected by a password, you might need to run:
+
+```console
+$ export GPG_TTY=$(tty)
+```
 
 ```console
 # Checking for releases ...

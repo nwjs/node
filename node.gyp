@@ -130,7 +130,6 @@
 'lib/internal/blob.js',
 'lib/internal/worker.js',
 'lib/internal/child_process/serialization.js',
-'lib/internal/process/esm_loader.js',
 'lib/internal/process/per_thread.js',
 'lib/internal/process/permission.js',
 'lib/internal/process/policy.js',
@@ -147,7 +146,6 @@
 'lib/internal/modules/package_json_reader.js',
 'lib/internal/modules/esm/fetch_module.js',
 'lib/internal/modules/esm/formats.js',
-'lib/internal/modules/esm/handle_process_exit.js',
 'lib/internal/modules/esm/loader.js',
 'lib/internal/modules/esm/module_map.js',
 'lib/internal/modules/esm/resolve.js',
@@ -159,7 +157,6 @@
 'lib/internal/modules/esm/initialize_import_meta.js',
 'lib/internal/modules/esm/assert.js',
 'lib/internal/modules/esm/load.js',
-'lib/internal/modules/esm/package_config.js',
 'lib/internal/modules/esm/utils.js',
 'lib/internal/modules/esm/worker.js',
 'lib/internal/modules/run_main.js',
@@ -187,6 +184,7 @@
 'lib/internal/main/run_main_module.js',
 'lib/internal/main/inspect.js',
 'lib/internal/main/repl.js',
+'lib/internal/main/run.js',
 'lib/internal/fs/read/context.js',
 'lib/internal/fs/utils.js',
 'lib/internal/fs/glob.js',
@@ -215,6 +213,7 @@
 'lib/internal/idna.js',
 'lib/internal/bootstrap/realm.js',
 'lib/internal/bootstrap/node.js',
+'lib/internal/bootstrap/shadow_realm.js',
 'lib/internal/main/watch_mode.js',
 'lib/internal/watch_mode/files_watcher.js',
 'lib/internal/bootstrap/switches/is_main_thread.js',
@@ -225,6 +224,7 @@
 'lib/internal/bootstrap/web/exposed-window-or-worker.js',
 'lib/internal/event_target.js',
 'lib/internal/events/symbols.js',
+'lib/internal/events/abort_listener.js',
 'lib/internal/policy/sri.js',
 'lib/internal/policy/manifest.js',
 'lib/internal/util.js',
@@ -243,7 +243,6 @@
 'lib/internal/http.js',
 'lib/internal/streams/utils.js',
 'lib/internal/streams/legacy.js',
-'lib/internal/streams/buffer_list.js',
 'lib/internal/streams/readable.js',
 'lib/internal/streams/destroy.js',
 'lib/internal/streams/from.js',
@@ -280,8 +279,9 @@
 'lib/internal/freeze_intrinsics.js',
 'lib/internal/options.js',
 'lib/internal/promise_hooks.js',
-'lib/internal/structured_clone.js',
+'lib/internal/shell.js',
 'lib/string_decoder.js',
+'lib/sea.js',
 'lib/_http_client.js',
 'lib/dns.js',
 'lib/dns/promises.js',
@@ -385,12 +385,14 @@
       'src/connection_wrap.cc',
       'src/dataqueue/queue.cc',
       'src/debug_utils.cc',
+      'src/embedded_data.cc',
       'src/encoding_binding.cc',
       'src/env.cc',
       'src/fs_event_wrap.cc',
       'src/handle_wrap.cc',
       'src/heap_utils.cc',
       'src/histogram.cc',
+      'src/internal_only_v8.cc',
       'src/js_native_api.h',
       'src/js_native_api_types.h',
       'src/js_native_api_v8.cc',
@@ -425,6 +427,7 @@
       'src/node_main_instance.cc',
       'src/node_messaging.cc',
       'src/node_metadata.cc',
+      'src/node_modules.cc',
       'src/node_options.cc',
       'src/node_os.cc',
       'src/node_perf.cc',
@@ -455,6 +458,7 @@
       'src/node_watchdog.cc',
       'src/node_worker.cc',
       'src/node_zlib.cc',
+      'src/path.cc',
       'src/permission/child_process_permission.cc',
       'src/permission/fs_permission.cc',
       'src/permission/inspector_permission.cc',
@@ -504,6 +508,7 @@
       'src/dataqueue/queue.h',
       'src/debug_utils.h',
       'src/debug_utils-inl.h',
+      'src/embeded_data.h',
       'src/encoding_binding.h',
       'src/env_properties.h',
       'src/env.h',
@@ -547,6 +552,7 @@
       'src/node_messaging.h',
       'src/node_metadata.h',
       'src/node_mutex.h',
+      'src/node_modules.h',
       'src/node_object_wrap.h',
       'src/node_options.h',
       'src/node_options-inl.h',
@@ -575,6 +581,7 @@
       'src/node_wasi.h',
       'src/node_watchdog.h',
       'src/node_worker.h',
+      'src/path.h',
       'src/permission/child_process_permission.h',
       'src/permission/fs_permission.h',
       'src/permission/inspector_permission.h',
@@ -665,6 +672,7 @@
       'src/quic/cid.cc',
       'src/quic/data.cc',
       'src/quic/endpoint.cc',
+      'src/quic/http3.cc',
       'src/quic/logstream.cc',
       'src/quic/packet.cc',
       'src/quic/preferredaddress.cc',
@@ -679,6 +687,7 @@
       'src/quic/cid.h',
       'src/quic/data.h',
       'src/quic/endpoint.h',
+      'src/quic/http3.h',
       'src/quic/logstream.h',
       'src/quic/packet.h',
       'src/quic/preferredaddress.h',
@@ -688,6 +697,7 @@
       'src/quic/tlscontext.h',
       'src/quic/tokens.h',
       'src/quic/transportparams.h',
+      'src/quic/quic.cc',
     ],
     'node_cctest_sources': [
       'src/node_snapshot_stub.cc',
@@ -701,6 +711,7 @@
       'test/cctest/test_environment.cc',
       'test/cctest/test_linked_binding.cc',
       'test/cctest/test_node_api.cc',
+      'test/cctest/test_path.cc',
       'test/cctest/test_per_process.cc',
       'test/cctest/test_platform.cc',
       'test/cctest/test_report.cc',
@@ -781,6 +792,9 @@
     },
 
     'conditions': [
+      ['target_arch=="arm64"', {
+        'cflags': ['-mbranch-protection=standard'],  # Pointer authentication.
+      }],
       ['OS in "aix os400"', {
         'ldflags': [
           '-Wl,-bnoerrmsg',
@@ -1078,7 +1092,7 @@
                 '<(fipsmodule)',
               ],
               'action': [
-                'python', 'tools/copyfile.py',
+                '<(python)', 'tools/copyfile.py',
                 '<(fipsmodule_internal)',
                 '<(fipsmodule)',
               ],
@@ -1088,7 +1102,7 @@
               'inputs': [ '<(opensslconfig)', ],
               'outputs': [ '<(opensslconfig_internal)', ],
               'action': [
-                'python', 'tools/enable_fips_include.py',
+                '<(python)', 'tools/enable_fips_include.py',
                 '<(opensslconfig)',
                 '<(opensslconfig_internal)',
                 '<(fipsconfig)',
@@ -1140,6 +1154,7 @@
         'deps/googletest/googletest.gyp:gtest_prod',
         'deps/histogram/histogram.gyp:histogram',
         'deps/uvwasi/uvwasi.gyp:uvwasi',
+        'deps/simdjson/simdjson.gyp:simdjson',
         'deps/simdutf/simdutf.gyp:simdutf',
         'node_js2c#host',
         #'deps/ada/ada.gyp:ada',
@@ -1395,6 +1410,7 @@
         'deps/googletest/googletest.gyp:gtest_main',
         'deps/histogram/histogram.gyp:histogram',
         'deps/uvwasi/uvwasi.gyp:uvwasi',
+        'deps/simdjson/simdjson.gyp:simdjson',
         'deps/simdutf/simdutf.gyp:simdutf',
         'deps/ada/ada.gyp:ada',
       ],
@@ -1550,11 +1566,14 @@
         'deps/simdutf/simdutf.gyp:simdutf#host',
       ],
       'include_dirs': [
-        'tools'
+        'tools',
+        'src',
       ],
       'sources': [
         'tools/js2c.cc',
-        'tools/executable_wrapper.h'
+        'tools/executable_wrapper.h',
+        'src/embedded_data.h',
+        'src/embedded_data.cc',
       ],
       'conditions': [
         [ 'node_shared_libuv=="false"', {
@@ -1563,6 +1582,13 @@
         [ 'OS in "linux mac"', {
           'defines': ['NODE_JS2C_USE_STRING_LITERALS'],
 	  'ldflags': [ '-lstdc++' ],
+        }],
+        [ 'OS=="linux" and component != "shared_library"', {
+          'ldflags': [
+                      '-Wl,--whole-archive',
+                      '<(LIBCXX)',
+                      '-Wl,--no-whole-archive'
+                     ]
         }],
         [ 'debug_node=="true"', {
           'cflags!': [ '-O3' ],

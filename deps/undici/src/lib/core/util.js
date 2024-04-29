@@ -1,14 +1,16 @@
 'use strict'
 
-const assert = require('assert')
+const assert = require('node:assert')
 const { kDestroyed, kBodyUsed } = require('./symbols')
-const { IncomingMessage } = require('http')
-const stream = require('stream')
-const net = require('net')
+const { IncomingMessage } = require('node:http')
+const stream = require('node:stream')
+const net = require('node:net')
 const { InvalidArgumentError } = require('./errors')
-const { Blob } = require('buffer')
-const nodeUtil = require('util')
-const { stringify } = require('querystring')
+const { Blob } = require('node:buffer')
+const nodeUtil = require('node:util')
+const { stringify } = require('node:querystring')
+const { headerNameLowerCasedRecord } = require('./constants')
+const { tree } = require('./tree')
 
 const [nodeMajor, nodeMinor] = process.versions.node.split('.').map(v => Number(v))
 
@@ -125,13 +127,13 @@ function getHostname (host) {
     const idx = host.indexOf(']')
 
     assert(idx !== -1)
-    return host.substr(1, idx - 1)
+    return host.substring(1, idx)
   }
 
   const idx = host.indexOf(':')
   if (idx === -1) return host
 
-  return host.substr(0, idx)
+  return host.substring(0, idx)
 }
 
 // IP addresses are not valid server names per RFC6066
@@ -180,17 +182,17 @@ function bodyLength (body) {
   return null
 }
 
-function isDestroyed (stream) {
-  return !stream || !!(stream.destroyed || stream[kDestroyed])
+function isDestroyed (body) {
+  return body && !!(body.destroyed || body[kDestroyed] || (stream.isDestroyed?.(body)))
 }
 
 function isReadableAborted (stream) {
-  const state = stream && stream._readableState
+  const state = stream?._readableState
   return isDestroyed(stream) && state && !state.endEmitted
 }
 
 function destroy (stream, err) {
-  if (!isStream(stream) || isDestroyed(stream)) {
+  if (stream == null || !isStream(stream) || isDestroyed(stream)) {
     return
   }
 
@@ -202,9 +204,9 @@ function destroy (stream, err) {
 
     stream.destroy(err)
   } else if (err) {
-    process.nextTick((stream, err) => {
+    queueMicrotask(() => {
       stream.emit('error', err)
-    }, stream, err)
+    })
   }
 
   if (stream.destroyed !== true) {
@@ -218,26 +220,50 @@ function parseKeepAliveTimeout (val) {
   return m ? parseInt(m[1], 10) * 1000 : null
 }
 
-function parseHeaders (headers, obj = {}) {
-  // For H2 support
-  if (!Array.isArray(headers)) return headers
+/**
+ * Retrieves a header name and returns its lowercase value.
+ * @param {string | Buffer} value Header name
+ * @returns {string}
+ */
+function headerNameToString (value) {
+  return typeof value === 'string'
+    ? headerNameLowerCasedRecord[value] ?? value.toLowerCase()
+    : tree.lookup(value) ?? value.toString('latin1').toLowerCase()
+}
 
+/**
+ * Receive the buffer as a string and return its lowercase value.
+ * @param {Buffer} value Header name
+ * @returns {string}
+ */
+function bufferToLowerCasedHeaderName (value) {
+  return tree.lookup(value) ?? value.toString('latin1').toLowerCase()
+}
+
+/**
+ * @param {Record<string, string | string[]> | (Buffer | string | (Buffer | string)[])[]} headers
+ * @param {Record<string, string | string[]>} [obj]
+ * @returns {Record<string, string | string[]>}
+ */
+function parseHeaders (headers, obj) {
+  if (obj === undefined) obj = {}
   for (let i = 0; i < headers.length; i += 2) {
-    const key = headers[i].toString().toLowerCase()
+    const key = headerNameToString(headers[i])
     let val = obj[key]
 
-    if (!val) {
-      if (Array.isArray(headers[i + 1])) {
-        obj[key] = headers[i + 1]
-      } else {
-        obj[key] = headers[i + 1].toString('utf8')
-      }
-    } else {
-      if (!Array.isArray(val)) {
+    if (val) {
+      if (typeof val === 'string') {
         val = [val]
         obj[key] = val
       }
       val.push(headers[i + 1].toString('utf8'))
+    } else {
+      const headersValue = headers[i + 1]
+      if (typeof headersValue === 'string') {
+        obj[key] = headersValue
+      } else {
+        obj[key] = Array.isArray(headersValue) ? headersValue.map(x => x.toString('utf8')) : headersValue.toString('utf8')
+      }
     }
   }
 
@@ -250,22 +276,30 @@ function parseHeaders (headers, obj = {}) {
 }
 
 function parseRawHeaders (headers) {
-  const ret = []
+  const len = headers.length
+  const ret = new Array(len)
+
   let hasContentLength = false
   let contentDispositionIdx = -1
+  let key
+  let val
+  let kLen = 0
 
   for (let n = 0; n < headers.length; n += 2) {
-    const key = headers[n + 0].toString()
-    const val = headers[n + 1].toString('utf8')
+    key = headers[n]
+    val = headers[n + 1]
 
-    if (key.length === 14 && (key === 'content-length' || key.toLowerCase() === 'content-length')) {
-      ret.push(key, val)
+    typeof key !== 'string' && (key = key.toString())
+    typeof val !== 'string' && (val = val.toString('utf8'))
+
+    kLen = key.length
+    if (kLen === 14 && key[7] === '-' && (key === 'content-length' || key.toLowerCase() === 'content-length')) {
       hasContentLength = true
-    } else if (key.length === 19 && (key === 'content-disposition' || key.toLowerCase() === 'content-disposition')) {
-      contentDispositionIdx = ret.push(key, val) - 1
-    } else {
-      ret.push(key, val)
+    } else if (kLen === 19 && key[7] === '-' && (key === 'content-disposition' || key.toLowerCase() === 'content-disposition')) {
+      contentDispositionIdx = n + 1
     }
+    ret[n] = key
+    ret[n + 1] = val
   }
 
   // See https://github.com/nodejs/node/pull/46528
@@ -320,30 +354,16 @@ function validateHandler (handler, method, upgrade) {
 // A body is disturbed if it has been read from and it cannot
 // be re-used without losing state or data.
 function isDisturbed (body) {
-  return !!(body && (
-    stream.isDisturbed
-      ? stream.isDisturbed(body) || body[kBodyUsed] // TODO (fix): Why is body[kBodyUsed] needed?
-      : body[kBodyUsed] ||
-        body.readableDidRead ||
-        (body._readableState && body._readableState.dataEmitted) ||
-        isReadableAborted(body)
-  ))
+  // TODO (fix): Why is body[kBodyUsed] needed?
+  return !!(body && (stream.isDisturbed(body) || body[kBodyUsed]))
 }
 
 function isErrored (body) {
-  return !!(body && (
-    stream.isErrored
-      ? stream.isErrored(body)
-      : /state: 'errored'/.test(nodeUtil.inspect(body)
-      )))
+  return !!(body && stream.isErrored(body))
 }
 
 function isReadable (body) {
-  return !!(body && (
-    stream.isReadable
-      ? stream.isReadable(body)
-      : /state: 'readable'/.test(nodeUtil.inspect(body)
-      )))
+  return !!(body && stream.isReadable(body))
 }
 
 function getSocketInfo (socket) {
@@ -359,21 +379,9 @@ function getSocketInfo (socket) {
   }
 }
 
-async function * convertIterableToBuffer (iterable) {
-  for await (const chunk of iterable) {
-    yield Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-  }
-}
-
-let ReadableStream
+/** @type {globalThis['ReadableStream']} */
 function ReadableStreamFrom (iterable) {
-  if (!ReadableStream) {
-    ReadableStream = require('stream/web').ReadableStream
-  }
-
-  if (ReadableStream.from) {
-    return ReadableStream.from(convertIterableToBuffer(iterable))
-  }
+  // We cannot use ReadableStream.from here because it does not return a byte stream.
 
   let iterator
   return new ReadableStream(
@@ -386,18 +394,21 @@ function ReadableStreamFrom (iterable) {
         if (done) {
           queueMicrotask(() => {
             controller.close()
+            controller.byobRequest?.respond(0)
           })
         } else {
           const buf = Buffer.isBuffer(value) ? value : Buffer.from(value)
-          controller.enqueue(new Uint8Array(buf))
+          if (buf.byteLength) {
+            controller.enqueue(new Uint8Array(buf))
+          }
         }
         return controller.desiredSize > 0
       },
       async cancel (reason) {
         await iterator.return()
-      }
-    },
-    0
+      },
+      type: 'bytes'
+    }
   )
 }
 
@@ -417,30 +428,7 @@ function isFormDataLike (object) {
   )
 }
 
-function throwIfAborted (signal) {
-  if (!signal) { return }
-  if (typeof signal.throwIfAborted === 'function') {
-    signal.throwIfAborted()
-  } else {
-    if (signal.aborted) {
-      // DOMException not available < v17.0.0
-      const err = new Error('The operation was aborted')
-      err.name = 'AbortError'
-      throw err
-    }
-  }
-}
-
-let events
 function addAbortListener (signal, listener) {
-  if (typeof Symbol.dispose === 'symbol') {
-    if (!events) {
-      events = require('events')
-    }
-    if (typeof events.addAbortListener === 'function' && 'aborted' in signal) {
-      return events.addAbortListener(signal, listener)
-    }
-  }
   if ('addEventListener' in signal) {
     signal.addEventListener('abort', listener, { once: true })
     return () => signal.removeEventListener('abort', listener)
@@ -449,19 +437,101 @@ function addAbortListener (signal, listener) {
   return () => signal.removeListener('abort', listener)
 }
 
-const hasToWellFormed = !!String.prototype.toWellFormed
+const hasToWellFormed = typeof String.prototype.toWellFormed === 'function'
+const hasIsWellFormed = typeof String.prototype.isWellFormed === 'function'
 
 /**
  * @param {string} val
  */
 function toUSVString (val) {
-  if (hasToWellFormed) {
-    return `${val}`.toWellFormed()
-  } else if (nodeUtil.toUSVString) {
-    return nodeUtil.toUSVString(val)
-  }
+  return hasToWellFormed ? `${val}`.toWellFormed() : nodeUtil.toUSVString(val)
+}
 
-  return `${val}`
+/**
+ * @param {string} val
+ */
+// TODO: move this to webidl
+function isUSVString (val) {
+  return hasIsWellFormed ? `${val}`.isWellFormed() : toUSVString(val) === `${val}`
+}
+
+/**
+ * @see https://tools.ietf.org/html/rfc7230#section-3.2.6
+ * @param {number} c
+ */
+function isTokenCharCode (c) {
+  switch (c) {
+    case 0x22:
+    case 0x28:
+    case 0x29:
+    case 0x2c:
+    case 0x2f:
+    case 0x3a:
+    case 0x3b:
+    case 0x3c:
+    case 0x3d:
+    case 0x3e:
+    case 0x3f:
+    case 0x40:
+    case 0x5b:
+    case 0x5c:
+    case 0x5d:
+    case 0x7b:
+    case 0x7d:
+      // DQUOTE and "(),/:;<=>?@[\]{}"
+      return false
+    default:
+      // VCHAR %x21-7E
+      return c >= 0x21 && c <= 0x7e
+  }
+}
+
+/**
+ * @param {string} characters
+ */
+function isValidHTTPToken (characters) {
+  if (characters.length === 0) {
+    return false
+  }
+  for (let i = 0; i < characters.length; ++i) {
+    if (!isTokenCharCode(characters.charCodeAt(i))) {
+      return false
+    }
+  }
+  return true
+}
+
+// headerCharRegex have been lifted from
+// https://github.com/nodejs/node/blob/main/lib/_http_common.js
+
+/**
+ * Matches if val contains an invalid field-vchar
+ *  field-value    = *( field-content / obs-fold )
+ *  field-content  = field-vchar [ 1*( SP / HTAB ) field-vchar ]
+ *  field-vchar    = VCHAR / obs-text
+ */
+const headerCharRegex = /[^\t\x20-\x7e\x80-\xff]/
+
+/**
+ * @param {string} characters
+ */
+function isValidHeaderChar (characters) {
+  return !headerCharRegex.test(characters)
+}
+
+// Parsed accordingly to RFC 9110
+// https://www.rfc-editor.org/rfc/rfc9110#field.content-range
+function parseRangeHeader (range) {
+  if (range == null || range === '') return { start: 0, end: null, size: null }
+
+  const m = range ? range.match(/^bytes (\d+)-(\d+)\/(\d+)?$/) : null
+  return m
+    ? {
+        start: parseInt(m[1]),
+        end: m[2] ? parseInt(m[2]) : null,
+        size: m[3] ? parseInt(m[3]) : null
+      }
+    : null
 }
 
 const kEnumerableProperty = Object.create(null)
@@ -474,6 +544,7 @@ module.exports = {
   isErrored,
   isReadable,
   toUSVString,
+  isUSVString,
   isReadableAborted,
   isBlobLike,
   parseOrigin,
@@ -483,6 +554,8 @@ module.exports = {
   isIterable,
   isAsyncIterable,
   isDestroyed,
+  headerNameToString,
+  bufferToLowerCasedHeaderName,
   parseRawHeaders,
   parseHeaders,
   parseKeepAliveTimeout,
@@ -495,9 +568,13 @@ module.exports = {
   getSocketInfo,
   isFormDataLike,
   buildURL,
-  throwIfAborted,
   addAbortListener,
+  isValidHTTPToken,
+  isValidHeaderChar,
+  isTokenCharCode,
+  parseRangeHeader,
   nodeMajor,
   nodeMinor,
-  nodeHasAutoSelectFamily: nodeMajor > 18 || (nodeMajor === 18 && nodeMinor >= 13)
+  nodeHasAutoSelectFamily: nodeMajor > 18 || (nodeMajor === 18 && nodeMinor >= 13),
+  safeHTTPMethods: ['GET', 'HEAD', 'OPTIONS', 'TRACE']
 }

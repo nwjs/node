@@ -24,21 +24,24 @@
   V(transfer_mode_private_symbol, "node:transfer_mode")                        \
   V(host_defined_option_symbol, "node:host_defined_option_symbol")             \
   V(js_transferable_wrapper_private_symbol, "node:js_transferable_wrapper")    \
+  V(entry_point_module_private_symbol, "node:entry_point_module")              \
+  V(entry_point_promise_private_symbol, "node:entry_point_promise")            \
   V(napi_type_tag, "node:napi:type_tag")                                       \
   V(napi_wrapper, "node:napi:wrapper")                                         \
   V(untransferable_object_private_symbol, "node:untransferableObject")         \
   V(exit_info_private_symbol, "node:exit_info_private_symbol")                 \
+  V(promise_trace_id, "node:promise_trace_id")                                 \
   V(require_private_symbol, "node:require_private_symbol")
 
 // Symbols are per-isolate primitives but Environment proxies them
 // for the sake of convenience.
 #define PER_ISOLATE_SYMBOL_PROPERTIES(V)                                       \
-  V(default_host_defined_options, "default_host_defined_options")              \
   V(fs_use_promises_symbol, "fs_use_promises_symbol")                          \
   V(async_id_symbol, "async_id_symbol")                                        \
   V(handle_onclose_symbol, "handle_onclose")                                   \
   V(no_message_symbol, "no_message_symbol")                                    \
   V(messaging_deserialize_symbol, "messaging_deserialize_symbol")              \
+  V(imported_cjs_symbol, "imported_cjs_symbol")                                \
   V(messaging_transfer_symbol, "messaging_transfer_symbol")                    \
   V(messaging_clone_symbol, "messaging_clone_symbol")                          \
   V(messaging_transfer_list_symbol, "messaging_transfer_list_symbol")          \
@@ -47,11 +50,18 @@
   V(onpskexchange_symbol, "onpskexchange")                                     \
   V(resource_symbol, "resource_symbol")                                        \
   V(trigger_async_id_symbol, "trigger_async_id_symbol")                        \
-  V(vm_dynamic_import_missing_flag, "vm_dynamic_import_missing_flag")
+  V(source_text_module_default_hdo, "source_text_module_default_hdo")          \
+  V(vm_dynamic_import_default_internal, "vm_dynamic_import_default_internal")  \
+  V(vm_dynamic_import_main_context_default,                                    \
+    "vm_dynamic_import_main_context_default")                                  \
+  V(vm_dynamic_import_missing_flag, "vm_dynamic_import_missing_flag")          \
+  V(vm_dynamic_import_no_callback, "vm_dynamic_import_no_callback")
 
 // Strings are per-isolate primitives but Environment proxies them
 // for the sake of convenience.  Strings should be ASCII-only.
 #define PER_ISOLATE_STRING_PROPERTIES(V)                                       \
+  V(__filename_string, "__filename")                                           \
+  V(__dirname_string, "__dirname")                                             \
   V(ack_string, "ack")                                                         \
   V(address_string, "address")                                                 \
   V(aliases_string, "aliases")                                                 \
@@ -431,6 +441,7 @@
   V(performance_entry_callback, v8::Function)                                  \
   V(prepare_stack_trace_callback, v8::Function)                                \
   V(process_object, v8::Object)                                                \
+  V(process_emit_warning_sync, v8::Function)                                   \
   V(primordials, v8::Object)                                                   \
   V(primordials_safe_map_prototype_object, v8::Object)                         \
   V(primordials_safe_set_prototype_object, v8::Object)                         \

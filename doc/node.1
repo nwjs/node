@@ -82,6 +82,9 @@ Allow file system read access when using the permission model.
 .It Fl -allow-fs-write
 Allow file system write access when using the permission model.
 .
+.It Fl -allow-addons
+Allow using native addons when using the permission model.
+.
 .It Fl -allow-child-process
 Allow spawning process when using the permission model.
 .
@@ -157,9 +160,6 @@ Interpret as either ES modules or CommonJS modules input via --eval or STDIN, wh
 .js or extensionless files with no sibling or parent package.json;
 .js or extensionless files whose nearest parent package.json lacks a "type" field, unless under node_modules.
 .
-.It Fl -experimental-global-webcrypto
-Expose the Web Crypto API on the global scope.
-.
 .It Fl -experimental-import-meta-resolve
 Enable experimental ES modules support for import.meta.resolve().
 .
@@ -183,11 +183,11 @@ Use this flag to enable ShadowRealm support.
 .It Fl -experimental-test-coverage
 Enable code coverage in the test runner.
 .
-.It Fl -experimental-websocket
-Enable experimental support for the WebSocket API.
-.
 .It Fl -no-experimental-fetch
 Disable experimental support for the Fetch API.
+.
+.It Fl -no-experimental-websocket
+Disable experimental support for the WebSocket API.
 .
 .It Fl -no-experimental-global-customevent
 Disable exposition of the CustomEvent on the global scope.
@@ -422,6 +422,10 @@ Starts the Node.js command line test runner.
 The maximum number of test files that the test runner CLI will execute
 concurrently.
 .
+.It Fl -test-force-exit
+Configures the test runner to exit the process once all known tests have
+finished executing even if the event loop would otherwise remain active.
+.
 .It Fl -test-name-pattern
 A regular expression that configures the test runner to only execute tests
 whose name matches the provided pattern.
@@ -438,6 +442,9 @@ option set.
 .
 .It Fl -test-shard
 Test suite shard to execute in a format of <index>/<total>.
+
+.It Fl -test-timeout
+A number of milliseconds the test execution will fail after.
 .
 .It Fl -throw-deprecation
 Throw errors for deprecations.

@@ -1,4 +1,3 @@
-#include "async_wrap-inl.h"
 #include "base_object-inl.h"
 #include "inspector_agent.h"
 #include "inspector_io.h"
@@ -61,7 +60,7 @@ struct MainThreadConnection {
 };
 
 template <typename ConnectionType>
-class JSBindingsConnection : public AsyncWrap {
+class JSBindingsConnection : public BaseObject {
  public:
   class JSBindingsSessionDelegate : public InspectorSessionDelegate {
    public:
@@ -91,8 +90,7 @@ class JSBindingsConnection : public AsyncWrap {
   JSBindingsConnection(Environment* env,
                        Local<Object> wrap,
                        Local<Function> callback)
-                       : AsyncWrap(env, wrap, PROVIDER_INSPECTORJSBINDING),
-                         callback_(env->isolate(), callback) {
+      : BaseObject(env, wrap), callback_(env->isolate(), callback) {
     Agent* inspector = env->inspector_agent();
     if (inspector)
     session_ = ConnectionType::Connect(
@@ -100,7 +98,9 @@ class JSBindingsConnection : public AsyncWrap {
   }
 
   void OnMessage(Local<Value> value) {
-    MakeCallback(callback_.Get(env()->isolate()), 1, &value);
+    auto result = callback_.Get(env()->isolate())
+                      ->Call(env()->context(), object(), 1, &value);
+    (void)result;
   }
 
   static void Bind(Environment* env, Local<Object> target) {
@@ -109,7 +109,6 @@ class JSBindingsConnection : public AsyncWrap {
         NewFunctionTemplate(isolate, JSBindingsConnection::New);
     tmpl->InstanceTemplate()->SetInternalFieldCount(
         JSBindingsConnection::kInternalFieldCount);
-    tmpl->Inherit(AsyncWrap::GetConstructorTemplate(env));
     SetProtoMethod(isolate, tmpl, "dispatch", JSBindingsConnection::Dispatch);
     SetProtoMethod(
         isolate, tmpl, "disconnect", JSBindingsConnection::Disconnect);

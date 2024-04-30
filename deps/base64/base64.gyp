@@ -211,7 +211,7 @@
           'msvs_settings': {
             'VCCLCompilerTool': {
               'AdditionalOptions': [
-                '/arch:AVX512'
+                '/arch:AVX512', '-mavx512vl', '-mavx512vbmi'
               ],
             },
           },

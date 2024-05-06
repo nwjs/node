@@ -460,7 +460,7 @@
  * if C++ is being used. Define it directly to avoid problems when integrating
  * libuv in a C++ project.
  */
-#if defined(ENODATA) && !defined(_WIN32)
+#if 0 //defined(ENODATA) && !defined(_WIN32)
 # define UV__ENODATA UV__ERR(ENODATA)
 #elif defined(__FreeBSD__)
 # define UV__ENODATA (-9919)

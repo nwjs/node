@@ -1583,13 +1583,6 @@
           'defines': ['NODE_JS2C_USE_STRING_LITERALS'],
 	  'ldflags': [ '-lstdc++' ],
         }],
-        [ 'OS=="linux" and component != "shared_library"', {
-          'ldflags': [
-                      '-Wl,--whole-archive',
-                      '<(LIBCXX)',
-                      '-Wl,--no-whole-archive'
-                     ]
-        }],
         [ 'debug_node=="true"', {
           'cflags!': [ '-O3' ],
           'cflags': [ '-g', '-O0' ],

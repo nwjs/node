@@ -440,6 +440,7 @@
       'V8_REVERSE_JSARGS',
       '_GLIBCXX_USE_CXX11_ABI=1',
       '_LIBCPP_HAS_NO_VENDOR_AVAILABILITY_ANNOTATIONS',
+      '_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_NONE',
     ],
 
     # Forcibly disable -Werror.  We support a wide range of compilers, it's
@@ -635,7 +636,9 @@
         'conditions': [
           [ 'building_nw==1 and component=="shared_library"', {
             'defines': [ '_LIBCPP_NO_AUTO_LINK' ],
-            'include_dirs': [ '<(DEPTH)/third_party/libc++/src/include'],
+            'include_dirs': [ '<(DEPTH)/third_party/libc++/src/include',
+	                      '<(DEPTH)/buildtools/third_party/libc++/',
+			    ],
           }],
           [ 'building_nw==1 and component!="shared_library"', {
             'defines': [ '_LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS' ],
@@ -696,6 +699,7 @@
                 'cflags': [ '--sysroot=<(sysroot)', '-nostdinc++', 
                         '-isystem<(PRODUCT_DIR)/../../third_party/libc++/src/include', 
                         '-isystem<(PRODUCT_DIR)/../../third_party/libc++', 
+                        '-isystem<(PRODUCT_DIR)/../../buildtools/third_party/libc++', 
                         '-isystem<(PRODUCT_DIR)/../../third_party/libc++abi/src/include' ],
                 'ldflags': [ '--sysroot=<(sysroot)','<!(<(DEPTH)/content/nw/tools/sysroot_ld_path.sh <(sysroot))', '-nostdlib++' ],
               }],

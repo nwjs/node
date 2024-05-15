@@ -1205,6 +1205,7 @@
         'USING_V8_SHARED',
         'V8_USE_EXTERNAL_STARTUP_DATA',
         'NODE_OPENSSL_SYSTEM_CERT_PATH="<(openssl_system_ca_path)"',
+        '_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_NONE',
       ],
 
       # - "C4244: conversion from 'type1' to 'type2', possible loss of data"
@@ -1214,7 +1215,8 @@
       'conditions': [
         [ 'OS=="win" or OS=="linux"', {
           'include_dirs': [
-            '<(PRODUCT_DIR)/../../buildtools/third_party/libc++/trunk/include',
+            '<(PRODUCT_DIR)/../../third_party/libc++/src/include',
+            '<(PRODUCT_DIR)/../../third_party/libc++',
             '<(PRODUCT_DIR)/../../buildtools/third_party/libc++',
           ],
         }],

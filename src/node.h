@@ -269,6 +269,8 @@ enum Flags : uint32_t {
   // Initialize the process for predictable snapshot generation.
   kGeneratePredictableSnapshot = 1 << 14,
 
+  kNWJS = //disable all except OpenSSL and CLI options
+      ((1 << 14) - 1) ^ (kNoInitOpenSSL | kDisableCLIOptions),
   // Emulate the behavior of InitializeNodeWithArgs() when passing
   // a flags argument to the InitializeOncePerProcess() replacement
   // function.

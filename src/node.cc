@@ -820,6 +820,7 @@ static ExitCode ProcessGlobalArgsInternal(std::vector<std::string>* args,
   }
 #endif
 
+  if (!node_is_nwjs) {
   std::vector<char*> v8_args_as_char_ptr(v8_args.size());
   if (v8_args.size() > 0) {
     for (size_t i = 0; i < v8_args.size(); ++i)
@@ -828,13 +829,13 @@ static ExitCode ProcessGlobalArgsInternal(std::vector<std::string>* args,
     V8::SetFlagsFromCommandLine(&argc, v8_args_as_char_ptr.data(), true);
     v8_args_as_char_ptr.resize(argc);
   }
-
   // Anything that's still in v8_argv is not a V8 or a node option.
   for (size_t i = 1; i < v8_args_as_char_ptr.size(); i++)
     errors->push_back("bad option: " + std::string(v8_args_as_char_ptr[i]));
 
   if (v8_args_as_char_ptr.size() > 1)
     return ExitCode::kInvalidCommandLineArgument;
+  } //node nwjs
 
   return ExitCode::kNoFailure;
 }
@@ -880,13 +881,15 @@ static ExitCode InitializeNodeWithArgsInternal(
   // Node provides a "v8.setFlagsFromString" method to dynamically change flags.
   // Hence do not freeze flags when initializing V8. In a browser setting, this
   // is security relevant, for Node it's less important.
-  V8::SetFlagsFromString("--no-freeze-flags-after-init");
+  if (!node_is_nwjs)
+    V8::SetFlagsFromString("--no-freeze-flags-after-init");
 
 #if defined(NODE_V8_OPTIONS)
   // Should come before the call to V8::SetFlagsFromCommandLine()
   // so the user can disable a flag --foo at run-time by passing
   // --no_foo from the command line.
-  V8::SetFlagsFromString(NODE_V8_OPTIONS, sizeof(NODE_V8_OPTIONS) - 1);
+  if (!node_is_nwjs)
+    V8::SetFlagsFromString(NODE_V8_OPTIONS, sizeof(NODE_V8_OPTIONS) - 1);
 #endif
 
   if (!!(flags & ProcessInitializationFlags::kGeneratePredictableSnapshot) ||
@@ -897,6 +900,7 @@ static ExitCode InitializeNodeWithArgsInternal(
 
   // Specify this explicitly to avoid being affected by V8 changes to the
   // default value.
+  if (!node_is_nwjs)
   V8::SetFlagsFromString("--rehash-snapshot");
 
   HandleEnvOptions(per_process::cli_options->per_isolate->per_env);
@@ -1313,6 +1317,7 @@ InitializeOncePerProcessInternal(const std::vector<std::string>& args,
 #endif  // HAVE_OPENSSL
   }
 
+  if (!node_is_nwjs) {
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
   std::string argv0 = args[0];
   //StartupDataHandler startup_data(argv[0], nullptr, nullptr);
@@ -1328,12 +1333,12 @@ InitializeOncePerProcessInternal(const std::vector<std::string>& args,
   if (icu_data)
     udata_setCommonData((uint8_t*)icu_data, &err);
 
-
   if (!(flags & ProcessInitializationFlags::kNoInitializeNodeV8Platform)) {
     per_process::v8_platform.Initialize(
         static_cast<int>(per_process::cli_options->v8_thread_pool_size));
     result->platform_ = per_process::v8_platform.Platform();
   }
+  } //node nwjs
 
   if (!(flags & ProcessInitializationFlags::kNoInitializeV8)) {
     V8::Initialize();
@@ -1949,6 +1954,13 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
   v8::Context::Scope context_scope(context);
 
   argv = uv_setup_args(argc, argv);
+  std::shared_ptr<node::InitializationResultImpl> result =
+    node::InitializeOncePerProcessInternal(
+					   std::vector<std::string>(argv, argv + argc),
+					   node::ProcessInitializationFlags::kNWJS);
+  for (const std::string& error : result->errors()) {
+    node::FPrintF(stderr, "%s: %s\n", result->args().at(0), error);
+  }
 
   if (!node::thread_ctx_created) {
     node::thread_ctx_created = 1;
@@ -1967,7 +1979,7 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
   node::NewContext(isolate, v8::Local<v8::ObjectTemplate>(), false);
   std::vector<std::string> args(argv, argv + argc);
   std::vector<std::string> exec_args;
-  tls_ctx->env = node::CreateEnvironment(isolate_data, context, args, exec_args);
+  tls_ctx->env = node::CreateEnvironment(isolate_data, context, result->args(), result->exec_args());
   isolate->SetFatalErrorHandler(node::OnFatalError);
   isolate->AddMessageListener(node::errors::PerIsolateMessageListener);
   //isolate->SetAutorunMicrotasks(false);

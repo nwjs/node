@@ -21,6 +21,7 @@
 
 #include "node.h"
 #include "node_dotenv.h"
+#include "node_task_runner.h"
 
 // ========== local headers ==========
 
@@ -428,10 +429,6 @@ MaybeLocal<Value> StartExecution(Environment* env, StartExecutionCallback cb) {
     return StartExecution(env, "internal/main/watch_mode");
   }
 
-  if (!env->options()->run.empty()) {
-    return StartExecution(env, "internal/main/run");
-  }
-
   if ((!first_argv.empty() && first_argv != "-") || node_is_nwjs) {
     return StartExecution(env, "internal/main/run_main_module");
   }
@@ -447,8 +444,9 @@ MaybeLocal<Value> StartExecution(Environment* env, StartExecutionCallback cb) {
 typedef void (*sigaction_cb)(int signo, siginfo_t* info, void* ucontext);
 #endif
 #if NODE_USE_V8_WASM_TRAP_HANDLER
+static std::atomic<bool> is_wasm_trap_handler_configured{false};
 #if defined(_WIN32)
-static LONG TrapWebAssemblyOrContinue(EXCEPTION_POINTERS* exception) {
+static LONG WINAPI TrapWebAssemblyOrContinue(EXCEPTION_POINTERS* exception) {
   if (v8::TryHandleWebAssemblyTrapWindows(exception)) {
     return EXCEPTION_CONTINUE_EXECUTION;
   }
@@ -492,15 +490,17 @@ void RegisterSignalHandler(int signal,
                            bool reset_handler) {
   CHECK_NOT_NULL(handler);
 #if NODE_USE_V8_WASM_TRAP_HANDLER
-  if (signal == SIGSEGV) {
+  // Stash the user-registered handlers for TrapWebAssemblyOrContinue
+  // to call out to when the signal is not coming from a WASM OOM.
+  if (signal == SIGSEGV && is_wasm_trap_handler_configured.load()) {
     CHECK(previous_sigsegv_action.is_lock_free());
     CHECK(!reset_handler);
     previous_sigsegv_action.store(handler);
     return;
   }
-// TODO(align behavior between macos and other in next major version)
+  // TODO(align behavior between macos and other in next major version)
 #if defined(__APPLE__)
-  if (signal == SIGBUS) {
+  if (signal == SIGBUS && is_wasm_trap_handler_configured.load()) {
     CHECK(previous_sigbus_action.is_lock_free());
     CHECK(!reset_handler);
     previous_sigbus_action.store(handler);
@@ -652,33 +652,6 @@ static void PlatformInit(ProcessInitializationFlags::Flags flags) {
   if (!(flags & ProcessInitializationFlags::kNoDefaultSignalHandling)) {
     RegisterSignalHandler(SIGINT, SignalExit, true);
     RegisterSignalHandler(SIGTERM, SignalExit, true);
-
-#if NODE_USE_V8_WASM_TRAP_HANDLER
-#if defined(_WIN32)
-    {
-      constexpr ULONG first = TRUE;
-      per_process::old_vectored_exception_handler =
-          AddVectoredExceptionHandler(first, TrapWebAssemblyOrContinue);
-    }
-#else
-    // Tell V8 to disable emitting WebAssembly
-    // memory bounds checks. This means that we have
-    // to catch the SIGSEGV/SIGBUS in TrapWebAssemblyOrContinue
-    // and pass the signal context to V8.
-    {
-      struct sigaction sa;
-      memset(&sa, 0, sizeof(sa));
-      sa.sa_sigaction = TrapWebAssemblyOrContinue;
-      sa.sa_flags = SA_SIGINFO;
-      CHECK_EQ(sigaction(SIGSEGV, &sa, nullptr), 0);
-// TODO(align behavior between macos and other in next major version)
-#if defined(__APPLE__)
-      CHECK_EQ(sigaction(SIGBUS, &sa, nullptr), 0);
-#endif
-    }
-#endif  // defined(_WIN32)
-    V8::EnableWebAssemblyTrapHandler(false);
-#endif  // NODE_USE_V8_WASM_TRAP_HANDLER
   }
 
   if (!(flags & ProcessInitializationFlags::kNoAdjustResourceLimits)) {
@@ -1155,11 +1128,11 @@ int InitializeNodeWithArgs(std::vector<std::string>* argv,
       InitializeNodeWithArgsInternal(argv, exec_argv, errors, flags));
 }
 
-static std::unique_ptr<InitializationResultImpl>
+static std::shared_ptr<InitializationResultImpl>
 InitializeOncePerProcessInternal(const std::vector<std::string>& args,
                                  ProcessInitializationFlags::Flags flags =
                                      ProcessInitializationFlags::kNoFlags) {
-  auto result = std::make_unique<InitializationResultImpl>();
+  auto result = std::make_shared<InitializationResultImpl>();
   result->args_ = args;
 
   if (!(flags & ProcessInitializationFlags::kNoParseGlobalDebugVariables)) {
@@ -1189,6 +1162,22 @@ InitializeOncePerProcessInternal(const std::vector<std::string>& args,
     }
   }
 
+  if (!per_process::cli_options->run.empty()) {
+    // TODO(@anonrig): Handle NODE_NO_WARNINGS, NODE_REDIRECT_WARNINGS,
+    //  --disable-warning and --redirect-warnings.
+    if (per_process::cli_options->per_isolate->per_env->warnings) {
+      fprintf(stderr,
+              "ExperimentalWarning: Task runner is an experimental feature and "
+              "might change at any time\n\n");
+    }
+
+    auto positional_args = task_runner::GetPositionalArgs(args);
+    result->early_return_ = true;
+    task_runner::RunTask(
+        result, per_process::cli_options->run, positional_args);
+    return result;
+  }
+
   if (!(flags & ProcessInitializationFlags::kNoPrintHelpOrVersionOutput)) {
     if (per_process::cli_options->print_version) {
       printf("%s\n", NODE_VERSION);
@@ -1214,7 +1203,8 @@ InitializeOncePerProcessInternal(const std::vector<std::string>& args,
   }
 
   if (!(flags & ProcessInitializationFlags::kNoInitOpenSSL)) {
-#if HAVE_OPENSSL && !defined(OPENSSL_IS_BORINGSSL)
+#if HAVE_OPENSSL
+#ifndef OPENSSL_IS_BORINGSSL
     auto GetOpenSSLErrorString = []() -> std::string {
       std::string ret;
       ERR_print_errors_cb(
@@ -1314,13 +1304,13 @@ InitializeOncePerProcessInternal(const std::vector<std::string>& args,
       CHECK(crypto::CSPRNG(buffer, length).is_ok());
       return true;
     });
-
+#endif  // !defined(OPENSSL_IS_BORINGSSL)
     {
       std::string extra_ca_certs;
       if (credentials::SafeGetenv("NODE_EXTRA_CA_CERTS", &extra_ca_certs))
         crypto::UseExtraCaCerts(extra_ca_certs);
     }
-#endif  // HAVE_OPENSSL && !defined(OPENSSL_IS_BORINGSSL)
+#endif  // HAVE_OPENSSL
   }
 
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
@@ -1357,13 +1347,44 @@ InitializeOncePerProcessInternal(const std::vector<std::string>& args,
     cppgc::InitializeProcess(allocator);
   }
 
+#if NODE_USE_V8_WASM_TRAP_HANDLER
+  bool use_wasm_trap_handler =
+      !per_process::cli_options->disable_wasm_trap_handler;
+  if (!(flags & ProcessInitializationFlags::kNoDefaultSignalHandling) &&
+      use_wasm_trap_handler) {
+#if defined(_WIN32)
+    constexpr ULONG first = TRUE;
+    per_process::old_vectored_exception_handler =
+        AddVectoredExceptionHandler(first, TrapWebAssemblyOrContinue);
+#else
+    // Tell V8 to disable emitting WebAssembly
+    // memory bounds checks. This means that we have
+    // to catch the SIGSEGV/SIGBUS in TrapWebAssemblyOrContinue
+    // and pass the signal context to V8.
+    {
+      struct sigaction sa;
+      memset(&sa, 0, sizeof(sa));
+      sa.sa_sigaction = TrapWebAssemblyOrContinue;
+      sa.sa_flags = SA_SIGINFO;
+      CHECK_EQ(sigaction(SIGSEGV, &sa, nullptr), 0);
+// TODO(align behavior between macos and other in next major version)
+#if defined(__APPLE__)
+      CHECK_EQ(sigaction(SIGBUS, &sa, nullptr), 0);
+#endif
+    }
+#endif  // defined(_WIN32)
+    is_wasm_trap_handler_configured.store(true);
+    V8::EnableWebAssemblyTrapHandler(false);
+  }
+#endif  // NODE_USE_V8_WASM_TRAP_HANDLER
+
   //performance::performance_v8_start = PERFORMANCE_NOW();
   per_process::v8_initialized = true;
 
   return result;
 }
 
-std::unique_ptr<InitializationResult> InitializeOncePerProcess(
+std::shared_ptr<InitializationResult> InitializeOncePerProcess(
     const std::vector<std::string>& args,
     ProcessInitializationFlags::Flags flags) {
   return InitializeOncePerProcessInternal(args, flags);
@@ -1386,7 +1407,7 @@ void TearDownOncePerProcess() {
   }
 
 #if NODE_USE_V8_WASM_TRAP_HANDLER && defined(_WIN32)
-  if (!(flags & ProcessInitializationFlags::kNoDefaultSignalHandling)) {
+  if (is_wasm_trap_handler_configured.load()) {
     RemoveVectoredExceptionHandler(per_process::old_vectored_exception_handler);
   }
 #endif
@@ -1569,7 +1590,7 @@ static ExitCode StartInternal(int argc, char** argv) {
   // Hack around with the argv pointer. Used for process.title = "blah".
   argv = uv_setup_args(argc, argv);
 
-  std::unique_ptr<InitializationResultImpl> result =
+  std::shared_ptr<InitializationResultImpl> result =
       InitializeOncePerProcessInternal(
           std::vector<std::string>(argv, argv + argc));
   for (const std::string& error : result->errors()) {

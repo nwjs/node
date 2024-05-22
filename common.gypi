@@ -3,7 +3,6 @@
     'configuring_node%': 0,
     'asan%': 0,
     'ubsan%': 0,
-    'werror': '',                     # Turn off -Werror in V8 build.
     'visibility%': 'hidden',          # V8's visibility setting
     'target_arch%': 'ia32',           # set v8's target architecture
     'host_arch%': 'ia32',             # set v8's host architecture
@@ -49,7 +48,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.10',
+    'v8_embedder_string': '-node.12',
 
     ##### V8 defaults for Node.js #####
 
@@ -143,7 +142,6 @@
         'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_sid_arm-sysroot',
       }],
       ['OS=="mac"', {
-        'clang%': 1,
         'obj_dir%': '<(PRODUCT_DIR)/obj.target',
         #'v8_base': '<(PRODUCT_DIR)/libv8_snapshot.a',
       }],
@@ -311,6 +309,9 @@
             'cflags': [ '-fPIC' ],
             'ldflags': [ '-fPIC' ]
           }],
+          ['clang==1', {
+            'msbuild_toolset': 'ClangCL',
+          }],
         ],
         'msvs_settings': {
           'VCCLCompilerTool': {
@@ -339,10 +340,10 @@
             }, {
               'MSVC_runtimeType': 2   # MultiThreadedDLL (/MD)
             }],
-            ['llvm_version=="0.0"', {
-              'lto': ' -flto=4 -fuse-linker-plugin -ffat-lto-objects ', # GCC
-            }, {
+            ['clang==1', {
               'lto': ' -flto ', # Clang
+            }, {
+              'lto': ' -flto=4 -fuse-linker-plugin -ffat-lto-objects ', # GCC
             }],
           ],
         },
@@ -399,6 +400,9 @@
             'cflags': [ '-fPIC', '-I<(android_ndk_path)/sources/android/cpufeatures' ],
             'ldflags': [ '-fPIC' ]
           }],
+          ['clang==1', {
+            'msbuild_toolset': 'ClangCL',
+          }],
         ],
         'msvs_settings': {
           'VCCLCompilerTool': {
@@ -449,12 +453,26 @@
 
     'msvs_settings': {
       'VCCLCompilerTool': {
-        'AdditionalOptions': [
-          '/Zc:__cplusplus',
-          # The following option enables c++20 on Windows. This is needed for V8 v12.4+
-          '-std:c++20',
-          # The following option reduces the "error C1060: compiler is out of heap space"
-          '/Zm2000',
+        # TODO(targos): Remove condition and always use LanguageStandard options
+        # once node-gyp supports them.
+        'conditions': [
+          ['clang==1', {
+            'LanguageStandard': 'stdcpp20',
+            'LanguageStandard_C': 'stdc11',
+            'AdditionalOptions': [
+              '/Zc:__cplusplus',
+              # The following option reduces the "error C1060: compiler is out of heap space"
+              '/Zm2000',
+            ],
+          }, {
+            'AdditionalOptions': [
+              '/Zc:__cplusplus',
+              # The following option enables c++20 on Windows. This is needed for V8 v12.4+
+              '-std:c++20',
+              # The following option reduces the "error C1060: compiler is out of heap space"
+              '/Zm2000',
+            ],
+          }],
         ],
         'BufferSecurityCheck': 'true',
         'DebugInformationFormat': 1,          # /Z7 embed info in .obj files
@@ -632,6 +650,10 @@
           '_HAS_EXCEPTIONS=1',
           #'BUILDING_V8_SHARED=1',
           'BUILDING_UV_SHARED=1',
+          # Stop <windows.h> from defining macros that conflict with
+          # std::min() and std::max().  We don't use <windows.h> (much)
+          # but we still inherit it from uv.h.
+          'NOMINMAX',
         ],
         'conditions': [
           [ 'building_nw==1 and component=="shared_library"', {

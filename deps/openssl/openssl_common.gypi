@@ -69,7 +69,7 @@
         'TERMIOS',
       ],
       'conditions': [
-        [ 'llvm_version=="0.0"', {
+        [ 'clang==0', {
           'cflags': ['-Wno-old-style-declaration',],
         }],
       ],

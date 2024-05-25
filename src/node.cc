@@ -1945,6 +1945,10 @@ NODE_EXTERN void g_stop_nw_instance() {
 
 NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Context> context, void* icu_data) {
 
+  static bool node_init_called = false;
+  static std::vector<std::string> args;
+  static std::vector<std::string> exec_args;
+
   UErrorCode err = U_ZERO_ERROR;
   if (icu_data)
     udata_setCommonData((uint8_t*)icu_data, &err);
@@ -1954,12 +1958,17 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
   v8::Context::Scope context_scope(context);
 
   argv = uv_setup_args(argc, argv);
-  std::shared_ptr<node::InitializationResultImpl> result =
-    node::InitializeOncePerProcessInternal(
+  if (!node_init_called) {
+    std::shared_ptr<node::InitializationResultImpl> result =
+      node::InitializeOncePerProcessInternal(
 					   std::vector<std::string>(argv, argv + argc),
 					   node::ProcessInitializationFlags::kNWJS);
-  for (const std::string& error : result->errors()) {
-    node::FPrintF(stderr, "%s: %s\n", result->args().at(0), error);
+    args = result->args();
+    exec_args = result->exec_args();
+    node_init_called = true;
+    for (const std::string& error : result->errors()) {
+      node::FPrintF(stderr, "%s: %s\n", result->args().at(0), error);
+    }
   }
 
   if (!node::thread_ctx_created) {
@@ -1977,9 +1986,7 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
   platform->RegisterIsolate(isolate, uv_default_loop());
   node::IsolateData* isolate_data = node::CreateIsolateData(isolate, uv_default_loop(), platform);
   node::NewContext(isolate, v8::Local<v8::ObjectTemplate>(), false);
-  std::vector<std::string> args(argv, argv + argc);
-  std::vector<std::string> exec_args;
-  tls_ctx->env = node::CreateEnvironment(isolate_data, context, result->args(), result->exec_args());
+  tls_ctx->env = node::CreateEnvironment(isolate_data, context, args, exec_args);
   isolate->SetFatalErrorHandler(node::OnFatalError);
   isolate->AddMessageListener(node::errors::PerIsolateMessageListener);
   //isolate->SetAutorunMicrotasks(false);

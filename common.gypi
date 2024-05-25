@@ -266,6 +266,7 @@
               'VCCLCompilerTool': {
                 'AdditionalOptions': [
                   '/Zc:dllexportInlines-',
+		  '/std:c++17',
                 ],
               },
             },

@@ -339,7 +339,7 @@ MaybeLocal<Module> ModuleWrap::CompileSourceTextModule(
     bool* cache_rejected) {
   Isolate* isolate = realm->isolate();
   EscapableHandleScope scope(isolate);
-  ScriptOrigin origin(isolate,
+  ScriptOrigin origin(
                       url,
                       line_offset,
                       column_offset,
@@ -549,7 +549,6 @@ void ModuleWrap::Evaluate(const FunctionCallbackInfo<Value>& args) {
 
   ShouldNotAbortOnUncaughtScope no_abort_scope(realm->env());
   TryCatchScope try_catch(realm->env());
-  Isolate::SafeForTerminationScope safe_for_termination(isolate);
 
   bool timed_out = false;
   bool received_signal = false;

@@ -1056,7 +1056,8 @@ static int32_t FastInternalModuleStat(
   auto path = std::filesystem::path(input.data, input.data + input.length);
   if (UNLIKELY(!env->permission()->is_granted(
           env, permission::PermissionScope::kFileSystemRead, path.string()))) {
-    options.fallback = true;
+    THROW_IF_INSUFFICIENT_PERMISSIONS(
+      env, permission::PermissionScope::kFileSystemRead, path.string(), -1);
     return -1;
   }
 

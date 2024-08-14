@@ -78,7 +78,7 @@ void NodeCategorySet::New(const FunctionCallbackInfo<Value>& args) {
 void NodeCategorySet::Enable(const FunctionCallbackInfo<Value>& args) {
 #if 0
   NodeCategorySet* category_set;
-  ASSIGN_OR_RETURN_UNWRAP(&category_set, args.Holder());
+  ASSIGN_OR_RETURN_UNWRAP(&category_set, args.This());
   CHECK_NOT_NULL(category_set);
   const auto& categories = category_set->GetCategories();
   if (!category_set->enabled_ && !categories.empty()) {
@@ -97,7 +97,7 @@ void Dummy(const FunctionCallbackInfo<Value>& args) {
 void NodeCategorySet::Disable(const FunctionCallbackInfo<Value>& args) {
 #if 0
   NodeCategorySet* category_set;
-  ASSIGN_OR_RETURN_UNWRAP(&category_set, args.Holder());
+  ASSIGN_OR_RETURN_UNWRAP(&category_set, args.This());
   CHECK_NOT_NULL(category_set);
   const auto& categories = category_set->GetCategories();
   if (category_set->enabled_ && !categories.empty()) {

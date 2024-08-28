@@ -13,6 +13,8 @@
 #include "stream_base-inl.h"
 #include "util-inl.h"
 
+#include "nbytes.h"
+
 #include <algorithm>
 #include <memory>
 #include <string>
@@ -455,8 +457,8 @@ Origins::Origins(
   }
 
   // Make sure the start address is aligned appropriately for an nghttp2_nv*.
-  char* start = AlignUp(static_cast<char*>(bs_->Data()),
-                        alignof(nghttp2_origin_entry));
+  char* start = nbytes::AlignUp(static_cast<char*>(bs_->Data()),
+                                alignof(nghttp2_origin_entry));
   char* origin_contents = start + (count_ * sizeof(nghttp2_origin_entry));
   nghttp2_origin_entry* const nva =
       reinterpret_cast<nghttp2_origin_entry*>(start);
@@ -1654,11 +1656,12 @@ void Http2Session::HandleSettingsFrame(const nghttp2_frame* frame) {
         int32_t settings_id = iv[i].settings_id;
         if (settings_id >=
             IDX_SETTINGS_COUNT) {  // unsupported, additional settings
+          auto iv_value = iv[i].value;
           for (size_t j = 0; j < numsettings; ++j) {
             if ((remote_custom_settings_.entries[j].settings_id & 0xFFFF) ==
                 settings_id) {
               remote_custom_settings_.entries[j].settings_id = settings_id;
-              remote_custom_settings_.entries[j].value = iv[i].value;
+              remote_custom_settings_.entries[j].value = iv_value;
               break;
             }
           }

@@ -18,6 +18,7 @@ const {
   getCallSite,
   getTTYfd,
   hasCrypto,
+  hasIntl,
   hasIPv6,
   hasMultiLocalhost,
   isAIX,
@@ -29,7 +30,7 @@ const {
   isLinuxPPCBE,
   isMainThread,
   isOpenBSD,
-  isOSX,
+  isMacOS,
   isSunOS,
   isWindows,
   localIPv6Hosts,
@@ -50,7 +51,6 @@ const {
   skipIfDumbTerminal,
   skipIfEslintMissing,
   skipIfInspectorDisabled,
-  skipIfWorker,
   spawnPromisified,
 } = common;
 
@@ -73,6 +73,7 @@ export {
   getPort,
   getTTYfd,
   hasCrypto,
+  hasIntl,
   hasIPv6,
   hasMultiLocalhost,
   isAIX,
@@ -84,7 +85,7 @@ export {
   isLinuxPPCBE,
   isMainThread,
   isOpenBSD,
-  isOSX,
+  isMacOS,
   isSunOS,
   isWindows,
   localIPv6Hosts,
@@ -105,6 +106,5 @@ export {
   skipIfDumbTerminal,
   skipIfEslintMissing,
   skipIfInspectorDisabled,
-  skipIfWorker,
   spawnPromisified,
 };

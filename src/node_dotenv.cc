@@ -14,13 +14,15 @@ using v8::String;
 std::vector<std::string> Dotenv::GetPathFromArgs(
     const std::vector<std::string>& args) {
   const auto find_match = [](const std::string& arg) {
-    const std::string_view flag = "--env-file";
-    return strncmp(arg.c_str(), flag.data(), flag.size()) == 0;
+    return arg == "--" || arg == "--env-file" || arg.starts_with("--env-file=");
   };
   std::vector<std::string> paths;
   auto path = std::find_if(args.begin(), args.end(), find_match);
 
   while (path != args.end()) {
+    if (*path == "--") {
+      return paths;
+    }
     auto equal_char = path->find('=');
 
     if (equal_char != std::string::npos) {
@@ -42,10 +44,6 @@ std::vector<std::string> Dotenv::GetPathFromArgs(
 }
 
 void Dotenv::SetEnvironment(node::Environment* env) {
-  if (store_.empty()) {
-    return;
-  }
-
   auto isolate = env->isolate();
 
   for (const auto& entry : store_) {
@@ -67,7 +65,7 @@ void Dotenv::SetEnvironment(node::Environment* env) {
   }
 }
 
-Local<Object> Dotenv::ToObject(Environment* env) {
+Local<Object> Dotenv::ToObject(Environment* env) const {
   Local<Object> result = Object::New(env->isolate());
 
   for (const auto& entry : store_) {
@@ -133,14 +131,14 @@ void Dotenv::ParseContent(const std::string_view input) {
     key = content.substr(0, equal);
     content.remove_prefix(equal + 1);
     key = trim_spaces(key);
+    content = trim_spaces(content);
 
     if (key.empty()) {
       break;
     }
 
     // Remove export prefix from key
-    auto have_export = key.compare(0, 7, "export ") == 0;
-    if (have_export) {
+    if (key.starts_with("export ")) {
       key.remove_prefix(7);
     }
 
@@ -263,7 +261,7 @@ Dotenv::ParseResult Dotenv::ParsePath(const std::string_view path) {
   return ParseResult::Valid;
 }
 
-void Dotenv::AssignNodeOptionsIfAvailable(std::string* node_options) {
+void Dotenv::AssignNodeOptionsIfAvailable(std::string* node_options) const {
   auto match = store_.find("NODE_OPTIONS");
 
   if (match != store_.end()) {

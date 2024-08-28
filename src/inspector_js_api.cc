@@ -182,6 +182,9 @@ void SetConsoleExtensionInstaller(const FunctionCallbackInfo<Value>& info) {
 
 void CallAndPauseOnStart(const FunctionCallbackInfo<v8::Value>& args) {
   Environment* env = Environment::GetCurrent(args);
+  THROW_IF_INSUFFICIENT_PERMISSIONS(env,
+                                    permission::PermissionScope::kInspector,
+                                    "PauseOnNextJavascriptStatement");
   CHECK_GT(args.Length(), 1);
   CHECK(args[0]->IsFunction());
   SlicedArguments call_args(args, /* start */ 2);
@@ -268,6 +271,30 @@ static void RegisterAsyncHookWrapper(const FunctionCallbackInfo<Value>& args) {
     enable_function, disable_function);
 }
 
+void EmitProtocolEvent(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+  CHECK(args[0]->IsString());
+  Local<String> eventName = args[0].As<String>();
+  CHECK(args[1]->IsString());
+  Local<String> params = args[1].As<String>();
+
+  env->inspector_agent()->EmitProtocolEvent(
+      ToProtocolString(env->isolate(), eventName)->string(),
+      ToProtocolString(env->isolate(), params)->string());
+}
+
+void SetupNetworkTracking(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+
+  CHECK(args[0]->IsFunction());
+  Local<Function> enable_function = args[0].As<Function>();
+  CHECK(args[1]->IsFunction());
+  Local<Function> disable_function = args[1].As<Function>();
+
+  env->inspector_agent()->SetupNetworkTracking(enable_function,
+                                               disable_function);
+}
+
 void IsEnabled(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
   args.GetReturnValue().Set(env->inspector_agent()->IsListening());
@@ -352,6 +379,8 @@ void Initialize(Local<Object> target, Local<Value> unused,
 
   SetMethod(context, target, "registerAsyncHook", RegisterAsyncHookWrapper);
   SetMethodNoSideEffect(context, target, "isEnabled", IsEnabled);
+  SetMethod(context, target, "emitProtocolEvent", EmitProtocolEvent);
+  SetMethod(context, target, "setupNetworkTracking", SetupNetworkTracking);
 
   Local<String> console_string = FIXED_ONE_BYTE_STRING(isolate, "console");
 
@@ -385,6 +414,8 @@ void RegisterExternalReferences(ExternalReferenceRegistry* registry) {
 
   registry->Register(RegisterAsyncHookWrapper);
   registry->Register(IsEnabled);
+  registry->Register(EmitProtocolEvent);
+  registry->Register(SetupNetworkTracking);
 
   registry->Register(JSBindingsConnection<LocalConnection>::New);
   registry->Register(JSBindingsConnection<LocalConnection>::Dispatch);

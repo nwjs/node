@@ -164,14 +164,14 @@ parser.add_argument("--fully-static",
     dest="fully_static",
     default=None,
     help="Generate an executable without external dynamic libraries. This "
-         "will not work on OSX when using the default compilation environment")
+         "will not work on macOS when using the default compilation environment")
 
 parser.add_argument("--partly-static",
     action="store_true",
     dest="partly_static",
     default=None,
     help="Generate an executable with libgcc and libstdc++ libraries. This "
-         "will not work on OSX when using the default compilation environment")
+         "will not work on macOS when using the default compilation environment")
 
 parser.add_argument("--enable-vtune-profiling",
     action="store_true",
@@ -397,7 +397,7 @@ shared_optgroup.add_argument('--shared-uvwasi-libname',
     action='store',
     dest='shared_uvwasi_libname',
     default='uvwasi',
-    help='alternative lib name to link to [default: %default]')
+    help='alternative lib name to link to [default: %(default)s]')
 
 shared_optgroup.add_argument('--shared-uvwasi-libpath',
     action='store',
@@ -537,6 +537,29 @@ shared_optgroup.add_argument('--shared-cares-libpath',
     action='store',
     dest='shared_cares_libpath',
     help='a directory to search for the shared cares DLL')
+
+shared_optgroup.add_argument('--shared-sqlite',
+    action='store_true',
+    dest='shared_sqlite',
+    default=None,
+    help='link to a shared sqlite DLL instead of static linking')
+
+shared_optgroup.add_argument('--shared-sqlite-includes',
+    action='store',
+    dest='shared_sqlite_includes',
+    help='directory containing sqlite header files')
+
+shared_optgroup.add_argument('--shared-sqlite-libname',
+    action='store',
+    dest='shared_sqlite_libname',
+    default='sqlite3',
+    help='alternative lib name to link to [default: %(default)s]')
+
+shared_optgroup.add_argument('--shared-sqlite-libpath',
+    action='store',
+    dest='shared_sqlite_libpath',
+    help='a directory to search for the shared sqlite DLL')
+
 
 for builtin in shareable_builtins:
   builtin_id = 'shared_builtin_' + builtin + '_path'
@@ -741,6 +764,12 @@ http2_optgroup.add_argument('--debug-nghttp2',
     dest='debug_nghttp2',
     default=None,
     help='build nghttp2 with DEBUGBUILD (default is false)')
+
+parser.add_argument('--without-amaro',
+    action='store_true',
+    dest='without_amaro',
+    default=None,
+    help='do not install the bundled Amaro (TypeScript utils)')
 
 parser.add_argument('--without-npm',
     action='store_true',
@@ -1283,6 +1312,9 @@ def host_arch_win():
 
   return matchup.get(arch, 'ia32')
 
+def set_configuration_variable(configs, name, release=None, debug=None):
+  configs['Release'][name] = release
+  configs['Debug'][name] = debug
 
 def configure_arm(o):
   if options.arm_float_abi:
@@ -1355,6 +1387,7 @@ def configure_node(o):
   o['variables']['node_prefix'] = options.prefix
   o['variables']['node_install_npm'] = b(not options.without_npm)
   o['variables']['node_install_corepack'] = b(not options.without_corepack)
+  o['variables']['node_use_amaro'] = b(not options.without_amaro)
   o['variables']['debug_node'] = b(options.debug_node)
   o['default_configuration'] = 'Debug' if options.debug else 'Release'
   o['variables']['error_on_warn'] = b(options.error_on_warn)
@@ -1597,12 +1630,13 @@ def configure_library(lib, output, pkgname=None):
       output['libraries'] += pkg_libs.split()
 
 
-def configure_v8(o):
+def configure_v8(o, configs):
+  set_configuration_variable(configs, 'v8_enable_v8_checks', release=1, debug=0)
+
   o['variables']['v8_enable_webassembly'] = 0 if options.v8_lite_mode else 1
   o['variables']['v8_enable_javascript_promise_hooks'] = 1
   o['variables']['v8_enable_lite_mode'] = 1 if options.v8_lite_mode else 0
   o['variables']['v8_enable_gdbjit'] = 1 if options.gdb else 0
-  o['variables']['v8_no_strict_aliasing'] = 1  # Work around compiler bugs.
   o['variables']['v8_optimized_debug'] = 0 if options.v8_non_optimized_debug else 1
   o['variables']['dcheck_always_on'] = 1 if options.v8_with_dchecks else 0
   o['variables']['v8_enable_object_print'] = 0 if options.v8_disable_object_print else 1
@@ -1612,10 +1646,10 @@ def configure_v8(o):
   o['variables']['v8_enable_maglev'] = B(not options.v8_disable_maglev and
                                          o['variables']['target_arch'] in maglev_enabled_architectures)
   o['variables']['v8_enable_pointer_compression'] = 1 if options.enable_pointer_compression else 0
+  o['variables']['v8_enable_sandbox'] = 1 if options.enable_pointer_compression else 0
   o['variables']['v8_enable_31bit_smis_on_64bit_arch'] = 1 if options.enable_pointer_compression else 0
   o['variables']['v8_enable_shared_ro_heap'] = 0 if options.enable_pointer_compression or options.disable_shared_ro_heap else 1
   o['variables']['v8_enable_extensible_ro_snapshot'] = 0
-  o['variables']['v8_enable_v8_checks'] = 1 if options.debug else 0
   o['variables']['v8_trace_maps'] = 1 if options.trace_maps else 0
   o['variables']['node_use_v8_platform'] = b(not options.without_v8_platform)
   o['variables']['node_use_bundled_v8'] = b(not options.without_bundled_v8)
@@ -1722,7 +1756,7 @@ def configure_openssl(o):
 def configure_static(o):
   if options.fully_static or options.partly_static:
     if flavor == 'mac':
-      warn("Generation of static executable will not work on OSX "
+      warn("Generation of static executable will not work on macOS "
             "when using the default compilation environment")
       return
 
@@ -2131,6 +2165,10 @@ output = {
   'defines': [],
   'cflags': [],
 }
+configurations = {
+  'Release': { 'variables': {} },
+  'Debug': { 'variables': {} },
+}
 
 # Print a warning when the compiler is too old.
 check_compiler(output)
@@ -2156,8 +2194,9 @@ configure_library('cares', output, pkgname='libcares')
 configure_library('nghttp2', output, pkgname='libnghttp2')
 configure_library('nghttp3', output, pkgname='libnghttp3')
 configure_library('ngtcp2', output, pkgname='libngtcp2')
+configure_library('sqlite', output, pkgname='sqlite3')
 configure_library('uvwasi', output, pkgname='libuvwasi')
-configure_v8(output)
+configure_v8(output, configurations)
 configure_openssl(output)
 configure_intl(output)
 configure_static(output)
@@ -2180,7 +2219,6 @@ output['variables']['ossfuzz'] = b(options.ossfuzz)
 # move everything else to target_defaults
 variables = output['variables']
 del output['variables']
-variables['is_debug'] = B(options.debug)
 
 # make_global_settings should be a root level element too
 if 'make_global_settings' in output:
@@ -2188,6 +2226,9 @@ if 'make_global_settings' in output:
   del output['make_global_settings']
 else:
   make_global_settings = False
+
+# Add configurations to target defaults
+output['configurations'] = configurations
 
 output = {
   'variables': variables,
@@ -2199,7 +2240,7 @@ if make_global_settings:
 print_verbose(output)
 
 write('config.gypi', do_not_edit +
-      pprint.pformat(output, indent=2, width=1024) + '\n')
+      pprint.pformat(output, indent=2, width=128) + '\n')
 
 write('config.status', '#!/bin/sh\nset -x\nexec ./configure ' +
       ' '.join([shlex.quote(arg) for arg in original_argv]) + '\n')

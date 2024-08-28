@@ -2580,6 +2580,16 @@ disconnected socket.
 
 A call was made and the UDP subsystem was not running.
 
+<a id="ERR_SQLITE_ERROR"></a>
+
+### `ERR_SQLITE_ERROR`
+
+<!-- YAML
+added: v22.5.0
+-->
+
+An error was returned from [SQLite][].
+
 <a id="ERR_SRI_PARSE"></a>
 
 ### `ERR_SRI_PARSE`
@@ -3105,6 +3115,54 @@ The `Worker` instance terminated because it reached its memory limit.
 The path for the main script of a worker is neither an absolute path
 nor a relative path starting with `./` or `../`.
 
+<a id="ERR_WORKER_MESSAGING_ERRORED"></a>
+
+### `ERR_WORKER_MESSAGING_ERRORED`
+
+<!-- YAML
+added: v22.5.0
+-->
+
+> Stability: 1.1 - Active development
+
+The destination thread threw an error while processing a message sent via [`postMessageToThread()`][].
+
+<a id="ERR_WORKER_MESSAGING_FAILED"></a>
+
+### `ERR_WORKER_MESSAGING_FAILED`
+
+<!-- YAML
+added: v22.5.0
+-->
+
+> Stability: 1.1 - Active development
+
+The thread requested in [`postMessageToThread()`][] is invalid or has no `workerMessage` listener.
+
+<a id="ERR_WORKER_MESSAGING_SAME_THREAD"></a>
+
+### `ERR_WORKER_MESSAGING_SAME_THREAD`
+
+<!-- YAML
+added: v22.5.0
+-->
+
+> Stability: 1.1 - Active development
+
+The thread id requested in [`postMessageToThread()`][] is the current thread id.
+
+<a id="ERR_WORKER_MESSAGING_TIMEOUT"></a>
+
+### `ERR_WORKER_MESSAGING_TIMEOUT`
+
+<!-- YAML
+added: v22.5.0
+-->
+
+> Stability: 1.1 - Active development
+
+Sending a message via [`postMessageToThread()`][] timed out.
+
 <a id="ERR_WORKER_UNSERIALIZABLE_ERROR"></a>
 
 ### `ERR_WORKER_UNSERIALIZABLE_ERROR`
@@ -3138,7 +3196,7 @@ changes:
 -->
 
 Too much HTTP header data was received. In order to protect against malicious or
-malconfigured clients, if more than 8 KiB of HTTP header data is received then
+malconfigured clients, if more than `maxHeaderSize` of HTTP header data is received then
 HTTP parsing will abort without a request or response object being created, and
 an `Error` with this code will be emitted.
 
@@ -3508,23 +3566,6 @@ removed: v10.0.0
 -->
 
 Used by the `Node-API` when `Constructor.prototype` is not an object.
-
-<a id="ERR_NETWORK_IMPORT_BAD_RESPONSE"></a>
-
-### `ERR_NETWORK_IMPORT_BAD_RESPONSE`
-
-> Stability: 1 - Experimental
-
-Response was received but was invalid when importing a module over the network.
-
-<a id="ERR_NETWORK_IMPORT_DISALLOWED"></a>
-
-### `ERR_NETWORK_IMPORT_DISALLOWED`
-
-> Stability: 1 - Experimental
-
-A network module attempted to load another module that it is not allowed to
-load. Likely this restriction is for security reasons.
 
 <a id="ERR_NO_LONGER_SUPPORTED"></a>
 
@@ -3958,6 +3999,16 @@ The public key in the certificate SubjectPublicKeyInfo could not be read.
 
 An error occurred trying to allocate memory. This should never happen.
 
+<a id="ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING"></a>
+
+#### `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`
+
+<!-- YAML
+added: v22.6.0
+-->
+
+Type stripping is not supported for files descendent of a `node_modules` directory.
+
 [ES Module]: esm.md
 [ICU]: intl.md#internationalization-support
 [JSON Web Key Elliptic Curve Registry]: https://www.iana.org/assignments/jose/jose.xhtml#web-key-elliptic-curve
@@ -3965,6 +4016,7 @@ An error occurred trying to allocate memory. This should never happen.
 [Node.js error codes]: #nodejs-error-codes
 [Permission Model]: permissions.md#permission-model
 [RFC 7230 Section 3]: https://tools.ietf.org/html/rfc7230#section-3
+[SQLite]: sqlite.md
 [Subresource Integrity specification]: https://www.w3.org/TR/SRI/#the-integrity-attribute
 [V8's stack trace API]: https://v8.dev/docs/stack-trace-api
 [WHATWG Supported Encodings]: util.md#whatwg-supported-encodings
@@ -4017,6 +4069,7 @@ An error occurred trying to allocate memory. This should never happen.
 [`new URLSearchParams(iterable)`]: url.md#new-urlsearchparamsiterable
 [`package.json`]: packages.md#nodejs-packagejson-field-definitions
 [`postMessage()`]: worker_threads.md#portpostmessagevalue-transferlist
+[`postMessageToThread()`]: worker_threads.md#workerpostmessagetothreadthreadid-value-transferlist-timeout
 [`process.on('exit')`]: process.md#event-exit
 [`process.send()`]: process.md#processsendmessage-sendhandle-options-callback
 [`process.setUncaughtExceptionCaptureCallback()`]: process.md#processsetuncaughtexceptioncapturecallbackfn

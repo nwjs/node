@@ -124,7 +124,6 @@ class NodeArrayBufferAllocator : public ArrayBufferAllocator {
   void* Allocate(size_t size) override;  // Defined in src/node.cc
   void* AllocateUninitialized(size_t size) override;
   void Free(void* data, size_t size) override;
-  void* Reallocate(void* data, size_t old_size, size_t size) override;
   void Free(void* data, size_t size, AllocationMode mode) override;
   virtual void RegisterPointer(void* data, size_t size) {
     total_mem_usage_.fetch_add(size, std::memory_order_relaxed);
@@ -153,7 +152,6 @@ class DebuggingArrayBufferAllocator final : public NodeArrayBufferAllocator {
   void* Allocate(size_t size) override;
   void* AllocateUninitialized(size_t size) override;
   void Free(void* data, size_t size) override;
-  void* Reallocate(void* data, size_t old_size, size_t size) override;
   void RegisterPointer(void* data, size_t size) override;
   void UnregisterPointer(void* data, size_t size) override;
 
@@ -217,7 +215,17 @@ v8::MaybeLocal<v8::Value> InternalMakeCallback(
     const v8::Local<v8::Function> callback,
     int argc,
     v8::Local<v8::Value> argv[],
-    async_context asyncContext);
+    async_context asyncContext,
+    v8::Local<v8::Value> context_frame);
+
+v8::MaybeLocal<v8::Value> InternalMakeCallback(
+    v8::Isolate* isolate,
+    v8::Local<v8::Object> recv,
+    const v8::Local<v8::Function> callback,
+    int argc,
+    v8::Local<v8::Value> argv[],
+    async_context asyncContext,
+    v8::Local<v8::Value> context_frame);
 
 v8::MaybeLocal<v8::Value> MakeSyncCallback(v8::Isolate* isolate,
                                            v8::Local<v8::Object> recv,
@@ -237,10 +245,13 @@ class InternalCallbackScope {
     // compatibility issues, but it shouldn't.)
     kSkipTaskQueues = 2
   };
-  InternalCallbackScope(Environment* env,
-                        v8::Local<v8::Object> object,
-                        const async_context& asyncContext,
-                        int flags = kNoFlags);
+  InternalCallbackScope(
+      Environment* env,
+      v8::Local<v8::Object> object,
+      const async_context& asyncContext,
+      int flags = kNoFlags,
+      v8::Local<v8::Value> context_frame = v8::Local<v8::Value>());
+
   // Utility that can be used by AsyncWrap classes.
   explicit InternalCallbackScope(AsyncWrap* async_wrap, int flags = 0);
   ~InternalCallbackScope();
@@ -258,6 +269,7 @@ class InternalCallbackScope {
   bool failed_ = false;
   bool pushed_ids_ = false;
   bool closed_ = false;
+  v8::Global<v8::Value> prior_context_frame_;
 };
 
 class DebugSealHandleScope {
@@ -367,7 +379,7 @@ bool HasSignalJSHandler(int signum);
 
 #ifdef _WIN32
 typedef SYSTEMTIME TIME_TYPE;
-#else  // UNIX, OSX
+#else  // UNIX, macOS
 typedef struct tm TIME_TYPE;
 #endif
 
@@ -416,10 +428,6 @@ using HeapSnapshotPointer =
 BaseObjectPtr<AsyncWrap> CreateHeapSnapshotStream(
     Environment* env, HeapSnapshotPointer&& snapshot);
 }  // namespace heap
-
-namespace fs {
-std::string Basename(const std::string& str, const std::string& extension);
-}  // namespace fs
 
 node_module napi_module_to_node_module(const napi_module* mod);
 

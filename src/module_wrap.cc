@@ -125,7 +125,7 @@ v8::Maybe<bool> ModuleWrap::CheckUnsettledTopLevelAwait() {
 
   auto stalled_messages =
       std::get<1>(module->GetStalledTopLevelAwaitMessages(isolate));
-  if (stalled_messages.size() == 0) {
+  if (stalled_messages.empty()) {
     return v8::Just(true);
   }
 
@@ -312,6 +312,14 @@ void ModuleWrap::New(const FunctionCallbackInfo<Value>& args) {
     return;
   }
 
+  // Initialize an empty slot for source map cache before the object is frozen.
+  if (that->SetPrivate(context,
+                       realm->isolate_data()->source_map_data_private_symbol(),
+                       Undefined(isolate))
+          .IsNothing()) {
+    return;
+  }
+
   // Use the extras object as an object whose GetCreationContext() will be the
   // original `context`, since the `Context` itself strictly speaking cannot
   // be stored in an internal field.
@@ -339,8 +347,7 @@ MaybeLocal<Module> ModuleWrap::CompileSourceTextModule(
     bool* cache_rejected) {
   Isolate* isolate = realm->isolate();
   EscapableHandleScope scope(isolate);
-  ScriptOrigin origin(
-                      url,
+  ScriptOrigin origin(url,
                       line_offset,
                       column_offset,
                       true,            // is cross origin
@@ -423,9 +430,9 @@ static Local<Array> createModuleRequestsContainer(
 
     Local<String> specifier = module_request->GetSpecifier();
 
-    // Contains the import assertions for this request in the form:
+    // Contains the import attributes for this request in the form:
     // [key1, value1, source_offset1, key2, value2, source_offset2, ...].
-    Local<FixedArray> raw_attributes = module_request->GetImportAssertions();
+    Local<FixedArray> raw_attributes = module_request->GetImportAttributes();
     Local<Object> attributes =
         createImportAttributesContainer(realm, isolate, raw_attributes, 3);
 
@@ -1012,6 +1019,69 @@ void ModuleWrap::CreateCachedData(const FunctionCallbackInfo<Value>& args) {
   }
 }
 
+// This v8::Module::ResolveModuleCallback simply links `import 'original'`
+// to the env->temporary_required_module_facade_original() which is stashed
+// right before this callback is called and will be restored as soon as
+// v8::Module::Instantiate() returns.
+MaybeLocal<Module> LinkRequireFacadeWithOriginal(
+    Local<Context> context,
+    Local<String> specifier,
+    Local<FixedArray> import_attributes,
+    Local<Module> referrer) {
+  Environment* env = Environment::GetCurrent(context);
+  Isolate* isolate = context->GetIsolate();
+  CHECK(specifier->Equals(context, env->original_string()).ToChecked());
+  CHECK(!env->temporary_required_module_facade_original.IsEmpty());
+  return env->temporary_required_module_facade_original.Get(isolate);
+}
+
+// Wraps an existing source text module with a facade that adds
+// .__esModule = true to the exports.
+// See env->required_module_facade_source_string() for the source.
+void ModuleWrap::CreateRequiredModuleFacade(
+    const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  Local<Context> context = isolate->GetCurrentContext();
+  Environment* env = Environment::GetCurrent(context);
+  CHECK(args[0]->IsObject());  // original module
+  Local<Object> wrap = args[0].As<Object>();
+  ModuleWrap* original;
+  ASSIGN_OR_RETURN_UNWRAP(&original, wrap);
+
+  // Use the same facade source and URL to hit the compilation cache.
+  ScriptOrigin origin(env->required_module_facade_url_string(),
+                      0,               // line offset
+                      0,               // column offset
+                      true,            // is cross origin
+                      -1,              // script id
+                      Local<Value>(),  // source map URL
+                      false,           // is opaque (?)
+                      false,           // is WASM
+                      true);           // is ES Module
+  ScriptCompiler::Source source(env->required_module_facade_source_string(),
+                                origin);
+
+  // The module facade instantiation simply links `import 'original'` in the
+  // facade with the original module and should never fail.
+  Local<Module> facade =
+      ScriptCompiler::CompileModule(isolate, &source).ToLocalChecked();
+  // Stash the original module in temporary_required_module_facade_original
+  // for the LinkRequireFacadeWithOriginal() callback to pick it up.
+  CHECK(env->temporary_required_module_facade_original.IsEmpty());
+  env->temporary_required_module_facade_original.Reset(
+      isolate, original->module_.Get(isolate));
+  CHECK(facade->InstantiateModule(context, LinkRequireFacadeWithOriginal)
+            .IsJust());
+  env->temporary_required_module_facade_original.Reset();
+
+  // The evaluation of the facade is synchronous.
+  Local<Value> evaluated = facade->Evaluate(context).ToLocalChecked();
+  CHECK(evaluated->IsPromise());
+  CHECK_EQ(evaluated.As<Promise>()->State(), Promise::PromiseState::kFulfilled);
+
+  args.GetReturnValue().Set(facade->GetModuleNamespace());
+}
+
 void ModuleWrap::CreatePerIsolateProperties(IsolateData* isolate_data,
                                             Local<ObjectTemplate> target) {
   Isolate* isolate = isolate_data->isolate();
@@ -1044,6 +1114,10 @@ void ModuleWrap::CreatePerIsolateProperties(IsolateData* isolate_data,
             target,
             "setInitializeImportMetaObjectCallback",
             SetInitializeImportMetaObjectCallback);
+  SetMethod(isolate,
+            target,
+            "createRequiredModuleFacade",
+            CreateRequiredModuleFacade);
 }
 
 void ModuleWrap::CreatePerContextProperties(Local<Object> target,
@@ -1083,6 +1157,8 @@ void ModuleWrap::RegisterExternalReferences(
   registry->Register(GetNamespace);
   registry->Register(GetStatus);
   registry->Register(GetError);
+
+  registry->Register(CreateRequiredModuleFacade);
 
   registry->Register(SetImportModuleDynamicallyCallback);
   registry->Register(SetInitializeImportMetaObjectCallback);

@@ -45,8 +45,11 @@ There are four fundamental stream types within Node.js:
   is written and read (for example, [`zlib.createDeflate()`][]).
 
 Additionally, this module includes the utility functions
-[`stream.pipeline()`][], [`stream.finished()`][], [`stream.Readable.from()`][]
-and [`stream.addAbortSignal()`][].
+[`stream.duplexPair()`][],
+[`stream.pipeline()`][],
+[`stream.finished()`][]
+[`stream.Readable.from()`][], and
+[`stream.addAbortSignal()`][].
 
 ### Streams Promises API
 
@@ -952,6 +955,17 @@ added: v12.3.0
 
 Getter for the property `objectMode` of a given `Writable` stream.
 
+##### `writable[Symbol.asyncDispose]()`
+
+<!-- YAML
+added: v22.4.0
+-->
+
+> Stability: 1 - Experimental
+
+Calls [`writable.destroy()`][writable-destroy] with an `AbortError` and returns
+a promise that fulfills when the stream is finished.
+
 ##### `writable.write(chunk[, encoding][, callback])`
 
 <!-- YAML
@@ -1278,9 +1292,11 @@ changes:
 -->
 
 The `'readable'` event is emitted when there is data available to be read from
-the stream or when the end of the stream has been reached. Effectively, the
-`'readable'` event indicates that the stream has new information. If data is
-available, [`stream.read()`][stream-read] will return that data.
+the stream, up to the configured high water mark (`state.highWaterMark`). Effectively,
+it indicates that the stream has new information within the buffer. If data is available
+within this buffer, [`stream.read()`][stream-read] can be called to retrieve that data.
+Additionally, the `'readable'` event may also be emitted when the end of the stream has been
+reached.
 
 ```js
 const readable = getReadableStreamSomehow();
@@ -1549,13 +1565,14 @@ readable.on('end', () => {
 });
 ```
 
-Each call to `readable.read()` returns a chunk of data, or `null`. The chunks
-are not concatenated. A `while` loop is necessary to consume all data
-currently in the buffer. When reading a large file `.read()` may return `null`,
-having consumed all buffered content so far, but there is still more data to
-come not yet buffered. In this case a new `'readable'` event will be emitted
-when there is more data in the buffer. Finally the `'end'` event will be
-emitted when there is no more data to come.
+Each call to `readable.read()` returns a chunk of data or `null`, signifying
+that there's no more data to read at that moment. These chunks aren't automatically
+concatenated. Because a single `read()` call does not return all the data, using
+a while loop may be necessary to continuously read chunks until all data is retrieved.
+When reading a large file, `.read()` might return `null` temporarily, indicating
+that it has consumed all buffered content but there may be more data yet to be
+buffered. In such cases, a new `'readable'` event is emitted once there's more
+data in the buffer, and the `'end'` event signifies the end of data transmission.
 
 Therefore to read a file's whole contents from a `readable`, it is necessary
 to collect chunks across multiple `'readable'` events:
@@ -2661,6 +2678,30 @@ unless `emitClose` is set in false.
 Once `destroy()` has been called, any further calls will be a no-op and no
 further errors except from `_destroy()` may be emitted as `'error'`.
 
+#### `stream.duplexPair([options])`
+
+<!-- YAML
+added: v22.6.0
+-->
+
+* `options` {Object} A value to pass to both [`Duplex`][] constructors,
+  to set options such as buffering.
+* Returns: {Array} of two [`Duplex`][] instances.
+
+The utility function `duplexPair` returns an Array with two items,
+each being a `Duplex` stream connected to the other side:
+
+```js
+const [ sideA, sideB ] = duplexPair();
+```
+
+Whatever is written to one stream is made readable on the other. It provides
+behavior analogous to a network connection, where the data written by the client
+becomes readable by the server, and vice-versa.
+
+The Duplex streams are symmetrical; one or the other may be used without any
+difference in behavior.
+
 ### `stream.finished(stream[, options], callback)`
 
 <!-- YAML
@@ -3408,7 +3449,7 @@ added:
 * Returns: {integer}
 
 Returns the default highWaterMark used by streams.
-Defaults to `16384` (16 KiB), or `16` for `objectMode`.
+Defaults to `65536` (64 KiB), or `16` for `objectMode`.
 
 ### `stream.setDefaultHighWaterMark(objectMode, value)`
 
@@ -4851,6 +4892,7 @@ contain multi-byte characters.
 [`stream.addAbortSignal()`]: #streamaddabortsignalsignal-stream
 [`stream.compose`]: #streamcomposestreams
 [`stream.cork()`]: #writablecork
+[`stream.duplexPair()`]: #streamduplexpairoptions
 [`stream.finished()`]: #streamfinishedstream-options-callback
 [`stream.pipe()`]: #readablepipedestination-options
 [`stream.pipeline()`]: #streampipelinesource-transforms-destination-callback

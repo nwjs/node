@@ -162,6 +162,8 @@ const customTypesMap = {
   'module.SourceMap':
     'module.html#class-modulesourcemap',
 
+  'MockModuleContext': 'test.html#class-mockmodulecontext',
+
   'require': 'modules.html#requireid',
 
   'Handle': 'net.html#serverlistenhandle-backlog-callback',
@@ -197,6 +199,8 @@ const customTypesMap = {
 
   'repl.REPLServer': 'repl.html#class-replserver',
 
+  'StatementSync': 'sqlite.html#class-statementsync',
+
   'Stream': 'stream.html#stream',
   'stream.Duplex': 'stream.html#class-streamduplex',
   'Duplex': 'stream.html#class-streamduplex',
@@ -218,6 +222,9 @@ const customTypesMap = {
   'tls.TLSSocket': 'tls.html#class-tlstlssocket',
 
   'Tracing': 'tracing.html#tracing-object',
+
+  'tty.ReadStream': 'tty.html#class-ttyreadstream',
+  'tty.WriteStream': 'tty.html#class-ttywritestream',
 
   'URL': 'url.html#the-whatwg-url-api',
   'URLSearchParams': 'url.html#class-urlsearchparams',
@@ -307,8 +314,8 @@ export function toLink(typeInput) {
           `<a href="${typeUrl}" class="type">&lt;${typeTextFull}&gt;</a>`);
       } else {
         throw new Error(
-          `Unrecognized type: '${typeTextFull}'.\n` +
-          `Please, edit the type or update '${import.meta.url}'.`,
+          `Unrecognized type: '${typeTextFull}' in '${import.meta.url}'.\n` +
+          'Valid types can be found at https://github.com/nodejs/node/blob/HEAD/tools/doc/type-parser.mjs',
         );
       }
     } else {

@@ -9,6 +9,7 @@
 #include "node_external_reference.h"
 #include "node_internals.h"
 #include "node_process-inl.h"
+#include "path.h"
 #include "util-inl.h"
 #include "uv.h"
 #include "v8-fast-api-calls.h"
@@ -83,6 +84,8 @@ static void Chdir(const FunctionCallbackInfo<Value>& args) {
   CHECK_EQ(args.Length(), 1);
   CHECK(args[0]->IsString());
   Utf8Value path(env->isolate(), args[0]);
+  THROW_IF_INSUFFICIENT_PERMISSIONS(
+      env, permission::PermissionScope::kFileSystemRead, path.ToStringView());
   int err = uv_chdir(*path);
   if (err) {
     // Also include the original working directory, since that will usually
@@ -472,7 +475,8 @@ static void LoadEnvFile(const v8::FunctionCallbackInfo<v8::Value>& args) {
   Environment* env = Environment::GetCurrent(args);
   std::string path = ".env";
   if (args.Length() == 1) {
-    Utf8Value path_value(args.GetIsolate(), args[0]);
+    BufferValue path_value(args.GetIsolate(), args[0]);
+    ToNamespacedPath(env, &path_value);
     path = path_value.ToString();
   }
 

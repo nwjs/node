@@ -1021,6 +1021,9 @@ try {
 <!-- YAML
 added: v16.7.0
 changes:
+  - version: v22.3.0
+    pr-url: https://github.com/nodejs/node/pull/53127
+    description: This API is no longer experimental.
   - version:
     - v20.1.0
     - v18.17.0
@@ -1035,8 +1038,6 @@ changes:
                  whether to perform path resolution for symlinks.
 -->
 
-> Stability: 1 - Experimental
-
 * `src` {string|URL} source path to copy.
 * `dest` {string|URL} destination path to copy to.
 * `options` {Object}
@@ -1049,7 +1050,8 @@ changes:
     that resolves to `true` or `false` **Default:** `undefined`.
     * `src` {string} source path to copy.
     * `dest` {string} destination path to copy to.
-    * Returns: {boolean|Promise}
+    * Returns: {boolean|Promise} A value that is coercible to `boolean` or
+      a `Promise` that fulfils with such value.
   * `force` {boolean} overwrite existing file or directory. The copy
     operation will ignore errors if you set this to false and the destination
     exists. Use the `errorOnExist` option to change this behavior.
@@ -2387,6 +2389,7 @@ changes:
 * `dest` {string|Buffer|URL} destination filename of the copy operation
 * `mode` {integer} modifiers for copy operation. **Default:** `0`.
 * `callback` {Function}
+  * `err` {Error}
 
 Asynchronously copies `src` to `dest`. By default, `dest` is overwritten if it
 already exists. No arguments other than a possible exception are given to the
@@ -2428,6 +2431,9 @@ copyFile('source.txt', 'destination.txt', constants.COPYFILE_EXCL, callback);
 <!-- YAML
 added: v16.7.0
 changes:
+  - version: v22.3.0
+    pr-url: https://github.com/nodejs/node/pull/53127
+    description: This API is no longer experimental.
   - version:
     - v20.1.0
     - v18.17.0
@@ -2447,8 +2453,6 @@ changes:
                  whether to perform path resolution for symlinks.
 -->
 
-> Stability: 1 - Experimental
-
 * `src` {string|URL} source path to copy.
 * `dest` {string|URL} destination path to copy to.
 * `options` {Object}
@@ -2461,7 +2465,8 @@ changes:
     that resolves to `true` or `false` **Default:** `undefined`.
     * `src` {string} source path to copy.
     * `dest` {string} destination path to copy to.
-    * Returns: {boolean|Promise}
+    * Returns: {boolean|Promise} A value that is coercible to `boolean` or
+      a `Promise` that fulfils with such value.
   * `force` {boolean} overwrite existing file or directory. The copy
     operation will ignore errors if you set this to false and the destination
     exists. Use the `errorOnExist` option to change this behavior.
@@ -2474,6 +2479,7 @@ changes:
   * `verbatimSymlinks` {boolean} When `true`, path resolution for symlinks will
     be skipped. **Default:** `false`
 * `callback` {Function}
+  * `err` {Error}
 
 Asynchronously copies the entire directory structure from `src` to `dest`,
 including subdirectories and files.
@@ -2730,7 +2736,7 @@ changes:
 * `callback` {Function}
   * `exists` {boolean}
 
-Test whether or not the given path exists by checking with the file system.
+Test whether or not the element at the given `path` exists by checking with the file system.
 Then call the `callback` argument with either true or false:
 
 ```mjs
@@ -2746,6 +2752,9 @@ callbacks.** Normally, the first parameter to a Node.js callback is an `err`
 parameter, optionally followed by other parameters. The `fs.exists()` callback
 has only one boolean parameter. This is one reason `fs.access()` is recommended
 instead of `fs.exists()`.
+
+If `path` is a symbolic link, it is followed. Thus, if `path` exists but points
+to a non-existent element, the callback will receive the value `false`.
 
 Using `fs.exists()` to check for the existence of a file before calling
 `fs.open()`, `fs.readFile()`, or `fs.writeFile()` is not recommended. Doing
@@ -5466,6 +5475,9 @@ copyFileSync('source.txt', 'destination.txt', constants.COPYFILE_EXCL);
 <!-- YAML
 added: v16.7.0
 changes:
+  - version: v22.3.0
+    pr-url: https://github.com/nodejs/node/pull/53127
+    description: This API is no longer experimental.
   - version:
     - v20.1.0
     - v18.17.0
@@ -5480,8 +5492,6 @@ changes:
                  whether to perform path resolution for symlinks.
 -->
 
-> Stability: 1 - Experimental
-
 * `src` {string|URL} source path to copy.
 * `dest` {string|URL} destination path to copy to.
 * `options` {Object}
@@ -5493,7 +5503,8 @@ changes:
     all of its contents will be skipped as well. **Default:** `undefined`
     * `src` {string} source path to copy.
     * `dest` {string} destination path to copy to.
-    * Returns: {boolean}
+    * Returns: {boolean} Any non-`Promise` value that is coercible
+      to `boolean`.
   * `force` {boolean} overwrite existing file or directory. The copy
     operation will ignore errors if you set this to false and the destination
     exists. Use the `errorOnExist` option to change this behavior.

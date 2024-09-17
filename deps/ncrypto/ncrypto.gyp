@@ -10,8 +10,7 @@
     {
       'target_name': 'ncrypto',
       'type': 'static_library',
-      'include_dirs': [ '.', '<(DEPTH)/third_party/libc++/src/include',
-                        '<(DEPTH)/buildtools/third_party/libc++/',
+      'include_dirs': [ '.',
        ],
       'direct_dependent_settings': {
         'include_dirs': ['.'],
@@ -22,6 +21,11 @@
           'dependencies': [
             '../openssl/openssl.gyp:openssl'
           ]
+        }],
+        [ 'OS in "win"', {
+          'include_dirs': [ '<(DEPTH)/third_party/libc++/src/include',
+                            '<(DEPTH)/buildtools/third_party/libc++/',
+          ],
         }],
       ]
     },

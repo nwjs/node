@@ -41,6 +41,7 @@ set msi=
 set upload=
 set licensertf=
 set lint_js=
+set lint_js_build=
 set lint_js_fix=
 set lint_cpp=
 set lint_md=
@@ -69,6 +70,7 @@ set openssl_no_asm=
 set no_shared_roheap=
 set doc=
 set extra_msbuild_args=
+set compile_commands=
 set exit_code=0
 
 :next-arg
@@ -116,10 +118,10 @@ if /i "%1"=="test-v8-benchmarks" set test_v8_benchmarks=1&set custom_v8_test=1&g
 if /i "%1"=="test-v8-all"       set test_v8=1&set test_v8_intl=1&set test_v8_benchmarks=1&set custom_v8_test=1&goto arg-ok
 if /i "%1"=="lint-cpp"      set lint_cpp=1&goto arg-ok
 if /i "%1"=="lint-js"       set lint_js=1&goto arg-ok
+if /i "%1"=="lint-js-build" set lint_js_build=1&goto arg-ok
 if /i "%1"=="lint-js-fix"   set lint_js_fix=1&goto arg-ok
 if /i "%1"=="jslint"        set lint_js=1&echo Please use lint-js instead of jslint&goto arg-ok
 if /i "%1"=="lint-md"       set lint_md=1&goto arg-ok
-if /i "%1"=="lint-md-build" set lint_md_build=1&goto arg-ok
 if /i "%1"=="lint"          set lint_cpp=1&set lint_js=1&set lint_md=1&goto arg-ok
 if /i "%1"=="lint-ci"       set lint_cpp=1&set lint_js_ci=1&goto arg-ok
 if /i "%1"=="format-md"     set format_md=1&goto arg-ok
@@ -145,6 +147,7 @@ if /i "%1"=="openssl-no-asm"   set openssl_no_asm=1&goto arg-ok
 if /i "%1"=="no-shared-roheap" set no_shared_roheap=1&goto arg-ok
 if /i "%1"=="doc"           set doc=1&goto arg-ok
 if /i "%1"=="binlog"        set extra_msbuild_args=/binaryLogger:out\%config%\node.binlog&goto arg-ok
+if /i "%1"=="compile-commands" set compile_commands=1&goto arg-ok
 
 echo Error: invalid command line option `%1`.
 exit /b 1
@@ -203,7 +206,12 @@ if defined debug_nghttp2    set configure_flags=%configure_flags% --debug-nghttp
 if defined openssl_no_asm   set configure_flags=%configure_flags% --openssl-no-asm
 if defined no_shared_roheap set configure_flags=%configure_flags% --disable-shared-readonly-heap
 if defined DEBUG_HELPER     set configure_flags=%configure_flags% --verbose
-if "%target_arch%"=="x86" if "%PROCESSOR_ARCHITECTURE%"=="AMD64" set configure_flags=%configure_flags% --no-cross-compiling
+if defined compile_commands set configure_flags=%configure_flags% -C
+
+if "%target_arch%"=="x86" (
+  echo "32-bit Windows builds are not supported anymore."
+  exit /b 1
+)
 
 if not exist "%~dp0deps\icu" goto no-depsicu
 if "%target%"=="Clean" echo deleting %~dp0deps\icu
@@ -220,7 +228,7 @@ if "%target%"=="TestClean" (
 call tools\msvs\find_python.cmd
 if errorlevel 1 goto :exit
 
-REM NASM is only needed on IA32 and x86_64.
+REM NASM is only needed on x86_64.
 if not defined openssl_no_asm if "%target_arch%" NEQ "arm64" call tools\msvs\find_nasm.cmd
 if errorlevel 1 echo Could not find NASM, install it or build with openssl-no-asm. See BUILDING.md.
 
@@ -236,9 +244,7 @@ if defined noprojgen if defined nobuild goto :after-build
 
 @rem Set environment for msbuild
 
-set msvs_host_arch=x86
-if _%PROCESSOR_ARCHITECTURE%_==_AMD64_ set msvs_host_arch=amd64
-if _%PROCESSOR_ARCHITEW6432%_==_AMD64_ set msvs_host_arch=amd64
+set msvs_host_arch=amd64
 if _%PROCESSOR_ARCHITECTURE%_==_ARM64_ set msvs_host_arch=arm64
 @rem usually vcvarsall takes an argument: host + '_' + target
 set vcvarsall_arg=%msvs_host_arch%_%target_arch%
@@ -348,8 +354,7 @@ if defined nobuild goto :after-build
 @rem Build the sln with msbuild.
 set "msbcpu=/m:2"
 if "%NUMBER_OF_PROCESSORS%"=="1" set "msbcpu=/m:1"
-set "msbplatform=Win32"
-if "%target_arch%"=="x64" set "msbplatform=x64"
+set "msbplatform=x64"
 if "%target_arch%"=="arm64" set "msbplatform=ARM64"
 if "%target%"=="Build" (
   if defined no_cctest set target=node
@@ -542,38 +547,36 @@ if not defined SSHCONFIG (
 )
 
 if not defined STAGINGSERVER set STAGINGSERVER=node-www
-if not defined CLOUDFLARE_ENDPOINT set CLOUDFLARE_ENDPOINT=https://07be8d2fbc940503ca1be344714cb0d1.r2.cloudflarestorage.com
-if not defined CLOUDFLARE_BUCKET set CLOUDFLARE_BUCKET=dist-staging
-if not defined CLOUDFLARE_PROFILE set CLOUDFLARE_PROFILE=worker
+if not defined CLOUDFLARE_BUCKET set CLOUDFLARE_BUCKET=r2:dist-staging
 ssh -F %SSHCONFIG% %STAGINGSERVER% "mkdir -p nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%"
 if errorlevel 1 goto exit
 scp -F %SSHCONFIG% Release\node.exe %STAGINGSERVER%:nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node.exe
 if errorlevel 1 goto exit
-ssh -F %SSHCONFIG% %STAGINGSERVER% "aws s3 cp nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node.exe s3://%CLOUDFLARE_BUCKET%/nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node.exe --endpoint=%CLOUDFLARE_ENDPOINT% --profile=%CLOUDFLARE_PROFILE%"
+ssh -F %SSHCONFIG% %STAGINGSERVER% "rclone copyto nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node.exe %CLOUDFLARE_BUCKET%/nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node.exe"
 if errorlevel 1 goto exit
 scp -F %SSHCONFIG% Release\node.lib %STAGINGSERVER%:nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node.lib
 if errorlevel 1 goto exit
-ssh -F %SSHCONFIG% %STAGINGSERVER% "aws s3 cp nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node.lib s3://%CLOUDFLARE_BUCKET%/nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node.lib --endpoint=%CLOUDFLARE_ENDPOINT% --profile=%CLOUDFLARE_PROFILE%"
+ssh -F %SSHCONFIG% %STAGINGSERVER% "rclone copyto nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node.lib %CLOUDFLARE_BUCKET%/nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node.lib"
 if errorlevel 1 goto exit
 scp -F %SSHCONFIG% Release\node_pdb.zip %STAGINGSERVER%:nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node_pdb.zip
 if errorlevel 1 goto exit
-ssh -F %SSHCONFIG% %STAGINGSERVER% "aws s3 cp nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node_pdb.zip s3://%CLOUDFLARE_BUCKET%/nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node_pdb.zip --endpoint=%CLOUDFLARE_ENDPOINT% --profile=%CLOUDFLARE_PROFILE%"
+ssh -F %SSHCONFIG% %STAGINGSERVER% "rclone copyto nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node_pdb.zip %CLOUDFLARE_BUCKET%/nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node_pdb.zip"
 if errorlevel 1 goto exit
 scp -F %SSHCONFIG% Release\node_pdb.7z %STAGINGSERVER%:nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node_pdb.7z
 if errorlevel 1 goto exit
-ssh -F %SSHCONFIG% %STAGINGSERVER% "aws s3 cp nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node_pdb.7z s3://%CLOUDFLARE_BUCKET%/nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node_pdb.7z --endpoint=%CLOUDFLARE_ENDPOINT% --profile=%CLOUDFLARE_PROFILE%"
+ssh -F %SSHCONFIG% %STAGINGSERVER% "rclone copyto nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node_pdb.7z %CLOUDFLARE_BUCKET%/nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%/node_pdb.7z"
 if errorlevel 1 goto exit
 scp -F %SSHCONFIG% Release\%TARGET_NAME%.7z %STAGINGSERVER%:nodejs/%DISTTYPEDIR%/v%FULLVERSION%/%TARGET_NAME%.7z
 if errorlevel 1 goto exit
-ssh -F %SSHCONFIG% %STAGINGSERVER% "aws s3 cp nodejs/%DISTTYPEDIR%/v%FULLVERSION%/%TARGET_NAME%.7z s3://%CLOUDFLARE_BUCKET%/nodejs/%DISTTYPEDIR%/v%FULLVERSION%/%TARGET_NAME%.7z --endpoint=%CLOUDFLARE_ENDPOINT% --profile=%CLOUDFLARE_PROFILE%"
+ssh -F %SSHCONFIG% %STAGINGSERVER% "rclone copyto nodejs/%DISTTYPEDIR%/v%FULLVERSION%/%TARGET_NAME%.7z %CLOUDFLARE_BUCKET%/nodejs/%DISTTYPEDIR%/v%FULLVERSION%/%TARGET_NAME%.7z"
 if errorlevel 1 goto exit
 scp -F %SSHCONFIG% Release\%TARGET_NAME%.zip %STAGINGSERVER%:nodejs/%DISTTYPEDIR%/v%FULLVERSION%/%TARGET_NAME%.zip
 if errorlevel 1 goto exit
-ssh -F %SSHCONFIG% %STAGINGSERVER% "aws s3 cp nodejs/%DISTTYPEDIR%/v%FULLVERSION%/%TARGET_NAME%.zip s3://%CLOUDFLARE_BUCKET%/nodejs/%DISTTYPEDIR%/v%FULLVERSION%/%TARGET_NAME%.zip --endpoint=%CLOUDFLARE_ENDPOINT% --profile=%CLOUDFLARE_PROFILE%"
+ssh -F %SSHCONFIG% %STAGINGSERVER% "rclone copyto nodejs/%DISTTYPEDIR%/v%FULLVERSION%/%TARGET_NAME%.zip %CLOUDFLARE_BUCKET%/nodejs/%DISTTYPEDIR%/v%FULLVERSION%/%TARGET_NAME%.zip"
 if errorlevel 1 goto exit
 scp -F %SSHCONFIG% node-v%FULLVERSION%-%target_arch%.msi %STAGINGSERVER%:nodejs/%DISTTYPEDIR%/v%FULLVERSION%/
 if errorlevel 1 goto exit
-ssh -F %SSHCONFIG% %STAGINGSERVER% "aws s3 cp nodejs/%DISTTYPEDIR%/v%FULLVERSION%/node-v%FULLVERSION%-%target_arch%.msi s3://%CLOUDFLARE_BUCKET%/nodejs/%DISTTYPEDIR%/v%FULLVERSION%/node-v%FULLVERSION%-%target_arch%.msi --endpoint=%CLOUDFLARE_ENDPOINT% --profile=%CLOUDFLARE_PROFILE%"
+ssh -F %SSHCONFIG% %STAGINGSERVER% "rclone copyto nodejs/%DISTTYPEDIR%/v%FULLVERSION%/node-v%FULLVERSION%-%target_arch%.msi %CLOUDFLARE_BUCKET%/nodejs/%DISTTYPEDIR%/v%FULLVERSION%/node-v%FULLVERSION%-%target_arch%.msi"
 if errorlevel 1 goto exit
 ssh -F %SSHCONFIG% %STAGINGSERVER% "touch nodejs/%DISTTYPEDIR%/v%FULLVERSION%/node-v%FULLVERSION%-%target_arch%.msi.done nodejs/%DISTTYPEDIR%/v%FULLVERSION%/%TARGET_NAME%.zip.done nodejs/%DISTTYPEDIR%/v%FULLVERSION%/%TARGET_NAME%.7z.done nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%.done && chmod -R ug=rw-x+X,o=r+X nodejs/%DISTTYPEDIR%/v%FULLVERSION%/node-v%FULLVERSION%-%target_arch%.* nodejs/%DISTTYPEDIR%/v%FULLVERSION%/win-%target_arch%*"
 if errorlevel 1 goto exit
@@ -728,7 +731,13 @@ goto lint-js
 
 :run-make-lint
 %NODEJS_MAKE% lint-cpp
-goto lint-js
+goto lint-js-build
+
+:lint-js-build
+if not defined lint_js_build if not defined lint_js if not defined lint_js_fix goto lint-md-build
+cd tools\eslint
+%npm_exe% ci
+cd ..\..
 
 :lint-js
 if not defined lint_js goto lint-js-fix
@@ -738,24 +747,21 @@ echo running lint-js
 goto lint-js-fix
 
 :lint-js-fix
-if not defined lint_js_fix goto lint-md-build
+if not defined lint_js_fix goto lint-md
 if not exist tools\eslint\node_modules\eslint goto no-lint
 echo running lint-js-fix
 %node_exe% tools\eslint\node_modules\eslint\bin\eslint.js --cache --max-warnings=0 --report-unused-disable-directives --rule "@stylistic/js/linebreak-style: 0" eslint.config.mjs benchmark doc lib test tools --fix
 goto lint-md-build
 
-:no-lint
-echo Linting is not available through the source tarball.
-echo Use the git repo instead: $ git clone https://github.com/nodejs/node.git
-goto lint-md-build
-
 :lint-md-build
-if not defined lint_md_build goto lint-md
-echo "Deprecated no-op target 'lint_md_build'"
-goto lint-md
+if not defined lint_md if not defined format_md goto lint-md
+cd tools\lint-md
+%npm_exe% ci
+cd ..\..
 
 :lint-md
 if not defined lint_md goto format-md
+if not exist tools\lint-md\node_modules goto no-lint
 echo Running Markdown linter on docs...
 SETLOCAL ENABLEDELAYEDEXPANSION
 set lint_md_files=
@@ -770,6 +776,7 @@ goto format-md
 
 :format-md
 if not defined format_md goto exit
+if not exist tools\lint-md\node_modules goto no-lint
 echo Running Markdown formatter on docs...
 SETLOCAL ENABLEDELAYEDEXPANSION
 set lint_md_files=
@@ -780,6 +787,10 @@ for /D %%D IN (doc\*) do (
 )
 %node_exe% tools\lint-md\lint-md.mjs --format %lint_md_files%
 ENDLOCAL
+
+:no-lint
+echo Linting is not available through the source tarball.
+echo Use the git repo instead: $ git clone https://github.com/nodejs/node.git
 goto exit
 
 :create-msvs-files-failed
@@ -789,7 +800,7 @@ set exit_code=1
 goto exit
 
 :help
-echo vcbuild.bat [debug/release] [msi] [doc] [test/test-all/test-addons/test-doc/test-js-native-api/test-node-api/test-internet/test-tick-processor/test-known-issues/test-node-inspect/test-check-deopts/test-npm/test-v8/test-v8-intl/test-v8-benchmarks/test-v8-all] [ignore-flaky] [static/dll] [noprojgen] [projgen] [clang-cl] [small-icu/full-icu/without-intl] [nobuild] [nosnapshot] [nonpm] [nocorepack] [ltcg] [licensetf] [sign] [ia32/x86/x64/arm64] [vs2022] [download-all] [enable-vtune] [lint/lint-ci/lint-js/lint-md] [lint-md-build] [format-md] [package] [build-release] [upload] [no-NODE-OPTIONS] [link-module path-to-module] [debug-http2] [debug-nghttp2] [clean] [cctest] [no-cctest] [openssl-no-asm]
+echo vcbuild.bat [debug/release] [msi] [doc] [test/test-all/test-addons/test-doc/test-js-native-api/test-node-api/test-internet/test-tick-processor/test-known-issues/test-node-inspect/test-check-deopts/test-npm/test-v8/test-v8-intl/test-v8-benchmarks/test-v8-all] [ignore-flaky] [static/dll] [noprojgen] [projgen] [clang-cl] [small-icu/full-icu/without-intl] [nobuild] [nosnapshot] [nonpm] [nocorepack] [ltcg] [licensetf] [sign] [x64/arm64] [vs2022] [download-all] [enable-vtune] [lint/lint-ci/lint-js/lint-md] [lint-md-build] [format-md] [package] [build-release] [upload] [no-NODE-OPTIONS] [link-module path-to-module] [debug-http2] [debug-nghttp2] [clean] [cctest] [no-cctest] [openssl-no-asm]
 echo Examples:
 echo   vcbuild.bat                          : builds release build
 echo   vcbuild.bat debug                    : builds debug build

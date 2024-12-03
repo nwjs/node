@@ -46,6 +46,7 @@ expected.beforePreExec = new Set([
   'NativeModule internal/assert',
   'NativeModule internal/util/inspect',
   'NativeModule internal/util/debuglog',
+  'NativeModule internal/streams/utils',
   'NativeModule internal/timers',
   'NativeModule events',
   'Internal Binding buffer',
@@ -103,6 +104,7 @@ expected.beforePreExec = new Set([
   'NativeModule diagnostics_channel',
   'Internal Binding wasm_web_api',
   'NativeModule internal/events/abort_listener',
+  'NativeModule internal/modules/typescript',
 ]);
 
 expected.atRunTime = new Set([
@@ -116,7 +118,6 @@ expected.atRunTime = new Set([
 
 if (common.isMainThread) {
   [
-    'NativeModule internal/idna',
     'NativeModule url',
   ].forEach(expected.beforePreExec.add.bind(expected.beforePreExec));
 } else {  // Worker.

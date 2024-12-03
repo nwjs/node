@@ -48,7 +48,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.18',
+    'v8_embedder_string': '-node.11',
 
     ##### V8 defaults for Node.js #####
 
@@ -871,7 +871,7 @@
           ['clang==1', {
             'xcode_settings': {
               'GCC_VERSION': 'com.apple.compilers.llvm.clang.1_0',
-              'CLANG_CXX_LANGUAGE_STANDARD': 'gnu++20',  # -std=gnu++17
+              'CLANG_CXX_LANGUAGE_STANDARD': 'gnu++20',  # -std=gnu++20
               'CLANG_CXX_LIBRARY': 'libc++',
             },
           }],

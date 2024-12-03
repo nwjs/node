@@ -21,6 +21,7 @@ using v8::ArrayBufferView;
 using v8::BackingStore;
 using v8::Boolean;
 using v8::Context;
+using v8::Date;
 using v8::EscapableHandleScope;
 using v8::Function;
 using v8::FunctionCallbackInfo;
@@ -102,8 +103,7 @@ void Fingerprint(const FunctionCallbackInfo<Value>& args) {
 
 MaybeLocal<Value> ToV8Value(Local<Context> context, BIOPointer&& bio) {
   if (!bio) return {};
-  BUF_MEM* mem;
-  BIO_get_mem_ptr(bio.get(), &mem);
+  BUF_MEM* mem = bio;
   Local<Value> ret;
   if (!String::NewFromUtf8(context->GetIsolate(),
                            mem->data,
@@ -161,8 +161,7 @@ MaybeLocal<Value> ToV8Value(Local<Context> context, const ASN1_STRING* str) {
 
 MaybeLocal<Value> ToV8Value(Local<Context> context, const BIOPointer& bio) {
   if (!bio) return {};
-  BUF_MEM* mem;
-  BIO_get_mem_ptr(bio.get(), &mem);
+  BUF_MEM* mem = bio;
   Local<Value> ret;
   if (!String::NewFromUtf8(context->GetIsolate(),
                            mem->data,
@@ -175,8 +174,7 @@ MaybeLocal<Value> ToV8Value(Local<Context> context, const BIOPointer& bio) {
 
 MaybeLocal<Value> ToBuffer(Environment* env, BIOPointer* bio) {
   if (bio == nullptr || !*bio) return {};
-  BUF_MEM* mem;
-  BIO_get_mem_ptr(bio->get(), &mem);
+  BUF_MEM* mem = *bio;
   auto backing = ArrayBuffer::NewBackingStore(
       mem->data,
       mem->length,
@@ -239,6 +237,18 @@ MaybeLocal<Value> GetValidTo(Environment* env, const ncrypto::X509View& view) {
     return {};
   }
   return ret;
+}
+
+MaybeLocal<Value> GetValidFromDate(Environment* env,
+                                   const ncrypto::X509View& view) {
+  int64_t validFromTime = view.getValidFromTime();
+  return Date::New(env->context(), validFromTime * 1000.);
+}
+
+MaybeLocal<Value> GetValidToDate(Environment* env,
+                                 const ncrypto::X509View& view) {
+  int64_t validToTime = view.getValidToTime();
+  return Date::New(env->context(), validToTime * 1000.);
 }
 
 MaybeLocal<Value> GetSerialNumber(Environment* env,
@@ -352,6 +362,26 @@ void ValidTo(const FunctionCallbackInfo<Value>& args) {
   }
 }
 
+void ValidFromDate(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+  X509Certificate* cert;
+  ASSIGN_OR_RETURN_UNWRAP(&cert, args.This());
+  Local<Value> ret;
+  if (GetValidFromDate(env, cert->view()).ToLocal(&ret)) {
+    args.GetReturnValue().Set(ret);
+  }
+}
+
+void ValidToDate(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+  X509Certificate* cert;
+  ASSIGN_OR_RETURN_UNWRAP(&cert, args.This());
+  Local<Value> ret;
+  if (GetValidToDate(env, cert->view()).ToLocal(&ret)) {
+    args.GetReturnValue().Set(ret);
+  }
+}
+
 void SerialNumber(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
   X509Certificate* cert;
@@ -374,11 +404,11 @@ void PublicKey(const FunctionCallbackInfo<Value>& args) {
     ThrowCryptoError(env, result.error.value_or(0));
     return;
   }
-  std::shared_ptr<KeyObjectData> key_data = KeyObjectData::CreateAsymmetric(
-      kKeyTypePublic, ManagedEVPPKey(std::move(result.value)));
+  auto key_data =
+      KeyObjectData::CreateAsymmetric(kKeyTypePublic, std::move(result.value));
 
   Local<Value> ret;
-  if (KeyObjectHandle::Create(env, std::move(key_data)).ToLocal(&ret)) {
+  if (key_data && KeyObjectHandle::Create(env, key_data).ToLocal(&ret)) {
     args.GetReturnValue().Set(ret);
   }
 }
@@ -416,9 +446,9 @@ void CheckPrivateKey(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[0]->IsObject());
   KeyObjectHandle* key;
   ASSIGN_OR_RETURN_UNWRAP(&key, args[0]);
-  CHECK_EQ(key->Data()->GetKeyType(), kKeyTypePrivate);
+  CHECK_EQ(key->Data().GetKeyType(), kKeyTypePrivate);
   args.GetReturnValue().Set(
-      cert->view().checkPrivateKey(key->Data()->GetAsymmetricKey().pkey()));
+      cert->view().checkPrivateKey(key->Data().GetAsymmetricKey()));
 }
 
 void CheckPublicKey(const FunctionCallbackInfo<Value>& args) {
@@ -428,10 +458,11 @@ void CheckPublicKey(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[0]->IsObject());
   KeyObjectHandle* key;
   ASSIGN_OR_RETURN_UNWRAP(&key, args[0]);
-  CHECK_EQ(key->Data()->GetKeyType(), kKeyTypePublic);
+  // A Public Key can be derived from a private key, so we allow both.
+  CHECK_NE(key->Data().GetKeyType(), kKeyTypeSecret);
 
   args.GetReturnValue().Set(
-      cert->view().checkPublicKey(key->Data()->GetAsymmetricKey().pkey()));
+      cert->view().checkPublicKey(key->Data().GetAsymmetricKey()));
 }
 
 void CheckHost(const FunctionCallbackInfo<Value>& args) {
@@ -664,14 +695,16 @@ MaybeLocal<Object> GetPubKey(Environment* env, OSSL3_CONST RSA* rsa) {
 }
 
 MaybeLocal<Value> GetModulusString(Environment* env, const BIGNUM* n) {
-  BIOPointer bio(BIO_new(BIO_s_mem()));
+  auto bio = BIOPointer::NewMem();
+  if (!bio) return {};
   BN_print(bio.get(), n);
   return ToV8Value(env->context(), bio);
 }
 
 MaybeLocal<Value> GetExponentString(Environment* env, const BIGNUM* e) {
   uint64_t exponent_word = static_cast<uint64_t>(BignumPointer::GetWord(e));
-  BIOPointer bio(BIO_new(BIO_s_mem()));
+  auto bio = BIOPointer::NewMem();
+  if (!bio) return {};
   BIO_printf(bio.get(), "0x%" PRIx64, exponent_word);
   return ToV8Value(env->context(), bio);
 }
@@ -834,6 +867,8 @@ Local<FunctionTemplate> X509Certificate::GetConstructorTemplate(
     SetProtoMethodNoSideEffect(isolate, tmpl, "issuer", Issuer);
     SetProtoMethodNoSideEffect(isolate, tmpl, "validTo", ValidTo);
     SetProtoMethodNoSideEffect(isolate, tmpl, "validFrom", ValidFrom);
+    SetProtoMethodNoSideEffect(isolate, tmpl, "validToDate", ValidToDate);
+    SetProtoMethodNoSideEffect(isolate, tmpl, "validFromDate", ValidFromDate);
     SetProtoMethodNoSideEffect(
         isolate, tmpl, "fingerprint", Fingerprint<EVP_sha1>);
     SetProtoMethodNoSideEffect(
@@ -1001,6 +1036,8 @@ void X509Certificate::RegisterExternalReferences(
   registry->Register(Issuer);
   registry->Register(ValidTo);
   registry->Register(ValidFrom);
+  registry->Register(ValidToDate);
+  registry->Register(ValidFromDate);
   registry->Register(Fingerprint<EVP_sha1>);
   registry->Register(Fingerprint<EVP_sha256>);
   registry->Register(Fingerprint<EVP_sha512>);

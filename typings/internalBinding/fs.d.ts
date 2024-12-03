@@ -113,7 +113,7 @@ declare namespace InternalFSBinding {
   function futimes(fd: number, atime: number, mtime: number): void;
   function futimes(fd: number, atime: number, mtime: number, usePromises: typeof kUsePromises): Promise<void>;
 
-  function internalModuleStat(path: string): number;
+  function internalModuleStat(receiver: unknown, path: string): number;
 
   function lchown(path: string, uid: number, gid: number, req: FSReqCallback): void;
   function lchown(path: string, uid: number, gid: number, req: undefined, ctx: FSSyncContext): void;
@@ -197,6 +197,8 @@ declare namespace InternalFSBinding {
   function rmdir(path: string, req: FSReqCallback): void;
   function rmdir(path: string): void;
   function rmdir(path: string, usePromises: typeof kUsePromises): Promise<void>;
+
+  function rmSync(path: StringOrBuffer, maxRetries: number, recursive: boolean, retryDelay: number): void;
 
   function stat(path: StringOrBuffer, useBigint: boolean, req: FSReqCallback<Float64Array | BigUint64Array>): void;
   function stat(path: StringOrBuffer, useBigint: true, req: FSReqCallback<BigUint64Array>): void;
@@ -282,6 +284,7 @@ export interface FsBinding {
   realpath: typeof InternalFSBinding.realpath;
   rename: typeof InternalFSBinding.rename;
   rmdir: typeof InternalFSBinding.rmdir;
+  rmSync: typeof InternalFSBinding.rmSync;
   stat: typeof InternalFSBinding.stat;
   symlink: typeof InternalFSBinding.symlink;
   unlink: typeof InternalFSBinding.unlink;

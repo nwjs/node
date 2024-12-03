@@ -35,6 +35,7 @@ using v8::Exception;
 using v8::FastApiCallbackOptions;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
+using v8::HandleScope;
 using v8::Integer;
 using v8::Isolate;
 using v8::Local;
@@ -241,14 +242,18 @@ inline void EinvalError() {}
 
 template <typename FT, FT F, typename R, typename... Args>
 R WASI::WasiFunction<FT, F, R, Args...>::FastCallback(
+    Local<Object> unused,
     Local<Object> receiver,
     Args... args,
     // NOLINTNEXTLINE(runtime/references) This is V8 api.
     FastApiCallbackOptions& options) {
   WASI* wasi = reinterpret_cast<WASI*>(BaseObject::FromJSObject(receiver));
-  if (UNLIKELY(wasi == nullptr)) return EinvalError<R>();
+  if (wasi == nullptr) [[unlikely]] {
+    return EinvalError<R>();
+  }
 
-  v8::Isolate* isolate = receiver->GetIsolate();
+  Isolate* isolate = receiver->GetIsolate();
+  HandleScope scope(isolate);
   if (wasi->memory_.IsEmpty()) {
     THROW_ERR_WASI_NOT_STARTED(isolate);
     return EinvalError<R>();

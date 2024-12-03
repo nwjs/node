@@ -2137,7 +2137,7 @@ async function httpNetworkFetch (
 
           // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Encoding
           if (codings.length !== 0 && request.method !== 'HEAD' && request.method !== 'CONNECT' && !nullBodyStatus.includes(status) && !willFollow) {
-            for (let i = 0; i < codings.length; ++i) {
+            for (let i = codings.length - 1; i >= 0; --i) {
               const coding = codings[i]
               // https://www.rfc-editor.org/rfc/rfc9112.html#section-7.2
               if (coding === 'x-gzip' || coding === 'gzip') {
@@ -2150,9 +2150,15 @@ async function httpNetworkFetch (
                   finishFlush: zlib.constants.Z_SYNC_FLUSH
                 }))
               } else if (coding === 'deflate') {
-                decoders.push(createInflate())
+                decoders.push(createInflate({
+                  flush: zlib.constants.Z_SYNC_FLUSH,
+                  finishFlush: zlib.constants.Z_SYNC_FLUSH
+                }))
               } else if (coding === 'br') {
-                decoders.push(zlib.createBrotliDecompress())
+                decoders.push(zlib.createBrotliDecompress({
+                  flush: zlib.constants.BROTLI_OPERATION_FLUSH,
+                  finishFlush: zlib.constants.BROTLI_OPERATION_FLUSH
+                }))
               } else {
                 decoders.length = 0
                 break
@@ -2160,13 +2166,19 @@ async function httpNetworkFetch (
             }
           }
 
+          const onError = this.onError.bind(this)
+
           resolve({
             status,
             statusText,
             headersList,
             body: decoders.length
-              ? pipeline(this.body, ...decoders, () => { })
-              : this.body.on('error', () => { })
+              ? pipeline(this.body, ...decoders, (err) => {
+                if (err) {
+                  this.onError(err)
+                }
+              }).on('error', onError)
+              : this.body.on('error', onError)
           })
 
           return true

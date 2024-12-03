@@ -128,8 +128,10 @@ Metadata::Versions::Versions() {
   cjs_module_lexer = CJS_MODULE_LEXER_VERSION;
   uvwasi = UVWASI_VERSION_STRING;
 
+#ifndef NODE_SHARED_BUILTIN_AMARO_DIST_INDEX_PATH
 #if HAVE_AMARO
   amaro = AMARO_VERSION;
+#endif
 #endif
 
 #if HAVE_OPENSSL
@@ -166,9 +168,7 @@ Metadata::Release::Release() : name(NODE_RELEASE) {
   source_url = NODE_RELEASE_URLFPFX ".tar.gz";
   headers_url = NODE_RELEASE_URLFPFX "-headers.tar.gz";
 #ifdef _WIN32
-  lib_url = strcmp(NODE_ARCH, "ia32") ? NODE_RELEASE_URLPFX "win-" NODE_ARCH
-                                                           "/node.lib"
-                                     : NODE_RELEASE_URLPFX "win-x86/node.lib";
+  lib_url = NODE_RELEASE_URLPFX "win-" NODE_ARCH "/node.lib";
 #endif  // _WIN32
 
 #endif  // NODE_HAS_RELEASE_URLS

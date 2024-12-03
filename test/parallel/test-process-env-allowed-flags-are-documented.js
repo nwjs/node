@@ -86,6 +86,18 @@ const difference = (setA, setB) => {
   return new Set([...setA].filter((x) => !setB.has(x)));
 };
 
+// Remove heap prof options if the inspector is not enabled.
+// NOTE: this is for ubuntuXXXX_sharedlibs_withoutssl_x64, no SSL, no inspector
+// Refs: https://github.com/nodejs/node/pull/54259#issuecomment-2308256647
+if (!process.features.inspector) {
+  [
+    '--heap-prof-dir',
+    '--heap-prof-interval',
+    '--heap-prof-name',
+    '--heap-prof',
+  ].forEach((opt) => documented.delete(opt));
+}
+
 const overdocumented = difference(documented,
                                   process.allowedNodeEnvironmentFlags);
 assert.strictEqual(overdocumented.size, 0,
@@ -99,6 +111,9 @@ const undocumented = difference(process.allowedNodeEnvironmentFlags,
 assert(undocumented.delete('--debug-arraybuffer-allocations'));
 assert(undocumented.delete('--no-debug-arraybuffer-allocations'));
 assert(undocumented.delete('--es-module-specifier-resolution'));
+assert(undocumented.delete('--experimental-fetch'));
+assert(undocumented.delete('--experimental-global-customevent'));
+assert(undocumented.delete('--experimental-global-webcrypto'));
 assert(undocumented.delete('--experimental-report'));
 assert(undocumented.delete('--experimental-worker'));
 assert(undocumented.delete('--node-snapshot'));

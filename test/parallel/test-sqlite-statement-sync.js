@@ -43,7 +43,15 @@ suite('StatementSync.prototype.get()', () => {
     t.assert.strictEqual(stmt.get('key1', 'val1'), undefined);
     t.assert.strictEqual(stmt.get('key2', 'val2'), undefined);
     stmt = db.prepare('SELECT * FROM storage ORDER BY key');
-    t.assert.deepStrictEqual(stmt.get(), { key: 'key1', val: 'val1' });
+    t.assert.deepStrictEqual(stmt.get(), { __proto__: null, key: 'key1', val: 'val1' });
+  });
+
+  test('executes a query that returns special columns', (t) => {
+    const db = new DatabaseSync(nextDb());
+    t.after(() => { db.close(); });
+    const stmt = db.prepare('SELECT 1 as __proto__, 2 as constructor, 3 as toString');
+    // eslint-disable-next-line no-dupe-keys
+    t.assert.deepStrictEqual(stmt.get(), { __proto__: null, ['__proto__']: 1, constructor: 2, toString: 3 });
   });
 });
 
@@ -71,8 +79,8 @@ suite('StatementSync.prototype.all()', () => {
     );
     stmt = db.prepare('SELECT * FROM storage ORDER BY key');
     t.assert.deepStrictEqual(stmt.all(), [
-      { key: 'key1', val: 'val1' },
-      { key: 'key2', val: 'val2' },
+      { __proto__: null, key: 'key1', val: 'val1' },
+      { __proto__: null, key: 'key2', val: 'val2' },
     ]);
   });
 });
@@ -127,8 +135,8 @@ suite('StatementSync.prototype.run()', () => {
   });
 });
 
-suite('StatementSync.prototype.sourceSQL()', () => {
-  test('returns input SQL', (t) => {
+suite('StatementSync.prototype.sourceSQL', () => {
+  test('equals input SQL', (t) => {
     const db = new DatabaseSync(nextDb());
     t.after(() => { db.close(); });
     const setup = db.exec(
@@ -137,12 +145,12 @@ suite('StatementSync.prototype.sourceSQL()', () => {
     t.assert.strictEqual(setup, undefined);
     const sql = 'INSERT INTO types (key, val) VALUES ($k, $v)';
     const stmt = db.prepare(sql);
-    t.assert.strictEqual(stmt.sourceSQL(), sql);
+    t.assert.strictEqual(stmt.sourceSQL, sql);
   });
 });
 
-suite('StatementSync.prototype.expandedSQL()', () => {
-  test('returns expanded SQL', (t) => {
+suite('StatementSync.prototype.expandedSQL', () => {
+  test('equals expanded SQL', (t) => {
     const db = new DatabaseSync(nextDb());
     t.after(() => { db.close(); });
     const setup = db.exec(
@@ -156,7 +164,7 @@ suite('StatementSync.prototype.expandedSQL()', () => {
       stmt.run({ $k: '33' }, '42'),
       { changes: 1, lastInsertRowid: 33 },
     );
-    t.assert.strictEqual(stmt.expandedSQL(), expanded);
+    t.assert.strictEqual(stmt.expandedSQL, expanded);
   });
 });
 
@@ -171,11 +179,11 @@ suite('StatementSync.prototype.setReadBigInts()', () => {
     t.assert.strictEqual(setup, undefined);
 
     const query = db.prepare('SELECT val FROM data');
-    t.assert.deepStrictEqual(query.get(), { val: 42 });
+    t.assert.deepStrictEqual(query.get(), { __proto__: null, val: 42 });
     t.assert.strictEqual(query.setReadBigInts(true), undefined);
-    t.assert.deepStrictEqual(query.get(), { val: 42n });
+    t.assert.deepStrictEqual(query.get(), { __proto__: null, val: 42n });
     t.assert.strictEqual(query.setReadBigInts(false), undefined);
-    t.assert.deepStrictEqual(query.get(), { val: 42 });
+    t.assert.deepStrictEqual(query.get(), { __proto__: null, val: 42 });
 
     const insert = db.prepare('INSERT INTO data (key) VALUES (?)');
     t.assert.deepStrictEqual(
@@ -223,6 +231,7 @@ suite('StatementSync.prototype.setReadBigInts()', () => {
     const good = db.prepare(`SELECT ${Number.MAX_SAFE_INTEGER} + 1`);
     good.setReadBigInts(true);
     t.assert.deepStrictEqual(good.get(), {
+      __proto__: null,
       [`${Number.MAX_SAFE_INTEGER} + 1`]: 2n ** 53n,
     });
   });

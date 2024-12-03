@@ -135,7 +135,10 @@
 'lib/internal/cluster/shared_handle.js',
 'lib/internal/assert/assertion_error.js',
 'lib/internal/assert/calltracker.js',
+'lib/internal/assert/myers_diff.js',
+'lib/internal/assert/utils.js',
 'lib/internal/blob.js',
+'lib/internal/data_url.js',
 'lib/internal/worker.js',
 'lib/internal/child_process/serialization.js',
 'lib/internal/process/finalization.js',
@@ -151,8 +154,8 @@
 'lib/internal/process/warning.js',
 'lib/internal/encoding.js',
 'lib/internal/priority_queue.js',
+'lib/internal/quic/quic.js',
 'lib/internal/modules/package_json_reader.js',
-'lib/internal/modules/esm/fetch_module.js',
 'lib/internal/modules/esm/formats.js',
 'lib/internal/modules/esm/loader.js',
 'lib/internal/modules/esm/module_map.js',
@@ -168,6 +171,7 @@
 'lib/internal/modules/esm/utils.js',
 'lib/internal/modules/esm/worker.js',
 'lib/internal/modules/run_main.js',
+'lib/internal/modules/typescript.js',
 'lib/internal/modules/helpers.js',
 'lib/internal/modules/cjs/loader.js',
 'lib/internal/navigator.js',
@@ -215,7 +219,6 @@
 'lib/internal/webstreams/writablestream.js',
 'lib/internal/webstreams/transformstream.js',
 'lib/internal/vm/module.js',
-'lib/internal/idna.js',
 'lib/internal/bootstrap/realm.js',
 'lib/internal/bootstrap/node.js',
 'lib/internal/bootstrap/shadow_realm.js',
@@ -517,6 +520,7 @@
       'src/compile_cache.h',
       'src/connect_wrap.h',
       'src/connection_wrap.h',
+      'src/cppgc_helpers.h',
       'src/dataqueue/queue.h',
       'src/debug_utils.h',
       'src/debug_utils-inl.h',
@@ -780,11 +784,6 @@
       }, {
         'use_openssl_def%': 0,
       }],
-      [ 'node_use_amaro=="true"', {
-          'deps_files': [
-              'deps/amaro/dist/index.js',
-          ]
-      } ]
     ],
   },
 
@@ -804,16 +803,10 @@
       ],
     },
 
-    # Relevant only for x86.
-    # Refs: https://github.com/nodejs/node/pull/25852
-    # Refs: https://docs.microsoft.com/en-us/cpp/build/reference/safeseh-image-has-safe-exception-handlers
-    'msvs_settings': {
-      'VCLinkerTool': {
-        'ImageHasSafeExceptionHandlers': 'false',
-      },
-    },
-
     'conditions': [
+      ['clang==0 and OS!="win"', {
+        'cflags': [ '-Wno-restrict', ],
+      }],
       # Pointer authentication for ARM64.
       ['target_arch=="arm64"', {
           'target_conditions': [
@@ -1185,7 +1178,6 @@
       'dependencies': [
         'deps/googletest/googletest.gyp:gtest_prod',
         'deps/histogram/histogram.gyp:histogram',
-        'deps/sqlite/sqlite.gyp:sqlite',
         'deps/simdjson/simdjson.gyp:simdjson',
         'deps/simdutf/simdutf.gyp:simdutf',
         'deps/nbytes/nbytes.gyp:nbytes',
@@ -1216,7 +1208,6 @@
         '<@(deps_files)',
         # node.gyp is added by default, common.gypi is added for change detection
         'common.gypi',
-        'common_node.gypi',
       ],
 
       'variables': {
@@ -1239,6 +1230,7 @@
         'USING_V8_SHARED',
         'V8_USE_EXTERNAL_STARTUP_DATA',
         'NODE_OPENSSL_SYSTEM_CERT_PATH="<(openssl_system_ca_path)"',
+        "SQLITE_ENABLE_SESSION",
         '_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_NONE',
       ],
 
@@ -1401,7 +1393,6 @@
       'dependencies': [
         '<(node_lib_target_name)',
         'deps/histogram/histogram.gyp:histogram',
-        'deps/sqlite/sqlite.gyp:sqlite',
       ],
 
       'includes': [
@@ -1413,7 +1404,6 @@
         'deps/v8/include',
         'deps/cares/include',
         'deps/uv/include',
-        'deps/sqlite',
         'test/cctest',
       ],
 
@@ -1446,7 +1436,6 @@
       'dependencies': [
         '<(node_lib_target_name)',
         'deps/histogram/histogram.gyp:histogram',
-        'deps/sqlite/sqlite.gyp:sqlite',
         'deps/uvwasi/uvwasi.gyp:uvwasi',
       ],
       'includes': [
@@ -1457,7 +1446,6 @@
         'tools/msvs/genfiles',
         'deps/v8/include',
         'deps/cares/include',
-        'deps/sqlite',
         'deps/uv/include',
         'deps/uvwasi/include',
         'test/cctest',
@@ -1492,7 +1480,6 @@
         '<(node_lib_target_name)',
         'deps/googletest/googletest.gyp:gtest_prod',
         'deps/histogram/histogram.gyp:histogram',
-        'deps/sqlite/sqlite.gyp:sqlite',
         'deps/uvwasi/uvwasi.gyp:uvwasi',
         'deps/ada/ada.gyp:ada',
         'deps/nbytes/nbytes.gyp:nbytes',
@@ -1505,7 +1492,6 @@
         'tools/msvs/genfiles',
         'deps/v8/include',
         'deps/cares/include',
-        'deps/sqlite',
         'deps/uv/include',
         'deps/uvwasi/include',
         'test/cctest',
@@ -1542,7 +1528,6 @@
         'deps/googletest/googletest.gyp:gtest',
         'deps/googletest/googletest.gyp:gtest_main',
         'deps/histogram/histogram.gyp:histogram',
-        'deps/sqlite/sqlite.gyp:sqlite',
         'deps/simdjson/simdjson.gyp:simdjson',
         'deps/simdutf/simdutf.gyp:simdutf',
         'deps/ada/ada.gyp:ada',
@@ -1559,7 +1544,6 @@
         '../../v8/include',
         'deps/cares/include',
         'deps/uv/include',
-        'deps/sqlite',
         'test/cctest',
       ],
 
@@ -1624,7 +1608,6 @@
       'dependencies': [
         '<(node_lib_target_name)',
         'deps/histogram/histogram.gyp:histogram',
-        'deps/sqlite/sqlite.gyp:sqlite',
         'deps/ada/ada.gyp:ada',
         'deps/nbytes/nbytes.gyp:nbytes',
       ],
@@ -1640,7 +1623,6 @@
         'deps/v8/include',
         'deps/cares/include',
         'deps/uv/include',
-        'deps/sqlite',
         'test/embedding',
       ],
 
@@ -1741,7 +1723,6 @@
       'dependencies': [
         '<(node_lib_target_name)',
         'deps/histogram/histogram.gyp:histogram',
-        'deps/sqlite/sqlite.gyp:sqlite',
         'deps/ada/ada.gyp:ada',
         'deps/nbytes/nbytes.gyp:nbytes',
         'deps/simdjson/simdjson.gyp:simdjson',
@@ -1758,7 +1739,6 @@
         'deps/v8/include',
         'deps/cares/include',
         'deps/uv/include',
-        'deps/sqlite',
       ],
 
       'defines': [ 'NODE_WANT_INTERNALS=1' ],
@@ -1767,6 +1747,12 @@
         'src/node_snapshot_stub.cc',
         'tools/snapshot/node_mksnapshot.cc',
       ],
+
+      'msvs_settings': {
+        'VCLinkerTool': {
+          'EnableCOMDATFolding': '1', # /OPT:NOICF
+        },
+      },
 
       'conditions': [
         ['node_write_snapshot_as_array_literals=="true"', {
@@ -1826,7 +1812,6 @@
             '<@(library_files)',
             '<@(deps_files)',
             'common.gypi',
-            'common_node.gypi',
           ],
           'direct_dependent_settings': {
             'ldflags': [ '-Wl,-brtl' ],

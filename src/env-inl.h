@@ -108,7 +108,7 @@ inline AliasedFloat64Array& AsyncHooks::async_ids_stack() {
 }
 
 v8::Local<v8::Array> AsyncHooks::js_execution_async_resources() {
-  if (UNLIKELY(js_execution_async_resources_.IsEmpty())) {
+  if (js_execution_async_resources_.IsEmpty()) [[unlikely]] {
     js_execution_async_resources_.Reset(
         env()->isolate(), v8::Array::New(env()->isolate()));
   }
@@ -185,13 +185,14 @@ inline bool TickInfo::has_rejection_to_warn() const {
 }
 
 inline Environment* Environment::GetCurrent(v8::Isolate* isolate) {
-  if (UNLIKELY(!isolate->InContext())) return nullptr;
+  if (!isolate->InContext()) [[unlikely]]
+    return nullptr;
   v8::HandleScope handle_scope(isolate);
   return GetCurrent(isolate->GetCurrentContext());
 }
 
 inline Environment* Environment::GetCurrent(v8::Local<v8::Context> context) {
-  if (UNLIKELY(!ContextEmbedderTag::IsNodeContext(context))) {
+  if (!ContextEmbedderTag::IsNodeContext(context)) [[unlikely]] {
     return nullptr;
   }
   return static_cast<Environment*>(
@@ -243,12 +244,6 @@ inline uv_check_t* Environment::immediate_check_handle() {
 
 inline uv_idle_t* Environment::immediate_idle_handle() {
   return &immediate_idle_handle_;
-}
-
-inline void Environment::RegisterHandleCleanup(uv_handle_t* handle,
-                                               HandleCleanupCb cb,
-                                               void* arg) {
-  handle_cleanup_queue_.push_back(HandleCleanup{handle, cb, arg});
 }
 
 template <typename T, typename OnCloseCallback>
@@ -447,6 +442,10 @@ inline double Environment::get_default_trigger_async_id() {
   if (default_trigger_async_id < 0)
     default_trigger_async_id = execution_async_id();
   return default_trigger_async_id;
+}
+
+inline int64_t Environment::stack_trace_limit() const {
+  return isolate_data_->options()->stack_trace_limit;
 }
 
 inline std::shared_ptr<EnvironmentOptions> Environment::options() {
@@ -655,7 +654,8 @@ inline bool Environment::owns_inspector() const {
 
 inline bool Environment::should_create_inspector() const {
   return (flags_ & EnvironmentFlags::kNoCreateInspector) == 0 &&
-         !options_->test_runner && !options_->watch_mode;
+         !(options_->test_runner && options_->test_isolation == "process") &&
+         !options_->watch_mode;
 }
 
 inline bool Environment::should_wait_for_inspector_frontend() const {
@@ -898,6 +898,10 @@ inline void Environment::set_heap_snapshot_near_heap_limit(uint32_t limit) {
 
 inline bool Environment::is_in_heapsnapshot_heap_limit_callback() const {
   return is_in_heapsnapshot_heap_limit_callback_;
+}
+
+inline bool Environment::report_exclude_env() const {
+  return options_->report_exclude_env;
 }
 
 inline void Environment::AddHeapSnapshotNearHeapLimitCallback() {

@@ -24,7 +24,7 @@ for example, they may not trigger garbage collection.
   [`node_external_reference.h`](../../src/node_external_reference.h) file.
   Although, it would not start failing or crashing until the function ends up
   in a snapshot (either the built-in or a user-land one). Please refer to the
-  [binding functions documentation](../../src#binding-functions) for more
+  [binding functions documentation](../../src/README.md#binding-functions) for more
   information.
 * To test fast APIs, make sure to run the tests in a loop with a decent
   iterations count to trigger relevant optimizations that prefer the fast API
@@ -38,6 +38,23 @@ for example, they may not trigger garbage collection.
 * The fast callback must be idempotent up to the point where error and fallback
   conditions are checked, because otherwise executing the slow callback might
   produce visible side effects twice.
+* If the receiver is used in the callback, it must be passed as a second argument,
+  leaving the first one unused, to prevent the JS land from accidentally omitting the receiver when
+  invoking the fast API method.
+
+  ```cpp
+  // Instead of invoking the method as `receiver.internalModuleStat(input)`, the JS land should
+  // invoke it as `internalModuleStat(binding, input)` to make sure the binding is available to
+  // the native land.
+  static int32_t FastInternalModuleStat(
+      Local<Object> unused,
+      Local<Object> recv,
+      const FastOneByteString& input,
+      FastApiCallbackOptions& options) {
+    Environment* env = Environment::GetCurrent(recv->GetCreationContextChecked());
+    // More code
+  }
+  ```
 
 ## Fallback to slow path
 
@@ -173,25 +190,24 @@ A typical function that communicates between JavaScript and C++ is as follows.
   // We could also require a function that uses the internal binding internally.
   const { divide } = internalBinding('custom_namespace');
 
+  // The function that will be optimized. It has to be a function written in
+  // JavaScript. Since `divide` comes from the C++ side, we need to wrap it.
+  function testFastPath(a, b) {
+    return divide(a, b);
+  }
+
+  eval('%PrepareFunctionForOptimization(testFastPath)');
+  // This call will let V8 know about the argument types that the function expects.
+  assert.strictEqual(testFastPath(6, 3), 2);
+
+  eval('%OptimizeFunctionOnNextCall(testFastPath)');
+  assert.strictEqual(testFastPath(8, 2), 4);
+  assert.throws(() => testFastPath(1, 0), {
+    code: 'ERR_INVALID_STATE',
+  });
+
   if (common.isDebug) {
     const { getV8FastApiCallCount } = internalBinding('debug');
-
-    // The function that will be optimized. It has to be a function written in
-    // JavaScript. Since `divide` comes from the C++ side, we need to wrap it.
-    function testFastPath(a, b) {
-      return divide(a, b);
-    }
-
-    eval('%PrepareFunctionForOptimization(testFastPath)');
-    // This call will let V8 know about the argument types that the function expects.
-    assert.strictEqual(testFastPath(6, 3), 2);
-
-    eval('%OptimizeFunctionOnNextCall(testFastPath)');
-    assert.strictEqual(testFastPath(8, 2), 4);
-    assert.throws(() => testFastPath(1, 0), {
-      code: 'ERR_INVALID_STATE',
-    });
-
     assert.strictEqual(getV8FastApiCallCount('custom_namespace.divide.ok'), 1);
     assert.strictEqual(getV8FastApiCallCount('custom_namespace.divide.error'), 1);
   }

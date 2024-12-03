@@ -996,6 +996,9 @@ instead.
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/52744
+    description: End-of-Life deprecation.
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/50488
     description: Runtime deprecation.
@@ -1011,15 +1014,18 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`util.isBoolean()`][] API is deprecated. Please use
+The `util.isBoolean()` API has been removed. Please use
 `typeof arg === 'boolean'` instead.
 
 ### DEP0046: `util.isBuffer()`
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/52744
+    description: End-of-Life deprecation.
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/50488
     description: Runtime deprecation.
@@ -1035,15 +1041,18 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`util.isBuffer()`][] API is deprecated. Please use
+The `util.isBuffer()` API has been removed. Please use
 [`Buffer.isBuffer()`][] instead.
 
 ### DEP0047: `util.isDate()`
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/52744
+    description: End-of-Life deprecation.
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/50488
     description: Runtime deprecation.
@@ -1059,15 +1068,18 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`util.isDate()`][] API is deprecated. Please use
+The `util.isDate()` API has been removed. Please use
 `arg instanceof Date` instead.
 
 ### DEP0048: `util.isError()`
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/52744
+    description: End-of-Life deprecation.
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/50488
     description: Runtime deprecation.
@@ -1083,9 +1095,9 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`util.isError()`][] API is deprecated. Please use
+The `util.isError()` API has been removed. Please use
 `Object.prototype.toString(arg) === '[object Error]' || arg instanceof Error`
 instead.
 
@@ -1093,6 +1105,9 @@ instead.
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/52744
+    description: End-of-Life deprecation.
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/50488
     description: Runtime deprecation.
@@ -1108,15 +1123,18 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`util.isFunction()`][] API is deprecated. Please use
+The `util.isFunction()` API has been removed. Please use
 `typeof arg === 'function'` instead.
 
 ### DEP0050: `util.isNull()`
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/52744
+    description: End-of-Life deprecation.
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/50488
     description: Runtime deprecation.
@@ -1132,15 +1150,18 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`util.isNull()`][] API is deprecated. Please use
+The `util.isNull()` API has been removed. Please use
 `arg === null` instead.
 
 ### DEP0051: `util.isNullOrUndefined()`
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/52744
+    description: End-of-Life deprecation.
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/50488
     description: Runtime deprecation.
@@ -1156,15 +1177,18 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`util.isNullOrUndefined()`][] API is deprecated. Please use
+The `util.isNullOrUndefined()` API has been removed. Please use
 `arg === null || arg === undefined` instead.
 
 ### DEP0052: `util.isNumber()`
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/52744
+    description: End-of-Life deprecation.
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/50488
     description: Runtime deprecation.
@@ -1180,15 +1204,18 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`util.isNumber()`][] API is deprecated. Please use
+The `util.isNumber()` API has been removed. Please use
 `typeof arg === 'number'` instead.
 
 ### DEP0053: `util.isObject()`
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/52744
+    description: End-of-Life deprecation.
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/50488
     description: Runtime deprecation.
@@ -1204,15 +1231,18 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`util.isObject()`][] API is deprecated. Please use
+The `util.isObject()` API has been removed. Please use
 `arg && typeof arg === 'object'` instead.
 
 ### DEP0054: `util.isPrimitive()`
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/52744
+    description: End-of-Life deprecation.
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/50488
     description: Runtime deprecation.
@@ -1228,9 +1258,9 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`util.isPrimitive()`][] API is deprecated. Please use
+The `util.isPrimitive()` API has been removed. Please use
 `arg === null || (typeof arg !=='object' && typeof arg !== 'function')`
 instead.
 
@@ -1238,6 +1268,9 @@ instead.
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/52744
+    description: End-of-Life deprecation.
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/50488
     description: Runtime deprecation.
@@ -1253,15 +1286,18 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`util.isRegExp()`][] API is deprecated. Please use
+The `util.isRegExp()` API has been removed. Please use
 `arg instanceof RegExp` instead.
 
 ### DEP0056: `util.isString()`
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/52744
+    description: End-of-Life deprecation.
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/50488
     description: Runtime deprecation.
@@ -1277,15 +1313,18 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`util.isString()`][] API is deprecated. Please use
+The `util.isString()` API has been removed. Please use
 `typeof arg === 'string'` instead.
 
 ### DEP0057: `util.isSymbol()`
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/52744
+    description: End-of-Life deprecation.
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/50488
     description: Runtime deprecation.
@@ -1301,15 +1340,18 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`util.isSymbol()`][] API is deprecated. Please use
+The `util.isSymbol()` API has been removed. Please use
 `typeof arg === 'symbol'` instead.
 
 ### DEP0058: `util.isUndefined()`
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/52744
+    description: End-of-Life deprecation.
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/50488
     description: Runtime deprecation.
@@ -1325,15 +1367,18 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`util.isUndefined()`][] API is deprecated. Please use
+The `util.isUndefined()` API has been removed. Please use
 `arg === undefined` instead.
 
 ### DEP0059: `util.log()`
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/52744
+    description: End-of-Life deprecation.
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/50488
     description: Runtime deprecation.
@@ -1345,9 +1390,9 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`util.log()`][] API has been deprecated because it's an unmaintained
+The `util.log()` API has been removed because it's an unmaintained
 legacy API that was exposed to user land by accident. Instead,
 consider the following alternatives based on your specific needs:
 
@@ -1985,12 +2030,15 @@ or `module.exports` instead.
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/55019
+    description: Runtime deprecation.
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/18335
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 The [`crypto.fips`][] property is deprecated. Please use `crypto.setFips()`
 and `crypto.getFips()` instead.
@@ -2097,6 +2145,9 @@ parameter.
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/55035
+    description: End-of-Life.
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/18666
     description: Runtime deprecation.
@@ -2104,7 +2155,7 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 `process.assert()` is deprecated. Please use the [`assert`][] module instead.
 
@@ -2239,6 +2290,9 @@ core and obsoleted by the removal of NPN (Next Protocol Negotiation) support.
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/55020
+    description: End-of-Life.
   - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/23308
     description: Runtime deprecation.
@@ -2247,7 +2301,7 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 Deprecated alias for [`zlib.bytesWritten`][]. This original name was chosen
 because it also made sense to interpret the value as the number of bytes
@@ -3313,6 +3367,9 @@ Values other than `undefined`, `null`, integer numbers, and integer strings
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/52747
+    description: End-of-Life.
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/51179
     description: Runtime deprecation.
@@ -3323,9 +3380,9 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`--trace-atomics-wait`][] flag is deprecated because
+The `--trace-atomics-wait` flag has been removed because
 it uses the V8 hook `SetAtomicsWaitCallback`,
 that will be removed in a future V8 release.
 
@@ -3551,6 +3608,9 @@ Please use `value instanceof WebAssembly.Module` instead.
 
 <!-- YAML
 changes:
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/51050
+    description: Runtime deprecation.
   - version:
     - v21.5.0
     - v20.12.0
@@ -3559,7 +3619,7 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 The [`dirent.path`][] is deprecated due to its lack of consistency across
 release lines. Please use [`dirent.parentPath`][] instead.
@@ -3591,7 +3651,7 @@ changes:
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/52067
     description: Runtime deprecation.
-  - version: v22.0.0
+  - version: v20.13.0
     pr-url: https://github.com/nodejs/node/pull/51879
     description: Documentation-only deprecation.
 -->
@@ -3608,7 +3668,7 @@ changes:
   - version: v22.0.0
     pr-url: https://github.com/nodejs/node/pull/52071
     description: Runtime deprecation.
-  - version: v22.0.0
+  - version: v20.13.0
     pr-url: https://github.com/nodejs/node/pull/51881
     description: Documentation-only deprecation.
 -->
@@ -3623,15 +3683,18 @@ Please use the [`crypto.createHmac()`][] method to create Hmac instances.
 
 <!-- YAML
 changes:
-  - version: v22.0.0
+  - version: v23.0.0
+    pr-url: https://github.com/nodejs/node/pull/52552
+    description: Runtime deprecation.
+  - version: v20.13.0
     pr-url: https://github.com/nodejs/node/pull/52345
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only (supports [`--pending-deprecation`][])
+Type: Runtime
 
 Applications that intend to use authentication tags that are shorter than the
-default authentication tag length should set the `authTagLength` option of the
+default authentication tag length must set the `authTagLength` option of the
 [`crypto.createDecipheriv()`][] function to the appropriate length.
 
 For ciphers in GCM mode, the [`decipher.setAuthTag()`][] function accepts
@@ -3642,7 +3705,9 @@ is deprecated to better align with recommendations per [NIST SP 800-38D][].
 
 <!-- YAML
 changes:
-  - version: v22.4.0
+  - version:
+    - v22.4.0
+    - v20.16.0
     pr-url: https://github.com/nodejs/node/pull/53329
     description: Documentation-only deprecation.
 -->
@@ -3655,6 +3720,42 @@ switch to its new provider model. The `clientCertEngine` option for
 the `privateKeyEngine` and `privateKeyIdentifier` for [`tls.createSecureContext()`][];
 and [`crypto.setEngine()`][] all depend on this functionality from OpenSSL.
 
+### DEP0184: Instantiating `node:zlib` classes without `new`
+
+<!-- YAML
+changes:
+  - version:
+    - v22.9.0
+    - v20.18.0
+    pr-url: https://github.com/nodejs/node/pull/54708
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only
+
+Instantiating classes without the `new` qualifier exported by the `node:zlib` module is deprecated.
+It is recommended to use the `new` qualifier instead. This applies to all Zlib classes, such as `Deflate`,
+`DeflateRaw`, `Gunzip`, `Inflate`, `InflateRaw`, `Unzip`, and `Zlib`.
+
+### DEP0185: Instantiating `node:repl` classes without `new`
+
+<!-- YAML
+changes:
+  - version:
+    - v22.9.0
+    - v20.18.0
+    pr-url: https://github.com/nodejs/node/pull/54842
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only
+
+Instantiating classes without the `new` qualifier exported by the `node:repl` module is deprecated.
+It is recommended to use the `new` qualifier instead. This applies to all REPL classes, including
+`REPLServer` and `Recoverable`.
+
+<!-- md-lint skip-deprecation DEP0186 -->
+
 [NIST SP 800-38D]: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf
 [RFC 6066]: https://tools.ietf.org/html/rfc6066#section-3
 [RFC 8247 Section 2.4]: https://www.rfc-editor.org/rfc/rfc8247#section-2.4
@@ -3664,7 +3765,6 @@ and [`crypto.setEngine()`][] all depend on this functionality from OpenSSL.
 [`--force-node-api-uncaught-exceptions-policy`]: cli.md#--force-node-api-uncaught-exceptions-policy
 [`--pending-deprecation`]: cli.md#--pending-deprecation
 [`--throw-deprecation`]: cli.md#--throw-deprecation
-[`--trace-atomics-wait`]: cli.md#--trace-atomics-wait
 [`--unhandled-rejections`]: cli.md#--unhandled-rejectionsmode
 [`Buffer.allocUnsafeSlow(size)`]: buffer.md#static-method-bufferallocunsafeslowsize
 [`Buffer.from(array)`]: buffer.md#static-method-bufferfromarray
@@ -3785,21 +3885,6 @@ and [`crypto.setEngine()`][] all depend on this functionality from OpenSSL.
 [`util.inspect()`]: util.md#utilinspectobject-options
 [`util.inspect.custom`]: util.md#utilinspectcustom
 [`util.isArray()`]: util.md#utilisarrayobject
-[`util.isBoolean()`]: util.md#utilisbooleanobject
-[`util.isBuffer()`]: util.md#utilisbufferobject
-[`util.isDate()`]: util.md#utilisdateobject
-[`util.isError()`]: util.md#utiliserrorobject
-[`util.isFunction()`]: util.md#utilisfunctionobject
-[`util.isNull()`]: util.md#utilisnullobject
-[`util.isNullOrUndefined()`]: util.md#utilisnullorundefinedobject
-[`util.isNumber()`]: util.md#utilisnumberobject
-[`util.isObject()`]: util.md#utilisobjectobject
-[`util.isPrimitive()`]: util.md#utilisprimitiveobject
-[`util.isRegExp()`]: util.md#utilisregexpobject
-[`util.isString()`]: util.md#utilisstringobject
-[`util.isSymbol()`]: util.md#utilissymbolobject
-[`util.isUndefined()`]: util.md#utilisundefinedobject
-[`util.log()`]: util.md#utillogstring
 [`util.promisify`]: util.md#utilpromisifyoriginal
 [`util.toUSVString()`]: util.md#utiltousvstringstring
 [`util.types`]: util.md#utiltypes

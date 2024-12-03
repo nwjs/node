@@ -192,8 +192,18 @@ class RetryHandler {
     if (this.resume != null) {
       this.resume = null
 
-      if (statusCode !== 206) {
-        return true
+      // Only Partial Content 206 supposed to provide Content-Range,
+      // any other status code that partially consumed the payload
+      // should not be retry because it would result in downstream
+      // wrongly concatanete multiple responses.
+      if (statusCode !== 206 && (this.start > 0 || statusCode !== 200)) {
+        this.abort(
+          new RequestRetryError('server does not support the range header and the payload was partially consumed', statusCode, {
+            headers,
+            data: { count: this.retryCount }
+          })
+        )
+        return false
       }
 
       const contentRange = parseRangeHeader(headers['content-range'])
@@ -219,7 +229,7 @@ class RetryHandler {
         return false
       }
 
-      const { start, size, end = size } = contentRange
+      const { start, size, end = size - 1 } = contentRange
 
       assert(this.start === start, 'content-range mismatch')
       assert(this.end == null || this.end === end, 'content-range mismatch')
@@ -242,7 +252,7 @@ class RetryHandler {
           )
         }
 
-        const { start, size, end = size } = range
+        const { start, size, end = size - 1 } = range
         assert(
           start != null && Number.isFinite(start),
           'content-range mismatch'
@@ -256,7 +266,7 @@ class RetryHandler {
       // We make our best to checkpoint the body for further range headers
       if (this.end == null) {
         const contentLength = headers['content-length']
-        this.end = contentLength != null ? Number(contentLength) : null
+        this.end = contentLength != null ? Number(contentLength) - 1 : null
       }
 
       assert(Number.isFinite(this.start))

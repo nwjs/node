@@ -22,16 +22,7 @@ import sqlite from 'node:sqlite';
 const sqlite = require('node:sqlite');
 ```
 
-This module is only available under the `node:` scheme. The following will not
-work:
-
-```mjs
-import sqlite from 'sqlite';
-```
-
-```cjs
-const sqlite = require('sqlite');
-```
+This module is only available under the `node:` scheme.
 
 The following example shows the basic usage of the `node:sqlite` module to open
 an in-memory database, write data to the database, and then read the data back.
@@ -107,6 +98,17 @@ added: v22.5.0
   * `open` {boolean} If `true`, the database is opened by the constructor. When
     this value is `false`, the database must be opened via the `open()` method.
     **Default:** `true`.
+  * `readOnly` {boolean} If `true`, the database is opened in read-only mode.
+    If the database does not exist, opening it will fail. **Default:** `false`.
+  * `enableForeignKeyConstraints` {boolean} If `true`, foreign key constraints
+    are enabled. This is recommended but can be disabled for compatibility with
+    legacy database schemas. The enforcement of foreign key constraints can be
+    enabled and disabled after opening the database using
+    [`PRAGMA foreign_keys`][]. **Default:** `true`.
+  * `enableDoubleQuotedStringLiterals` {boolean} If `true`, SQLite will accept
+    [double-quoted string literals][]. This is not recommended but can be
+    enabled for compatibility with legacy database schemas.
+    **Default:** `false`.
 
 Constructs a new `DatabaseSync` instance.
 
@@ -153,6 +155,70 @@ added: v22.5.0
 Compiles a SQL statement into a [prepared statement][]. This method is a wrapper
 around [`sqlite3_prepare_v2()`][].
 
+### `database.createSession([options])`
+
+* `options` {Object} The configuration options for the session.
+  * `table` {string} A specific table to track changes for. By default, changes to all tables are tracked.
+  * `db` {string} Name of the database to track. This is useful when multiple databases have been added using [`ATTACH DATABASE`][]. **Default**: `'main'`.
+* Returns: {Session} A session handle.
+
+Creates and attaches a session to the database. This method is a wrapper around [`sqlite3session_create()`][] and [`sqlite3session_attach()`][].
+
+### `database.applyChangeset(changeset[, options])`
+
+* `changeset` {Uint8Array} A binary changeset or patchset.
+* `options` {Object} The configuration options for how the changes will be applied.
+  * `filter` {Function} Skip changes that, when targeted table name is supplied to this function, return a truthy value.
+    By default, all changes are attempted.
+  * `onConflict` {number} Determines how conflicts are handled. **Default**: `SQLITE_CHANGESET_ABORT`.
+    * `SQLITE_CHANGESET_OMIT`: conflicting changes are omitted.
+    * `SQLITE_CHANGESET_REPLACE`: conflicting changes replace existing values.
+    * `SQLITE_CHANGESET_ABORT`: abort on conflict and roll back databsase.
+* Returns: {boolean} Whether the changeset was applied succesfully without being aborted.
+
+An exception is thrown if the database is not
+open. This method is a wrapper around [`sqlite3changeset_apply()`][].
+
+```js
+const sourceDb = new DatabaseSync(':memory:');
+const targetDb = new DatabaseSync(':memory:');
+
+sourceDb.exec('CREATE TABLE data(key INTEGER PRIMARY KEY, value TEXT)');
+targetDb.exec('CREATE TABLE data(key INTEGER PRIMARY KEY, value TEXT)');
+
+const session = sourceDb.createSession();
+
+const insert = sourceDb.prepare('INSERT INTO data (key, value) VALUES (?, ?)');
+insert.run(1, 'hello');
+insert.run(2, 'world');
+
+const changeset = session.changeset();
+targetDb.applyChangeset(changeset);
+// Now that the changeset has been applied, targetDb contains the same data as sourceDb.
+```
+
+## Class: `Session`
+
+### `session.changeset()`
+
+* Returns: {Uint8Array} Binary changeset that can be applied to other databases.
+
+Retrieves a changeset containing all changes since the changeset was created. Can be called multiple times.
+An exception is thrown if the database or the session is not open. This method is a wrapper around [`sqlite3session_changeset()`][].
+
+### `session.patchset()`
+
+* Returns: {Uint8Array} Binary patchset that can be applied to other databases.
+
+Similar to the method above, but generates a more compact patchset. See [Changesets and Patchsets][]
+in the documentation of SQLite. An exception is thrown if the database or the session is not open. This method is a
+wrapper around [`sqlite3session_patchset()`][].
+
+### `session.close()`.
+
+Closes the session. An exception is thrown if the database or the session is not open. This method is a
+wrapper around [`sqlite3session_delete()`][].
+
 ## Class: `StatementSync`
 
 <!-- YAML
@@ -189,16 +255,17 @@ objects. If the prepared statement does not return any results, this method
 returns an empty array. The prepared statement [parameters are bound][] using
 the values in `namedParameters` and `anonymousParameters`.
 
-### `statement.expandedSQL()`
+### `statement.expandedSQL`
 
 <!-- YAML
 added: v22.5.0
 -->
 
-* Returns: {string} The source SQL expanded to include parameter values.
+* {string} The source SQL expanded to include parameter values.
 
-This method returns the source SQL of the prepared statement with parameter
-placeholders replaced by values. This method is a wrapper around
+The source SQL text of the prepared statement with parameter
+placeholders replaced by the values that were used during the most recent
+execution of this prepared statement. This property is a wrapper around
 [`sqlite3_expanded_sql()`][].
 
 ### `statement.get([namedParameters][, ...anonymousParameters])`
@@ -287,15 +354,15 @@ be used to read `INTEGER` data using JavaScript `BigInt`s. This method has no
 impact on database write operations where numbers and `BigInt`s are both
 supported at all times.
 
-### `statement.sourceSQL()`
+### `statement.sourceSQL`
 
 <!-- YAML
 added: v22.5.0
 -->
 
-* Returns: {string} The source SQL used to create this prepared statement.
+* {string} The source SQL used to create this prepared statement.
 
-This method returns the source SQL of the prepared statement. This method is a
+The source SQL text of the prepared statement. This property is a
 wrapper around [`sqlite3_sql()`][].
 
 ### Type conversion between JavaScript and SQLite
@@ -308,14 +375,46 @@ exception.
 
 | SQLite    | JavaScript           |
 | --------- | -------------------- |
-| `NULL`    | `null`               |
-| `INTEGER` | `number` or `BigInt` |
-| `REAL`    | `number`             |
-| `TEXT`    | `string`             |
-| `BLOB`    | `Uint8Array`         |
+| `NULL`    | {null}               |
+| `INTEGER` | {number} or {bigint} |
+| `REAL`    | {number}             |
+| `TEXT`    | {string}             |
+| `BLOB`    | {Uint8Array}         |
 
+## SQLite constants
+
+The following constants are exported by the `node:sqlite` module.
+
+### SQLite Session constants
+
+#### Conflict-resolution constants
+
+The following constants are meant for use with [`database.applyChangeset()`](#databaseapplychangesetchangeset-options).
+
+<table>
+  <tr>
+    <th>Constant</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td><code>SQLITE_CHANGESET_OMIT</code></td>
+    <td>Conflicting changes are omitted.</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_CHANGESET_REPLACE</code></td>
+    <td>Conflicting changes replace existing values.</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_CHANGESET_ABORT</code></td>
+    <td>Abort when a change encounters a conflict and roll back databsase.</td>
+  </tr>
+</table>
+
+[Changesets and Patchsets]: https://www.sqlite.org/sessionintro.html#changesets_and_patchsets
 [SQL injection]: https://en.wikipedia.org/wiki/SQL_injection
 [`--experimental-sqlite`]: cli.md#--experimental-sqlite
+[`ATTACH DATABASE`]: https://www.sqlite.org/lang_attach.html
+[`PRAGMA foreign_keys`]: https://www.sqlite.org/pragma.html#pragma_foreign_keys
 [`sqlite3_changes64()`]: https://www.sqlite.org/c3ref/changes.html
 [`sqlite3_close_v2()`]: https://www.sqlite.org/c3ref/close.html
 [`sqlite3_exec()`]: https://www.sqlite.org/c3ref/exec.html
@@ -323,8 +422,15 @@ exception.
 [`sqlite3_last_insert_rowid()`]: https://www.sqlite.org/c3ref/last_insert_rowid.html
 [`sqlite3_prepare_v2()`]: https://www.sqlite.org/c3ref/prepare.html
 [`sqlite3_sql()`]: https://www.sqlite.org/c3ref/expanded_sql.html
+[`sqlite3changeset_apply()`]: https://www.sqlite.org/session/sqlite3changeset_apply.html
+[`sqlite3session_attach()`]: https://www.sqlite.org/session/sqlite3session_attach.html
+[`sqlite3session_changeset()`]: https://www.sqlite.org/session/sqlite3session_changeset.html
+[`sqlite3session_create()`]: https://www.sqlite.org/session/sqlite3session_create.html
+[`sqlite3session_delete()`]: https://www.sqlite.org/session/sqlite3session_delete.html
+[`sqlite3session_patchset()`]: https://www.sqlite.org/session/sqlite3session_patchset.html
 [connection]: https://www.sqlite.org/c3ref/sqlite3.html
 [data types]: https://www.sqlite.org/datatype3.html
+[double-quoted string literals]: https://www.sqlite.org/quirks.html#dblquote
 [in memory]: https://www.sqlite.org/inmemorydb.html
 [parameters are bound]: https://www.sqlite.org/c3ref/bind_blob.html
 [prepared statement]: https://www.sqlite.org/c3ref/stmt.html

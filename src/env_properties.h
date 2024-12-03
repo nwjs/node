@@ -57,6 +57,7 @@
   V(resource_symbol, "resource_symbol")                                        \
   V(trigger_async_id_symbol, "trigger_async_id_symbol")                        \
   V(source_text_module_default_hdo, "source_text_module_default_hdo")          \
+  V(vm_context_no_contextify, "vm_context_no_contextify")                      \
   V(vm_dynamic_import_default_internal, "vm_dynamic_import_default_internal")  \
   V(vm_dynamic_import_main_context_default,                                    \
     "vm_dynamic_import_main_context_default")                                  \
@@ -89,6 +90,7 @@
   V(cached_data_string, "cachedData")                                          \
   V(cache_key_string, "cacheKey")                                              \
   V(change_string, "change")                                                   \
+  V(changes_string, "changes")                                                 \
   V(channel_string, "channel")                                                 \
   V(chunks_sent_since_last_write_string, "chunksSentSinceLastWrite")           \
   V(clone_unsupported_type_str, "Cannot clone object of unsupported type.")    \
@@ -97,6 +99,7 @@
     "transferList")                                                            \
   V(clone_untransferable_str, "Found invalid value in transferList.")          \
   V(code_string, "code")                                                       \
+  V(column_string, "column")                                                   \
   V(commonjs_string, "commonjs")                                               \
   V(config_string, "config")                                                   \
   V(constants_string, "constants")                                             \
@@ -143,6 +146,8 @@
   V(env_var_settings_string, "envVarSettings")                                 \
   V(errno_string, "errno")                                                     \
   V(error_string, "error")                                                     \
+  V(events, "events")                                                          \
+  V(events_waiting, "eventsWaiting")                                           \
   V(exchange_string, "exchange")                                               \
   V(expire_string, "expire")                                                   \
   V(exponent_string, "exponent")                                               \
@@ -155,6 +160,7 @@
   V(fields_string, "fields")                                                   \
   V(file_string, "file")                                                       \
   V(filename_string, "filename")                                               \
+  V(filter_string, "filter")                                                   \
   V(fingerprint256_string, "fingerprint256")                                   \
   V(fingerprint512_string, "fingerprint512")                                   \
   V(fingerprint_string, "fingerprint")                                         \
@@ -163,6 +169,7 @@
   V(fragment_string, "fragment")                                               \
   V(frames_received_string, "framesReceived")                                  \
   V(frames_sent_string, "framesSent")                                          \
+  V(function_name_string, "functionName")                                      \
   V(function_string, "function")                                               \
   V(get_string, "get")                                                         \
   V(get_data_clone_error_string, "_getDataCloneError")                         \
@@ -210,8 +217,11 @@
   V(jwk_y_string, "y")                                                         \
   V(kill_signal_string, "killSignal")                                          \
   V(kind_string, "kind")                                                       \
+  V(last_insert_rowid_string, "lastInsertRowid")                               \
   V(length_string, "length")                                                   \
   V(library_string, "library")                                                 \
+  V(line_number_string, "lineNumber")                                          \
+  V(loop_count, "loopCount")                                                   \
   V(mac_string, "mac")                                                         \
   V(max_buffer_string, "maxBuffer")                                            \
   V(max_concurrent_streams_string, "maxConcurrentStreams")                     \
@@ -237,6 +247,7 @@
   V(onchange_string, "onchange")                                               \
   V(onclienthello_string, "onclienthello")                                     \
   V(oncomplete_string, "oncomplete")                                           \
+  V(onconflict_string, "onConflict")                                           \
   V(onconnection_string, "onconnection")                                       \
   V(ondone_string, "ondone")                                                   \
   V(onerror_string, "onerror")                                                 \
@@ -301,6 +312,7 @@
   V(salt_length_string, "saltLength")                                          \
   V(scheme_string, "scheme")                                                   \
   V(scopeid_string, "scopeid")                                                 \
+  V(script_name_string, "scriptName")                                          \
   V(serial_number_string, "serialNumber")                                      \
   V(serial_string, "serial")                                                   \
   V(servername_string, "servername")                                           \
@@ -404,6 +416,7 @@
   V(shutdown_wrap_template, v8::ObjectTemplate)                                \
   V(socketaddress_constructor_template, v8::FunctionTemplate)                  \
   V(sqlite_statement_sync_constructor_template, v8::FunctionTemplate)          \
+  V(sqlite_session_constructor_template, v8::FunctionTemplate)                 \
   V(streambaseentry_ctor_template, v8::FunctionTemplate)                       \
   V(streambaseoutputstream_constructor_template, v8::ObjectTemplate)           \
   V(streamentry_ctor_template, v8::FunctionTemplate)                           \

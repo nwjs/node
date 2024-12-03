@@ -1,7 +1,7 @@
 'use strict'
 
 const { Headers, HeadersList, fill, getHeadersGuard, setHeadersGuard, setHeadersList } = require('./headers')
-const { extractBody, cloneBody, mixinBody } = require('./body')
+const { extractBody, cloneBody, mixinBody, hasFinalizationRegistry, streamRegistry, bodyUnusable } = require('./body')
 const util = require('../../core/util')
 const nodeUtil = require('node:util')
 const { kEnumerableProperty } = util
@@ -26,23 +26,8 @@ const { URLSerializer } = require('./data-url')
 const { kConstruct } = require('../../core/symbols')
 const assert = require('node:assert')
 const { types } = require('node:util')
-const { isDisturbed, isErrored } = require('node:stream')
 
 const textEncoder = new TextEncoder('utf-8')
-
-const hasFinalizationRegistry = globalThis.FinalizationRegistry && process.version.indexOf('v18') !== 0
-let registry
-
-if (hasFinalizationRegistry) {
-  registry = new FinalizationRegistry((weakRef) => {
-    const stream = weakRef.deref()
-    if (stream && !stream.locked && !isDisturbed(stream) && !isErrored(stream)) {
-      stream.cancel('Response object has been garbage collected').catch(noop)
-    }
-  })
-}
-
-function noop () {}
 
 // https://fetch.spec.whatwg.org/#response-class
 class Response {
@@ -125,6 +110,7 @@ class Response {
 
   // https://fetch.spec.whatwg.org/#dom-response
   constructor (body = null, init = {}) {
+    webidl.util.markAsUncloneable(this)
     if (body === kConstruct) {
       return
     }
@@ -244,7 +230,7 @@ class Response {
     webidl.brandCheck(this, Response)
 
     // 1. If this is unusable, then throw a TypeError.
-    if (this.bodyUsed || this.body?.locked) {
+    if (bodyUnusable(this)) {
       throw webidl.errors.exception({
         header: 'Response.clone',
         message: 'Body has already been consumed.'
@@ -327,7 +313,7 @@ function cloneResponse (response) {
   // 3. If response’s body is non-null, then set newResponse’s body to the
   // result of cloning response’s body.
   if (response.body != null) {
-    newResponse.body = cloneBody(response.body)
+    newResponse.body = cloneBody(newResponse, response.body)
   }
 
   // 4. Return newResponse.
@@ -532,7 +518,7 @@ function fromInnerResponse (innerResponse, guard) {
     // a primitive or an object, even undefined. If the held value is an object, the registry keeps
     // a strong reference to it (so it can pass it to the cleanup callback later). Reworded from
     // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/FinalizationRegistry
-    registry.register(response, new WeakRef(innerResponse.body.stream))
+    streamRegistry.register(response, new WeakRef(innerResponse.body.stream))
   }
 
   return response

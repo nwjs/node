@@ -537,7 +537,7 @@
         'defines': [
           'WIN32',
           'NOMINMAX',  # Refs: https://chromium-review.googlesource.com/c/v8/v8/+/1456620
-          '_WIN32_WINNT=0x0602',  # Windows 8
+          '_WIN32_WINNT=0x0A00',  # Windows 10
           '_SILENCE_ALL_CXX20_DEPRECATION_WARNINGS',
         ],
         # 4351: VS 2005 and later are warning us that they've fixed a bug
@@ -545,14 +545,6 @@
         'msvs_disabled_warnings': [4351],
         'msvs_configuration_attributes': {
           'CharacterSet': '1',
-        },
-      }],
-      ['OS=="win" and v8_target_arch=="ia32"', {
-        'msvs_settings': {
-          'VCCLCompilerTool': {
-            # Ensure no surprising artifacts from 80bit double math with x86.
-            'AdditionalOptions': ['/arch:SSE2'],
-          },
         },
       }],
       ['OS=="win" and v8_enable_prof==1', {
@@ -938,13 +930,5 @@
       4724,  # https://crbug.com/v8/7771
       4800,  # Forcing value to bool.
     ],
-    # Relevant only for x86.
-    # Refs: https://github.com/nodejs/node/pull/25852
-    # Refs: https://docs.microsoft.com/en-us/cpp/build/reference/safeseh-image-has-safe-exception-handlers
-    'msvs_settings': {
-      'VCLinkerTool': {
-        'ImageHasSafeExceptionHandlers': 'false',
-      },
-    },
   },  # target_defaults
 }

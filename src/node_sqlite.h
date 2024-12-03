@@ -14,13 +14,41 @@
 namespace node {
 namespace sqlite {
 
+class DatabaseOpenConfiguration {
+ public:
+  explicit DatabaseOpenConfiguration(std::string&& location)
+      : location_(std::move(location)) {}
+
+  inline const std::string& location() const { return location_; }
+
+  inline bool get_read_only() const { return read_only_; }
+
+  inline void set_read_only(bool flag) { read_only_ = flag; }
+
+  inline bool get_enable_foreign_keys() const { return enable_foreign_keys_; }
+
+  inline void set_enable_foreign_keys(bool flag) {
+    enable_foreign_keys_ = flag;
+  }
+
+  inline bool get_enable_dqs() const { return enable_dqs_; }
+
+  inline void set_enable_dqs(bool flag) { enable_dqs_ = flag; }
+
+ private:
+  std::string location_;
+  bool read_only_ = false;
+  bool enable_foreign_keys_ = true;
+  bool enable_dqs_ = false;
+};
+
 class StatementSync;
 
 class DatabaseSync : public BaseObject {
  public:
   DatabaseSync(Environment* env,
                v8::Local<v8::Object> object,
-               v8::Local<v8::String> location,
+               DatabaseOpenConfiguration&& open_config,
                bool open);
   void MemoryInfo(MemoryTracker* tracker) const override;
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -28,6 +56,8 @@ class DatabaseSync : public BaseObject {
   static void Close(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Prepare(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Exec(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void CreateSession(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ApplyChangeset(const v8::FunctionCallbackInfo<v8::Value>& args);
   void FinalizeStatements();
   void UntrackStatement(StatementSync* statement);
   bool IsOpen();
@@ -38,11 +68,16 @@ class DatabaseSync : public BaseObject {
 
  private:
   bool Open();
+  void DeleteSessions();
 
   ~DatabaseSync() override;
-  std::string location_;
+  DatabaseOpenConfiguration open_config_;
   sqlite3* connection_;
+
+  std::set<sqlite3_session*> sessions_;
   std::unordered_set<StatementSync*> statements_;
+
+  friend class Session;
 };
 
 class StatementSync : public BaseObject {
@@ -60,8 +95,9 @@ class StatementSync : public BaseObject {
   static void All(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Get(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Run(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void SourceSQL(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void ExpandedSQL(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SourceSQLGetter(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ExpandedSQLGetter(
+      const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetAllowBareNamedParameters(
       const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetReadBigInts(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -80,8 +116,36 @@ class StatementSync : public BaseObject {
   std::optional<std::map<std::string, std::string>> bare_named_params_;
   bool BindParams(const v8::FunctionCallbackInfo<v8::Value>& args);
   bool BindValue(const v8::Local<v8::Value>& value, const int index);
-  v8::Local<v8::Value> ColumnToValue(const int column);
-  v8::Local<v8::Value> ColumnNameToValue(const int column);
+  v8::MaybeLocal<v8::Value> ColumnToValue(const int column);
+  v8::MaybeLocal<v8::Name> ColumnNameToName(const int column);
+};
+
+using Sqlite3ChangesetGenFunc = int (*)(sqlite3_session*, int*, void**);
+
+class Session : public BaseObject {
+ public:
+  Session(Environment* env,
+          v8::Local<v8::Object> object,
+          BaseObjectWeakPtr<DatabaseSync> database,
+          sqlite3_session* session);
+  ~Session() override;
+  template <Sqlite3ChangesetGenFunc sqliteChangesetFunc>
+  static void Changeset(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Close(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static v8::Local<v8::FunctionTemplate> GetConstructorTemplate(
+      Environment* env);
+  static BaseObjectPtr<Session> Create(Environment* env,
+                                       BaseObjectWeakPtr<DatabaseSync> database,
+                                       sqlite3_session* session);
+
+  void MemoryInfo(MemoryTracker* tracker) const override;
+  SET_MEMORY_INFO_NAME(Session)
+  SET_SELF_SIZE(Session)
+
+ private:
+  void Delete();
+  sqlite3_session* session_;
+  BaseObjectWeakPtr<DatabaseSync> database_;  // The Parent Database
 };
 
 }  // namespace sqlite

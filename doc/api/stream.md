@@ -257,6 +257,11 @@ changes:
     - v18.14.0
     pr-url: https://github.com/nodejs/node/pull/46205
     description: Added support for `ReadableStream` and `WritableStream`.
+  - version:
+    - v19.1.0
+    - v18.13.0
+    pr-url: https://github.com/nodejs/node/pull/44862
+    description: The `cleanup` option was added.
 -->
 
 * `stream` {Stream|ReadableStream|WritableStream} A readable and/or writable
@@ -265,7 +270,9 @@ changes:
   * `error` {boolean|undefined}
   * `readable` {boolean|undefined}
   * `writable` {boolean|undefined}
-  * `signal`: {AbortSignal|undefined}
+  * `signal` {AbortSignal|undefined}
+  * `cleanup` {boolean|undefined} If `true`, removes the listeners registered by
+    this function before the promise is fulfilled. **Default:** `false`.
 * Returns: {Promise} Fulfills when the stream is no
   longer readable or writable.
 
@@ -300,6 +307,17 @@ rs.resume(); // Drain the stream.
 ```
 
 The `finished` API also provides a [callback version][stream-finished].
+
+`stream.finished()` leaves dangling event listeners (in particular
+`'error'`, `'end'`, `'finish'` and `'close'`) after the returned promise is
+resolved or rejected. The reason for this is so that unexpected `'error'`
+events (due to incorrect stream implementations) do not cause unexpected
+crashes. If this is unwanted behavior then `options.cleanup` should be set to
+`true`:
+
+```js
+await finished(rs, { cleanup: true });
+```
 
 ### Object mode
 
@@ -743,7 +761,9 @@ console.log(myStream.destroyed); // true
 <!-- YAML
 added: v0.9.4
 changes:
-  - version: v22.0.0
+  - version:
+    - v22.0.0
+    - v20.13.0
     pr-url: https://github.com/nodejs/node/pull/51866
     description: The `chunk` argument can now be a `TypedArray` or `DataView` instance.
   - version: v15.0.0
@@ -958,7 +978,9 @@ Getter for the property `objectMode` of a given `Writable` stream.
 ##### `writable[Symbol.asyncDispose]()`
 
 <!-- YAML
-added: v22.4.0
+added:
+- v22.4.0
+- v20.16.0
 -->
 
 > Stability: 1 - Experimental
@@ -971,7 +993,9 @@ a promise that fulfills when the stream is finished.
 <!-- YAML
 added: v0.9.4
 changes:
-  - version: v22.0.0
+  - version:
+    - v22.0.0
+    - v20.13.0
     pr-url: https://github.com/nodejs/node/pull/51866
     description: The `chunk` argument can now be a `TypedArray` or `DataView` instance.
   - version: v8.0.0
@@ -1814,7 +1838,9 @@ setTimeout(() => {
 <!-- YAML
 added: v0.9.11
 changes:
-  - version: v22.0.0
+  - version:
+    - v22.0.0
+    - v20.13.0
     pr-url: https://github.com/nodejs/node/pull/51866
     description: The `chunk` argument can now be a `TypedArray` or `DataView` instance.
   - version: v8.0.0
@@ -2209,7 +2235,7 @@ stopped by having passed a `signal` option and aborting the related
 `return`. In either case the stream will be destroyed.
 
 This method is different from listening to the [`'data'`][] event in that it
-uses the [`readable`][] event in the underlying machinary and can limit the
+uses the [`readable`][] event in the underlying machinery and can limit the
 number of concurrent `fn` calls.
 
 ```mjs
@@ -2681,7 +2707,9 @@ further errors except from `_destroy()` may be emitted as `'error'`.
 #### `stream.duplexPair([options])`
 
 <!-- YAML
-added: v22.6.0
+added:
+  - v22.6.0
+  - v20.17.0
 -->
 
 * `options` {Object} A value to pass to both [`Duplex`][] constructors,
@@ -2744,8 +2772,6 @@ changes:
     underlying stream will _not_ be aborted if the signal is aborted. The
     callback will get called with an `AbortError`. All registered
     listeners added by this function will also be removed.
-  * `cleanup` {boolean} remove all registered stream listeners.
-    **Default:** `false`.
 * `callback` {Function} A callback function that takes an optional error
   argument.
 * Returns: {Function} A cleanup function which removes all registered
@@ -3705,7 +3731,7 @@ class WriteStream extends Writable {
     this.fd = null;
   }
   _construct(callback) {
-    fs.open(this.filename, (err, fd) => {
+    fs.open(this.filename, 'w', (err, fd) => {
       if (err) {
         callback(err);
       } else {
@@ -4146,7 +4172,9 @@ It can be overridden by child classes but it **must not** be called directly.
 
 <!-- YAML
 changes:
-  - version: v22.0.0
+  - version:
+    - v22.0.0
+    - v20.13.0
     pr-url: https://github.com/nodejs/node/pull/51866
     description: The `chunk` argument can now be a `TypedArray` or `DataView` instance.
   - version: v8.0.0

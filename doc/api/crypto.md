@@ -891,7 +891,9 @@ When passing a string as the `buffer`, please consider
 <!-- YAML
 added: v1.0.0
 changes:
-  - version: v22.0.0
+  - version:
+    - v22.0.0
+    - v20.13.0
     pr-url: https://github.com/nodejs/node/pull/52345
     description: Using GCM tag lengths other than 128 bits without specifying
                  the `authTagLength` option when creating `decipher` is
@@ -2134,6 +2136,24 @@ added: v11.6.0
 For secret keys, this property represents the size of the key in bytes. This
 property is `undefined` for asymmetric keys.
 
+### `keyObject.toCryptoKey(algorithm, extractable, keyUsages)`
+
+<!-- YAML
+added: v23.0.0
+-->
+
+<!--lint disable maximum-line-length remark-lint-->
+
+* `algorithm`: {AlgorithmIdentifier|RsaHashedImportParams|EcKeyImportParams|HmacImportParams}
+
+<!--lint enable maximum-line-length remark-lint-->
+
+* `extractable`: {boolean}
+* `keyUsages`: {string\[]} See [Key usages][].
+* Returns: {CryptoKey}
+
+Converts a `KeyObject` instance to a `CryptoKey`.
+
 ### `keyObject.type`
 
 <!-- YAML
@@ -2863,6 +2883,16 @@ added: v15.6.0
 
 The date/time from which this certificate is valid.
 
+### `x509.validFromDate`
+
+<!-- YAML
+added: v23.0.0
+-->
+
+* Type: {Date}
+
+The date/time from which this certificate is valid, encapsulated in a `Date` object.
+
 ### `x509.validTo`
 
 <!-- YAML
@@ -2872,6 +2902,16 @@ added: v15.6.0
 * Type: {string}
 
 The date/time until which this certificate is valid.
+
+### `x509.validToDate`
+
+<!-- YAML
+added: v23.0.0
+-->
+
+* Type: {Date}
+
+The date/time until which this certificate is valid, encapsulated in a `Date` object.
 
 ### `x509.verify(publicKey)`
 
@@ -3083,10 +3123,9 @@ and initialization vector (`iv`).
 The `options` argument controls stream behavior and is optional except when a
 cipher in CCM or OCB mode (e.g. `'aes-128-ccm'`) is used. In that case, the
 `authTagLength` option is required and specifies the length of the
-authentication tag in bytes, see [CCM mode][]. In GCM mode, the `authTagLength`
-option is not required but can be used to restrict accepted authentication tags
-to those with the specified length.
-For `chacha20-poly1305`, the `authTagLength` option defaults to 16 bytes.
+authentication tag in bytes, see [CCM mode][].
+For AES-GCM and `chacha20-poly1305`, the `authTagLength` option defaults to 16
+bytes and must be set to a different value if a different length is used.
 
 The `algorithm` is dependent on OpenSSL, examples are `'aes192'`, etc. On
 recent OpenSSL releases, `openssl list -cipher-algorithms` will
@@ -3518,7 +3557,7 @@ added:
 
 Computes the Diffie-Hellman secret based on a `privateKey` and a `publicKey`.
 Both keys must have the same `asymmetricKeyType`, which must be one of `'dh'`
-(for Diffie-Hellman), `'ec'` (for ECDH), `'x448'`, or `'x25519'` (for ECDH-ES).
+(for Diffie-Hellman), `'ec'`, `'x448'`, or `'x25519'` (for ECDH).
 
 ### `crypto.hash(algorithm, data[, outputEncoding])`
 
@@ -5276,7 +5315,9 @@ added: v15.6.0
 <!-- YAML
 added: v0.11.11
 changes:
-  - version: v22.4.0
+  - version:
+    - v22.4.0
+    - v20.16.0
     pr-url: https://github.com/nodejs/node/pull/53329
     description: Custom engine support in OpenSSL 3 is deprecated.
 -->
@@ -5945,7 +5986,7 @@ See the [list of SSL OP Flags][] for details.
   </tr>
   <tr>
     <td><code>ENGINE_METHOD_PKEY_METHS</code></td>
-    <td>Limit engine usage to PKEY_METHDS</td>
+    <td>Limit engine usage to PKEY_METHS</td>
   </tr>
   <tr>
     <td><code>ENGINE_METHOD_PKEY_ASN1_METHS</code></td>
@@ -6064,6 +6105,7 @@ See the [list of SSL OP Flags][] for details.
 [FIPS provider from OpenSSL 3]: https://www.openssl.org/docs/man3.0/man7/crypto.html#FIPS-provider
 [HTML 5.2]: https://www.w3.org/TR/html52/changes.html#features-removed
 [JWK]: https://tools.ietf.org/html/rfc7517
+[Key usages]: webcrypto.md#cryptokeyusages
 [NIST SP 800-131A]: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-131Ar2.pdf
 [NIST SP 800-132]: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-132.pdf
 [NIST SP 800-38D]: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf

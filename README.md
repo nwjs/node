@@ -81,8 +81,10 @@ directory contains the latest Hydrogen (Node.js 18) release.
 
 <https://nodejs.org/download/nightly/>
 
-Each directory name and filename contains a date (in UTC) and the commit
-SHA at the HEAD of the release.
+Each directory and filename includes the version (e.g., `v22.0.0`),
+followed by the UTC date (e.g., `20240424` for April 24, 2024),
+and the short commit SHA of the HEAD of the release (e.g., `ddd0a9e494`).
+For instance, a full directory name might look like `v22.0.0-nightly20240424ddd0a9e494`.
 
 #### API documentation
 
@@ -102,11 +104,10 @@ To download `SHASUMS256.txt` using `curl`:
 curl -O https://nodejs.org/dist/vx.y.z/SHASUMS256.txt
 ```
 
-To check that a downloaded file matches the checksum, run
-it through `sha256sum` with a command such as:
+To check that downloaded files match the checksum, use `sha256sum`:
 
 ```bash
-grep node-vx.y.z.tar.gz SHASUMS256.txt | sha256sum -c -
+sha256sum -c SHASUMS256.txt --ignore-missing
 ```
 
 For Current and LTS, the GPG detached signature of `SHASUMS256.txt` is in
@@ -282,12 +283,14 @@ For information about the governance of the Node.js project, see
 
 ### Collaborators
 
+* [abmusse](https://github.com/abmusse) -
+  **Abdirahim Musse** <<abdirahim.musse@ibm.com>>
 * [addaleax](https://github.com/addaleax) -
   **Anna Henningsen** <<anna@addaleax.net>> (she/her)
 * [aduh95](https://github.com/aduh95) -
-  **Antoine du Hamel** <<duhamelantoine1995@gmail.com>> (he/him)
+  **Antoine du Hamel** <<duhamelantoine1995@gmail.com>> (he/him) - [Support me](https://github.com/sponsors/aduh95)
 * [anonrig](https://github.com/anonrig) -
-  **Yagiz Nizipli** <<yagiz@nizipli.com>> (he/him)
+  **Yagiz Nizipli** <<yagiz@nizipli.com>> (he/him) - [Support me](https://github.com/sponsors/anonrig)
 * [apapirovski](https://github.com/apapirovski) -
   **Anatoli Papirovski** <<apapirovski@mac.com>> (he/him)
 * [atlowChemi](https://github.com/atlowChemi) -
@@ -316,8 +319,6 @@ For information about the governance of the Node.js project, see
   **Kohei Ueno** <<kohei.ueno119@gmail.com>> (he/him)
 * [daeyeon](https://github.com/daeyeon) -
   **Daeyeon Jeong** <<daeyeon.dev@gmail.com>> (he/him)
-* [danielleadams](https://github.com/danielleadams) -
-  **Danielle Adams** <<adamzdanielle@gmail.com>> (she/her)
 * [debadree25](https://github.com/debadree25) -
   **Debadree Chatterjee** <<debadree333@gmail.com>> (he/him)
 * [deokjinkim](https://github.com/deokjinkim) -
@@ -356,10 +357,10 @@ For information about the governance of the Node.js project, see
   **Jacob Smith** <<jacob@frende.me>> (he/him)
 * [jasnell](https://github.com/jasnell) -
   **James M Snell** <<jasnell@gmail.com>> (he/him)
+* [jazelly](https://github.com/jazelly) -
+  **Jason Zhang** <<xzha4350@gmail.com>> (he/him)
 * [jkrems](https://github.com/jkrems) -
   **Jan Krems** <<jan.krems@gmail.com>> (he/him)
-* [joesepi](https://github.com/joesepi) -
-  **Joe Sepi** <<sepi@joesepi.com>> (he/him)
 * [joyeecheung](https://github.com/joyeecheung) -
   **Joyee Cheung** <<joyeec9h3@gmail.com>> (she/her)
 * [juanarbol](https://github.com/juanarbol) -
@@ -385,13 +386,13 @@ For information about the governance of the Node.js project, see
 * [Lxxyx](https://github.com/Lxxyx) -
   **Zijian Liu** <<lxxyxzj@gmail.com>> (he/him)
 * [marco-ippolito](https://github.com/marco-ippolito) -
-  **Marco Ippolito** <<marcoippolito54@gmail.com>> (he/him)
+  **Marco Ippolito** <<marcoippolito54@gmail.com>> (he/him) - [Support me](https://github.com/sponsors/marco-ippolito)
 * [marsonya](https://github.com/marsonya) -
   **Akhil Marsonya** <<akhil.marsonya27@gmail.com>> (he/him)
 * [MattiasBuelens](https://github.com/MattiasBuelens) -
   **Mattias Buelens** <<mattias@buelens.com>> (he/him)
 * [mcollina](https://github.com/mcollina) -
-  **Matteo Collina** <<matteo.collina@gmail.com>> (he/him)
+  **Matteo Collina** <<matteo.collina@gmail.com>> (he/him) - [Support me](https://github.com/sponsors/mcollina)
 * [meixg](https://github.com/meixg) -
   **Xuguang Mei** <<meixuguang@gmail.com>> (he/him)
 * [mhdawson](https://github.com/mhdawson) -
@@ -408,6 +409,8 @@ For information about the governance of the Node.js project, see
   **Filip Skokan** <<panva.ip@gmail.com>> (he/him)
 * [pimterry](https://github.com/pimterry) -
   **Tim Perry** <<pimterry@gmail.com>> (he/him)
+* [pmarchini](https://github.com/pmarchini) -
+  **Pietro Marchini** <<pietro.marchini94@gmail.com>> (he/him)
 * [Qard](https://github.com/Qard) -
   **Stephen Belanger** <<admin@stephenbelanger.com>> (he/him)
 * [RafaelGSS](https://github.com/RafaelGSS) -
@@ -498,6 +501,8 @@ For information about the governance of the Node.js project, see
   **Claudio Rodriguez** <<cjrodr@yahoo.com>>
 * [danbev](https://github.com/danbev) -
   **Daniel Bevenius** <<daniel.bevenius@gmail.com>> (he/him)
+* [danielleadams](https://github.com/danielleadams) -
+  **Danielle Adams** <<adamzdanielle@gmail.com>> (she/her)
 * [DavidCai1993](https://github.com/DavidCai1993) -
   **David Cai** <<davidcai1993@yahoo.com>> (he/him)
 * [davisjam](https://github.com/davisjam) -
@@ -510,7 +515,7 @@ For information about the governance of the Node.js project, see
   **Hitesh Kanwathirtha** <<digitalinfinity@gmail.com>> (he/him)
 * [dmabupt](https://github.com/dmabupt) -
   **Xu Meng** <<dmabupt@gmail.com>> (he/him)
-* [dnlup](https://github.com/dnlup)
+* [dnlup](https://github.com/dnlup) -
   **dnlup** <<dnlup.dev@gmail.com>>
 * [eljefedelrodeodeljefe](https://github.com/eljefedelrodeodeljefe) -
   **Robert Jefe Lindstaedt** <<robert.lindstaedt@gmail.com>>
@@ -562,6 +567,8 @@ For information about the governance of the Node.js project, see
   **Yuval Brik** <<yuval@brik.org.il>>
 * [joaocgreis](https://github.com/joaocgreis) -
   **João Reis** <<reis@janeasystems.com>>
+* [joesepi](https://github.com/joesepi) -
+  **Joe Sepi** <<sepi@joesepi.com>> (he/him)
 * [joshgav](https://github.com/joshgav) -
   **Josh Gavant** <<josh.gavant@outlook.com>>
 * [julianduque](https://github.com/julianduque) -
@@ -750,7 +757,7 @@ maintaining the Node.js project.
   **Mert Can Altin** <<mertgold60@gmail.com>>
 * [preveen-stack](https://github.com/preveen-stack) -
   **Preveen Padmanabhan** <<wide4head@gmail.com>> (he/him)
-* [RedYetiDev](https://github.com/redyetidev) -
+* [RedYetiDev](https://github.com/RedYetiDev) -
   **Aviv Keller** <<redyetidev@gmail.com>> (they/them)
 * [VoltrexKeyva](https://github.com/VoltrexKeyva) -
   **Mohammed Keyvanzadeh** <<mohammadkeyvanzade94@gmail.com>> (he/him)
@@ -762,12 +769,8 @@ responding to new issues.
 
 Primary GPG keys for Node.js Releasers (some Releasers sign with subkeys):
 
-* **Beth Griggs** <<bethanyngriggs@gmail.com>>
-  `4ED778F539E3634C779C87C6D7062848A1AB005C`
-* **Bryan English** <<bryan@bryanenglish.com>>
-  `141F07595B7B3FFE74309A937405533BE57C7D57`
-* **Danielle Adams** <<adamzdanielle@gmail.com>>
-  `74F12602B6F1C4E913FAA37AD3A89613643B6201`
+* **Antoine du Hamel** <<duhamelantoine1995@gmail.com>>
+  `C0D6248439F1D5604AAFFB4021D900FFDB233756`
 * **Juan José Arboleda** <<soyjuanarbol@gmail.com>>
   `DD792F5973C6DE52C432CBDAC77ABFA00DDBF2B7`
 * **Marco Ippolito** <<marcoippolito54@gmail.com>>
@@ -787,9 +790,7 @@ To import the full set of trusted release keys (including subkeys possibly used
 to sign releases):
 
 ```bash
-gpg --keyserver hkps://keys.openpgp.org --recv-keys 4ED778F539E3634C779C87C6D7062848A1AB005C # Beth Griggs
-gpg --keyserver hkps://keys.openpgp.org --recv-keys 141F07595B7B3FFE74309A937405533BE57C7D57 # Bryan English
-gpg --keyserver hkps://keys.openpgp.org --recv-keys 74F12602B6F1C4E913FAA37AD3A89613643B6201 # Danielle Adams
+gpg --keyserver hkps://keys.openpgp.org --recv-keys C0D6248439F1D5604AAFFB4021D900FFDB233756 # Antoine du Hamel
 gpg --keyserver hkps://keys.openpgp.org --recv-keys DD792F5973C6DE52C432CBDAC77ABFA00DDBF2B7 # Juan José Arboleda
 gpg --keyserver hkps://keys.openpgp.org --recv-keys CC68F5A3106FF448322E48ED27F5E38D5B0A215F # Marco Ippolito
 gpg --keyserver hkps://keys.openpgp.org --recv-keys 8FCCA13FEF1D0C2E91008E09770F7A9A5AE15600 # Michaël Zasso
@@ -806,12 +807,17 @@ verify a downloaded file.
 
 <summary>Other keys used to sign some previous releases</summary>
 
+* **Beth Griggs** <<bethanyngriggs@gmail.com>>
+  `4ED778F539E3634C779C87C6D7062848A1AB005C`
+* **Bryan English** <<bryan@bryanenglish.com>>
+  `141F07595B7B3FFE74309A937405533BE57C7D57`
 * **Chris Dickinson** <<christopher.s.dickinson@gmail.com>>
   `9554F04D7259F04124DE6B476D5A82AC7E37093B`
 * **Colin Ihrig** <<cjihrig@gmail.com>>
   `94AE36675C464D64BAFA68DD7434390BDBE9B9C5`
 * **Danielle Adams** <<adamzdanielle@gmail.com>>
   `1C050899334244A8AF75E53792EF661D867B9DFA`
+  `74F12602B6F1C4E913FAA37AD3A89613643B6201`
 * **Evan Lucas** <<evanlucas@me.com>>
   `B9AE9905FFD7803F25714661B63B535A4C206CA9`
 * **Gibson Fahnestock** <<gibfahn@gmail.com>>
@@ -871,7 +877,7 @@ releases on a rotation basis as outlined in the
 ## License
 
 Node.js is available under the
-[MIT license](https://opensource.org/licenses/MIT). Node.js also includes
+[MIT License](https://opensource.org/licenses/MIT). Node.js also includes
 external libraries that are available under a variety of licenses.  See
 [LICENSE](https://github.com/nodejs/node/blob/HEAD/LICENSE) for the full
 license text.

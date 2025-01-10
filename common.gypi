@@ -674,7 +674,7 @@
       }],
       [ 'OS in "linux freebsd openbsd solaris aix os400"', {
         'cflags': [ '-pthread' ],
-        'ldflags': [ '-pthread' ],
+        'ldflags': [ '-pthread', '-fuse-ld=lld' ],
       }],
       [ 'OS in "linux freebsd openbsd solaris android aix os400 cloudabi"', {
         'cflags': [ '-Wall', '-Wextra', '-Wno-unused-parameter', ],

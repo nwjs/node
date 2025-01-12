@@ -848,7 +848,7 @@
           ['_type!="static_library"', {
             'xcode_settings': {
               'OTHER_LDFLAGS': [
-                '-Wl,-search_paths_first'
+                '-fuse-ld=lld -Wl,-search_paths_first'
               ],
             },
           }],

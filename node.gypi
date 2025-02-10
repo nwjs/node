@@ -340,6 +340,7 @@
           '-L<(PRODUCT_DIR)/../nw/', '-lv8',
           '<(PRODUCT_DIR)/../nw/nwjs\ Framework.framework/nwjs\ Framework',
                   '-Wl,-force_load <(V8_LIBBASE)',
+                  '-Wl,-force_load <(LIBABSL)',
                   '-Wl,-force_load <(LIBCXXABI)',
                   '-Wl,-force_load <(V8_PLTFRM)',
         ],
@@ -372,6 +373,7 @@
        'OTHER_LDFLAGS': [
          '<(PRODUCT_DIR)/../nw/nwjs\ Framework.framework/nwjs\ Framework',
                  '-Wl,-force_load <(V8_LIBBASE)',
+                 '-Wl,-force_load <(LIBABSL)',
                  '-Wl,-force_load <(LIBCXX)',
                  '-Wl,-force_load <(V8_PLTFRM)',
        ],

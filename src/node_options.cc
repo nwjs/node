@@ -1137,7 +1137,8 @@ PerProcessOptionsParser::PerProcessOptionsParser(
             &PerProcessOptions::trace_sigint,
             kAllowedInEnvvar);
 
-  //Insert(iop, &PerProcessOptions::get_per_isolate_options);
+  Insert(iop, &PerProcessOptions::get_per_isolate_options);
+
 #if 0
   AddOption("--node-memory-debug",
             "Run with extra debug checks for memory leaks in Node.js itself",

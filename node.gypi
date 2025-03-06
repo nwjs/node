@@ -222,6 +222,9 @@
     [ 'OS=="win" and component=="shared_library"', {
       'libraries': [ '<(PRODUCT_DIR)/../nw/v8.dll.lib' ]
     }],
+    [ 'OS=="win"', {
+      'libraries': [ '<(PRODUCT_DIR)/../nw/obj/third_party/abseil-cpp/absl.lib' ]
+    }],
 
     [ 'node_shared_brotli=="false"', {
       'dependencies': [ 'deps/brotli/brotli.gyp:brotli' ],

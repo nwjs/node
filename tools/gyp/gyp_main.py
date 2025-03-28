@@ -39,6 +39,7 @@ def UnixifyPath(path):
 # else the 'gyp' library will not be found
 path = UnixifyPath(sys.argv[0])
 sys.path.insert(0, os.path.join(os.path.dirname(path), "pylib"))
+sys.path.insert(1, os.path.join(os.path.dirname(path), '..', 'v8_gypfiles'))
 import gyp  # noqa: E402
 
 if __name__ == "__main__":

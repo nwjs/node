@@ -15,6 +15,10 @@
     'python%': 'python3',
 
     'node_shared%': 'true',
+    'node_shared_ada%': 'false',
+    'node_shared_simdjson%': 'false',
+    'node_shared_simdutf%': 'false',
+    'node_quic%': 'false',
     'force_dynamic_crt%': 0,
     'node_use_v8_platform%': 'true',
     'node_use_bundled_v8%': 'true',
@@ -36,6 +40,8 @@
 
     'clang%': 0,
     'error_on_warn%': 'false',
+    'suppress_all_error_on_warn%': 'false',
+    'control_flow_guard%': 'false',
 
     'openssl_product': '<(STATIC_LIB_PREFIX)openssl<(STATIC_LIB_SUFFIX)',
     'openssl_fips': '',
@@ -48,7 +54,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.11',
+    'v8_embedder_string': '-node.13',
 
     ##### V8 defaults for Node.js #####
 
@@ -475,6 +481,11 @@
               '/Zm2000',
             ],
           }],
+          ['control_flow_guard=="true"', {
+            'AdditionalOptions': [
+              '/guard:cf',                        # Control Flow Guard
+            ],
+          }],
         ],
         'BufferSecurityCheck': 'true',
         'DebugInformationFormat': 1,          # /Z7 embed info in .obj files
@@ -500,6 +511,11 @@
           }],
           ['target_arch=="arm64"', {
             'TargetMachine' : 0,              # NotSet. MACHINE:ARM64 is inferred from the input files.
+          }],
+          ['control_flow_guard=="true"', {
+            'AdditionalOptions': [
+              '/guard:cf',                        # Control Flow Guard
+            ],
           }],
         ],
         'GenerateDebugInformation': 'true',

@@ -3549,7 +3549,7 @@ changes:
 
 Type: Runtime
 
-Calling [`util.promisify`][] on a function that returns a <Promise> will ignore
+Calling [`util.promisify`][] on a function that returns a `Promise` will ignore
 the result of said promise, which can lead to unhandled promise rejections.
 
 ### DEP0175: `util.toUSVString`
@@ -3755,6 +3755,47 @@ It is recommended to use the `new` qualifier instead. This applies to all REPL c
 `REPLServer` and `Recoverable`.
 
 <!-- md-lint skip-deprecation DEP0186 -->
+
+### DEP0187: Passing invalid argument types to `fs.existsSync`
+
+<!-- YAML
+changes:
+  - version: v23.4.0
+    pr-url: https://github.com/nodejs/node/pull/55892
+    description: Documentation-only.
+-->
+
+Type: Documentation-only
+
+Passing non-supported argument types is deprecated and, instead of returning `false`,
+will throw an error in a future version.
+
+### DEP0188: `process.features.ipv6` and `process.features.uv`
+
+<!-- YAML
+changes:
+  - version: v23.4.0
+    pr-url: https://github.com/nodejs/node/pull/55545
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only
+
+These properties are unconditionally `true`. Any checks based on these properties are redundant.
+
+### DEP0189: `process.features.tls_*`
+
+<!-- YAML
+changes:
+  - version: v23.4.0
+    pr-url: https://github.com/nodejs/node/pull/55545
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only
+
+`process.features.tls_alpn`, `process.features.tls_ocsp`, and `process.features.tls_sni` are
+deprecated, as their values are guaranteed to be identical to that of `process.features.tls`.
 
 [NIST SP 800-38D]: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf
 [RFC 6066]: https://tools.ietf.org/html/rfc6066#section-3

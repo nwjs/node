@@ -20,6 +20,7 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "node.h"
+#include "node_config_file.h"
 #include "node_dotenv.h"
 #include "node_task_runner.h"
 
@@ -168,6 +169,9 @@ namespace per_process {
 // node_dotenv.h
 // Instance is used to store environment variables including NODE_OPTIONS.
 node::Dotenv dotenv_file = Dotenv();
+
+// node_config_file.h
+node::ConfigReader config_reader = ConfigReader();
 
 // node_revert.h
 // Bit flag used to track security reverts.
@@ -339,7 +343,8 @@ MaybeLocal<Value> StartExecution(Environment* env, StartExecutionCallback cb) {
   CHECK(!env->isolate_data()->is_building_snapshot());
 
 #ifndef DISABLE_SINGLE_EXECUTABLE_APPLICATION
-  if (sea::IsSingleExecutable()) {
+  // Snapshot in SEA is only loaded for the main thread.
+  if (sea::IsSingleExecutable() && env->is_main_thread()) {
     sea::SeaResource sea = sea::FindSingleExecutableResource();
     // The SEA preparation blob building process should already enforce this,
     // this check is just here to guard against the unlikely case where
@@ -361,6 +366,9 @@ MaybeLocal<Value> StartExecution(Environment* env, StartExecutionCallback cb) {
   // move the pre-execution part into a different file that can be
   // reused when dealing with user-defined main functions.
   if (!env->snapshot_deserialize_main().IsEmpty()) {
+    // Custom worker snapshot is not supported yet,
+    // so workers can't have deserialize main functions.
+    CHECK(env->is_main_thread());
     return env->RunSnapshotDeserializeMain();
   }
 
@@ -905,6 +913,36 @@ static ExitCode InitializeNodeWithArgsInternal(
     per_process::dotenv_file.AssignNodeOptionsIfAvailable(&node_options);
   }
 
+  std::string node_options_from_config;
+  if (auto path = per_process::config_reader.GetDataFromArgs(*argv)) {
+    switch (per_process::config_reader.ParseConfig(*path)) {
+      case ParseResult::Valid:
+        break;
+      case ParseResult::InvalidContent:
+        errors->push_back(std::string(*path) + ": invalid content");
+        break;
+      case ParseResult::FileError:
+        errors->push_back(std::string(*path) + ": not found");
+        break;
+      default:
+        UNREACHABLE();
+    }
+    node_options_from_config = per_process::config_reader.AssignNodeOptions();
+    // (@marco-ippolito) Avoid reparsing the env options again
+    std::vector<std::string> env_argv_from_config =
+        ParseNodeOptionsEnvVar(node_options_from_config, errors);
+
+    // Check the number of flags in NODE_OPTIONS from the config file
+    // matches the parsed ones. This avoid users from sneaking in
+    // additional flags.
+    if (env_argv_from_config.size() !=
+        per_process::config_reader.GetFlagsSize()) {
+      errors->emplace_back("The number of NODE_OPTIONS doesn't match "
+                           "the number of flags in the config file");
+    }
+    node_options += node_options_from_config;
+  }
+
 #if !defined(NODE_WITHOUT_NODE_OPTIONS)
   if (!(flags & ProcessInitializationFlags::kDisableNodeOptionsEnv)) {
     // NODE_OPTIONS environment variable is preferred over the file one.
@@ -1127,7 +1165,7 @@ InitializeOncePerProcessInternal(const std::vector<std::string>& args,
   if (!(flags & ProcessInitializationFlags::kNoParseGlobalDebugVariables)) {
     // Initialized the enabled list for Debug() calls with system
     // environment variables.
-    per_process::enabled_debug_list.Parse(per_process::system_environment);
+    per_process::enabled_debug_list.Parse(nullptr);
   }
 
   PlatformInit(flags);
@@ -1311,6 +1349,7 @@ InitializeOncePerProcessInternal(const std::vector<std::string>& args,
     udata_setCommonData((uint8_t*)icu_data, &err);
 
   if (!(flags & ProcessInitializationFlags::kNoInitializeNodeV8Platform)) {
+    uv_thread_setname("MainThread");
     per_process::v8_platform.Initialize(
         static_cast<int>(per_process::cli_options->v8_thread_pool_size));
     result->platform_ = per_process::v8_platform.Platform();
@@ -1404,6 +1443,10 @@ void TearDownOncePerProcess() {
     // will never be fully cleaned up.
     per_process::v8_platform.Dispose();
   }
+
+#if HAVE_OPENSSL
+  crypto::CleanupCachedRootCertificates();
+#endif  // HAVE_OPENSSL
 }
 
 ExitCode GenerateAndWriteSnapshotData(const SnapshotData** snapshot_data_ptr,

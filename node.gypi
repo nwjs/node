@@ -27,7 +27,11 @@
 
   'conditions': [
     [ 'clang==1', {
-      'cflags': [ '-Werror=undefined-inline', '-Werror=extra-semi']
+      'cflags': [
+        '-Werror=undefined-inline',
+        '-Werror=extra-semi',
+        '-Werror=ctad-maybe-unsupported',
+      ],
     }],
     [ '"<(_type)"=="executable"', {
       'msvs_settings': {
@@ -65,17 +69,21 @@
         'NODE_PLATFORM="win32"',
         '_UNICODE=1',
       ],
-      #'msvs_precompiled_header': 'tools/msvs/pch/node_pch.h',
-      #'msvs_precompiled_source': 'tools/msvs/pch/node_pch.cc',
-      #'sources': [
-        #'<(_msvs_precompiled_header)',
-        #'<(_msvs_precompiled_source)',
-      #],
+      'conditions': [
+          [ 'clang != 1 or use_ccache_win != 1', {
+            #'msvs_precompiled_header': 'tools/msvs/pch/node_pch.h',
+            #'msvs_precompiled_source': 'tools/msvs/pch/node_pch.cc',
+            'sources': [
+            #  '<(_msvs_precompiled_header)',
+            #  '<(_msvs_precompiled_source)',
+            ],
+          }]
+      ]
     }, { # POSIX
       'defines': [ '__POSIX__' ],
     }],
     [ 'node_enable_d8=="true"', {
-      'dependencies': [ 'tools/v8_gypfiles/d8.gyp:d8' ],
+      #'dependencies': [ 'tools/v8_gypfiles/d8.gyp:d8' ],
     }],
     [ 'node_use_bundled_v8=="true"', {
       'dependencies': [
@@ -137,7 +145,7 @@
        target_arch=="ia32" or target_arch=="x32")', {
       'defines': [ 'NODE_ENABLE_VTUNE_PROFILING' ],
       'dependencies': [
-        'tools/v8_gypfiles/v8vtune.gyp:v8_vtune'
+        #'tools/v8_gypfiles/v8vtune.gyp:v8_vtune'
       ],
     }],
     [ 'node_no_browser_globals=="true"', {
@@ -226,6 +234,18 @@
       'libraries': [ '<(PRODUCT_DIR)/../nw/obj/third_party/abseil-cpp/absl.lib' ]
     }],
 
+    [ 'node_shared_ada=="false"', {
+        #'dependencies': [ 'deps/ada/ada.gyp:ada' ],
+    }],
+
+    [ 'node_shared_simdjson=="false"', {
+        'dependencies': [ 'deps/simdjson/simdjson.gyp:simdjson' ],
+    }],
+
+    [ 'node_shared_simdutf=="false"', {
+        'dependencies': [ 'deps/simdutf/simdutf.gyp:simdutf' ],
+    }],
+
     [ 'node_shared_brotli=="false"', {
       'dependencies': [ 'deps/brotli/brotli.gyp:brotli' ],
     }],
@@ -234,10 +254,15 @@
       'dependencies': [ 'deps/sqlite/sqlite.gyp:sqlite' ],
     }],
 
+    [ 'node_shared_zstd=="false"', {
+      'dependencies': [ 'deps/zstd/zstd.gyp:zstd' ],
+    }],
+
     [ 'OS=="mac"', {
       # linking Corefoundation is needed since certain macOS debugging tools
-      # like Instruments require it for some features
-      'libraries': [ '-framework CoreFoundation' ],
+      # like Instruments require it for some features. Security is needed for
+      # --use-system-ca.
+      'libraries': [ '-framework CoreFoundation -framework Security' ],
       'defines!': [
         'NODE_PLATFORM="mac"',
       ],

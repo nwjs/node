@@ -18,6 +18,7 @@
     'node_shared_ada%': 'false',
     'node_shared_simdjson%': 'false',
     'node_shared_simdutf%': 'false',
+    'use_ccache_win%': 'false',
     'node_quic%': 'false',
     'force_dynamic_crt%': 0,
     'node_use_v8_platform%': 'true',

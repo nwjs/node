@@ -47,6 +47,8 @@
 #include "node_v8_platform-inl.h"
 #include "node_version.h"
 
+#include "module_wrap.h"
+
 #include <iostream>
 
 #include <vector>
@@ -2068,6 +2070,25 @@ NODE_EXTERN void g_promise_reject_callback(v8::PromiseRejectMessage* data) {
 NODE_EXTERN void g_uv_init_nw(int worker) {
   uv_init_nw(worker);
 }
+
+NODE_EXTERN void g_host_import_module(
+    v8::Local<v8::Context> context,
+    v8::Local<v8::Data> v8_host_defined_options,
+    v8::Local<v8::Value> v8_referrer_resource_url,
+    v8::Local<v8::String> v8_specifier,
+    v8::Local<v8::FixedArray> v8_import_attributes,
+    v8::MaybeLocal<v8::Promise>* retval) {
+  v8::MaybeLocal<v8::Promise> ret = node::loader::ImportModuleDynamically(context, v8_host_defined_options, v8_referrer_resource_url, v8_specifier, v8_import_attributes);
+  if (retval)
+    *retval = ret;
+}
+
+NODE_EXTERN void g_host_get_import_meta(v8::Local<v8::Context> context,
+					v8::Local<v8::Module> module,
+					v8::Local<v8::Object> meta) {
+  node::loader::ModuleWrap::HostInitializeImportMetaObjectCallback(context, module, meta);
+}
+
 
 #ifdef __APPLE__
 

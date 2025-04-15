@@ -15,6 +15,8 @@
 #include <algorithm>
 
 namespace node {
+extern bool node_is_nwjs;
+
 namespace loader {
 
 using errors::TryCatchScope;
@@ -858,7 +860,7 @@ MaybeLocal<Module> ModuleWrap::ResolveModuleCallback(
   return module->module_.Get(isolate);
 }
 
-static MaybeLocal<Promise> ImportModuleDynamically(
+MaybeLocal<Promise> ImportModuleDynamically(
     Local<Context> context,
     Local<Data> host_defined_options,
     Local<Value> resource_name,
@@ -928,7 +930,8 @@ void ModuleWrap::SetImportModuleDynamicallyCallback(
   Local<Function> import_callback = args[0].As<Function>();
   realm->set_host_import_module_dynamically_callback(import_callback);
 
-  isolate->SetHostImportModuleDynamicallyCallback(ImportModuleDynamically);
+  if (!node_is_nwjs)
+    isolate->SetHostImportModuleDynamicallyCallback(ImportModuleDynamically);
 }
 
 void ModuleWrap::HostInitializeImportMetaObjectCallback(
@@ -975,6 +978,7 @@ void ModuleWrap::SetInitializeImportMetaObjectCallback(
   Local<Function> import_meta_callback = args[0].As<Function>();
   realm->set_host_initialize_import_meta_object_callback(import_meta_callback);
 
+  if (!node_is_nwjs)
   isolate->SetHostInitializeImportMetaObjectCallback(
       HostInitializeImportMetaObjectCallback);
 }

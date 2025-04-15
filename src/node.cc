@@ -2078,9 +2078,19 @@ NODE_EXTERN void g_host_import_module(
     v8::Local<v8::String> v8_specifier,
     v8::Local<v8::FixedArray> v8_import_attributes,
     v8::MaybeLocal<v8::Promise>* retval) {
-  v8::MaybeLocal<v8::Promise> ret = node::loader::ImportModuleDynamically(context, v8_host_defined_options, v8_referrer_resource_url, v8_specifier, v8_import_attributes);
+  node::thread_ctx_st* tls_ctx = nullptr;
+  if (node::thread_ctx_created) {
+    tls_ctx = (node::thread_ctx_st*)uv_key_get(&node::thread_ctx_key);
+    if (tls_ctx && tls_ctx->env) {
+      tls_ctx->env->context()->Enter();
+    }
+  }
+  v8::MaybeLocal<v8::Promise> ret = node::loader::ImportModuleDynamically(tls_ctx->env->context(), v8_host_defined_options, v8_referrer_resource_url, v8_specifier, v8_import_attributes);
   if (retval)
     *retval = ret;
+  if (tls_ctx && tls_ctx->env) {
+    tls_ctx->env->context()->Exit();
+  }
 }
 
 NODE_EXTERN void g_host_get_import_meta(v8::Local<v8::Context> context,

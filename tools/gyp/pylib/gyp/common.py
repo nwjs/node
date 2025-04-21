@@ -146,7 +146,7 @@ def RelativePath(path, relative_to, follow_path_symlink=True):
 
     # Convert to normalized (and therefore absolute paths).
     path = os.path.realpath(path) if follow_path_symlink else os.path.abspath(path)
-    relative_to = os.path.realpath(relative_to)
+    relative_to = os.path.realpath(relative_to) if follow_path_symlink else os.path.abspath(relative_to)
 
     # On Windows, we can't create a relative path to a different drive, so just
     # use the absolute path.

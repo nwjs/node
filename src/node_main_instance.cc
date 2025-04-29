@@ -85,9 +85,11 @@ NodeMainInstance::~NodeMainInstance() {
     // This should only be done on a main instance that owns its isolate.
     // IsolateData must be freed before UnregisterIsolate() is called.
     isolate_data_.reset();
-    platform_->UnregisterIsolate(isolate_);
   }
   isolate_->Dispose();
+  // deleting isolate could trigger cppgc's termination, which in turn
+  // needs platform's task runner...
+  platform_->UnregisterIsolate(isolate_);
 }
 
 ExitCode NodeMainInstance::Run() {

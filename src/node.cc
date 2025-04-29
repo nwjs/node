@@ -1362,6 +1362,7 @@ InitializeOncePerProcessInternal(const std::vector<std::string>& args,
     V8::Initialize();
   }
 
+#if 0 //already done in V8::Initialize() even in plain node mode
   if (!(flags & ProcessInitializationFlags::kNoInitializeCppgc)) {
     v8::PageAllocator* allocator = nullptr;
     if (result->platform_ != nullptr) {
@@ -1369,6 +1370,7 @@ InitializeOncePerProcessInternal(const std::vector<std::string>& args,
     }
     cppgc::InitializeProcess(allocator);
   }
+#endif
 
 #if NODE_USE_V8_WASM_TRAP_HANDLER
   bool use_wasm_trap_handler =

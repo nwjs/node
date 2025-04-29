@@ -192,6 +192,14 @@ added: v23.5.0
 This method is used to create SQLite user-defined functions. This method is a
 wrapper around [`sqlite3_create_function_v2()`][].
 
+### `database.isOpen`
+
+<!-- YAML
+added: v23.11.0
+-->
+
+* {boolean} Whether the database is currently open or not.
+
 ### `database.open()`
 
 <!-- YAML
@@ -258,7 +266,7 @@ added: v23.3.0
     applying the changeset is aborted and the database is rolled back.
 
     **Default**: A function that returns `SQLITE_CHANGESET_ABORT`.
-* Returns: {boolean} Whether the changeset was applied succesfully without being aborted.
+* Returns: {boolean} Whether the changeset was applied successfully without being aborted.
 
 An exception is thrown if the database is not
 open. This method is a wrapper around [`sqlite3changeset_apply()`][].
@@ -280,6 +288,17 @@ const changeset = session.changeset();
 targetDb.applyChangeset(changeset);
 // Now that the changeset has been applied, targetDb contains the same data as sourceDb.
 ```
+
+### `database[Symbol.dispose]()`
+
+<!-- YAML
+added: v23.11.0
+-->
+
+> Stability: 1 - Experimental
+
+Closes the database connection. If the database connection is already closed
+then this is a no-op.
 
 ## Class: `Session`
 
@@ -354,6 +373,34 @@ This method executes a prepared statement and returns all results as an array of
 objects. If the prepared statement does not return any results, this method
 returns an empty array. The prepared statement [parameters are bound][] using
 the values in `namedParameters` and `anonymousParameters`.
+
+### `statement.columns()`
+
+<!-- YAML
+added: v23.11.0
+-->
+
+* Returns: {Array} An array of objects. Each object corresponds to a column
+  in the prepared statement, and contains the following properties:
+
+  * `column`: {string|null} The unaliased name of the column in the origin
+    table, or `null` if the column is the result of an expression or subquery.
+    This property is the result of [`sqlite3_column_origin_name()`][].
+  * `database`: {string|null} The unaliased name of the origin database, or
+    `null` if the column is the result of an expression or subquery. This
+    property is the result of [`sqlite3_column_database_name()`][].
+  * `name`: {string} The name assigned to the column in the result set of a
+    `SELECT` statement. This property is the result of
+    [`sqlite3_column_name()`][].
+  * `table`: {string|null} The unaliased name of the origin table, or `null` if
+    the column is the result of an expression or subquery. This property is the
+    result of [`sqlite3_column_table_name()`][].
+  * `type`: {string|null} The declared data type of the column, or `null` if the
+    column is the result of an expression or subquery. This property is the
+    result of [`sqlite3_column_decltype()`][].
+
+This method is used to retrieve information about the columns returned by the
+prepared statement.
 
 ### `statement.expandedSQL`
 
@@ -468,6 +515,17 @@ are several caveats to be aware of when enabling bare named parameters:
 * Using ambiguous named parameters, such as `$k` and `@k`, in the same prepared
   statement will result in an exception as it cannot be determined how to bind
   a bare name.
+
+### `statement.setAllowUnknownNamedParameters(enabled)`
+
+<!-- YAML
+added: v23.11.0
+-->
+
+* `enabled` {boolean} Enables or disables support for unknown named parameters.
+
+By default, if an unknown name is encountered while binding parameters, an
+exception is thrown. This method allows unknown named parameters to be ignored.
 
 ### `statement.setReadBigInts(enabled)`
 
@@ -659,6 +717,11 @@ resolution handler passed to [`database.applyChangeset()`][]. See also
 [`sqlite3_backup_step()`]: https://www.sqlite.org/c3ref/backup_finish.html#sqlite3backupstep
 [`sqlite3_changes64()`]: https://www.sqlite.org/c3ref/changes.html
 [`sqlite3_close_v2()`]: https://www.sqlite.org/c3ref/close.html
+[`sqlite3_column_database_name()`]: https://www.sqlite.org/c3ref/column_database_name.html
+[`sqlite3_column_decltype()`]: https://www.sqlite.org/c3ref/column_decltype.html
+[`sqlite3_column_name()`]: https://www.sqlite.org/c3ref/column_name.html
+[`sqlite3_column_origin_name()`]: https://www.sqlite.org/c3ref/column_database_name.html
+[`sqlite3_column_table_name()`]: https://www.sqlite.org/c3ref/column_database_name.html
 [`sqlite3_create_function_v2()`]: https://www.sqlite.org/c3ref/create_function.html
 [`sqlite3_exec()`]: https://www.sqlite.org/c3ref/exec.html
 [`sqlite3_expanded_sql()`]: https://www.sqlite.org/c3ref/expanded_sql.html

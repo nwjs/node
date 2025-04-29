@@ -158,6 +158,16 @@ inline void THROW_ERR_SQLITE_ERROR(Isolate* isolate, int errcode) {
   }
 }
 
+inline MaybeLocal<Value> NullableSQLiteStringToValue(Isolate* isolate,
+                                                     const char* str) {
+  if (str == nullptr) {
+    return Null(isolate);
+  }
+
+  return String::NewFromUtf8(isolate, str, NewStringType::kInternalized)
+      .As<Value>();
+}
+
 class BackupJob : public ThreadPoolWork {
  public:
   explicit BackupJob(Environment* env,
@@ -757,6 +767,12 @@ void DatabaseSync::Open(const FunctionCallbackInfo<Value>& args) {
   db->Open();
 }
 
+void DatabaseSync::IsOpenGetter(const FunctionCallbackInfo<Value>& args) {
+  DatabaseSync* db;
+  ASSIGN_OR_RETURN_UNWRAP(&db, args.This());
+  args.GetReturnValue().Set(db->IsOpen());
+}
+
 void DatabaseSync::Close(const FunctionCallbackInfo<Value>& args) {
   DatabaseSync* db;
   ASSIGN_OR_RETURN_UNWRAP(&db, args.This());
@@ -1345,6 +1361,7 @@ StatementSync::StatementSync(Environment* env,
   // connection level and inherited by statements to reduce boilerplate.
   use_big_ints_ = false;
   allow_bare_named_params_ = true;
+  allow_unknown_named_params_ = false;
   bare_named_params_ = std::nullopt;
 }
 
@@ -1427,9 +1444,13 @@ bool StatementSync::BindParams(const FunctionCallbackInfo<Value>& args) {
         }
 
         if (r == 0) {
-          THROW_ERR_INVALID_STATE(
-              env(), "Unknown named parameter '%s'", *utf8_key);
-          return false;
+          if (allow_unknown_named_params_) {
+            continue;
+          } else {
+            THROW_ERR_INVALID_STATE(
+                env(), "Unknown named parameter '%s'", *utf8_key);
+            return false;
+          }
         }
       }
 
@@ -1897,6 +1918,72 @@ void StatementSync::Run(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(result);
 }
 
+void StatementSync::Columns(const FunctionCallbackInfo<Value>& args) {
+  StatementSync* stmt;
+  ASSIGN_OR_RETURN_UNWRAP(&stmt, args.This());
+  Environment* env = Environment::GetCurrent(args);
+  THROW_AND_RETURN_ON_BAD_STATE(
+      env, stmt->IsFinalized(), "statement has been finalized");
+  int num_cols = sqlite3_column_count(stmt->statement_);
+  Isolate* isolate = env->isolate();
+  LocalVector<Value> cols(isolate);
+  LocalVector<Name> col_keys(isolate,
+                             {env->column_string(),
+                              env->database_string(),
+                              env->name_string(),
+                              env->table_string(),
+                              env->type_string()});
+  Local<Value> value;
+
+  cols.reserve(num_cols);
+  for (int i = 0; i < num_cols; ++i) {
+    LocalVector<Value> col_values(isolate);
+    col_values.reserve(col_keys.size());
+
+    if (!NullableSQLiteStringToValue(
+             isolate, sqlite3_column_origin_name(stmt->statement_, i))
+             .ToLocal(&value)) {
+      return;
+    }
+    col_values.emplace_back(value);
+
+    if (!NullableSQLiteStringToValue(
+             isolate, sqlite3_column_database_name(stmt->statement_, i))
+             .ToLocal(&value)) {
+      return;
+    }
+    col_values.emplace_back(value);
+
+    if (!stmt->ColumnNameToName(i).ToLocal(&value)) {
+      return;
+    }
+    col_values.emplace_back(value);
+
+    if (!NullableSQLiteStringToValue(
+             isolate, sqlite3_column_table_name(stmt->statement_, i))
+             .ToLocal(&value)) {
+      return;
+    }
+    col_values.emplace_back(value);
+
+    if (!NullableSQLiteStringToValue(
+             isolate, sqlite3_column_decltype(stmt->statement_, i))
+             .ToLocal(&value)) {
+      return;
+    }
+    col_values.emplace_back(value);
+
+    Local<Object> column = Object::New(isolate,
+                                       Null(isolate),
+                                       col_keys.data(),
+                                       col_values.data(),
+                                       col_keys.size());
+    cols.emplace_back(column);
+  }
+
+  args.GetReturnValue().Set(Array::New(isolate, cols.data(), cols.size()));
+}
+
 void StatementSync::SourceSQLGetter(const FunctionCallbackInfo<Value>& args) {
   StatementSync* stmt;
   ASSIGN_OR_RETURN_UNWRAP(&stmt, args.This());
@@ -1951,6 +2038,23 @@ void StatementSync::SetAllowBareNamedParameters(
   stmt->allow_bare_named_params_ = args[0]->IsTrue();
 }
 
+void StatementSync::SetAllowUnknownNamedParameters(
+    const FunctionCallbackInfo<Value>& args) {
+  StatementSync* stmt;
+  ASSIGN_OR_RETURN_UNWRAP(&stmt, args.This());
+  Environment* env = Environment::GetCurrent(args);
+  THROW_AND_RETURN_ON_BAD_STATE(
+      env, stmt->IsFinalized(), "statement has been finalized");
+
+  if (!args[0]->IsBoolean()) {
+    THROW_ERR_INVALID_ARG_TYPE(env->isolate(),
+                               "The \"enabled\" argument must be a boolean.");
+    return;
+  }
+
+  stmt->allow_unknown_named_params_ = args[0]->IsTrue();
+}
+
 void StatementSync::SetReadBigInts(const FunctionCallbackInfo<Value>& args) {
   StatementSync* stmt;
   ASSIGN_OR_RETURN_UNWRAP(&stmt, args.This());
@@ -2002,6 +2106,8 @@ Local<FunctionTemplate> StatementSync::GetConstructorTemplate(
     SetProtoMethod(isolate, tmpl, "all", StatementSync::All);
     SetProtoMethod(isolate, tmpl, "get", StatementSync::Get);
     SetProtoMethod(isolate, tmpl, "run", StatementSync::Run);
+    SetProtoMethodNoSideEffect(
+        isolate, tmpl, "columns", StatementSync::Columns);
     SetSideEffectFreeGetter(isolate,
                             tmpl,
                             FIXED_ONE_BYTE_STRING(isolate, "sourceSQL"),
@@ -2014,6 +2120,10 @@ Local<FunctionTemplate> StatementSync::GetConstructorTemplate(
                    tmpl,
                    "setAllowBareNamedParameters",
                    StatementSync::SetAllowBareNamedParameters);
+    SetProtoMethod(isolate,
+                   tmpl,
+                   "setAllowUnknownNamedParameters",
+                   StatementSync::SetAllowUnknownNamedParameters);
     SetProtoMethod(
         isolate, tmpl, "setReadBigInts", StatementSync::SetReadBigInts);
     env->set_sqlite_statement_sync_constructor_template(tmpl);
@@ -2169,6 +2279,10 @@ static void Initialize(Local<Object> target,
                  DatabaseSync::EnableLoadExtension);
   SetProtoMethod(
       isolate, db_tmpl, "loadExtension", DatabaseSync::LoadExtension);
+  SetSideEffectFreeGetter(isolate,
+                          db_tmpl,
+                          FIXED_ONE_BYTE_STRING(isolate, "isOpen"),
+                          DatabaseSync::IsOpenGetter);
   SetConstructorFunction(context, target, "DatabaseSync", db_tmpl);
   SetConstructorFunction(context,
                          target,

@@ -770,7 +770,7 @@ Maybe<void> InitializeMainContextForSnapshot(Local<Context> context) {
   if (InitializeBaseContextForSnapshot(context).IsNothing()) {
     return Nothing<void>();
   }
-  return InitializePrimordials(context);
+  return JustVoid();
 }
 
 Maybe<void> InitializePrimordials(Local<Context> context) {
@@ -779,13 +779,18 @@ Maybe<void> InitializePrimordials(Local<Context> context) {
   Context::Scope context_scope(context);
   Local<Object> exports;
 
+  if (!GetPerContextExports(context).ToLocal(&exports)) {
+    return Nothing<void>();
+  }
   Local<String> primordials_string =
       FIXED_ONE_BYTE_STRING(isolate, "primordials");
+  // Ensure that `InitializePrimordials` is called exactly once on a given
+  // context.
+  CHECK(!exports->Has(context, primordials_string).FromJust());
 
-  // Create primordials first and make it available to per-context scripts.
   Local<Object> primordials = Object::New(isolate);
+  // Create primordials and make it available to per-context scripts.
   if (primordials->SetPrototypeV2(context, Null(isolate)).IsNothing() ||
-      !GetPerContextExports(context).ToLocal(&exports) ||
       exports->Set(context, primordials_string, primordials).IsNothing()) {
     return Nothing<void>();
   }

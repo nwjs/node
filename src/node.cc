@@ -2087,6 +2087,8 @@ NODE_EXTERN void g_host_import_module(
       tls_ctx->env->context()->Enter();
     }
   }
+  if (!tls_ctx || !tls_ctx->env)
+    return;
   v8::MaybeLocal<v8::Promise> ret = node::loader::ImportModuleDynamically(tls_ctx->env->context(), v8_host_defined_options, v8_referrer_resource_url, v8_specifier, v8_import_attributes);
   if (retval)
     *retval = ret;

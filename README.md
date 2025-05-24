@@ -317,6 +317,8 @@ For information about the governance of the Node.js project, see
   **Kohei Ueno** <<kohei.ueno119@gmail.com>> (he/him)
 * [daeyeon](https://github.com/daeyeon) -
   **Daeyeon Jeong** <<daeyeon.dev@gmail.com>> (he/him)
+* [dario-piotrowicz](https://github.com/dario-piotrowicz) -
+  **Dario Piotrowicz** <<dario.piotrowicz@gmail.com>> (he/him)
 * [debadree25](https://github.com/debadree25) -
   **Debadree Chatterjee** <<debadree333@gmail.com>> (he/him)
 * [deokjinkim](https://github.com/deokjinkim) -
@@ -361,6 +363,8 @@ For information about the governance of the Node.js project, see
   **Jason Zhang** <<xzha4350@gmail.com>> (he/him)
 * [jkrems](https://github.com/jkrems) -
   **Jan Martin** <<jan.krems@gmail.com>> (he/him)
+* [JonasBa](https://github.com/JonasBa) -
+  **Jonas Badalic** <<jonas.badalic@gmail.com>> (he/him)
 * [joyeecheung](https://github.com/joyeecheung) -
   **Joyee Cheung** <<joyeec9h3@gmail.com>> (she/her)
 * [juanarbol](https://github.com/juanarbol) -
@@ -409,6 +413,8 @@ For information about the governance of the Node.js project, see
   **Tim Perry** <<pimterry@gmail.com>> (he/him)
 * [pmarchini](https://github.com/pmarchini) -
   **Pietro Marchini** <<pietro.marchini94@gmail.com>> (he/him)
+* [puskin](https://github.com/puskin) -
+  **Giovanni Bucci** <<github@puskin.it>> (he/him)
 * [Qard](https://github.com/Qard) -
   **Stephen Belanger** <<admin@stephenbelanger.com>> (he/him)
 * [RafaelGSS](https://github.com/RafaelGSS) -
@@ -753,6 +759,8 @@ maintaining the Node.js project.
   **Gireesh Punathil** <<gpunathi@in.ibm.com>> (he/him)
 * [gurgunday](https://github.com/gurgunday) -
   **Gürgün Dayıoğlu** <<hey@gurgun.day>>
+* [HBSPS](https://github.com/HBSPS) -
+  **Wiyeong Seo** <<hbsps.dev@gmail.com>>
 * [iam-frankqiu](https://github.com/iam-frankqiu) -
   **Frank Qiu** <<iam.frankqiu@gmail.com>> (he/him)
 * [KevinEady](https://github.com/KevinEady) -

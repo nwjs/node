@@ -10,6 +10,18 @@
 
 namespace node {
 
+using CFunctionCallbackWithalueAndOptions = bool (*)(
+    v8::Local<v8::Value>, v8::Local<v8::Value>, v8::FastApiCallbackOptions&);
+using CFunctionCallbackWithMultipleValueAndOptions =
+    bool (*)(v8::Local<v8::Value>,
+             v8::Local<v8::Value>,
+             v8::Local<v8::Value>,
+             v8::FastApiCallbackOptions&);
+using CFunctionA =
+    uint32_t (*)(v8::Local<v8::Value> receiver,
+                 v8::Local<v8::Value> sourceValue,
+                 // NOLINTNEXTLINE(runtime/references) This is V8 api.
+                 v8::FastApiCallbackOptions& options);
 using CFunctionCallbackWithOneByteString =
     uint32_t (*)(v8::Local<v8::Value>, const v8::FastOneByteString&);
 
@@ -20,9 +32,8 @@ using CFunctionCallback = void (*)(v8::Local<v8::Value> unused,
 using CFunctionCallbackReturnDouble =
     double (*)(v8::Local<v8::Object> unused, v8::Local<v8::Object> receiver);
 using CFunctionCallbackReturnInt32 =
-    int32_t (*)(v8::Local<v8::Object> unused,
-                v8::Local<v8::Object> receiver,
-                const v8::FastOneByteString& input,
+    int32_t (*)(v8::Local<v8::Value> receiver,
+                v8::Local<v8::Value> input,
                 // NOLINTNEXTLINE(runtime/references) This is V8 api.
                 v8::FastApiCallbackOptions& options);
 using CFunctionCallbackValueReturnDouble =
@@ -41,8 +52,22 @@ using CFunctionCallbackWithStrings =
     bool (*)(v8::Local<v8::Value>,
              const v8::FastOneByteString& input,
              const v8::FastOneByteString& base);
+using CFunctionCallbackWithTwoUint8Arrays =
+    int32_t (*)(v8::Local<v8::Value>,
+                v8::Local<v8::Value>,
+                v8::Local<v8::Value>,
+                v8::FastApiCallbackOptions&);
+using CFunctionCallbackWithUint8ArrayUint32Int64Bool =
+    int32_t (*)(v8::Local<v8::Value>,
+                v8::Local<v8::Value>,
+                uint32_t,
+                int64_t,
+                bool,
+                v8::FastApiCallbackOptions&);
 using CFunctionWithUint32 = uint32_t (*)(v8::Local<v8::Value>,
                                          const uint32_t input);
+using CFunctionWithReturnUint32 = uint32_t (*)(v8::Local<v8::Value>);
+using CFunctionWithReturnDouble = double (*)(v8::Local<v8::Value>);
 using CFunctionWithDoubleReturnDouble = double (*)(v8::Local<v8::Value>,
                                                    v8::Local<v8::Value>,
                                                    const double);
@@ -54,22 +79,20 @@ using CFunctionWithBool = void (*)(v8::Local<v8::Value>,
                                    v8::Local<v8::Value>,
                                    bool);
 
-using CFunctionWriteString =
-    uint32_t (*)(v8::Local<v8::Value> receiver,
-                 v8::Local<v8::Value> dst,
-                 const v8::FastOneByteString& src,
-                 uint32_t offset,
-                 uint32_t max_length,
-                 v8::FastApiCallbackOptions&);
+using CFunctionWriteString = uint32_t (*)(v8::Local<v8::Value>,
+                                          v8::Local<v8::Value>,
+                                          const v8::FastOneByteString&,
+                                          uint32_t,
+                                          uint32_t,
+                                          v8::FastApiCallbackOptions&);
 
-using CFunctionBufferCopy =
-    uint32_t (*)(v8::Local<v8::Value> receiver,
-                 v8::Local<v8::Value> source,
-                 v8::Local<v8::Value> target,
-                 uint32_t target_start,
-                 uint32_t source_start,
-                 uint32_t to_copy,
-                 v8::FastApiCallbackOptions&);
+using CFunctionBufferCopy = uint32_t (*)(v8::Local<v8::Value>,
+                                         v8::Local<v8::Value>,
+                                         v8::Local<v8::Value>,
+                                         uint32_t,
+                                         uint32_t,
+                                         uint32_t,
+                                         v8::FastApiCallbackOptions&);
 
 // This class manages the external references from the V8 heap
 // to the C++ addresses in Node.js.
@@ -78,17 +101,23 @@ class ExternalReferenceRegistry {
   ExternalReferenceRegistry();
 
 #define ALLOWED_EXTERNAL_REFERENCE_TYPES(V)                                    \
+  V(CFunctionA)                                                                \
   V(CFunctionCallback)                                                         \
+  V(CFunctionCallbackWithalueAndOptions)                                       \
+  V(CFunctionCallbackWithMultipleValueAndOptions)                              \
   V(CFunctionCallbackWithOneByteString)                                        \
   V(CFunctionCallbackReturnBool)                                               \
   V(CFunctionCallbackReturnDouble)                                             \
   V(CFunctionCallbackReturnInt32)                                              \
+  V(CFunctionWithReturnUint32)                                                 \
   V(CFunctionCallbackValueReturnDouble)                                        \
   V(CFunctionCallbackValueReturnDoubleUnusedReceiver)                          \
   V(CFunctionCallbackWithInt64)                                                \
   V(CFunctionCallbackWithBool)                                                 \
   V(CFunctionCallbackWithString)                                               \
   V(CFunctionCallbackWithStrings)                                              \
+  V(CFunctionCallbackWithTwoUint8Arrays)                                       \
+  V(CFunctionCallbackWithUint8ArrayUint32Int64Bool)                            \
   V(CFunctionWithUint32)                                                       \
   V(CFunctionWithDoubleReturnDouble)                                           \
   V(CFunctionWithInt64Fallback)                                                \

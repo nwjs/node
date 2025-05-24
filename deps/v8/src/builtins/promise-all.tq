@@ -45,8 +45,9 @@ macro CreatePromiseAllResolveElementFunction(
   dcheck(index > 0);
   dcheck(index < kPropertyArrayHashFieldMax);
 
-  const resolve =
-      AllocateRootFunctionWithContext(resolveFunction, resolveElementContext);
+  const resolve = AllocateRootFunctionWithContext(
+      resolveFunction, resolveElementContext,
+      LoadNativeContext(resolveElementContext));
 
   dcheck(kPropertyArrayNoHashSentinel == 0);
   resolve.properties_or_hash = index;
@@ -273,7 +274,7 @@ Reject(JSAny) {
       index += 1;
     }
   } catch (e, _message) deferred {
-    iterator::IteratorCloseOnException(iter);
+    iterator::IteratorCloseOnException(iter.object);
     goto Reject(e);
   } label Done {}
 

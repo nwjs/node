@@ -62,7 +62,7 @@ struct FlatHashSetPolicy;
 // Its interface is similar to that of `std::unordered_set<T>` with the
 // following notable differences:
 //
-// * Requires keys that are CopyConstructible
+// * Requires keys that are MoveConstructible
 // * Supports heterogeneous lookup, through `find()` and `insert()`, provided
 //   that the set is provided a compatible heterogeneous hashing function and
 //   equality operator. See below for details.
@@ -122,7 +122,7 @@ struct FlatHashSetPolicy;
 template <class T, class Hash = DefaultHashContainerHash<T>,
           class Eq = DefaultHashContainerEq<T>,
           class Allocator = std::allocator<T>>
-class ABSL_INTERNAL_ATTRIBUTE_OWNER flat_hash_set
+class ABSL_ATTRIBUTE_OWNER flat_hash_set
     : public absl::container_internal::raw_hash_set<
           absl::container_internal::FlatHashSetPolicy<T>, Hash, Eq, Allocator> {
   using Base = typename flat_hash_set::raw_hash_set;

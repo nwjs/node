@@ -93,6 +93,16 @@ struct RuntimeCallDescriptor {
         Operator::kNoDeopt | Operator::kNoThrow;
   };
 
+  struct BigIntUnaryOp : public Descriptor<BigIntUnaryOp> {
+    static constexpr auto kFunction = Runtime::kBigIntUnaryOp;
+    using arguments_t = std::tuple<V<BigInt>, V<Smi>>;
+    using result_t = V<BigInt>;
+
+    static constexpr bool kNeedsFrameState = false;
+    static constexpr Operator::Properties kProperties =
+        Operator::kNoDeopt | Operator::kNoThrow;
+  };
+
   struct DateCurrentTime : public Descriptor<DateCurrentTime> {
     static constexpr auto kFunction = Runtime::kDateCurrentTime;
     using arguments_t = std::tuple<>;
@@ -152,6 +162,15 @@ struct RuntimeCallDescriptor {
     static constexpr Operator::Properties kProperties = Operator::kNoProperties;
   };
 
+  struct ReThrow : public Descriptor<ReThrow> {
+    static constexpr auto kFunction = Runtime::kReThrow;
+    using arguments_t = std::tuple<V<Object>>;
+    using result_t = Never;
+
+    static constexpr bool kNeedsFrameState = false;
+    static constexpr Operator::Properties kProperties = Operator::kNoThrow;
+  };
+
   struct StringCharCodeAt : public Descriptor<StringCharCodeAt> {
     static constexpr auto kFunction = Runtime::kStringCharCodeAt;
     using arguments_t = std::tuple<V<String>, V<Number>>;
@@ -204,6 +223,18 @@ struct RuntimeCallDescriptor {
 
   struct TryMigrateInstance : public Descriptor<TryMigrateInstance> {
     static constexpr auto kFunction = Runtime::kTryMigrateInstance;
+    using arguments_t = std::tuple<V<HeapObject>>;
+    using result_t = V<Object>;
+
+    static constexpr bool kNeedsFrameState = false;
+    static constexpr Operator::Properties kProperties =
+        Operator::kNoDeopt | Operator::kNoThrow;
+  };
+
+  struct TryMigrateInstanceAndMarkMapAsMigrationTarget
+      : public Descriptor<TryMigrateInstanceAndMarkMapAsMigrationTarget> {
+    static constexpr auto kFunction =
+        Runtime::kTryMigrateInstanceAndMarkMapAsMigrationTarget;
     using arguments_t = std::tuple<V<HeapObject>>;
     using result_t = V<Object>;
 

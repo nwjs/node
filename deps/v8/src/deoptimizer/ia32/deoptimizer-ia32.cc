@@ -12,6 +12,11 @@ namespace internal {
 const int Deoptimizer::kEagerDeoptExitSize = 5;
 const int Deoptimizer::kLazyDeoptExitSize = 5;
 
+const int Deoptimizer::kAdaptShadowStackOffsetToSubtract = 0;
+
+// static
+void Deoptimizer::PatchToJump(Address pc, Address new_pc) { UNREACHABLE(); }
+
 Float32 RegisterValues::GetFloatRegister(unsigned n) const {
   return base::ReadUnalignedValue<Float32>(
       reinterpret_cast<Address>(simd128_registers_ + n));

@@ -933,7 +933,9 @@ Reduction JSCreateLowering::ReduceJSCreateClosure(Node* node) {
   CreateClosureParameters const& p = n.Parameters();
   SharedFunctionInfoRef shared = p.shared_info();
   FeedbackCellRef feedback_cell = n.GetFeedbackCellRefChecked(broker());
+#ifndef V8_ENABLE_LEAPTIERING
   HeapObjectRef code = p.code();
+#endif
   Effect effect = n.effect();
   Control control = n.control();
   Node* context = n.context();
@@ -958,14 +960,24 @@ Reduction JSCreateLowering::ReduceJSCreateClosure(Node* node) {
   // generated code instead of loading it at runtime from the FeedbackCell.
   // This will likely first require GC support though.
   Node* feedback_cell_node = jsgraph()->ConstantNoHole(feedback_cell, broker());
-  // TODO(saelo): need to obtain a dispatch entry here in cases where the
-  // function is a builtin.
-  DCHECK(shared.HasBuiltinId() ||
-         feedback_cell.object()->dispatch_handle() != kNullJSDispatchHandle);
-  Node* dispatch_handle = effect = graph()->NewNode(
-      simplified()->LoadField(
-          AccessBuilder::ForFeedbackCellDispatchHandleNoWriteBarrier()),
-      feedback_cell_node, effect, control);
+  Node* dispatch_handle;
+  if (shared.HasBuiltinId()) {
+    // This uses a smi constant to store the static dispatch handle, since
+    // currently we expect dispatch handles to be encoded as numbers in the
+    // deopt metadata.
+    // TODO(olivf): Dispatch handles should be supported in deopt metadata.
+    dispatch_handle = jsgraph()->SmiConstant(
+        jsgraph()
+            ->isolate()
+            ->builtin_dispatch_handle(shared.builtin_id())
+            .value());
+  } else {
+    DCHECK(feedback_cell.object()->dispatch_handle() != kNullJSDispatchHandle);
+    dispatch_handle = effect = graph()->NewNode(
+        simplified()->LoadField(
+            AccessBuilder::ForFeedbackCellDispatchHandleNoWriteBarrier()),
+        feedback_cell_node, effect, control);
+  }
 #endif  // V8_ENABLE_LEAPTIERING
 
   // TODO(turbofan): We should use the pretenure flag from {p} here,
@@ -980,8 +992,7 @@ Reduction JSCreateLowering::ReduceJSCreateClosure(Node* node) {
   AllocationType allocation = AllocationType::kYoung;
 
   // Emit code to allocate the JSFunction instance.
-  static_assert(JSFunction::kSizeWithoutPrototype ==
-                (7 + V8_ENABLE_LEAPTIERING_BOOL) * kTaggedSize);
+  static_assert(JSFunction::kSizeWithoutPrototype == 7 * kTaggedSize);
   AllocationBuilder a(jsgraph(), broker(), effect, control);
   a.Allocate(function_map.instance_size(), allocation,
              Type::CallableFunction());
@@ -996,15 +1007,14 @@ Reduction JSCreateLowering::ReduceJSCreateClosure(Node* node) {
 #ifdef V8_ENABLE_LEAPTIERING
   a.Store(AccessBuilder::ForJSFunctionDispatchHandleNoWriteBarrier(),
           dispatch_handle);
-#endif  // V8_ENABLE_LEAPTIERING
+#else
   a.Store(AccessBuilder::ForJSFunctionCode(), code);
-  static_assert(JSFunction::kSizeWithoutPrototype ==
-                (7 + V8_ENABLE_LEAPTIERING_BOOL) * kTaggedSize);
+#endif  // V8_ENABLE_LEAPTIERING
+  static_assert(JSFunction::kSizeWithoutPrototype == 7 * kTaggedSize);
   if (function_map.has_prototype_slot()) {
     a.Store(AccessBuilder::ForJSFunctionPrototypeOrInitialMap(),
             jsgraph()->TheHoleConstant());
-    static_assert(JSFunction::kSizeWithPrototype ==
-                  (8 + V8_ENABLE_LEAPTIERING_BOOL) * kTaggedSize);
+    static_assert(JSFunction::kSizeWithPrototype == 8 * kTaggedSize);
   }
   for (int i = 0; i < function_map.GetInObjectProperties(); i++) {
     a.Store(AccessBuilder::ForJSObjectInObjectProperty(function_map, i),
@@ -1908,7 +1918,7 @@ std::optional<Node*> JSCreateLowering::TryAllocateFastLiteralElements(
       boilerplate, JSObject::kElementsOffset, boilerplate_elements);
 
   // Empty or copy-on-write elements just store a constant.
-  int const elements_length = boilerplate_elements.length();
+  const uint32_t elements_length = boilerplate_elements.length();
   MapRef elements_map = boilerplate_elements.map(broker());
   // Protect against concurrent changes to the boilerplate object by checking
   // for an identical value at the end of the compilation.
@@ -1926,11 +1936,12 @@ std::optional<Node*> JSCreateLowering::TryAllocateFastLiteralElements(
   // Compute the elements to store first (might have effects).
   ZoneVector<Node*> elements_values(elements_length, zone());
   if (boilerplate_elements.IsFixedDoubleArray()) {
-    int const size = FixedDoubleArray::SizeFor(boilerplate_elements.length());
+    uint32_t const size =
+        FixedDoubleArray::SizeFor(boilerplate_elements.length());
     if (size > kMaxRegularHeapObjectSize) return {};
 
     FixedDoubleArrayRef elements = boilerplate_elements.AsFixedDoubleArray();
-    for (int i = 0; i < elements_length; ++i) {
+    for (uint32_t i = 0; i < elements_length; ++i) {
       Float64 value = elements.GetFromImmutableFixedDoubleArray(i);
       elements_values[i] = value.is_hole_nan()
                                ? jsgraph()->TheHoleConstant()
@@ -1938,7 +1949,7 @@ std::optional<Node*> JSCreateLowering::TryAllocateFastLiteralElements(
     }
   } else {
     FixedArrayRef elements = boilerplate_elements.AsFixedArray();
-    for (int i = 0; i < elements_length; ++i) {
+    for (uint32_t i = 0; i < elements_length; ++i) {
       if ((*max_properties)-- == 0) return {};
       OptionalObjectRef element_value = elements.TryGet(broker(), i);
       if (!element_value.has_value()) return {};
@@ -1962,7 +1973,7 @@ std::optional<Node*> JSCreateLowering::TryAllocateFastLiteralElements(
   ElementAccess const access = boilerplate_elements.IsFixedDoubleArray()
                                    ? AccessBuilder::ForFixedDoubleArrayElement()
                                    : AccessBuilder::ForFixedArrayElement();
-  for (int i = 0; i < elements_length; ++i) {
+  for (uint32_t i = 0; i < elements_length; ++i) {
     ab.Store(access, jsgraph()->ConstantNoHole(i), elements_values[i]);
   }
   return ab.Finish();
@@ -2006,7 +2017,7 @@ Factory* JSCreateLowering::factory() const {
   return jsgraph()->isolate()->factory();
 }
 
-Graph* JSCreateLowering::graph() const { return jsgraph()->graph(); }
+TFGraph* JSCreateLowering::graph() const { return jsgraph()->graph(); }
 
 CommonOperatorBuilder* JSCreateLowering::common() const {
   return jsgraph()->common();

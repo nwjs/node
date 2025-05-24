@@ -199,7 +199,8 @@ class VariableReducer : public RequiredOptimizationReducer<AfterNext> {
   void Set(Variable var, V<Rep> value) {
     DCHECK(!is_temporary_);
     if (V8_UNLIKELY(__ generating_unreachable_operations())) return;
-    DCHECK(Rep::allows_representation(RegisterRepresentation(var.data().rep)));
+    DCHECK(
+        V<Rep>::allows_representation(RegisterRepresentation(var.data().rep)));
     table_.Set(var, value);
   }
 
@@ -255,7 +256,7 @@ class VariableReducer : public RequiredOptimizationReducer<AfterNext> {
     for (auto frame_state : frame_states) {
       DCHECK_EQ(first_frame->input_count, frame_state->input_count);
       DCHECK_EQ(first_frame->inlined, frame_state->inlined);
-      DCHECK_EQ(first_frame->data, frame_state->data);
+      DCHECK_EQ(*first_frame->data, *frame_state->data);
     }
 #endif
 

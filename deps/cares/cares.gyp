@@ -146,7 +146,7 @@
         'defines': [
           '_DARWIN_USE_64_BIT_INODE=1',
           '_LARGEFILE_SOURCE',
-          '_FILE_OFFSET_BITS=64',
+          #'_FILE_OFFSET_BITS=64',
           '_GNU_SOURCE'
         ]
       }],

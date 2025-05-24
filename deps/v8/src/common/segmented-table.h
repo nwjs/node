@@ -32,12 +32,23 @@ namespace internal {
  */
 template <typename Entry, size_t size>
 class V8_EXPORT_PRIVATE SegmentedTable {
- public:
  protected:
   static constexpr bool kIsWriteProtected = Entry::IsWriteProtected;
   static constexpr int kEntrySize = sizeof(Entry);
+
+#ifdef V8_TARGET_ARCH_64_BIT
+  // On 64 bit, we use a large address space reservation for the table memory.
+  static constexpr bool kUseContiguousMemory = true;
   static constexpr size_t kReservationSize = size;
   static constexpr size_t kMaxCapacity = kReservationSize / kEntrySize;
+#else
+  // On 32 bit, segments are individually mapped.
+  static constexpr bool kUseContiguousMemory = false;
+#endif
+
+  // The sandbox relies on not being able to access any SegmentedTable out of
+  // bounds.
+  static_assert(kUseContiguousMemory || !V8_ENABLE_SANDBOX_BOOL);
 
   // For managing the table's backing memory, the table is partitioned into
   // segments of this size. Segments can then be allocated and freed using the
@@ -123,15 +134,30 @@ class V8_EXPORT_PRIVATE SegmentedTable {
     explicit WriteIterator(Entry* base, uint32_t index);
 
     uint32_t index() const { return index_; }
-    Entry* operator->() { return &base_[index_]; }
-    Entry& operator*() { return base_[index_]; }
+    Entry* operator->() {
+      DCHECK(!crossed_segment_);
+      return &base_[index_];
+    }
+    Entry& operator*() {
+      DCHECK(!crossed_segment_);
+      return base_[index_];
+    }
     WriteIterator& operator++() {
       index_++;
-      DCHECK_LT(index_, size);
+#ifdef DEBUG
+      if (IsAligned(index_, kEntriesPerSegment)) {
+        crossed_segment_ = true;
+      }
+#endif
       return *this;
     }
     WriteIterator& operator--() {
       DCHECK_GT(index_, 0);
+#ifdef DEBUG
+      if (IsAligned(index_, kEntriesPerSegment)) {
+        crossed_segment_ = true;
+      }
+#endif
       index_--;
       return *this;
     }
@@ -142,6 +168,9 @@ class V8_EXPORT_PRIVATE SegmentedTable {
     std::conditional_t<kIsWriteProtected, CFIMetadataWriteScope,
                        NopRwxMemoryWriteScope>
         write_scope_;
+#ifdef DEBUG
+    bool crossed_segment_ = false;
+#endif
   };
 
   // Access the entry at the specified index.
@@ -163,6 +192,9 @@ class V8_EXPORT_PRIVATE SegmentedTable {
   //
   // The segment is initialized with freelist entries.
   std::pair<Segment, FreelistHead> AllocateAndInitializeSegment();
+  // Same as above but fails if there is no space left.
+  std::optional<std::pair<Segment, FreelistHead>>
+  TryAllocateAndInitializeSegment();
 
   // Initialize a table segment with a freelist.
   //
@@ -175,7 +207,6 @@ class V8_EXPORT_PRIVATE SegmentedTable {
   // The memory of this segment will afterwards be inaccessible.
   void FreeTableSegment(Segment segment);
 
- protected:
   // Initializes the table by reserving the backing memory, allocating an
   // initial segment, and populating the freelist.
   void Initialize();

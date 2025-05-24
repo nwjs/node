@@ -481,7 +481,12 @@ number of bytes read is zero.
 <!-- YAML
 added: v17.0.0
 changes:
-  - version: v23.8.0
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/57513
+    description: Marking the API stable.
+  - version:
+    - v23.8.0
+    - v22.15.0
     pr-url: https://github.com/nodejs/node/pull/55461
     description: Removed option to create a 'bytes' stream. Streams are now always 'bytes' streams.
   - version:
@@ -490,8 +495,6 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/46933
     description: Added option to create a 'bytes' stream.
 -->
-
-> Stability: 1 - Experimental
 
 * Returns: {ReadableStream}
 
@@ -740,7 +743,7 @@ added:
 * `options` {Object}
   * `offset` {integer} **Default:** `0`
   * `length` {integer} **Default:** `buffer.byteLength - offset`
-  * `position` {integer} **Default:** `null`
+  * `position` {integer|null} **Default:** `null`
 * Returns: {Promise}
 
 Write `buffer` to the file.
@@ -1074,7 +1077,15 @@ behavior is similar to `cp dir1/ dir2/`.
 <!-- YAML
 added: v22.0.0
 changes:
-  - version: v23.7.0
+  - version: v24.1.0
+    pr-url: https://github.com/nodejs/node/pull/58182
+    description: Add support for `URL` instances for `cwd` option.
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/57513
+    description: Marking the API stable.
+  - version:
+    - v23.7.0
+    - v22.14.0
     pr-url: https://github.com/nodejs/node/pull/56489
     description: Add support for `exclude` option to accept glob patterns.
   - version: v22.2.0
@@ -1082,11 +1093,9 @@ changes:
     description: Add support for `withFileTypes` as an option.
 -->
 
-> Stability: 1 - Experimental
-
 * `pattern` {string|string\[]}
 * `options` {Object}
-  * `cwd` {string} current working directory. **Default:** `process.cwd()`
+  * `cwd` {string|URL} current working directory. **Default:** `process.cwd()`
   * `exclude` {Function|string\[]} Function to filter out files/directories or a
     list of glob patterns to be excluded. If a function is provided, return
     `true` to exclude the item, `false` to include it. **Default:** `undefined`.
@@ -3126,7 +3135,15 @@ descriptor. See [`fs.utimes()`][].
 <!-- YAML
 added: v22.0.0
 changes:
-  - version: v23.7.0
+  - version: v24.1.0
+    pr-url: https://github.com/nodejs/node/pull/58182
+    description: Add support for `URL` instances for `cwd` option.
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/57513
+    description: Marking the API stable.
+  - version:
+    - v23.7.0
+    - v22.14.0
     pr-url: https://github.com/nodejs/node/pull/56489
     description: Add support for `exclude` option to accept glob patterns.
   - version: v22.2.0
@@ -3134,12 +3151,10 @@ changes:
     description: Add support for `withFileTypes` as an option.
 -->
 
-> Stability: 1 - Experimental
-
 * `pattern` {string|string\[]}
 
 * `options` {Object}
-  * `cwd` {string} current working directory. **Default:** `process.cwd()`
+  * `cwd` {string|URL} current working directory. **Default:** `process.cwd()`
   * `exclude` {Function|string\[]} Function to filter out files/directories or a
     list of glob patterns to be excluded. If a function is provided, return
     `true` to exclude the item, `false` to include it. **Default:** `undefined`.
@@ -3575,9 +3590,11 @@ Functions based on `fs.open()` exhibit this behavior as well:
 
 <!-- YAML
 added: v19.8.0
+changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/57513
+    description: Marking the API stable.
 -->
-
-> Stability: 1 - Experimental
 
 * `path` {string|Buffer|URL}
 * `options` {Object}
@@ -4984,7 +5001,7 @@ added:
 * `options` {Object}
   * `offset` {integer} **Default:** `0`
   * `length` {integer} **Default:** `buffer.byteLength - offset`
-  * `position` {integer} **Default:** `null`
+  * `position` {integer|null} **Default:** `null`
 * `callback` {Function}
   * `err` {Error}
   * `bytesWritten` {integer}
@@ -5674,7 +5691,15 @@ Synchronous version of [`fs.futimes()`][]. Returns `undefined`.
 <!-- YAML
 added: v22.0.0
 changes:
-  - version: v23.7.0
+  - version: v24.1.0
+    pr-url: https://github.com/nodejs/node/pull/58182
+    description: Add support for `URL` instances for `cwd` option.
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/57513
+    description: Marking the API stable.
+  - version:
+    - v23.7.0
+    - v22.14.0
     pr-url: https://github.com/nodejs/node/pull/56489
     description: Add support for `exclude` option to accept glob patterns.
   - version: v22.2.0
@@ -5682,11 +5707,9 @@ changes:
     description: Add support for `withFileTypes` as an option.
 -->
 
-> Stability: 1 - Experimental
-
 * `pattern` {string|string\[]}
 * `options` {Object}
-  * `cwd` {string} current working directory. **Default:** `process.cwd()`
+  * `cwd` {string|URL} current working directory. **Default:** `process.cwd()`
   * `exclude` {Function|string\[]} Function to filter out files/directories or a
     list of glob patterns to be excluded. If a function is provided, return
     `true` to exclude the item, `false` to include it. **Default:** `undefined`.
@@ -6515,7 +6538,7 @@ added:
 * `options` {Object}
   * `offset` {integer} **Default:** `0`
   * `length` {integer} **Default:** `buffer.byteLength - offset`
-  * `position` {integer} **Default:** `null`
+  * `position` {integer|null} **Default:** `null`
 * Returns: {number} The number of bytes written.
 
 For detailed information, see the documentation of the asynchronous version of
@@ -6722,6 +6745,26 @@ provided by the operating system's underlying directory mechanisms.
 Entries added or removed while iterating over the directory might not be
 included in the iteration results.
 
+#### `dir[Symbol.asyncDispose]()`
+
+<!-- YAML
+added: v24.1.0
+-->
+
+> Stability: 1 - Experimental
+
+An alias for `dir.close()`.
+
+#### `dir[Symbol.Dispose]()`
+
+<!-- YAML
+added: v24.1.0
+-->
+
+> Stability: 1 - Experimental
+
+An alias for `dir.closeSync()`.
+
 ### Class: `fs.Dirent`
 
 <!-- YAML
@@ -6827,38 +6870,15 @@ added:
   - v21.4.0
   - v20.12.0
   - v18.20.0
+changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/57513
+    description: Marking the API stable.
 -->
-
-> Stability: 1 - Experimental
 
 * {string}
 
 The path to the parent directory of the file this {fs.Dirent} object refers to.
-
-#### `dirent.path`
-
-<!-- YAML
-added:
-  - v20.1.0
-  - v18.17.0
-deprecated:
-  - v21.5.0
-  - v20.12.0
-  - v18.20.0
-changes:
-  - version: v23.2.0
-    pr-url: https://github.com/nodejs/node/pull/55547
-    description: The property is no longer read-only.
-  - version: v23.0.0
-    pr-url: https://github.com/nodejs/node/pull/51050
-    description: Accessing this property emits a warning. It is now read-only.
--->
-
-> Stability: 0 - Deprecated: Use [`dirent.parentPath`][] instead.
-
-* {string}
-
-Alias for `dirent.parentPath`.
 
 ### Class: `fs.FSWatcher`
 
@@ -8418,7 +8438,6 @@ the file contents.
 [`Number.MAX_SAFE_INTEGER`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER
 [`ReadDirectoryChangesW`]: https://docs.microsoft.com/en-us/windows/desktop/api/winbase/nf-winbase-readdirectorychangesw
 [`UV_THREADPOOL_SIZE`]: cli.md#uv_threadpool_sizesize
-[`dirent.parentPath`]: #direntparentpath
 [`event ports`]: https://illumos.org/man/port_create
 [`filehandle.createReadStream()`]: #filehandlecreatereadstreamoptions
 [`filehandle.createWriteStream()`]: #filehandlecreatewritestreamoptions

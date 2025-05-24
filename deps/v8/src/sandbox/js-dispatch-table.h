@@ -8,11 +8,11 @@
 #include "include/v8config.h"
 #include "src/base/atomicops.h"
 #include "src/base/memory.h"
-#include "src/base/platform/mutex.h"
 #include "src/common/globals.h"
+#include "src/runtime/runtime.h"
 #include "src/sandbox/external-entity-table.h"
 
-#ifdef V8_ENABLE_SANDBOX
+#ifdef V8_ENABLE_LEAPTIERING
 
 namespace v8 {
 namespace internal {
@@ -20,6 +20,7 @@ namespace internal {
 class Isolate;
 class Counters;
 class Code;
+enum class TieringBuiltin;
 
 /**
  * The entries of a JSDispatchTable.
@@ -39,10 +40,12 @@ struct JSDispatchEntry {
 
   inline Address GetEntrypoint() const;
   inline Address GetCodePointer() const;
+  inline Tagged<Code> GetCode() const;
   inline uint16_t GetParameterCount() const;
 
   inline void SetCodeAndEntrypointPointer(Address new_object,
                                           Address new_entrypoint);
+  inline void SetEntrypointPointer(Address new_entrypoint);
 
   // Make this entry a freelist entry, containing the index of the next entry
   // on the freelist.
@@ -66,33 +69,92 @@ struct JSDispatchEntry {
   // Test whether this entry is currently marked as alive.
   inline bool IsMarked() const;
 
+  // Constants for access from generated code.
+  // These are static_assert'ed to be correct in CheckFieldOffsets().
+  static constexpr uintptr_t kEntrypointOffset = 0;
+  static constexpr uintptr_t kCodeObjectOffset = kSystemPointerSize;
+  static constexpr size_t kParameterCountSize = 2;
+
+#if defined(V8_TARGET_ARCH_64_BIT)
+  // Freelist entries contain the index of the next free entry in their lower 32
+  // bits and are tagged with this tag.
+#ifdef __illumos__
+  // In illumos 64-bit apps, pointers are allocated both the bottom 2^47 range
+  // AND the top 2^47 range in the 64-bit space. Instead of 47 bits of VA space
+  // we have 48 bits. This means, however, the top 16-bits may be 0xffff. We
+  // therefore pick a different value for the kFreeEntryTag.  If/when we go to
+  // VA57, aka 5-level paging, we'll need to revisit this again, as will node
+  // by default, since the fixed-bits on the high end will shrink from top
+  // 16-bits to top 8-bits.
+  //
+  // Unless illumos ships an Oracle-Solaris-like VA47 link-time options to
+  // restrict pointers from allocating from above the Virtual Address hole,
+  // we need to be mindful of this.
+  static constexpr Address kFreeEntryTag = 0xfeed000000000000ull;
+#else
+  static constexpr Address kFreeEntryTag = 0xffff000000000000ull;
+#endif /* __illumos__ */
+#ifdef V8_TARGET_BIG_ENDIAN
+  // 2-byte parameter count is on the least significant side of encoded_word_.
+  static constexpr int kBigEndianParamCountOffset =
+      sizeof(Address) - sizeof(uint16_t);
+  static constexpr uintptr_t kParameterCountOffset =
+      kCodeObjectOffset + kBigEndianParamCountOffset;
+#else
+  static constexpr uintptr_t kParameterCountOffset = kCodeObjectOffset;
+#endif  // V8_TARGET_BIG_ENDIAN
   static constexpr uint32_t kObjectPointerShift = 16;
+  static constexpr uint32_t kParameterCountMask = 0xffff;
+#elif defined(V8_TARGET_ARCH_32_BIT)
+  static constexpr uintptr_t kParameterCountOffset =
+      kCodeObjectOffset + kSystemPointerSize;
+  static constexpr uint32_t kObjectPointerShift = 0;
+  static constexpr uint32_t kParameterCountMask = 0x0;
+#else
+#error "Unsupported Architecture"
+#endif
+
+  static void CheckFieldOffsets();
 
  private:
   friend class JSDispatchTable;
 
-  // Freelist entries contain the index of the next free entry in their lower 32
-  // bits and are tagged with this tag.
-  static constexpr Address kFreeEntryTag = 0xffff000000000000ull;
+  // The first word contains the pointer to the (executable) entrypoint.
+  std::atomic<Address> entrypoint_;
 
-  // The first word of the entry contains (1) the pointer to the code object
-  // associated with this entry, (2) the marking bit of the entry in the LSB of
-  // the object pointer (which must be unused as the address must be aligned),
-  // and (3) the 16-bit parameter count. The parameter count is stored in the
-  // lower 16 bits and therefore the pointer is shifted to the left. The final
-  // format therefore looks as follows:
+  // On 64 bit architectures the second word of the entry contains (1) the
+  // pointer to the code object associated with this entry, (2) the marking bit
+  // of the entry in the LSB of the object pointer (which must be unused as the
+  // address must be aligned), and (3) the 16-bit parameter count. The parameter
+  // count is stored in the lower 16 bits and therefore the pointer is shifted
+  // to the left. The final format therefore looks as follows:
   //
-  // +------------------------+-------------+-----------------+
-  // |     Bits 63 ... 17     |   Bit 16    |  Bits 15 ... 0  |
-  // |   HeapObject pointer   | Marking bit | Parameter count |
-  // +------------------------+-------------+-----------------+
+  // +----------------------+---------------+-------------------+
+  // | Bits 63 ... 17       | Bit 16        | Bits 15 ... 0     |
+  // |  HeapObject pointer  |  Marking bit  |  Parameter count  |
+  // +----------------------+---------------+-------------------+
   //
-  static constexpr Address kMarkingBit = 1 << 16;
-  static constexpr uint32_t kParameterCountMask = 0xffff;
+  // On 32 bit architectures only the mark bit is shared with the pointer.
+  //
+  // +----------------------+---------------+
+  // | Bits 32 ... 1        | Bit 0         |
+  // |  HeapObject pointer  |  Marking bit  |
+  // +----------------------+---------------+
+  //
+  // TODO(olivf): Find a better format that allows us to write atomically to the
+  // individual parts and unify with 32 bit. For instance we could try to store
+  // the code pointer in some compressd format, such that it fits into 32 bits.
+
+  static constexpr Address kMarkingBit = 1 << kObjectPointerShift;
   std::atomic<Address> encoded_word_;
 
-  // A pointer to the (executable) entrypoint of the code for this entry.
-  std::atomic<Address> entrypoint_;
+#ifdef V8_TARGET_ARCH_32_BIT
+  // TODO(olivf): Investigate if we could shrink the entry size on 32bit
+  // platforms to 12 bytes.
+  std::atomic<uint16_t> parameter_count_;
+  // 16 bits of padding
+  std::atomic<uint32_t> next_free_entry_;
+#endif  // V8_TARGET_ARCH_32_BIT
 };
 
 static_assert(sizeof(JSDispatchEntry) == kJSDispatchTableEntrySize);
@@ -126,9 +188,10 @@ class V8_EXPORT_PRIVATE JSDispatchTable
       ExternalEntityTable<JSDispatchEntry, kJSDispatchTableReservationSize>;
 
  public:
-  // Size of a JSDispatchTable, for layout computation in IsolateData.
-  static int constexpr kSize = 2 * kSystemPointerSize;
+#ifdef V8_ENABLE_SANDBOX
   static_assert(kMaxJSDispatchEntries == kMaxCapacity);
+#endif  // V8_ENABLE_SANDBOX
+  static_assert(!kSupportsCompaction);
 
   JSDispatchTable() = default;
   JSDispatchTable(const JSDispatchTable&) = delete;
@@ -145,7 +208,10 @@ class V8_EXPORT_PRIVATE JSDispatchTable
   // TODO(saelo): in the future, we might store either a Code or a
   // BytecodeArray in the entries. At that point, this could be changed to
   // return a Tagged<Union<Code, BytecodeArray>>.
-  Tagged<Code> GetCode(JSDispatchHandle handle);
+  inline Tagged<Code> GetCode(JSDispatchHandle handle);
+
+  // Returns the address of the Code object stored in the specified entry.
+  inline Address GetCodeAddress(JSDispatchHandle handle);
 
   // Retrieves the parameter count of the entry referenced by the given handle.
   inline uint16_t GetParameterCount(JSDispatchHandle handle);
@@ -153,14 +219,57 @@ class V8_EXPORT_PRIVATE JSDispatchTable
   // Updates the entry referenced by the given handle to the given Code and its
   // entrypoint. The code must be compatible with the specified entry. In
   // particular, the two must use the same parameter count.
-  void SetCode(JSDispatchHandle handle, Tagged<Code> new_code);
-  bool HasCode(JSDispatchHandle handle);
+  // NB: Callee must emit JS_DISPATCH_HANDLE_WRITE_BARRIER if needed!
+  inline void SetCodeNoWriteBarrier(JSDispatchHandle handle,
+                                    Tagged<Code> new_code);
+
+  // Execute a tiering builtin instead of the actual code. Leaves the Code
+  // pointer untouched and changes only the entrypoint.
+  inline void SetTieringRequest(JSDispatchHandle handle, TieringBuiltin builtin,
+                                Isolate* isolate);
+  inline void SetCodeKeepTieringRequestNoWriteBarrier(JSDispatchHandle handle,
+                                                      Tagged<Code> new_code);
+  // Resets the entrypoint to the code's entrypoint.
+  inline void ResetTieringRequest(JSDispatchHandle handle);
+  // Check if and/or which tiering builtin is installed.
+  inline bool IsTieringRequested(JSDispatchHandle handle);
+  inline bool IsTieringRequested(JSDispatchHandle handle,
+                                 TieringBuiltin builtin, Isolate* isolate);
 
   // Allocates a new entry in the table and initialize it.
   //
+  // Note: If possible allocate dispatch handles through the factory.
+  //
   // This method is atomic and can be called from background threads.
-  JSDispatchHandle AllocateAndInitializeEntry(Space* space,
-                                              uint16_t parameter_count);
+  inline JSDispatchHandle AllocateAndInitializeEntry(Space* space,
+                                                     uint16_t parameter_count,
+                                                     Tagged<Code> code);
+  inline std::optional<JSDispatchHandle> TryAllocateAndInitializeEntry(
+      Space* space, uint16_t parameter_count, Tagged<Code> code);
+
+  // The following methods are used to pre allocate entries and then initialize
+  // them later.
+  JSDispatchHandle PreAllocateEntries(Space* space, int num,
+                                      bool ensure_static_handles);
+  bool PreAllocatedEntryNeedsInitialization(Space* space,
+                                            JSDispatchHandle handle);
+  void InitializePreAllocatedEntry(Space* space, JSDispatchHandle handle,
+                                   Tagged<Code> code, uint16_t parameter_count);
+
+  // Can be used to statically predict the handles if the pre allocated entries
+  // are in the overall first read only segment of the whole table.
+#if V8_STATIC_DISPATCH_HANDLES_BOOL
+  static JSDispatchHandle GetStaticHandleForReadOnlySegmentEntry(int index) {
+    return IndexToHandle(kInternalNullEntryIndex + 1 + index);
+  }
+#endif  // V8_STATIC_DISPATCH_HANDLES_BOOL
+  static bool InReadOnlySegment(JSDispatchHandle handle) {
+    return HandleToIndex(handle) <= kEndOfInternalReadOnlySegment;
+  }
+  static int OffsetOfEntry(JSDispatchHandle handle) {
+    return JSDispatchTable::HandleToIndex(handle)
+           << kJSDispatchTableEntrySizeLog2;
+  }
 
   // Marks the specified entry as alive.
   //
@@ -173,68 +282,62 @@ class V8_EXPORT_PRIVATE JSDispatchTable
   // not safe to allocate table entries while a space is being swept.
   //
   // Returns the number of live entries after sweeping.
-  uint32_t Sweep(Space* space, Counters* counters);
+  template <typename Callback>
+  uint32_t Sweep(Space* space, Counters* counters, Callback callback);
 
   // Iterate over all active entries in the given space.
   //
   // The callback function will be invoked once for every entry that is
   // currently in use, i.e. has been allocated and not yet freed, and will
   // receive the handle of that entry.
-  // TODO(saelo): does it also need to get the referenced object pointer?
   template <typename Callback>
   void IterateActiveEntriesIn(Space* space, Callback callback);
+
+  template <typename Callback>
+  void IterateMarkedEntriesIn(Space* space, Callback callback);
 
   // The base address of this table, for use in JIT compilers.
   Address base_address() const { return base(); }
 
-  static JSDispatchTable* instance() {
-    CheckInitialization(false);
-    return instance_nocheck();
-  }
-  static void Initialize() {
-    CheckInitialization(true);
-    instance_nocheck()->Base::Initialize();
-  }
-
-  static constexpr uintptr_t kEntryCodeObjectOffset =
-      offsetof(JSDispatchEntry, encoded_word_);
-  static constexpr uintptr_t kEntryEntrypointOffset =
-      offsetof(JSDispatchEntry, entrypoint_);
-
 #ifdef DEBUG
+  bool IsMarked(JSDispatchHandle handle);
+#endif  // DEBUG
+#if defined(DEBUG) || defined(VERIFY_HEAP)
   inline void VerifyEntry(JSDispatchHandle handle, Space* space,
                           Space* ro_space);
-#endif  // DEBUG
+#endif  // defined(DEBUG) || defined(VERIFY_HEAP)
+
+  void PrintEntry(JSDispatchHandle handle);
+  void PrintCurrentTieringRequest(JSDispatchHandle handle, Isolate* isolate,
+                                  std::ostream& os);
+
+  static constexpr bool kWriteBarrierSetsEntryMarkBit = true;
 
  private:
-  static void CheckInitialization(bool is_initializing) {
-#ifdef DEBUG
-    static std::atomic<bool> initialized = false;
-    DCHECK_NE(is_initializing, initialized.load());
-    initialized.store(true);
-#endif
+  static inline bool IsCompatibleCode(Tagged<Code> code,
+                                      uint16_t parameter_count);
+
+  inline void SetCodeAndEntrypointNoWriteBarrier(JSDispatchHandle handle,
+                                                 Tagged<Code> new_code,
+                                                 Address entrypoint);
+
+  static uint32_t HandleToIndex(JSDispatchHandle handle) {
+    uint32_t index = handle.value() >> kJSDispatchHandleShift;
+    DCHECK_EQ(handle.value(), index << kJSDispatchHandleShift);
+    return index;
+  }
+  static JSDispatchHandle IndexToHandle(uint32_t index) {
+    JSDispatchHandle handle(index << kJSDispatchHandleShift);
+    DCHECK_EQ(index, handle.value() >> kJSDispatchHandleShift);
+    return handle;
   }
 
-  static JSDispatchTable* instance_nocheck() {
-    static ::v8::base::LeakyObject<JSDispatchTable> instance;
-    return instance.get();
-  }
-
-  inline uint32_t HandleToIndex(JSDispatchHandle handle) const;
-  inline JSDispatchHandle IndexToHandle(uint32_t index) const;
+  friend class MarkCompactCollector;
 };
-
-static_assert(sizeof(JSDispatchTable) == JSDispatchTable::kSize);
-
-// TODO(olivf): Remove this accessor and also unify implementation with
-// GetProcessWideCodePointerTable().
-V8_EXPORT_PRIVATE inline JSDispatchTable* GetProcessWideJSDispatchTable() {
-  return JSDispatchTable::instance();
-}
 
 }  // namespace internal
 }  // namespace v8
 
-#endif  // V8_ENABLE_SANDBOX
+#endif  // V8_ENABLE_LEAPTIERING
 
 #endif  // V8_SANDBOX_JS_DISPATCH_TABLE_H_

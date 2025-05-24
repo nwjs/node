@@ -33,14 +33,12 @@ static inline v8::Local<v8::Value> Run(v8::Local<v8::Script> script) {
   return v8::Local<v8::Value>();
 }
 
-
-
 template <typename T = Object>
-Handle<T> GetLexical(const char* name) {
+DirectHandle<T> GetLexical(const char* name) {
   Isolate* isolate = CcTest::i_isolate();
   Factory* factory = isolate->factory();
 
-  Handle<String> str_name = factory->InternalizeUtf8String(name);
+  DirectHandle<String> str_name = factory->InternalizeUtf8String(name);
   DirectHandle<ScriptContextTable> script_contexts(
       isolate->native_context()->script_context_table(), isolate);
 
@@ -48,16 +46,15 @@ Handle<T> GetLexical(const char* name) {
   if (script_contexts->Lookup(str_name, &lookup_result)) {
     Tagged<Context> script_context =
         script_contexts->get(lookup_result.context_index);
-    Handle<Object> result(script_context->get(lookup_result.slot_index),
-                          isolate);
+    DirectHandle<Object> result(script_context->get(lookup_result.slot_index),
+                                isolate);
     return Cast<T>(result);
   }
-  return Handle<T>();
+  return DirectHandle<T>();
 }
 
-
 template <typename T = Object>
-Handle<T> GetLexical(const std::string& name) {
+DirectHandle<T> GetLexical(const std::string& name) {
   return GetLexical<T>(name.c_str());
 }
 
@@ -67,7 +64,7 @@ static inline Handle<T> RunI(v8::Local<v8::Script> script) {
 }
 
 template <typename T>
-static inline Handle<T> CompileRunI(const char* script) {
+static inline DirectHandle<T> CompileRunI(const char* script) {
   return OpenHandle<T>(CompileRun(script));
 }
 
@@ -109,7 +106,7 @@ bool IsObjectShrinkable(Tagged<JSObject> obj) {
 }
 
 TEST(JSObjectBasic) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -167,7 +164,7 @@ TEST(JSObjectBasicNoInlineNew) {
 
 
 TEST(JSObjectComplex) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -247,7 +244,7 @@ TEST(JSObjectComplexNoInlineNew) {
 
 
 TEST(JSGeneratorObjectBasic) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -313,7 +310,7 @@ TEST(JSGeneratorObjectBasicNoInlineNew) {
 
 
 TEST(SubclassBasicNoBaseClassInstances) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -405,7 +402,7 @@ TEST(SubclassBasicNoBaseClassInstancesNoInlineNew) {
 
 
 TEST(SubclassBasic) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -607,7 +604,7 @@ static void TestClassHierarchy(const std::vector<int>& hierarchy_desc, int n) {
 
 
 static void TestSubclassChain(const std::vector<int>& hierarchy_desc) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -653,7 +650,7 @@ TEST(LongSubclassChain3) {
 
 
 TEST(InobjectPropetiesCountOverflowInSubclass) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -839,7 +836,7 @@ TEST(ObjectLiteralPropertyBackingStoreSize) {
 TEST(SlowModeSubclass) {
   if (v8_flags.stress_concurrent_allocation) return;
 
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -976,7 +973,7 @@ static void TestSubclassBuiltin(const char* subclass_name,
 
 
 TEST(SubclassObjectBuiltin) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -994,7 +991,7 @@ TEST(SubclassObjectBuiltinNoInlineNew) {
 
 
 TEST(SubclassFunctionBuiltin) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -1011,7 +1008,7 @@ TEST(SubclassFunctionBuiltinNoInlineNew) {
 
 
 TEST(SubclassBooleanBuiltin) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -1028,7 +1025,7 @@ TEST(SubclassBooleanBuiltinNoInlineNew) {
 
 
 TEST(SubclassErrorBuiltin) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -1052,7 +1049,7 @@ TEST(SubclassErrorBuiltinNoInlineNew) {
 
 
 TEST(SubclassNumberBuiltin) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -1069,7 +1066,7 @@ TEST(SubclassNumberBuiltinNoInlineNew) {
 
 
 TEST(SubclassDateBuiltin) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -1085,7 +1082,7 @@ TEST(SubclassDateBuiltinNoInlineNew) {
 
 
 TEST(SubclassStringBuiltin) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -1103,7 +1100,7 @@ TEST(SubclassStringBuiltinNoInlineNew) {
 
 
 TEST(SubclassRegExpBuiltin) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -1121,7 +1118,7 @@ TEST(SubclassRegExpBuiltinNoInlineNew) {
 
 
 TEST(SubclassArrayBuiltin) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -1137,7 +1134,7 @@ TEST(SubclassArrayBuiltinNoInlineNew) {
 
 
 TEST(SubclassTypedArrayBuiltin) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   v8_flags.js_float16array = true;
   CcTest::InitializeVM();
@@ -1159,7 +1156,7 @@ TEST(SubclassTypedArrayBuiltinNoInlineNew) {
 
 
 TEST(SubclassCollectionBuiltin) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -1178,7 +1175,7 @@ TEST(SubclassCollectionBuiltinNoInlineNew) {
 
 
 TEST(SubclassArrayBufferBuiltin) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
@@ -1196,7 +1193,7 @@ TEST(SubclassArrayBufferBuiltinNoInlineNew) {
 
 
 TEST(SubclassPromiseBuiltin) {
-  // Avoid eventual completion of in-object slack tracking.
+  // Avoid possible completion of in-object slack tracking.
   v8_flags.always_turbofan = false;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());

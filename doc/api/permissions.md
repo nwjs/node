@@ -33,7 +33,9 @@ If you find a potential security vulnerability, please refer to our
 <!-- YAML
 added: v20.0.0
 changes:
-  - version: v23.5.0
+  - version:
+    - v23.5.0
+    - v22.13.0
     pr-url: https://github.com/nodejs/node/pull/56201
     description: This feature is no longer experimental.
 -->
@@ -106,8 +108,8 @@ The valid arguments for both flags are:
 
 * `*` - To allow all `FileSystemRead` or `FileSystemWrite` operations,
   respectively.
-* Paths delimited by comma (`,`) to allow only matching `FileSystemRead` or
-  `FileSystemWrite` operations, respectively.
+* Relative paths to the current working directory.
+* Absolute paths.
 
 Example:
 

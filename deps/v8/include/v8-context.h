@@ -320,7 +320,7 @@ class V8_EXPORT Context : public Data {
    * 'Function' constructor are used an exception will be thrown.
    *
    * If code generation from strings is not allowed the
-   * V8::AllowCodeGenerationFromStrings callback will be invoked if
+   * V8::ModifyCodeGenerationFromStringsCallback callback will be invoked if
    * set before blocking the call to 'eval' or the 'Function'
    * constructor. If that callback returns true, the call will be
    * allowed, otherwise an exception will be thrown. If no callback is
@@ -427,7 +427,8 @@ class V8_EXPORT Context : public Data {
 
   static void CheckCast(Data* obj);
 
-  internal::Address* GetDataFromSnapshotOnce(size_t index);
+  internal::ValueHelper::InternalRepresentationType GetDataFromSnapshotOnce(
+      size_t index);
   Local<Value> SlowGetEmbedderData(int index);
   void* SlowGetAlignedPointerFromEmbedderData(int index);
 };
@@ -497,10 +498,10 @@ void* Context::GetAlignedPointerFromEmbedderData(int index) {
 
 template <class T>
 MaybeLocal<T> Context::GetDataFromSnapshotOnce(size_t index) {
-  if (auto slot = GetDataFromSnapshotOnce(index); slot) {
-    internal::PerformCastCheck(
-        internal::ValueHelper::SlotAsValue<T, false>(slot));
-    return Local<T>::FromSlot(slot);
+  if (auto repr = GetDataFromSnapshotOnce(index);
+      repr != internal::ValueHelper::kEmpty) {
+    internal::PerformCastCheck(internal::ValueHelper::ReprAsValue<T>(repr));
+    return Local<T>::FromRepr(repr);
   }
   return {};
 }

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --allow-natives-syntax --turboshaft-from-maglev --turbofan
+// Flags: --allow-natives-syntax --turbolev --turbofan
 
 function f64_abs(n) {
   let v = n + 3.125;
@@ -33,7 +33,7 @@ assertOptimized(i32_abs);
 
 // Triggering a deopt in `i32_abs` by calling it with a value that will lead
 // doing Int32Abs on min_int, which overflows because the result is not
-// representable as a int32.
+// representable as an int32.
 let min_int = -0x80000000;
 let val_for_deopt = ((min_int + 28) / 10) & 0xffffffff;
 assertTrue(%IsSmi(val_for_deopt));

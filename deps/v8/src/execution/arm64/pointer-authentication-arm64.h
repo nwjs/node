@@ -142,8 +142,8 @@ V8_INLINE Address PointerAuthentication::SignAndCheckPC(Isolate* isolate,
                                                         Address pc,
                                                         Address sp) {
   pc = impl::SignPC(pc, sp);
-  CHECK(Deoptimizer::IsValidReturnAddress(PointerAuthentication::StripPAC(pc),
-                                          isolate));
+  Deoptimizer::EnsureValidReturnAddress(isolate,
+                                        PointerAuthentication::StripPAC(pc));
   return pc;
 }
 
@@ -153,7 +153,8 @@ V8_INLINE Address PointerAuthentication::MoveSignedPC(Isolate* isolate,
                                                       Address new_sp,
                                                       Address old_sp) {
 #if V8_ENABLE_WEBASSEMBLY
-  CHECK(v8_flags.wasm_deopt);  // Only used by wasm deoptimizations.
+  // Only used by wasm deoptimizations and growable stacks.
+  CHECK(v8_flags.wasm_deopt || v8_flags.experimental_wasm_growable_stacks);
   // Verify the old pc and sign it for the new sp.
   return impl::SignPC(impl::AuthPAC(pc, old_sp), new_sp);
 #else

@@ -115,7 +115,7 @@ struct NodeHashSetPolicy;
 //  }
 template <class T, class Hash = DefaultHashContainerHash<T>,
           class Eq = DefaultHashContainerEq<T>, class Alloc = std::allocator<T>>
-class ABSL_INTERNAL_ATTRIBUTE_OWNER node_hash_set
+class ABSL_ATTRIBUTE_OWNER node_hash_set
     : public absl::container_internal::raw_hash_set<
           absl::container_internal::NodeHashSetPolicy<T>, Hash, Eq, Alloc> {
   using Base = typename node_hash_set::raw_hash_set;
@@ -230,8 +230,13 @@ class ABSL_INTERNAL_ATTRIBUTE_OWNER node_hash_set
   //   Erases the element at `position` of the `node_hash_set`, returning
   //   `void`.
   //
-  //   NOTE: this return behavior is different than that of STL containers in
-  //   general and `std::unordered_set` in particular.
+  //   NOTE: Returning `void` in this case is different than that of STL
+  //   containers in general and `std::unordered_map` in particular (which
+  //   return an iterator to the element following the erased element). If that
+  //   iterator is needed, simply post increment the iterator:
+  //
+  //     map.erase(it++);
+  //
   //
   // iterator erase(const_iterator first, const_iterator last):
   //

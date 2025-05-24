@@ -17,7 +17,7 @@ class V8_EXPORT_PRIVATE RegExpMacroAssemblerMIPS
   RegExpMacroAssemblerMIPS(Isolate* isolate, Zone* zone, Mode mode,
                            int registers_to_save);
   ~RegExpMacroAssemblerMIPS() override;
-  int stack_limit_slack() override;
+  int stack_limit_slack_slot_count() override;
   void AdvanceCurrentPosition(int by) override;
   void AdvanceRegister(int reg, int by) override;
   void Backtrack() override;
@@ -52,6 +52,9 @@ class V8_EXPORT_PRIVATE RegExpMacroAssemblerMIPS
   bool CheckCharacterNotInRangeArray(const ZoneList<CharacterRange>* ranges,
                                      Label* on_not_in_range) override;
   void CheckBitInTable(Handle<ByteArray> table, Label* on_bit_set) override;
+  void SkipUntilBitInTable(int cp_offset, Handle<ByteArray> table,
+                           Handle<ByteArray> nibble_table,
+                           int advance_by) override;
 
   // Checks whether the given offset from the current position is before
   // the end of the string.
@@ -59,7 +62,8 @@ class V8_EXPORT_PRIVATE RegExpMacroAssemblerMIPS
   bool CheckSpecialClassRanges(StandardCharacterSet type,
                                Label* on_no_match) override;
   void Fail() override;
-  Handle<HeapObject> GetCode(Handle<String> source) override;
+  DirectHandle<HeapObject> GetCode(DirectHandle<String> source,
+                                   RegExpFlags flags) override;
   void GoTo(Label* label) override;
   void IfRegisterGE(int reg, int comparand, Label* if_ge) override;
   void IfRegisterLT(int reg, int comparand, Label* if_lt) override;
@@ -160,7 +164,7 @@ class V8_EXPORT_PRIVATE RegExpMacroAssemblerMIPS
 
   // Check whether we are exceeding the stack limit on the backtrack stack.
   void CheckStackLimit();
-
+  void AssertAboveStackLimitMinusSlack();
 
   // Generate a call to CheckStackGuardState.
   void CallCheckStackGuardState(Register scratch,

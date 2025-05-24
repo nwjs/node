@@ -8,7 +8,6 @@
 #include "include/v8config.h"
 #include "src/base/atomicops.h"
 #include "src/base/memory.h"
-#include "src/base/platform/mutex.h"
 #include "src/common/globals.h"
 #include "src/sandbox/code-entrypoint-tag.h"
 #include "src/sandbox/external-entity-table.h"
@@ -123,9 +122,8 @@ class V8_EXPORT_PRIVATE CodePointerTable
                                    kCodePointerTableReservationSize>;
 
  public:
-  // Size of a CodePointerTable, for layout computation in IsolateData.
-  static int constexpr kSize = 2 * kSystemPointerSize;
   static_assert(kMaxCodePointers == kMaxCapacity);
+  static_assert(!kSupportsCompaction);
 
   CodePointerTable() = default;
   CodePointerTable(const CodePointerTable&) = delete;
@@ -192,10 +190,6 @@ class V8_EXPORT_PRIVATE CodePointerTable
   inline uint32_t HandleToIndex(CodePointerHandle handle) const;
   inline CodePointerHandle IndexToHandle(uint32_t index) const;
 };
-
-static_assert(sizeof(CodePointerTable) == CodePointerTable::kSize);
-
-V8_EXPORT_PRIVATE CodePointerTable* GetProcessWideCodePointerTable();
 
 }  // namespace internal
 }  // namespace v8

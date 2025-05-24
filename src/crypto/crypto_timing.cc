@@ -10,6 +10,7 @@
 
 namespace node {
 
+using v8::CFunction;
 using v8::FastApiCallbackOptions;
 using v8::FunctionCallbackInfo;
 using v8::HandleScope;
@@ -49,11 +50,34 @@ void TimingSafeEqual(const FunctionCallbackInfo<Value>& args) {
       CRYPTO_memcmp(buf1.data(), buf2.data(), buf1.size()) == 0);
 }
 
+bool FastTimingSafeEqual(Local<Value> receiver,
+                         Local<Value> a_obj,
+                         Local<Value> b_obj,
+                         // NOLINTNEXTLINE(runtime/references)
+                         FastApiCallbackOptions& options) {
+  HandleScope scope(options.isolate);
+  ArrayBufferViewContents<uint8_t> a(a_obj);
+  ArrayBufferViewContents<uint8_t> b(b_obj);
+  if (a.length() != b.length()) {
+    TRACK_V8_FAST_API_CALL("crypto.timingSafeEqual.error");
+    THROW_ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH(options.isolate);
+    return false;
+  }
+
+  TRACK_V8_FAST_API_CALL("crypto.timingSafeEqual.ok");
+  return CRYPTO_memcmp(a.data(), b.data(), a.length()) == 0;
+}
+
+static CFunction fast_equal(CFunction::Make(FastTimingSafeEqual));
+
 void Initialize(Environment* env, Local<Object> target) {
-  SetMethod(env->context(), target, "timingSafeEqual", TimingSafeEqual);
+  SetFastMethodNoSideEffect(
+      env->context(), target, "timingSafeEqual", TimingSafeEqual, &fast_equal);
 }
 void RegisterExternalReferences(ExternalReferenceRegistry* registry) {
   registry->Register(TimingSafeEqual);
+  registry->Register(FastTimingSafeEqual);
+  registry->Register(fast_equal.GetTypeInfo());
 }
 }  // namespace Timing
 

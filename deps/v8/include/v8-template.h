@@ -72,8 +72,6 @@ class V8_EXPORT Template : public Data {
    * \param name The name of the property for which an accessor is added.
    * \param getter The callback to invoke when getting the property.
    * \param setter The callback to invoke when setting the property.
-   * \param data A piece of data that will be passed to the getter and setter
-   *   callbacks whenever they are invoked.
    * \param attribute The attributes of the property for which an accessor
    *   is added.
    */
@@ -702,6 +700,14 @@ class V8_EXPORT FunctionTemplate : public Template {
    * This is an experimental feature and may still change significantly.
    */
   bool IsLeafTemplateForApiObject(v8::Local<v8::Value> value) const;
+
+  /**
+   * Checks if the object can be promoted to read only space, seals it and
+   * prepares for promotion.
+   *
+   * This is an experimental feature and may still change significantly.
+   */
+  void SealAndPrepareForPromotionToReadOnly();
 
   V8_INLINE static FunctionTemplate* Cast(Data* data);
 

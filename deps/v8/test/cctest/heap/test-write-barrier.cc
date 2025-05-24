@@ -24,7 +24,7 @@ HEAP_TEST(WriteBarrier_Marking) {
   Factory* factory = isolate->factory();
   Heap* heap = isolate->heap();
   HandleScope outer(isolate);
-  Handle<FixedArray> objects = factory->NewFixedArray(3);
+  DirectHandle<FixedArray> objects = factory->NewFixedArray(3);
   v8::Global<Value> global_objects(CcTest::isolate(), Utils::ToLocal(objects));
   {
     // Make sure that these objects are not immediately reachable from
@@ -44,11 +44,11 @@ HEAP_TEST(WriteBarrier_Marking) {
   CHECK(heap->marking_state()->IsUnmarked(host));
   CHECK(heap->marking_state()->IsUnmarked(value1));
   // Trigger the barrier for the unmarked host and expect the bail out.
-  WriteBarrier::Marking(host, host->RawFieldOfElementAt(0), value1);
+  WriteBarrier::MarkingForTesting(host, host->RawFieldOfElementAt(0), value1);
   CHECK(heap->marking_state()->IsMarked(value1));
 
   CHECK(heap->marking_state()->IsUnmarked(value2));
-  WriteBarrier::Marking(host, host->RawFieldOfElementAt(0), value2);
+  WriteBarrier::MarkingForTesting(host, host->RawFieldOfElementAt(0), value2);
   CHECK(heap->marking_state()->IsMarked(value2));
   heap::SimulateIncrementalMarking(CcTest::heap(), true);
   CHECK(heap->marking_state()->IsMarked(host));
@@ -77,13 +77,13 @@ HEAP_TEST(WriteBarrier_MarkingExtension) {
   Tagged<JSArrayBuffer> host = Cast<JSArrayBuffer>(objects->get(0));
   CHECK(heap->marking_state()->IsUnmarked(host));
   CHECK(!extension->IsMarked());
-  WriteBarrier::Marking(host, extension);
+  WriteBarrier::ForArrayBufferExtension(host, extension);
   CHECK(extension->IsMarked());
   // Concurrent marking barrier should mark the value now.
   CHECK(extension->IsMarked());
   // Keep object alive using the global handle.
-  v8::Global<ArrayBuffer> global_host(CcTest::isolate(),
-                                      Utils::ToLocal(handle(host, isolate)));
+  v8::Global<ArrayBuffer> global_host(
+      CcTest::isolate(), Utils::ToLocal(direct_handle(host, isolate)));
   heap::SimulateIncrementalMarking(CcTest::heap(), true);
   CHECK(heap->marking_state()->IsMarked(host));
   CHECK(extension->IsMarked());

@@ -1,4 +1,3 @@
-
 // Copyright 2024 the V8 project authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -21,6 +20,7 @@
 #include "src/compiler/compiler-source-position-table.h"
 #include "src/compiler/js-context-specialization.h"
 #include "src/compiler/js-heap-broker.h"
+#include "src/compiler/js-inlining.h"
 #include "src/compiler/js-operator.h"
 #include "src/compiler/machine-graph.h"
 #include "src/compiler/machine-operator.h"
@@ -30,9 +30,9 @@
 #include "src/compiler/pipeline-statistics.h"
 #include "src/compiler/schedule.h"
 #include "src/compiler/simplified-operator.h"
+#include "src/compiler/turbofan-typer.h"
 #include "src/compiler/turboshaft/phase.h"
 #include "src/compiler/turboshaft/zone-with-name.h"
-#include "src/compiler/typer.h"
 #include "src/compiler/zone-stats.h"
 #include "src/execution/isolate.h"
 #include "src/handles/handles-inl.h"
@@ -84,11 +84,15 @@ class TFPipelineData {
         register_allocation_zone_(register_allocation_zone_scope_.zone()),
         assembler_options_(AssemblerOptions::Default(isolate)) {
     PhaseScope scope(pipeline_statistics, "V8.TFInitPipelineData");
-    graph_ = graph_zone_->New<Graph>(graph_zone_);
+    graph_ = graph_zone_->New<TFGraph>(graph_zone_);
     source_positions_ = graph_zone_->New<SourcePositionTable>(graph_);
     node_origins_ = info->trace_turbo_json()
                         ? graph_zone_->New<NodeOriginTable>(graph_)
                         : nullptr;
+#if V8_ENABLE_WEBASSEMBLY
+    js_wasm_calls_sidetable_ =
+        graph_zone_->New<JsWasmCallsSidetable>(graph_zone_);
+#endif  // V8_ENABLE_WEBASSEMBLY
     simplified_ = graph_zone_->New<SimplifiedOperatorBuilder>(graph_zone_);
     machine_ = graph_zone_->New<MachineOperatorBuilder>(
         graph_zone_, MachineType::PointerRepresentation(),
@@ -115,11 +119,10 @@ class TFPipelineData {
                  NodeOriginTable* node_origins,
                  const AssemblerOptions& assembler_options)
       : isolate_(nullptr),
-        wasm_engine_(wasm_engine),
         allocator_(wasm_engine->allocator()),
         info_(info),
         debug_name_(info_->GetDebugName()),
-        may_have_unverifiable_graph_(v8_flags.turboshaft_wasm),
+        may_have_unverifiable_graph_(true),
         zone_stats_(zone_stats),
         pipeline_statistics_(pipeline_statistics),
         graph_zone_(zone_stats_, kGraphZoneName, kCompressGraphZone),
@@ -146,18 +149,13 @@ class TFPipelineData {
 
   // For CodeStubAssembler and machine graph testing entry point.
   TFPipelineData(ZoneStats* zone_stats, OptimizedCompilationInfo* info,
-                 Isolate* isolate, AccountingAllocator* allocator, Graph* graph,
-                 JSGraph* jsgraph, Schedule* schedule,
+                 Isolate* isolate, AccountingAllocator* allocator,
+                 TFGraph* graph, JSGraph* jsgraph, Schedule* schedule,
                  SourcePositionTable* source_positions,
                  NodeOriginTable* node_origins, JumpOptimizationInfo* jump_opt,
                  const AssemblerOptions& assembler_options,
                  const ProfileDataFromFile* profile_data)
       : isolate_(isolate),
-#if V8_ENABLE_WEBASSEMBLY
-        // TODO(clemensb): Remove this field, use GetWasmEngine directly
-        // instead.
-        wasm_engine_(wasm::GetWasmEngine()),
-#endif  // V8_ENABLE_WEBASSEMBLY
         allocator_(allocator),
         info_(info),
         debug_name_(info_->GetDebugName()),
@@ -243,8 +241,8 @@ class TFPipelineData {
   bool verify_graph() const { return verify_graph_; }
   void set_verify_graph(bool value) { verify_graph_ = value; }
 
-  MaybeHandle<Code> code() { return code_; }
-  void set_code(MaybeHandle<Code> code) {
+  MaybeIndirectHandle<Code> code() { return code_; }
+  void set_code(MaybeIndirectHandle<Code> code) {
     DCHECK(code_.is_null());
     code_ = code;
   }
@@ -255,8 +253,8 @@ class TFPipelineData {
   bool MayHaveUnverifiableGraph() const { return may_have_unverifiable_graph_; }
 
   Zone* graph_zone() { return graph_zone_; }
-  Graph* graph() const { return graph_; }
-  void set_graph(Graph* graph) { graph_ = graph; }
+  TFGraph* graph() const { return graph_; }
+  void set_graph(TFGraph* graph) { graph_ = graph; }
   template <typename T>
   using GraphZonePointer = turboshaft::ZoneWithNamePointer<T, kGraphZoneName>;
   void InitializeWithGraphZone(
@@ -273,7 +271,7 @@ class TFPipelineData {
     node_origins_ = node_origins;
 
     // Allocate a new graph and schedule.
-    graph_ = graph_zone_.New<Graph>(graph_zone_);
+    graph_ = graph_zone_.New<TFGraph>(graph_zone_);
     schedule_ = graph_zone_.New<Schedule>(graph_zone_, node_count_hint);
 
     // Initialize node builders.
@@ -306,11 +304,11 @@ class TFPipelineData {
   JSOperatorBuilder* javascript() const { return javascript_; }
   JSGraph* jsgraph() const { return jsgraph_; }
   MachineGraph* mcgraph() const { return mcgraph_; }
-  Handle<NativeContext> native_context() const {
-    return handle(info()->native_context(), isolate());
+  DirectHandle<NativeContext> native_context() const {
+    return direct_handle(info()->native_context(), isolate());
   }
-  Handle<JSGlobalObject> global_object() const {
-    return handle(info()->global_object(), isolate());
+  DirectHandle<JSGlobalObject> global_object() const {
+    return direct_handle(info()->global_object(), isolate());
   }
 
   JSHeapBroker* broker() const { return broker_.get(); }
@@ -382,7 +380,9 @@ class TFPipelineData {
 
   CodeTracer* GetCodeTracer() const {
 #if V8_ENABLE_WEBASSEMBLY
-    if (wasm_engine_) return wasm_engine_->GetCodeTracer();
+    if (info_->IsWasm() || info_->IsWasmBuiltin()) {
+      return wasm::GetWasmEngine()->GetCodeTracer();
+    }
 #endif  // V8_ENABLE_WEBASSEMBLY
     return isolate_->GetCodeTracer();
   }
@@ -405,6 +405,9 @@ class TFPipelineData {
   }
 
   void DeleteGraphZone() {
+#ifdef V8_ENABLE_WEBASSEMBLY
+    js_wasm_calls_sidetable_ = nullptr;
+#endif  // V8_ENABLE_WEBASSEMBLY
     graph_ = nullptr;
     source_positions_ = nullptr;
     node_origins_ = nullptr;
@@ -533,30 +536,40 @@ class TFPipelineData {
     runtime_call_stats_ = stats;
   }
 
-  // Used to skip the "wasm-inlining" phase when there are no JS-to-Wasm calls.
-  bool has_js_wasm_calls() const { return has_js_wasm_calls_; }
-  void set_has_js_wasm_calls(bool has_js_wasm_calls) {
-    has_js_wasm_calls_ = has_js_wasm_calls;
-  }
-
 #if V8_ENABLE_WEBASSEMBLY
+  bool has_js_wasm_calls() const {
+    return wasm_module_for_inlining_ != nullptr;
+  }
   const wasm::WasmModule* wasm_module_for_inlining() const {
     return wasm_module_for_inlining_;
   }
   void set_wasm_module_for_inlining(const wasm::WasmModule* module) {
+    // We may only inline Wasm functions from at most one module, see below.
+    DCHECK_NULL(wasm_module_for_inlining_);
     wasm_module_for_inlining_ = module;
   }
-#endif
+  JsWasmCallsSidetable* js_wasm_calls_sidetable() {
+    return js_wasm_calls_sidetable_;
+  }
+#endif  // V8_ENABLE_WEBASSEMBLY
 
  private:
   Isolate* const isolate_;
 #if V8_ENABLE_WEBASSEMBLY
-  wasm::WasmEngine* const wasm_engine_ = nullptr;
   // The wasm module to be used for inlining wasm functions into JS.
   // The first module wins and inlining of different modules into the same
   // JS function is not supported. This is necessary because the wasm
   // instructions use module-specific (non-canonicalized) type indices.
+  // TODO(353475584): Long-term we might want to lift this restriction, i.e.,
+  // support inlining Wasm functions from different Wasm modules in the
+  // Turboshaft implementation to avoid a surprising performance cliff.
   const wasm::WasmModule* wasm_module_for_inlining_ = nullptr;
+  // Sidetable for storing/passing information about the to-be-inlined calls to
+  // Wasm functions through the JS Turbofan frontend to the Turboshaft backend.
+  // This should go away once we not only inline the Wasm body in Turboshaft but
+  // also the JS-to-Wasm wrapper (which is currently inlined in Turbofan still).
+  // See https://crbug.com/353475584.
+  JsWasmCallsSidetable* js_wasm_calls_sidetable_ = nullptr;
 #endif  // V8_ENABLE_WEBASSEMBLY
   AccountingAllocator* const allocator_;
   OptimizedCompilationInfo* const info_;
@@ -567,7 +580,7 @@ class TFPipelineData {
   bool verify_graph_ = false;
   int start_source_position_ = kNoSourcePosition;
   std::shared_ptr<OsrHelper> osr_helper_;
-  MaybeHandle<Code> code_;
+  MaybeIndirectHandle<Code> code_;
   CodeGenerator* code_generator_ = nullptr;
   Typer* typer_ = nullptr;
   Typer::Flags typer_flags_ = Typer::kNoFlags;
@@ -575,7 +588,7 @@ class TFPipelineData {
   // All objects in the following group of fields are allocated in graph_zone_.
   // They are all set to nullptr when the graph_zone_ is destroyed.
   turboshaft::ZoneWithName<kGraphZoneName> graph_zone_;
-  Graph* graph_ = nullptr;
+  TFGraph* graph_ = nullptr;
   SourcePositionTable* source_positions_ = nullptr;
   NodeOriginTable* node_origins_ = nullptr;
   SimplifiedOperatorBuilder* simplified_ = nullptr;
@@ -626,8 +639,6 @@ class TFPipelineData {
 
   RuntimeCallStats* runtime_call_stats_ = nullptr;
   const ProfileDataFromFile* profile_data_ = nullptr;
-
-  bool has_js_wasm_calls_ = false;
 };
 
 }  // namespace v8::internal::compiler

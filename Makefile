@@ -175,7 +175,7 @@ out/Makefile: config.gypi common.gypi node.gyp \
 	tools/v8_gypfiles/toolchain.gypi \
 	tools/v8_gypfiles/features.gypi \
 	tools/v8_gypfiles/inspector.gypi tools/v8_gypfiles/v8.gyp
-	$(PYTHON) tools/gyp_node.py -f make
+	$(PYTHON) tools/gyp_node.py -f make -Dpython=$(PYTHON)
 
 # node_version.h is listed because the N-API version is taken from there
 # and included in config.gypi
@@ -238,7 +238,7 @@ coverage-clean: ## Remove coverage artifacts.
 	$(RM) -r node_modules
 	$(RM) -r gcovr
 	$(RM) -r coverage/tmp
-	@if [ -d "out/Release/obj.target" ]; then \
+	@if [ -d "out/$(BUILDTYPE)/obj.target" ]; then \
 		$(FIND) out/$(BUILDTYPE)/obj.target \( -name "*.gcda" -o -name "*.gcno" \) \
 			-type f | xargs $(RM); \
 	fi
@@ -265,7 +265,7 @@ coverage-build-js: ## Build JavaScript coverage files.
 
 .PHONY: coverage-test
 coverage-test: coverage-build ## Run the tests and generate a coverage report.
-	@if [ -d "out/Release/obj.target" ]; then \
+	@if [ -d "out/$(BUILDTYPE)/obj.target" ]; then \
 		$(FIND) out/$(BUILDTYPE)/obj.target -name "*.gcda" -type f | xargs $(RM); \
 	fi
 	-NODE_V8_COVERAGE=coverage/tmp \
@@ -378,11 +378,11 @@ ifeq ($(OSTYPE),os400)
 DOCBUILDSTAMP_PREREQS := $(DOCBUILDSTAMP_PREREQS) out/$(BUILDTYPE)/node.exp
 endif
 
-node_use_openssl = $(call available-node,"-p" \
-			 "process.versions.openssl != undefined")
+node_use_openssl_and_icu = $(call available-node,"-p" \
+			 "process.versions.openssl != undefined && process.versions.icu != undefined")
 test/addons/.docbuildstamp: $(DOCBUILDSTAMP_PREREQS) tools/doc/node_modules
-	@if [ "$(shell $(node_use_openssl))" != "true" ]; then \
-		echo "Skipping .docbuildstamp (no crypto)"; \
+	@if [ "$(shell $(node_use_openssl_and_icu))" != "true" ]; then \
+		echo "Skipping .docbuildstamp (no crypto and/or no ICU)"; \
 	else \
 		$(RM) -r test/addons/??_*/; \
 		[ -x $(NODE) ] && $(NODE) $< || node $< ; \
@@ -509,16 +509,24 @@ SQLITE_BINDING_SOURCES := \
 	$(wildcard test/sqlite/*/*.c)
 
 # Implicitly depends on $(NODE_EXE), see the build-sqlite-tests rule for rationale.
+ifndef NOSQLITE
 test/sqlite/.buildstamp: $(ADDONS_PREREQS) \
 	$(SQLITE_BINDING_GYPS) $(SQLITE_BINDING_SOURCES)
 	@$(call run_build_addons,"$$PWD/test/sqlite",$@)
+else
+test/sqlite/.buildstamp:
+endif
 
 .PHONY: build-sqlite-tests
+ifndef NOSQLITE
 # .buildstamp needs $(NODE_EXE) but cannot depend on it
 # directly because it calls make recursively.  The parent make cannot know
 # if the subprocess touched anything so it pessimistically assumes that
 # .buildstamp is out of date and need a rebuild.
 build-sqlite-tests: | $(NODE_EXE) test/sqlite/.buildstamp ## Build SQLite tests.
+else
+build-sqlite-tests:
+endif
 
 .PHONY: clear-stalled
 clear-stalled: ## Clear any stalled processes.
@@ -559,7 +567,7 @@ NATIVE_SUITES ?= addons js-native-api node-api
 # CI_* variables should be kept synchronized with the ones in vcbuild.bat
 CI_NATIVE_SUITES ?= $(NATIVE_SUITES) benchmark
 CI_JS_SUITES ?= $(JS_SUITES) pummel
-ifeq ($(node_use_openssl), false)
+ifeq ($(node_use_openssl_and_icu), false)
 	CI_DOC := doctool
 else
 	CI_DOC =
@@ -654,14 +662,10 @@ test-internet: all ## Run internet tests.
 test-tick-processor: all ## Run tick processor tests.
 	$(PYTHON) tools/test.py $(PARALLEL_ARGS) tick-processor
 
-.PHONY: test-hash-seed
-test-hash-seed: all ## Verifu that the hash seed used by V8 for hashing is random.
-	$(NODE) test/pummel/test-hash-seed.js
-
 .PHONY: test-doc
 test-doc: doc-only lint-md ## Build, lint, and verify the docs.
-	@if [ "$(shell $(node_use_openssl))" != "true" ]; then \
-		echo "Skipping test-doc (no crypto)"; \
+	@if [ "$(shell $(node_use_openssl_and_icu))" != "true" ]; then \
+		echo "Skipping test-doc (no crypto and/or no ICU)"; \
 	else \
 		$(PYTHON) tools/test.py $(PARALLEL_ARGS) doctool; \
 	fi
@@ -751,8 +755,6 @@ test-v8: v8  ## Run the V8 test suite on deps/v8.
 				mjsunit cctest debugger inspector message preparser \
 				$(TAP_V8)
 	$(call convert_to_junit,$(TAP_V8_JSON))
-	$(info Testing hash seed)
-	$(MAKE) test-hash-seed
 
 test-v8-intl: v8 ## Run the v8 test suite, intl tests.
 	export PATH="$(NO_BIN_OVERRIDE_PATH)" && \
@@ -768,7 +770,7 @@ test-v8-benchmarks: v8 ## Run the v8 test suite, benchmarks.
 				$(TAP_V8_BENCHMARKS)
 	$(call convert_to_junit,$(TAP_V8_BENCHMARKS_JSON))
 
-test-v8-updates: ## Run the v8 test suite, updates.
+test-v8-updates: all ## Run the v8 test suite, updates.
 	$(PYTHON) tools/test.py $(PARALLEL_ARGS) --mode=$(BUILDTYPE_LOWER) v8-updates
 
 test-v8-all: test-v8 test-v8-intl test-v8-benchmarks test-v8-updates ## Run the entire V8 test suite, including intl, benchmarks, and updates.
@@ -789,8 +791,8 @@ apidocs_json = $(addprefix out/,$(apidoc_sources:.md=.json))
 apiassets = $(subst api_assets,api/assets,$(addprefix out/,$(wildcard doc/api_assets/*)))
 
 tools/doc/node_modules: tools/doc/package.json
-	@if [ "$(shell $(node_use_openssl))" != "true" ]; then \
-		echo "Skipping tools/doc/node_modules (no crypto)"; \
+	@if [ "$(shell $(node_use_openssl_and_icu))" != "true" ]; then \
+		echo "Skipping tools/doc/node_modules (no crypto and/or no ICU)"; \
 	else \
 		cd tools/doc && $(call available-node,$(run-npm-ci)) \
 	fi
@@ -798,8 +800,8 @@ tools/doc/node_modules: tools/doc/package.json
 .PHONY: doc-only
 doc-only: tools/doc/node_modules \
 	$(apidoc_dirs) $(apiassets) ## Build the docs with the local or the global Node.js binary.
-	@if [ "$(shell $(node_use_openssl))" != "true" ]; then \
-		echo "Skipping doc-only (no crypto)"; \
+	@if [ "$(shell $(node_use_openssl_and_icu))" != "true" ]; then \
+		echo "Skipping doc-only (no crypto and/or no ICU)"; \
 	else \
 		$(MAKE) out/doc/api/all.html out/doc/api/all.json out/doc/api/stability; \
 	fi
@@ -946,14 +948,8 @@ else
 ifeq ($(findstring ppc64,$(UNAME_M)),ppc64)
 DESTCPU ?= ppc64
 else
-ifeq ($(findstring ppc,$(UNAME_M)),ppc)
-DESTCPU ?= ppc
-else
 ifeq ($(findstring s390x,$(UNAME_M)),s390x)
 DESTCPU ?= s390x
-else
-ifeq ($(findstring s390,$(UNAME_M)),s390)
-DESTCPU ?= s390
 else
 ifeq ($(findstring OS/390,$(shell uname -s)),OS/390)
 DESTCPU ?= s390x
@@ -988,8 +984,6 @@ endif
 endif
 endif
 endif
-endif
-endif
 ifeq ($(DESTCPU),x64)
 ARCH=x64
 else
@@ -1002,12 +996,6 @@ else
 ifeq ($(DESTCPU),ppc64)
 ARCH=ppc64
 else
-ifeq ($(DESTCPU),ppc)
-ARCH=ppc
-else
-ifeq ($(DESTCPU),s390)
-ARCH=s390
-else
 ifeq ($(DESTCPU),s390x)
 ARCH=s390x
 else
@@ -1018,8 +1006,6 @@ ifeq ($(DESTCPU),loong64)
 ARCH=loong64
 else
 ARCH=x86
-endif
-endif
 endif
 endif
 endif
@@ -1432,8 +1418,8 @@ lint-js-fix: tools/eslint/node_modules/eslint/bin/eslint.js ## Lint and fix the 
 # Note that on the CI `lint-js-ci` is run instead.
 lint-js-doc: LINT_JS_TARGETS=doc
 lint-js lint-js-doc: tools/eslint/node_modules/eslint/bin/eslint.js ## Lint the JavaScript code with eslint./eslint/bin/eslint.js
-	@if [ "$(shell $(node_use_openssl))" != "true" ]; then \
-		echo "Skipping $@ (no crypto)"; \
+	@if [ "$(shell $(node_use_openssl_and_icu))" != "true" ]; then \
+		echo "Skipping $@ (no crypto and/or no ICU)"; \
 	else \
 		echo "Running JS linter..."; \
 		$(call available-node,$(run-lint-js)) \

@@ -127,6 +127,8 @@
 #include <unistd.h>        // STDIN_FILENO, STDERR_FILENO
 #endif
 
+#include "absl/synchronization/mutex.h"
+
 // ========== global C++ headers ==========
 
 #include <cerrno>
@@ -731,9 +733,11 @@ void ResetStdio() {
       while (err == -1 && errno == EINTR);  // NOLINT
       CHECK_EQ(0, pthread_sigmask(SIG_UNBLOCK, &sa, nullptr));
 
-      // Normally we expect err == 0. But if macOS App Sandbox is enabled,
-      // tcsetattr will fail with err == -1 and errno == EPERM.
-      CHECK_IMPLIES(err != 0, err == -1 && errno == EPERM);
+      // We don't check the return value of tcsetattr() because it can fail
+      // for a number of reasons, none that we can do anything about. Examples:
+      // - if macOS App Sandbox is enabled, tcsetattr fails with EPERM
+      // - if the process group is orphaned, e.g. because the user logged out,
+      //   tcsetattr fails with EIO
     }
   }
 #endif  // __POSIX__
@@ -789,6 +793,10 @@ static ExitCode ProcessGlobalArgsInternal(std::vector<std::string>* args,
       std::find(v8_args.begin(), v8_args.end(),
                 "--abort_on_uncaught_exception") != v8_args.end()) {
     env_opts->abort_on_uncaught_exception = true;
+  }
+
+  if (env_opts->experimental_wasm_modules) {
+    v8_args.emplace_back("--js-source-phase-imports");
   }
 
 #ifdef __POSIX__
@@ -1358,10 +1366,6 @@ InitializeOncePerProcessInternal(const std::vector<std::string>& args,
   }
   } //node nwjs
 
-  if (!(flags & ProcessInitializationFlags::kNoInitializeV8)) {
-    V8::Initialize();
-  }
-
 #if 0 //already done in V8::Initialize() even in plain node mode
   if (!(flags & ProcessInitializationFlags::kNoInitializeCppgc)) {
     v8::PageAllocator* allocator = nullptr;
@@ -1371,6 +1375,15 @@ InitializeOncePerProcessInternal(const std::vector<std::string>& args,
     cppgc::InitializeProcess(allocator);
   }
 #endif
+
+  if (!(flags & ProcessInitializationFlags::kNoInitializeV8)) {
+    V8::Initialize();
+
+    // Disable absl deadlock detection in V8 as it reports false-positive cases.
+    // TODO(legendecas): Replace this global disablement with case suppressions.
+    // https://github.com/nodejs/node-v8/issues/301
+    absl::SetMutexDeadlockDetectionMode(absl::OnDeadlockCycle::kIgnore);
+  }
 
 #if NODE_USE_V8_WASM_TRAP_HANDLER
   bool use_wasm_trap_handler =

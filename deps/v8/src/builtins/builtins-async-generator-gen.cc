@@ -13,6 +13,8 @@
 namespace v8 {
 namespace internal {
 
+#include "src/codegen/define-code-stub-assembler-macros.inc"
+
 namespace {
 
 class AsyncGeneratorBuiltinsAssembler : public AsyncBuiltinsAssembler {
@@ -249,7 +251,7 @@ template <typename Descriptor>
 void AsyncGeneratorBuiltinsAssembler::AsyncGeneratorAwait() {
   auto async_generator_object =
       Parameter<JSAsyncGeneratorObject>(Descriptor::kAsyncGeneratorObject);
-  auto value = Parameter<Object>(Descriptor::kValue);
+  auto value = Parameter<JSAny>(Descriptor::kValue);
   auto context = Parameter<Context>(Descriptor::kContext);
 
   TNode<AsyncGeneratorRequest> request =
@@ -258,8 +260,8 @@ void AsyncGeneratorBuiltinsAssembler::AsyncGeneratorAwait() {
       request, AsyncGeneratorRequest::kPromiseOffset);
 
   Await(context, async_generator_object, value, outer_promise,
-        AsyncGeneratorAwaitResolveSharedFunConstant(),
-        AsyncGeneratorAwaitRejectSharedFunConstant());
+        RootIndex::kAsyncGeneratorAwaitResolveClosureSharedFun,
+        RootIndex::kAsyncGeneratorAwaitRejectClosureSharedFun);
   SetGeneratorAwaiting(async_generator_object);
   Return(UndefinedConstant());
 }
@@ -387,14 +389,14 @@ TF_BUILTIN(AsyncGeneratorPrototypeThrow, AsyncGeneratorBuiltinsAssembler) {
 }
 
 TF_BUILTIN(AsyncGeneratorAwaitResolveClosure, AsyncGeneratorBuiltinsAssembler) {
-  auto value = Parameter<Object>(Descriptor::kValue);
+  auto value = Parameter<JSAny>(Descriptor::kValue);
   auto context = Parameter<Context>(Descriptor::kContext);
   AsyncGeneratorAwaitResumeClosure(context, value,
                                    JSAsyncGeneratorObject::kNext);
 }
 
 TF_BUILTIN(AsyncGeneratorAwaitRejectClosure, AsyncGeneratorBuiltinsAssembler) {
-  auto value = Parameter<Object>(Descriptor::kValue);
+  auto value = Parameter<JSAny>(Descriptor::kValue);
   auto context = Parameter<Context>(Descriptor::kContext);
   // Restart in Rethrow mode, as this exception was already thrown and we don't
   // want to trigger a second debug break event or change the message location.
@@ -498,7 +500,7 @@ TF_BUILTIN(AsyncGeneratorResumeNext, AsyncGeneratorBuiltinsAssembler) {
 TF_BUILTIN(AsyncGeneratorResolve, AsyncGeneratorBuiltinsAssembler) {
   const auto generator =
       Parameter<JSAsyncGeneratorObject>(Descriptor::kGenerator);
-  const auto value = Parameter<Object>(Descriptor::kValue);
+  const auto value = Parameter<JSAny>(Descriptor::kValue);
   const auto done = Parameter<Object>(Descriptor::kDone);
   const auto context = Parameter<Context>(Descriptor::kContext);
 
@@ -568,7 +570,7 @@ TF_BUILTIN(AsyncGeneratorResolve, AsyncGeneratorBuiltinsAssembler) {
 TF_BUILTIN(AsyncGeneratorReject, AsyncGeneratorBuiltinsAssembler) {
   const auto generator =
       Parameter<JSAsyncGeneratorObject>(Descriptor::kGenerator);
-  const auto value = Parameter<Object>(Descriptor::kValue);
+  const auto value = Parameter<JSAny>(Descriptor::kValue);
   const auto context = Parameter<Context>(Descriptor::kContext);
 
   TNode<AsyncGeneratorRequest> next =
@@ -582,7 +584,7 @@ TF_BUILTIN(AsyncGeneratorReject, AsyncGeneratorBuiltinsAssembler) {
 
 TF_BUILTIN(AsyncGeneratorYieldWithAwait, AsyncGeneratorBuiltinsAssembler) {
   const auto generator = Parameter<JSGeneratorObject>(Descriptor::kGenerator);
-  const auto value = Parameter<Object>(Descriptor::kValue);
+  const auto value = Parameter<JSAny>(Descriptor::kValue);
   const auto context = Parameter<Context>(Descriptor::kContext);
 
   const TNode<AsyncGeneratorRequest> request =
@@ -591,8 +593,8 @@ TF_BUILTIN(AsyncGeneratorYieldWithAwait, AsyncGeneratorBuiltinsAssembler) {
       LoadPromiseFromAsyncGeneratorRequest(request);
 
   Await(context, generator, value, outer_promise,
-        AsyncGeneratorYieldWithAwaitResolveSharedFunConstant(),
-        AsyncGeneratorAwaitRejectSharedFunConstant());
+        RootIndex::kAsyncGeneratorYieldWithAwaitResolveClosureSharedFun,
+        RootIndex::kAsyncGeneratorAwaitRejectClosureSharedFun);
   SetGeneratorAwaiting(generator);
   Return(UndefinedConstant());
 }
@@ -600,7 +602,7 @@ TF_BUILTIN(AsyncGeneratorYieldWithAwait, AsyncGeneratorBuiltinsAssembler) {
 TF_BUILTIN(AsyncGeneratorYieldWithAwaitResolveClosure,
            AsyncGeneratorBuiltinsAssembler) {
   const auto context = Parameter<Context>(Descriptor::kContext);
-  const auto value = Parameter<Object>(Descriptor::kValue);
+  const auto value = Parameter<JSAny>(Descriptor::kValue);
   const TNode<JSAsyncGeneratorObject> generator =
       CAST(LoadContextElement(context, Context::EXTENSION_INDEX));
 
@@ -633,25 +635,39 @@ TF_BUILTIN(AsyncGeneratorReturn, AsyncGeneratorBuiltinsAssembler) {
   // In all cases, the final step is to jump back to AsyncGeneratorResumeNext.
   const auto generator =
       Parameter<JSAsyncGeneratorObject>(Descriptor::kGenerator);
-  const auto value = Parameter<Object>(Descriptor::kValue);
+  const auto value = Parameter<JSAny>(Descriptor::kValue);
   const TNode<AsyncGeneratorRequest> req =
       CAST(LoadFirstAsyncGeneratorRequestFromQueue(generator));
 
-  Label perform_await(this);
-  TVARIABLE(SharedFunctionInfo, var_on_resolve,
-            AsyncGeneratorReturnClosedResolveSharedFunConstant());
-
-  TVARIABLE(SharedFunctionInfo, var_on_reject,
-            AsyncGeneratorReturnClosedRejectSharedFunConstant());
-
   const TNode<Smi> state = LoadGeneratorState(generator);
-  GotoIf(IsGeneratorStateClosed(state), &perform_await);
-  var_on_resolve = AsyncGeneratorReturnResolveSharedFunConstant();
-  var_on_reject = AsyncGeneratorAwaitRejectSharedFunConstant();
+  auto MakeClosures = [&](TNode<Context> context,
+                          TNode<NativeContext> native_context) {
+    TVARIABLE(JSFunction, var_on_resolve);
+    TVARIABLE(JSFunction, var_on_reject);
+    Label closed(this), not_closed(this), done(this);
+    Branch(IsGeneratorStateClosed(state), &closed, &not_closed);
 
-  Goto(&perform_await);
+    BIND(&closed);
+    var_on_resolve = AllocateRootFunctionWithContext(
+        RootIndex::kAsyncGeneratorReturnClosedResolveClosureSharedFun, context,
+        native_context);
+    var_on_reject = AllocateRootFunctionWithContext(
+        RootIndex::kAsyncGeneratorReturnClosedRejectClosureSharedFun, context,
+        native_context);
+    Goto(&done);
 
-  BIND(&perform_await);
+    BIND(&not_closed);
+    var_on_resolve = AllocateRootFunctionWithContext(
+        RootIndex::kAsyncGeneratorReturnResolveClosureSharedFun, context,
+        native_context);
+    var_on_reject = AllocateRootFunctionWithContext(
+        RootIndex::kAsyncGeneratorAwaitRejectClosureSharedFun, context,
+        native_context);
+    Goto(&done);
+
+    BIND(&done);
+    return std::make_pair(var_on_resolve.value(), var_on_reject.value());
+  };
 
   SetGeneratorAwaiting(generator);
   auto context = Parameter<Context>(Descriptor::kContext);
@@ -664,9 +680,7 @@ TF_BUILTIN(AsyncGeneratorReturn, AsyncGeneratorBuiltinsAssembler) {
   {
     compiler::ScopedExceptionHandler handler(this, &await_exception,
                                              &var_exception);
-
-    Await(context, generator, value, outer_promise, var_on_resolve.value(),
-          var_on_reject.value());
+    Await(context, generator, value, outer_promise, MakeClosures);
   }
   Goto(&done);
 
@@ -695,7 +709,7 @@ TF_BUILTIN(AsyncGeneratorReturn, AsyncGeneratorBuiltinsAssembler) {
 TF_BUILTIN(AsyncGeneratorReturnResolveClosure,
            AsyncGeneratorBuiltinsAssembler) {
   const auto context = Parameter<Context>(Descriptor::kContext);
-  const auto value = Parameter<Object>(Descriptor::kValue);
+  const auto value = Parameter<JSAny>(Descriptor::kValue);
   AsyncGeneratorAwaitResumeClosure(context, value, JSGeneratorObject::kReturn);
 }
 
@@ -705,7 +719,7 @@ TF_BUILTIN(AsyncGeneratorReturnResolveClosure,
 TF_BUILTIN(AsyncGeneratorReturnClosedResolveClosure,
            AsyncGeneratorBuiltinsAssembler) {
   const auto context = Parameter<Context>(Descriptor::kContext);
-  const auto value = Parameter<Object>(Descriptor::kValue);
+  const auto value = Parameter<JSAny>(Descriptor::kValue);
   const TNode<JSAsyncGeneratorObject> generator =
       CAST(LoadContextElement(context, Context::EXTENSION_INDEX));
 
@@ -723,12 +737,14 @@ TF_BUILTIN(AsyncGeneratorReturnClosedResolveClosure,
 TF_BUILTIN(AsyncGeneratorReturnClosedRejectClosure,
            AsyncGeneratorBuiltinsAssembler) {
   const auto context = Parameter<Context>(Descriptor::kContext);
-  const auto value = Parameter<Object>(Descriptor::kValue);
+  const auto value = Parameter<JSAny>(Descriptor::kValue);
   const TNode<JSAsyncGeneratorObject> generator =
       CAST(LoadContextElement(context, Context::EXTENSION_INDEX));
 
   AsyncGeneratorReturnClosedReject(context, generator, value);
 }
+
+#include "src/codegen/undef-code-stub-assembler-macros.inc"
 
 }  // namespace internal
 }  // namespace v8

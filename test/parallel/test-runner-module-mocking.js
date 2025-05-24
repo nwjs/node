@@ -365,6 +365,34 @@ test('ESM mocking with namedExports option', async (t) => {
   });
 });
 
+test('JSON mocking', async (t) => {
+  await t.test('with defaultExport', async (t) => {
+    const fixturePath = fixtures.path('module-mocking', 'basic.json');
+    const fixture = pathToFileURL(fixturePath);
+    const { default: original } = await import(fixture, { with: { type: 'json' } });
+
+    assert.deepStrictEqual(original, { foo: 'bar' });
+
+    const defaultExport = { qux: 'zed' };
+
+    t.mock.module(fixture, { defaultExport });
+
+    const { default: mocked } = await import(fixture, { with: { type: 'json' } });
+
+    assert.deepStrictEqual(mocked, defaultExport);
+  });
+
+  await t.test('throws without appropriate import attributes', async (t) => {
+    const fixturePath = fixtures.path('module-mocking', 'basic.json');
+    const fixture = pathToFileURL(fixturePath);
+
+    const defaultExport = { qux: 'zed' };
+    t.mock.module(fixture, { defaultExport });
+
+    await assert.rejects(() => import(fixture), /import attribute/);
+  });
+});
+
 test('modules cannot be mocked multiple times at once', async (t) => {
   await t.test('CJS', async (t) => {
     const fixture = fixtures.path('module-mocking', 'basic-cjs.js');
@@ -449,13 +477,15 @@ test('mocks are automatically restored', async (t) => {
     assert.strictEqual(mocked.fn(), 43);
   });
 
-  const cjsMock = require(cjsFixture);
-  const esmMock = await import(esmFixture);
+  t.test('checks original behavior', async () => {
+    const cjsMock = require(cjsFixture);
+    const esmMock = await import(esmFixture);
 
-  assert.strictEqual(cjsMock.string, 'original cjs string');
-  assert.strictEqual(cjsMock.fn, undefined);
-  assert.strictEqual(esmMock.string, 'original esm string');
-  assert.strictEqual(esmMock.fn, undefined);
+    assert.strictEqual(cjsMock.string, 'original cjs string');
+    assert.strictEqual(cjsMock.fn, undefined);
+    assert.strictEqual(esmMock.string, 'original esm string');
+    assert.strictEqual(esmMock.fn, undefined);
+  });
 });
 
 test('mocks can be restored independently', async (t) => {

@@ -21,6 +21,11 @@ ASSERT_OFFSET(Builtin::kDeoptimizationEntry_Lazy);
 const int Deoptimizer::kEagerDeoptExitSize = 6 + 2;
 const int Deoptimizer::kLazyDeoptExitSize = 6 + 2;
 
+const int Deoptimizer::kAdaptShadowStackOffsetToSubtract = 0;
+
+// static
+void Deoptimizer::PatchToJump(Address pc, Address new_pc) { UNREACHABLE(); }
+
 Float32 RegisterValues::GetFloatRegister(unsigned n) const {
   Float64 f64_val = base::ReadUnalignedValue<Float64>(
       reinterpret_cast<Address>(simd128_registers_ + n));

@@ -12,18 +12,32 @@ namespace v8 {
 namespace internal {
 
 template <typename Trait>
-double MemoryController<Trait>::GrowingFactor(Heap* heap, size_t max_heap_size,
-                                              double gc_speed,
-                                              double mutator_speed) {
+double MemoryController<Trait>::GrowingFactor(
+    Heap* heap, size_t max_heap_size, std::optional<double> gc_speed,
+    double mutator_speed, Heap::HeapGrowingMode growing_mode) {
   const double max_factor = MaxGrowingFactor(max_heap_size);
-  const double factor =
-      DynamicGrowingFactor(gc_speed, mutator_speed, max_factor);
-  if (v8_flags.trace_gc_verbose) {
+  double factor = DynamicGrowingFactor(gc_speed, mutator_speed, max_factor);
+  switch (growing_mode) {
+    case Heap::HeapGrowingMode::kConservative:
+    case Heap::HeapGrowingMode::kSlow:
+      factor = std::min({factor, Trait::kConservativeGrowingFactor});
+      break;
+    case Heap::HeapGrowingMode::kMinimal:
+      factor = Trait::kMinGrowingFactor;
+      break;
+    case Heap::HeapGrowingMode::kDefault:
+      break;
+  }
+  if (v8_flags.heap_growing_percent > 0) {
+    factor = 1.0 + v8_flags.heap_growing_percent / 100.0;
+  }
+  if (V8_UNLIKELY(v8_flags.trace_gc_verbose)) {
     Isolate::FromHeap(heap)->PrintWithTimestamp(
         "[%s] factor %.1f based on mu=%.3f, speed_ratio=%.f "
         "(gc=%.f, mutator=%.f)\n",
         Trait::kName, factor, Trait::kTargetMutatorUtilization,
-        gc_speed / mutator_speed, gc_speed, mutator_speed);
+        gc_speed.value_or(0) / mutator_speed, gc_speed.value_or(0),
+        mutator_speed);
   }
   return factor;
 }
@@ -92,14 +106,13 @@ double MemoryController<Trait>::MaxGrowingFactor(size_t max_heap_size) {
 //   F * (R * (1 - MU) - MU) / (R * (1 - MU)) = 1
 //   F = R * (1 - MU) / (R * (1 - MU) - MU)
 template <typename Trait>
-double MemoryController<Trait>::DynamicGrowingFactor(double gc_speed,
-                                                     double mutator_speed,
-                                                     double max_factor) {
+double MemoryController<Trait>::DynamicGrowingFactor(
+    std::optional<double> gc_speed, double mutator_speed, double max_factor) {
   DCHECK_LE(Trait::kMinGrowingFactor, max_factor);
   DCHECK_GE(Trait::kMaxGrowingFactor, max_factor);
-  if (gc_speed == 0 || mutator_speed == 0) return max_factor;
+  if (!gc_speed || mutator_speed == 0) return max_factor;
 
-  const double speed_ratio = gc_speed / mutator_speed;
+  const double speed_ratio = *gc_speed / mutator_speed;
 
   const double a = speed_ratio * (1 - Trait::kTargetMutatorUtilization);
   const double b = speed_ratio * (1 - Trait::kTargetMutatorUtilization) -
@@ -124,47 +137,25 @@ size_t MemoryController<Trait>::MinimumAllocationLimitGrowingStep(
 }
 
 template <typename Trait>
-size_t MemoryController<Trait>::CalculateAllocationLimit(
-    Heap* heap, size_t current_size, size_t min_size, size_t max_size,
-    size_t new_space_capacity, double factor,
+size_t MemoryController<Trait>::BoundAllocationLimit(
+    Heap* heap, size_t current_size, uint64_t limit, size_t min_size,
+    size_t max_size, size_t new_space_capacity,
     Heap::HeapGrowingMode growing_mode) {
-  switch (growing_mode) {
-    case Heap::HeapGrowingMode::kConservative:
-    case Heap::HeapGrowingMode::kSlow:
-      factor = std::min({factor, Trait::kConservativeGrowingFactor});
-      break;
-    case Heap::HeapGrowingMode::kMinimal:
-      factor = Trait::kMinGrowingFactor;
-      break;
-    case Heap::HeapGrowingMode::kDefault:
-      break;
-  }
-
-  if (v8_flags.heap_growing_percent > 0) {
-    factor = 1.0 + v8_flags.heap_growing_percent / 100.0;
-  }
-
-  CHECK_LT(1.0, factor);
   CHECK_LT(0, current_size);
-  const uint64_t limit =
-      std::max(static_cast<uint64_t>(current_size * factor),
-               static_cast<uint64_t>(current_size) +
-                   MinimumAllocationLimitGrowingStep(growing_mode)) +
-      new_space_capacity;
+  limit = std::max(limit, static_cast<uint64_t>(current_size) +
+                              MinimumAllocationLimitGrowingStep(growing_mode)) +
+          new_space_capacity;
   const uint64_t halfway_to_the_max =
       (static_cast<uint64_t>(current_size) + max_size) / 2;
   const uint64_t limit_or_halfway =
       std::min<uint64_t>(limit, halfway_to_the_max);
   const size_t result =
       static_cast<size_t>(std::max<uint64_t>(limit_or_halfway, min_size));
-  if (v8_flags.trace_gc_verbose) {
+  if (V8_UNLIKELY(v8_flags.trace_gc_verbose)) {
     Isolate::FromHeap(heap)->PrintWithTimestamp(
-        "[%s] Limit: old size: %zu KB, new limit: %zu KB (%.1f)\n",
-        Trait::kName, current_size / KB, result / KB, factor);
+        "[%s] Limit: old size: %zu KB, new limit: %zu KB\n", Trait::kName,
+        current_size / KB, result / KB);
   }
-#if defined(V8_USE_PERFETTO)
-  TRACE_COUNTER(TRACE_DISABLED_BY_DEFAULT("v8.gc"), Trait::kName, result);
-#endif
   return result;
 }
 

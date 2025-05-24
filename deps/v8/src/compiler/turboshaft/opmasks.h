@@ -43,6 +43,8 @@
 
 namespace v8::internal::compiler::turboshaft::Opmask {
 
+#include "src/compiler/turboshaft/field-macro.inc"
+
 template <typename T, size_t Offset>
 struct OpMaskField {
   using type = T;
@@ -134,10 +136,6 @@ struct MaskBuilder {
   template <typename Fields::type... Args>
   using For = OpMaskT<Op, BuildMask(), EncodeValue(Args...)>;
 };
-
-#define FIELD(op, field_name)                                       \
-  OpMaskField<UnwrapRepresentation<decltype(op::field_name)>::type, \
-              OFFSET_OF(op, field_name)>
 
 // === Definitions of masks for Turboshaft operations === //
 
@@ -244,6 +242,8 @@ using ConstantMask = MaskBuilder<ConstantOp, FIELD(ConstantOp, kind)>;
 using kWord32Constant = ConstantMask::For<ConstantOp::Kind::kWord32>;
 using kWord64Constant = ConstantMask::For<ConstantOp::Kind::kWord64>;
 using kExternalConstant = ConstantMask::For<ConstantOp::Kind::kExternal>;
+using kHeapConstant = ConstantMask::For<ConstantOp::Kind::kHeapObject>;
+using kSmiConstant = ConstantMask::For<ConstantOp::Kind::kSmi>;
 
 using ProjectionMask = MaskBuilder<ProjectionOp, FIELD(ProjectionOp, index)>;
 
@@ -354,11 +354,24 @@ using Simd128LoadTransformMask =
 FOREACH_SIMD_128_LOAD_TRANSFORM_OPCODE(SIMD_LOAD_TRANSFORM_MASK)
 #undef SIMD_LOAD_TRANSFORM_MASK
 
+using Simd128ReplaceLaneMask =
+    MaskBuilder<Simd128ReplaceLaneOp, FIELD(Simd128ReplaceLaneOp, kind)>;
+using kSimd128ReplaceLaneF32x4 =
+    Simd128ReplaceLaneMask::For<Simd128ReplaceLaneOp::Kind::kF32x4>;
+
+#if V8_ENABLE_WASM_SIMD256_REVEC
+using Simd256UnaryMask =
+    MaskBuilder<Simd256UnaryOp, FIELD(Simd256UnaryOp, kind)>;
+#define SIMD256_UNARY_MASK(kind) \
+  using kSimd256##kind = Simd256UnaryMask::For<Simd256UnaryOp::Kind::k##kind>;
+FOREACH_SIMD_256_UNARY_OPCODE(SIMD256_UNARY_MASK)
+#undef SIMD256_UNARY_MASK
+
+#endif  // V8_ENABLE_WASM_SIMD256_REVEC
+
 #endif  // V8_ENABLE_WEBASSEMBLY
 
-#ifndef TURBOSHAFT_OPMASK_EXPORT_FIELD_MACRO_FOR_UNITTESTS
 #undef FIELD
-#endif
 
 }  // namespace v8::internal::compiler::turboshaft::Opmask
 

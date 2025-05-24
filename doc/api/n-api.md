@@ -2703,7 +2703,9 @@ JavaScript `TypedArray` objects are described in
 #### `node_api_create_buffer_from_arraybuffer`
 
 <!-- YAML
-added: v23.0.0
+added:
+  - v23.0.0
+  - v22.12.0
 napiVersion: 10
 -->
 
@@ -3687,6 +3689,8 @@ napi_status napi_get_value_string_latin1(napi_env env,
   is returned in `result`.
 * `[in] bufsize`: Size of the destination buffer. When this value is
   insufficient, the returned string is truncated and null-terminated.
+  If this value is zero, then the string is not returned and no changes are done
+  to the buffer.
 * `[out] result`: Number of bytes copied into the buffer, excluding the null
   terminator.
 
@@ -3718,6 +3722,8 @@ napi_status napi_get_value_string_utf8(napi_env env,
   returned in `result`.
 * `[in] bufsize`: Size of the destination buffer. When this value is
   insufficient, the returned string is truncated and null-terminated.
+  If this value is zero, then the string is not returned and no changes are done
+  to the buffer.
 * `[out] result`: Number of bytes copied into the buffer, excluding the null
   terminator.
 
@@ -3748,6 +3754,8 @@ napi_status napi_get_value_string_utf16(napi_env env,
   null terminator is returned.
 * `[in] bufsize`: Size of the destination buffer. When this value is
   insufficient, the returned string is truncated and null-terminated.
+  If this value is zero, then the string is not returned and no changes are done
+  to the buffer.
 * `[out] result`: Number of 2-byte code units copied into the buffer, excluding
   the null terminator.
 

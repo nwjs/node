@@ -589,8 +589,12 @@ void Assembler::GetCode(LocalIsolate* isolate, CodeDesc* desc,
   // this point to make CodeDesc initialization less fiddly.
 
   static constexpr int kConstantPoolSize = 0;
+  static constexpr int kBuiltinJumpTableInfoSize = 0;
   const int instruction_size = pc_offset();
-  const int code_comments_offset = instruction_size - code_comments_size;
+  const int builtin_jump_table_info_offset =
+      instruction_size - kBuiltinJumpTableInfoSize;
+  const int code_comments_offset =
+      builtin_jump_table_info_offset - code_comments_size;
   const int constant_pool_offset = code_comments_offset - kConstantPoolSize;
   const int handler_table_offset2 = (handler_table_offset == kNoHandlerTable)
                                         ? constant_pool_offset
@@ -603,7 +607,8 @@ void Assembler::GetCode(LocalIsolate* isolate, CodeDesc* desc,
       static_cast<int>(reloc_info_writer.pos() - buffer_->start());
   CodeDesc::Initialize(desc, this, safepoint_table_offset,
                        handler_table_offset2, constant_pool_offset,
-                       code_comments_offset, reloc_info_offset);
+                       code_comments_offset, builtin_jump_table_info_offset,
+                       reloc_info_offset);
 }
 
 void Assembler::Align(int m) {
@@ -1202,7 +1207,7 @@ void Assembler::Move32BitImmediate(Register rd, const Operand& x,
     // can be patched.
     DCHECK(!x.MustOutputRelocInfo(this));
     UseScratchRegisterScope temps(this);
-    // Re-use the destination register as a scratch if possible.
+    // Reuse the destination register as a scratch if possible.
     Register target = rd != pc && rd != sp ? rd : temps.Acquire();
     uint32_t imm32 = static_cast<uint32_t>(x.immediate());
     movw(target, imm32 & 0xFFFF, cond);
@@ -1255,7 +1260,7 @@ void Assembler::AddrMode1(Instr instr, Register rd, Register rn,
     } else if ((opcode == ADD || opcode == SUB) && !set_flags && (rd == rn) &&
                !temps.CanAcquire()) {
       // Split the operation into a sequence of additions if we cannot use a
-      // scratch register. In this case, we cannot re-use rn and the assembler
+      // scratch register. In this case, we cannot reuse rn and the assembler
       // does not have any scratch registers to spare.
       uint32_t imm = x.immediate();
       do {
@@ -1286,7 +1291,7 @@ void Assembler::AddrMode1(Instr instr, Register rd, Register rn,
       // The immediate operand cannot be encoded as a shifter operand, so load
       // it first to a scratch register and change the original instruction to
       // use it.
-      // Re-use the destination register if possible.
+      // Reuse the destination register if possible.
       Register scratch = (rd.is_valid() && rd != rn && rd != pc && rd != sp)
                              ? rd
                              : temps.Acquire();
@@ -1352,7 +1357,7 @@ void Assembler::AddrMode2(Instr instr, Register rd, const MemOperand& x) {
       // Immediate offset cannot be encoded, load it first to a scratch
       // register.
       UseScratchRegisterScope temps(this);
-      // Allow re-using rd for load instructions if possible.
+      // Allow reuse of rd for load instructions if possible.
       bool is_load = (instr & L) == L;
       Register scratch = (is_load && rd != x.rn_ && rd != pc && rd != sp)
                              ? rd
@@ -1394,7 +1399,7 @@ void Assembler::AddrMode3(Instr instr, Register rd, const MemOperand& x) {
       // Immediate offset cannot be encoded, load it first to a scratch
       // register.
       UseScratchRegisterScope temps(this);
-      // Allow re-using rd for load instructions if possible.
+      // Allow reuse of rd for load instructions if possible.
       Register scratch = (is_load && rd != x.rn_ && rd != pc && rd != sp)
                              ? rd
                              : temps.Acquire();
@@ -1409,7 +1414,7 @@ void Assembler::AddrMode3(Instr instr, Register rd, const MemOperand& x) {
     // Scaled register offsets are not supported, compute the offset separately
     // to a scratch register.
     UseScratchRegisterScope temps(this);
-    // Allow re-using rd for load instructions if possible.
+    // Allow reuse of rd for load instructions if possible.
     Register scratch =
         (is_load && rd != x.rn_ && rd != pc && rd != sp) ? rd : temps.Acquire();
     mov(scratch, Operand(x.rm_, x.shift_op_, x.shift_imm_), LeaveCC,

@@ -330,7 +330,9 @@ most convenient for scripts).
 ### Event: `'workerMessage'`
 
 <!-- YAML
-added: v22.5.0
+added:
+- v22.5.0
+- v20.19.0
 -->
 
 * `value` {any} A value transmitted using [`postMessageToThread()`][].
@@ -577,6 +579,10 @@ address such failures, a non-operational
 [`.catch(() => { })`][`promise.catch()`] handler may be attached to
 `resource.loaded`, which would prevent the `'unhandledRejection'` event from
 being emitted.
+
+If an `'unhandledRejection'` event is emitted but not handled it will
+be raised as an uncaught exception. This alongside other behaviors of
+`'unhandledRejection'` events can changed via the [`--unhandled-rejections`][] flag.
 
 ### Event: `'warning'`
 
@@ -892,7 +898,7 @@ added: v0.5.0
 
 The operating system CPU architecture for which the Node.js binary was compiled.
 Possible values are: `'arm'`, `'arm64'`, `'ia32'`, `'loong64'`, `'mips'`,
-`'mipsel'`, `'ppc'`, `'ppc64'`, `'riscv64'`, `'s390'`, `'s390x'`, and `'x64'`.
+`'mipsel'`, `'ppc64'`, `'riscv64'`, `'s390'`, `'s390x'`, and `'x64'`.
 
 ```mjs
 import { arch } from 'node:process';
@@ -1130,14 +1136,15 @@ added:
   - v19.6.0
   - v18.15.0
 changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/57765
+    description: Change stability index for this feature from Experimental to Stable.
   - version:
     - v22.0.0
     - v20.13.0
     pr-url: https://github.com/nodejs/node/pull/52039
     description: Aligned return value with `uv_get_constrained_memory`.
 -->
-
-> Stability: 1 - Experimental
 
 * {number}
 
@@ -1154,9 +1161,11 @@ information.
 added:
   - v22.0.0
   - v20.13.0
+changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/57765
+    description: Change stability index for this feature from Experimental to Stable.
 -->
-
-> Stability: 1 - Experimental
 
 * {number}
 
@@ -1950,7 +1959,9 @@ A boolean value that is `true` if the current Node.js build includes the inspect
 
 <!-- YAML
 added: v0.5.3
-deprecated: v23.4.0
+deprecated:
+  - v23.4.0
+  - v22.13.0
 -->
 
 > Stability: 0 - Deprecated. This property is always true, and any checks based on it are
@@ -1965,7 +1976,10 @@ Since all Node.js builds have IPv6 support, this value is always `true`.
 ## `process.features.require_module`
 
 <!-- YAML
-added: v23.0.0
+added:
+ - v23.0.0
+ - v22.10.0
+ - v20.19.0
 -->
 
 * {boolean}
@@ -1987,7 +2001,9 @@ A boolean value that is `true` if the current Node.js build includes support for
 
 <!-- YAML
 added: v4.8.0
-deprecated: v23.4.0
+deprecated:
+  - v23.4.0
+  - v22.13.0
 -->
 
 > Stability: 0 - Deprecated. Use `process.features.tls` instead.
@@ -2003,7 +2019,9 @@ This value is therefore identical to that of `process.features.tls`.
 
 <!-- YAML
 added: v0.11.13
-deprecated: v23.4.0
+deprecated:
+  - v23.4.0
+  - v22.13.0
 -->
 
 > Stability: 0 - Deprecated. Use `process.features.tls` instead.
@@ -2019,7 +2037,9 @@ This value is therefore identical to that of `process.features.tls`.
 
 <!-- YAML
 added: v0.5.3
-deprecated: v23.4.0
+deprecated:
+  - v23.4.0
+  - v22.13.0
 -->
 
 > Stability: 0 - Deprecated. Use `process.features.tls` instead.
@@ -2034,10 +2054,12 @@ This value is therefore identical to that of `process.features.tls`.
 ## `process.features.typescript`
 
 <!-- YAML
-added: v23.0.0
+added:
+ - v23.0.0
+ - v22.10.0
 -->
 
-> Stability: 1.1 - Active development
+> Stability: 1.2 - Release candidate
 
 * {boolean|string}
 
@@ -2049,7 +2071,9 @@ Node.js is run with `--no-experimental-strip-types`.
 
 <!-- YAML
 added: v0.5.3
-deprecated: v23.4.0
+deprecated:
+  - v23.4.0
+  - v22.13.0
 -->
 
 > Stability: 0 - Deprecated. This property is always true, and any checks based on it are
@@ -2280,9 +2304,11 @@ setup();
 added:
   - v17.3.0
   - v16.14.0
+changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/57765
+    description: Change stability index for this feature from Experimental to Stable.
 -->
-
-> Stability: 1 - Experimental
 
 * Returns: {string\[]}
 
@@ -3256,7 +3282,9 @@ console.log(`The parent process is pid ${ppid}`);
 ## `process.ref(maybeRefable)`
 
 <!-- YAML
-added: v23.6.0
+added:
+  - v23.6.0
+  - v22.14.0
 -->
 
 > Stability: 1 - Experimental
@@ -3329,7 +3357,9 @@ relied upon to exist.
 ## `process.execve(file[, args[, env]])`
 
 <!-- YAML
-added: v23.11.0
+added:
+  - v23.11.0
+  - v22.15.0
 -->
 
 > Stability: 1 - Experimental
@@ -3351,7 +3381,7 @@ any exit or close events and without running any cleanup handler.
 
 This function will never return, unless an error occurred.
 
-This function is only available on POSIX platforms (i.e. not Windows or Android).
+This function is not available on Windows or IBM i.
 
 ## `process.report`
 
@@ -3594,7 +3624,9 @@ console.log(`Report on exception: ${report.reportOnUncaughtException}`);
 ### `process.report.excludeEnv`
 
 <!-- YAML
-added: v23.3.0
+added:
+  - v23.3.0
+  - v22.13.0
 -->
 
 * {boolean}
@@ -4364,7 +4396,9 @@ In [`Worker`][] threads, `process.umask(mask)` will throw an exception.
 ## `process.unref(maybeRefable)`
 
 <!-- YAML
-added: v23.6.0
+added:
+  - v23.6.0
+  - v22.14.0
 -->
 
 > Stability: 1 - Experimental

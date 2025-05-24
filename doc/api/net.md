@@ -173,7 +173,9 @@ The list of rules added to the blocklist.
 ### `BlockList.isBlockList(value)`
 
 <!-- YAML
-added: v23.4.0
+added:
+  - v23.4.0
+  - v22.13.0
 -->
 
 * `value` {any} Any JS value
@@ -247,7 +249,9 @@ added:
 ### `SocketAddress.parse(input)`
 
 <!-- YAML
-added: v23.4.0
+added:
+  - v23.4.0
+  - v22.13.0
 -->
 
 * `input` {string} An input string containing an IP address and optional port,
@@ -491,7 +495,9 @@ Listening on a file descriptor is not supported on Windows.
 <!-- YAML
 added: v0.11.14
 changes:
-  - version: v23.1.0
+  - version:
+    - v23.1.0
+    - v22.12.0
     pr-url: https://github.com/nodejs/node/pull/55408
     description: The `reusePort` option is supported.
   - version: v15.6.0
@@ -643,7 +649,9 @@ with [`child_process.fork()`][].
 ### `server.dropMaxConnection`
 
 <!-- YAML
-added: v23.1.0
+added:
+  - v23.1.0
+  - v22.12.0
 -->
 
 * {boolean}

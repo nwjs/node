@@ -100,9 +100,6 @@
         'NODE_USE_V8_PLATFORM=0',
       ],
     }],
-    [ 'v8_enable_shared_ro_heap==1', {
-      'defines': ['NODE_V8_SHARED_RO_HEAP',],
-    }],
     [ 'node_tag!=""', {
       'defines': [ 'NODE_TAG="<(node_tag)"' ],
     }],
@@ -243,14 +240,14 @@
     }],
 
     [ 'node_shared_simdutf=="false"', {
-        'dependencies': [ 'deps/simdutf/simdutf.gyp:simdutf' ],
+    #    'dependencies': [ 'tools/v8_gypfiles/v8.gyp:simdutf' ],
     }],
 
     [ 'node_shared_brotli=="false"', {
       'dependencies': [ 'deps/brotli/brotli.gyp:brotli' ],
     }],
 
-    [ 'node_shared_sqlite=="false"', {
+    [ 'node_use_sqlite=="true" and node_shared_sqlite=="false"', {
       'dependencies': [ 'deps/sqlite/sqlite.gyp:sqlite' ],
     }],
 
@@ -343,12 +340,14 @@
           'ldflags': [ '-L<(PRODUCT_DIR)/../nw/lib/', '-lv8',
                       '-Wl,--whole-archive <(V8_LIBBASE)',
                       '<(V8_PLTFRM)',
+                      '<(LIBABSL)',
                       '-Wl,--no-whole-archive' ]
     }],
     [ 'OS=="linux" and component != "shared_library"', {
           'ldflags': [ '-L<(PRODUCT_DIR)/../nw/lib/', '-lnw',
                       '-Wl,--whole-archive',
                       '<(LIBCXX)',
+                      '<(LIBABSL)',
                       '-Wl,--no-whole-archive'
                      ]
     }],

@@ -218,33 +218,48 @@ TEST_F(ApiWasmTest, WasmErrorIsSharedCrossOrigin) {
 TEST_F(ApiWasmTest, WasmEnableDisableImportedStrings) {
   Local<Context> context_local = Context::New(isolate());
   Context::Scope context_scope(context_local);
-  i::Handle<i::NativeContext> context = v8::Utils::OpenHandle(*context_local);
+  i::DirectHandle<i::NativeContext> context =
+      v8::Utils::OpenDirectHandle(*context_local);
   // Test enabling/disabling via flag.
   {
     i::FlagScope<bool> flag_strings(
         &i::v8_flags.experimental_wasm_imported_strings, true);
     EXPECT_TRUE(i_isolate()->IsWasmImportedStringsEnabled(context));
+
+    // When flag is on, callback return value has no effect.
+    isolate()->SetWasmImportedStringsEnabledCallback([](auto) { return true; });
+    EXPECT_TRUE(i_isolate()->IsWasmImportedStringsEnabled(context));
+    EXPECT_TRUE(i::wasm::WasmEnabledFeatures::FromIsolate(i_isolate())
+                    .has_imported_strings());
+    isolate()->SetWasmImportedStringsEnabledCallback(
+        [](auto) { return false; });
+    EXPECT_TRUE(i_isolate()->IsWasmImportedStringsEnabled(context));
+    EXPECT_TRUE(i::wasm::WasmEnabledFeatures::FromIsolate(i_isolate())
+                    .has_imported_strings());
   }
   {
     i::FlagScope<bool> flag_strings(
         &i::v8_flags.experimental_wasm_imported_strings, false);
     EXPECT_FALSE(i_isolate()->IsWasmImportedStringsEnabled(context));
+
+    // Test enabling/disabling via callback.
+    isolate()->SetWasmImportedStringsEnabledCallback([](auto) { return true; });
+    EXPECT_TRUE(i_isolate()->IsWasmImportedStringsEnabled(context));
+    EXPECT_TRUE(i::wasm::WasmEnabledFeatures::FromIsolate(i_isolate())
+                    .has_imported_strings());
+    isolate()->SetWasmImportedStringsEnabledCallback(
+        [](auto) { return false; });
+    EXPECT_FALSE(i_isolate()->IsWasmImportedStringsEnabled(context));
+    EXPECT_FALSE(i::wasm::WasmEnabledFeatures::FromIsolate(i_isolate())
+                     .has_imported_strings());
   }
-  // Test enabling/disabling via callback.
-  isolate()->SetWasmImportedStringsEnabledCallback([](auto) { return true; });
-  EXPECT_TRUE(i_isolate()->IsWasmImportedStringsEnabled(context));
-  EXPECT_TRUE(i::wasm::WasmEnabledFeatures::FromIsolate(i_isolate())
-                  .has_imported_strings());
-  isolate()->SetWasmImportedStringsEnabledCallback([](auto) { return false; });
-  EXPECT_FALSE(i_isolate()->IsWasmImportedStringsEnabled(context));
-  EXPECT_FALSE(i::wasm::WasmEnabledFeatures::FromIsolate(i_isolate())
-                   .has_imported_strings());
 }
 
 TEST_F(ApiWasmTest, WasmEnableDisableJSPI) {
   Local<Context> context_local = Context::New(isolate());
   Context::Scope context_scope(context_local);
-  i::Handle<i::NativeContext> context = v8::Utils::OpenHandle(*context_local);
+  i::DirectHandle<i::NativeContext> context =
+      v8::Utils::OpenDirectHandle(*context_local);
   // Test enabling/disabling via flag.
   {
     i::FlagScope<bool> flag_strings(&i::v8_flags.experimental_wasm_jspi, true);
@@ -264,13 +279,13 @@ TEST_F(ApiWasmTest, WasmEnableDisableJSPI) {
 TEST_F(ApiWasmTest, WasmInstallJSPI) {
   Local<Context> context_local = Context::New(isolate());
   Context::Scope context_scope(context_local);
-  i::Handle<i::NativeContext> context = v8::Utils::OpenHandle(*context_local);
+  i::DirectHandle<i::NativeContext> context =
+      v8::Utils::OpenDirectHandle(*context_local);
 
   EXPECT_FALSE(i_isolate()->IsWasmJSPIEnabled(context));
   i::wasm::WasmEnabledFeatures features =
       i::wasm::WasmEnabledFeatures::FromIsolate(i_isolate());
   EXPECT_FALSE(features.has_jspi());
-  EXPECT_FALSE(features.has_type_reflection());
 
   // Test installing JSPI via flag.
   isolate()->SetWasmJSPIEnabledCallback([](auto) { return true; });
@@ -279,14 +294,12 @@ TEST_F(ApiWasmTest, WasmInstallJSPI) {
   EXPECT_FALSE(i_isolate()->IsWasmJSPIEnabled(context));
   features = i::wasm::WasmEnabledFeatures::FromIsolate(i_isolate());
   EXPECT_FALSE(features.has_jspi());
-  EXPECT_FALSE(features.has_type_reflection());
 
   i::WasmJs::InstallConditionalFeatures(i_isolate(), context);
 
   EXPECT_TRUE(i_isolate()->IsWasmJSPIEnabled(context));
   features = i::wasm::WasmEnabledFeatures::FromIsolate(i_isolate());
   EXPECT_TRUE(features.has_jspi());
-  EXPECT_TRUE(features.has_type_reflection());
 }
 
 }  // namespace v8

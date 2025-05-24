@@ -85,6 +85,7 @@ class FreezeCacheState {
  public:
 #if DEBUG
   explicit FreezeCacheState(LiftoffAssembler& assm);
+  FreezeCacheState(FreezeCacheState&& other) V8_NOEXCEPT;
   ~FreezeCacheState();
 
  private:
@@ -251,10 +252,10 @@ class LiftoffAssembler : public MacroAssembler {
       LiftoffRegList available_regs =
           kGpCacheRegList.MaskOut(pinned).MaskOut(used_registers);
       if (available_regs.is_empty()) return no_reg;
-      // Prefer the {kWasmInstanceRegister}, because that's where the instance
-      // initially is, and where it needs to be for calls.
-      Register new_cache_reg = available_regs.has(kWasmInstanceRegister)
-                                   ? kWasmInstanceRegister
+      // Prefer the {kWasmImplicitArgRegister}, because that's where the
+      // instance data initially is, and where it needs to be for calls.
+      Register new_cache_reg = available_regs.has(kWasmImplicitArgRegister)
+                                   ? kWasmImplicitArgRegister
                                    : available_regs.GetFirstRegSet().gp();
       SetInstanceCacheRegister(new_cache_reg);
       DCHECK_EQ(new_cache_reg, cached_instance_data);
@@ -303,7 +304,11 @@ class LiftoffAssembler : public MacroAssembler {
 
     // Returns whether this was the last use.
     void dec_used(LiftoffRegister reg) {
-      DCHECK(!frozen);
+      // Note that we do not DCHECK(!frozen) here due to a special case: When
+      // performign a call_indirect, we first create an OOL trap label (which
+      // freezes the state to make sure that the safe point table remains valid)
+      // and then we drop values (which doesn't invalidate safe point table, so
+      // it is actually fine to do it.)
       DCHECK(is_used(reg));
       if (reg.is_pair()) {
         dec_used(reg.low());
@@ -675,7 +680,8 @@ class LiftoffAssembler : public MacroAssembler {
                               int stack_param_delta);
   inline void AlignFrameSize();
   inline void PatchPrepareStackFrame(int offset, SafepointTableBuilder*,
-                                     bool feedback_vector_slot);
+                                     bool feedback_vector_slot,
+                                     size_t stack_param_slots);
   inline void FinishCode();
   inline void AbortCompilation();
   inline static constexpr int StaticStackFrameSize();
@@ -684,6 +690,8 @@ class LiftoffAssembler : public MacroAssembler {
 
   inline void CheckTierUp(int declared_func_index, int budget_used,
                           Label* ool_label, const FreezeCacheState& frozen);
+  inline Register LoadOldFramePointer();
+  inline void CheckStackShrink();
   inline void LoadConstant(LiftoffRegister, WasmValue);
   inline void LoadInstanceDataFromFrame(Register dst);
   inline void LoadTrustedPointer(Register dst, Register src_addr, int offset,
@@ -702,6 +710,7 @@ class LiftoffAssembler : public MacroAssembler {
                                    int32_t offset);
   inline void LoadFullPointer(Register dst, Register src_addr,
                               int32_t offset_imm);
+  inline void LoadCodePointer(Register dst, Register src_addr, int32_t offset);
 #ifdef V8_ENABLE_SANDBOX
   inline void LoadCodeEntrypointViaCodePointer(Register dsr, Register src_addr,
                                                int offset_imm);
@@ -776,7 +785,7 @@ class LiftoffAssembler : public MacroAssembler {
   inline void LoadCallerFrameSlot(LiftoffRegister, uint32_t caller_slot_idx,
                                   ValueKind);
   inline void StoreCallerFrameSlot(LiftoffRegister, uint32_t caller_slot_idx,
-                                   ValueKind);
+                                   ValueKind, Register frame_pointer);
   inline void LoadReturnStackSlot(LiftoffRegister, int offset, ValueKind);
   inline void MoveStackValue(uint32_t dst_offset, uint32_t src_offset,
                              ValueKind);
@@ -991,7 +1000,7 @@ class LiftoffAssembler : public MacroAssembler {
   inline void LoadTransform(LiftoffRegister dst, Register src_addr,
                             Register offset_reg, uintptr_t offset_imm,
                             LoadType type, LoadTransformationKind transform,
-                            uint32_t* protected_load_pc);
+                            uint32_t* protected_load_pc, bool i64_offset);
   inline void LoadLane(LiftoffRegister dst, LiftoffRegister src, Register addr,
                        Register offset_reg, uintptr_t offset_imm, LoadType type,
                        uint8_t lane, uint32_t* protected_load_pc,
@@ -1503,8 +1512,8 @@ class LiftoffAssembler : public MacroAssembler {
   inline void emit_f64x2_qfms(LiftoffRegister dst, LiftoffRegister src1,
                               LiftoffRegister src2, LiftoffRegister src3);
 
-  inline void set_trap_on_oob_mem64(Register index, uint64_t oob_size,
-                                    uint64_t oob_index);
+  inline void set_trap_on_oob_mem64(Register index, uint64_t max_index,
+                                    Label* trap_label);
 
   inline void StackCheck(Label* ool_code);
 
@@ -1541,7 +1550,8 @@ class LiftoffAssembler : public MacroAssembler {
   inline void CallIndirect(const ValueKindSig* sig,
                            compiler::CallDescriptor* call_descriptor,
                            Register target);
-  inline void TailCallIndirect(Register target);
+  inline void TailCallIndirect(compiler::CallDescriptor* call_descriptor,
+                               Register target);
   inline void CallBuiltin(Builtin builtin);
 
   // Reserve space in the current frame, store address to space in {addr}.
@@ -1551,13 +1561,18 @@ class LiftoffAssembler : public MacroAssembler {
   // Instrumentation for shadow-stack-compatible OSR on x64.
   inline void MaybeOSR();
 
-  // Set the i32 at address dst to a non-zero value if src is a NaN.
-  inline void emit_set_if_nan(Register dst, DoubleRegister src, ValueKind kind);
+  // Set the i32 at address {dst} to a non-zero value if {src} is a NaN.
+  inline void emit_store_nonzero_if_nan(Register dst, DoubleRegister src,
+                                        ValueKind kind);
 
-  // Set the i32 at address dst to a non-zero value if src contains a NaN.
-  inline void emit_s128_set_if_nan(Register dst, LiftoffRegister src,
-                                   Register tmp_gp, LiftoffRegister tmp_s128,
-                                   ValueKind lane_kind);
+  // Set the i32 at address {dst} to a non-zero value if {src} contains a NaN.
+  inline void emit_s128_store_nonzero_if_nan(Register dst, LiftoffRegister src,
+                                             Register tmp_gp,
+                                             LiftoffRegister tmp_s128,
+                                             ValueKind lane_kind);
+
+  // Unconditinally set the i32 at address {dst} to a non-zero value.
+  inline void emit_store_nonzero(Register dst);
 
   inline bool supports_f16_mem_access();
 
@@ -1596,7 +1611,8 @@ class LiftoffAssembler : public MacroAssembler {
   inline void bailout(LiftoffBailoutReason reason, const char* detail);
 
  private:
-  LiftoffRegister LoadI64HalfIntoRegister(VarState slot, RegPairHalf half);
+  LiftoffRegister LoadI64HalfIntoRegister(VarState slot, RegPairHalf half,
+                                          LiftoffRegList pinned);
 
   // Spill one of the candidate registers.
   V8_NOINLINE V8_PRESERVE_MOST LiftoffRegister
@@ -1625,6 +1641,10 @@ class LiftoffAssembler : public MacroAssembler {
 inline FreezeCacheState::FreezeCacheState(LiftoffAssembler& assm)
     : assm_(assm) {
   assm.SetCacheStateFrozen();
+}
+inline FreezeCacheState::FreezeCacheState(FreezeCacheState&& other) V8_NOEXCEPT
+    : assm_(other.assm_) {
+  assm_.SetCacheStateFrozen();
 }
 inline FreezeCacheState::~FreezeCacheState() { assm_.UnfreezeCacheState(); }
 #endif

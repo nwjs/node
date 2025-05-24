@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
-// Flags: --allow-natives-syntax --turboshaft-from-maglev --turbofan
+// Flags: --allow-natives-syntax --turbolev --turbofan
 // Flags: --maglev-extend-properties-backing-store
 
 // TODO(dmercadier): this test is exactly the same as
-// test/mjsunit/maglev/extend-properties-backing-store-1.js, but with a
+// test/mjsunit/maglev/extend-properties-backing-store-1.js, but with an
 // %OptimizeFunctionOnNextCall instead of the %OptimizeMaglevOnNextCall.
 // Consider unifying the 2 tests.
 

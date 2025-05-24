@@ -2,6 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "$schema": {
+      "type": "string"
+    },
     "nodeOptions": {
       "additionalProperties": false,
       "properties": {
@@ -46,6 +49,9 @@
           "type": "boolean"
         },
         "allow-worker": {
+          "type": "boolean"
+        },
+        "async-context-frame": {
           "type": "boolean"
         },
         "conditions": {
@@ -119,9 +125,6 @@
           "type": "boolean"
         },
         "experimental-addon-modules": {
-          "type": "boolean"
-        },
-        "experimental-async-context-frame": {
           "type": "boolean"
         },
         "experimental-detect-module": {
@@ -388,6 +391,9 @@
         },
         "test-coverage-lines": {
           "type": "number"
+        },
+        "test-global-setup": {
+          "type": "string"
         },
         "test-isolation": {
           "type": "string"

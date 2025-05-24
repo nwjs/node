@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --allow-natives-syntax --sandbox-testing --turboshaft-wasm
+// Flags: --allow-natives-syntax --sandbox-testing
 
 d8.file.execute('test/mjsunit/wasm/wasm-module-builder.js');
 
@@ -61,7 +61,8 @@ for (let i = 0; i < 10; i++) {
 const kHeapObjectTag = 1;
 const kMapOffset = 0;
 const kStructField0Offset = 8;  // 0:map, 4:hash
-const kWasmInternalFunctionOffset = 4;
+const kWasmFuncRefType = Sandbox.getInstanceTypeIdFor('WASM_FUNC_REF_TYPE')
+const kWasmFuncRefInternalOffset = Sandbox.getFieldOffset(kWasmFuncRefType, 'trusted_internal');
 
 let memory = new DataView(new Sandbox.MemoryView(0, 0x100000000));
 
@@ -79,12 +80,12 @@ function setField(obj, offset, value) {
 // feedback, we'll inline the wrong target.
 let f0_box = getPtr(instance.exports.get_func0());
 let f0 = getField(f0_box, kStructField0Offset);
-let f0_int = getField(f0, kWasmInternalFunctionOffset);
+let f0_int = getField(f0, kWasmFuncRefInternalOffset);
 
 let f1_box = getPtr(instance.exports.get_func1());
 let f1 = getField(f1_box, kStructField0Offset);
 
-setField(f1, kWasmInternalFunctionOffset, f0_int);
+setField(f1, kWasmFuncRefInternalOffset, f0_int);
 
 // Also corrupt $f0 to make it past the type check.
 let f1_map = getField(f1, kMapOffset);
@@ -95,6 +96,6 @@ setField(f0, kMapOffset, f1_map);
 %WasmTierUpFunction(instance.exports.boom);
 
 // If the process was still alive, this would cause the sandbox violation.
-instance.exports.boom(func0, BigInt(Sandbox.targetPage));
+instance.exports.boom(func0, 0x414141414141n);
 
 assertUnreachable("Process should have been killed.");

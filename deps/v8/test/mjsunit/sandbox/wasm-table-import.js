@@ -46,7 +46,8 @@ let $t_imp =
 
 // Prepare corruption utilities.
 const kHeapObjectTag = 1;
-const kWasmTableEntriesOffset = 12;
+const kWasmTableType = Sandbox.getInstanceTypeIdFor('WASM_TABLE_OBJECT_TYPE');
+const kWasmTableEntriesOffset = Sandbox.getFieldOffset(kWasmTableType, 'entries');
 let memory = new DataView(new Sandbox.MemoryView(0, 0x100000000));
 function getPtr(obj) {
   return Sandbox.getAddressOf(obj) + kHeapObjectTag;
@@ -67,6 +68,6 @@ setField(t1_entries, 8, t0_entry);
 // All checks pass - table type already equivalent, but entry replaced.
 let instance1 = builder.instantiate({'import': {'table': table1}});
 
-instance1.exports.boom(BigInt(Sandbox.targetPage) - 0x7n, 42n);
-
-assertUnreachable("Process should have been killed.");
+// This still calls the original function, because overwriting an entry
+// doesn't affect the WasmDispatchTable.
+instance1.exports.boom(0x414141414141n, 42n);

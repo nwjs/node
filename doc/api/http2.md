@@ -1073,7 +1073,7 @@ The `'origin'` event is only emitted when using a secure TLS connection.
 added: v8.4.0
 -->
 
-* `headers` {HTTP/2 Headers Object}
+* `headers` {HTTP/2 Headers Object} | {Array}
 
 * `options` {Object}
   * `endStream` {boolean} `true` if the `Http2Stream` _writable_ side should
@@ -2768,6 +2768,7 @@ added: v8.4.0
 changes:
   - version:
       - v23.0.0
+      - v22.10.0
     pr-url: https://github.com/nodejs/node/pull/54875
     description: Added `streamResetBurst` and `streamResetRate`.
   - version:

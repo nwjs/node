@@ -236,10 +236,10 @@ for (const expected of expectedStrings) {
 }
 
 assert.strictEqual(strings.shift(),
-                   "{\n  foo: 'bar',\n  [Symbol(nodejs.util.inspect.custom)]:" +
+                   "{\n  foo: 'bar',\n  Symbol(nodejs.util.inspect.custom):" +
                     ' [Function: [nodejs.util.inspect.custom]]\n}\n');
 assert.strictEqual(strings.shift(),
-                   "{\n  foo: 'bar',\n  [Symbol(nodejs.util.inspect.custom)]:" +
+                   "{\n  foo: 'bar',\n  Symbol(nodejs.util.inspect.custom):" +
                     ' [Function: [nodejs.util.inspect.custom]]\n}\n');
 assert.ok(strings.shift().includes('foo: [Object]'));
 assert.strictEqual(strings.shift().includes('baz'), false);

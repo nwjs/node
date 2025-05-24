@@ -695,6 +695,9 @@ Type: End-of-Life
 
 <!-- YAML
 changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/55175
+    description: Runtime deprecation.
   - version: v6.12.0
     pr-url: https://github.com/nodejs/node/pull/10116
     description: A deprecation code has been assigned.
@@ -703,7 +706,7 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 The [`SlowBuffer`][] class is deprecated. Please use
 [`Buffer.allocUnsafeSlow(size)`][] instead.
@@ -944,6 +947,9 @@ The `tls.CryptoStream` class was removed. Please use
 
 <!-- YAML
 changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/57361
+    description: End-of-Life.
   - version: v8.0.0
     pr-url: https://github.com/nodejs/node/pull/11349
     description: Runtime deprecation.
@@ -963,9 +969,9 @@ changes:
     description: Runtime deprecation.
 -->
 
-Type: Documentation-only
+Type: End-of-Life
 
-The [`tls.SecurePair`][] class is deprecated. Please use
+The `tls.SecurePair` class is deprecated. Please use
 [`tls.TLSSocket`][] instead.
 
 ### DEP0044: `util.isArray()`
@@ -1485,6 +1491,9 @@ officially supported API.
 
 <!-- YAML
 changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/57361
+    description: End-of-Life.
   - version: v8.0.0
     pr-url: https://github.com/nodejs/node/pull/11349
     description: Runtime deprecation.
@@ -1504,7 +1513,7 @@ changes:
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 The `tls.createSecurePair()` API was deprecated in documentation in Node.js
 0.11.3. Users should use `tls.Socket` instead.
@@ -1536,6 +1545,9 @@ removed. Please use `sloppy` instead.
 
 <!-- YAML
 changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/57551
+    description: End-of-Life.
   - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/24167
     description: Runtime deprecation.
@@ -1544,7 +1556,7 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 The `node:http` module `OutgoingMessage.prototype._headers` and
 `OutgoingMessage.prototype._headerNames` properties are deprecated. Use one of
@@ -1823,12 +1835,15 @@ and replaced with an identical, public `path.toNamespacedPath()` method.
 
 <!-- YAML
 changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/57567
+    description: End-of-Life.
   - version: v9.0.0
     pr-url: https://github.com/nodejs/node/pull/15990
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 `fs.truncate()` `fs.truncateSync()` usage with a file descriptor is
 deprecated. Please use `fs.ftruncate()` or `fs.ftruncateSync()` to work with
@@ -2062,28 +2077,34 @@ method.
 
 <!-- YAML
 changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/56966
+    description: End-of-Life.
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/18066
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-`timers.enroll()` is deprecated. Please use the publicly documented
+`timers.enroll()` has been removed. Please use the publicly documented
 [`setTimeout()`][] or [`setInterval()`][] instead.
 
 ### DEP0096: `timers.unenroll()`
 
 <!-- YAML
 changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/56966
+    description: End-of-Life.
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/18066
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-`timers.unenroll()` is deprecated. Please use the publicly documented
+`timers.unenroll()` has been removed. Please use the publicly documented
 [`clearTimeout()`][] or [`clearInterval()`][] instead.
 
 ### DEP0097: `MakeCallback` with `domain` property
@@ -2268,7 +2289,7 @@ initialization vectors.
 It is recommended to derive a key using
 [`crypto.pbkdf2()`][] or [`crypto.scrypt()`][] with random salts and to use
 [`crypto.createCipheriv()`][] and [`crypto.createDecipheriv()`][] to obtain the
-[`Cipher`][] and [`Decipher`][] objects respectively.
+[`Cipheriv`][] and [`Decipheriv`][] objects respectively.
 
 ### DEP0107: `tls.convertNPNProtocols()`
 
@@ -2539,12 +2560,15 @@ undocumented `COUNTER_NET_SERVER_CONNECTION()`,
 
 <!-- YAML
 changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/57550
+    description: End-of-Life.
   - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/23760
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 The undocumented `net._setSimultaneousAccepts()` function was originally
 intended for debugging and performance tuning when using the
@@ -2556,12 +2580,15 @@ generally useful and is being removed. See discussion here:
 
 <!-- YAML
 changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/57339
+    description: End-of-Life.
   - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/23820
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 Please use `Server.prototype.setSecureContext()` instead.
 
@@ -2612,14 +2639,17 @@ The `node:_stream_wrap` module is deprecated.
 
 <!-- YAML
 changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/56966
+    description: End-of-Life.
   - version: v11.14.0
     pr-url: https://github.com/nodejs/node/pull/26760
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The previously undocumented `timers.active()` is deprecated.
+The previously undocumented `timers.active()` has been removed.
 Please use the publicly documented [`timeout.refresh()`][] instead.
 If re-referencing the timeout is necessary, [`timeout.ref()`][] can be used
 with no performance impact since Node.js 10.
@@ -2628,14 +2658,17 @@ with no performance impact since Node.js 10.
 
 <!-- YAML
 changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/56966
+    description: End-of-Life.
   - version: v11.14.0
     pr-url: https://github.com/nodejs/node/pull/26760
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The previously undocumented and "private" `timers._unrefActive()` is deprecated.
+The previously undocumented and "private" `timers._unrefActive()` has been removed.
 Please use the publicly documented [`timeout.refresh()`][] instead.
 If unreferencing the timeout is necessary, [`timeout.unref()`][] can be used
 with no performance impact since Node.js 10.
@@ -3031,11 +3064,11 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 Using a trailing `"/"` to define subpath folder mappings in the
-[subpath exports][] or [subpath imports][] fields is deprecated. Use
-[subpath patterns][] instead.
+[subpath exports][] or [subpath imports][] fields is no longer supported.
+Use [subpath patterns][] instead.
 
 ### DEP0149: `http.IncomingMessage#connection`
 
@@ -3457,6 +3490,10 @@ Node-API callbacks.
 <!-- YAML
 changes:
   - version:
+      - v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/55017
+    description: Application deprecation.
+  - version:
       - v19.9.0
       - v18.17.0
     pr-url: https://github.com/nodejs/node/pull/47203
@@ -3468,7 +3505,7 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only (supports [`--pending-deprecation`][])
+Type: Application (non-`node_modules` code only)
 
 [`url.parse()`][] behavior is not standardized and prone to errors that
 have security implications. Use the [WHATWG URL API][] instead. CVEs are not
@@ -3532,10 +3569,10 @@ be added when a function is bound to an `AsyncResource`.
 changes:
   - version: v20.1.0
     pr-url: https://github.com/nodejs/node/pull/47740
-    description: Documentation-only deprecation.
+    description: Runtime deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 In a future version of Node.js, [`assert.CallTracker`][],
 will be removed.
@@ -3576,12 +3613,15 @@ The [`util.toUSVString()`][] API is deprecated. Please use
 
 <!-- YAML
 changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/49686
+    description: Runtime deprecation.
   - version: v20.8.0
     pr-url: https://github.com/nodejs/node/pull/49683
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 `F_OK`, `R_OK`, `W_OK` and `X_OK` getters exposed directly on `node:fs` are
 deprecated. Get them from `fs.constants` or `fs.promises.constants` instead.
@@ -3614,6 +3654,9 @@ Please use `value instanceof WebAssembly.Module` instead.
 
 <!-- YAML
 changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/55548
+    description: End-of-Life.
   - version: v23.0.0
     pr-url: https://github.com/nodejs/node/pull/51050
     description: Runtime deprecation.
@@ -3625,9 +3668,9 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`dirent.path`][] is deprecated due to its lack of consistency across
+The `dirent.path` property has been removed due to its lack of consistency across
 release lines. Please use [`dirent.parentPath`][] instead.
 
 ### DEP0179: `Hash` constructor
@@ -3730,6 +3773,9 @@ and [`crypto.setEngine()`][] all depend on this functionality from OpenSSL.
 
 <!-- YAML
 changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/55718
+    description: Runtime deprecation.
   - version:
     - v22.9.0
     - v20.18.0
@@ -3737,7 +3783,7 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 Instantiating classes without the `new` qualifier exported by the `node:zlib` module is deprecated.
 It is recommended to use the `new` qualifier instead. This applies to all Zlib classes, such as `Deflate`,
@@ -3747,6 +3793,9 @@ It is recommended to use the `new` qualifier instead. This applies to all Zlib c
 
 <!-- YAML
 changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/54869
+    description: Runtime deprecation.
   - version:
     - v22.9.0
     - v20.18.0
@@ -3754,7 +3803,7 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 Instantiating classes without the `new` qualifier exported by the `node:repl` module is deprecated.
 It is recommended to use the `new` qualifier instead. This applies to all REPL classes, including
@@ -3766,12 +3815,17 @@ It is recommended to use the `new` qualifier instead. This applies to all REPL c
 
 <!-- YAML
 changes:
-  - version: v23.4.0
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/55753
+    description: Runtime deprecation.
+  - version:
+    - v23.4.0
+    - v22.13.0
     pr-url: https://github.com/nodejs/node/pull/55892
     description: Documentation-only.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 Passing non-supported argument types is deprecated and, instead of returning `false`,
 will throw an error in a future version.
@@ -3780,7 +3834,9 @@ will throw an error in a future version.
 
 <!-- YAML
 changes:
-  - version: v23.4.0
+  - version:
+    - v23.4.0
+    - v22.13.0
     pr-url: https://github.com/nodejs/node/pull/55545
     description: Documentation-only deprecation.
 -->
@@ -3793,7 +3849,9 @@ These properties are unconditionally `true`. Any checks based on these propertie
 
 <!-- YAML
 changes:
-  - version: v23.4.0
+  - version:
+    - v23.4.0
+    - v22.13.0
     pr-url: https://github.com/nodejs/node/pull/55545
     description: Documentation-only deprecation.
 -->
@@ -3807,17 +3865,39 @@ deprecated, as their values are guaranteed to be identical to that of `process.f
 
 <!-- YAML
 changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/57199
+    description: Runtime deprecation.
   - version:
     - v23.11.0
+    - v22.15.0
     pr-url: https://github.com/nodejs/node/pull/57389
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 When an `args` array is passed to [`child_process.execFile`][] or [`child_process.spawn`][] with the option
 `{ shell: true }`, the values are not escaped, only space-separated, which can lead to shell injection.
 
+### DEP0191: `repl.builtinModules`
+
+<!-- YAML
+changes:
+  - version: v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/57508
+    description: Documentation-only deprecation
+                 with `--pending-deprecation` support.
+-->
+
+Type: Documentation-only (supports [`--pending-deprecation`][])
+
+The `node:repl` module exports a `builtinModules` property that contains an array
+of built-in modules. This was incomplete and matched the already deprecated
+`repl._builtinLibs` ([DEP0142][]) instead it's better to rely
+upon `require('node:module').builtinModules`.
+
+[DEP0142]: #dep0142-repl_builtinlibs
 [NIST SP 800-38D]: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf
 [RFC 6066]: https://tools.ietf.org/html/rfc6066#section-3
 [RFC 8247 Section 2.4]: https://www.rfc-editor.org/rfc/rfc8247#section-2.4
@@ -3832,8 +3912,8 @@ When an `args` array is passed to [`child_process.execFile`][] or [`child_proces
 [`Buffer.from(array)`]: buffer.md#static-method-bufferfromarray
 [`Buffer.from(buffer)`]: buffer.md#static-method-bufferfrombuffer
 [`Buffer.isBuffer()`]: buffer.md#static-method-bufferisbufferobj
-[`Cipher`]: crypto.md#class-cipher
-[`Decipher`]: crypto.md#class-decipher
+[`Cipheriv`]: crypto.md#class-cipheriv
+[`Decipheriv`]: crypto.md#class-decipheriv
 [`REPLServer.clearBufferedCommand()`]: repl.md#replserverclearbufferedcommand
 [`ReadStream.open()`]: fs.md#class-fsreadstream
 [`Server.getConnections()`]: net.md#servergetconnectionscallback
@@ -3867,7 +3947,6 @@ When an `args` array is passed to [`child_process.execFile`][] or [`child_proces
 [`diagnostics_channel.subscribe(name, onMessage)`]: diagnostics_channel.md#diagnostics_channelsubscribename-onmessage
 [`diagnostics_channel.unsubscribe(name, onMessage)`]: diagnostics_channel.md#diagnostics_channelunsubscribename-onmessage
 [`dirent.parentPath`]: fs.md#direntparentpath
-[`dirent.path`]: fs.md#direntpath
 [`dns.lookup()`]: dns.md#dnslookuphostname-options-callback
 [`dnsPromises.lookup()`]: dns.md#dnspromiseslookuphostname-options
 [`domain`]: domain.md
@@ -3935,7 +4014,6 @@ When an `args` array is passed to [`child_process.execFile`][] or [`child_proces
 [`timeout.refresh()`]: timers.md#timeoutrefresh
 [`timeout.unref()`]: timers.md#timeoutunref
 [`tls.SecureContext`]: tls.md#tlscreatesecurecontextoptions
-[`tls.SecurePair`]: tls.md#class-tlssecurepair
 [`tls.TLSSocket`]: tls.md#class-tlstlssocket
 [`tls.checkServerIdentity()`]: tls.md#tlscheckserveridentityhostname-cert
 [`tls.createSecureContext()`]: tls.md#tlscreatesecurecontextoptions

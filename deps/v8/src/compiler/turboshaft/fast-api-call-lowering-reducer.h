@@ -24,43 +24,30 @@ class FastApiCallLoweringReducer : public Next {
  public:
   TURBOSHAFT_REDUCER_BOILERPLATE(FastApiCallLowering)
 
-  OpIndex REDUCE(FastApiCall)(V<FrameState> frame_state,
-                              V<Object> data_argument, V<Context> context,
-                              base::Vector<const OpIndex> arguments,
-                              const FastApiCallParameters* parameters) {
-    const auto& c_functions = parameters->c_functions;
+  OpIndex REDUCE(FastApiCall)(
+      V<FrameState> frame_state, V<Object> data_argument, V<Context> context,
+      base::Vector<const OpIndex> arguments,
+      const FastApiCallParameters* parameters,
+      base::Vector<const RegisterRepresentation> out_reps) {
+    __ data() -> set_graph_has_lowered_fast_api_calls();
+
+    FastApiCallFunction c_function = parameters->c_function;
     const auto& c_signature = parameters->c_signature();
     const int c_arg_count = c_signature->ArgumentCount();
     DCHECK_EQ(c_arg_count, arguments.size());
-    const auto& resolution_result = parameters->resolution_result;
 
     Label<> handle_error(this);
-    Label<Word32, Object> done(this);
+    Label<Word32> done(this);
+    Variable result = __ NewVariable(RegisterRepresentation::FromCTypeInfo(
+        c_signature->ReturnInfo(), c_signature->GetInt64Representation()));
 
-    OpIndex callee;
+    OpIndex callee = __ ExternalConstant(ExternalReference::Create(
+        c_function.address, ExternalReference::FAST_C_CALL));
+
     base::SmallVector<OpIndex, 16> args;
     for (int i = 0; i < c_arg_count; ++i) {
-      // Check if this is the argument on which we need to perform overload
-      // resolution.
-      if (i == resolution_result.distinguishable_arg_index) {
-        DCHECK_GT(c_functions.size(), 1);
-        // This only happens when the FastApiCall node represents multiple
-        // overloaded functions and {i} is the index of the distinguishable
-        // argument.
-        OpIndex arg_i;
-        std::tie(callee, arg_i) = AdaptOverloadedFastCallArgument(
-            arguments[i], c_functions, resolution_result, handle_error);
-        args.push_back(arg_i);
-      } else {
         CTypeInfo type = c_signature->ArgumentInfo(i);
         args.push_back(AdaptFastCallArgument(arguments[i], type, handle_error));
-      }
-    }
-
-    if (c_functions.size() == 1) {
-      DCHECK(!callee.valid());
-      callee = __ ExternalConstant(ExternalReference::Create(
-          c_functions[0].address, ExternalReference::FAST_C_CALL));
     }
 
     // While adapting the arguments, we might have noticed an inconsistency that
@@ -70,13 +57,17 @@ class FastApiCallLoweringReducer : public Next {
       MachineSignature::Builder builder(
           __ graph_zone(), 1,
           c_arg_count + (c_signature->HasOptions() ? 1 : 0));
+
       builder.AddReturn(MachineType::TypeForCType(c_signature->ReturnInfo()));
+
       for (int i = 0; i < c_arg_count; ++i) {
         CTypeInfo type = c_signature->ArgumentInfo(i);
+        START_ALLOW_USE_DEPRECATED()
         MachineType machine_type =
             type.GetSequenceType() == CTypeInfo::SequenceType::kScalar
                 ? MachineType::TypeForCType(type)
                 : MachineType::AnyTagged();
+        END_ALLOW_USE_DEPRECATED()
         builder.AddParam(machine_type);
       }
 
@@ -108,7 +99,7 @@ class FastApiCallLoweringReducer : public Next {
 
       // Build the actual call.
       const TSCallDescriptor* call_descriptor = TSCallDescriptor::Create(
-          Linkage::GetSimplifiedCDescriptor(__ graph_zone(), builder.Build(),
+          Linkage::GetSimplifiedCDescriptor(__ graph_zone(), builder.Get(),
                                             CallDescriptor::kNeedsFrameState),
           CanThrow::kNo, LazyDeoptOnThrow::kNo, __ graph_zone());
       OpIndex c_call_result = WrapFastCall(call_descriptor, callee, frame_state,
@@ -125,90 +116,31 @@ class FastApiCallLoweringReducer : public Next {
                       __ HeapConstant(isolate_->factory()->the_hole_value()))),
                   trigger_exception);
 
-      V<Object> fast_call_result =
-          ConvertReturnValue(c_signature, c_call_result);
+      V<Any> fast_call_result = ConvertReturnValue(c_signature, c_call_result);
+      __ SetVariable(result, fast_call_result);
 
-      GOTO(done, FastApiCallOp::kSuccessValue, fast_call_result);
+      GOTO(done, FastApiCallOp::kSuccessValue);
       BIND(trigger_exception);
       __ template CallRuntime<
           typename RuntimeCallDescriptor::PropagateException>(
           isolate_, frame_state, __ NoContextConstant(), LazyDeoptOnThrow::kNo,
           {});
 
-      GOTO(done, FastApiCallOp::kFailureValue, __ TagSmi(0));
+      __ Unreachable();
     }
 
     if (BIND(handle_error)) {
+      __ SetVariable(result, DefaultReturnValue(c_signature));
       // We pass Tagged<Smi>(0) as the value here, although this should never be
       // visible when calling code reacts to `kFailureValue` properly.
-      GOTO(done, FastApiCallOp::kFailureValue, __ TagSmi(0));
+      GOTO(done, FastApiCallOp::kFailureValue);
     }
 
-    BIND(done, state, value);
-    return __ Tuple(state, value);
+    BIND(done, state);
+    return __ Tuple(state, __ GetVariable(result));
   }
 
  private:
-  std::pair<OpIndex, OpIndex> AdaptOverloadedFastCallArgument(
-      OpIndex argument, const FastApiCallFunctionVector& c_functions,
-      const fast_api_call::OverloadsResolutionResult& resolution_result,
-      Label<>& handle_error) {
-    Label<WordPtr, WordPtr> done(this);
-
-    for (size_t func_index = 0; func_index < c_functions.size(); ++func_index) {
-      const CFunctionInfo* c_signature = c_functions[func_index].signature;
-      CTypeInfo arg_type = c_signature->ArgumentInfo(
-          resolution_result.distinguishable_arg_index);
-
-      Label<> next(this);
-
-      // Check that the value is a HeapObject.
-      GOTO_IF(__ ObjectIsSmi(argument), handle_error);
-
-      switch (arg_type.GetSequenceType()) {
-        case CTypeInfo::SequenceType::kIsSequence: {
-          CHECK_EQ(arg_type.GetType(), CTypeInfo::Type::kVoid);
-
-          // Check that the value is a JSArray.
-          V<Map> map = __ LoadMapField(argument);
-          V<Word32> instance_type = __ LoadInstanceTypeField(map);
-          GOTO_IF_NOT(__ Word32Equal(instance_type, JS_ARRAY_TYPE), next);
-
-          OpIndex argument_to_pass = __ AdaptLocalArgument(argument);
-          OpIndex target_address = __ ExternalConstant(
-              ExternalReference::Create(c_functions[func_index].address,
-                                        ExternalReference::FAST_C_CALL));
-          GOTO(done, target_address, argument_to_pass);
-          break;
-        }
-        case CTypeInfo::SequenceType::kIsTypedArray: {
-          // Check that the value is a TypedArray with a type that matches the
-          // type declared in the c-function.
-          OpIndex stack_slot = AdaptFastCallTypedArrayArgument(
-              argument,
-              fast_api_call::GetTypedArrayElementsKind(
-                  resolution_result.element_type),
-              next);
-          OpIndex target_address = __ ExternalConstant(
-              ExternalReference::Create(c_functions[func_index].address,
-                                        ExternalReference::FAST_C_CALL));
-          GOTO(done, target_address, stack_slot);
-          break;
-        }
-
-        default: {
-          UNREACHABLE();
-        }
-      }
-
-      BIND(next);
-    }
-    GOTO(handle_error);
-
-    BIND(done, callee, arg);
-    return {callee, arg};
-  }
-
   template <typename T>
   V<T> Checked(V<Tuple<T, Word32>> result, Label<>& otherwise) {
     V<Word32> result_state = __ template Projection<1>(result);
@@ -219,6 +151,7 @@ class FastApiCallLoweringReducer : public Next {
 
   OpIndex AdaptFastCallArgument(OpIndex argument, CTypeInfo arg_type,
                                 Label<>& handle_error) {
+    START_ALLOW_USE_DEPRECATED()
     switch (arg_type.GetSequenceType()) {
       case CTypeInfo::SequenceType::kScalar: {
         uint8_t flags = static_cast<uint8_t>(arg_type.GetFlags());
@@ -331,19 +264,11 @@ class FastApiCallLoweringReducer : public Next {
 
         return __ AdaptLocalArgument(argument);
       }
-      case CTypeInfo::SequenceType::kIsTypedArray: {
-        // Check that the value is a HeapObject.
-        GOTO_IF(__ ObjectIsSmi(argument), handle_error);
-
-        return AdaptFastCallTypedArrayArgument(
-            argument,
-            fast_api_call::GetTypedArrayElementsKind(arg_type.GetType()),
-            handle_error);
-      }
       default: {
         UNREACHABLE();
       }
     }
+    END_ALLOW_USE_DEPRECATED()
   }
 
   OpIndex ClampFastCallArgument(V<Float64> argument,
@@ -396,163 +321,78 @@ class FastApiCallLoweringReducer : public Next {
     }
   }
 
-  OpIndex AdaptFastCallTypedArrayArgument(V<HeapObject> argument,
-                                          ElementsKind expected_elements_kind,
-                                          Label<>& bailout) {
-    V<Map> map = __ LoadMapField(argument);
-    V<Word32> instance_type = __ LoadInstanceTypeField(map);
-    GOTO_IF_NOT(LIKELY(__ Word32Equal(instance_type, JS_TYPED_ARRAY_TYPE)),
-                bailout);
-
-    V<Word32> bitfield2 =
-        __ template LoadField<Word32>(map, AccessBuilder::ForMapBitField2());
-    V<Word32> kind = __ Word32ShiftRightLogical(
-        __ Word32BitwiseAnd(bitfield2, Map::Bits2::ElementsKindBits::kMask),
-        Map::Bits2::ElementsKindBits::kShift);
-    GOTO_IF_NOT(LIKELY(__ Word32Equal(kind, expected_elements_kind)), bailout);
-
-    V<HeapObject> buffer = __ template LoadField<HeapObject>(
-        argument, AccessBuilder::ForJSArrayBufferViewBuffer());
-    V<Word32> buffer_bitfield = __ template LoadField<Word32>(
-        buffer, AccessBuilder::ForJSArrayBufferBitField());
-
-    // Go to the slow path if the {buffer} was detached.
-    GOTO_IF(UNLIKELY(__ Word32BitwiseAnd(buffer_bitfield,
-                                         JSArrayBuffer::WasDetachedBit::kMask)),
-            bailout);
-
-    // Go to the slow path if the {buffer} is shared.
-    GOTO_IF(UNLIKELY(__ Word32BitwiseAnd(buffer_bitfield,
-                                         JSArrayBuffer::IsSharedBit::kMask)),
-            bailout);
-
-    // Unpack the store and length, and store them to a struct
-    // FastApiTypedArray.
-    OpIndex external_pointer =
-        __ LoadField(argument, AccessBuilder::ForJSTypedArrayExternalPointer());
-
-    // Load the base pointer for the buffer. This will always be Smi
-    // zero unless we allow on-heap TypedArrays, which is only the case
-    // for Chrome. Node and Electron both set this limit to 0. Setting
-    // the base to Smi zero here allows the BuildTypedArrayDataPointer
-    // to optimize away the tricky part of the access later.
-    V<WordPtr> data_ptr;
-    if constexpr (JSTypedArray::kMaxSizeInHeap == 0) {
-      data_ptr = external_pointer;
-    } else {
-      V<Object> base_pointer = __ template LoadField<Object>(
-          argument, AccessBuilder::ForJSTypedArrayBasePointer());
-      V<WordPtr> base = __ BitcastTaggedToWordPtr(base_pointer);
-      if (COMPRESS_POINTERS_BOOL) {
-        // Zero-extend Tagged_t to UintPtr according to current compression
-        // scheme so that the addition with |external_pointer| (which already
-        // contains compensated offset value) will decompress the tagged value.
-        // See JSTypedArray::ExternalPointerCompensationForOnHeapArray() for
-        // details.
-        base = __ ChangeUint32ToUintPtr(__ TruncateWordPtrToWord32(base));
-      }
-      data_ptr = __ WordPtrAdd(base, external_pointer);
-    }
-
-    V<WordPtr> length_in_bytes = __ template LoadField<WordPtr>(
-        argument, AccessBuilder::ForJSTypedArrayLength());
-
-    // We hard-code int32_t here, because all specializations of
-    // FastApiTypedArray have the same size.
-    START_ALLOW_USE_DEPRECATED()
-    constexpr int kAlign = alignof(FastApiTypedArray<int32_t>);
-    constexpr int kSize = sizeof(FastApiTypedArray<int32_t>);
-    static_assert(kAlign == alignof(FastApiTypedArray<double>),
-                  "Alignment mismatch between different specializations of "
-                  "FastApiTypedArray");
-    static_assert(kSize == sizeof(FastApiTypedArray<double>),
-                  "Size mismatch between different specializations of "
-                  "FastApiTypedArray");
-    END_ALLOW_USE_DEPRECATED()
-    static_assert(
-        kSize == sizeof(uintptr_t) + sizeof(size_t),
-        "The size of "
-        "FastApiTypedArray isn't equal to the sum of its expected members.");
-    OpIndex stack_slot = __ StackSlot(kSize, kAlign);
-    __ StoreOffHeap(stack_slot, length_in_bytes,
-                    MemoryRepresentation::UintPtr());
-    __ StoreOffHeap(stack_slot, data_ptr, MemoryRepresentation::UintPtr(),
-                    sizeof(size_t));
-    static_assert(sizeof(uintptr_t) == sizeof(size_t),
-                  "The buffer length can't "
-                  "fit the PointerRepresentation used to store it.");
-    return stack_slot;
-  }
-
-  V<Object> ConvertReturnValue(const CFunctionInfo* c_signature,
-                               OpIndex result) {
+  V<Any> DefaultReturnValue(const CFunctionInfo* c_signature) {
     switch (c_signature->ReturnInfo().GetType()) {
       case CTypeInfo::Type::kVoid:
         return __ HeapConstant(factory_->undefined_value());
       case CTypeInfo::Type::kBool:
-        static_assert(sizeof(bool) == 1, "unsupported bool size");
-        return __ ConvertWord32ToBoolean(
-            __ Word32BitwiseAnd(result, __ Word32Constant(0xFF)));
       case CTypeInfo::Type::kInt32:
-        return __ ConvertInt32ToNumber(result);
       case CTypeInfo::Type::kUint32:
-        return __ ConvertUint32ToNumber(result);
-      case CTypeInfo::Type::kInt64: {
-        CFunctionInfo::Int64Representation repr =
-            c_signature->GetInt64Representation();
-        if (repr == CFunctionInfo::Int64Representation::kBigInt) {
-          return __ ConvertUntaggedToJSPrimitive(
-              result, ConvertUntaggedToJSPrimitiveOp::JSPrimitiveKind::kBigInt,
-              RegisterRepresentation::Word64(),
-              ConvertUntaggedToJSPrimitiveOp::InputInterpretation::kSigned,
-              CheckForMinusZeroMode::kDontCheckForMinusZero);
-        } else if (repr == CFunctionInfo::Int64Representation::kNumber) {
-          return __ ConvertUntaggedToJSPrimitive(
-              result, ConvertUntaggedToJSPrimitiveOp::JSPrimitiveKind::kNumber,
-              RegisterRepresentation::Word64(),
-              ConvertUntaggedToJSPrimitiveOp::InputInterpretation::kSigned,
-              CheckForMinusZeroMode::kDontCheckForMinusZero);
-        } else {
-          UNREACHABLE();
-        }
-      }
+        return __ Word32Constant(0);
+      case CTypeInfo::Type::kInt64:
       case CTypeInfo::Type::kUint64: {
         CFunctionInfo::Int64Representation repr =
             c_signature->GetInt64Representation();
         if (repr == CFunctionInfo::Int64Representation::kBigInt) {
-          return __ ConvertUntaggedToJSPrimitive(
-              result, ConvertUntaggedToJSPrimitiveOp::JSPrimitiveKind::kBigInt,
-              RegisterRepresentation::Word64(),
-              ConvertUntaggedToJSPrimitiveOp::InputInterpretation::kUnsigned,
-              CheckForMinusZeroMode::kDontCheckForMinusZero);
-        } else if (repr == CFunctionInfo::Int64Representation::kNumber) {
-          return __ ConvertUntaggedToJSPrimitive(
-              result, ConvertUntaggedToJSPrimitiveOp::JSPrimitiveKind::kNumber,
-              RegisterRepresentation::Word64(),
-              ConvertUntaggedToJSPrimitiveOp::InputInterpretation::kUnsigned,
-              CheckForMinusZeroMode::kDontCheckForMinusZero);
-        } else {
-          UNREACHABLE();
+          return __ Word64Constant(int64_t{0});
         }
+        DCHECK_EQ(repr, CFunctionInfo::Int64Representation::kNumber);
+        return __ Float64Constant(0);
       }
       case CTypeInfo::Type::kFloat32:
-        return __ ConvertFloat64ToNumber(
-            __ ChangeFloat32ToFloat64(result),
-            CheckForMinusZeroMode::kCheckForMinusZero);
+        return __ Float32Constant(0);
       case CTypeInfo::Type::kFloat64:
-        return __ ConvertFloat64ToNumber(
-            result, CheckForMinusZeroMode::kCheckForMinusZero);
+        return __ Float64Constant(0);
       case CTypeInfo::Type::kPointer:
-        return BuildAllocateJSExternalObject(result);
+        return __ HeapConstant(factory_->undefined_value());
+      case CTypeInfo::Type::kAny:
       case CTypeInfo::Type::kSeqOneByteString:
       case CTypeInfo::Type::kV8Value:
       case CTypeInfo::Type::kApiObject:
       case CTypeInfo::Type::kUint8:
         UNREACHABLE();
+    }
+  }
+
+  V<Any> ConvertReturnValue(const CFunctionInfo* c_signature, OpIndex result) {
+    switch (c_signature->ReturnInfo().GetType()) {
+      case CTypeInfo::Type::kVoid:
+        return __ HeapConstant(factory_->undefined_value());
+      case CTypeInfo::Type::kBool:
+        static_assert(sizeof(bool) == 1, "unsupported bool size");
+        return __ Word32BitwiseAnd(result, __ Word32Constant(0xFF));
+      case CTypeInfo::Type::kInt32:
+      case CTypeInfo::Type::kUint32:
+      case CTypeInfo::Type::kFloat32:
+      case CTypeInfo::Type::kFloat64:
+        return result;
+      case CTypeInfo::Type::kInt64: {
+        CFunctionInfo::Int64Representation repr =
+            c_signature->GetInt64Representation();
+        if (repr == CFunctionInfo::Int64Representation::kBigInt) {
+          return result;
+        }
+        DCHECK_EQ(repr, CFunctionInfo::Int64Representation::kNumber);
+        return __ ChangeInt64ToFloat64(result);
+      }
+      case CTypeInfo::Type::kUint64: {
+        CFunctionInfo::Int64Representation repr =
+            c_signature->GetInt64Representation();
+        if (repr == CFunctionInfo::Int64Representation::kBigInt) {
+          return result;
+        }
+        DCHECK_EQ(repr, CFunctionInfo::Int64Representation::kNumber);
+        return __ ChangeUint64ToFloat64(result);
+      }
+
+      case CTypeInfo::Type::kPointer:
+        return BuildAllocateJSExternalObject(result);
       case CTypeInfo::Type::kAny:
-        return __ ConvertFloat64ToNumber(
-            __ ChangeInt64ToFloat64(result),
-            CheckForMinusZeroMode::kCheckForMinusZero);
+      case CTypeInfo::Type::kSeqOneByteString:
+      case CTypeInfo::Type::kV8Value:
+      case CTypeInfo::Type::kApiObject:
+      case CTypeInfo::Type::kUint8:
+        UNREACHABLE();
     }
   }
 
@@ -586,7 +426,7 @@ class FastApiCallLoweringReducer : public Next {
             ExternalReference::
                 allocate_and_initialize_young_external_pointer_table_entry());
     auto call_descriptor =
-        Linkage::GetSimplifiedCDescriptor(__ graph_zone(), builder.Build());
+        Linkage::GetSimplifiedCDescriptor(__ graph_zone(), builder.Get());
     OpIndex handle = __ Call(
         allocate_and_initialize_young_external_pointer_table_entry,
         {isolate_ptr, pointer},

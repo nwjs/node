@@ -120,7 +120,7 @@ class NodeHashMapPolicy;
 template <class Key, class Value, class Hash = DefaultHashContainerHash<Key>,
           class Eq = DefaultHashContainerEq<Key>,
           class Alloc = std::allocator<std::pair<const Key, Value>>>
-class ABSL_INTERNAL_ATTRIBUTE_OWNER node_hash_map
+class ABSL_ATTRIBUTE_OWNER node_hash_map
     : public absl::container_internal::raw_hash_map<
           absl::container_internal::NodeHashMapPolicy<Key, Value>, Hash, Eq,
           Alloc> {
@@ -236,8 +236,13 @@ class ABSL_INTERNAL_ATTRIBUTE_OWNER node_hash_map
   //   Erases the element at `position` of the `node_hash_map`, returning
   //   `void`.
   //
-  //   NOTE: this return behavior is different than that of STL containers in
-  //   general and `std::unordered_map` in particular.
+  //   NOTE: Returning `void` in this case is different than that of STL
+  //   containers in general and `std::unordered_map` in particular (which
+  //   return an iterator to the element following the erased element). If that
+  //   iterator is needed, simply post increment the iterator:
+  //
+  //     map.erase(it++);
+  //
   //
   // iterator erase(const_iterator first, const_iterator last):
   //

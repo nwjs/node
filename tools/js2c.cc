@@ -11,7 +11,7 @@
 #include <vector>
 #include "embedded_data.h"
 #include "executable_wrapper.h"
-#include "simdutf.h"
+#include "third_party/simdutf/simdutf.h"
 #include "uv.h"
 
 #if defined(_WIN32)

@@ -4,6 +4,8 @@
 
 // Platform-specific code for Win32.
 
+#include "src/base/platform/platform-win32.h"
+
 // Secure API functions are not available using MinGW with msvcrt.dll
 // on Windows XP. Make sure MINGW_HAS_SECURE_API is not defined to
 // disable definition of secure API functions in standard headers that
@@ -32,12 +34,11 @@
 #include "src/base/bits.h"
 #include "src/base/lazy-instance.h"
 #include "src/base/macros.h"
-#include "src/base/platform/platform-win32.h"
+#include "src/base/platform/mutex.h"
 #include "src/base/platform/platform.h"
 #include "src/base/platform/time.h"
 #include "src/base/timezone-cache.h"
 #include "src/base/utils/random-number-generator.h"
-#include "src/base/win32-headers.h"
 
 #if defined(_MSC_VER)
 #include <crtdbg.h>
@@ -539,8 +540,7 @@ int OS::GetCurrentProcessId() {
   return static_cast<int>(::GetCurrentProcessId());
 }
 
-
-int OS::GetCurrentThreadId() {
+int OS::GetCurrentThreadIdInternal() {
   return static_cast<int>(::GetCurrentThreadId());
 }
 
@@ -980,7 +980,7 @@ void* AllocateInternal(void* hint, size_t size, size_t alignment,
 
 void CheckIsOOMError(int error) {
   // We expect one of ERROR_NOT_ENOUGH_MEMORY or ERROR_COMMITMENT_LIMIT. We'd
-  // still like to get the actual error code when its not one of the expected
+  // still like to get the actual error code when it's not one of the expected
   // errors, so use the construct below to achieve that.
   if (error != ERROR_NOT_ENOUGH_MEMORY) CHECK_EQ(ERROR_COMMITMENT_LIMIT, error);
 }
@@ -1122,6 +1122,9 @@ bool OS::DecommitPages(void* address, size_t size) {
 }
 
 // static
+bool OS::SealPages(void* address, size_t size) { return false; }
+
+// static
 bool OS::CanReserveAddressSpace() {
   return VirtualAlloc2 != nullptr && MapViewOfFile3 != nullptr &&
          UnmapViewOfFile2 != nullptr;
@@ -1242,20 +1245,17 @@ void OS::Abort() {
 
   switch (g_abort_mode) {
     case AbortMode::kExitWithSuccessAndIgnoreDcheckFailures:
-      _exit(0);
+      ExitProcess(0);
     case AbortMode::kExitWithFailureAndIgnoreDcheckFailures:
-      _exit(-1);
+      ExitProcess(-1);
     case AbortMode::kImmediateCrash:
       IMMEDIATE_CRASH();
     case AbortMode::kDefault:
       break;
   }
 
-  // Make the MSVCRT do a silent abort.
-  raise(SIGABRT);
-
   // Make sure function doesn't return.
-  abort();
+  ExitProcess(3);
 }
 
 

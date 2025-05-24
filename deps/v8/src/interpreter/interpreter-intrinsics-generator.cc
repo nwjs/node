@@ -15,6 +15,8 @@ namespace v8 {
 namespace internal {
 namespace interpreter {
 
+#include "src/codegen/define-code-stub-assembler-macros.inc"
+
 class IntrinsicsGenerator {
  public:
   explicit IntrinsicsGenerator(InterpreterAssembler* assembler)
@@ -156,7 +158,8 @@ TNode<Object> IntrinsicsGenerator::CreateIterResultObject(
 TNode<Object> IntrinsicsGenerator::CreateAsyncFromSyncIterator(
     const InterpreterAssembler::RegListNodePair& args, TNode<Context> context,
     int arg_count) {
-  TNode<Object> sync_iterator = __ LoadRegisterFromRegisterList(args, 0);
+  TNode<JSAny> sync_iterator =
+      __ CAST(__ LoadRegisterFromRegisterList(args, 0));
   return __ CreateAsyncFromSyncIterator(context, sync_iterator);
 }
 
@@ -262,6 +265,8 @@ void IntrinsicsGenerator::AbortIfArgCountMismatch(int expected,
 }
 
 #undef __
+
+#include "src/codegen/undef-code-stub-assembler-macros.inc"
 
 }  // namespace interpreter
 }  // namespace internal

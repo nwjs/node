@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#if V8_TARGET_ARCH_PPC || V8_TARGET_ARCH_PPC64
+#if V8_TARGET_ARCH_PPC64
 
 #include "src/regexp/ppc/regexp-macro-assembler-ppc.h"
 
@@ -139,11 +139,9 @@ RegExpMacroAssemblerPPC::~RegExpMacroAssemblerPPC() {
   fallback_label_.Unuse();
 }
 
-
-int RegExpMacroAssemblerPPC::stack_limit_slack() {
-  return RegExpStack::kStackLimitSlack;
+int RegExpMacroAssemblerPPC::stack_limit_slack_slot_count() {
+  return RegExpStack::kStackLimitSlackSlotCount;
 }
-
 
 void RegExpMacroAssemblerPPC::AdvanceCurrentPosition(int by) {
   if (by != 0) {
@@ -554,14 +552,27 @@ void RegExpMacroAssemblerPPC::CheckBitInTable(Handle<ByteArray> table,
   __ mov(r3, Operand(table));
   if (mode_ != LATIN1 || kTableMask != String::kMaxOneByteCharCode) {
     __ andi(r4, current_character(), Operand(kTableSize - 1));
-    __ addi(r4, r4, Operand(ByteArray::kHeaderSize - kHeapObjectTag));
+    __ addi(r4, r4, Operand(OFFSET_OF_DATA_START(ByteArray) - kHeapObjectTag));
   } else {
     __ addi(r4, current_character(),
-            Operand(ByteArray::kHeaderSize - kHeapObjectTag));
+            Operand(OFFSET_OF_DATA_START(ByteArray) - kHeapObjectTag));
   }
   __ lbzx(r3, MemOperand(r3, r4));
   __ cmpi(r3, Operand::Zero());
   BranchOrBacktrack(ne, on_bit_set);
+}
+
+void RegExpMacroAssemblerPPC::SkipUntilBitInTable(
+    int cp_offset, Handle<ByteArray> table, Handle<ByteArray> nibble_table,
+    int advance_by) {
+  // TODO(pthier): Optimize. Table can be loaded outside of the loop.
+  Label cont, again;
+  Bind(&again);
+  LoadCurrentCharacter(cp_offset, &cont, true);
+  CheckBitInTable(table, &cont);
+  AdvanceCurrentPosition(advance_by);
+  GoTo(&again);
+  Bind(&cont);
 }
 
 bool RegExpMacroAssemblerPPC::CheckSpecialClassRanges(StandardCharacterSet type,
@@ -720,7 +731,8 @@ void RegExpMacroAssemblerPPC::PopRegExpBasePointer(Register stack_pointer_out,
   StoreRegExpStackPointerToMemory(stack_pointer_out, scratch);
 }
 
-Handle<HeapObject> RegExpMacroAssemblerPPC::GetCode(Handle<String> source) {
+DirectHandle<HeapObject> RegExpMacroAssemblerPPC::GetCode(
+    DirectHandle<String> source, RegExpFlags flags) {
   Label return_r3;
 
   if (masm_->has_exception()) {
@@ -1074,10 +1086,9 @@ Handle<HeapObject> RegExpMacroAssemblerPPC::GetCode(Handle<String> source) {
           .set_empty_source_position_table()
           .Build();
   PROFILE(masm_->isolate(),
-          RegExpCodeCreateEvent(Cast<AbstractCode>(code), source));
+          RegExpCodeCreateEvent(Cast<AbstractCode>(code), source, flags));
   return Cast<HeapObject>(code);
 }
-
 
 void RegExpMacroAssemblerPPC::GoTo(Label* to) { BranchOrBacktrack(al, to); }
 
@@ -1131,6 +1142,7 @@ void RegExpMacroAssemblerPPC::PushBacktrack(Label* label) {
 
 void RegExpMacroAssemblerPPC::PushCurrentPosition() {
   Push(current_input_offset());
+  CheckStackLimit();
 }
 
 
@@ -1138,7 +1150,11 @@ void RegExpMacroAssemblerPPC::PushRegister(int register_index,
                                            StackCheckFlag check_stack_limit) {
   __ LoadU64(r3, register_location(register_index), r0);
   Push(r3);
-  if (check_stack_limit) CheckStackLimit();
+  if (check_stack_limit) {
+    CheckStackLimit();
+  } else if (V8_UNLIKELY(v8_flags.slow_debug_code)) {
+    AssertAboveStackLimitMinusSlack();
+  }
 }
 
 
@@ -1418,6 +1434,19 @@ void RegExpMacroAssemblerPPC::CheckStackLimit() {
   SafeCall(&stack_overflow_label_, le);
 }
 
+void RegExpMacroAssemblerPPC::AssertAboveStackLimitMinusSlack() {
+  DCHECK(v8_flags.slow_debug_code);
+  Label no_stack_overflow;
+  ASM_CODE_COMMENT_STRING(masm_.get(), "AssertAboveStackLimitMinusSlack");
+  auto l = ExternalReference::address_of_regexp_stack_limit_address(isolate());
+  __ mov(r3, Operand(l));
+  __ LoadU64(r3, MemOperand(r3));
+  __ SubS64(r3, r3, Operand(RegExpStack::kStackLimitSlackSize));
+  __ CmpU64(backtrack_stackpointer(), r3);
+  __ bgt(&no_stack_overflow);
+  __ DebugBreak();
+  __ bind(&no_stack_overflow);
+}
 
 void RegExpMacroAssemblerPPC::LoadCurrentCharacterUnchecked(int cp_offset,
                                                             int characters) {
@@ -1485,4 +1514,4 @@ void RegExpMacroAssemblerPPC::LoadCurrentCharacterUnchecked(int cp_offset,
 }  // namespace internal
 }  // namespace v8
 
-#endif  //  V8_TARGET_ARCH_PPC || V8_TARGET_ARCH_PPC64
+#endif  //  V8_TARGET_ARCH_PPC64

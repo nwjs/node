@@ -279,7 +279,7 @@
           ]
         }],
         [ 'OS=="linux"', {
-          'defines': [ '_FILE_OFFSET_BITS=64' ],
+          #'defines': [ '_FILE_OFFSET_BITS=64' ],
           'sources': [
             '<@(uv_sources_linux)',
           ],

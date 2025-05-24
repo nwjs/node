@@ -86,6 +86,8 @@ class V8_EXPORT_PRIVATE CompactibleExternalEntityTable
   using Base = ExternalEntityTable<Entry, size>;
 
  public:
+  static constexpr bool kSupportsCompaction = true;
+
   struct CompactionResult {
     uint32_t start_of_evacuation_area;
     bool success;
@@ -110,7 +112,6 @@ class V8_EXPORT_PRIVATE CompactibleExternalEntityTable
    private:
     friend class CompactibleExternalEntityTable<Entry, size>;
     friend class ExternalPointerTable;
-    friend class ExternalBufferTable;
     friend class CppHeapPointerTable;
 
     // Routines for compaction. See the comment about table compaction above.

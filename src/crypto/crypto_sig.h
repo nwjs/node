@@ -30,7 +30,7 @@ class SignBase : public BaseObject {
 
   SignBase(Environment* env, v8::Local<v8::Object> wrap);
 
-  Error Init(std::string_view digest);
+  Error Init(const char* digest);
   Error Update(const char* data, size_t len);
 
   // TODO(joyeecheung): track the memory used by OpenSSL types
@@ -137,10 +137,10 @@ struct SignTraits final {
       unsigned int offset,
       SignConfiguration* params);
 
-  static bool DeriveBits(
-      Environment* env,
-      const SignConfiguration& params,
-      ByteSource* out);
+  static bool DeriveBits(Environment* env,
+                         const SignConfiguration& params,
+                         ByteSource* out,
+                         CryptoJobMode mode);
 
   static v8::MaybeLocal<v8::Value> EncodeOutput(Environment* env,
                                                 const SignConfiguration& params,

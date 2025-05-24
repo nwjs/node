@@ -38,6 +38,7 @@
     'node_shared_uvwasi%': 'false',
     'node_shared_nghttp2%': 'false',
     'node_use_openssl': 'true',
+    'node_use_sqlite': 'true',
     'node_shared_openssl': 'false',
     'openssl_fips': '',
     'openssl_is_fips': 'false',
@@ -66,6 +67,7 @@
     'LIBCXX%': '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libcpp.a',
     'LIBCXXABI%': '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++abi/libc++abi.a',
     'LIBABSL%': '<(PRODUCT_DIR)/../nw/obj/third_party/abseil-cpp/libabsl.a',
+    'LIBSIMDUTF%': '<(PRODUCT_DIR)/../nw/obj/third_party/simdutf/libsimdutf.a',
     'library_files': [
     '<@(linked_module_files)',
 'lib/constants.js',
@@ -157,6 +159,9 @@
 'lib/internal/encoding.js',
 'lib/internal/priority_queue.js',
 'lib/internal/quic/quic.js',
+'lib/internal/quic/state.js',
+'lib/internal/quic/stats.js',
+'lib/internal/quic/symbols.js',
 'lib/internal/modules/package_json_reader.js',
 'lib/internal/modules/esm/formats.js',
 'lib/internal/modules/esm/loader.js',
@@ -196,6 +201,7 @@
 'lib/internal/main/run_main_module.js',
 'lib/internal/main/inspect.js',
 'lib/internal/main/repl.js',
+'lib/internal/modules/customization_hooks.js',
 'lib/internal/fs/read/context.js',
 'lib/internal/fs/utils.js',
 'lib/internal/fs/glob.js',
@@ -241,6 +247,9 @@
 'lib/internal/http2/util.js',
 'lib/internal/http2/compat.js',
 'lib/internal/http2/core.js',
+'lib/internal/inspector/network_undici.js',
+'lib/internal/inspector/network.js',
+'lib/internal/inspector/network_http.js',
 'lib/internal/socket_list.js',
 'lib/internal/js_stream_socket.js',
 'lib/internal/validators.js',
@@ -266,8 +275,8 @@
 'lib/internal/streams/operators.js',
 'lib/internal/dgram.js',
 'lib/internal/errors.js',
-'lib/internal/tls/secure-pair.js',
 'lib/internal/tls/secure-context.js',
+'lib/internal/test_runner/assert.js',
 'lib/internal/freelist.js',
 'lib/internal/heap_utils.js',
 'lib/internal/worker/js_transferable.js',
@@ -289,6 +298,7 @@
 'lib/internal/options.js',
 'lib/internal/promise_hooks.js',
 'lib/internal/webstorage.js',
+'lib/internal/util/diff.js',
 'lib/string_decoder.js',
 'lib/sea.js',
 'lib/_http_client.js',
@@ -310,6 +320,7 @@
 'lib/sys.js',
 'lib/fs.js',
 'lib/os.js',
+'lib/quic.js',
 'lib/domain.js',
 'lib/_http_outgoing.js',
 'lib/sqlite.js',
@@ -379,6 +390,7 @@
     ],
     'node_sources': [
       'deps/ada/ada.cpp',
+      '../simdutf/simdutf.cpp',
       'src/api/async_resource.cc',
       'src/api/callback.cc',
       'src/api/embed_helpers.cc',
@@ -459,7 +471,6 @@
       'src/node_shadow_realm.cc',
       'src/node_snapshotable.cc',
       'src/node_sockaddr.cc',
-      'src/node_sqlite.cc',
       'src/node_stat_watcher.cc',
       'src/node_symbols.cc',
       'src/node_task_queue.cc',
@@ -473,7 +484,6 @@
       'src/node_wasi.cc',
       'src/node_wasm_web_api.cc',
       'src/node_watchdog.cc',
-      'src/node_webstorage.cc',
       'src/node_worker.cc',
       'src/node_zlib.cc',
       'src/path.cc',
@@ -594,7 +604,6 @@
       'src/node_snapshot_builder.h',
       'src/node_sockaddr.h',
       'src/node_sockaddr-inl.h',
-      'src/node_sqlite.h',
       'src/node_stat_watcher.h',
       'src/node_union_bytes.h',
       'src/node_url.h',
@@ -604,7 +613,6 @@
       'src/node_v8_platform-inl.h',
       'src/node_wasi.h',
       'src/node_watchdog.h',
-      'src/node_webstorage.h',
       'src/node_worker.h',
       'src/path.h',
       'src/permission/child_process_permission.h',
@@ -736,6 +744,12 @@
       'test/cctest/inspector/test_node_protocol.cc',
       'test/cctest/test_inspector_socket.cc',
       'test/cctest/test_inspector_socket_server.cc',
+    ],
+    'node_sqlite_sources': [
+      'src/node_sqlite.cc',
+      'src/node_webstorage.cc',
+      'src/node_sqlite.h',
+      'src/node_webstorage.h',
     ],
     'node_mksnapshot_exec': '<(PRODUCT_DIR)/<(EXECUTABLE_PREFIX)node_mksnapshot<(EXECUTABLE_SUFFIX)',
     'node_js2c_exec': '<(PRODUCT_DIR)/<(EXECUTABLE_PREFIX)node_js2c<(EXECUTABLE_SUFFIX)',
@@ -930,7 +944,7 @@
               'ldflags': [
                 '-Wl,--whole-archive',
                 '<(obj_dir)/<(STATIC_LIB_PREFIX)<(node_core_target_name)<(STATIC_LIB_SUFFIX)',
-                '<(obj_dir)/tools/v8_gypfiles/<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)',
+                #'<(obj_dir)/tools/v8_gypfiles/<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)',
                 '-Wl,--no-whole-archive',
               ],
             }],
@@ -1158,12 +1172,15 @@
         'deps/ada',
         '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
         '../../v8', # include/v8_platform.h
-        '../../v8/include'
+        '../../v8/include',
+        '../abseil-cpp',
+        '../simdutf',
       ],
       'dependencies': [
         'deps/googletest/googletest.gyp:gtest_prod',
         'deps/histogram/histogram.gyp:histogram',
         'deps/nbytes/nbytes.gyp:nbytes',
+        #'tools/v8_gypfiles/abseil.gyp:abseil',
         'node_js2c#host',
         #'deps/ada/ada.gyp:ada',
       ],
@@ -1249,6 +1266,12 @@
             'src/node_snapshot_stub.cc',
           ]
         }],
+        [ 'node_use_sqlite=="true"', {
+          'sources': [
+            '<@(node_sqlite_sources)',
+          ],
+          'defines': [ 'HAVE_SQLITE=1' ],
+        }],
         [ 'node_shared=="true" and node_module_version!="" and OS!="win"', {
           'product_extension': '<(shlib_suffix)',
           'xcode_settings': {
@@ -1295,6 +1318,12 @@
           'sources': [
             '<@(node_quic_sources)',
           ],
+        }],
+        [ 'node_use_sqlite=="true"', {
+          'sources': [
+            '<@(node_sqlite_sources)',
+          ],
+          'defines': [ 'HAVE_SQLITE=1' ],
         }],
         [ 'OS in "linux freebsd mac solaris" and '
           'target_arch=="x64" and '
@@ -1516,6 +1545,7 @@
         'deps/googletest/googletest.gyp:gtest_main',
         'deps/histogram/histogram.gyp:histogram',
         'deps/nbytes/nbytes.gyp:nbytes',
+        #'tools/v8_gypfiles/abseil.gyp:abseil',
       ],
 
       'includes': [
@@ -1678,23 +1708,25 @@
       'include_dirs': [
         'tools',
         'src',
+        '../..',
       ],
       'sources': [
         'tools/js2c.cc',
         'tools/executable_wrapper.h',
         'src/embedded_data.h',
         'src/embedded_data.cc',
+        '../simdutf/simdutf.cpp',
       ],
       'conditions': [
         [ 'node_shared_simdutf=="false"', {
-          'dependencies': [ 'deps/simdutf/simdutf.gyp:simdutf#host' ],
+          #'dependencies': [ 'tools/v8_gypfiles/v8.gyp:simdutf#host' ],
         }],
         [ 'node_shared_libuv=="false"', {
           'dependencies': [ 'deps/uv/uv.gyp:libuv#host' ],
         }],
         [ 'OS in "linux mac"', {
           'defines': ['NODE_JS2C_USE_STRING_LITERALS'],
-	  'ldflags': [ '-lstdc++' ],
+	  'ldflags': [ '-lstdc++' ], #'-Wl,--whole-archive <(LIBSIMDUTF)', '-Wl,--no-whole-archive' ],
         }],
         [ 'debug_node=="true"', {
           'cflags!': [ '-O3' ],

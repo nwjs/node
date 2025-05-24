@@ -203,7 +203,7 @@ const EVP_MD* GetDigestImplementation(Environment* env,
   return result.explicit_md ? result.explicit_md : result.implicit_md;
 #else
   Utf8Value utf8(env->isolate(), algorithm);
-  return ncrypto::getDigestByName(utf8.ToStringView());
+  return ncrypto::getDigestByName(*utf8);
 #endif
 }
 
@@ -252,19 +252,14 @@ void Hash::OneShotDigest(const FunctionCallbackInfo<Value>& args) {
     return ThrowCryptoError(env, ERR_get_error());
   }
 
-  Local<Value> error;
-  MaybeLocal<Value> rc =
-      StringBytes::Encode(env->isolate(),
+  Local<Value> ret;
+  if (StringBytes::Encode(env->isolate(),
                           static_cast<const char*>(output.get()),
                           output.size(),
-                          output_enc,
-                          &error);
-  if (rc.IsEmpty()) [[unlikely]] {
-    CHECK(!error.IsEmpty());
-    env->isolate()->ThrowException(error);
-    return;
+                          output_enc)
+          .ToLocal(&ret)) {
+    args.GetReturnValue().Set(ret);
   }
-  args.GetReturnValue().Set(rc.FromMaybe(Local<Value>()));
 }
 
 void Hash::Initialize(Environment* env, Local<Object> target) {
@@ -284,9 +279,6 @@ void Hash::Initialize(Environment* env, Local<Object> target) {
   SetMethodNoSideEffect(context, target, "oneShotDigest", OneShotDigest);
 
   HashJob::Initialize(env, target);
-
-  SetMethodNoSideEffect(
-      context, target, "internalVerifyIntegrity", InternalVerifyIntegrity);
 }
 
 void Hash::RegisterExternalReferences(ExternalReferenceRegistry* registry) {
@@ -298,8 +290,6 @@ void Hash::RegisterExternalReferences(ExternalReferenceRegistry* registry) {
   registry->Register(OneShotDigest);
 
   HashJob::RegisterExternalReferences(registry);
-
-  registry->Register(InternalVerifyIntegrity);
 }
 
 // new Hash(algorithm, algorithmId, xofLen, algorithmCache)
@@ -410,15 +400,12 @@ void Hash::HashDigest(const FunctionCallbackInfo<Value>& args) {
     hash->digest_ = ByteSource::Allocated(data.release());
   }
 
-  Local<Value> error;
-  MaybeLocal<Value> rc = StringBytes::Encode(
-      env->isolate(), hash->digest_.data<char>(), len, encoding, &error);
-  if (rc.IsEmpty()) [[unlikely]] {
-    CHECK(!error.IsEmpty());
-    env->isolate()->ThrowException(error);
-    return;
+  Local<Value> ret;
+  if (StringBytes::Encode(
+          env->isolate(), hash->digest_.data<char>(), len, encoding)
+          .ToLocal(&ret)) {
+    args.GetReturnValue().Set(ret);
   }
-  args.GetReturnValue().Set(rc.FromMaybe(Local<Value>()));
 }
 
 HashConfig::HashConfig(HashConfig&& other) noexcept
@@ -456,7 +443,7 @@ Maybe<void> HashTraits::AdditionalConfig(
 
   CHECK(args[offset]->IsString());  // Hash algorithm
   Utf8Value digest(env->isolate(), args[offset]);
-  params->digest = ncrypto::getDigestByName(digest.ToStringView());
+  params->digest = ncrypto::getDigestByName(*digest);
   if (params->digest == nullptr) [[unlikely]] {
     THROW_ERR_CRYPTO_INVALID_DIGEST(env, "Invalid digest: %s", *digest);
     return Nothing<void>();
@@ -489,10 +476,10 @@ Maybe<void> HashTraits::AdditionalConfig(
   return JustVoid();
 }
 
-bool HashTraits::DeriveBits(
-    Environment* env,
-    const HashConfig& params,
-    ByteSource* out) {
+bool HashTraits::DeriveBits(Environment* env,
+                            const HashConfig& params,
+                            ByteSource* out,
+                            CryptoJobMode mode) {
   auto ctx = EVPMDCtxPointer::New();
 
   if (!ctx.digestInit(params.digest) || !ctx.digestUpdate(params.in))
@@ -512,49 +499,5 @@ bool HashTraits::DeriveBits(
   return true;
 }
 
-void InternalVerifyIntegrity(const v8::FunctionCallbackInfo<v8::Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-
-  CHECK_EQ(args.Length(), 3);
-
-  CHECK(args[0]->IsString());
-  Utf8Value algorithm(env->isolate(), args[0]);
-
-  CHECK(args[1]->IsString() || IsAnyBufferSource(args[1]));
-  ByteSource content = ByteSource::FromStringOrBuffer(env, args[1]);
-
-  CHECK(args[2]->IsArrayBufferView());
-  ArrayBufferOrViewContents<unsigned char> expected(args[2]);
-
-  const EVP_MD* md_type = ncrypto::getDigestByName(algorithm.ToStringView());
-  unsigned char digest[EVP_MAX_MD_SIZE];
-  unsigned int digest_size;
-  if (md_type == nullptr || EVP_Digest(content.data(),
-                                       content.size(),
-                                       digest,
-                                       &digest_size,
-                                       md_type,
-                                       nullptr) != 1) [[unlikely]] {
-    return ThrowCryptoError(
-        env, ERR_get_error(), "Digest method not supported");
-  }
-
-  if (digest_size != expected.size() ||
-      CRYPTO_memcmp(digest, expected.data(), digest_size) != 0) {
-    Local<Value> error;
-    MaybeLocal<Value> rc =
-        StringBytes::Encode(env->isolate(),
-                            reinterpret_cast<const char*>(digest),
-                            digest_size,
-                            BASE64,
-                            &error);
-    if (rc.IsEmpty()) [[unlikely]] {
-      CHECK(!error.IsEmpty());
-      env->isolate()->ThrowException(error);
-      return;
-    }
-    args.GetReturnValue().Set(rc.FromMaybe(Local<Value>()));
-  }
-}
 }  // namespace crypto
 }  // namespace node

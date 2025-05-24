@@ -5,28 +5,27 @@
 #ifndef V8_HEAP_MEMORY_CHUNK_METADATA_INL_H_
 #define V8_HEAP_MEMORY_CHUNK_METADATA_INL_H_
 
-#include "src/heap/memory-chunk-inl.h"
 #include "src/heap/memory-chunk-metadata.h"
+// Include the non-inl header before the rest of the headers.
+
+#include "src/heap/memory-chunk-inl.h"
 
 namespace v8 {
 namespace internal {
 
 // static
 MemoryChunkMetadata* MemoryChunkMetadata::FromAddress(Address a) {
-  DCHECK(!V8_ENABLE_THIRD_PARTY_HEAP_BOOL);
   return MemoryChunk::FromAddress(a)->Metadata();
 }
 
 // static
 MemoryChunkMetadata* MemoryChunkMetadata::FromHeapObject(Tagged<HeapObject> o) {
-  DCHECK(!V8_ENABLE_THIRD_PARTY_HEAP_BOOL);
   return FromAddress(o.ptr());
 }
 
 // static
 MemoryChunkMetadata* MemoryChunkMetadata::FromHeapObject(
     const HeapObjectLayout* o) {
-  DCHECK(!V8_ENABLE_THIRD_PARTY_HEAP_BOOL);
   return FromAddress(reinterpret_cast<Address>(o));
 }
 

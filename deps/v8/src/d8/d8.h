@@ -34,7 +34,7 @@ class D8Console;
 class Message;
 class TryCatch;
 
-enum class ModuleType { kJavaScript, kJSON, kInvalid };
+enum class ModuleType { kJavaScript, kJSON, kWebAssembly, kInvalid };
 
 namespace internal {
 class CancelableTaskManager;
@@ -186,9 +186,10 @@ class SerializationDataQueue {
 
 class Worker : public std::enable_shared_from_this<Worker> {
  public:
-  static constexpr i::ExternalPointerTag kManagedTag = i::kGenericManagedTag;
+  static constexpr i::ExternalPointerTag kManagedTag = i::kD8WorkerTag;
 
-  explicit Worker(Isolate* parent_isolate, const char* script);
+  explicit Worker(Isolate* parent_isolate, const char* script,
+                  bool flush_denormals);
   ~Worker();
 
   // Post a message to the worker. The worker will take ownership of the
@@ -267,6 +268,7 @@ class Worker : public std::enable_shared_from_this<Worker> {
 
   base::Thread* thread_ = nullptr;
   char* script_;
+  bool flush_denormals_;
   std::atomic<State> state_;
   bool is_joined_ = false;
   // For signalling that the worker has started.
@@ -512,6 +514,7 @@ class ShellOptions {
   DisallowReassignment<bool> wasm_trap_handler = {"wasm-trap-handler", true};
 #endif  // V8_ENABLE_WEBASSEMBLY
   DisallowReassignment<bool> expose_fast_api = {"expose-fast-api", false};
+  DisallowReassignment<bool> flush_denormals = {"flush-denormals", false};
   DisallowReassignment<size_t> max_serializer_memory = {"max-serializer-memory",
                                                         1 * i::MB};
 };
@@ -529,6 +532,9 @@ class Shell : public i::AllStatic {
   };
   enum class CodeType { kFileName, kString, kFunction, kInvalid, kNone };
 
+  // Boolean return values (for any method below) typically denote "success".
+  // We return `false` on uncaught exceptions, except for termination
+  // exceptions.
   static bool ExecuteString(Isolate* isolate, Local<String> source,
                             Local<String> name,
                             ReportExceptions report_exceptions,
@@ -540,6 +546,8 @@ class Shell : public i::AllStatic {
   static void ReportException(Isolate* isolate, const TryCatch& try_catch);
   static MaybeLocal<String> ReadFile(Isolate* isolate, const char* name,
                                      bool should_throw = true);
+  static std::unique_ptr<base::OS::MemoryMappedFile> ReadFileData(
+      Isolate* isolate, const char* name, bool should_throw = true);
   static Local<String> WasmLoadSourceMapCallback(Isolate* isolate,
                                                  const char* name);
   static MaybeLocal<Context> CreateEvaluationContext(Isolate* isolate);
@@ -599,6 +607,8 @@ class Shell : public i::AllStatic {
   static void InstallConditionalFeatures(
       const v8::FunctionCallbackInfo<v8::Value>& info);
   static void EnableJSPI(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void SetFlushDenormals(
+      const v8::FunctionCallbackInfo<v8::Value>& info);
 
   static void AsyncHooksCreateHook(
       const v8::FunctionCallbackInfo<v8::Value>& info);
@@ -640,6 +650,8 @@ class Shell : public i::AllStatic {
   static void Version(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void WriteFile(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void ReadFile(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void CreateWasmMemoryMapDescriptor(
+      const v8::FunctionCallbackInfo<v8::Value>& info);
   static char* ReadChars(const char* name, int* size_out);
   static MaybeLocal<PrimitiveArray> ReadLines(Isolate* isolate,
                                               const char* name);
@@ -716,6 +728,10 @@ class Shell : public i::AllStatic {
       Local<Context> context, Local<Data> host_defined_options,
       Local<Value> resource_name, Local<String> specifier,
       Local<FixedArray> import_attributes);
+  static MaybeLocal<Promise> HostImportModuleWithPhaseDynamically(
+      Local<Context> context, Local<Data> host_defined_options,
+      Local<Value> resource_name, Local<String> specifier,
+      ModuleImportPhase phase, Local<FixedArray> import_attributes);
 
   static void ModuleResolutionSuccessCallback(
       const v8::FunctionCallbackInfo<v8::Value>& info);
@@ -781,7 +797,7 @@ class Shell : public i::AllStatic {
 
   static const char* stringify_source_;
   static CounterMap* counter_map_;
-  static base::SharedMutex counter_mutex_;
+  static base::Mutex counter_mutex_;
   // We statically allocate a set of local counters to be used if we
   // don't want to store the stats in a memory-mapped file
   static CounterCollection local_counters_;
@@ -829,6 +845,10 @@ class Shell : public i::AllStatic {
       v8::MaybeLocal<Value> global_object);
   static void DisposeRealm(const v8::FunctionCallbackInfo<v8::Value>& info,
                            int index);
+
+  static MaybeLocal<Object> FetchModuleSource(
+      v8::Local<v8::Module> origin_module, v8::Local<v8::Context> context,
+      const std::string& file_name, ModuleType module_type);
   static MaybeLocal<Module> FetchModuleTree(v8::Local<v8::Module> origin_module,
                                             v8::Local<v8::Context> context,
                                             const std::string& file_name,

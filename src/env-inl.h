@@ -215,6 +215,11 @@ inline v8::Isolate* Environment::isolate() const {
   return isolate_;
 }
 
+inline v8::ExternalMemoryAccounter* Environment::external_memory_accounter()
+    const {
+  return external_memory_accounter_;
+}
+
 inline Environment* Environment::from_timer_handle(uv_timer_t* handle) {
   return ContainerOf(&Environment::timer_handle_, handle);
 }
@@ -914,26 +919,6 @@ inline void Environment::RemoveHeapSnapshotNearHeapLimitCallback(
                                         heap_limit);
 }
 
-inline void Environment::SetAsyncResourceContextFrame(
-    std::uintptr_t async_resource_handle,
-    v8::Global<v8::Value>&& context_frame) {
-  async_resource_context_frames_.emplace(
-      std::make_pair(async_resource_handle, std::move(context_frame)));
-}
-
-inline const v8::Global<v8::Value>& Environment::GetAsyncResourceContextFrame(
-    std::uintptr_t async_resource_handle) {
-  auto&& async_resource_context_frame =
-      async_resource_context_frames_.find(async_resource_handle);
-  CHECK_NE(async_resource_context_frame, async_resource_context_frames_.end());
-
-  return async_resource_context_frame->second;
-}
-
-inline void Environment::RemoveAsyncResourceContextFrame(
-    std::uintptr_t async_resource_handle) {
-  async_resource_context_frames_.erase(async_resource_handle);
-}
 }  // namespace node
 
 // These two files depend on each other. Including base_object-inl.h after this

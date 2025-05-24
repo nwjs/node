@@ -17,6 +17,13 @@ enum class CollectionType : uint8_t {
   kMajor,
 };
 
+// Specifies whether free memory should be transparently discarded when it is
+// not yet released. This is generally enabled for free list entries on memory
+// reducing GCs. Windows is the exception where these calls are too expensive.
+//
+// In order to minimize actual discard calls various components optimize the
+// calls here. E.g., we assume that whole pages are freed through a page pool
+// (which doesn't discard on adding) that is fully released after a GC cycle.
 enum class FreeMemoryHandling : uint8_t {
   kDoNotDiscard,
   kDiscardWherePossible
@@ -35,14 +42,8 @@ struct MarkingConfig {
   StackState stack_state = StackState::kMayContainHeapPointers;
   MarkingType marking_type = MarkingType::kIncremental;
   IsForcedGC is_forced_gc = IsForcedGC::kNotForced;
-  v8::base::TimeDelta incremental_task_delay = v8::base::TimeDelta();
-  bool bailout_of_marking_when_ahead_of_schedule = false;
 };
 
-enum class SweepingStrategy {
-  kMinimizeMutatorInterference,
-  kMinimizeMemory,
-};
 struct SweepingConfig {
   using SweepingType = cppgc::Heap::SweepingType;
   enum class CompactableSpaceHandling { kSweep, kIgnore };
@@ -52,7 +53,6 @@ struct SweepingConfig {
   CompactableSpaceHandling compactable_space_handling =
       CompactableSpaceHandling::kSweep;
   FreeMemoryHandling free_memory_handling = FreeMemoryHandling::kDoNotDiscard;
-  SweepingStrategy sweeping_strategy = SweepingStrategy::kMinimizeMemory;
 };
 
 struct GCConfig {

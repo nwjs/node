@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --allow-natives-syntax --turboshaft-from-maglev --turbofan
+// Flags: --allow-natives-syntax --turbolev --turbofan
 
 function g(b) {
   if (b) {
@@ -18,7 +18,7 @@ function foo(n, r, b) {
     v = 45;
     g(true);
   } catch(e) {
-    // {v} here is a Phi with a Uint32 and a Int32 input.
+    // {v} here is a Phi with a Uint32 and an Int32 input.
     return v + 3;
   }
 }

@@ -19,7 +19,7 @@ const jsGlobalTypes = [
   'TypeError', 'URIError', 'WeakMap', 'WeakSet',
 
   'TypedArray',
-  'Float32Array', 'Float64Array',
+  'Float16Array', 'Float32Array', 'Float64Array',
   'Int8Array', 'Int16Array', 'Int32Array',
   'Uint8Array', 'Uint8ClampedArray', 'Uint16Array', 'Uint32Array',
 ];
@@ -75,8 +75,8 @@ const customTypesMap = {
 
   'cluster.Worker': 'cluster.html#class-worker',
 
-  'Cipher': 'crypto.html#class-cipher',
-  'Decipher': 'crypto.html#class-decipher',
+  'Cipheriv': 'crypto.html#class-cipheriv',
+  'Decipheriv': 'crypto.html#class-decipheriv',
   'DiffieHellman': 'crypto.html#class-diffiehellman',
   'DiffieHellmanGroup': 'crypto.html#class-diffiehellmangroup',
   'ECDH': 'crypto.html#class-ecdh',
@@ -87,23 +87,29 @@ const customTypesMap = {
   'Verify': 'crypto.html#class-verify',
   'crypto.constants': 'crypto.html#cryptoconstants',
 
+  'Algorithm': 'webcrypto.html#class-algorithm',
   'CryptoKey': 'webcrypto.html#class-cryptokey',
   'CryptoKeyPair': 'webcrypto.html#class-cryptokeypair',
   'Crypto': 'webcrypto.html#class-crypto',
   'SubtleCrypto': 'webcrypto.html#class-subtlecrypto',
   'RsaOaepParams': 'webcrypto.html#class-rsaoaepparams',
-  'AlgorithmIdentifier': 'webcrypto.html#class-algorithmidentifier',
   'AesCtrParams': 'webcrypto.html#class-aesctrparams',
   'AesCbcParams': 'webcrypto.html#class-aescbcparams',
   'AesDerivedKeyParams': 'webcrypto.html#class-aesderivedkeyparams',
   'AesGcmParams': 'webcrypto.html#class-aesgcmparams',
   'EcdhKeyDeriveParams': 'webcrypto.html#class-ecdhkeyderiveparams',
   'HkdfParams': 'webcrypto.html#class-hkdfparams',
+  'KeyAlgorithm': 'webcrypto.html#class-keyalgorithm',
   'Pbkdf2Params': 'webcrypto.html#class-pbkdf2params',
+  'HmacKeyAlgorithm': 'webcrypto.html#class-hmackeyalgorithm',
   'HmacKeyGenParams': 'webcrypto.html#class-hmackeygenparams',
+  'AesKeyAlgorithm': 'webcrypto.html#class-aeskeyalgorithm',
   'AesKeyGenParams': 'webcrypto.html#class-aeskeygenparams',
+  'RsaHashedKeyAlgorithm':
+    'webcrypto.html#class-rsahashedkeyalgorithm',
   'RsaHashedKeyGenParams':
     'webcrypto.html#class-rsahashedkeygenparams',
+  'EcKeyAlgorithm': 'webcrypto.html#class-eckeyalgorithm',
   'EcKeyGenParams': 'webcrypto.html#class-eckeygenparams',
   'RsaHashedImportParams':
     'webcrypto.html#class-rsahashedimportparams',

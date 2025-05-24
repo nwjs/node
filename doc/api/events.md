@@ -73,8 +73,8 @@ myEmitter.on('event', function(a, b) {
   //     _events: [Object: null prototype] { event: [Function (anonymous)] },
   //     _eventsCount: 1,
   //     _maxListeners: undefined,
-  //     [Symbol(shapeMode)]: false,
-  //     [Symbol(kCapture)]: false
+  //     Symbol(shapeMode): false,
+  //     Symbol(kCapture): false
   //   } true
 });
 myEmitter.emit('event', 'a', 'b');
@@ -91,8 +91,8 @@ myEmitter.on('event', function(a, b) {
   //     _events: [Object: null prototype] { event: [Function (anonymous)] },
   //     _eventsCount: 1,
   //     _maxListeners: undefined,
-  //     [Symbol(shapeMode)]: false,
-  //     [Symbol(kCapture)]: false
+  //     Symbol(shapeMode): false,
+  //     Symbol(kCapture): false
   //   } true
 });
 myEmitter.emit('event', 'a', 'b');
@@ -603,10 +603,10 @@ myEmitter.emit('event', 1, 2, 3, 4, 5);
 added: v6.0.0
 -->
 
-* Returns: {Array}
+* Returns: {string\[]|symbol\[]}
 
 Returns an array listing the events for which the emitter has registered
-listeners. The values in the array are strings or `Symbol`s.
+listeners.
 
 ```mjs
 import { EventEmitter } from 'node:events';
@@ -1834,9 +1834,11 @@ setMaxListeners(5, target, emitter);
 added:
  - v20.5.0
  - v18.18.0
+changes:
+ - version: v24.0.0
+   pr-url: https://github.com/nodejs/node/pull/57765
+   description: Change stability index for this feature from Experimental to Stable.
 -->
-
-> Stability: 1 - Experimental
 
 * `signal` {AbortSignal}
 * `listener` {Function|EventListener}

@@ -92,7 +92,7 @@ extern enum ArrayFromAsyncIterableResolveContextSlots extends intptr
 }
 
 extern macro AllocateRootFunctionWithContext(
-    constexpr intptr, FunctionContext): JSFunction;
+    constexpr intptr, FunctionContext, NativeContext): JSFunction;
 
 const kArrayFromAsyncIterableOnFulfilledSharedFun: constexpr intptr
     generates 'RootIndex::kArrayFromAsyncIterableOnFulfilledSharedFun';
@@ -139,13 +139,15 @@ macro CreateArrayFromAsyncIterableResolveContext(
       ArrayFromAsyncIterableResolveContextSlots::
           kArrayFromAsyncIterableResolveOnFulfilledFunctionSlot,
       AllocateRootFunctionWithContext(
-          kArrayFromAsyncIterableOnFulfilledSharedFun, resolveContext));
+          kArrayFromAsyncIterableOnFulfilledSharedFun, resolveContext,
+          nativeContext));
   InitContextSlot(
       resolveContext,
       ArrayFromAsyncIterableResolveContextSlots::
           kArrayFromAsyncIterableResolveOnRejectedFunctionSlot,
       AllocateRootFunctionWithContext(
-          kArrayFromAsyncIterableOnRejectedSharedFun, resolveContext));
+          kArrayFromAsyncIterableOnRejectedSharedFun, resolveContext,
+          nativeContext));
   InitContextSlot(
       resolveContext,
       ArrayFromAsyncIterableResolveContextSlots::
@@ -559,13 +561,15 @@ macro CreateArrayFromAsyncArrayLikeResolveContext(
       ArrayFromAsyncArrayLikeResolveContextSlots::
           kArrayFromAsyncArrayLikeResolveOnFulfilledFunctionSlot,
       AllocateRootFunctionWithContext(
-          kArrayFromAsyncArrayLikeOnFulfilledSharedFun, resolveContext));
+          kArrayFromAsyncArrayLikeOnFulfilledSharedFun, resolveContext,
+          nativeContext));
   InitContextSlot(
       resolveContext,
       ArrayFromAsyncArrayLikeResolveContextSlots::
           kArrayFromAsyncArrayLikeResolveOnRejectedFunctionSlot,
       AllocateRootFunctionWithContext(
-          kArrayFromAsyncArrayLikeOnRejectedSharedFun, resolveContext));
+          kArrayFromAsyncArrayLikeOnRejectedSharedFun, resolveContext,
+          nativeContext));
   InitContextSlot(
       resolveContext,
       ArrayFromAsyncArrayLikeResolveContextSlots::
@@ -800,6 +804,7 @@ extern macro ArrayFromAsyncArrayLikeOnRejectedSharedFunConstant():
 // Since we do not have support for `await` in torque, we handled
 // asynchronous execution flow manually in torque. More information
 // is available in go/array-from-async-implementation.
+@incrementUseCounter('v8::Isolate::kArrayFromAsync')
 transitioning javascript builtin ArrayFromAsync(
     js-implicit context: NativeContext, receiver: JSAny)(...arguments): JSAny {
   // 1. Let C be the this value.

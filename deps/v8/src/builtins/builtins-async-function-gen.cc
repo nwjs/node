@@ -13,6 +13,8 @@
 namespace v8 {
 namespace internal {
 
+#include "src/codegen/define-code-stub-assembler-macros.inc"
+
 class AsyncFunctionBuiltinsAssembler : public AsyncBuiltinsAssembler {
  public:
   explicit AsyncFunctionBuiltinsAssembler(compiler::CodeAssemblerState* state)
@@ -197,17 +199,14 @@ template <typename Descriptor>
 void AsyncFunctionBuiltinsAssembler::AsyncFunctionAwait() {
   auto async_function_object =
       Parameter<JSAsyncFunctionObject>(Descriptor::kAsyncFunctionObject);
-  auto value = Parameter<Object>(Descriptor::kValue);
+  auto value = Parameter<JSAny>(Descriptor::kValue);
   auto context = Parameter<Context>(Descriptor::kContext);
 
-  TNode<SharedFunctionInfo> on_resolve_sfi =
-      AsyncFunctionAwaitResolveSharedFunConstant();
-  TNode<SharedFunctionInfo> on_reject_sfi =
-      AsyncFunctionAwaitRejectSharedFunConstant();
   TNode<JSPromise> outer_promise = LoadObjectField<JSPromise>(
       async_function_object, JSAsyncFunctionObject::kPromiseOffset);
-  Await(context, async_function_object, value, outer_promise, on_resolve_sfi,
-        on_reject_sfi);
+  Await(context, async_function_object, value, outer_promise,
+        RootIndex::kAsyncFunctionAwaitResolveClosureSharedFun,
+        RootIndex::kAsyncFunctionAwaitRejectClosureSharedFun);
 
   // Return outer promise to avoid adding an load of the outer promise before
   // suspending in BytecodeGenerator.
@@ -218,6 +217,8 @@ void AsyncFunctionBuiltinsAssembler::AsyncFunctionAwait() {
 TF_BUILTIN(AsyncFunctionAwait, AsyncFunctionBuiltinsAssembler) {
   AsyncFunctionAwait<Descriptor>();
 }
+
+#include "src/codegen/undef-code-stub-assembler-macros.inc"
 
 }  // namespace internal
 }  // namespace v8

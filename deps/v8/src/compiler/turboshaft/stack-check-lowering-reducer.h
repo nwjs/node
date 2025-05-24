@@ -79,6 +79,13 @@ class StackCheckLoweringReducer : public Next {
       return V<None>::Invalid();
     }
 
+    if (kind == WasmStackCheckOp::Kind::kFunctionEntry &&
+        v8_flags.experimental_wasm_growable_stacks) {
+      // WasmStackCheck should be lowered by GrowableStacksReducer
+      // in a special way.
+      return Next::ReduceWasmStackCheck(kind);
+    }
+
     // Loads of the stack limit should not be load-eliminated as it can be
     // modified by another thread.
     V<WordPtr> limit = __ Load(
@@ -87,8 +94,6 @@ class StackCheckLoweringReducer : public Next {
 
     IF_NOT (LIKELY(__ StackPointerGreaterThan(limit, StackCheckKind::kWasm))) {
       // TODO(14108): Cache descriptor.
-      V<WordPtr> builtin =
-          __ RelocatableWasmBuiltinCallTarget(Builtin::kWasmStackGuard);
       const CallDescriptor* call_descriptor =
           compiler::Linkage::GetStubCallDescriptor(
               __ graph_zone(),                      // zone
@@ -100,6 +105,8 @@ class StackCheckLoweringReducer : public Next {
       const TSCallDescriptor* ts_call_descriptor =
           TSCallDescriptor::Create(call_descriptor, compiler::CanThrow::kNo,
                                    LazyDeoptOnThrow::kNo, __ graph_zone());
+      V<WordPtr> builtin =
+          __ RelocatableWasmBuiltinCallTarget(Builtin::kWasmStackGuard);
       // Pass custom effects to the `Call` node to mark it as non-writing.
       __ Call(
           builtin, {}, ts_call_descriptor,

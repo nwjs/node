@@ -69,7 +69,9 @@ const siblingModule = require('./sibling-module');
 ### `module.findPackageJSON(specifier[, base])`
 
 <!-- YAML
-added: v23.2.0
+added:
+  - v23.2.0
+  - v22.14.0
 -->
 
 > Stability: 1.1 - Active Development
@@ -177,7 +179,10 @@ added:
   - v20.6.0
   - v18.19.0
 changes:
-  - version: v23.6.1
+  - version:
+    - v23.6.1
+    - v22.13.1
+    - v20.18.2
     pr-url: https://github.com/nodejs-private/node-private/pull/629
     description: Using this feature with the permission model enabled requires
                  passing `--allow-worker`.
@@ -214,7 +219,9 @@ This feature requires `--allow-worker` if used with the [Permission Model][].
 ### `module.registerHooks(options)`
 
 <!-- YAML
-added: v23.5.0
+added:
+  - v23.5.0
+  - v22.15.0
 -->
 
 > Stability: 1.1 - Active development
@@ -229,10 +236,12 @@ See [Customization hooks][].
 ### `module.stripTypeScriptTypes(code[, options])`
 
 <!-- YAML
-added: v23.2.0
+added:
+  - v23.2.0
+  - v22.13.0
 -->
 
-> Stability: 1.1 - Active development
+> Stability: 1.2 - Release candidate
 
 * `code` {string} The code to strip type annotations from.
 * `options` {Object}
@@ -511,6 +520,7 @@ be inherited into the child workers. The directory can be obtained either from t
 <!-- YAML
 added:
  - v23.0.0
+ - v22.10.0
 -->
 
 > Stability: 1.1 - Active Development
@@ -539,7 +549,9 @@ added: v22.8.0
 <!-- YAML
 added: v8.8.0
 changes:
-  - version: v23.5.0
+  - version:
+    - v23.5.0
+    - v22.15.0
     pr-url: https://github.com/nodejs/node/pull/55698
     description: Add support for synchronous and in-thread hooks.
   - version:
@@ -872,7 +884,9 @@ child workers by default.
 #### Synchronous hooks accepted by `module.registerHooks()`
 
 <!-- YAML
-added: v23.5.0
+added:
+  - v23.5.0
+  - v22.15.0
 -->
 
 > Stability: 1.1 - Active development
@@ -1001,7 +1015,9 @@ register('./path-to-my-hooks.js', {
 
 <!-- YAML
 changes:
-  - version: v23.5.0
+  - version:
+    - v23.5.0
+    - v22.15.0
     pr-url: https://github.com/nodejs/node/pull/55698
     description: Add support for synchronous and in-thread hooks.
   - version:
@@ -1124,7 +1140,9 @@ function resolve(specifier, context, nextResolve) {
 
 <!-- YAML
 changes:
-  - version: v23.5.0
+  - version:
+    - v23.5.0
+    - v22.15.0
     pr-url: https://github.com/nodejs/node/pull/55698
     description: Add support for synchronous and in-thread version.
   - version: v20.6.0
@@ -1169,14 +1187,16 @@ validating the import attributes.
 
 The final value of `format` must be one of the following:
 
-| `format`     | Description                    | Acceptable types for `source` returned by `load`   |
-| ------------ | ------------------------------ | -------------------------------------------------- |
-| `'addon'`    | Load a Node.js addon           | {null}                                             |
-| `'builtin'`  | Load a Node.js builtin module  | {null}                                             |
-| `'commonjs'` | Load a Node.js CommonJS module | {string\|ArrayBuffer\|TypedArray\|null\|undefined} |
-| `'json'`     | Load a JSON file               | {string\|ArrayBuffer\|TypedArray}                  |
-| `'module'`   | Load an ES module              | {string\|ArrayBuffer\|TypedArray}                  |
-| `'wasm'`     | Load a WebAssembly module      | {ArrayBuffer\|TypedArray}                          |
+| `format`                | Description                                           | Acceptable types for `source` returned by `load`   |
+| ----------------------- | ----------------------------------------------------- | -------------------------------------------------- |
+| `'addon'`               | Load a Node.js addon                                  | {null}                                             |
+| `'builtin'`             | Load a Node.js builtin module                         | {null}                                             |
+| `'commonjs-typescript'` | Load a Node.js CommonJS module with TypeScript syntax | {string\|ArrayBuffer\|TypedArray\|null\|undefined} |
+| `'commonjs'`            | Load a Node.js CommonJS module                        | {string\|ArrayBuffer\|TypedArray\|null\|undefined} |
+| `'json'`                | Load a JSON file                                      | {string\|ArrayBuffer\|TypedArray}                  |
+| `'module-typescript'`   | Load an ES module with TypeScript syntax              | {string\|ArrayBuffer\|TypedArray}                  |
+| `'module'`              | Load an ES module                                     | {string\|ArrayBuffer\|TypedArray}                  |
+| `'wasm'`                | Load a WebAssembly module                             | {ArrayBuffer\|TypedArray}                          |
 
 The value of `source` is ignored for type `'builtin'` because currently it is
 not possible to replace the value of a Node.js builtin (core) module.
@@ -1581,7 +1601,9 @@ const { findSourceMap, SourceMap } = require('node:module');
 ### `module.getSourceMapsSupport()`
 
 <!-- YAML
-added: v23.7.0
+added:
+  - v23.7.0
+  - v22.14.0
 -->
 
 * Returns: {Object}
@@ -1614,7 +1636,9 @@ should be fetched.
 ### `module.setSourceMapsSupport(enabled[, options])`
 
 <!-- YAML
-added: v23.7.0
+added:
+  - v23.7.0
+  - v22.14.0
 -->
 
 * `enabled` {boolean} Enable the source map support.

@@ -5,9 +5,11 @@
 #ifndef V8_COMMON_SEGMENTED_TABLE_INL_H_
 #define V8_COMMON_SEGMENTED_TABLE_INL_H_
 
+#include "src/common/segmented-table.h"
+// Include the non-inl header before the rest of the headers.
+
 #include "src/base/emulated-virtual-address-subspace.h"
 #include "src/common/assert-scope.h"
-#include "src/common/segmented-table.h"
 #include "src/utils/allocation.h"
 
 namespace v8 {
@@ -47,7 +49,7 @@ SegmentedTable<Entry, size>::iter_at(uint32_t index) {
 template <typename Entry, size_t size>
 bool SegmentedTable<Entry, size>::is_initialized() const {
   DCHECK(!base_ || reinterpret_cast<Address>(base_) == vas_->base());
-  return base_ != nullptr;
+  return vas_ != nullptr;
 }
 
 template <typename Entry, size_t size>
@@ -62,6 +64,9 @@ void SegmentedTable<Entry, size>::Initialize() {
   DCHECK_EQ(vas_, nullptr);
 
   VirtualAddressSpace* root_space = GetPlatformVirtualAddressSpace();
+
+#ifdef V8_TARGET_ARCH_64_BIT
+  static_assert(kUseContiguousMemory);
   DCHECK(IsAligned(kReservationSize, root_space->allocation_granularity()));
 
   if (root_space->CanAllocateSubspaces()) {
@@ -85,9 +90,14 @@ void SegmentedTable<Entry, size>::Initialize() {
     V8::FatalProcessOutOfMemory(
         nullptr, "SegmentedTable::InitializeTable (subspace allocation)");
   }
+#else  // V8_TARGET_ARCH_64_BIT
+  static_assert(!kUseContiguousMemory);
+  vas_ = root_space;
+#endif
+
   base_ = reinterpret_cast<Entry*>(vas_->base());
 
-  if constexpr (kIsWriteProtected) {
+  if constexpr (kUseContiguousMemory && kIsWriteProtected) {
     CHECK(ThreadIsolation::WriteProtectMemory(
         base(), size, PageAllocator::Permission::kNoAccess));
   }
@@ -98,7 +108,9 @@ void SegmentedTable<Entry, size>::TearDown() {
   DCHECK(is_initialized());
 
   base_ = nullptr;
+#ifdef V8_TARGET_ARCH_64_BIT
   delete vas_;
+#endif
   vas_ = nullptr;
 }
 
@@ -127,18 +139,29 @@ template <typename Entry, size_t size>
 std::pair<typename SegmentedTable<Entry, size>::Segment,
           typename SegmentedTable<Entry, size>::FreelistHead>
 SegmentedTable<Entry, size>::AllocateAndInitializeSegment() {
+  if (auto res = TryAllocateAndInitializeSegment()) {
+    return *res;
+  }
+  V8::FatalProcessOutOfMemory(nullptr,
+                              "SegmentedTable::AllocateAndInitializeSegment");
+}
+
+template <typename Entry, size_t size>
+std::optional<std::pair<typename SegmentedTable<Entry, size>::Segment,
+                        typename SegmentedTable<Entry, size>::FreelistHead>>
+SegmentedTable<Entry, size>::TryAllocateAndInitializeSegment() {
   Address start =
       vas_->AllocatePages(VirtualAddressSpace::kNoHint, kSegmentSize,
                           kSegmentSize, PagePermissions::kReadWrite);
   if (!start) {
-    V8::FatalProcessOutOfMemory(nullptr, "SegmentedTable::AllocateSegment");
+    return {};
   }
   uint32_t offset = static_cast<uint32_t>((start - vas_->base()));
   Segment segment = Segment::At(offset);
 
   FreelistHead freelist = InitializeFreeList(segment);
 
-  return {segment, freelist};
+  return {{segment, freelist}};
 }
 
 template <typename Entry, size_t size>

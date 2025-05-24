@@ -55,7 +55,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.14',
+    'v8_embedder_string': '-node.16',
 
     ##### V8 defaults for Node.js #####
 
@@ -153,7 +153,7 @@
         #'v8_base': '<(PRODUCT_DIR)/libv8_snapshot.a',
       }],
       # V8 pointer compression only supports 64bit architectures.
-      ['target_arch in "arm ia32 mips mipsel ppc"', {
+      ['target_arch in "arm ia32 mips mipsel"', {
         'v8_enable_pointer_compression': 0,
         'v8_enable_31bit_smis_on_64bit_arch': 0,
         'v8_enable_sandbox': 0
@@ -452,6 +452,9 @@
     'defines': [
       'V8_REVERSE_JSARGS',
       '_GLIBCXX_USE_CXX11_ABI=1',
+      # This help forks when building Node.js on a 32-bit arch as
+      # libuv is always compiled with _FILE_OFFSET_BITS=64
+      '_FILE_OFFSET_BITS=64',
       '_LIBCPP_HAS_NO_VENDOR_AVAILABILITY_ANNOTATIONS',
       '_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_NONE',
     ],
@@ -725,10 +728,6 @@
                 'cflags': [ '-m64' ],
                 'ldflags': [ '-m64' ],
               }],
-              [ 'host_arch=="ppc" and OS not in "aix os400"', {
-                'cflags': [ '-m32' ],
-                'ldflags': [ '-m32' ],
-              }],
               [ 'host_arch=="ppc64" and OS not in "aix os400"', {
                 'cflags': [ '-m64', '-mminimal-toc' ],
                 'ldflags': [ '-m64' ],
@@ -761,10 +760,6 @@
                 'cflags': [ '-m64' ],
                 'ldflags': [ '-m64' ],
               }],
-              [ 'target_arch=="ppc" and OS not in "aix os400"', {
-                'cflags': [ '-m32' ],
-                'ldflags': [ '-m32' ],
-              }],
               [ 'target_arch=="ppc64" and OS not in "aix os400"', {
                 'cflags': [ '-m64', '-mminimal-toc' ],
                 'ldflags': [ '-m64' ],
@@ -789,6 +784,7 @@
           }],
           [ 'node_shared=="true"', {
             'cflags': [ '-fPIC' ],
+            'ldflags': [ '-fPIC' ],
           }],
         ],
       }],
@@ -852,7 +848,7 @@
           'GCC_ENABLE_PASCAL_STRINGS': 'NO',        # No -mpascal-strings
           'GCC_STRICT_ALIASING': 'NO',              # -fno-strict-aliasing
           'PREBINDING': 'NO',                       # No -Wl,-prebind
-          'MACOSX_DEPLOYMENT_TARGET': '11.0',       # -mmacosx-version-min=11.0
+          'MACOSX_DEPLOYMENT_TARGET': '13.5',       # -mmacosx-version-min=13.5
           'USE_HEADERMAP': 'NO',
           'WARNING_CFLAGS': [
             '-Wall',

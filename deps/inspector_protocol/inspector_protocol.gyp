@@ -38,6 +38,15 @@
       'sources': [
         '<@(crdtp_sources)',
       ],
+      'conditions': [
+        [ 'OS=="win" or OS=="linux"', {
+          'include_dirs': [
+            '<(PRODUCT_DIR)/../../third_party/libc++/src/include',
+            '<(PRODUCT_DIR)/../../third_party/libc++',
+            '<(PRODUCT_DIR)/../../buildtools/third_party/libc++',
+          ],
+        }],
+      ],
     },
   ]
 }

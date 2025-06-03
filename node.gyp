@@ -20,7 +20,7 @@
     'ossfuzz' : 'false',
     'node_use_bundled_v8': 'false',
     'node_shared': 'true',
-    'v8_enable_inspector': 0,
+    'v8_enable_inspector': 1,
     'debug_http2': 0,
     'debug_nghttp2': 0,
     'node_enable_d8': 'false',
@@ -1173,6 +1173,7 @@
         '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
         '../../v8', # include/v8_platform.h
         '../../v8/include',
+        '<(PRODUCT_DIR)/../nw/gen/v8/include/', # for inspector
         '../abseil-cpp',
         '../simdutf',
       ],

@@ -2001,11 +2001,19 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
   v8::Context::Scope context_scope(context);
 
   argv = uv_setup_args(argc, argv);
+  std::vector<std::string> arguments(argv, argv + argc);
+  auto it = std::find(arguments.begin(), arguments.end(), "--nw-node-inspector");
+  uint64_t env_flags = node::EnvironmentFlags::kDefaultFlags;
+  if (it != arguments.end()) {
+    arguments.erase(it);
+  } else {
+    env_flags |= node::EnvironmentFlags::kNoCreateInspector;
+  }
   if (!node_init_called) {
     std::shared_ptr<node::InitializationResultImpl> result =
       node::InitializeOncePerProcessInternal(
-					   std::vector<std::string>(argv, argv + argc),
-					   node::ProcessInitializationFlags::kNWJS);
+          arguments,
+          node::ProcessInitializationFlags::kNWJS);
     args = result->args();
     exec_args = result->exec_args();
     node_init_called = true;
@@ -2029,7 +2037,9 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
   platform->RegisterIsolate(isolate, uv_default_loop());
   node::IsolateData* isolate_data = node::CreateIsolateData(isolate, uv_default_loop(), platform);
   node::NewContext(isolate, v8::Local<v8::ObjectTemplate>(), false);
-  tls_ctx->env = node::CreateEnvironment(isolate_data, context, args, exec_args);
+  tls_ctx->env = node::CreateEnvironment(
+      isolate_data, context, args, exec_args,
+      static_cast<node::EnvironmentFlags::Flags>(env_flags));
   isolate->SetFatalErrorHandler(node::OnFatalError);
   isolate->AddMessageListener(node::errors::PerIsolateMessageListener);
   //isolate->SetAutorunMicrotasks(false);
@@ -2045,6 +2055,8 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
           node::InternalCallbackScope::kSkipAsyncHooks);
     node::LoadEnvironment(tls_ctx->env, node::StartExecutionCallback{});
   }
+  node::per_process::Debug(node::DebugCategory::INSPECTOR_SERVER,
+                     "Node start\n");
 }
 
 NODE_EXTERN void g_set_nw_tick_callback(NWTickCallback tick_callback) {

@@ -2103,6 +2103,7 @@ NODE_EXTERN void g_host_import_module(
     v8::Local<v8::Data> v8_host_defined_options,
     v8::Local<v8::Value> v8_referrer_resource_url,
     v8::Local<v8::String> v8_specifier,
+    v8::ModuleImportPhase import_phase,
     v8::Local<v8::FixedArray> v8_import_attributes,
     v8::MaybeLocal<v8::Promise>* retval) {
   node::thread_ctx_st* tls_ctx = nullptr;
@@ -2114,7 +2115,11 @@ NODE_EXTERN void g_host_import_module(
   }
   if (!tls_ctx || !tls_ctx->env)
     return;
-  v8::MaybeLocal<v8::Promise> ret = node::loader::ImportModuleDynamically(tls_ctx->env->context(), v8_host_defined_options, v8_referrer_resource_url, v8_specifier, v8_import_attributes);
+  v8::MaybeLocal<v8::Promise> ret =
+      node::loader::ImportModuleDynamicallyWithPhase(
+          tls_ctx->env->context(), v8_host_defined_options,
+          v8_referrer_resource_url, v8_specifier, import_phase,
+          v8_import_attributes);
   if (retval)
     *retval = ret;
   if (tls_ctx && tls_ctx->env) {

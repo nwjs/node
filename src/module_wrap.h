@@ -154,12 +154,13 @@ class ModuleWrap : public BaseObject {
   int module_hash_;
 };
 
-v8::MaybeLocal<v8::Promise> ImportModuleDynamically(
-						    v8::Local<v8::Context> context,
-						    v8::Local<v8::Data> host_defined_options,
-						    v8::Local<v8::Value> resource_name,
-						    v8::Local<v8::String> specifier,
-						    v8::Local<v8::FixedArray> import_attributes);
+v8::MaybeLocal<v8::Promise> ImportModuleDynamicallyWithPhase(
+    v8::Local<v8::Context> context,
+    v8::Local<v8::Data> host_defined_options,
+    v8::Local<v8::Value> resource_name,
+    v8::Local<v8::String> specifier,
+    v8::ModuleImportPhase phase,
+    v8::Local<v8::FixedArray> import_attributes);
 
 }  // namespace loader
 }  // namespace node

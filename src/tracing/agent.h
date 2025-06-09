@@ -35,10 +35,11 @@ class AsyncTraceWriter {
 class TracingController : public v8::platform::tracing::TracingController {
  public:
   TracingController() : v8::platform::tracing::TracingController() {}
-
+#if !defined(V8_USE_PERFETTO)
   int64_t CurrentTimestampMicroseconds() override {
     return uv_hrtime() / 1000;
   }
+#endif
   void AddMetadataEvent(
       const unsigned char* category_group_enabled,
       const char* name,

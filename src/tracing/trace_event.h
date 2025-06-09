@@ -322,6 +322,7 @@ class TraceEventHelper {
   static Agent* GetAgent();
   static void SetAgent(Agent* agent);
 
+#if !defined(V8_USE_PERFETTO)
   static inline const uint8_t* GetCategoryGroupEnabled(const char* group) {
     v8::TracingController* controller = GetTracingController();
     static const uint8_t disabled = 0;
@@ -330,6 +331,7 @@ class TraceEventHelper {
     }
     return controller->GetCategoryGroupEnabled(group);
   }
+#endif
 };
 
 // TraceID encapsulates an ID that can either be an integer or pointer. Pointers

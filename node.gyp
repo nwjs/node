@@ -39,6 +39,7 @@
     'node_shared_nghttp2%': 'false',
     'node_use_openssl': 'true',
     'node_use_sqlite': 'true',
+    'nw_browser_tests%': 0,
     'node_shared_openssl': 'false',
     'openssl_fips': '',
     'openssl_is_fips': 'false',

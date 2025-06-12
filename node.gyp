@@ -69,6 +69,7 @@
     'LIBCXXABI%': '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++abi/libc++abi.a',
     'LIBABSL%': '<(PRODUCT_DIR)/../nw/obj/third_party/abseil-cpp/libabsl.a',
     'LIBSIMDUTF%': '<(PRODUCT_DIR)/../nw/obj/third_party/simdutf/libsimdutf.a',
+    'LIBPERFETTO%': '<(PRODUCT_DIR)/../nw/obj/third_party/perfetto/libperfetto.a',
     'library_files': [
     '<@(linked_module_files)',
 'lib/constants.js',

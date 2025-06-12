@@ -370,6 +370,7 @@
                   '-Wl,-force_load <(LIBABSL)',
                   '-Wl,-force_load <(LIBCXXABI)',
                   '-Wl,-force_load <(V8_PLTFRM)',
+                  '-Wl,-force_load <(LIBPERFETTO)',
         ],
       },
       'postbuilds': [
@@ -403,6 +404,7 @@
                  '-Wl,-force_load <(LIBABSL)',
                  '-Wl,-force_load <(LIBCXX)',
                  '-Wl,-force_load <(V8_PLTFRM)',
+                 '-Wl,-force_load <(LIBPERFETTO)',
        ],
      },
     }],

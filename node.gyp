@@ -69,7 +69,7 @@
     'LIBCXXABI%': '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++abi/libc++abi.a',
     'LIBABSL%': '<(PRODUCT_DIR)/../nw/obj/third_party/abseil-cpp/libabsl.a',
     'LIBSIMDUTF%': '<(PRODUCT_DIR)/../nw/obj/third_party/simdutf/libsimdutf.a',
-    'LIBPERFETTO%': '<(PRODUCT_DIR)/../nw/obj/third_party/perfetto/libperfetto.a',
+    'LIBPERFETTO%': '<(PRODUCT_DIR)/../nw/obj/third_party/perfetto/libperfettonode.a',
     'library_files': [
     '<@(linked_module_files)',
 'lib/constants.js',
@@ -1303,9 +1303,9 @@
               ],
             }],
             [ 'component == "shared_library"', {
-              'libraries': [ 'Winmm', 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/third_party/perfetto/libperfetto.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/libc++.dll.lib'],
+              'libraries': [ 'Winmm', 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/third_party/perfetto/libperfettonode.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/libc++.dll.lib'],
             }, {
-              'libraries': [ 'Winmm', 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/third_party/perfetto/libperfetto.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libcpp.lib'],
+              'libraries': [ 'Winmm', 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/third_party/perfetto/libperfettonode.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libcpp.lib'],
             }],
             [ 'nw_browser_tests == 1', {
               'libraries': [ '<(PRODUCT_DIR)/../nw/browser_tests.lib'],

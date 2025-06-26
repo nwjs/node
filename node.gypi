@@ -333,6 +333,14 @@
         'NODE_PLATFORM="sunos"',
       ],
     }],
+    [ '(OS=="freebsd" or OS=="linux" or OS=="openharmony") and node_shared=="false"'
+        ' and force_load=="true"', {
+      'ldflags': [
+        '-Wl,-z,noexecstack',
+        '-Wl,--whole-archive <(v8_base)',
+        '-Wl,--no-whole-archive',
+      ]
+    }],
     [ 'OS=="linux"', {
       'cflags': [ "-Wno-unused-result" ],
     }],
@@ -408,7 +416,7 @@
        ],
      },
     }],
-    [ 'coverage=="true" and node_shared=="false" and OS in "mac freebsd linux"', {
+    [ 'coverage=="true" and node_shared=="false" and OS in "mac freebsd linux openharmony"', {
       'cflags!': [ '-O3' ],
       'ldflags': [ '--coverage',
                    '-g',
@@ -440,12 +448,12 @@
     [ 'OS=="sunos"', {
       'ldflags': [ '-Wl,-M,/usr/lib/ld/map.noexstk' ],
     }],
-    [ 'OS=="linux"', {
+    [ 'OS=="linux" or OS=="openharmony"', {
       'libraries!': [
         '-lrt'
       ],
     }],
-    [ 'OS in "freebsd linux"', {
+    [ 'OS in "freebsd linux openharmony"', {
       'ldflags': [ '-Wl,-z,relro',
                    '-Wl,-z,now',
                    '-Wl,--gc-sections' ]
@@ -478,7 +486,7 @@
                 },
               },
               'conditions': [
-                ['OS in "linux freebsd" and node_shared=="false"', {
+                ['OS in "linux freebsd openharmony" and node_shared=="false"', {
                   'ldflags': [
                     #'-Wl,--whole-archive,'
                     #  '<(obj_dir)/deps/openssl/<(openssl_product)',

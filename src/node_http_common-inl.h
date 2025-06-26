@@ -1,6 +1,9 @@
 #ifndef SRC_NODE_HTTP_COMMON_INL_H_
 #define SRC_NODE_HTTP_COMMON_INL_H_
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
 #include "node_http_common.h"
 #include "node.h"
 #include "node_mem-inl.h"
@@ -194,5 +197,7 @@ uint8_t NgHeader<T>::flags() const {
 }
 
 }  // namespace node
+
+#pragma clang diagnostic pop
 
 #endif  // SRC_NODE_HTTP_COMMON_INL_H_

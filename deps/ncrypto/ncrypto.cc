@@ -1,3 +1,6 @@
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
 #include "ncrypto.h"
 #include <openssl/asn1.h>
 #include <openssl/bn.h>
@@ -4298,3 +4301,5 @@ const Digest Digest::FromName(const char* name) {
 }
 
 }  // namespace ncrypto
+
+#pragma clang diagnostic pop

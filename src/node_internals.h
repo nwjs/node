@@ -308,7 +308,7 @@ class ThreadPoolWork {
  private:
   Environment* env_;
   uv_work_t work_req_;
-  const char* type_;
+  [[maybe_unused]] const char* type_;
 };
 
 #define TRACING_CATEGORY_NODE "node"

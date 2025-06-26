@@ -1,5 +1,8 @@
 #pragma once
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
 #include <openssl/bio.h>
 #include <openssl/bn.h>
 #include <openssl/dh.h>
@@ -1545,3 +1548,5 @@ enum {
 };
 
 }  // namespace ncrypto
+
+#pragma clang diagnostic pop

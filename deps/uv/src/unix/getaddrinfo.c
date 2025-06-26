@@ -87,7 +87,7 @@ int uv__getaddrinfo_translate_error(int sys_err) {
   case EAI_SYSTEM: return UV__ERR(errno);
 #endif
   }
-  assert(!(int)("unknown EAI_* error code"));
+  assert(!"unknown EAI_* error code");
   abort();
 #ifndef __SUNPRO_C
   return 0;  /* Pacify compiler. */

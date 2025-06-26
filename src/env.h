@@ -692,6 +692,7 @@ class Environment final : public MemoryRetainer {
   void StartProfilerIdleNotifier();
 
   inline v8::Isolate* isolate() const;
+  inline cppgc::AllocationHandle& cppgc_allocation_handle() const;
   inline v8::ExternalMemoryAccounter* external_memory_accounter() const;
   inline uv_loop_t* event_loop() const;
   void TryLoadAddon(const char* filename,
@@ -830,6 +831,9 @@ class Environment final : public MemoryRetainer {
   inline void ThrowError(const char* errmsg);
   inline void ThrowTypeError(const char* errmsg);
   inline void ThrowRangeError(const char* errmsg);
+  inline void ThrowStdErrException(std::error_code error_code,
+                                   const char* syscall,
+                                   const char* path = nullptr);
   inline void ThrowErrnoException(int errorno,
                                   const char* syscall = nullptr,
                                   const char* message = nullptr,

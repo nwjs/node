@@ -170,7 +170,7 @@
         ],
         'include_dirs': [ 'include' ],
         'conditions': [
-          ['OS == "linux"', {
+          ['OS == "linux" or OS=="openharmony"', {
             'defines': [ '_POSIX_C_SOURCE=200112' ],
           }],
         ],
@@ -187,7 +187,7 @@
           '-Wno-unused-parameter',
           '-Wstrict-prototypes', '-Wno-error=gnu-folding-constant', '-Wno-varargs'
         ],
-        'OTHER_CFLAGS': [ '-g', '--std=gnu89' ],
+        'OTHER_CFLAGS': [ '-g', '--std=gnu11' ],
       },
       'msvs_disabled_warnings': [4267, 4477],
       'conditions': [
@@ -253,14 +253,14 @@
             }],
           ],
         }],
-        [ 'OS in "linux mac ios android zos"', {
+        [ 'OS in "linux mac ios android zos openharmony"', {
           'sources': [ 'src/unix/proctitle.c' ],
         }],
         [ 'OS != "zos"', {
           'cflags': [
             '-fvisibility=hidden',
             '-g',
-            '--std=gnu89',
+            '--std=gnu11',
             '-Wall',
             '-Wextra',
             '-Wno-unused-parameter',

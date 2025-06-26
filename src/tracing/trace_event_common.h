@@ -209,8 +209,8 @@
 // enabled, then this does nothing.
 // - category and name strings must have application lifetime (statics or
 //   literals). They may not include " chars.
-#define TRACE_EVENT0(category_group, name)    \
-  INTERNAL_TRACE_EVENT_ADD_SCOPED(category_group, name)
+#define TRACE_EVENT0(category_group, name)
+  //INTERNAL_TRACE_EVENT_ADD_SCOPED(category_group, name)
 #define TRACE_EVENT_WITH_FLOW0(category_group, name, bind_id, flow_flags)  \
   INTERNAL_TRACE_EVENT_ADD_SCOPED_WITH_FLOW(category_group, name, bind_id, \
                                             flow_flags)

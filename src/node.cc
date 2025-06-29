@@ -165,6 +165,7 @@ static UVRunFn g_nw_uv_run = nullptr;
 static NWTickCallback g_nw_tick_callback = nullptr;
 static const char* g_native_blob_path = nullptr;
 bool node_is_nwjs = false;
+bool g_nw_stdin = false;
 
 NODE_EXTERN void OnMessage(v8::Local<v8::Message> message, v8::Local<v8::Value> error);
 
@@ -414,7 +415,7 @@ MaybeLocal<Value> StartExecution(Environment* env, StartExecutionCallback cb) {
     return StartExecution(env, "internal/main/watch_mode");
   }
 
-  if ((!first_argv.empty() && first_argv != "-") || node_is_nwjs) {
+  if ((!first_argv.empty() && first_argv != "-") || (node_is_nwjs && !g_nw_stdin)) {
     return StartExecution(env, "internal/main/run_main_module");
   }
 
@@ -2017,6 +2018,11 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
     arguments.erase(it);
   } else {
     env_flags |= node::EnvironmentFlags::kNoCreateInspector;
+  }
+  it = std::find(arguments.begin(), arguments.end(), "--nw-stdin");
+  if (it != arguments.end()) {
+    arguments.erase(it);
+    node::g_nw_stdin = true;
   }
   if (!node_init_called) {
     std::shared_ptr<node::InitializationResultImpl> result =

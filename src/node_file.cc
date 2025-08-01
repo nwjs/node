@@ -1040,6 +1040,7 @@ static void ExistsSync(const FunctionCallbackInfo<Value>& args) {
   // will **not** return an error and is therefore not enough.
   // Double check with `uv_fs_stat()`.
   if (err == 0) {
+    uv_fs_req_cleanup(&req);
     FS_SYNC_TRACE_BEGIN(stat);
     err = uv_fs_stat(nullptr, &req, path.out(), nullptr);
     FS_SYNC_TRACE_END(stat);
@@ -2478,8 +2479,6 @@ static void WriteString(const FunctionCallbackInfo<Value>& args) {
       uv_req->path = nullptr;
       AfterInteger(uv_req);  // after may delete req_wrap_async if there is
                              // an error
-    } else {
-      req_wrap_async->SetReturnValue(args);
     }
   } else {  // write(fd, string, pos, enc, undefined, ctx)
     CHECK_EQ(argc, 6);
@@ -2859,10 +2858,10 @@ static void Chown(const FunctionCallbackInfo<Value>& args) {
   ToNamespacedPath(env, &path);
 
   CHECK(IsSafeJsInt(args[1]));
-  const uv_uid_t uid = FromV8Value<uv_uid_t>(args[1]);
+  const auto uid = FromV8Value<uv_uid_t, true>(args[1]);
 
   CHECK(IsSafeJsInt(args[2]));
-  const uv_gid_t gid = FromV8Value<uv_gid_t>(args[2]);
+  const auto gid = FromV8Value<uv_gid_t, true>(args[2]);
 
   if (argc > 3) {  // chown(path, uid, gid, req)
     FSReqBase* req_wrap_async = GetReqWrap(args, 3);
@@ -2904,10 +2903,10 @@ static void FChown(const FunctionCallbackInfo<Value>& args) {
   }
 
   CHECK(IsSafeJsInt(args[1]));
-  const uv_uid_t uid = static_cast<uv_uid_t>(args[1].As<Integer>()->Value());
+  const auto uid = FromV8Value<uv_uid_t, true>(args[1]);
 
   CHECK(IsSafeJsInt(args[2]));
-  const uv_gid_t gid = static_cast<uv_gid_t>(args[2].As<Integer>()->Value());
+  const auto gid = FromV8Value<uv_gid_t, true>(args[2]);
 
   if (argc > 3) {  // fchown(fd, uid, gid, req)
     FSReqBase* req_wrap_async = GetReqWrap(args, 3);
@@ -2934,10 +2933,10 @@ static void LChown(const FunctionCallbackInfo<Value>& args) {
   ToNamespacedPath(env, &path);
 
   CHECK(IsSafeJsInt(args[1]));
-  const uv_uid_t uid = FromV8Value<uv_uid_t>(args[1]);
+  const auto uid = FromV8Value<uv_uid_t, true>(args[1]);
 
   CHECK(IsSafeJsInt(args[2]));
-  const uv_gid_t gid = FromV8Value<uv_gid_t>(args[2]);
+  const auto gid = FromV8Value<uv_gid_t, true>(args[2]);
 
   if (argc > 3) {  // lchown(path, uid, gid, req)
     FSReqBase* req_wrap_async = GetReqWrap(args, 3);

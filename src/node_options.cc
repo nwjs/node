@@ -536,10 +536,7 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             kAllowedInEnvvar);
   AddAlias("--loader", "--experimental-loader");
   AddOption("--experimental-modules", "", NoOp{}, kAllowedInEnvvar);
-  AddOption("--experimental-wasm-modules",
-            "experimental ES Module support for webassembly modules",
-            &EnvironmentOptions::experimental_wasm_modules,
-            kAllowedInEnvvar);
+  AddOption("--experimental-wasm-modules", "", NoOp{}, kAllowedInEnvvar);
   AddOption("--experimental-import-meta-resolve",
             "experimental ES Module import.meta.resolve() parentURL support",
             &EnvironmentOptions::experimental_import_meta_resolve,
@@ -663,6 +660,12 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             "emit pending deprecation warnings",
             &EnvironmentOptions::pending_deprecation,
             kAllowedInEnvvar);
+  AddOption("--use-env-proxy",
+            "parse proxy settings from HTTP_PROXY/HTTPS_PROXY/NO_PROXY"
+            "environment variables and apply the setting in global HTTP/HTTPS "
+            "clients",
+            &EnvironmentOptions::use_env_proxy,
+            kAllowedInEnvvar);
   AddOption("--preserve-symlinks",
             "preserve symbolic links when resolving",
             &EnvironmentOptions::preserve_symlinks,
@@ -707,6 +710,9 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
   AddOption("--experimental-worker-inspection",
             "experimental worker inspection support",
             &EnvironmentOptions::experimental_worker_inspection);
+  AddOption("--experimental-inspector-network-resource",
+            "experimental load network resources via the inspector",
+            &EnvironmentOptions::experimental_inspector_network_resource);
   AddOption(
       "--heap-prof",
       "Start the V8 heap profiler on start up, and write the heap profile "
@@ -952,6 +958,11 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
   AddOption("--watch-path",
             "path to watch",
             &EnvironmentOptions::watch_mode_paths,
+            kAllowedInEnvvar);
+  AddOption("--watch-kill-signal",
+            "kill signal to send to the process on watch mode restarts"
+            "(default: SIGTERM)",
+            &EnvironmentOptions::watch_mode_kill_signal,
             kAllowedInEnvvar);
   AddOption("--watch-preserve-output",
             "preserve outputs on watch mode restart",
@@ -1871,6 +1882,8 @@ void HandleEnvOptions(std::shared_ptr<EnvironmentOptions> env_options,
 
   env_options->preserve_symlinks_main =
       opt_getter("NODE_PRESERVE_SYMLINKS_MAIN") == "1";
+
+  env_options->use_env_proxy = opt_getter("NODE_USE_ENV_PROXY") == "1";
 
   if (env_options->redirect_warnings.empty())
     env_options->redirect_warnings = opt_getter("NODE_REDIRECT_WARNINGS");

@@ -452,6 +452,7 @@
       'src/node_http_parser.cc',
       'src/node_http2.cc',
       'src/node_i18n.cc',
+      'src/node_locks.cc',
       'src/node_main_instance.cc',
       'src/node_messaging.cc',
       'src/node_metadata.cc',
@@ -495,6 +496,7 @@
       'src/permission/permission.cc',
       'src/permission/wasi_permission.cc',
       'src/permission/worker_permission.cc',
+      'src/permission/addon_permission.cc',
       'src/pipe_wrap.cc',
       'src/process_wrap.cc',
       'src/signal_wrap.cc',
@@ -581,6 +583,7 @@
       'src/node_http2_state.h',
       'src/node_i18n.h',
       'src/node_internals.h',
+      'src/node_locks.h',
       'src/node_main_instance.h',
       'src/node_mem.h',
       'src/node_mem-inl.h',
@@ -624,6 +627,7 @@
       'src/permission/permission.h',
       'src/permission/wasi_permission.h',
       'src/permission/worker_permission.h',
+      'src/permission/addon_permission.h',
       'src/pipe_wrap.h',
       'src/req_wrap.h',
       'src/req_wrap-inl.h',
@@ -1711,6 +1715,13 @@
         }],
       ]
     }, # overlapped-checker
+    {
+      'target_name': 'nop',
+      'type': 'executable',
+      'sources': [
+        'test/nop/nop.c',
+      ]
+    }, # nop
     {
       'target_name': 'node_js2c',
       'type': 'executable',

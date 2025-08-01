@@ -1044,7 +1044,7 @@ property is set only when `tlsSocket.authorized === false`.
 added: v0.11.4
 -->
 
-* {boolean}
+* Type: {boolean}
 
 This property is `true` if the peer certificate was signed by one of the CAs
 specified when creating the `tls.TLSSocket` instance, otherwise `false`.
@@ -1395,7 +1395,7 @@ See the OpenSSL [`SSL_get_version`][] documentation for more information.
 added: v0.11.4
 -->
 
-* {Buffer}
+* Type: {Buffer}
 
 Returns the TLS session data or `undefined` if no session was
 negotiated. On the client, the data can be provided to the `session` option of
@@ -1426,7 +1426,7 @@ for more information.
 added: v0.11.4
 -->
 
-* {Buffer}
+* Type: {Buffer}
 
 For a client, returns the TLS session ticket if one is available, or
 `undefined`. For a server, always returns `undefined`.
@@ -1464,7 +1464,7 @@ See [Session Resumption][] for more information.
 added: v0.11.4
 -->
 
-* {string}
+* Type: {string}
 
 Returns the string representation of the local IP address.
 
@@ -1474,7 +1474,7 @@ Returns the string representation of the local IP address.
 added: v0.11.4
 -->
 
-* {integer}
+* Type: {integer}
 
 Returns the numeric representation of the local port.
 
@@ -1484,7 +1484,7 @@ Returns the numeric representation of the local port.
 added: v0.11.4
 -->
 
-* {string}
+* Type: {string}
 
 Returns the string representation of the remote IP address. For example,
 `'74.125.127.100'` or `'2001:4860:a005::68'`.
@@ -1495,7 +1495,7 @@ Returns the string representation of the remote IP address. For example,
 added: v0.11.4
 -->
 
-* {string}
+* Type: {string}
 
 Returns the string representation of the remote IP family. `'IPv4'` or `'IPv6'`.
 
@@ -1505,7 +1505,7 @@ Returns the string representation of the remote IP family. `'IPv4'` or `'IPv6'`.
 added: v0.11.4
 -->
 
-* {integer}
+* Type: {integer}
 
 Returns the numeric representation of the remote port. For example, `443`.
 
@@ -2260,6 +2260,54 @@ openssl pkcs12 -certpbe AES-256-CBC -export -out client-cert.pem \
 The server can be tested by connecting to it using the example client from
 [`tls.connect()`][].
 
+## `tls.setDefaultCACertificates(certs)`
+
+<!-- YAML
+added: v24.5.0
+-->
+
+* `certs` {string\[]|ArrayBufferView\[]} An array of CA certificates in PEM format.
+
+Sets the default CA certificates used by Node.js TLS clients. If the provided
+certificates are parsed successfully, they will become the default CA
+certificate list returned by [`tls.getCACertificates()`][] and used
+by subsequent TLS connections that don't specify their own CA certificates.
+The certificates will be deduplicated before being set as the default.
+
+This function only affects the current Node.js thread. Previous
+sessions cached by the HTTPS agent won't be affected by this change, so
+this method should be called before any unwanted cachable TLS connections are
+made.
+
+To use system CA certificates as the default:
+
+```cjs
+const tls = require('node:tls');
+tls.setDefaultCACertificates(tls.getCACertificates('system'));
+```
+
+```mjs
+import tls from 'node:tls';
+tls.setDefaultCACertificates(tls.getCACertificates('system'));
+```
+
+This function completely replaces the default CA certificate list. To add additional
+certificates to the existing defaults, get the current certificates and append to them:
+
+```cjs
+const tls = require('node:tls');
+const currentCerts = tls.getCACertificates('default');
+const additionalCerts = ['-----BEGIN CERTIFICATE-----\n...'];
+tls.setDefaultCACertificates([...currentCerts, ...additionalCerts]);
+```
+
+```mjs
+import tls from 'node:tls';
+const currentCerts = tls.getCACertificates('default');
+const additionalCerts = ['-----BEGIN CERTIFICATE-----\n...'];
+tls.setDefaultCACertificates([...currentCerts, ...additionalCerts]);
+```
+
 ## `tls.getCACertificates([type])`
 
 <!-- YAML
@@ -2319,7 +2367,7 @@ console.log(tls.getCiphers()); // ['aes128-gcm-sha256', 'aes128-sha', ...]
 added: v12.3.0
 -->
 
-* {string\[]}
+* Type: {string\[]}
 
 An immutable array of strings representing the root certificates (in PEM format)
 from the bundled Mozilla CA store as supplied by the current Node.js version.
@@ -2352,7 +2400,7 @@ information.
 added: v11.4.0
 -->
 
-* {string} The default value of the `maxVersion` option of
+* Type: {string} The default value of the `maxVersion` option of
   [`tls.createSecureContext()`][]. It can be assigned any of the supported TLS
   protocol versions, `'TLSv1.3'`, `'TLSv1.2'`, `'TLSv1.1'`, or `'TLSv1'`.
   **Default:** `'TLSv1.3'`, unless changed using CLI options. Using
@@ -2366,7 +2414,7 @@ added: v11.4.0
 added: v11.4.0
 -->
 
-* {string} The default value of the `minVersion` option of
+* Type: {string} The default value of the `minVersion` option of
   [`tls.createSecureContext()`][]. It can be assigned any of the supported TLS
   protocol versions, `'TLSv1.3'`, `'TLSv1.2'`, `'TLSv1.1'`, or `'TLSv1'`.
   Versions before TLSv1.2 may require downgrading the [OpenSSL Security Level][].
@@ -2384,7 +2432,7 @@ added:
  - v18.16.0
 -->
 
-* {string} The default value of the `ciphers` option of
+* Type: {string} The default value of the `ciphers` option of
   [`tls.createSecureContext()`][]. It can be assigned any of the supported
   OpenSSL ciphers.  Defaults to the content of
   `crypto.constants.defaultCoreCipherList`, unless changed using CLI options

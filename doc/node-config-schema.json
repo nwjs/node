@@ -177,9 +177,6 @@
         "experimental-vm-modules": {
           "type": "boolean"
         },
-        "experimental-wasm-modules": {
-          "type": "boolean"
-        },
         "experimental-websocket": {
           "type": "boolean"
         },
@@ -541,6 +538,9 @@
         "use-bundled-ca": {
           "type": "boolean"
         },
+        "use-env-proxy": {
+          "type": "boolean"
+        },
         "use-largepages": {
           "type": "string"
         },
@@ -561,6 +561,9 @@
         },
         "watch": {
           "type": "boolean"
+        },
+        "watch-kill-signal": {
+          "type": "string"
         },
         "watch-path": {
           "oneOf": [

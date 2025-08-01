@@ -339,7 +339,7 @@ modules it can be used to load ES modules.
 
 ## `import.meta`
 
-* {Object}
+* Type: {Object}
 
 The `import.meta` meta property is an `Object` that contains the following
 properties. It is only supported in ES modules.
@@ -356,7 +356,7 @@ changes:
     description: This property is no longer experimental.
 -->
 
-* {string} The directory name of the current module.
+* Type: {string} The directory name of the current module.
 
 This is the same as the [`path.dirname()`][] of the [`import.meta.filename`][].
 
@@ -374,7 +374,7 @@ changes:
     description: This property is no longer experimental.
 -->
 
-* {string} The full absolute path and filename of the current module, with
+* Type: {string} The full absolute path and filename of the current module, with
   symlinks resolved.
 
 This is the same as the [`url.fileURLToPath()`][] of the [`import.meta.url`][].
@@ -384,7 +384,7 @@ This is the same as the [`url.fileURLToPath()`][] of the [`import.meta.url`][].
 
 ### `import.meta.url`
 
-* {string} The absolute `file:` URL of the module.
+* Type: {string} The absolute `file:` URL of the module.
 
 This is defined exactly the same as it is in browsers providing the URL of the
 current module file.
@@ -405,7 +405,7 @@ added:
 
 > Stability: 1.0 - Early development
 
-* {boolean} `true` when the current module is the entry point of the current process; `false` otherwise.
+* Type: {boolean} `true` when the current module is the entry point of the current process; `false` otherwise.
 
 Equivalent to `require.main === module` in CommonJS.
 
@@ -701,33 +701,22 @@ imported from the same path.
 
 ## Wasm modules
 
-> Stability: 1 - Experimental
+<!-- YAML
+changes:
+  - version: v24.5.0
+    pr-url: https://github.com/nodejs/node/pull/57038
+    description: Wasm modules no longer require the `--experimental-wasm-modules` flag.
+-->
 
 Importing both WebAssembly module instances and WebAssembly source phase
-imports are supported under the `--experimental-wasm-modules` flag.
+imports is supported.
 
 Both of these integrations are in line with the
 [ES Module Integration Proposal for WebAssembly][].
 
-Instance imports allow any `.wasm` files to be imported as normal modules,
-supporting their module imports in turn.
-
-For example, an `index.js` containing:
-
-```js
-import * as M from './library.wasm';
-console.log(M);
-```
-
-executed under:
-
-```bash
-node --experimental-wasm-modules index.mjs
-```
-
-would provide the exports interface for the instantiation of `library.wasm`.
-
 ### Wasm Source Phase Imports
+
+> Stability: 1.2 - Release candidate
 
 <!-- YAML
 added: v24.0.0
@@ -759,6 +748,98 @@ const dynamicLibrary = await import.source('./library.wasm');
 
 const instance = await WebAssembly.instantiate(dynamicLibrary, importObject);
 ```
+
+### JavaScript String Builtins
+
+> Stability: 1.2 - Release candidate
+
+<!-- YAML
+added: v24.5.0
+-->
+
+When importing WebAssembly modules, the
+[WebAssembly JS String Builtins Proposal][] is automatically enabled through the
+ESM Integration. This allows WebAssembly modules to directly use efficient
+compile-time string builtins from the `wasm:js-string` namespace.
+
+For example, the following Wasm module exports a string `getLength` function using
+the `wasm:js-string` `length` builtin:
+
+```text
+(module
+  ;; Compile-time import of the string length builtin.
+  (import "wasm:js-string" "length" (func $string_length (param externref) (result i32)))
+
+  ;; Define getLength, taking a JS value parameter assumed to be a string,
+  ;; calling string length on it and returning the result.
+  (func $getLength (param $str externref) (result i32)
+    local.get $str
+    call $string_length
+  )
+
+  ;; Export the getLength function.
+  (export "getLength" (func $get_length))
+)
+```
+
+```js
+import { getLength } from './string-len.wasm';
+getLength('foo'); // Returns 3.
+```
+
+Wasm builtins are compile-time imports that are linked during module compilation
+rather than during instantiation. They do not behave like normal module graph
+imports and they cannot be inspected via `WebAssembly.Module.imports(mod)`
+or virtualized unless recompiling the module using the direct
+`WebAssembly.compile` API with string builtins disabled.
+
+Importing a module in the source phase before it has been instantiated will also
+use the compile-time builtins automatically:
+
+```js
+import source mod from './string-len.wasm';
+const { exports: { getLength } } = await WebAssembly.instantiate(mod, {});
+getLength('foo'); // Also returns 3.
+```
+
+### Wasm Instance Phase Imports
+
+> Stability: 1.1 - Active development
+
+Instance imports allow any `.wasm` files to be imported as normal modules,
+supporting their module imports in turn.
+
+For example, an `index.js` containing:
+
+```js
+import * as M from './library.wasm';
+console.log(M);
+```
+
+executed under:
+
+```bash
+node index.mjs
+```
+
+would provide the exports interface for the instantiation of `library.wasm`.
+
+### Reserved Wasm Namespaces
+
+<!-- YAML
+added: v24.5.0
+-->
+
+When importing WebAssembly module instances, they cannot use import module
+names or import/export names that start with reserved prefixes:
+
+* `wasm-js:` - reserved in all module import names, module names and export
+  names.
+* `wasm:` - reserved in module import names and export names (imported module
+  names are allowed in order to support future builtin polyfills).
+
+Importing a module using the above reserved names will throw a
+`WebAssembly.LinkError`.
 
 <i id="esm_experimental_top_level_await"></i>
 
@@ -1117,7 +1198,7 @@ _isImports_, _conditions_)
 >    1. Return _"commonjs"_.
 > 4. If _url_ ends in _".json"_, then
 >    1. Return _"json"_.
-> 5. If `--experimental-wasm-modules` is enabled and _url_ ends in
+> 5. If _url_ ends in
 >    _".wasm"_, then
 >    1. Return _"wasm"_.
 > 6. If `--experimental-addon-modules` is enabled and _url_ ends in
@@ -1135,9 +1216,8 @@ _isImports_, _conditions_)
 >        1. Return _"module"_.
 >     3. Return _"commonjs"_.
 > 12. If _url_ does not have any extension, then
->     1. If _packageType_ is _"module"_ and `--experimental-wasm-modules` is
->        enabled and the file at _url_ contains the header for a WebAssembly
->        module, then
+>     1. If _packageType_ is _"module"_ and the file at _url_ contains the
+>        "application/wasm" content type header for a WebAssembly module, then
 >        1. Return _"wasm"_.
 >     2. If _packageType_ is not **null**, then
 >        1. Return _packageType_.
@@ -1202,6 +1282,7 @@ resolution for ESM specifiers is [commonjs-extension-resolution-loader][].
 [Source Phase Imports]: https://github.com/tc39/proposal-source-phase-imports
 [Terminology]: #terminology
 [URL]: https://url.spec.whatwg.org/
+[WebAssembly JS String Builtins Proposal]: https://github.com/WebAssembly/js-string-builtins
 [`"exports"`]: packages.md#exports
 [`"type"`]: packages.md#type
 [`--input-type`]: cli.md#--input-typetype

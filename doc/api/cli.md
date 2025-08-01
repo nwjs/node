@@ -33,8 +33,7 @@ If a file is found, its path will be passed to the
 
 * The program was started with a command-line flag that forces the entry
   point to be loaded with ECMAScript module loader, such as `--import`.
-* The file has an `.mjs` or `.wasm` (with `--experimental-wasm-modules`)
-  extension.
+* The file has an `.mjs` or `.wasm` extension.
 * The file does not have a `.cjs` extension, and the nearest parent
   `package.json` file contains a top-level [`"type"`][] field with a value of
   `"module"`.
@@ -49,7 +48,6 @@ entry point, the `node` command will accept as input only files with `.js`,
 `.mjs`, or `.cjs` extensions. With the following flags, additional file
 extensions are enabled:
 
-* [`--experimental-wasm-modules`][] for files with `.wasm` extension.
 * [`--experimental-addon-modules`][] for files with `.node` extension.
 
 ## Options
@@ -153,6 +151,12 @@ Error: Cannot load native addon because loading addons is disabled.
 
 <!-- YAML
 added: v20.0.0
+changes:
+  - version: v24.4.0
+    pr-url: https://github.com/nodejs/node/pull/58853
+    description: When spawning process with the permission model enabled.
+                 The flags are inherit to the child Node.js process through
+                 NODE_OPTIONS environment variable.
 -->
 
 > Stability: 1.1 - Active development
@@ -183,11 +187,15 @@ Error: Access to this API has been restricted
 }
 ```
 
-Unlike `child_process.spawn`, the `child_process.fork` API copies the execution
-arguments from the parent process. This means that if you start Node.js with the
-Permission Model enabled and include the `--allow-child-process` flag, calling
-`child_process.fork()` will propagate all Permission Model flags to the child
-process.
+The `child_process.fork()` API inherits the execution arguments from the
+parent process. This means that if Node.js is started with the Permission
+Model enabled and the `--allow-child-process` flag is set, any child process
+created using `child_process.fork()` will automatically receive all relevant
+Permission Model flags.
+
+This behavior also applies to `child_process.spawn()`, but in that case, the
+flags are propagated via the `NODE_OPTIONS` environment variable rather than
+directly through the process arguments.
 
 ### `--allow-fs-read`
 
@@ -496,13 +504,16 @@ $ ls *.cpuprofile
 CPU.20190409.202950.15293.0.0.cpuprofile
 ```
 
-If `--cpu-prof-name` is specified, the provided value will be used as-is; patterns such as
-`${hhmmss}` or `${pid}` are not supported.
+If `--cpu-prof-name` is specified, the provided value is used as a template
+for the file name. The following placeholder is supported and will be
+substituted at runtime:
+
+* `${pid}` — the current process ID
 
 ```console
 $ node --cpu-prof --cpu-prof-name 'CPU.${pid}.cpuprofile' index.js
 $ ls *.cpuprofile
-'CPU.${pid}.cpuprofile'
+CPU.15293.cpuprofile
 ```
 
 ### `--cpu-prof-dir`
@@ -798,7 +809,7 @@ node --entry-url 'file.ts?query#hash'
 node --entry-url 'data:text/javascript,console.log("Hello")'
 ```
 
-### `--env-file-if-exists=config`
+### `--env-file-if-exists=file`
 
 <!-- YAML
 added: v22.9.0
@@ -809,7 +820,7 @@ added: v22.9.0
 Behavior is the same as [`--env-file`][], but an error is not thrown if the file
 does not exist.
 
-### `--env-file=config`
+### `--env-file=file`
 
 <!-- YAML
 added: v20.6.0
@@ -1021,6 +1032,17 @@ passing a second `parentURL` argument for contextual resolution.
 
 Previously gated the entire `import.meta.resolve` feature.
 
+### `--experimental-inspector-network-resource`
+
+<!-- YAML
+added:
+  - v24.5.0
+-->
+
+> Stability: 1.1 - Active Development
+
+Enable experimental support for inspector network resources.
+
 ### `--experimental-loader=module`
 
 <!-- YAML
@@ -1195,14 +1217,6 @@ changes:
 -->
 
 Enable experimental WebAssembly System Interface (WASI) support.
-
-### `--experimental-wasm-modules`
-
-<!-- YAML
-added: v12.3.0
--->
-
-Enable experimental WebAssembly module support.
 
 ### `--experimental-webstorage`
 
@@ -1806,7 +1820,7 @@ For more information, see the [TypeScript type-stripping][] documentation.
 added: v22.0.0
 -->
 
-Disable exposition of [`WebSocket`][] on the global scope.
+Disable exposition of {WebSocket} on the global scope.
 
 ### `--no-extra-info-on-fatal-exception`
 
@@ -2945,6 +2959,21 @@ environment variables.
 
 See `SSL_CERT_DIR` and `SSL_CERT_FILE`.
 
+### `--use-env-proxy`
+
+<!-- YAML
+added: v24.5.0
+-->
+
+> Stability: 1.1 - Active Development
+
+When enabled, Node.js parses the `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`
+environment variables during startup, and tunnels requests over the
+specified proxy.
+
+This is equivalent to setting the [`NODE_USE_ENV_PROXY=1`][] environment variable.
+When both are set, `--use-env-proxy` takes precedence.
+
 ### `--use-largepages=mode`
 
 <!-- YAML
@@ -3090,6 +3119,21 @@ mode. If no file is provided, Node.js will exit with status code `9`.
 
 ```bash
 node --watch index.js
+```
+
+### `--watch-kill-signal`
+
+<!-- YAML
+added:
+  - v24.4.0
+-->
+
+> Stability: 1.1 - Active Development
+
+Customizes the signal sent to the process on watch mode restarts.
+
+```bash
+node --watch --watch-kill-signal SIGINT test.js
 ```
 
 ### `--watch-path`
@@ -3328,7 +3372,6 @@ one is included in the list below.
 * `--experimental-transform-types`
 * `--experimental-vm-modules`
 * `--experimental-wasi-unstable-preview1`
-* `--experimental-wasm-modules`
 * `--experimental-webstorage`
 * `--force-context-aware`
 * `--force-fips`
@@ -3430,10 +3473,12 @@ one is included in the list below.
 * `--track-heap-objects`
 * `--unhandled-rejections`
 * `--use-bundled-ca`
+* `--use-env-proxy`
 * `--use-largepages`
 * `--use-openssl-ca`
 * `--use-system-ca`
 * `--v8-pool-size`
+* `--watch-kill-signal`
 * `--watch-path`
 * `--watch-preserve-output`
 * `--watch`
@@ -3584,8 +3629,8 @@ When enabled, Node.js parses the `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`
 environment variables during startup, and tunnels requests over the
 specified proxy.
 
-This currently only affects requests sent over `fetch()`. Support for other
-built-in `http` and `https` methods is under way.
+This can also be enabled using the [`--use-env-proxy`][] command-line flag.
+When both are set, `--use-env-proxy` takes precedence.
 
 ### `NODE_V8_COVERAGE=dir`
 
@@ -3902,11 +3947,10 @@ node --stack-trace-limit=12 -p -e "Error.stackTraceLimit" # prints 12
 [`--cpu-prof-dir`]: #--cpu-prof-dir
 [`--diagnostic-dir`]: #--diagnostic-dirdirectory
 [`--disable-sigusr1`]: #--disable-sigusr1
-[`--env-file-if-exists`]: #--env-file-if-existsconfig
-[`--env-file`]: #--env-fileconfig
+[`--env-file-if-exists`]: #--env-file-if-existsfile
+[`--env-file`]: #--env-filefile
 [`--experimental-addon-modules`]: #--experimental-addon-modules
 [`--experimental-sea-config`]: single-executable-applications.md#generating-single-executable-preparation-blobs
-[`--experimental-wasm-modules`]: #--experimental-wasm-modules
 [`--heap-prof-dir`]: #--heap-prof-dir
 [`--import`]: #--importmodule
 [`--no-experimental-strip-types`]: #--no-experimental-strip-types
@@ -3915,16 +3959,17 @@ node --stack-trace-limit=12 -p -e "Error.stackTraceLimit" # prints 12
 [`--print`]: #-p---print-script
 [`--redirect-warnings`]: #--redirect-warningsfile
 [`--require`]: #-r---require-module
+[`--use-env-proxy`]: #--use-env-proxy
 [`AsyncLocalStorage`]: async_context.md#class-asynclocalstorage
 [`Buffer`]: buffer.md#class-buffer
 [`CRYPTO_secure_malloc_init`]: https://www.openssl.org/docs/man3.0/man3/CRYPTO_secure_malloc_init.html
 [`ERR_INVALID_TYPESCRIPT_SYNTAX`]: errors.md#err_invalid_typescript_syntax
 [`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`]: errors.md#err_unsupported_typescript_syntax
 [`NODE_OPTIONS`]: #node_optionsoptions
+[`NODE_USE_ENV_PROXY=1`]: #node_use_env_proxy1
 [`NO_COLOR`]: https://no-color.org
 [`SlowBuffer`]: buffer.md#class-slowbuffer
 [`Web Storage`]: https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API
-[`WebSocket`]: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket
 [`YoungGenerationSizeFromSemiSpaceSize`]: https://chromium.googlesource.com/v8/v8.git/+/refs/tags/10.3.129/src/heap/heap.cc#328
 [`dns.lookup()`]: dns.md#dnslookuphostname-options-callback
 [`dns.setDefaultResultOrder()`]: dns.md#dnssetdefaultresultorderorder

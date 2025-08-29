@@ -507,8 +507,7 @@ class BackupJob : public ThreadPoolWork {
 
         Local<Value> argv[] = {progress_info};
         TryCatch try_catch(env()->isolate());
-        fn->Call(env()->context(), Null(env()->isolate()), 1, argv)
-            .FromMaybe(Local<Value>());
+        USE(fn->Call(env()->context(), Null(env()->isolate()), 1, argv));
         if (try_catch.HasCaught()) {
           Finalize();
           resolver->Reject(env()->context(), try_catch.Exception()).ToChecked();
@@ -1934,7 +1933,9 @@ bool StatementSync::BindParams(const FunctionCallbackInfo<Value>& args) {
   }
 
   for (int i = anon_start; i < args.Length(); ++i) {
-    while (sqlite3_bind_parameter_name(statement_, anon_idx) != nullptr) {
+    while (1) {
+      const char* param = sqlite3_bind_parameter_name(statement_, anon_idx);
+      if (param == nullptr || param[0] == '?') break;
       anon_idx++;
     }
 
@@ -2740,6 +2741,13 @@ static void Initialize(Local<Object> target,
                           db_tmpl,
                           FIXED_ONE_BYTE_STRING(isolate, "isTransaction"),
                           DatabaseSync::IsTransactionGetter);
+  Local<String> sqlite_type_key = FIXED_ONE_BYTE_STRING(isolate, "sqlite-type");
+  Local<v8::Symbol> sqlite_type_symbol =
+      v8::Symbol::For(isolate, sqlite_type_key);
+  Local<String> database_sync_string =
+      FIXED_ONE_BYTE_STRING(isolate, "node:sqlite");
+  db_tmpl->InstanceTemplate()->Set(sqlite_type_symbol, database_sync_string);
+
   SetConstructorFunction(context, target, "DatabaseSync", db_tmpl);
   SetConstructorFunction(context,
                          target,

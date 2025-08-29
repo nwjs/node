@@ -115,6 +115,12 @@
   V(crypto_ec_string, "ec")                                                    \
   V(crypto_ed25519_string, "ed25519")                                          \
   V(crypto_ed448_string, "ed448")                                              \
+  V(crypto_ml_dsa_44_string, "ml-dsa-44")                                      \
+  V(crypto_ml_dsa_65_string, "ml-dsa-65")                                      \
+  V(crypto_ml_dsa_87_string, "ml-dsa-87")                                      \
+  V(crypto_ml_kem_512_string, "ml-kem-512")                                    \
+  V(crypto_ml_kem_768_string, "ml-kem-768")                                    \
+  V(crypto_ml_kem_1024_string, "ml-kem-1024")                                  \
   V(crypto_x25519_string, "x25519")                                            \
   V(crypto_x448_string, "x448")                                                \
   V(crypto_rsa_string, "rsa")                                                  \
@@ -220,6 +226,8 @@
   V(issuer_string, "issuer")                                                   \
   V(issuercert_string, "issuerCertificate")                                    \
   V(iterator_string, "Iterator")                                               \
+  V(jwk_akp_string, "AKP")                                                     \
+  V(jwk_alg_string, "alg")                                                     \
   V(jwk_crv_string, "crv")                                                     \
   V(jwk_d_string, "d")                                                         \
   V(jwk_dp_string, "dp")                                                       \
@@ -229,13 +237,15 @@
   V(jwk_ec_string, "EC")                                                       \
   V(jwk_g_string, "g")                                                         \
   V(jwk_k_string, "k")                                                         \
-  V(jwk_p_string, "p")                                                         \
-  V(jwk_q_string, "q")                                                         \
-  V(jwk_qi_string, "qi")                                                       \
   V(jwk_kty_string, "kty")                                                     \
   V(jwk_n_string, "n")                                                         \
   V(jwk_oct_string, "oct")                                                     \
   V(jwk_okp_string, "OKP")                                                     \
+  V(jwk_p_string, "p")                                                         \
+  V(jwk_priv_string, "priv")                                                   \
+  V(jwk_pub_string, "pub")                                                     \
+  V(jwk_q_string, "q")                                                         \
+  V(jwk_qi_string, "qi")                                                       \
   V(jwk_rsa_string, "RSA")                                                     \
   V(jwk_x_string, "x")                                                         \
   V(jwk_y_string, "y")                                                         \
@@ -390,6 +400,7 @@
   V(table_string, "table")                                                     \
   V(target_string, "target")                                                   \
   V(thread_id_string, "threadId")                                              \
+  V(thread_name_string, "threadName")                                          \
   V(ticketkeycallback_string, "onticketkeycallback")                           \
   V(timeout_string, "timeout")                                                 \
   V(time_to_first_byte_string, "timeToFirstByte")                              \
@@ -476,6 +487,7 @@
   V(tcp_constructor_template, v8::FunctionTemplate)                            \
   V(tty_constructor_template, v8::FunctionTemplate)                            \
   V(write_wrap_template, v8::ObjectTemplate)                                   \
+  V(worker_cpu_usage_taker_template, v8::ObjectTemplate)                       \
   V(worker_heap_snapshot_taker_template, v8::ObjectTemplate)                   \
   V(worker_heap_statistics_taker_template, v8::ObjectTemplate)                 \
   V(x509_constructor_template, v8::FunctionTemplate)

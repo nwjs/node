@@ -750,6 +750,34 @@ The most important options are:
 * `ZSTD_c_compressionLevel`
   * Set compression parameters according to pre-defined cLevel table. Default
     level is ZSTD\_CLEVEL\_DEFAULT==3.
+* `ZSTD_c_strategy`
+  * Select the compression strategy.
+  * Possible values are listed in the strategy options section below.
+
+#### Strategy options
+
+The following constants can be used as values for the `ZSTD_c_strategy`
+parameter:
+
+* `zlib.constants.ZSTD_fast`
+* `zlib.constants.ZSTD_dfast`
+* `zlib.constants.ZSTD_greedy`
+* `zlib.constants.ZSTD_lazy`
+* `zlib.constants.ZSTD_lazy2`
+* `zlib.constants.ZSTD_btlazy2`
+* `zlib.constants.ZSTD_btopt`
+* `zlib.constants.ZSTD_btultra`
+* `zlib.constants.ZSTD_btultra2`
+
+Example:
+
+```js
+const stream = zlib.createZstdCompress({
+  params: {
+    [zlib.constants.ZSTD_c_strategy]: zlib.constants.ZSTD_btultra,
+  },
+});
+```
 
 #### Pledged Source Size
 
@@ -1069,6 +1097,9 @@ Each Zstd-based class takes an `options` object. All options are optional.
 * `maxOutputLength` {integer} Limits output size when using
   [convenience methods][]. **Default:** [`buffer.kMaxLength`][]
 * `info` {boolean} If `true`, returns an object with `buffer` and `engine`. **Default:** `false`
+* `dictionary` {Buffer} Optional dictionary used to
+  improve compression efficiency when compressing or decompressing data that
+  shares common patterns with the dictionary.
 
 For example:
 

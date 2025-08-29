@@ -1680,6 +1680,22 @@ changes:
 
 Specify the maximum size, in bytes, of HTTP headers. Defaults to 16 KiB.
 
+### `--max-old-space-size-percentage=PERCENTAGE`
+
+Sets the max memory size of V8's old memory section as a percentage of available system memory.
+This flag takes precedence over `--max-old-space-size` when both are specified.
+
+The `PERCENTAGE` parameter must be a number greater than 0 and up to 100. representing the percentage
+of available system memory to allocate to the V8 heap.
+
+```bash
+# Using 50% of available system memory
+node --max-old-space-size-percentage=50 index.js
+
+# Using 75% of available system memory
+node --max-old-space-size-percentage=75 index.js
+```
+
 ### `--napi-modules`
 
 <!-- YAML
@@ -2585,6 +2601,20 @@ changes:
 The destination for the corresponding test reporter. See the documentation on
 [test reporters][] for more details.
 
+### `--test-rerun-failures`
+
+<!-- YAML
+added:
+  - v24.7.0
+-->
+
+A path to a file allowing the test runner to persist the state of the test
+suite between runs. The test runner will use this file to determine which tests
+have already succeeded or failed, allowing for re-running of failed tests
+without having to re-run the entire test suite. The test runner will create this
+file if it does not exist.
+See the documentation on [test reruns][] for more details.
+
 ### `--test-shard`
 
 <!-- YAML
@@ -3395,6 +3425,7 @@ one is included in the list below.
 * `--inspect`
 * `--localstorage-file`
 * `--max-http-header-size`
+* `--max-old-space-size-percentage`
 * `--napi-modules`
 * `--network-family-autoselection-attempt-timeout`
 * `--no-addons`
@@ -3444,6 +3475,7 @@ one is included in the list below.
 * `--test-only`
 * `--test-reporter-destination`
 * `--test-reporter`
+* `--test-rerun-failures`
 * `--test-shard`
 * `--test-skip-pattern`
 * `--throw-deprecation`
@@ -3631,6 +3663,18 @@ specified proxy.
 
 This can also be enabled using the [`--use-env-proxy`][] command-line flag.
 When both are set, `--use-env-proxy` takes precedence.
+
+### `NODE_USE_SYSTEM_CA=1`
+
+<!-- YAML
+added: v24.6.0
+-->
+
+Node.js uses the trusted CA certificates present in the system store along with
+the `--use-bundled-ca` option and the `NODE_EXTRA_CA_CERTS` environment variable.
+
+This can also be enabled using the [`--use-system-ca`][] command-line flag.
+When both are set, `--use-system-ca` takes precedence.
 
 ### `NODE_V8_COVERAGE=dir`
 
@@ -3960,6 +4004,7 @@ node --stack-trace-limit=12 -p -e "Error.stackTraceLimit" # prints 12
 [`--redirect-warnings`]: #--redirect-warningsfile
 [`--require`]: #-r---require-module
 [`--use-env-proxy`]: #--use-env-proxy
+[`--use-system-ca`]: #--use-system-ca
 [`AsyncLocalStorage`]: async_context.md#class-asynclocalstorage
 [`Buffer`]: buffer.md#class-buffer
 [`CRYPTO_secure_malloc_init`]: https://www.openssl.org/docs/man3.0/man3/CRYPTO_secure_malloc_init.html
@@ -4005,6 +4050,7 @@ node --stack-trace-limit=12 -p -e "Error.stackTraceLimit" # prints 12
 [snapshot testing]: test.md#snapshot-testing
 [syntax detection]: packages.md#syntax-detection
 [test reporters]: test.md#test-reporters
+[test reruns]: test.md#rerunning-failed-tests
 [test runner execution model]: test.md#test-runner-execution-model
 [timezone IDs]: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
 [tracking issue for user-land snapshots]: https://github.com/nodejs/node/issues/44014

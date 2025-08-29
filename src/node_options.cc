@@ -7,6 +7,7 @@
 #include "node_external_reference.h"
 #include "node_internals.h"
 #include "node_sea.h"
+#include "uv.h"
 #if HAVE_OPENSSL
 #include "openssl/opensslv.h"
 #endif
@@ -14,6 +15,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cstdint>
 #include <limits>
 #include <sstream>
 #include <string_view>
@@ -107,8 +109,54 @@ void PerProcessOptions::CheckOptions(std::vector<std::string>* errors,
   per_isolate->CheckOptions(errors, argv);
 }
 
+void PerIsolateOptions::HandleMaxOldSpaceSizePercentage(
+    std::vector<std::string>* errors,
+    std::string* max_old_space_size_percentage) {
+  std::string original_input_for_error = *max_old_space_size_percentage;
+  // Parse the percentage value
+  char* end_ptr;
+  double percentage =
+      std::strtod(max_old_space_size_percentage->c_str(), &end_ptr);
+
+  // Validate the percentage value
+  if (*end_ptr != '\0' || percentage <= 0.0 || percentage > 100.0) {
+    errors->push_back("--max-old-space-size-percentage must be greater "
+                      "than 0 and up to 100. Got: " +
+                      original_input_for_error);
+    return;
+  }
+
+  // Get available memory in bytes
+  uint64_t total_memory = uv_get_total_memory();
+  uint64_t constrained_memory = uv_get_constrained_memory();
+
+  // Use constrained memory if available, otherwise use total memory
+  // This logic correctly handles the documented guarantees.
+  // Use uint64_t for the result to prevent data loss on 32-bit systems.
+  uint64_t available_memory =
+      (constrained_memory > 0 && constrained_memory != UINT64_MAX)
+          ? constrained_memory
+          : total_memory;
+
+  if (available_memory == 0) {
+    errors->push_back("the available memory can not be calculated");
+    return;
+  }
+
+  // Convert to MB and calculate the percentage
+  uint64_t memory_mb = available_memory / (1024 * 1024);
+  uint64_t calculated_mb = static_cast<size_t>(memory_mb * percentage / 100.0);
+
+  // Convert back to string
+  max_old_space_size = std::to_string(calculated_mb);
+}
+
 void PerIsolateOptions::CheckOptions(std::vector<std::string>* errors,
                                      std::vector<std::string>* argv) {
+  if (!max_old_space_size_percentage.empty()) {
+    HandleMaxOldSpaceSizePercentage(errors, &max_old_space_size_percentage);
+  }
+
   per_env->CheckOptions(errors, argv);
 }
 
@@ -871,6 +919,11 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             &EnvironmentOptions::test_global_setup_path,
             kAllowedInEnvvar,
             OptionNamespaces::kTestRunnerNamespace);
+  AddOption("--test-rerun-failures",
+            "specifies the path to the rerun state file",
+            &EnvironmentOptions::test_rerun_failures_path,
+            kAllowedInEnvvar,
+            OptionNamespaces::kTestRunnerNamespace);
   AddOption("--test-udp-no-try-send",
             "",  // For testing only.
             &EnvironmentOptions::test_udp_no_try_send,
@@ -1082,6 +1135,11 @@ PerIsolateOptionsParser::PerIsolateOptionsParser(
             V8Option{},
             kAllowedInEnvvar);
   AddOption("--max-old-space-size", "", V8Option{}, kAllowedInEnvvar);
+  AddOption("--max-old-space-size-percentage",
+            "set V8's max old space size as a percentage of available memory "
+            "(e.g., '50%'). Takes precedence over --max-old-space-size.",
+            &PerIsolateOptions::max_old_space_size_percentage,
+            kAllowedInEnvvar);
   AddOption("--max-semi-space-size", "", V8Option{}, kAllowedInEnvvar);
   AddOption("--perf-basic-prof", "", V8Option{}, kAllowedInEnvvar);
   AddOption(
@@ -1818,6 +1876,117 @@ void GetNamespaceOptionsInputType(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(namespaces_map);
 }
 
+// Return an array containing all currently active options as flag
+// strings from all sources (command line, NODE_OPTIONS, config file)
+void GetOptionsAsFlags(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  Local<Context> context = isolate->GetCurrentContext();
+  Environment* env = Environment::GetCurrent(context);
+
+  if (!env->has_run_bootstrapping_code()) {
+    // No code because this is an assertion.
+    THROW_ERR_OPTIONS_BEFORE_BOOTSTRAPPING(
+        isolate, "Should not query options before bootstrapping is done");
+  }
+  env->set_has_serialized_options(true);
+
+  Mutex::ScopedLock lock(per_process::cli_options_mutex);
+  IterateCLIOptionsScope s(env);
+
+  std::vector<std::string> flags;
+  PerProcessOptions* opts = per_process::cli_options.get();
+
+  for (const auto& item : _ppop_instance.options_) {
+    const std::string& option_name = item.first;
+    const auto& option_info = item.second;
+    auto field = option_info.field;
+
+    // TODO(pmarchini): Skip internal options for the moment as probably not
+    // required
+    if (option_name.empty() || option_name.starts_with('[')) {
+      continue;
+    }
+
+    // Skip V8 options and NoOp options - only Node.js-specific options
+    if (option_info.type == kNoOp || option_info.type == kV8Option) {
+      continue;
+    }
+
+    switch (option_info.type) {
+      case kBoolean: {
+        bool current_value = *_ppop_instance.Lookup<bool>(field, opts);
+        // For boolean options with default_is_true, we want the opposite logic
+        if (option_info.default_is_true) {
+          if (!current_value) {
+            // If default is true and current is false, add --no-* flag
+            flags.push_back("--no-" + option_name.substr(2));
+          }
+        } else {
+          if (current_value) {
+            // If default is false and current is true, add --flag
+            flags.push_back(option_name);
+          }
+        }
+        break;
+      }
+      case kInteger: {
+        int64_t current_value = *_ppop_instance.Lookup<int64_t>(field, opts);
+        flags.push_back(option_name + "=" + std::to_string(current_value));
+        break;
+      }
+      case kUInteger: {
+        uint64_t current_value = *_ppop_instance.Lookup<uint64_t>(field, opts);
+        flags.push_back(option_name + "=" + std::to_string(current_value));
+        break;
+      }
+      case kString: {
+        const std::string& current_value =
+            *_ppop_instance.Lookup<std::string>(field, opts);
+        // Only include if not empty
+        if (!current_value.empty()) {
+          flags.push_back(option_name + "=" + current_value);
+        }
+        break;
+      }
+      case kStringList: {
+        const std::vector<std::string>& current_values =
+            *_ppop_instance.Lookup<StringVector>(field, opts);
+        // Add each string in the list as a separate flag
+        for (const std::string& value : current_values) {
+          flags.push_back(option_name + "=" + value);
+        }
+        break;
+      }
+      case kHostPort: {
+        const HostPort& host_port =
+            *_ppop_instance.Lookup<HostPort>(field, opts);
+        // Only include if host is not empty or port is not default
+        if (!host_port.host().empty() || host_port.port() != 0) {
+          std::string host_port_str = host_port.host();
+          if (host_port.port() != 0) {
+            if (!host_port_str.empty()) {
+              host_port_str += ":";
+            }
+            host_port_str += std::to_string(host_port.port());
+          }
+          if (!host_port_str.empty()) {
+            flags.push_back(option_name + "=" + host_port_str);
+          }
+        }
+        break;
+      }
+      default:
+        // Skip unknown types
+        break;
+    }
+  }
+
+  Local<Value> result;
+  CHECK(ToV8Value(context, flags).ToLocal(&result));
+
+  args.GetReturnValue().Set(result);
+}
+
 void Initialize(Local<Object> target,
                 Local<Value> unused,
                 Local<Context> context,
@@ -1828,6 +1997,8 @@ void Initialize(Local<Object> target,
       context, target, "getCLIOptionsValues", GetCLIOptionsValues);
   SetMethodNoSideEffect(
       context, target, "getCLIOptionsInfo", GetCLIOptionsInfo);
+  SetMethodNoSideEffect(
+      context, target, "getOptionsAsFlags", GetOptionsAsFlags);
   SetMethodNoSideEffect(
       context, target, "getEmbedderOptions", GetEmbedderOptions);
   SetMethodNoSideEffect(
@@ -1860,6 +2031,7 @@ void Initialize(Local<Object> target,
 void RegisterExternalReferences(ExternalReferenceRegistry* registry) {
   registry->Register(GetCLIOptionsValues);
   registry->Register(GetCLIOptionsInfo);
+  registry->Register(GetOptionsAsFlags);
   registry->Register(GetEmbedderOptions);
   registry->Register(GetEnvOptionsInputType);
   registry->Register(GetNamespaceOptionsInputType);

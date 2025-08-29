@@ -721,6 +721,17 @@ An integer identifier for the current thread. On the corresponding worker object
 (if there is any), it is available as [`worker.threadId`][].
 This value is unique for each [`Worker`][] instance inside a single process.
 
+## `worker.threadName`
+
+<!-- YAML
+added: v24.6.0
+-->
+
+* {string|null}
+
+A string identifier for the current thread or null if the thread is not running.
+On the corresponding worker object (if there is any), it is available as [`worker.threadName`][].
+
 ## `worker.workerData`
 
 <!-- YAML
@@ -1758,6 +1769,19 @@ added: v10.5.0
 The `'online'` event is emitted when the worker thread has started executing
 JavaScript code.
 
+### `worker.cpuUsage([prev])`
+
+<!-- YAML
+added:
+- v24.6.0
+-->
+
+* Returns: {Promise}
+
+This method returns a `Promise` that will resolve to an object identical to [`process.threadCpuUsage()`][],
+or reject with an [`ERR_WORKER_NOT_RUNNING`][] error if the worker is no longer running.
+This methods allows the statistics to be observed from outside the actual thread.
+
 ### `worker.getHeapSnapshot([options])`
 
 <!-- YAML
@@ -1998,6 +2022,17 @@ An integer identifier for the referenced thread. Inside the worker thread,
 it is available as [`require('node:worker_threads').threadId`][].
 This value is unique for each `Worker` instance inside a single process.
 
+### `worker.threadName`
+
+<!-- YAML
+added: v24.6.0
+-->
+
+* {string|null}
+
+A string identifier for the referenced thread or null if the thread is not running.
+Inside the worker thread, it is available as [`require('node:worker_threads').threadName`][].
+
 ### `worker.unref()`
 
 <!-- YAML
@@ -2119,12 +2154,14 @@ thread spawned will spawn another until the application crashes.
 [`process.stderr`]: process.md#processstderr
 [`process.stdin`]: process.md#processstdin
 [`process.stdout`]: process.md#processstdout
+[`process.threadCpuUsage()`]: process.md#processthreadcpuusagepreviousvalue
 [`process.title`]: process.md#processtitle
 [`require('node:worker_threads').isMainThread`]: #workerismainthread
 [`require('node:worker_threads').parentPort.on('message')`]: #event-message
 [`require('node:worker_threads').parentPort.postMessage()`]: #workerpostmessagevalue-transferlist
 [`require('node:worker_threads').parentPort`]: #workerparentport
 [`require('node:worker_threads').threadId`]: #workerthreadid
+[`require('node:worker_threads').threadName`]: #workerthreadname
 [`require('node:worker_threads').workerData`]: #workerworkerdata
 [`trace_events`]: tracing.md
 [`v8.getHeapSnapshot()`]: v8.md#v8getheapsnapshotoptions
@@ -2135,6 +2172,7 @@ thread spawned will spawn another until the application crashes.
 [`worker.postMessage()`]: #workerpostmessagevalue-transferlist
 [`worker.terminate()`]: #workerterminate
 [`worker.threadId`]: #workerthreadid_1
+[`worker.threadName`]: #workerthreadname_1
 [async-resource-worker-pool]: async_context.md#using-asyncresource-for-a-worker-thread-pool
 [browser `LockManager`]: https://developer.mozilla.org/en-US/docs/Web/API/LockManager
 [browser `MessagePort`]: https://developer.mozilla.org/en-US/docs/Web/API/MessagePort

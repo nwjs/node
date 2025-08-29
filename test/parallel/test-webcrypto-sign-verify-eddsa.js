@@ -219,7 +219,7 @@ async function testSign({ name,
 })().then(common.mustCall());
 
 // Ed448 context
-{
+if (!process.features.openssl_is_boringssl) {
   const vector = vectors.find(({ name }) => name === 'Ed448');
   Promise.all([
     subtle.importKey(
@@ -241,10 +241,12 @@ async function testSign({ name,
       await subtle.verify({ name: 'Ed448', context: Buffer.alloc(0) }, publicKey, sig, vector.data), true);
 
     await assert.rejects(subtle.sign({ name: 'Ed448', context: Buffer.alloc(1) }, privateKey, vector.data), {
-      message: /Non zero-length context is not supported/
+      message: /Non zero-length Ed448Params\.context is not supported/
     });
     await assert.rejects(subtle.verify({ name: 'Ed448', context: Buffer.alloc(1) }, publicKey, sig, vector.data), {
-      message: /Non zero-length context is not supported/
+      message: /Non zero-length Ed448Params\.context is not supported/
     });
   }).then(common.mustCall());
+} else {
+  common.printSkipMessage('Skipping unsupported Ed448 test case');
 }

@@ -31,6 +31,15 @@
 #include <openssl/fips.h>
 #endif  // OPENSSL_FIPS
 
+// Define OPENSSL_WITH_PQC for post-quantum cryptography support
+#if OPENSSL_VERSION_NUMBER >= 0x30500000L
+#define OPENSSL_WITH_PQC 1
+#define EVP_PKEY_ML_KEM_512 NID_ML_KEM_512
+#define EVP_PKEY_ML_KEM_768 NID_ML_KEM_768
+#define EVP_PKEY_ML_KEM_1024 NID_ML_KEM_1024
+#include <openssl/core_names.h>
+#endif
+
 #if OPENSSL_VERSION_MAJOR >= 3
 #define OSSL3_CONST const
 #else
@@ -367,6 +376,10 @@ class Cipher final {
   static const Cipher AES_128_KW;
   static const Cipher AES_192_KW;
   static const Cipher AES_256_KW;
+  static const Cipher AES_128_OCB;
+  static const Cipher AES_192_OCB;
+  static const Cipher AES_256_OCB;
+  static const Cipher CHACHA20_POLY1305;
 
   struct CipherParams {
     int padding;
@@ -731,6 +744,7 @@ class CipherCtxPointer final {
   int getNid() const;
 
   bool isGcmMode() const;
+  bool isOcbMode() const;
   bool isCcmMode() const;
   bool isWrapMode() const;
   bool isChaCha20Poly1305() const;
@@ -820,6 +834,10 @@ class EVPKeyPointer final {
                                     const Buffer<const unsigned char>& data);
   static EVPKeyPointer NewRawPrivate(int id,
                                      const Buffer<const unsigned char>& data);
+#if OPENSSL_WITH_PQC
+  static EVPKeyPointer NewRawSeed(int id,
+                                  const Buffer<const unsigned char>& data);
+#endif
   static EVPKeyPointer NewDH(DHPointer&& dh);
   static EVPKeyPointer NewRSA(RSAPointer&& rsa);
 
@@ -912,6 +930,10 @@ class EVPKeyPointer final {
   DataPointer rawPublicKey() const;
   DataPointer rawPrivateKey() const;
   BIOPointer derPublicKey() const;
+
+#if OPENSSL_WITH_PQC
+  DataPointer rawSeed() const;
+#endif
 
   Result<BIOPointer, bool> writePrivateKey(
       const PrivateKeyEncodingConfig& config) const;
@@ -1541,6 +1563,57 @@ DataPointer pbkdf2(const Digest& md,
                    const Buffer<const unsigned char>& salt,
                    uint32_t iterations,
                    size_t length);
+
+#if OPENSSL_VERSION_NUMBER >= 0x30200000L
+#ifndef OPENSSL_NO_ARGON2
+enum class Argon2Type { ARGON2D, ARGON2I, ARGON2ID };
+
+DataPointer argon2(const Buffer<const char>& pass,
+                   const Buffer<const unsigned char>& salt,
+                   uint32_t lanes,
+                   size_t length,
+                   uint32_t memcost,
+                   uint32_t iter,
+                   uint32_t version,
+                   const Buffer<const unsigned char>& secret,
+                   const Buffer<const unsigned char>& ad,
+                   Argon2Type type);
+#endif
+#endif
+
+// ============================================================================
+// KEM (Key Encapsulation Mechanism)
+#if OPENSSL_VERSION_MAJOR >= 3
+
+class KEM final {
+ public:
+  struct EncapsulateResult {
+    DataPointer ciphertext;
+    DataPointer shared_key;
+
+    EncapsulateResult() = default;
+    EncapsulateResult(DataPointer ct, DataPointer sk)
+        : ciphertext(std::move(ct)), shared_key(std::move(sk)) {}
+  };
+
+  // Encapsulate a shared secret using KEM with a public key.
+  // Returns both the ciphertext and shared secret.
+  static std::optional<EncapsulateResult> Encapsulate(
+      const EVPKeyPointer& public_key);
+
+  // Decapsulate a shared secret using KEM with a private key and ciphertext.
+  // Returns the shared secret.
+  static DataPointer Decapsulate(const EVPKeyPointer& private_key,
+                                 const Buffer<const void>& ciphertext);
+
+ private:
+#if !OPENSSL_VERSION_PREREQ(3, 5)
+  static bool SetOperationParameter(EVP_PKEY_CTX* ctx,
+                                    const EVPKeyPointer& key);
+#endif
+};
+
+#endif  // OPENSSL_VERSION_MAJOR >= 3
 
 // ============================================================================
 // Version metadata

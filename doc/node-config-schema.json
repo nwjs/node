@@ -266,6 +266,9 @@
         "max-http-header-size": {
           "type": "number"
         },
+        "max-old-space-size-percentage": {
+          "type": "string"
+        },
         "network-family-autoselection": {
           "type": "boolean"
         },
@@ -439,6 +442,9 @@
               "type": "array"
             }
           ]
+        },
+        "test-rerun-failures": {
+          "type": "string"
         },
         "test-shard": {
           "type": "string"
@@ -691,6 +697,9 @@
               "type": "array"
             }
           ]
+        },
+        "test-rerun-failures": {
+          "type": "string"
         },
         "test-shard": {
           "type": "string"

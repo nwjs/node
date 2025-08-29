@@ -33,22 +33,27 @@ properties:
   using `napi_get_last_error_info`. More information can be found in the error
   handling section [Error handling][].
 
+## Writing addons in various programming languages
+
 Node-API is a C API that ensures ABI stability across Node.js versions
-and different compiler levels. A C++ API can be easier to use.
-To support using C++, the project maintains a
-C++ wrapper module called [`node-addon-api`][].
-This wrapper provides an inlinable C++ API. Binaries built
-with `node-addon-api` will depend on the symbols for the Node-API C-based
-functions exported by Node.js. `node-addon-api` is a more
-efficient way to write code that calls Node-API. Take, for example, the
-following `node-addon-api` code. The first section shows the
-`node-addon-api` code and the second section shows what actually gets
-used in the addon.
+and different compiler levels. With this stability guarantee, it is possible
+to write addons in other programming languages on top of Node-API. Refer
+to [language and engine bindings][] for more programming languages and engines
+support details.
+
+[`node-addon-api`][] is the official C++ binding that provides a more efficient way to
+write C++ code that calls Node-API. This wrapper is a header-only library that offers an inlinable C++ API.
+Binaries built with `node-addon-api` will depend on the symbols of the Node-API
+C-based functions exported by Node.js. The following code snippet is an example
+of `node-addon-api`:
 
 ```cpp
 Object obj = Object::New(env);
 obj["foo"] = String::New(env, "bar");
 ```
+
+The above `node-addon-api` C++ code is equivalent to the following C-based
+Node-API code:
 
 ```cpp
 napi_status status;
@@ -72,8 +77,9 @@ if (status != napi_ok) {
 }
 ```
 
-The end result is that the addon only uses the exported C APIs. As a result,
-it still gets the benefits of the ABI stability provided by the C API.
+The end result is that the addon only uses the exported C APIs. Even though
+the addon is written in C++, it still gets the benefits of the ABI stability
+provided by the C Node-API.
 
 When using `node-addon-api` instead of the C APIs, start with the API [docs][]
 for `node-addon-api`.
@@ -120,6 +126,32 @@ must use Node-API exclusively by restricting itself to using
 
 and by checking, for all external libraries that it uses, that the external
 library makes ABI stability guarantees similar to Node-API.
+
+### Enum values in ABI stability
+
+All enum data types defined in Node-API should be considered as a fixed size
+`int32_t` value. Bit flag enum types should be explicitly documented, and they
+work with bit operators like bit-OR (`|`) as a bit value. Unless otherwise
+documented, an enum type should be considered to be extensible.
+
+A new enum value will be added at the end of the enum definition. An enum value
+will not be removed or renamed.
+
+For an enum type returned from a Node-API function, or provided as an out
+parameter of a Node-API function, the value is an integer value and an addon
+should handle unknown values. New values are allowed to be introduced without
+a version guard. For example, when checking `napi_status` in switch statements,
+an addon should include a default branch, as new status codes may be introduced
+in newer Node.js versions.
+
+For an enum type used in an in-parameter, the result of passing an unknown
+integer value to Node-API functions is undefined unless otherwise documented.
+A new value is added with a version guard to indicate the Node-API version in
+which it was introduced. For example, `napi_get_all_property_names` can be
+extended with new enum value of `napi_key_filter`.
+
+For an enum type used in both in-parameters and out-parameters, new values are
+allowed to be introduced without a version guard.
 
 ## Building
 
@@ -2203,7 +2235,7 @@ typedef enum {
 } napi_key_filter;
 ```
 
-Property filter bits. They can be or'ed to build a composite filter.
+Property filter bit flag. This works with bit operators to build a composite filter.
 
 #### `napi_key_conversion`
 
@@ -4417,11 +4449,11 @@ typedef enum {
 } napi_property_attributes;
 ```
 
-`napi_property_attributes` are flags used to control the behavior of properties
-set on a JavaScript object. Other than `napi_static` they correspond to the
-attributes listed in [Section property attributes][]
+`napi_property_attributes` are bit flags used to control the behavior of
+properties set on a JavaScript object. Other than `napi_static` they
+correspond to the attributes listed in [Section property attributes][]
 of the [ECMAScript Language Specification][].
-They can be one or more of the following bitflags:
+They can be one or more of the following bit flags:
 
 * `napi_default`: No explicit attributes are set on the property. By default, a
   property is read only, not enumerable and not configurable.
@@ -6861,6 +6893,7 @@ the add-on's file name during loading.
 [externals]: #napi_create_external
 [global scope]: globals.md
 [gyp-next]: https://github.com/nodejs/gyp-next
+[language and engine bindings]: https://github.com/nodejs/abi-stable-node/blob/doc/node-api-engine-bindings.md
 [module scope]: modules.md#the-module-scope
 [node-gyp]: https://github.com/nodejs/node-gyp
 [node-pre-gyp]: https://github.com/mapbox/node-pre-gyp

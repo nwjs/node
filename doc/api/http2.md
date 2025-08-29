@@ -1080,6 +1080,11 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/58313
     description: Following the deprecation of priority signaling as of RFC 9113,
                  `weight` option is deprecated.
+  - version:
+      - v24.0.0
+      - v22.17.0
+    pr-url: https://github.com/nodejs/node/pull/57917
+    description: Allow passing headers in raw array format.
 -->
 
 * `headers` {HTTP/2 Headers Object|Array}
@@ -1851,13 +1856,17 @@ and will throw an error.
 added: v8.4.0
 changes:
   - version:
+    - v24.7.0
+    pr-url: https://github.com/nodejs/node/pull/59455
+    description: Allow passing headers in raw array format.
+  - version:
     - v14.5.0
     - v12.19.0
     pr-url: https://github.com/nodejs/node/pull/33160
     description: Allow explicitly setting date headers.
 -->
 
-* `headers` {HTTP/2 Headers Object}
+* `headers` {HTTP/2 Headers Object|Array}
 * `options` {Object}
   * `endStream` {boolean} Set to `true` to indicate that the response will not
     include payload data.
@@ -2914,7 +2923,7 @@ changes:
     and trailing whitespace validation for HTTP/2 header field names and values
     as per [RFC-9113](https://www.rfc-editor.org/rfc/rfc9113.html#section-8.2.1).
     **Default:** `true`.
-  * ...: Any [`net.createServer()`][] option can be provided.
+  * `...options` {Object} Any [`net.createServer()`][] option can be provided.
 * `onRequestHandler` {Function} See [Compatibility API][]
 * Returns: {Http2Server}
 
@@ -3077,8 +3086,8 @@ changes:
     settings types, which are included in the `customSettings`-property of the
     received remoteSettings. Please see the `customSettings`-property of the
     `Http2Settings` object for more information, on the allowed setting types.
-  * ...: Any [`tls.createServer()`][] options can be provided. For
-    servers, the identity options (`pfx` or `key`/`cert`) are usually required.
+  * `...options` {Object} Any [`tls.createServer()`][] options can be provided.
+    For servers, the identity options (`pfx` or `key`/`cert`) are usually required.
   * `origins` {string\[]} An array of origin strings to send within an `ORIGIN`
     frame immediately following creation of a new server `Http2Session`.
   * `unknownProtocolTimeout` {number} Specifies a timeout in milliseconds that
@@ -3239,7 +3248,8 @@ changes:
   * `createConnection` {Function} An optional callback that receives the `URL`
     instance passed to `connect` and the `options` object, and returns any
     [`Duplex`][] stream that is to be used as the connection for this session.
-  * ...: Any [`net.connect()`][] or [`tls.connect()`][] options can be provided.
+  * `...options` {Object} Any [`net.connect()`][] or [`tls.connect()`][] options
+    can be provided.
   * `unknownProtocolTimeout` {number} Specifies a timeout in milliseconds that
     a server should wait when an [`'unknownProtocol'`][] event is emitted. If
     the socket has not been destroyed by that time the server will destroy it.
@@ -3364,8 +3374,7 @@ added:
 -->
 
 * `socket` {stream.Duplex}
-* `options` {Object}
-  * ...: Any [`http2.createServer()`][] option can be provided.
+* `options` {Object} Any [`http2.createServer()`][] option can be provided.
 * Returns: {ServerHttp2Session}
 
 Create an HTTP/2 server session from an existing socket.

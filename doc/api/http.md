@@ -117,6 +117,10 @@ http.get({
 added: v0.3.4
 changes:
   - version:
+    - v24.7.0
+    pr-url: https://github.com/nodejs/node/pull/59315
+    description: Add support for `agentKeepAliveTimeoutBuffer`.
+  - version:
     - v24.5.0
     pr-url: https://github.com/nodejs/node/pull/58980
     description: Add support for `proxyEnv`.
@@ -156,6 +160,12 @@ changes:
     the [initial delay][]
     for TCP Keep-Alive packets. Ignored when the
     `keepAlive` option is `false` or `undefined`. **Default:** `1000`.
+  * `agentKeepAliveTimeoutBuffer` {number} Milliseconds to subtract from
+    the server-provided `keep-alive: timeout=...` hint when determining socket
+    expiration time. This buffer helps ensure the agent closes the socket
+    slightly before the server does, reducing the chance of sending a request
+    on a socket that’s about to be closed by the server.
+    **Default:** `1000`.
   * `maxSockets` {number} Maximum number of sockets to allow per host.
     If the same host opens multiple concurrent connections, each request
     will use new socket until the `maxSockets` value is reached.
@@ -1942,17 +1952,38 @@ added: v8.0.0
 
 The number of milliseconds of inactivity a server needs to wait for additional
 incoming data, after it has finished writing the last response, before a socket
-will be destroyed. If the server receives new data before the keep-alive
-timeout has fired, it will reset the regular inactivity timeout, i.e.,
-[`server.timeout`][].
+will be destroyed.
+
+This timeout value is combined with the
+[`server.keepAliveTimeoutBuffer`][] option to determine the actual socket
+timeout, calculated as:
+socketTimeout = keepAliveTimeout + keepAliveTimeoutBuffer
+If the server receives new data before the keep-alive timeout has fired, it
+will reset the regular inactivity timeout, i.e., [`server.timeout`][].
 
 A value of `0` will disable the keep-alive timeout behavior on incoming
 connections.
-A value of `0` makes the http server behave similarly to Node.js versions prior
+A value of `0` makes the HTTP server behave similarly to Node.js versions prior
 to 8.0.0, which did not have a keep-alive timeout.
 
 The socket timeout logic is set up on connection, so changing this value only
 affects new connections to the server, not any existing connections.
+
+### `server.keepAliveTimeoutBuffer`
+
+<!-- YAML
+added: v24.6.0
+-->
+
+* Type: {number} Timeout in milliseconds. **Default:** `1000` (1 second).
+
+An additional buffer time added to the
+[`server.keepAliveTimeout`][] to extend the internal socket timeout.
+
+This buffer helps reduce connection reset (`ECONNRESET`) errors by increasing
+the socket timeout slightly beyond the advertised keep-alive timeout.
+
+This option applies only to new incoming connections.
 
 ### `server[Symbol.asyncDispose]()`
 
@@ -4432,6 +4463,7 @@ const agent2 = new http.Agent({ proxyEnv: process.env });
 [`response.writeHead()`]: #responsewriteheadstatuscode-statusmessage-headers
 [`server.close()`]: #serverclosecallback
 [`server.headersTimeout`]: #serverheaderstimeout
+[`server.keepAliveTimeoutBuffer`]: #serverkeepalivetimeoutbuffer
 [`server.keepAliveTimeout`]: #serverkeepalivetimeout
 [`server.listen()`]: net.md#serverlisten
 [`server.requestTimeout`]: #serverrequesttimeout

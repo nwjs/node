@@ -826,6 +826,12 @@ when an error occurs (and is caught) during the creation of the
 context, for example, when the allocation fails or the maximum call stack
 size is reached when the context is created.
 
+<a id="ERR_CRYPTO_ARGON2_NOT_SUPPORTED"></a>
+
+### `ERR_CRYPTO_ARGON2_NOT_SUPPORTED`
+
+Argon2 is not supported by the current version of OpenSSL being used.
+
 <a id="ERR_CRYPTO_CUSTOM_ENGINE_NOT_SUPPORTED"></a>
 
 ### `ERR_CRYPTO_CUSTOM_ENGINE_NOT_SUPPORTED`
@@ -1058,6 +1064,17 @@ Key's Elliptic Curve is not registered for use in the
 
 Key's Asymmetric Key Type is not registered for use in the
 [JSON Web Key Types Registry][].
+
+<a id="ERR_CRYPTO_KEM_NOT_SUPPORTED"></a>
+
+### `ERR_CRYPTO_KEM_NOT_SUPPORTED`
+
+<!-- YAML
+added: v24.7.0
+-->
+
+Attempted to use KEM operations while Node.js was not compiled with
+OpenSSL with KEM support.
 
 <a id="ERR_CRYPTO_OPERATION_FAILED"></a>
 

@@ -330,6 +330,9 @@ with the [`--no-experimental-websocket`][] CLI flag.
 <!-- YAML
 added: v18.0.0
 changes:
+ - version: v24.7.0
+   pr-url: https://github.com/nodejs/node/pull/59464
+   description: format now accepts `brotli` value.
  - version:
     - v23.11.0
     - v22.15.0
@@ -445,6 +448,9 @@ A browser-compatible implementation of {CustomEvent}.
 <!-- YAML
 added: v18.0.0
 changes:
+ - version: v24.7.0
+   pr-url: https://github.com/nodejs/node/pull/59464
+   description: format now accepts `brotli` value.
  - version:
     - v23.11.0
     - v22.15.0
@@ -537,7 +543,7 @@ The dispatcher must be compatible with `undici`'s
 fetch(url, { dispatcher: new MyAgent() });
 ```
 
-It is possible to change the global dispatcher in Node.js installing `undici` and using
+It is possible to change the global dispatcher in Node.js by installing `undici` and using
 the `setGlobalDispatcher()` method. Calling this method will affect both `undici` and
 Node.js.
 

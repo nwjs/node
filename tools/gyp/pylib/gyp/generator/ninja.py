@@ -250,7 +250,7 @@ class NinjaWriter:
         if flavor == "win":
             # See docstring of msvs_emulation.GenerateEnvironmentFiles().
             self.win_env = {}
-            for arch in ("x86", "x64"):
+            for arch in ("x86", "x64", "arm64"):
                 self.win_env[arch] = "environment." + arch
 
         # Relative path from build output dir to base dir.
@@ -406,11 +406,18 @@ class NinjaWriter:
         if self.flavor == "win":
             self.msvs_settings = gyp.msvs_emulation.MsvsSettings(spec, generator_flags)
             arch = self.msvs_settings.GetArch(config_name)
-            self.ninja.variable("arch", self.win_env[arch])
+            if self.toolset != "target" and arch == "arm64":
+                self.ninja.variable("arch", self.win_env['x64'])
+            else:
+                self.ninja.variable("arch", self.win_env[arch])
             self.ninja.variable("cc", "$cl_" + arch)
             self.ninja.variable("cxx", "$cl_" + arch)
-            self.ninja.variable("cc_host", "$cl_" + arch)
-            self.ninja.variable("cxx_host", "$cl_" + arch)
+            if arch == "arm64":
+                self.ninja.variable("cc_host", "$cl_x64")
+                self.ninja.variable("cxx_host", "$cl_x64")
+            else:
+                self.ninja.variable("cc_host", "$cl_" + arch)
+                self.ninja.variable("cxx_host", "$cl_" + arch)
             self.ninja.variable("asm", "$ml_" + arch)
 
         if self.flavor == "mac":
@@ -2329,7 +2336,10 @@ def GenerateOutputForConfig(target_list, target_dicts, data, params, config_name
             )
             if clang_cl:
                 # Use clang-cl to cross-compile for x86 or x86_64.
-                command += " -m32" if arch == "x86" else " -m64"
+                if arch != "arm64":
+                    command += " -m32" if arch == "x86" else " -m64"
+                else:
+                    command += " --target=aarch64-pc-windows-msvc"
             master_ninja.variable("cl_" + arch, command)
 
     cc = GetEnvironFallback(["CC_target", "CC"], cc)

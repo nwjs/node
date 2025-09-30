@@ -328,7 +328,7 @@ class MsvsSettings:
         if not platform:  # If no specific override, use the configuration's.
             platform = configuration_platform
         # Map from platform to architecture.
-        return {"Win32": "x86", "x64": "x64", "ARM64": "arm64"}.get(platform, "x86")
+        return {"Win32": "x86", "x64": "x64", "ARM64": "arm64", "arm64": "arm64"}.get(platform, "x86")
 
     def _TargetConfig(self, config):
         """Returns the target-specific configuration."""
@@ -1173,7 +1173,7 @@ def GenerateEnvironmentFiles(
     meet your requirement (e.g. for custom toolchains), you can pass
     "-G ninja_use_custom_environment_files" to the gyp to suppress file
     generation and use custom environment files prepared by yourself."""
-    archs = ("x86", "x64")
+    archs = ("x86", "x64", "arm64")
     if generator_flags.get("ninja_use_custom_environment_files", 0):
         cl_paths = {}
         for arch in archs:

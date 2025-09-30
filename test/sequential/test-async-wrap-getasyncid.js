@@ -64,6 +64,8 @@ const { getSystemErrorName } = require('util');
     delete providers.WORKERHEAPSNAPSHOT;
     delete providers.WORKERHEAPSTATISTICS;
     delete providers.WORKERCPUUSAGE;
+    delete providers.WORKERCPUPROFILE;
+    delete providers.WORKERHEAPPROFILE;
     delete providers.BLOBREADER;
     delete providers.RANDOMPRIMEREQUEST;
     delete providers.CHECKPRIMEREQUEST;

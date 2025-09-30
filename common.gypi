@@ -19,6 +19,7 @@
     'node_shared_simdjson%': 'false',
     'node_shared_simdutf%': 'false',
     'use_ccache_win%': 'false',
+    'node_enable_v8windbg%': 'false',
     'node_quic%': 'false',
     'force_dynamic_crt%': 0,
     'node_use_v8_platform%': 'true',
@@ -55,7 +56,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.26',
+    'v8_embedder_string': '-node.27',
 
     ##### V8 defaults for Node.js #####
 

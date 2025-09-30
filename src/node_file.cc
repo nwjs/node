@@ -1994,7 +1994,7 @@ static void ReadDir(const FunctionCallbackInfo<Value>& args) {
   ToNamespacedPath(env, &path);
 
 #ifdef _WIN32
-  if (slashCheck) {
+  if (slashCheck && !path.ToStringView().ends_with("\\")) {
     size_t new_length = path.length() + 1;
     path.AllocateSufficientStorage(new_length + 1);
     path.SetLengthAndZeroTerminate(new_length);
@@ -3251,8 +3251,8 @@ static void CpSyncCheckPaths(const FunctionCallbackInfo<Value>& args) {
         errorno, dereference ? "stat" : "lstat", nullptr, src.out());
   }
   auto dest_status =
-      dereference ? std::filesystem::symlink_status(dest_path, error_code)
-                  : std::filesystem::status(dest_path, error_code);
+      dereference ? std::filesystem::status(dest_path, error_code)
+                  : std::filesystem::symlink_status(dest_path, error_code);
 
   bool dest_exists = !error_code && dest_status.type() !=
                                         std::filesystem::file_type::not_found;
@@ -3276,7 +3276,7 @@ static void CpSyncCheckPaths(const FunctionCallbackInfo<Value>& args) {
       std::string message =
           "Cannot overwrite non-directory %s with directory %s";
       return THROW_ERR_FS_CP_DIR_TO_NON_DIR(
-          env, message.c_str(), src_path_str, dest_path_str);
+          env, message.c_str(), dest_path_str, src_path_str);
     }
 
     if (!src_is_dir && dest_is_dir) {

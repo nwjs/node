@@ -106,8 +106,10 @@ v8::Local<v8::Array> AsyncHooks::js_execution_async_resources() {
 }
 
 v8::Local<v8::Object> AsyncHooks::native_execution_async_resource(size_t i) {
-  if (i >= native_execution_async_resources_.size()) return {};
-  return native_execution_async_resources_[i];
+  if (i >= native_execution_async_resources_.size() ||
+      native_execution_async_resources_[i] == nullptr)
+    return {};
+  return *native_execution_async_resources_[i];
 }
 
 inline v8::Local<v8::String> AsyncHooks::provider_string(int idx) {
@@ -855,6 +857,7 @@ void Environment::set_process_exit_handler(
     return PropertyName##_.Get(isolate_);                                      \
   }                                                                            \
   inline void IsolateData::set_##PropertyName(v8::Local<TypeName> value) {     \
+    CHECK(PropertyName##_.IsEmpty());                                          \
     PropertyName##_.Set(isolate_, value);                                      \
   }
   PER_ISOLATE_TEMPLATE_PROPERTIES(V)

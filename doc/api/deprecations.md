@@ -1079,6 +1079,10 @@ Type: End-of-Life
 The `util.isDate()` API has been removed. Please use
 `arg instanceof Date` instead.
 
+Also for stronger approaches, consider using:
+`Date.prototype.toString.call(arg) === '[object Date]' && !isNaN(arg)`.
+This can also be used in a `try/catch` block to handle invalid date objects.
+
 ### DEP0048: `util.isError()`
 
 <!-- YAML
@@ -1103,9 +1107,7 @@ changes:
 
 Type: End-of-Life
 
-The `util.isError()` API has been removed. Please use
-`Object.prototype.toString(arg) === '[object Error]' || arg instanceof Error`
-instead.
+The `util.isError()` API has been removed. Please use `Error.isError(arg)`.
 
 ### DEP0049: `util.isFunction()`
 
@@ -1266,9 +1268,7 @@ changes:
 
 Type: End-of-Life
 
-The `util.isPrimitive()` API has been removed. Please use
-`arg === null || (typeof arg !=='object' && typeof arg !== 'function')`
-instead.
+The `util.isPrimitive()` API has been removed. Please use `Object(arg) !== arg` instead.
 
 ### DEP0055: `util.isRegExp()`
 
@@ -3359,6 +3359,9 @@ Convert them to primitive strings.
 
 <!-- YAML
 changes:
+  - version: v24.8.0
+    pr-url: https://github.com/nodejs/node/pull/59758
+    description: Deprecation revoked.
   - version:
     - v18.7.0
     - v16.17.0
@@ -3366,14 +3369,12 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Deprecation revoked
 
-These methods were deprecated because they can be used in a way which does not
-hold the channel reference alive long enough to receive the events.
-
-Use [`diagnostics_channel.subscribe(name, onMessage)`][] or
-[`diagnostics_channel.unsubscribe(name, onMessage)`][] which does the same
-thing instead.
+These methods were deprecated because their use could leave the channel object
+vulnerable to being garbage-collected if not strongly referenced by the user.
+The deprecation was revoked because channel objects are now resistant to
+garbage collection when the channel has active subscribers.
 
 ### DEP0164: `process.exit(code)`, `process.exitCode` coercion to integer
 
@@ -4025,6 +4026,52 @@ The `node:_http_agent`, `node:_http_client`, `node:_http_common`, `node:_http_in
 `node:_http_outgoing` and `node:_http_server` modules are deprecated as they should be considered
 an internal nodejs implementation rather than a public facing API, use `node:http` instead.
 
+### DEP0200: Closing fs.Dir on garbage collection
+
+<!-- YAML
+changes:
+  - version: v24.9.0
+    pr-url: https://github.com/nodejs/node/pull/59839
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only
+
+Allowing a [`fs.Dir`][] object to be closed on garbage collection is
+deprecated. In the future, doing so might result in a thrown error that will
+terminate the process.
+
+Please ensure that all `fs.Dir` objects are explicitly closed using
+`Dir.prototype.close()` or `using` keyword:
+
+```mjs
+import { opendir } from 'node:fs/promises';
+
+{
+  await using dir = await opendir('/async/disposable/directory');
+} // Closed by dir[Symbol.asyncDispose]()
+
+{
+  using dir = await opendir('/sync/disposable/directory');
+} // Closed by dir[Symbol.dispose]()
+
+{
+  const dir = await opendir('/unconditionally/iterated/directory');
+  for await (const entry of dir) {
+    // process an entry
+  } // Closed by iterator
+}
+
+{
+  let dir;
+  try {
+    dir = await opendir('/legacy/closeable/directory');
+  } finally {
+    await dir?.close();
+  }
+}
+```
+
 [DEP0142]: #dep0142-repl_builtinlibs
 [NIST SP 800-38D]: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf
 [RFC 6066]: https://tools.ietf.org/html/rfc6066#section-3
@@ -4075,8 +4122,6 @@ an internal nodejs implementation rather than a public facing API, use `node:htt
 [`crypto.setEngine()`]: crypto.md#cryptosetengineengine-flags
 [`decipher.final()`]: crypto.md#decipherfinaloutputencoding
 [`decipher.setAuthTag()`]: crypto.md#deciphersetauthtagbuffer-encoding
-[`diagnostics_channel.subscribe(name, onMessage)`]: diagnostics_channel.md#diagnostics_channelsubscribename-onmessage
-[`diagnostics_channel.unsubscribe(name, onMessage)`]: diagnostics_channel.md#diagnostics_channelunsubscribename-onmessage
 [`dirent.parentPath`]: fs.md#direntparentpath
 [`dns.lookup()`]: dns.md#dnslookuphostname-options-callback
 [`dnsPromises.lookup()`]: dns.md#dnspromiseslookuphostname-options
@@ -4084,6 +4129,7 @@ an internal nodejs implementation rather than a public facing API, use `node:htt
 [`ecdh.setPublicKey()`]: crypto.md#ecdhsetpublickeypublickey-encoding
 [`emitter.listenerCount(eventName)`]: events.md#emitterlistenercounteventname-listener
 [`events.listenerCount(emitter, eventName)`]: events.md#eventslistenercountemitter-eventname
+[`fs.Dir`]: fs.md#class-fsdir
 [`fs.FileHandle`]: fs.md#class-filehandle
 [`fs.access()`]: fs.md#fsaccesspath-mode-callback
 [`fs.appendFile()`]: fs.md#fsappendfilepath-data-options-callback

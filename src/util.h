@@ -26,6 +26,7 @@
 
 #include "uv.h"
 #include "v8-inspector.h"
+#include "v8-profiler.h"
 #include "v8.h"
 
 #include "node.h"
@@ -45,6 +46,7 @@
 #include <optional>
 #include <ranges>
 #include <set>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -329,21 +331,29 @@ class KVStore {
 };
 
 // Convenience wrapper around v8::String::NewFromOneByte().
-inline v8::Local<v8::String> OneByteString(v8::Isolate* isolate,
-                                           const char* data,
-                                           int length = -1);
+inline v8::Local<v8::String> OneByteString(
+    v8::Isolate* isolate,
+    const char* data,
+    int length = -1,
+    v8::NewStringType type = v8::NewStringType::kNormal);
 
 // For the people that compile with -funsigned-char.
-inline v8::Local<v8::String> OneByteString(v8::Isolate* isolate,
-                                           const signed char* data,
-                                           int length = -1);
+inline v8::Local<v8::String> OneByteString(
+    v8::Isolate* isolate,
+    const signed char* data,
+    int length = -1,
+    v8::NewStringType type = v8::NewStringType::kNormal);
 
-inline v8::Local<v8::String> OneByteString(v8::Isolate* isolate,
-                                           const unsigned char* data,
-                                           int length = -1);
+inline v8::Local<v8::String> OneByteString(
+    v8::Isolate* isolate,
+    const unsigned char* data,
+    int length = -1,
+    v8::NewStringType type = v8::NewStringType::kNormal);
 
-inline v8::Local<v8::String> OneByteString(v8::Isolate* isolate,
-                                           std::string_view str);
+inline v8::Local<v8::String> OneByteString(
+    v8::Isolate* isolate,
+    std::string_view str,
+    v8::NewStringType type = v8::NewStringType::kNormal);
 
 // Used to be a macro, hence the uppercase name.
 template <std::size_t N>
@@ -351,15 +361,7 @@ template <std::size_t N>
 inline v8::Local<v8::String> FIXED_ONE_BYTE_STRING(v8::Isolate* isolate,
                                                    const char (&data)[N]) {
   CHECK_EQ(data[N - 1], '\0');
-  return OneByteString(isolate, data, N - 1);
-}
-
-template <std::size_t N>
-  requires(N > 0)
-inline v8::Local<v8::String> FIXED_ONE_BYTE_STRING(
-    v8::Isolate* isolate, const std::array<char, N>& arr) {
-  CHECK_EQ(arr[N - 1], '\0');
-  return OneByteString(isolate, arr.data(), N - 1);
+  return OneByteString(isolate, data, N - 1, v8::NewStringType::kInternalized);
 }
 
 // tolower() is locale-sensitive.  Use ToLower() instead.
@@ -659,13 +661,9 @@ struct MallocedBuffer {
 };
 
 // Test whether some value can be called with ().
-template <typename T, typename = void>
-struct is_callable : std::is_function<T> { };
-
 template <typename T>
-struct is_callable<T, typename std::enable_if<
-    std::is_same<decltype(void(&T::operator())), void>::value
-    >::type> : std::true_type { };
+concept is_callable =
+    std::is_function<T>::value || requires { &T::operator(); };
 
 template <typename T, void (*function)(T*)>
 struct FunctionDeleter {
@@ -934,6 +932,16 @@ void SetMethodNoSideEffect(v8::Isolate* isolate,
                            const std::string_view name,
                            v8::FunctionCallback callback);
 
+// Set the Symbol.dispose method on the prototype of the class.
+void SetProtoDispose(v8::Isolate* isolate,
+                     v8::Local<v8::FunctionTemplate> that,
+                     v8::FunctionCallback callback);
+
+// Set the Symbol.asyncDispose method on the prototype of the class.
+void SetProtoAsyncDispose(v8::Isolate* isolate,
+                          v8::Local<v8::FunctionTemplate> that,
+                          v8::FunctionCallback callback);
+
 enum class SetConstructorFunctionFlag {
   NONE,
   SET_CLASS_NAME,
@@ -1002,12 +1010,45 @@ v8::Maybe<int> GetValidFileMode(Environment* env,
                                 v8::Local<v8::Value> input,
                                 uv_fs_type type);
 
+class JSONOutputStream final : public v8::OutputStream {
+ public:
+  JSONOutputStream() = default;
+
+  int GetChunkSize() override { return 65536; }
+
+  void EndOfStream() override {}
+
+  WriteResult WriteAsciiChunk(char* data, const int size) override {
+    out_stream_.write(data, size);
+    return kContinue;
+  }
+
+  std::ostringstream& out_stream() { return out_stream_; }
+
+ private:
+  std::ostringstream out_stream_;
+};
+
 #ifdef _WIN32
 // Returns true if OS==Windows and filename ends in .bat or .cmd,
 // case insensitive.
 inline bool IsWindowsBatchFile(const char* filename);
 inline std::wstring ConvertToWideString(const std::string& str, UINT code_page);
 #endif  // _WIN32
+
+// A helper to create a new instance of the dictionary template.
+// Unlike v8::DictionaryTemplate::NewInstance, this method will
+// check that all properties have been set (are not empty MaybeLocals)
+// or will return early with an empty MaybeLocal under the assumption
+// that an error has been thrown.
+inline v8::MaybeLocal<v8::Object> NewDictionaryInstance(
+    v8::Local<v8::Context> context,
+    v8::Local<v8::DictionaryTemplate> tmpl,
+    v8::MemorySpan<v8::MaybeLocal<v8::Value>> property_values);
+inline v8::MaybeLocal<v8::Object> NewDictionaryInstanceNullProto(
+    v8::Local<v8::Context> context,
+    v8::Local<v8::DictionaryTemplate> tmpl,
+    v8::MemorySpan<v8::MaybeLocal<v8::Value>> property_values);
 
 }  // namespace node
 

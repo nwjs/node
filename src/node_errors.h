@@ -48,6 +48,8 @@ void OOMErrorHandler(const char* location, const v8::OOMDetails& details);
   V(ERR_CLOSED_MESSAGE_PORT, Error)                                            \
   V(ERR_CONSTRUCT_CALL_REQUIRED, TypeError)                                    \
   V(ERR_CONSTRUCT_CALL_INVALID, TypeError)                                     \
+  V(ERR_CPU_PROFILE_NOT_STARTED, Error)                                        \
+  V(ERR_CPU_PROFILE_TOO_MANY, Error)                                           \
   V(ERR_CRYPTO_CUSTOM_ENGINE_NOT_SUPPORTED, Error)                             \
   V(ERR_CRYPTO_INITIALIZATION_FAILED, Error)                                   \
   V(ERR_CRYPTO_INVALID_ARGON2_PARAMS, TypeError)                               \
@@ -85,6 +87,8 @@ void OOMErrorHandler(const char* location, const v8::OOMDetails& details);
   V(ERR_FS_CP_SOCKET, Error)                                                   \
   V(ERR_FS_CP_FIFO_PIPE, Error)                                                \
   V(ERR_FS_CP_UNKNOWN, Error)                                                  \
+  V(ERR_HEAP_PROFILE_HAVE_BEEN_STARTED, Error)                                 \
+  V(ERR_HEAP_PROFILE_NOT_STARTED, Error)                                       \
   V(ERR_ILLEGAL_CONSTRUCTOR, Error)                                            \
   V(ERR_INVALID_ADDRESS, Error)                                                \
   V(ERR_INVALID_ARG_VALUE, TypeError)                                          \
@@ -108,6 +112,8 @@ void OOMErrorHandler(const char* location, const v8::OOMDetails& details);
   V(ERR_MISSING_PASSPHRASE, TypeError)                                         \
   V(ERR_MISSING_PLATFORM_FOR_WORKER, Error)                                    \
   V(ERR_MODULE_NOT_FOUND, Error)                                               \
+  V(ERR_MODULE_NOT_INSTANTIATED, Error)                                        \
+  V(ERR_MODULE_LINK_MISMATCH, TypeError)                                       \
   V(ERR_NON_CONTEXT_AWARE_DISABLED, Error)                                     \
   V(ERR_OPERATION_FAILED, TypeError)                                           \
   V(ERR_OPTIONS_BEFORE_BOOTSTRAPPING, Error)                                   \
@@ -226,6 +232,7 @@ ERRORS_WITH_CODE(V)
   V(ERR_MISSING_PLATFORM_FOR_WORKER,                                           \
     "The V8 platform used by this instance of Node does not support "          \
     "creating Workers")                                                        \
+  V(ERR_MODULE_NOT_INSTANTIATED, "Module is not instantiated")                 \
   V(ERR_NON_CONTEXT_AWARE_DISABLED,                                            \
     "Loading non context-aware native addons has been disabled")               \
   V(ERR_SCRIPT_EXECUTION_INTERRUPTED,                                          \

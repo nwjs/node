@@ -18,6 +18,7 @@
                  'node_shared_openssl': 'false',
                  'node_shared_v8': 'false',
                  'node_shared_zlib': 'false',
+                 'node_enable_v8windbg': 'false',
                  'node_tag': '',
                  'node_release_urlbase': '',
                  'node_byteorder': 'little',

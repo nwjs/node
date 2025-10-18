@@ -146,7 +146,7 @@ static int32_t count_leading_zeros_64(int64_t value)
 #if defined(_MSC_VER) && !(defined(__clang__) && (defined(_M_ARM) || defined(_M_ARM64)))
     uint32_t leading_zero = 0;
 #if defined(_WIN64)
-    _BitScanReverse64(&leading_zero, value);
+    _BitScanReverse64((unsigned long*)&leading_zero, value);
 #else
     uint32_t high = value >> 32;
     if  (_BitScanReverse(&leading_zero, high))

@@ -156,7 +156,7 @@ static int32_t count_leading_zeros_64(int64_t value)
     else
     {
         uint32_t low = value & 0x00000000FFFFFFFF;
-        _BitScanReverse(&leading_zero, low);
+        _BitScanReverse((unsigned long*)&leading_zero, low);
     }
 #endif
     return 63 - leading_zero; /* smallest power of 2 containing value */

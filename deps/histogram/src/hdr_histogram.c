@@ -149,7 +149,7 @@ static int32_t count_leading_zeros_64(int64_t value)
     _BitScanReverse64((unsigned long*)&leading_zero, value);
 #else
     uint32_t high = value >> 32;
-    if  (_BitScanReverse(&leading_zero, high))
+    if  (_BitScanReverse((unsigned long*)&leading_zero, high))
     {
         leading_zero += 32;
     }

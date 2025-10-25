@@ -48,6 +48,7 @@ using v8::EmbedderGraph;
 using v8::EscapableHandleScope;
 using v8::ExternalMemoryAccounter;
 using v8::Function;
+using v8::Global;
 using v8::HandleScope;
 using v8::HeapProfiler;
 using v8::HeapSpaceStatistics;
@@ -122,10 +123,12 @@ void Environment::ResetPromiseHooks(Local<Function> init,
 }
 
 // Remember to keep this code aligned with pushAsyncContext() in JS.
-void AsyncHooks::push_async_context(double async_id,
-                                    double trigger_async_id,
-                                    Local<Object>* resource) {
-  CHECK_IMPLIES(resource != nullptr, !resource->IsEmpty());
+void AsyncHooks::push_async_context(
+    double async_id,
+    double trigger_async_id,
+    std::variant<Local<Object>*, Global<Object>*> resource) {
+  std::visit([](auto* ptr) { CHECK_IMPLIES(ptr != nullptr, !ptr->IsEmpty()); },
+             resource);
   // Since async_hooks is experimental, do only perform the check
   // when async_hooks is enabled.
   if (fields_[kCheck] > 0) {
@@ -143,12 +146,13 @@ void AsyncHooks::push_async_context(double async_id,
 
 #ifdef DEBUG
   for (uint32_t i = offset; i < native_execution_async_resources_.size(); i++)
-    CHECK_NULL(native_execution_async_resources_[i]);
+    std::visit([](auto* ptr) { CHECK_NULL(ptr); },
+               native_execution_async_resources_[i]);
 #endif
 
   // When this call comes from JS (as a way of increasing the stack size),
   // `resource` will be empty, because JS caches these values anyway.
-  if (resource != nullptr) {
+  if (std::visit([](auto* ptr) { return ptr != nullptr; }, resource)) {
     native_execution_async_resources_.resize(offset + 1);
     // Caveat: This is a v8::Local<>* assignment, we do not keep a v8::Global<>!
     native_execution_async_resources_[offset] = resource;
@@ -175,11 +179,13 @@ bool AsyncHooks::pop_async_context(double async_id) {
   fields_[kStackLength] = offset;
 
   if (offset < native_execution_async_resources_.size() &&
-      native_execution_async_resources_[offset] != nullptr) [[likely]] {
+      std::visit([](auto* ptr) { return ptr != nullptr; },
+                 native_execution_async_resources_[offset])) [[likely]] {
 #ifdef DEBUG
     for (uint32_t i = offset + 1; i < native_execution_async_resources_.size();
          i++) {
-      CHECK_NULL(native_execution_async_resources_[i]);
+      std::visit([](auto* ptr) { CHECK_NULL(ptr); },
+                 native_execution_async_resources_[i]);
     }
 #endif
     native_execution_async_resources_.resize(offset);
@@ -920,8 +926,10 @@ Environment::Environment(IsolateData* isolate_data,
       options_->allow_native_addons = false;
       permission()->Apply(this, {"*"}, permission::PermissionScope::kAddon);
     }
-    flags_ = flags_ | EnvironmentFlags::kNoCreateInspector;
-    permission()->Apply(this, {"*"}, permission::PermissionScope::kInspector);
+    if (!options_->allow_inspector) {
+      flags_ = flags_ | EnvironmentFlags::kNoCreateInspector;
+      permission()->Apply(this, {"*"}, permission::PermissionScope::kInspector);
+    }
     if (!options_->allow_child_process) {
       permission()->Apply(
           this, {"*"}, permission::PermissionScope::kChildProcess);
@@ -963,6 +971,10 @@ Environment::Environment(IsolateData* isolate_data,
       permission()->Apply(this,
                           options_->allow_fs_write,
                           permission::PermissionScope::kFileSystemWrite);
+    }
+
+    if (options_->allow_net) {
+      permission()->Apply(this, {"*"}, permission::PermissionScope::kNet);
     }
   }
 }
@@ -1131,11 +1143,21 @@ void Environment::InitializeCompileCache() {
       dir_from_env.empty()) {
     return;
   }
-  EnableCompileCache(dir_from_env);
+  std::string portable_env;
+  bool portable = credentials::SafeGetenv(
+                      "NODE_COMPILE_CACHE_PORTABLE", &portable_env, this) &&
+                  !portable_env.empty() && portable_env == "1";
+  if (portable) {
+    Debug(this,
+          DebugCategory::COMPILE_CACHE,
+          "[compile cache] using relative path\n");
+  }
+  EnableCompileCache(dir_from_env,
+                     portable ? EnableOption::PORTABLE : EnableOption::DEFAULT);
 }
 
 CompileCacheEnableResult Environment::EnableCompileCache(
-    const std::string& cache_dir) {
+    const std::string& cache_dir, EnableOption option) {
   CompileCacheEnableResult result;
   std::string disable_env;
   if (credentials::SafeGetenv(
@@ -1152,7 +1174,7 @@ CompileCacheEnableResult Environment::EnableCompileCache(
   if (!compile_cache_handler_) {
     std::unique_ptr<CompileCacheHandler> handler =
         std::make_unique<CompileCacheHandler>(this);
-    result = handler->Enable(this, cache_dir);
+    result = handler->Enable(this, cache_dir, option);
     if (result.status == CompileCacheEnableStatus::ENABLED) {
       compile_cache_handler_ = std::move(handler);
       AtExit(
@@ -1762,10 +1784,10 @@ void AsyncHooks::Deserialize(Local<Context> context) {
         context->GetDataFromSnapshotOnce<Array>(
             info_->js_execution_async_resources).ToLocalChecked();
   } else {
-    js_execution_async_resources = Array::New(context->GetIsolate());
+    js_execution_async_resources = Array::New(Isolate::GetCurrent());
   }
-  js_execution_async_resources_.Reset(
-      context->GetIsolate(), js_execution_async_resources);
+  js_execution_async_resources_.Reset(Isolate::GetCurrent(),
+                                      js_execution_async_resources);
 
   // The native_execution_async_resources_ field requires v8::Local<> instances
   // for async calls whose resources were on the stack as JS objects when they
@@ -1805,7 +1827,7 @@ AsyncHooks::SerializeInfo AsyncHooks::Serialize(Local<Context> context,
   info.async_id_fields = async_id_fields_.Serialize(context, creator);
   if (!js_execution_async_resources_.IsEmpty()) {
     info.js_execution_async_resources = creator->AddData(
-        context, js_execution_async_resources_.Get(context->GetIsolate()));
+        context, js_execution_async_resources_.Get(Isolate::GetCurrent()));
     CHECK_NE(info.js_execution_async_resources, 0);
   } else {
     info.js_execution_async_resources = 0;
@@ -1814,10 +1836,9 @@ AsyncHooks::SerializeInfo AsyncHooks::Serialize(Local<Context> context,
   info.native_execution_async_resources.resize(
       native_execution_async_resources_.size());
   for (size_t i = 0; i < native_execution_async_resources_.size(); i++) {
+    auto resource = native_execution_async_resource(i);
     info.native_execution_async_resources[i] =
-        native_execution_async_resources_[i] == nullptr
-            ? SIZE_MAX
-            : creator->AddData(context, *native_execution_async_resources_[i]);
+        resource.IsEmpty() ? SIZE_MAX : creator->AddData(context, resource);
   }
 
   // At the moment, promise hooks are not supported in the startup snapshot.

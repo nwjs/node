@@ -813,11 +813,11 @@ parser.add_argument('--without-npm',
     default=None,
     help='do not install the bundled npm (package manager)')
 
-parser.add_argument('--without-corepack',
+parser.add_argument('--with-corepack',
     action='store_true',
-    dest='without_corepack',
+    dest='with_corepack',
     default=None,
-    help='do not install the bundled Corepack')
+    help='do install the bundled Corepack (experimental, will be removed without notice)')
 
 parser.add_argument('--control-flow-guard',
     action='store_true',
@@ -851,12 +851,6 @@ parser.add_argument('--without-siphash',
     help=argparse.SUPPRESS)
 
 # End dummy list.
-
-parser.add_argument('--with-quic',
-    action='store_true',
-    dest='quic',
-    default=None,
-    help='build with QUIC support')
 
 parser.add_argument('--without-ssl',
     action='store_true',
@@ -1123,18 +1117,20 @@ def try_check_compiler(cc, lang):
 
   with proc:
     proc.stdin.write(b'__clang__ __GNUC__ __GNUC_MINOR__ __GNUC_PATCHLEVEL__ '
-                     b'__clang_major__ __clang_minor__ __clang_patchlevel__')
+                     b'__clang_major__ __clang_minor__ __clang_patchlevel__ '
+                     b'__APPLE__')
 
     if sys.platform == 'zos':
-      values = (to_utf8(proc.communicate()[0]).split('\n')[-2].split() + ['0'] * 7)[0:7]
+      values = (to_utf8(proc.communicate()[0]).split('\n')[-2].split() + ['0'] * 7)[0:8]
     else:
-      values = (to_utf8(proc.communicate()[0]).split() + ['0'] * 7)[0:7]
+      values = (to_utf8(proc.communicate()[0]).split() + ['0'] * 7)[0:8]
 
   is_clang = values[0] == '1'
   gcc_version = tuple(map(int, values[1:1+3]))
   clang_version = tuple(map(int, values[4:4+3])) if is_clang else None
+  is_apple = values[7] == '1'
 
-  return (True, is_clang, clang_version, gcc_version)
+  return (True, is_clang, clang_version, gcc_version, is_apple)
 
 
 #
@@ -1211,6 +1207,68 @@ def get_gas_version(cc):
   warn(f'Could not recognize `gas`: {gas_ret}')
   return '0.0'
 
+def get_openssl_version(o):
+  """Parse OpenSSL version from opensslv.h header file.
+
+  Returns the version as a number matching OPENSSL_VERSION_NUMBER format:
+  0xMNN00PPSL where M=major, NN=minor, PP=patch, S=status(0xf=release,0x0=pre), L=0
+  """
+
+  try:
+    # Use the C compiler to extract preprocessor macros from opensslv.h
+    args = ['-E', '-dM', '-include', 'openssl/opensslv.h', '-']
+    if not options.shared_openssl:
+      args = ['-I', 'deps/openssl/openssl/include'] + args
+    elif options.shared_openssl_includes:
+      args = ['-I', options.shared_openssl_includes] + args
+    else:
+      for dir in o['include_dirs']:
+        args = ['-I', dir] + args
+
+    proc = subprocess.Popen(
+      shlex.split(CC) + args,
+      stdin=subprocess.PIPE,
+      stdout=subprocess.PIPE,
+      stderr=subprocess.PIPE
+    )
+    with proc:
+      proc.stdin.write(b'\n')
+      out = to_utf8(proc.communicate()[0])
+
+    if proc.returncode != 0:
+      warn('Failed to extract OpenSSL version from opensslv.h header')
+      return 0
+
+    # Parse the macro definitions
+    macros = {}
+    for line in out.split('\n'):
+      if line.startswith('#define OPENSSL_VERSION_'):
+        parts = line.split()
+        if len(parts) >= 3:
+          macro_name = parts[1]
+          macro_value = parts[2]
+          macros[macro_name] = macro_value
+
+    # Extract version components
+    major = int(macros.get('OPENSSL_VERSION_MAJOR', '0'))
+    minor = int(macros.get('OPENSSL_VERSION_MINOR', '0'))
+    patch = int(macros.get('OPENSSL_VERSION_PATCH', '0'))
+
+    # Check if it's a pre-release (has non-empty PRE_RELEASE string)
+    pre_release = macros.get('OPENSSL_VERSION_PRE_RELEASE', '""').strip('"')
+    status = 0x0 if pre_release else 0xf
+    # Construct version number: 0xMNN00PPSL
+    version_number = ((major << 28) |
+                     (minor << 20) |
+                     (patch << 4) |
+                     status)
+
+    return version_number
+
+  except (OSError, ValueError, subprocess.SubprocessError) as e:
+    warn(f'Failed to determine OpenSSL version from header: {e}')
+    return 0
+
 # Note: Apple clang self-reports as clang 4.2.0 and gcc 4.2.1.  It passes
 # the version check more by accident than anything else but a more rigorous
 # check involves checking the build number against an allowlist.  I'm not
@@ -1236,18 +1294,18 @@ def check_compiler(o):
         o['variables']['openssl_no_asm'] = 1
     return
 
-  ok, is_clang, clang_version, gcc_version = try_check_compiler(CXX, 'c++')
+  ok, is_clang, clang_version, gcc_version, is_apple = try_check_compiler(CXX, 'c++')
   o['variables']['clang'] = B(is_clang)
   version_str = ".".join(map(str, clang_version if is_clang else gcc_version))
-  print_verbose(f"Detected {'clang ' if is_clang else ''}C++ compiler (CXX={CXX}) version: {version_str}")
+  print_verbose(f"Detected {'Apple ' if is_apple else ''}{'clang ' if is_clang else ''}C++ compiler (CXX={CXX}) version: {version_str}")
   if not ok:
     warn(f'failed to autodetect C++ compiler version (CXX={CXX})')
-  elif clang_version < (8, 0, 0) if is_clang else gcc_version < (12, 2, 0):
-    warn(f'C++ compiler (CXX={CXX}, {version_str}) too old, need g++ 12.2.0 or clang++ 8.0.0')
+  elif ((is_apple and clang_version < (17, 0, 0)) or (not is_apple and clang_version < (19, 1, 0))) if is_clang else gcc_version < (12, 2, 0):
+    warn(f"C++ compiler (CXX={CXX}, {version_str}) too old, need g++ 12.2.0 or clang++ 19.1.0{' or Apple clang++ 17.0.0' if is_apple else ''}")
 
-  ok, is_clang, clang_version, gcc_version = try_check_compiler(CC, 'c')
+  ok, is_clang, clang_version, gcc_version, is_apple = try_check_compiler(CC, 'c')
   version_str = ".".join(map(str, clang_version if is_clang else gcc_version))
-  print_verbose(f"Detected {'clang ' if is_clang else ''}C compiler (CC={CC}) version: {version_str}")
+  print_verbose(f"Detected {'Apple ' if is_apple else ''}{'clang ' if is_clang else ''}C compiler (CC={CC}) version: {version_str}")
   if not ok:
     warn(f'failed to autodetect C compiler version (CC={CC})')
   elif not is_clang and gcc_version < (4, 2, 0):
@@ -1425,7 +1483,7 @@ def configure_zos(o):
 
 def clang_version_ge(version_checked):
   for compiler in [(CC, 'c'), (CXX, 'c++')]:
-    _, is_clang, clang_version, _1 = (
+    _, is_clang, clang_version, _1, _2 = (
       try_check_compiler(compiler[0], compiler[1])
     )
     if is_clang and clang_version >= version_checked:
@@ -1434,7 +1492,7 @@ def clang_version_ge(version_checked):
 
 def gcc_version_ge(version_checked):
   for compiler in [(CC, 'c'), (CXX, 'c++')]:
-    _, is_clang, _1, gcc_version = (
+    _, is_clang, _1, gcc_version, _2 = (
       try_check_compiler(compiler[0], compiler[1])
     )
     if is_clang or gcc_version < version_checked:
@@ -1454,7 +1512,7 @@ def configure_node(o):
     o['variables']['OS'] = 'android'
   o['variables']['node_prefix'] = options.prefix
   o['variables']['node_install_npm'] = b(not options.without_npm)
-  o['variables']['node_install_corepack'] = b(not options.without_corepack)
+  o['variables']['node_install_corepack'] = b(options.with_corepack)
   o['variables']['control_flow_guard'] = b(options.enable_cfg)
   o['variables']['node_use_amaro'] = b(not options.without_amaro)
   o['variables']['debug_node'] = b(options.debug_node)
@@ -1771,7 +1829,6 @@ def configure_openssl(o):
   variables['node_shared_ngtcp2'] = b(options.shared_ngtcp2)
   variables['node_shared_nghttp3'] = b(options.shared_nghttp3)
   variables['openssl_is_fips'] = b(options.openssl_is_fips)
-  variables['node_quic'] = b(options.quic)
   variables['node_fipsinstall'] = b(False)
 
   if options.openssl_no_asm:
@@ -1833,11 +1890,9 @@ def configure_openssl(o):
   if options.openssl_is_fips and not options.shared_openssl:
     variables['node_fipsinstall'] = b(True)
 
-  variables['openssl_quic'] = b(options.quic)
-  if options.quic:
-    o['defines'] += ['NODE_OPENSSL_HAS_QUIC']
-
   configure_library('openssl', o)
+
+  o['variables']['openssl_version'] = get_openssl_version(o)
 
 def configure_sqlite(o):
   o['variables']['node_use_sqlite'] = b(not options.without_sqlite)

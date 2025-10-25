@@ -152,7 +152,9 @@ Error: Cannot load native addon because loading addons is disabled.
 <!-- YAML
 added: v20.0.0
 changes:
-  - version: v24.4.0
+  - version:
+      - v24.4.0
+      - v22.18.0
     pr-url: https://github.com/nodejs/node/pull/58853
     description: When spawning process with the permission model enabled.
                  The flags are inherit to the child Node.js process through
@@ -202,7 +204,9 @@ directly through the process arguments.
 <!-- YAML
 added: v20.0.0
 changes:
-  - version: v24.2.0
+  - version:
+      - v24.2.0
+      - v22.17.0
     pr-url: https://github.com/nodejs/node/pull/58579
     description: Entrypoints of your application are allowed to be read implicitly.
   - version:
@@ -270,6 +274,68 @@ Paths delimited by comma (`,`) are no longer allowed.
 When passing a single flag with a comma a warning will be displayed.
 
 Examples can be found in the [File System Permissions][] documentation.
+
+### `--allow-inspector`
+
+<!-- YAML
+added: v25.0.0
+-->
+
+> Stability: 1.0 - Early development
+
+When using the [Permission Model][], the process will not be able to connect
+through inspector protocol.
+
+Attempts to do so will throw an `ERR_ACCESS_DENIED` unless the
+user explicitly passes the `--allow-inspector` flag when starting Node.js.
+
+Example:
+
+```js
+const { Session } = require('node:inspector/promises');
+
+const session = new Session();
+session.connect();
+```
+
+```console
+$ node --permission index.js
+Error: connect ERR_ACCESS_DENIED Access to this API has been restricted. Use --allow-inspector to manage permissions.
+  code: 'ERR_ACCESS_DENIED',
+}
+```
+
+### `--allow-net`
+
+<!-- YAML
+added: v25.0.0
+-->
+
+> Stability: 1.1 - Active development
+
+When using the [Permission Model][], the process will not be able to access
+network by default.
+Attempts to do so will throw an `ERR_ACCESS_DENIED` unless the
+user explicitly passes the `--allow-net` flag when starting Node.js.
+
+Example:
+
+```js
+const http = require('node:http');
+// Attempt to bypass the permission
+const req = http.get('http://example.com', () => {});
+
+req.on('error', (err) => {
+  console.log('err', err);
+});
+```
+
+```console
+$ node --permission index.js
+Error: connect ERR_ACCESS_DENIED Access to this API has been restricted. Use --allow-net to manage permissions.
+  code: 'ERR_ACCESS_DENIED',
+}
+```
 
 ### `--allow-wasi`
 
@@ -593,7 +659,9 @@ added:
   - v23.7.0
   - v22.14.0
 changes:
-  - version: v24.8.0
+  - version:
+    - v24.8.0
+    - v22.20.0
     pr-url: https://github.com/nodejs/node/pull/59707
     description: The option is no longer experimental.
 -->
@@ -815,9 +883,11 @@ node --entry-url 'data:text/javascript,console.log("Hello")'
 
 <!-- YAML
 added: v22.9.0
+changes:
+  - version: v24.10.0
+    pr-url: https://github.com/nodejs/node/pull/59925
+    description: The `--env-file-if-exists` flag is no longer experimental.
 -->
-
-> Stability: 1.1 - Active development
 
 Behavior is the same as [`--env-file`][], but an error is not thrown if the file
 does not exist.
@@ -827,14 +897,15 @@ does not exist.
 <!-- YAML
 added: v20.6.0
 changes:
+  - version: v24.10.0
+    pr-url: https://github.com/nodejs/node/pull/59925
+    description: The `--env-file` flag is no longer experimental.
   - version:
     - v21.7.0
     - v20.12.0
     pr-url: https://github.com/nodejs/node/pull/51289
     description: Add support to multi-line values.
 -->
-
-> Stability: 1.1 - Active development
 
 Loads environment variables from a file relative to the current directory,
 making them available to applications on `process.env`. The [environment
@@ -915,7 +986,9 @@ It is possible to run code containing inline types unless the
 ### `--experimental-addon-modules`
 
 <!-- YAML
-added: v23.6.0
+added:
+  - v23.6.0
+  - v22.20.0
 -->
 
 > Stability: 1.0 - Early development
@@ -925,7 +998,9 @@ Enable experimental import support for `.node` addons.
 ### `--experimental-config-file=config`
 
 <!-- YAML
-added: v23.10.0
+added:
+ - v23.10.0
+ - v22.16.0
 -->
 
 > Stability: 1.0 - Early development
@@ -994,7 +1069,9 @@ so **NEVER** use untrusted configuration files.
 ### `--experimental-default-config-file`
 
 <!-- YAML
-added: v23.10.0
+added:
+ - v23.10.0
+ - v22.16.0
 -->
 
 > Stability: 1.0 - Early development
@@ -1039,6 +1116,7 @@ Previously gated the entire `import.meta.resolve` feature.
 <!-- YAML
 added:
   - v24.5.0
+  - v22.19.0
 -->
 
 > Stability: 1.1 - Active Development
@@ -1095,6 +1173,16 @@ added:
 If the ES module being `require()`'d contains top-level `await`, this flag
 allows Node.js to evaluate the module, try to locate the
 top-level awaits, and print their location to help users find them.
+
+### `--experimental-quic`
+
+<!-- YAML
+added: v25.0.0
+-->
+
+> Stability: 1.1 - Active development
+
+Enable experimental support for the QUIC protocol.
 
 ### `--experimental-require-module`
 
@@ -1220,19 +1308,12 @@ changes:
 
 Enable experimental WebAssembly System Interface (WASI) support.
 
-### `--experimental-webstorage`
-
-<!-- YAML
-added: v22.4.0
--->
-
-Enable experimental [`Web Storage`][] support.
-
 ### `--experimental-worker-inspection`
 
 <!-- YAML
 added:
   - v24.1.0
+  - v22.17.0
 -->
 
 > Stability: 1.1 - Active Development
@@ -1492,7 +1573,9 @@ forked processes, or clustered processes.
 <!-- YAML
 added: v12.0.0
 changes:
-  - version: v23.6.0
+  - version:
+      - v23.6.0
+      - v22.18.0
     pr-url: https://github.com/nodejs/node/pull/56350
     description: Add support for `-typescript` values.
   - version:
@@ -1665,8 +1748,8 @@ added: v22.4.0
 
 The file used to store `localStorage` data. If the file does not exist, it is
 created the first time `localStorage` is accessed. The same file may be shared
-between multiple Node.js processes concurrently. This flag is a no-op unless
-Node.js is started with the `--experimental-webstorage` flag.
+between multiple Node.js processes concurrently. This flag is a no-op if
+Node.js is started with the `--no-webstorage` (or `--no-experimental-webstorage`) flag.
 
 ### `--max-http-header-size=size`
 
@@ -1682,13 +1765,16 @@ changes:
 
 Specify the maximum size, in bytes, of HTTP headers. Defaults to 16 KiB.
 
-### `--max-old-space-size-percentage=PERCENTAGE`
+### `--max-old-space-size-percentage=percentage`
 
-Sets the max memory size of V8's old memory section as a percentage of available system memory.
+Sets the maximum memory size of V8's old memory section as a percentage of available system memory.
 This flag takes precedence over `--max-old-space-size` when both are specified.
 
-The `PERCENTAGE` parameter must be a number greater than 0 and up to 100. representing the percentage
+The `percentage` parameter must be a number greater than 0 and up to 100, representing the percentage
 of available system memory to allocate to the V8 heap.
+
+**Note:** This flag utilizes `--max-old-space-size`, which may be unreliable on 32-bit platforms due to
+integer overflow issues.
 
 ```bash
 # Using 50% of available system memory
@@ -1822,7 +1908,9 @@ Disable the experimental [`node:sqlite`][] module.
 <!-- YAML
 added: v22.6.0
 changes:
-  - version: v23.6.0
+  - version:
+      - v23.6.0
+      - v22.18.0
     pr-url: https://github.com/nodejs/node/pull/56350
     description: Type stripping is enabled by default.
 -->
@@ -1888,6 +1976,14 @@ added: v6.0.0
 -->
 
 Silence all process warnings (including deprecations).
+
+### `--no-webstorage`
+
+<!-- YAML
+added: v25.0.0
+-->
+
+Disable [`Web Storage`][] support.
 
 ### `--node-memory-debug`
 
@@ -1971,6 +2067,7 @@ following permissions are restricted:
 
 * File System - manageable through
   [`--allow-fs-read`][], [`--allow-fs-write`][] flags
+* Network - manageable through [`--allow-net`][] flag
 * Child Process - manageable through [`--allow-child-process`][] flag
 * Worker Threads - manageable through [`--allow-worker`][] flag
 * WASI - manageable through [`--allow-wasi`][] flag
@@ -3158,6 +3255,7 @@ node --watch index.js
 <!-- YAML
 added:
   - v24.4.0
+  - v22.18.0
 -->
 
 > Stability: 1.1 - Active Development
@@ -3222,8 +3320,7 @@ node --watch --watch-preserve-output test.js
 added: v6.0.0
 -->
 
-Automatically zero-fills all newly allocated [`Buffer`][] and [`SlowBuffer`][]
-instances.
+Automatically zero-fills all newly allocated [`Buffer`][] instances.
 
 ## Environment variables
 
@@ -3253,6 +3350,11 @@ added: v22.1.0
 
 Enable the [module compile cache][] for the Node.js instance. See the documentation of
 [module compile cache][] for details.
+
+### `NODE_COMPILE_CACHE_PORTABLE=1`
+
+When set to 1, the [module compile cache][]  can be reused across different directory
+locations as long as the module layout relative to the cache directory remains the same.
 
 ### `NODE_DEBUG=module[,…]`
 
@@ -3370,6 +3472,8 @@ one is included in the list below.
 * `--allow-child-process`
 * `--allow-fs-read`
 * `--allow-fs-write`
+* `--allow-inspector`
+* `--allow-net`
 * `--allow-wasi`
 * `--allow-worker`
 * `--conditions`, `-C`
@@ -3396,6 +3500,7 @@ one is included in the list below.
 * `--experimental-loader`
 * `--experimental-modules`
 * `--experimental-print-required-tla`
+* `--experimental-quic`
 * `--experimental-require-module`
 * `--experimental-shadow-realm`
 * `--experimental-specifier-resolution`
@@ -3404,7 +3509,6 @@ one is included in the list below.
 * `--experimental-transform-types`
 * `--experimental-vm-modules`
 * `--experimental-wasi-unstable-preview1`
-* `--experimental-webstorage`
 * `--force-context-aware`
 * `--force-fips`
 * `--force-node-api-uncaught-exceptions-policy`
@@ -3438,11 +3542,13 @@ one is included in the list below.
 * `--no-experimental-sqlite`
 * `--no-experimental-strip-types`
 * `--no-experimental-websocket`
+* `--no-experimental-webstorage`
 * `--no-extra-info-on-fatal-exception`
 * `--no-force-async-hooks-checks`
 * `--no-global-search-paths`
 * `--no-network-family-autoselection`
 * `--no-warnings`
+* `--no-webstorage`
 * `--node-memory-debug`
 * `--openssl-config`
 * `--openssl-legacy-provider`
@@ -3669,7 +3775,9 @@ When both are set, `--use-env-proxy` takes precedence.
 ### `NODE_USE_SYSTEM_CA=1`
 
 <!-- YAML
-added: v24.6.0
+added:
+ - v24.6.0
+ - v22.19.0
 -->
 
 Node.js uses the trusted CA certificates present in the system store along with
@@ -3987,6 +4095,7 @@ node --stack-trace-limit=12 -p -e "Error.stackTraceLimit" # prints 12
 [`--allow-child-process`]: #--allow-child-process
 [`--allow-fs-read`]: #--allow-fs-read
 [`--allow-fs-write`]: #--allow-fs-write
+[`--allow-net`]: #--allow-net
 [`--allow-wasi`]: #--allow-wasi
 [`--allow-worker`]: #--allow-worker
 [`--build-snapshot`]: #--build-snapshot
@@ -4015,7 +4124,6 @@ node --stack-trace-limit=12 -p -e "Error.stackTraceLimit" # prints 12
 [`NODE_OPTIONS`]: #node_optionsoptions
 [`NODE_USE_ENV_PROXY=1`]: #node_use_env_proxy1
 [`NO_COLOR`]: https://no-color.org
-[`SlowBuffer`]: buffer.md#class-slowbuffer
 [`Web Storage`]: https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API
 [`YoungGenerationSizeFromSemiSpaceSize`]: https://chromium.googlesource.com/v8/v8.git/+/refs/tags/10.3.129/src/heap/heap.cc#328
 [`dns.lookup()`]: dns.md#dnslookuphostname-options-callback

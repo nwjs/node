@@ -78,7 +78,9 @@ console.log(query.all());
 <!-- YAML
 added: v22.5.0
 changes:
-  - version: v24.0.0
+  - version:
+    - v24.0.0
+    - v22.16.0
     pr-url: https://github.com/nodejs/node/pull/57752
     description: Add `timeout` option.
   - version:
@@ -96,7 +98,9 @@ exposed by this class execute synchronously.
 <!-- YAML
 added: v22.5.0
 changes:
-  - version: v24.4.0
+  - version:
+      - v24.4.0
+      - v22.18.0
     pr-url: https://github.com/nodejs/node/pull/58697
     description: Add new SQLite database options.
 -->
@@ -142,7 +146,9 @@ Constructs a new `DatabaseSync` instance.
 ### `database.aggregate(name, options)`
 
 <!-- YAML
-added: v24.0.0
+added:
+ - v24.0.0
+ - v22.16.0
 -->
 
 Registers a new aggregate function with the SQLite database. This method is a wrapper around
@@ -258,7 +264,9 @@ loading extensions for security reasons.
 ### `database.location([dbName])`
 
 <!-- YAML
-added: v24.0.0
+added:
+  - v24.0.0
+  - v22.16.0
 -->
 
 * `dbName` {string} Name of the database. This can be `'main'` (the default primary database) or any other
@@ -310,6 +318,81 @@ added:
 This method is used to create SQLite user-defined functions. This method is a
 wrapper around [`sqlite3_create_function_v2()`][].
 
+### `database.setAuthorizer(callback)`
+
+<!-- YAML
+added: v24.10.0
+-->
+
+* `callback` {Function|null} The authorizer function to set, or `null` to
+  clear the current authorizer.
+
+Sets an authorizer callback that SQLite will invoke whenever it attempts to
+access data or modify the database schema through prepared statements.
+This can be used to implement security policies, audit access, or restrict certain operations.
+This method is a wrapper around [`sqlite3_set_authorizer()`][].
+
+When invoked, the callback receives five arguments:
+
+* `actionCode` {number} The type of operation being performed (e.g.,
+  `SQLITE_INSERT`, `SQLITE_UPDATE`, `SQLITE_SELECT`).
+* `arg1` {string|null} The first argument (context-dependent, often a table name).
+* `arg2` {string|null} The second argument (context-dependent, often a column name).
+* `dbName` {string|null} The name of the database.
+* `triggerOrView` {string|null} The name of the trigger or view causing the access.
+
+The callback must return one of the following constants:
+
+* `SQLITE_OK` - Allow the operation.
+* `SQLITE_DENY` - Deny the operation (causes an error).
+* `SQLITE_IGNORE` - Ignore the operation (silently skip).
+
+```cjs
+const { DatabaseSync, constants } = require('node:sqlite');
+const db = new DatabaseSync(':memory:');
+
+// Set up an authorizer that denies all table creation
+db.setAuthorizer((actionCode) => {
+  if (actionCode === constants.SQLITE_CREATE_TABLE) {
+    return constants.SQLITE_DENY;
+  }
+  return constants.SQLITE_OK;
+});
+
+// This will work
+db.prepare('SELECT 1').get();
+
+// This will throw an error due to authorization denial
+try {
+  db.exec('CREATE TABLE blocked (id INTEGER)');
+} catch (err) {
+  console.log('Operation blocked:', err.message);
+}
+```
+
+```mjs
+import { DatabaseSync, constants } from 'node:sqlite';
+const db = new DatabaseSync(':memory:');
+
+// Set up an authorizer that denies all table creation
+db.setAuthorizer((actionCode) => {
+  if (actionCode === constants.SQLITE_CREATE_TABLE) {
+    return constants.SQLITE_DENY;
+  }
+  return constants.SQLITE_OK;
+});
+
+// This will work
+db.prepare('SELECT 1').get();
+
+// This will throw an error due to authorization denial
+try {
+  db.exec('CREATE TABLE blocked (id INTEGER)');
+} catch (err) {
+  console.log('Operation blocked:', err.message);
+}
+```
+
 ### `database.isOpen`
 
 <!-- YAML
@@ -323,7 +406,9 @@ added:
 ### `database.isTransaction`
 
 <!-- YAML
-added: v24.0.0
+added:
+  - v24.0.0
+  - v22.16.0
 -->
 
 * Type: {boolean} Whether the database is currently within a transaction. This method
@@ -351,7 +436,7 @@ added: v22.5.0
 Compiles a SQL statement into a [prepared statement][]. This method is a wrapper
 around [`sqlite3_prepare_v2()`][].
 
-### `database.createSQLTagStore([maxSize])`
+### `database.createTagStore([maxSize])`
 
 <!-- YAML
 added: v24.9.0
@@ -375,7 +460,7 @@ avoid the overhead of repeatedly parsing and preparing the same SQL statements.
 import { DatabaseSync } from 'node:sqlite';
 
 const db = new DatabaseSync(':memory:');
-const sql = db.createSQLTagStore();
+const sql = db.createTagStore();
 
 db.exec('CREATE TABLE users (id INT, name TEXT)');
 
@@ -550,14 +635,14 @@ added: v24.9.0
 This class represents a single LRU (Least Recently Used) cache for storing
 prepared statements.
 
-Instances of this class are created via the database.createSQLTagStore() method,
+Instances of this class are created via the database.createTagStore() method,
 not by using a constructor. The store caches prepared statements based on the
 provided SQL query string. When the same query is seen again, the store
 retrieves the cached statement and safely applies the new values through
 parameter binding, thereby preventing attacks like SQL injection.
 
 The cache has a maxSize that defaults to 1000 statements, but a custom size can
-be provided (e.g., database.createSQLTagStore(100)). All APIs exposed by this
+be provided (e.g., database.createTagStore(100)). All APIs exposed by this
 class execute synchronously.
 
 ### `sqlTagStore.all(sqlTemplate[, ...values])`
@@ -683,7 +768,9 @@ the values in `namedParameters` and `anonymousParameters`.
 ### `statement.columns()`
 
 <!-- YAML
-added: v23.11.0
+added:
+  - v23.11.0
+  - v22.16.0
 -->
 
 * Returns: {Array} An array of objects. Each object corresponds to a column
@@ -846,7 +933,9 @@ exception is thrown. This method allows unknown named parameters to be ignored.
 ### `statement.setReturnArrays(enabled)`
 
 <!-- YAML
-added: v24.0.0
+added:
+  - v24.0.0
+  - v22.16.0
 -->
 
 * `enabled` {boolean} Enables or disables the return of query results as arrays.
@@ -900,7 +989,9 @@ exception.
 ## `sqlite.backup(sourceDb, path[, options])`
 
 <!-- YAML
-added: v23.8.0
+added:
+  - v23.8.0
+  - v22.16.0
 changes:
   - version: v23.10.0
     pr-url: https://github.com/nodejs/node/pull/56991
@@ -1032,6 +1123,182 @@ resolution handler passed to [`database.applyChangeset()`][]. See also
   </tr>
 </table>
 
+#### Authorization constants
+
+The following constants are used with the [`database.setAuthorizer()`][] method.
+
+##### Authorization result codes
+
+One of the following constants must be returned from the authorizer callback
+function passed to [`database.setAuthorizer()`][].
+
+<table>
+  <tr>
+    <th>Constant</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td><code>SQLITE_OK</code></td>
+    <td>Allow the operation to proceed normally.</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_DENY</code></td>
+    <td>Deny the operation and cause an error to be returned.</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_IGNORE</code></td>
+    <td>Ignore the operation and continue as if it had never been requested.</td>
+  </tr>
+</table>
+
+##### Authorization action codes
+
+The following constants are passed as the first argument to the authorizer
+callback function to indicate what type of operation is being authorized.
+
+<table>
+  <tr>
+    <th>Constant</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td><code>SQLITE_CREATE_INDEX</code></td>
+    <td>Create an index</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_CREATE_TABLE</code></td>
+    <td>Create a table</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_CREATE_TEMP_INDEX</code></td>
+    <td>Create a temporary index</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_CREATE_TEMP_TABLE</code></td>
+    <td>Create a temporary table</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_CREATE_TEMP_TRIGGER</code></td>
+    <td>Create a temporary trigger</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_CREATE_TEMP_VIEW</code></td>
+    <td>Create a temporary view</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_CREATE_TRIGGER</code></td>
+    <td>Create a trigger</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_CREATE_VIEW</code></td>
+    <td>Create a view</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_DELETE</code></td>
+    <td>Delete from a table</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_DROP_INDEX</code></td>
+    <td>Drop an index</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_DROP_TABLE</code></td>
+    <td>Drop a table</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_DROP_TEMP_INDEX</code></td>
+    <td>Drop a temporary index</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_DROP_TEMP_TABLE</code></td>
+    <td>Drop a temporary table</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_DROP_TEMP_TRIGGER</code></td>
+    <td>Drop a temporary trigger</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_DROP_TEMP_VIEW</code></td>
+    <td>Drop a temporary view</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_DROP_TRIGGER</code></td>
+    <td>Drop a trigger</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_DROP_VIEW</code></td>
+    <td>Drop a view</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_INSERT</code></td>
+    <td>Insert into a table</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_PRAGMA</code></td>
+    <td>Execute a PRAGMA statement</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_READ</code></td>
+    <td>Read from a table</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_SELECT</code></td>
+    <td>Execute a SELECT statement</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_TRANSACTION</code></td>
+    <td>Begin, commit, or rollback a transaction</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_UPDATE</code></td>
+    <td>Update a table</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_ATTACH</code></td>
+    <td>Attach a database</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_DETACH</code></td>
+    <td>Detach a database</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_ALTER_TABLE</code></td>
+    <td>Alter a table</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_REINDEX</code></td>
+    <td>Reindex</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_ANALYZE</code></td>
+    <td>Analyze the database</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_CREATE_VTABLE</code></td>
+    <td>Create a virtual table</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_DROP_VTABLE</code></td>
+    <td>Drop a virtual table</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_FUNCTION</code></td>
+    <td>Use a function</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_SAVEPOINT</code></td>
+    <td>Create, release, or rollback a savepoint</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_COPY</code></td>
+    <td>Copy data (legacy)</td>
+  </tr>
+  <tr>
+    <td><code>SQLITE_RECURSIVE</code></td>
+    <td>Recursive query</td>
+  </tr>
+</table>
+
 [Changesets and Patchsets]: https://www.sqlite.org/sessionintro.html#changesets_and_patchsets
 [Constants Passed To The Conflict Handler]: https://www.sqlite.org/session/c_changeset_conflict.html
 [Constants Returned From The Conflict Handler]: https://www.sqlite.org/session/c_changeset_abort.html
@@ -1043,6 +1310,7 @@ resolution handler passed to [`database.applyChangeset()`][]. See also
 [`SQLITE_DIRECTONLY`]: https://www.sqlite.org/c3ref/c_deterministic.html
 [`SQLITE_MAX_FUNCTION_ARG`]: https://www.sqlite.org/limits.html#max_function_arg
 [`database.applyChangeset()`]: #databaseapplychangesetchangeset-options
+[`database.setAuthorizer()`]: #databasesetauthorizercallback
 [`sqlite3_backup_finish()`]: https://www.sqlite.org/c3ref/backup_finish.html#sqlite3backupfinish
 [`sqlite3_backup_init()`]: https://www.sqlite.org/c3ref/backup_finish.html#sqlite3backupinit
 [`sqlite3_backup_step()`]: https://www.sqlite.org/c3ref/backup_finish.html#sqlite3backupstep
@@ -1062,6 +1330,7 @@ resolution handler passed to [`database.applyChangeset()`][]. See also
 [`sqlite3_last_insert_rowid()`]: https://www.sqlite.org/c3ref/last_insert_rowid.html
 [`sqlite3_load_extension()`]: https://www.sqlite.org/c3ref/load_extension.html
 [`sqlite3_prepare_v2()`]: https://www.sqlite.org/c3ref/prepare.html
+[`sqlite3_set_authorizer()`]: https://sqlite.org/c3ref/set_authorizer.html
 [`sqlite3_sql()`]: https://www.sqlite.org/c3ref/expanded_sql.html
 [`sqlite3changeset_apply()`]: https://www.sqlite.org/session/sqlite3changeset_apply.html
 [`sqlite3session_attach()`]: https://www.sqlite.org/session/sqlite3session_attach.html

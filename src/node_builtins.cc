@@ -4,6 +4,7 @@
 #include "node_external_reference.h"
 #include "node_internals.h"
 #include "node_threadsafe_cow-inl.h"
+#include "quic/guard.h"
 #include "simdutf.h"
 #include "util-inl.h"
 
@@ -132,14 +133,15 @@ BuiltinLoader::BuiltinCategories BuiltinLoader::GetBuiltinCategories() const {
 
 #if !HAVE_OPENSSL
         "crypto", "crypto/promises", "https", "http2", "tls", "_tls_common",
-        "_tls_wrap", "internal/tls/parse-cert-string",
-        "internal/tls/secure-context", "internal/http2/core",
-        "internal/http2/compat", "internal/streams/lazy_transform",
+        "_tls_wrap", "internal/tls/parse-cert-string", "internal/tls/common",
+        "internal/tls/wrap", "internal/tls/secure-context",
+        "internal/http2/core", "internal/http2/compat",
+        "internal/streams/lazy_transform",
 #endif           // !HAVE_OPENSSL
-#if !NODE_OPENSSL_HAS_QUIC
+#ifndef OPENSSL_NO_QUIC
         "internal/quic/quic", "internal/quic/symbols", "internal/quic/stats",
         "internal/quic/state",
-#endif             // !NODE_OPENSSL_HAS_QUIC
+#endif             // !OPENSSL_NO_QUIC
         "quic",    // Experimental.
         "sqlite",  // Experimental.
         "sys",     // Deprecated.
@@ -273,7 +275,7 @@ MaybeLocal<Function> BuiltinLoader::LookupAndCompileInternal(
     const char* id,
     LocalVector<String>* parameters,
     Realm* optional_realm) {
-  Isolate* isolate = context->GetIsolate();
+  Isolate* isolate = Isolate::GetCurrent();
   EscapableHandleScope scope(isolate);
 
   Local<String> source;
@@ -397,7 +399,7 @@ void BuiltinLoader::SaveCodeCache(const char* id, Local<Function> fun) {
 MaybeLocal<Function> BuiltinLoader::LookupAndCompile(Local<Context> context,
                                                      const char* id,
                                                      Realm* optional_realm) {
-  Isolate* isolate = context->GetIsolate();
+  Isolate* isolate = Isolate::GetCurrent();
   LocalVector<String> parameters(isolate);
   // Detects parameters of the scripts based on module ids.
   // internal/bootstrap/realm: process, getLinkedBinding,
@@ -451,7 +453,7 @@ MaybeLocal<Function> BuiltinLoader::LookupAndCompile(Local<Context> context,
 MaybeLocal<Value> BuiltinLoader::CompileAndCall(Local<Context> context,
                                                 const char* id,
                                                 Realm* realm) {
-  Isolate* isolate = context->GetIsolate();
+  Isolate* isolate = Isolate::GetCurrent();
   // Detects parameters of the scripts based on module ids.
   // internal/bootstrap/realm: process, getLinkedBinding,
   //                           getInternalBinding, primordials
@@ -507,7 +509,7 @@ MaybeLocal<Value> BuiltinLoader::CompileAndCall(Local<Context> context,
   if (!maybe_fn.ToLocal(&fn)) {
     return MaybeLocal<Value>();
   }
-  Local<Value> undefined = Undefined(context->GetIsolate());
+  Local<Value> undefined = Undefined(Isolate::GetCurrent());
   return fn->Call(context, undefined, argc, argv);
 }
 
@@ -545,14 +547,14 @@ bool BuiltinLoader::CompileAllBuiltinsAndCopyCodeCache(
       to_eager_compile_.emplace(id);
     }
 
-    TryCatch bootstrapCatch(context->GetIsolate());
+    TryCatch bootstrapCatch(Isolate::GetCurrent());
     auto fn = LookupAndCompile(context, id.data(), nullptr);
     if (bootstrapCatch.HasCaught()) {
       per_process::Debug(DebugCategory::CODE_CACHE,
                          "Failed to compile code cache for %s\n",
                          id.data());
       all_succeeded = false;
-      PrintCaughtException(context->GetIsolate(), context, bootstrapCatch);
+      PrintCaughtException(Isolate::GetCurrent(), context, bootstrapCatch);
     } else {
       // This is used by the snapshot builder, so save the code cache
       // unconditionally.

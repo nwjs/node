@@ -176,95 +176,6 @@ process, the `message` argument can contain data that JSON is not able
 to represent.
 See [Advanced serialization for `child_process`][] for more details.
 
-### Event: `'multipleResolves'`
-
-<!-- YAML
-added: v10.12.0
-deprecated:
-  - v17.6.0
-  - v16.15.0
--->
-
-> Stability: 0 - Deprecated
-
-* `type` {string} The resolution type. One of `'resolve'` or `'reject'`.
-* `promise` {Promise} The promise that resolved or rejected more than once.
-* `value` {any} The value with which the promise was either resolved or
-  rejected after the original resolve.
-
-The `'multipleResolves'` event is emitted whenever a `Promise` has been either:
-
-* Resolved more than once.
-* Rejected more than once.
-* Rejected after resolve.
-* Resolved after reject.
-
-This is useful for tracking potential errors in an application while using the
-`Promise` constructor, as multiple resolutions are silently swallowed. However,
-the occurrence of this event does not necessarily indicate an error. For
-example, [`Promise.race()`][] can trigger a `'multipleResolves'` event.
-
-Because of the unreliability of the event in cases like the
-[`Promise.race()`][] example above it has been deprecated.
-
-```mjs
-import process from 'node:process';
-
-process.on('multipleResolves', (type, promise, reason) => {
-  console.error(type, promise, reason);
-  setImmediate(() => process.exit(1));
-});
-
-async function main() {
-  try {
-    return await new Promise((resolve, reject) => {
-      resolve('First call');
-      resolve('Swallowed resolve');
-      reject(new Error('Swallowed reject'));
-    });
-  } catch {
-    throw new Error('Failed');
-  }
-}
-
-main().then(console.log);
-// resolve: Promise { 'First call' } 'Swallowed resolve'
-// reject: Promise { 'First call' } Error: Swallowed reject
-//     at Promise (*)
-//     at new Promise (<anonymous>)
-//     at main (*)
-// First call
-```
-
-```cjs
-const process = require('node:process');
-
-process.on('multipleResolves', (type, promise, reason) => {
-  console.error(type, promise, reason);
-  setImmediate(() => process.exit(1));
-});
-
-async function main() {
-  try {
-    return await new Promise((resolve, reject) => {
-      resolve('First call');
-      resolve('Swallowed resolve');
-      reject(new Error('Swallowed reject'));
-    });
-  } catch {
-    throw new Error('Failed');
-  }
-}
-
-main().then(console.log);
-// resolve: Promise { 'First call' } 'Swallowed resolve'
-// reject: Promise { 'First call' } Error: Swallowed reject
-//     at Promise (*)
-//     at new Promise (<anonymous>)
-//     at main (*)
-// First call
-```
-
 ### Event: `'rejectionHandled'`
 
 <!-- YAML
@@ -989,7 +900,9 @@ added:
   - v22.0.0
   - v20.13.0
 changes:
-  - version: v24.0.0
+  - version:
+    - v24.0.0
+    - v22.16.0
     pr-url: https://github.com/nodejs/node/pull/57765
     description: Change stability index for this feature from Experimental to Stable.
 -->
@@ -1156,7 +1069,9 @@ added:
   - v19.6.0
   - v18.15.0
 changes:
-  - version: v24.0.0
+  - version:
+    - v24.0.0
+    - v22.16.0
     pr-url: https://github.com/nodejs/node/pull/57765
     description: Change stability index for this feature from Experimental to Stable.
   - version:
@@ -2334,7 +2249,9 @@ added:
   - v17.3.0
   - v16.14.0
 changes:
-  - version: v24.0.0
+  - version:
+    - v24.0.0
+    - v22.16.0
     pr-url: https://github.com/nodejs/node/pull/57765
     description: Change stability index for this feature from Experimental to Stable.
 -->
@@ -2779,9 +2696,11 @@ debugger. See [Signal Events][].
 added:
   - v21.7.0
   - v20.12.0
+changes:
+  - version: v24.10.0
+    pr-url: https://github.com/nodejs/node/pull/59925
+    description: This API is no longer experimental.
 -->
-
-> Stability: 1.1 - Active development
 
 * `path` {string | URL | Buffer | undefined}. **Default:** `'./.env'`
 
@@ -4292,7 +4211,9 @@ Thrown:
 ## `process.threadCpuUsage([previousValue])`
 
 <!-- YAML
-added: v23.9.0
+added:
+ - v23.9.0
+ - v22.19.0
 -->
 
 * `previousValue` {Object} A previous return value from calling
@@ -4604,7 +4525,6 @@ cases:
 [`Error`]: errors.md#class-error
 [`EventEmitter`]: events.md#class-eventemitter
 [`NODE_OPTIONS`]: cli.md#node_optionsoptions
-[`Promise.race()`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/race
 [`Worker`]: worker_threads.md#class-worker
 [`Worker` constructor]: worker_threads.md#new-workerfilename-options
 [`console.error()`]: console.md#consoleerrordata-args
@@ -4616,7 +4536,7 @@ cases:
 [`net.Server`]: net.md#class-netserver
 [`net.Socket`]: net.md#class-netsocket
 [`os.constants.dlopen`]: os.md#dlopen-constants
-[`postMessageToThread()`]: worker_threads.md#workerpostmessagetothreadthreadid-value-transferlist-timeout
+[`postMessageToThread()`]: worker_threads.md#worker_threadspostmessagetothreadthreadid-value-transferlist-timeout
 [`process.argv`]: #processargv
 [`process.config`]: #processconfig
 [`process.execPath`]: #processexecpath

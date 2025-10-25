@@ -45,6 +45,12 @@
             }
           ]
         },
+        "allow-inspector": {
+          "type": "boolean"
+        },
+        "allow-net": {
+          "type": "boolean"
+        },
         "allow-wasi": {
           "type": "boolean"
         },
@@ -156,6 +162,9 @@
         "experimental-print-required-tla": {
           "type": "boolean"
         },
+        "experimental-quic": {
+          "type": "boolean"
+        },
         "experimental-repl-await": {
           "type": "boolean"
         },
@@ -178,9 +187,6 @@
           "type": "boolean"
         },
         "experimental-websocket": {
-          "type": "boolean"
-        },
-        "experimental-webstorage": {
           "type": "boolean"
         },
         "extra-info-on-fatal-exception": {
@@ -586,6 +592,9 @@
           ]
         },
         "watch-preserve-output": {
+          "type": "boolean"
+        },
+        "webstorage": {
           "type": "boolean"
         },
         "zero-fill-buffers": {

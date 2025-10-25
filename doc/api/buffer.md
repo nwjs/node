@@ -1494,7 +1494,7 @@ console.log(Buffer.isEncoding(''));
 // Prints: false
 ```
 
-### Class property: `Buffer.poolSize`
+### `Buffer.poolSize`
 
 <!-- YAML
 added: v0.11.3
@@ -5282,7 +5282,9 @@ An alias for [`buffer.constants.MAX_STRING_LENGTH`][].
 <!-- YAML
 added: v16.7.0
 changes:
- - version: v24.0.0
+ - version:
+    - v24.0.0
+    - v22.17.0
    pr-url: https://github.com/nodejs/node/pull/57513
    description: Marking the API stable.
 -->
@@ -5339,28 +5341,6 @@ console.log(newBuf.toString('ascii'));
 
 Because the Euro (`€`) sign is not representable in US-ASCII, it is replaced
 with `?` in the transcoded `Buffer`.
-
-### Class: `SlowBuffer`
-
-<!-- YAML
-deprecated: v6.0.0
--->
-
-> Stability: 0 - Deprecated: Use [`Buffer.allocUnsafeSlow()`][] instead.
-
-See [`Buffer.allocUnsafeSlow()`][]. This was never a class in the sense that
-the constructor always returned a `Buffer` instance, rather than a `SlowBuffer`
-instance.
-
-#### `new SlowBuffer(size)`
-
-<!-- YAML
-deprecated: v6.0.0
--->
-
-* `size` {integer} The desired length of the new `SlowBuffer`.
-
-See [`Buffer.allocUnsafeSlow()`][].
 
 ### Buffer constants
 
@@ -5494,11 +5474,11 @@ added: v5.10.0
 
 Node.js can be started using the `--zero-fill-buffers` command-line option to
 cause all newly-allocated `Buffer` instances to be zero-filled upon creation by
-default. Without the option, buffers created with [`Buffer.allocUnsafe()`][],
-[`Buffer.allocUnsafeSlow()`][], and `new SlowBuffer(size)` are not zero-filled.
-Use of this flag can have a measurable negative impact on performance. Use the
-`--zero-fill-buffers` option only when necessary to enforce that newly allocated
-`Buffer` instances cannot contain old data that is potentially sensitive.
+default. Without the option, buffers created with [`Buffer.allocUnsafe()`][] and
+[`Buffer.allocUnsafeSlow()`][] are not zero-filled. Use of this flag can have a
+measurable negative impact on performance. Use the `--zero-fill-buffers` option
+only when necessary to enforce that newly allocated `Buffer` instances cannot
+contain old data that is potentially sensitive.
 
 ```console
 $ node --zero-fill-buffers
@@ -5535,7 +5515,7 @@ introducing security vulnerabilities into an application.
 [`Buffer.from(arrayBuf)`]: #static-method-bufferfromarraybuffer-byteoffset-length
 [`Buffer.from(buffer)`]: #static-method-bufferfrombuffer
 [`Buffer.from(string)`]: #static-method-bufferfromstring-encoding
-[`Buffer.poolSize`]: #class-property-bufferpoolsize
+[`Buffer.poolSize`]: #bufferpoolsize
 [`ERR_INVALID_BUFFER_SIZE`]: errors.md#err_invalid_buffer_size
 [`ERR_OUT_OF_RANGE`]: errors.md#err_out_of_range
 [`JSON.stringify()`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify

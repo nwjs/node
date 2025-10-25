@@ -817,7 +817,7 @@ def Execute(args, context, timeout=None, env=None, disable_core_files=False,
     else:
       preexec_fn = setMaxVirtualMemory
 
-  (process, exit_code, timed_out) = RunProcess(
+  (_process, exit_code, timed_out) = RunProcess(
     context,
     timeout,
     args = args,
@@ -924,7 +924,7 @@ class LiteralTestSuite(TestSuite):
     return result
 
   def ListTests(self, current_path, path, context, arch, mode):
-    (name, rest) = CarCdr(path)
+    (name, _rest) = CarCdr(path)
     result = [ ]
     for test in self.tests_repos:
       test_name = test.GetName()
@@ -1677,9 +1677,6 @@ def Main():
   if options.check_deopts:
     options.node_args.append("--trace-opt")
     options.node_args.append("--trace-file-names")
-    # --always-turbofan is needed because many tests do not run long enough for
-    # the optimizer to kick in, so this flag will force it to run.
-    options.node_args.append("--always-turbofan")
     options.progress = "deopts"
 
   if options.error_reporter:

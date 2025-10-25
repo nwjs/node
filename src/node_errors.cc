@@ -555,7 +555,7 @@ static void ReportFatalException(Environment* env,
   }
 
   if (env->isolate_data()->options()->report_uncaught_exception) {
-    TriggerNodeReport(env, report_message.c_str(), "Exception", "", error);
+    TriggerNodeReport(env, report_message, "Exception", "", error);
   }
 
   if (env->options()->trace_uncaught) {
@@ -635,7 +635,7 @@ v8::ModifyCodeGenerationFromStringsResult ModifyCodeGenerationFromStrings(
     v8::Local<v8::Context> context,
     v8::Local<v8::Value> source,
     bool is_code_like) {
-  HandleScope scope(context->GetIsolate());
+  HandleScope scope(Isolate::GetCurrent());
 
   if (context->GetNumberOfEmbedderDataFields() <=
       ContextEmbedderIndex::kAllowCodeGenerationFromStrings) {
@@ -1018,7 +1018,7 @@ const char* errno_string(int errorno) {
 }
 
 void PerIsolateMessageListener(Local<Message> message, Local<Value> error) {
-  Isolate* isolate = message->GetIsolate();
+  Isolate* isolate = Isolate::GetCurrent();
   switch (message->ErrorLevel()) {
     case Isolate::MessageErrorLevel::kMessageWarning: {
       Environment* env = Environment::GetCurrent(isolate);
@@ -1179,7 +1179,7 @@ void Initialize(Local<Object> target,
   SetMethod(
       context, target, "getErrorSourcePositions", GetErrorSourcePositions);
 
-  Isolate* isolate = context->GetIsolate();
+  Isolate* isolate = Isolate::GetCurrent();
   Local<Object> exit_codes = Object::New(isolate);
   READONLY_PROPERTY(target, "exitCodes", exit_codes);
 

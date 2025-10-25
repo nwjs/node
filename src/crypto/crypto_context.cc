@@ -1022,7 +1022,7 @@ bool ArrayOfStringsToX509s(Local<Context> context,
                            Local<Array> cert_array,
                            std::vector<X509*>* certs) {
   ClearErrorOnReturn clear_error_on_return;
-  Isolate* isolate = context->GetIsolate();
+  Isolate* isolate = Isolate::GetCurrent();
   Environment* env = Environment::GetCurrent(context);
   uint32_t array_length = cert_array->Length();
 
@@ -1460,7 +1460,7 @@ void SecureContext::Init(const FunctionCallbackInfo<Value>& args) {
       method = TLS_client_method();
     } else {
       THROW_ERR_TLS_INVALID_PROTOCOL_METHOD(
-          env, "Unknown method: %s", *sslmethod);
+          env, "Unknown method: %s", sslmethod);
       return;
     }
   }

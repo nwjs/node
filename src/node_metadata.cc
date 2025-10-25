@@ -12,6 +12,7 @@
 #include "simdjson.h"
 #include "simdutf.h"
 #if HAVE_SQLITE
+#include "quic/guard.h"
 #include "sqlite3.h"
 #endif  // HAVE_SQLITE
 #include "undici_version.h"
@@ -30,13 +31,13 @@
 #if HAVE_OPENSSL
 #include <openssl/crypto.h>
 #include "ncrypto.h"
-#if NODE_OPENSSL_HAS_QUIC
+#ifndef OPENSSL_NO_QUIC
 #include <openssl/quic.h>
 #endif
 #endif  // HAVE_OPENSSL
 
 #if 0
-//#ifdef NODE_OPENSSL_HAS_QUIC
+//#ifndef OPENSSL_NO_QUIC
 #include <ngtcp2/version.h>
 #include <nghttp3/version.h>
 #endif
@@ -148,7 +149,7 @@ Metadata::Versions::Versions() {
   unicode = U_UNICODE_VERSION;
 #endif  // NODE_HAVE_I18N_SUPPORT
 
-#if 0 //def NODE_OPENSSL_HAS_QUIC
+#if 0 //ndef OPENSSL_NO_QUIC
   ngtcp2 = NGTCP2_VERSION;
   nghttp3 = NGHTTP3_VERSION;
 #endif

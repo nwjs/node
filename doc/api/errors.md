@@ -831,7 +831,9 @@ size is reached when the context is created.
 ### `ERR_CPU_PROFILE_ALREADY_STARTED`
 
 <!-- YAML
-added: v24.8.0
+added:
+  - v24.8.0
+  - v22.20.0
 -->
 
 The CPU profile with the given name is already started.
@@ -841,7 +843,9 @@ The CPU profile with the given name is already started.
 ### `ERR_CPU_PROFILE_NOT_STARTED`
 
 <!-- YAML
-added: v24.8.0
+added:
+  - v24.8.0
+  - v22.20.0
 -->
 
 The CPU profile with the given name is not started.
@@ -851,7 +855,9 @@ The CPU profile with the given name is not started.
 ### `ERR_CPU_PROFILE_TOO_MANY`
 
 <!-- YAML
-added: v24.8.0
+added:
+  - v24.8.0
+  - v22.20.0
 -->
 
 There are too many CPU profiles being collected.
@@ -2459,7 +2465,9 @@ of an asynchronous operation.
 ### `ERR_OPTIONS_BEFORE_BOOTSTRAPPING`
 
 <!-- YAML
-added: v23.10.0
+added:
+ - v23.10.0
+ - v22.16.0
 -->
 
 An attempt was made to get options before the bootstrapping was completed.
@@ -4411,7 +4419,7 @@ An error occurred trying to allocate memory. This should never happen.
 [`new URLSearchParams(iterable)`]: url.md#new-urlsearchparamsiterable
 [`package.json`]: packages.md#nodejs-packagejson-field-definitions
 [`postMessage()`]: worker_threads.md#portpostmessagevalue-transferlist
-[`postMessageToThread()`]: worker_threads.md#workerpostmessagetothreadthreadid-value-transferlist-timeout
+[`postMessageToThread()`]: worker_threads.md#worker_threadspostmessagetothreadthreadid-value-transferlist-timeout
 [`process.on('exit')`]: process.md#event-exit
 [`process.send()`]: process.md#processsendmessage-sendhandle-options-callback
 [`process.setUncaughtExceptionCaptureCallback()`]: process.md#processsetuncaughtexceptioncapturecallbackfn

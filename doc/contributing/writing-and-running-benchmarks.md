@@ -613,7 +613,7 @@ the code inside the `main` function if it's more than just declaration.
 ```js
 'use strict';
 const common = require('../common.js');
-const { SlowBuffer } = require('node:buffer');
+const { Buffer } = require('node:buffer');
 
 const configs = {
   // Number of operations, specified here so they show up in the report.
@@ -644,10 +644,11 @@ function main(conf) {
   bench.start();
 
   // Do operations here
-  const BufferConstructor = conf.type === 'fast' ? Buffer : SlowBuffer;
 
   for (let i = 0; i < conf.n; i++) {
-    new BufferConstructor(conf.size);
+    conf.type === 'fast' ?
+      Buffer.allocUnsafe(conf.size) :
+      Buffer.allocUnsafeSlow(conf.size);
   }
 
   // End the timer, pass in the number of operations

@@ -85,6 +85,12 @@ Allow using native addons when using the permission model.
 .It Fl -allow-child-process
 Allow spawning process when using the permission model.
 .
+.It Fl -allow-inspector
+Allow inspector access when using the permission model.
+.
+.It Fl -allow-net
+Allow network access when using the permission model.
+.
 .It Fl -allow-wasi
 Allow execution of WASI when using the permission model.
 .
@@ -201,8 +207,8 @@ Enable experimental support for the EventSource Web API.
 .It Fl -no-experimental-websocket
 Disable experimental support for the WebSocket API.
 .
-.It Fl -experimental-webstorage
-Enable experimental support for the Web Storage API.
+.It Fl -no-webstorage
+Disable webstorage.
 .
 .It Fl -no-experimental-repl-await
 Disable top-level await keyword support in REPL.
@@ -333,7 +339,7 @@ The file used to store localStorage data.
 Specify the maximum size of HTTP headers in bytes. Defaults to 16 KiB.
 .
 .It Fl -max-old-space-size-percentage Ns = Ns Ar percentage
-Sets the max memory size of V8's old memory section as a percentage of available system memory.
+Sets the maximum memory size of V8's old memory section as a percentage of available system memory.
 This flag takes precedence over
 .Fl -max-old-space-size
 when both are specified.
@@ -341,6 +347,10 @@ The
 .Ar percentage
 parameter must be a number greater than 0 and up to 100, representing the percentage
 of available system memory to allocate to the V8 heap.
+.Pp
+Note: This flag utilizes
+.Fl -max-old-space-size ,
+which may be unreliable on 32-bit platforms due to integer overflow issues.
 .
 .It Fl -napi-modules
 This option is a no-op.
@@ -656,7 +666,7 @@ This will turn off watching of required or imported modules, even when used in c
 Customizes the signal sent to the process on watch mode restarts.
 .
 .It Fl -zero-fill-buffers
-Automatically zero-fills all newly allocated Buffer and SlowBuffer instances.
+Automatically zero-fills all newly allocated Buffer instances.
 .
 .It Fl c , Fl -check
 Check the script's syntax without executing it.
@@ -718,6 +728,13 @@ Alias for NODE_DISABLE_COLORS
 Enable the
 .Sy module compile cache
 for the Node.js instance.
+.
+.It Ev NODE_COMPILE_CACHE_PORTABLE
+When set to '1' or 'true', the
+.Sy module compile cache
+will be hit as long as the location of the modules relative to the cache directory remain
+consistent. This can be used in conjunction with .Ev NODE_COMPILE_CACHE
+to enable portable on-disk caching.
 .
 .It Ev NODE_DEBUG Ar modules...
 Comma-separated list of core modules that should print debug information.

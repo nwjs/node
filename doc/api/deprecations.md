@@ -551,6 +551,12 @@ Type: End-of-Life
 The `os.tmpDir()` API was deprecated in Node.js 7.0.0 and has since been
 removed. Please use [`os.tmpdir()`][] instead.
 
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/tmpDir-to-tmpdir)):
+
+```bash
+npx codemod@latest @nodejs/tmpDir-to-tmpdir
+```
+
 ### DEP0023: `os.getNetworkInterfaces()`
 
 <!-- YAML
@@ -628,6 +634,12 @@ Type: End-of-Life
 
 `util.print()` has been removed. Please use [`console.log()`][] instead.
 
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/util-print-to-console-log)):
+
+```bash
+npx codemod@latest @nodejs/util-print-to-console-log
+```
+
 ### DEP0027: `util.puts()`
 
 <!-- YAML
@@ -648,6 +660,12 @@ changes:
 Type: End-of-Life
 
 `util.puts()` has been removed. Please use [`console.log()`][] instead.
+
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/util-print-to-console-log)):
+
+```bash
+npx codemod@latest @nodejs/util-print-to-console-log
+```
 
 ### DEP0028: `util.debug()`
 
@@ -670,6 +688,12 @@ Type: End-of-Life
 
 `util.debug()` has been removed. Please use [`console.error()`][] instead.
 
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/util-debug-to-console-error)):
+
+```bash
+npx codemod@latest @nodejs/util-debug-to-console-error
+```
+
 ### DEP0029: `util.error()`
 
 <!-- YAML
@@ -691,10 +715,19 @@ Type: End-of-Life
 
 `util.error()` has been removed. Please use [`console.error()`][] instead.
 
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/util-print-to-console-log)):
+
+```bash
+npx codemod@latest @nodejs/util-print-to-console-log
+```
+
 ### DEP0030: `SlowBuffer`
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/58220
+    description: End-of-Life.
   - version: v24.0.0
     pr-url: https://github.com/nodejs/node/pull/55175
     description: Runtime deprecation.
@@ -706,15 +739,18 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The [`SlowBuffer`][] class is deprecated. Please use
+The `SlowBuffer` class has been removed. Please use
 [`Buffer.allocUnsafeSlow(size)`][] instead.
 
 ### DEP0031: `ecdh.setPublicKey()`
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/58620
+    description: Runtime deprecation.
   - version: v6.12.0
     pr-url: https://github.com/nodejs/node/pull/10116
     description: A deprecation code has been assigned.
@@ -723,10 +759,10 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
-The [`ecdh.setPublicKey()`][] method is now deprecated as its inclusion in the
-API is not useful.
+The [`ecdh.setPublicKey()`][] method is now deprecated as its inclusion in
+the API is not useful.
 
 ### DEP0032: `node:domain` module
 
@@ -1410,6 +1446,12 @@ By adopting one of these alternatives, you can transition away from `util.log()`
 and choose a logging strategy that aligns with the specific
 requirements and complexity of your application.
 
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/util-log-to-console-log)):
+
+```bash
+npx codemod@latest @nodejs/util-log-to-console-log
+```
+
 ### DEP0060: `util._extend()`
 
 <!-- YAML
@@ -1474,12 +1516,15 @@ instead.
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/59060
+    description: Runtime deprecation.
   - version: v8.0.0
     pr-url: https://github.com/nodejs/node/pull/11355
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 The `node:http` module `ServerResponse.prototype.writeHeader()` API is
 deprecated. Please use `ServerResponse.prototype.writeHead()` instead.
@@ -1766,14 +1811,17 @@ not handle all certificate subjects correctly and should not be used.
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/58473
+    description: End-of-Life.
   - version: v9.0.0
     pr-url: https://github.com/nodejs/node/pull/13948
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-`Module._debug()` is deprecated.
+`Module._debug()` has been removed.
 
 The `Module._debug()` function was never documented as an officially
 supported API.
@@ -2062,12 +2110,15 @@ and `crypto.getFips()` instead.
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/58532
+    description: End-of-Life.
   - version: v10.0.0
     pr-url: https://github.com/nodejs/node/pull/18418
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 Using `assert.fail()` with more than one argument is deprecated. Use
 `assert.fail()` with only one argument or use a different `node:assert` module
@@ -2388,19 +2439,22 @@ unavailable when the [permission model][] is enabled.
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/58474
+    description: End-of-Life.
   - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/22011
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 The `node:dgram` module previously contained several APIs that were never meant
 to accessed outside of Node.js core: `Socket.prototype._handle`,
 `Socket.prototype._receiving`, `Socket.prototype._bindState`,
 `Socket.prototype._queue`, `Socket.prototype._reuseAddr`,
 `Socket.prototype._healthCheck()`, `Socket.prototype._stopReceiving()`, and
-`dgram._createSocketHandle()`.
+`dgram._createSocketHandle()`. These have been removed.
 
 ### DEP0113: `Cipher.setAuthTag()`, `Decipher.getAuthTag()`
 
@@ -2509,17 +2563,18 @@ object can lead to crashing the application.
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/58619
+    description: End-of-Life.
   - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/23173
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 Previous versions of Node.js supported `dns.lookup()` with a falsy host name
-like `dns.lookup(false)` due to backward compatibility.
-This behavior is undocumented and is thought to be unused in real world apps.
-It will become an error in future versions of Node.js.
+like `dns.lookup(false)` due to backward compatibility. This has been removed.
 
 ### DEP0119: `process.binding('uv').errname()` private API
 
@@ -2596,15 +2651,18 @@ Please use `Server.prototype.setSecureContext()` instead.
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/58533
+    description: End-of-Life.
   - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/23329
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 Setting the TLS ServerName to an IP address is not permitted by
-[RFC 6066][]. This will be ignored in a future version.
+[RFC 6066][].
 
 ### DEP0124: using `REPLServer.rli`
 
@@ -2696,6 +2754,9 @@ Node.js versions.
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/58527
+    description: End-of-Life.
   - version: v13.0.0
     pr-url: https://github.com/nodejs/node/pull/27949
     description: Runtime deprecation.
@@ -2704,7 +2765,7 @@ changes:
     description: Documentation-only.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 The `_channel` property of child process objects returned by `spawn()` and
 similar functions is not intended for public use. Use `ChildProcess.channel`
@@ -2728,6 +2789,12 @@ changes:
 Type: End-of-Life
 
 Use [`module.createRequire()`][] instead.
+
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/create-require-from-path)):
+
+```bash
+npx codemod@latest @nodejs/create-require-from-path
+```
 
 ### DEP0131: Legacy HTTP parser
 
@@ -2755,12 +2822,15 @@ legacy parser.
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/58528
+    description: End-of-Life.
   - version: v12.5.0
     pr-url: https://github.com/nodejs/node/pull/28021
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 Passing a callback to [`worker.terminate()`][] is deprecated. Use the returned
 `Promise` instead, or a listener to the worker's `'exit'` event.
@@ -2798,12 +2868,15 @@ an officially supported API.
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/58529
+    description: End-of-Life.
   - version: v13.0.0
     pr-url: https://github.com/nodejs/node/pull/29061
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 [`WriteStream.open()`][] and [`ReadStream.open()`][] are undocumented internal
 APIs that do not make sense to use in userland. File streams should always be
@@ -2837,16 +2910,18 @@ To maintain existing behavior `response.finished` should be replaced with
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/58536
+    description: End-of-Life.
   - version: v14.0.0
     pr-url: https://github.com/nodejs/node/pull/28396
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-Allowing a [`fs.FileHandle`][] object to be closed on garbage collection is
-deprecated. In the future, doing so might result in a thrown error that will
-terminate the process.
+Allowing a [`fs.FileHandle`][] object to be closed on garbage collection used
+to be allowed, but now throws an error.
 
 Please ensure that all `fs.FileHandle` objects are explicitly closed using
 `FileHandle.prototype.close()` when the `fs.FileHandle` is no longer needed:
@@ -2881,6 +2956,12 @@ modules is unsupported.
 
 It is deprecated in favor of [`require.main`][], because it serves the same
 purpose and is only available on CommonJS environment.
+
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/process-main-module)):
+
+```bash
+npx codemod@latest @nodejs/process-main-module
+```
 
 ### DEP0139: `process.umask()` with no arguments
 
@@ -3029,6 +3110,9 @@ The [`crypto.Certificate()` constructor][] is deprecated. Use
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/58616
+    description: End-of-Life.
   - version: v16.0.0
     pr-url: https://github.com/nodejs/node/pull/37302
     description: Runtime deprecation.
@@ -3040,14 +3124,20 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-In future versions of Node.js, `recursive` option will be ignored for
-`fs.rmdir`, `fs.rmdirSync`, and `fs.promises.rmdir`.
+The `fs.rmdir`, `fs.rmdirSync`, and `fs.promises.rmdir` methods used
+to support a `recursive` option. That option has been removed.
 
 Use `fs.rm(path, { recursive: true, force: true })`,
 `fs.rmSync(path, { recursive: true, force: true })` or
 `fs.promises.rm(path, { recursive: true, force: true })` instead.
+
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/rmdir)):
+
+```bash
+npx codemod@latest @nodejs/rmdir
+```
 
 ### DEP0148: Folder mappings in `"exports"` (trailing `"/"`)
 
@@ -3131,18 +3221,21 @@ an explicit [`"exports"` or `"main"` entry][] with the exact file extension.
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/58531
+    description: End-of-Life.
   - version: v16.0.0
     pr-url: https://github.com/nodejs/node/pull/37136
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The `'gc'`, `'http2'`, and `'http'` {PerformanceEntry} object types have
+The `'gc'`, `'http2'`, and `'http'` {PerformanceEntry} object types used to have
 additional properties assigned to them that provide additional information.
 These properties are now available within the standard `detail` property
-of the `PerformanceEntry` object. The existing accessors have been
-deprecated and should no longer be used.
+of the `PerformanceEntry` object. The deprecated accessors have been
+removed.
 
 ### DEP0153: `dns.lookup` and `dnsPromises.lookup` options type coercion
 
@@ -3171,6 +3264,9 @@ option, or a non-nullish non-boolean value for `verbatim` option in
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/58706
+    description: End-of-Life.
   - version: v20.0.0
     pr-url: https://github.com/nodejs/node/pull/45653
     description: Runtime deprecation.
@@ -3179,10 +3275,9 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-The `'hash'` and `'mgf1Hash'` options are replaced with `'hashAlgorithm'`
-and `'mgf1HashAlgorithm'`.
+Use  `'hashAlgorithm'` instead of `'hash'`, and `'mgf1HashAlgorithm'` instead of `'mgf1Hash'`.
 
 ### DEP0155: Trailing slashes in pattern specifier resolutions
 
@@ -3296,6 +3391,9 @@ the errors used for value type validation.
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/58707
+    description: End-of-Life.
   - version: v18.0.0
     pr-url: https://github.com/nodejs/node/pull/41896
     description: Runtime deprecation.
@@ -3306,10 +3404,10 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-This event was deprecated because it did not work with V8 promise combinators
-which diminished its usefulness.
+This event was deprecated and removed because it did not work with V8 promise
+combinators which diminished its usefulness.
 
 ### DEP0161: `process._getActiveRequests()` and `process._getActiveHandles()`
 
@@ -3359,7 +3457,9 @@ Convert them to primitive strings.
 
 <!-- YAML
 changes:
-  - version: v24.8.0
+  - version:
+    - v24.8.0
+    - v22.20.0
     pr-url: https://github.com/nodejs/node/pull/59758
     description: Deprecation revoked.
   - version:
@@ -3519,6 +3619,9 @@ issued for `url.parse()` vulnerabilities.
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/58617
+    description: End-of-Life.
   - version:
     - v20.0.0
     pr-url: https://github.com/nodejs/node/pull/45526
@@ -3530,11 +3633,11 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-[`url.parse()`][] accepts URLs with ports that are not numbers. This behavior
-might result in host name spoofing with unexpected input. These URLs will throw
-an error in future versions of Node.js, as the [WHATWG URL API][] does already.
+[`url.parse()`][] used to accept URLs with ports that are not numbers. This
+behavior might result in host name spoofing with unexpected input. These URLs
+will throw an error (which the [WHATWG URL API][] also does).
 
 ### DEP0171: Setters for `http.IncomingMessage` headers and trailers
 
@@ -3557,30 +3660,34 @@ In a future version of Node.js, [`message.headers`][],
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/58618
+    description: End-of-Life.
   - version: v20.0.0
     pr-url: https://github.com/nodejs/node/pull/46432
     description: Runtime-deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-In a future version of Node.js, the `asyncResource` property will no longer
-be added when a function is bound to an `AsyncResource`.
+Older versions of Node.js would add the `asyncResource` when a function is
+bound to an `AsyncResource`. It no longer does.
 
 ### DEP0173: the `assert.CallTracker` class
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/00000
+    description: End-of-Life.
   - version: v20.1.0
     pr-url: https://github.com/nodejs/node/pull/47740
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-In a future version of Node.js, [`assert.CallTracker`][],
-will be removed.
-Consider using alternatives such as the [`mock`][] helper function.
+The `assert.CallTracker` API has been removed.
 
 ### DEP0174: calling `promisify` on a function that returns a `Promise`
 
@@ -3617,6 +3724,9 @@ The [`util.toUSVString()`][] API is deprecated. Please use
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/55862
+    description: End-of-Life.
   - version: v24.0.0
     pr-url: https://github.com/nodejs/node/pull/49686
     description: Runtime deprecation.
@@ -3625,10 +3735,16 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-`F_OK`, `R_OK`, `W_OK` and `X_OK` getters exposed directly on `node:fs` are
-deprecated. Get them from `fs.constants` or `fs.promises.constants` instead.
+`F_OK`, `R_OK`, `W_OK` and `X_OK` getters exposed directly on `node:fs` were
+removed. Get them from `fs.constants` or `fs.promises.constants` instead.
+
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/fs-access-mode-constants)):
+
+```bash
+npx codemod@latest @nodejs/fs-access-mode-constants
+```
 
 ### DEP0177: `util.types.isWebAssemblyCompiledModule`
 
@@ -3797,6 +3913,9 @@ It is recommended to use the `new` qualifier instead. This applies to all Zlib c
 
 <!-- YAML
 changes:
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/59495
+    description: End-of-Life.
   - version: v24.0.0
     pr-url: https://github.com/nodejs/node/pull/54869
     description: Runtime deprecation.
@@ -3807,10 +3926,10 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 Instantiating classes without the `new` qualifier exported by the `node:repl` module is deprecated.
-It is recommended to use the `new` qualifier instead. This applies to all REPL classes, including
+The `new` qualifier must be used instead. This applies to all REPL classes, including
 `REPLServer` and `Recoverable`.
 
 <!-- md-lint skip-deprecation DEP0186 -->
@@ -3825,6 +3944,7 @@ changes:
   - version:
     - v23.4.0
     - v22.13.0
+    - v20.19.3
     pr-url: https://github.com/nodejs/node/pull/55892
     description: Documentation-only.
 -->
@@ -3888,7 +4008,9 @@ When an `args` array is passed to [`child_process.execFile`][] or [`child_proces
 
 <!-- YAML
 changes:
-  - version: v24.0.0
+  - version:
+     - v24.0.0
+     - v22.16.0
     pr-url: https://github.com/nodejs/node/pull/57508
     description: Documentation-only deprecation
                  with `--pending-deprecation` support.
@@ -3905,12 +4027,14 @@ upon `require('node:module').builtinModules`.
 
 <!-- YAML
 changes:
-  - version: v24.2.0
+  - version:
+      - v24.2.0
+      - v22.17.0
     pr-url: https://github.com/nodejs/node/pull/57643
-    description: Documentation-only deprecation.
+    description: Runtime deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 The `node:_tls_common` and `node:_tls_wrap` modules are deprecated as they should be considered
 an internal nodejs implementation rather than a public facing API, use `node:tls` instead.
@@ -3919,12 +4043,14 @@ an internal nodejs implementation rather than a public facing API, use `node:tls
 
 <!-- YAML
 changes:
-  - version: v24.2.0
+  - version:
+      - v24.2.0
+      - v22.17.0
     pr-url: https://github.com/nodejs/node/pull/58337
-    description: Documentation-only deprecation.
+    description: Runtime deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 The `node:_stream_duplex`, `node:_stream_passthrough`, `node:_stream_readable`, `node:_stream_transform`,
 `node:_stream_wrap` and `node:_stream_writable` modules are deprecated as they should be considered
@@ -3937,7 +4063,9 @@ changes:
   - version: v24.2.0
     pr-url: https://github.com/nodejs/node/pull/58293
     description: End-of-Life.
-  - version: v24.2.0
+  - version:
+      - v24.2.0
+      - v22.17.0
     pr-url: https://github.com/nodejs/node/pull/58313
     description: Documentation-only deprecation.
 -->
@@ -3950,7 +4078,9 @@ The support for priority signaling has been removed following its deprecation in
 
 <!-- YAML
 changes:
-  - version: v24.2.0
+  - version:
+      - v24.2.0
+      - v22.17.0
     pr-url: https://github.com/nodejs/node/pull/58518
     description: Documentation-only deprecation.
 -->
@@ -3961,11 +4091,19 @@ Instantiating classes without the `new` qualifier exported by the `node:http` mo
 It is recommended to use the `new` qualifier instead. This applies to all http classes, such as
 `OutgoingMessage`, `IncomingMessage`, `ServerResponse` and `ClientRequest`.
 
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/http-classes-with-new)):
+
+```bash
+npx codemod@latest @nodejs/http-classes-with-new
+```
+
 ### DEP0196: Calling `node:child_process` functions with `options.shell` as an empty string
 
 <!-- YAML
 changes:
-  - version: v24.2.0
+  - version:
+      - v24.2.0
+      - v22.17.0
     pr-url: https://github.com/nodejs/node/pull/58564
     description: Documentation-only deprecation.
 -->
@@ -3998,16 +4136,28 @@ Type: Documentation-only
 
 The [`util.types.isNativeError`][] API is deprecated. Please use [`Error.isError`][] instead.
 
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/types-is-native-error)):
+
+```bash
+npx codemod@latest @nodejs/types-is-native-error
+```
+
 ### DEP0198: Creating SHAKE-128 and SHAKE-256 digests without an explicit `options.outputLength`
 
 <!-- YAML
 changes:
-  - version: v24.4.0
+  - version: v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/59008
+    description: Runtime deprecation.
+  - version:
+      - v24.4.0
+      - v22.18.0
+      - v20.19.5
     pr-url: https://github.com/nodejs/node/pull/58942
     description: Documentation-only deprecation with support for `--pending-deprecation`.
 -->
 
-Type: Documentation-only (supports [`--pending-deprecation`][])
+Type: Runtime
 
 Creating SHAKE-128 and SHAKE-256 digests without an explicit `options.outputLength` is deprecated.
 
@@ -4015,7 +4165,9 @@ Creating SHAKE-128 and SHAKE-256 digests without an explicit `options.outputLeng
 
 <!-- YAML
 changes:
-  - version: v24.6.0
+  - version:
+     - v24.6.0
+     - v22.19.0
     pr-url: https://github.com/nodejs/node/pull/59293
     description: Documentation-only deprecation.
 -->
@@ -4095,10 +4247,8 @@ import { opendir } from 'node:fs/promises';
 [`ReadStream.open()`]: fs.md#class-fsreadstream
 [`Server.getConnections()`]: net.md#servergetconnectionscallback
 [`Server.listen({fd: <number>})`]: net.md#serverlistenhandle-backlog-callback
-[`SlowBuffer`]: buffer.md#class-slowbuffer
 [`String.prototype.toWellFormed`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/toWellFormed
 [`WriteStream.open()`]: fs.md#class-fswritestream
-[`assert.CallTracker`]: assert.md#class-assertcalltracker
 [`assert`]: assert.md
 [`asyncResource.runInAsyncScope()`]: async_context.md#asyncresourceruninasyncscopefn-thisarg-args
 [`buffer.subarray`]: buffer.md#bufsubarraystart-end
@@ -4160,7 +4310,6 @@ import { opendir } from 'node:fs/promises';
 [`message.socket`]: http.md#messagesocket
 [`message.trailersDistinct`]: http.md#messagetrailersdistinct
 [`message.trailers`]: http.md#messagetrailers
-[`mock`]: test.md#mocking
 [`module.createRequire()`]: module.md#modulecreaterequirefilename
 [`os.networkInterfaces()`]: os.md#osnetworkinterfaces
 [`os.tmpdir()`]: os.md#ostmpdir

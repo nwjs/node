@@ -13,6 +13,7 @@
 
 #if HAVE_OPENSSL
 #include "openssl/opensslv.h"
+#include "quic/guard.h"
 #endif
 
 namespace node {
@@ -126,8 +127,8 @@ class EnvironmentOptions : public Options {
   bool experimental_fetch = true;
   bool experimental_websocket = true;
   bool experimental_sqlite = true;
-  bool experimental_webstorage = false;
-#ifdef NODE_OPENSSL_HAS_QUIC
+  bool webstorage = true;
+#ifndef OPENSSL_NO_QUIC
   bool experimental_quic = false;
 #endif
   std::string localstorage_file;
@@ -140,7 +141,9 @@ class EnvironmentOptions : public Options {
   std::vector<std::string> allow_fs_read;
   std::vector<std::string> allow_fs_write;
   bool allow_addons = false;
+  bool allow_inspector = false;
   bool allow_child_process = false;
+  bool allow_net = false;
   bool allow_wasi = false;
   bool allow_worker_threads = false;
   bool experimental_repl_await = true;

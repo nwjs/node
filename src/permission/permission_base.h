@@ -27,7 +27,10 @@ namespace permission {
 #define WORKER_THREADS_PERMISSIONS(V)                                          \
   V(WorkerThreads, "worker", PermissionsRoot, "--allow-worker")
 
-#define INSPECTOR_PERMISSIONS(V) V(Inspector, "inspector", PermissionsRoot, "")
+#define INSPECTOR_PERMISSIONS(V)                                               \
+  V(Inspector, "inspector", PermissionsRoot, "--allow-inspector")
+
+#define NET_PERMISSIONS(V) V(Net, "net", PermissionsRoot, "--allow-net")
 
 #define ADDON_PERMISSIONS(V)                                                   \
   V(Addon, "addon", PermissionsRoot, "--allow-addons")
@@ -38,6 +41,7 @@ namespace permission {
   WASI_PERMISSIONS(V)                                                          \
   WORKER_THREADS_PERMISSIONS(V)                                                \
   INSPECTOR_PERMISSIONS(V)                                                     \
+  NET_PERMISSIONS(V)                                                           \
   ADDON_PERMISSIONS(V)
 
 #define V(name, _, __, ___) k##name,

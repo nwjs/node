@@ -11,8 +11,8 @@ extern void* g_get_node_env();
 namespace node {
 
 using v8::Context;
-using v8::EscapableHandleScope;
 using v8::Function;
+using v8::Global;
 using v8::HandleScope;
 using v8::Isolate;
 using v8::Local;
@@ -31,11 +31,28 @@ CallbackScope::CallbackScope(Isolate* isolate,
 CallbackScope::CallbackScope(Environment* env,
                              Local<Object> object,
                              async_context asyncContext)
-  : private_(new InternalCallbackScope(env,
-                                       object,
-                                       asyncContext)),
-    try_catch_(env->isolate()) {
+    : resource_storage_({.local = object}),
+      private_(new InternalCallbackScope(
+          env, &resource_storage_.local, asyncContext)),
+      try_catch_(env->isolate()) {
   try_catch_.SetVerbose(true);
+}
+
+CallbackScope::CallbackScope(Environment* env,
+                             Global<Object>* object,
+                             async_context asyncContext)
+    : resource_storage_({.global_ptr = object}),
+      private_(new InternalCallbackScope(
+          env, resource_storage_.global_ptr, asyncContext)),
+      try_catch_(env->isolate()) {
+  try_catch_.SetVerbose(true);
+  // These checks can be removed in a future major version -- they ensure
+  // ABI compatibility with previous Node.js versions.
+  static_assert(sizeof(resource_storage_) == sizeof(Global<Object>*));
+  static_assert(sizeof(resource_storage_) == sizeof(Local<Object>));
+  static_assert(alignof(decltype(resource_storage_)) ==
+                alignof(Global<Object>*));
+  static_assert(alignof(decltype(resource_storage_)) == alignof(Local<Object>));
 }
 
 CallbackScope::~CallbackScope() {
@@ -54,7 +71,7 @@ InternalCallbackScope::InternalCallbackScope(AsyncWrap* async_wrap, int flags)
 
 InternalCallbackScope::InternalCallbackScope(
     Environment* env,
-    std::variant<Local<Object>, Local<Object>*> object,
+    std::variant<Local<Object>, Local<Object>*, Global<Object>*> object_arg,
     const async_context& asyncContext,
     int flags,
     Local<Value> context_frame)
@@ -64,13 +81,16 @@ InternalCallbackScope::InternalCallbackScope(
       skip_task_queues_(flags & kSkipTaskQueues) {
   CHECK_NOT_NULL(env);
 
-  if (std::holds_alternative<Local<Object>>(object)) {
-    object_storage_ = std::get<Local<Object>>(object);
-    object_ = &object_storage_;
+  std::variant<v8::Local<v8::Object>*, v8::Global<v8::Object>*> object;
+  if (std::holds_alternative<Local<Object>>(object_arg)) {
+    object_storage_ = std::get<Local<Object>>(object_arg);
+    object = &object_storage_;
+  } else if (std::holds_alternative<Local<Object>*>(object_arg)) {
+    object = std::get<Local<Object>*>(object_arg);
   } else {
-    object_ = std::get<Local<Object>*>(object);
-    CHECK_NOT_NULL(object_);
+    object = std::get<Global<Object>*>(object_arg);
   }
+  std::visit([](auto* ptr) { CHECK_NOT_NULL(ptr); }, object);
 
   env->PushAsyncCallbackScope();
 
@@ -98,7 +118,7 @@ InternalCallbackScope::InternalCallbackScope(
       isolate, async_context_frame::exchange(isolate, context_frame));
 
   env->async_hooks()->push_async_context(
-      async_context_.async_id, async_context_.trigger_async_id, object_);
+      async_context_.async_id, async_context_.trigger_async_id, object);
 
   pushed_ids_ = true;
 
@@ -378,41 +398,6 @@ MaybeLocal<Value> MakeSyncCallback(Isolate* isolate,
                                                async_context{0, 0},
                                                Undefined(isolate));
   return ret;
-}
-
-// Legacy MakeCallback()s
-
-Local<Value> MakeCallback(Isolate* isolate,
-                          Local<Object> recv,
-                          const char* method,
-                          int argc,
-                          Local<Value>* argv) {
-  EscapableHandleScope handle_scope(isolate);
-  return handle_scope.Escape(
-      MakeCallback(isolate, recv, method, argc, argv, {0, 0})
-          .FromMaybe(Local<Value>()));
-}
-
-Local<Value> MakeCallback(Isolate* isolate,
-                          Local<Object> recv,
-                          Local<String> symbol,
-                          int argc,
-                          Local<Value>* argv) {
-  EscapableHandleScope handle_scope(isolate);
-  return handle_scope.Escape(
-      MakeCallback(isolate, recv, symbol, argc, argv, {0, 0})
-          .FromMaybe(Local<Value>()));
-}
-
-Local<Value> MakeCallback(Isolate* isolate,
-                          Local<Object> recv,
-                          Local<Function> callback,
-                          int argc,
-                          Local<Value>* argv) {
-  EscapableHandleScope handle_scope(isolate);
-  return handle_scope.Escape(
-      MakeCallback(isolate, recv, callback, argc, argv, {0, 0})
-          .FromMaybe(Local<Value>()));
 }
 
 }  // namespace node

@@ -1213,6 +1213,8 @@ $(TARBALL): release-only doc-only
 	$(RM) -r $(TARNAME)/.editorconfig
 	$(RM) -r $(TARNAME)/.git*
 	$(RM) -r $(TARNAME)/.mailmap
+	$(RM) -r $(TARNAME)/deps/corepack
+	$(RM) $(TARNAME)/test/parallel/test-corepack-version.js
 	$(RM) -r $(TARNAME)/deps/openssl/openssl/demos
 	$(RM) -r $(TARNAME)/deps/openssl/openssl/doc
 	$(RM) -r $(TARNAME)/deps/openssl/openssl/test
@@ -1563,8 +1565,8 @@ cpplint: lint-cpp
 # Try with '--system' if it fails without; the system may have set '--user'
 lint-py-build: ## Build resources needed to lint python files.
 	$(info Pip installing ruff on $(shell $(PYTHON) --version)...)
-	$(PYTHON) -m pip install --upgrade --target tools/pip/site-packages ruff==0.6.5 || \
-		$(PYTHON) -m pip install --upgrade --system --target tools/pip/site-packages ruff==0.6.5
+	$(PYTHON) -m pip install --upgrade --target tools/pip/site-packages ruff==0.13.1 || \
+		$(PYTHON) -m pip install --upgrade --system --target tools/pip/site-packages ruff==0.13.1
 
 .PHONY: lint-py lint-py-fix lint-py-fix-unsafe
 ifneq ("","$(wildcard tools/pip/site-packages/ruff)")
@@ -1574,7 +1576,6 @@ lint-py:
 	tools/pip/site-packages/bin/ruff check .
 lint-py-fix:
 	tools/pip/site-packages/bin/ruff check . --fix
-
 lint-py-fix-unsafe:
 	tools/pip/site-packages/bin/ruff check . --fix --unsafe-fixes
 else

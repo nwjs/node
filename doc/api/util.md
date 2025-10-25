@@ -742,7 +742,9 @@ fs.access('file/that/does/not/exist', (err) => {
 ## `util.setTraceSigInt(enable)`
 
 <!-- YAML
-added: v24.6.0
+added:
+ - v24.6.0
+ - v22.19.0
 -->
 
 * `enable` {boolean}
@@ -845,6 +847,11 @@ stream.write('With ES6');
 <!-- YAML
 added: v0.3.0
 changes:
+  - version:
+    - v25.0.0
+    pr-url: https://github.com/nodejs/node/pull/59710
+    description: The util.inspect.styles.regexp style is now a method that is
+                 invoked for coloring the stringified regular expression.
   - version:
     - v17.3.0
     - v16.14.0
@@ -1295,7 +1302,12 @@ The default styles and associated colors are:
 * `name`: (no styling)
 * `null`: `bold`
 * `number`: `yellow`
-* `regexp`: `red`
+* `regexp`: A method that colors character classes, groups, assertions, and
+  other parts for improved readability. To customize the coloring, change the
+  `colors` property. It is set to
+  `['red', 'green', 'yellow', 'cyan', 'magenta']` by default and may be
+  adjusted as needed. The array is repetitively iterated through depending on
+  the "depth".
 * `special`: `cyan` (e.g., `Proxies`)
 * `string`: `green`
 * `symbol`: `green`
@@ -1306,6 +1318,17 @@ terminals. To verify color support use [`tty.hasColors()`][].
 
 Predefined control codes are listed below (grouped as "Modifiers", "Foreground
 colors", and "Background colors").
+
+#### Complex custom coloring
+
+It is possible to define a method as style. It receives the stringified value
+of the input. It is invoked in case coloring is active and the type is
+inspected.
+
+Example: `util.inspect.styles.regexp(value)`
+
+* `value` {string} The string representation of the input type.
+* Returns: {string} The adjusted representation of `object`.
 
 #### Modifiers
 
@@ -1628,7 +1651,7 @@ A MIME string is a structured string containing multiple meaningful
 components. When parsed, a `MIMEType` object is returned containing
 properties for each of these components.
 
-### Constructor: `new MIMEType(input)`
+### `new MIMEType(input)`
 
 * `input` {string} The input MIME to parse
 
@@ -1820,7 +1843,7 @@ added:
 The `MIMEParams` API provides read and write access to the parameters of a
 `MIMEType`.
 
-### Constructor: `new MIMEParams()`
+### `new MIMEParams()`
 
 Creates a new `MIMEParams` object by with empty parameters
 
@@ -2188,9 +2211,11 @@ $ node negate.js --no-logfile --logfile=test.log --color --no-color
 added:
   - v21.7.0
   - v20.12.0
+changes:
+  - version: v24.10.0
+    pr-url: https://github.com/nodejs/node/pull/59925
+    description: This API is no longer experimental.
 -->
-
-> Stability: 1.1 - Active development
 
 * `content` {string}
 
@@ -2457,7 +2482,9 @@ added:
   - v21.7.0
   - v20.12.0
 changes:
-  - version: v24.2.0
+  - version:
+      - v24.2.0
+      - v22.17.0
     pr-url: https://github.com/nodejs/node/pull/58437
     description: Added the `'none'` format as a non-op format.
   - version:
@@ -2793,7 +2820,9 @@ added:
  - v19.7.0
  - v18.16.0
 changes:
- - version: v24.0.0
+ - version:
+   - v24.0.0
+   - v22.16.0
    pr-url: https://github.com/nodejs/node/pull/57765
    description: Change stability index for this feature from Experimental to Stable.
 -->
@@ -3167,7 +3196,9 @@ For further information on `napi_create_external`, refer to
 ### `util.types.isFloat16Array(value)`
 
 <!-- YAML
-added: v24.0.0
+added:
+ - v24.0.0
+ - v22.16.0
 -->
 
 * `value` {any}

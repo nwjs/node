@@ -56,7 +56,7 @@ const hasCrypto = Boolean(process.versions.openssl) &&
 
 const hasSQLite = Boolean(process.versions.sqlite);
 
-const hasQuic = hasCrypto && !!process.config.variables.node_quic;
+const hasQuic = hasCrypto && !!process.features.quic;
 
 /**
  * Parse test metadata from the specified file.
@@ -363,6 +363,9 @@ if (hasCrypto) {
   knownGlobals.add(globalThis.CryptoKey);
   knownGlobals.add(globalThis.SubtleCrypto);
 }
+
+const { Worker } = require('node:worker_threads');
+knownGlobals.add(Worker);
 
 function allowGlobals(...allowlist) {
   for (const val of allowlist) {

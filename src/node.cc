@@ -81,7 +81,7 @@
 #endif
 
 #ifdef NODE_ENABLE_VTUNE_PROFILING
-#include "../deps/v8/src/third_party/vtune/v8-vtune.h"
+#include "../deps/v8/third_party/vtune/v8-vtune.h"
 #endif
 
 #include "large_pages/node_large_page.h"
@@ -850,7 +850,7 @@ static ExitCode InitializeNodeWithArgsInternal(
     std::vector<std::string>* exec_argv,
     std::vector<std::string>* errors,
     ProcessInitializationFlags::Flags flags) {
-  // Make sure InitializeNodeWithArgs() is called only once.
+  // Make sure InitializeNodeWithArgsInternal() is called only once.
   CHECK(!init_called.exchange(true));
 
   // Initialize node_start_time to get relative uptime.
@@ -1192,14 +1192,6 @@ void StartupDataHandler::Load(const char* blob_file,
 
 #endif  // V8_USE_EXTERNAL_STARTUP_DATA
 
-
-int InitializeNodeWithArgs(std::vector<std::string>* argv,
-                           std::vector<std::string>* exec_argv,
-                           std::vector<std::string>* errors,
-                           ProcessInitializationFlags::Flags flags) {
-  return static_cast<int>(
-      InitializeNodeWithArgsInternal(argv, exec_argv, errors, flags));
-}
 
 static std::shared_ptr<InitializationResultImpl>
 InitializeOncePerProcessInternal(const std::vector<std::string>& args,
@@ -1979,7 +1971,7 @@ NODE_EXTERN void g_stop_nw_instance() {
     //uv_print_active_handles(tls_ctx->env->event_loop(), stderr);
       more = uv_run(loop, UV_RUN_ONCE);
     if (more == false) {
-      node::EmitBeforeExit(tls_ctx->env);
+      node::EmitProcessBeforeExit(tls_ctx->env);
 
       // Emit `beforeExit` if the loop became alive either after emitting
       // event, or after running some callbacks.
@@ -2121,7 +2113,7 @@ NODE_EXTERN void* g_get_current_env(v8::Handle<v8::Context> context) {
 }
 
 NODE_EXTERN void g_emit_exit(node::Environment* env) {
-  node::EmitExit(env);
+  node::EmitProcessExit(env);
 }
 
 NODE_EXTERN void g_run_at_exit(node::Environment* env) {

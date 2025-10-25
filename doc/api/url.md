@@ -629,7 +629,9 @@ console.log(JSON.stringify(myURLs));
 <!-- YAML
 added: v16.7.0
 changes:
- - version: v24.0.0
+ - version:
+    - v24.0.0
+    - v22.17.0
    pr-url: https://github.com/nodejs/node/pull/57513
    description: Marking the API stable.
 -->
@@ -667,7 +669,9 @@ to other workers or the main thread.
 <!-- YAML
 added: v16.7.0
 changes:
- - version: v24.0.0
+ - version:
+    - v24.0.0
+    - v22.17.0
    pr-url: https://github.com/nodejs/node/pull/57513
    description: Marking the API stable.
 -->
@@ -1361,7 +1365,9 @@ fileURLToPath('file:///hello world');      // Correct:   /hello world (POSIX)
 ### `url.fileURLToPathBuffer(url[, options])`
 
 <!--
-added: v24.3.0
+added:
+ - v24.3.0
+ - v22.18.0
 -->
 
 * `url` {URL | string} The file URL string or URL object to convert to a path.
@@ -1841,7 +1847,25 @@ A `URIError` is thrown if the `auth` property is present but cannot be decoded.
 strings. It is prone to security issues such as [host name spoofing][]
 and incorrect handling of usernames and passwords. Do not use with untrusted
 input. CVEs are not issued for `url.parse()` vulnerabilities. Use the
-[WHATWG URL][] API instead.
+[WHATWG URL][] API instead, for example:
+
+```js
+function getURL(req) {
+  const proto = req.headers['x-forwarded-proto'] || 'https';
+  const host = req.headers['x-forwarded-host'] || req.headers.host || 'example.com';
+  return new URL(`${proto}://${host}${req.url || '/'}`);
+}
+```
+
+The example above assumes well-formed headers are forwarded from a reverse
+proxy to your Node.js server. If you are not using a reverse proxy, you should
+use the example below:
+
+```js
+function getURL(req) {
+  return new URL(`https://example.com${req.url || '/'}`);
+}
+```
 
 ### `url.resolve(from, to)`
 

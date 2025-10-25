@@ -155,25 +155,25 @@ Depending on the host platform, the selection of toolchains may vary.
 
 | Operating System | Compiler Versions                                              |
 | ---------------- | -------------------------------------------------------------- |
-| Linux            | GCC >= 12.2                                                    |
+| Linux            | GCC >= 12.2 or Clang >= 19.1                                   |
 | Windows          | Visual Studio >= 2022 with the Windows 10 SDK on a 64-bit host |
-| macOS            | Xcode >= 16.1 (Apple LLVM >= 17)                               |
+| macOS            | Xcode >= 16.4 (Apple LLVM >= 19)                               |
 
 ### Official binary platforms and toolchains
 
 Binaries at <https://nodejs.org/download/release/> are produced on:
 
-| Binary package          | Platform and Toolchain                                    |
-| ----------------------- | --------------------------------------------------------- |
-| aix-ppc64               | AIX 7.2 TL04 on PPC64BE with GCC 12[^5]                   |
-| darwin-x64              | macOS 13, Xcode 16 with -mmacosx-version-min=13.5         |
-| darwin-arm64 (and .pkg) | macOS 13 (arm64), Xcode 16 with -mmacosx-version-min=13.5 |
-| linux-arm64             | RHEL 8 with gcc-toolset-12[^6]                            |
-| linux-ppc64le           | RHEL 8 with gcc-toolset-12[^6]                            |
-| linux-s390x             | RHEL 8 with gcc-toolset-12[^6]                            |
-| linux-x64               | RHEL 8 with gcc-toolset-12[^6]                            |
-| win-arm64               | Windows Server 2022 (x64) with Visual Studio 2022         |
-| win-x64                 | Windows Server 2022 (x64) with Visual Studio 2022         |
+| Binary package          | Platform and Toolchain                                        |
+| ----------------------- | ------------------------------------------------------------- |
+| aix-ppc64               | AIX 7.2 TL04 on PPC64BE with GCC 12[^5]                       |
+| darwin-x64              | macOS 15, Xcode 16 with -mmacosx-version-min=13.5             |
+| darwin-arm64 (and .pkg) | macOS 15 (arm64), Xcode 16 with -mmacosx-version-min=13.5     |
+| linux-arm64             | RHEL 8 with Clang 19.1 and gcc-toolset-14-libatomic-devel[^6] |
+| linux-ppc64le           | RHEL 8 with Clang 19.1 and gcc-toolset-14-libatomic-devel[^6] |
+| linux-s390x             | RHEL 8 with Clang 19.1 and gcc-toolset-14-libatomic-devel[^6] |
+| linux-x64               | RHEL 8 with Clang 19.1 and gcc-toolset-14-libatomic-devel[^6] |
+| win-arm64               | Windows Server 2022 (x64) with Visual Studio 2022             |
+| win-x64                 | Windows Server 2022 (x64) with Visual Studio 2022             |
 
 <!--lint disable final-definition-->
 
@@ -232,7 +232,7 @@ Consult previous versions of this document for older versions of Node.js:
 
 #### Unix prerequisites
 
-* `gcc` and `g++` >= 12.2 or newer
+* `gcc` and `g++` >= 12.2 or `clang` and `clang++` >= 19.1
 * GNU Make 3.81 or newer
 * [A supported version of Python][Python versions]
   * For test coverage, your Python installation must include pip.
@@ -249,7 +249,7 @@ FreeBSD and OpenBSD users may also need to install `libexecinfo`.
 
 #### macOS prerequisites
 
-* Xcode Command Line Tools >= 13 for macOS
+* Xcode Command Line Tools >= 16.4 for macOS
 * [A supported version of Python][Python versions]
   * For test coverage, your Python installation must include pip.
 
@@ -637,7 +637,7 @@ Refs:
 * The current [version of Python][Python versions] from the
   [Microsoft Store](https://apps.microsoft.com/store/search?publisher=Python+Software+Foundation)
 * The "Desktop development with C++" workload from
-  [Visual Studio 2022 (17.6 or newer)](https://visualstudio.microsoft.com/downloads/)
+  [Visual Studio 2022 (17.13 or newer)](https://visualstudio.microsoft.com/downloads/)
   or the "C++ build tools" workload from the
   [Build Tools](https://aka.ms/vs/17/release/vs_buildtools.exe),
   with the default optional components. Starting with Node.js v24, ClangCL is required to compile
@@ -659,9 +659,7 @@ Optional requirements to build the MSI installer package:
 
 Optional requirements for compiling for Windows on ARM (ARM64):
 
-* Visual Studio 17.6.0 or newer
-  > **Note:** There is [a bug](https://github.com/nodejs/build/issues/3739) in `17.10.x`
-  > preventing Node.js from compiling.
+* Visual Studio 17.13.0 or newer
 * Visual Studio optional components
   * Visual C++ compilers and libraries for ARM64
   * Visual C++ ATL for ARM64

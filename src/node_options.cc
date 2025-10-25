@@ -10,6 +10,7 @@
 #include "uv.h"
 #if HAVE_OPENSSL
 #include "openssl/opensslv.h"
+#include "quic/guard.h"
 #endif
 
 #include <algorithm>
@@ -550,19 +551,20 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             kAllowedInEnvvar,
             true);
   AddOption("--experimental-quic",
-            "" /* undocumented until its development */,
-#ifdef NODE_OPENSSL_HAS_QUIC
+#ifndef OPENSSL_NO_QUIC
+            "experimental QUIC support",
             &EnvironmentOptions::experimental_quic,
 #else
-            // Option is a no-op if the NODE_OPENSSL_HAS_QUIC
-            // compile flag is not enabled
+            "" /* undocumented when no-op */,
             NoOp{},
 #endif
             kAllowedInEnvvar);
-  AddOption("--experimental-webstorage",
-            "experimental Web Storage API",
-            &EnvironmentOptions::experimental_webstorage,
-            kAllowedInEnvvar);
+  AddOption("--webstorage",
+            "Web Storage API",
+            &EnvironmentOptions::webstorage,
+            kAllowedInEnvvar,
+            true);
+  AddAlias("--experimental-webstorage", "--webstorage");
   AddOption("--localstorage-file",
             "file used to persist localStorage data",
             &EnvironmentOptions::localstorage_file,
@@ -605,6 +607,14 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
   AddOption("--allow-child-process",
             "allow use of child process when any permissions are set",
             &EnvironmentOptions::allow_child_process,
+            kAllowedInEnvvar);
+  AddOption("--allow-inspector",
+            "allow use of inspector when any permissions are set",
+            &EnvironmentOptions::allow_inspector,
+            kAllowedInEnvvar);
+  AddOption("--allow-net",
+            "allow use of network when any permissions are set",
+            &EnvironmentOptions::allow_net,
             kAllowedInEnvvar);
   AddOption("--allow-wasi",
             "allow wasi when any permissions are set",
@@ -1219,8 +1229,7 @@ PerProcessOptionsParser::PerProcessOptionsParser(
             &PerProcessOptions::v8_thread_pool_size,
             kAllowedInEnvvar);
   AddOption("--zero-fill-buffers",
-            "automatically zero-fill all newly allocated Buffer and "
-            "SlowBuffer instances",
+            "automatically zero-fill all newly allocated Buffer instances",
             &PerProcessOptions::zero_fill_all_buffers,
             kAllowedInEnvvar);
   AddOption("--debug-arraybuffer-allocations",

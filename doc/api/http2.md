@@ -1075,7 +1075,9 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/58293
     description: The `weight` option is now ignored, setting it will trigger a
                  runtime warning.
-  - version: v24.2.0
+  - version:
+      - v24.2.0
+      - v22.17.0
     pr-url: https://github.com/nodejs/node/pull/58313
     description: Following the deprecation of priority signaling as of RFC 9113,
                  `weight` option is deprecated.
@@ -1467,7 +1469,9 @@ numeric stream identifier.
 
 <!-- YAML
 added: v8.4.0
-deprecated: v24.2.0
+deprecated:
+ - v24.2.0
+ - v22.17.0
 changes:
   - version: v24.2.0
     pr-url: https://github.com/nodejs/node/pull/58293
@@ -1579,7 +1583,9 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/58293
     description: The `state.weight` property is now always set to 16 and
                  `sumDependencyWeight` is always set to 0.
-  - version: v24.2.0
+  - version:
+      - v24.2.0
+      - v22.17.0
     pr-url: https://github.com/nodejs/node/pull/58313
     description: Following the deprecation of priority signaling as of RFC 9113,
                  `weight` and `sumDependencyWeight` options are deprecated.
@@ -1859,6 +1865,7 @@ added: v8.4.0
 changes:
   - version:
     - v24.7.0
+    - v22.20.0
     pr-url: https://github.com/nodejs/node/pull/59455
     description: Allow passing headers in raw array format.
   - version:

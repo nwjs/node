@@ -38,6 +38,7 @@ function replaceJunitDuration(str) {
     .replaceAll(/time="[0-9.]+"/g, 'time="*"')
     .replaceAll(/duration_ms [0-9.]+/g, 'duration_ms *')
     .replaceAll(`hostname="${hostname()}"`, 'hostname="HOSTNAME"')
+    .replaceAll(/file="[^"]*"/g, 'file="*"')
     .replace(stackTraceBasePath, '$3');
 }
 
@@ -136,7 +137,7 @@ const tests = [
     name: 'test-runner/output/test-timeout-flag.js',
     flags: [
       '--test-reporter=tap',
-      '--test-timeout=20',
+      '--test-timeout=100',
     ],
   },
   // --test-timeout should work with or without --test flag
@@ -144,7 +145,7 @@ const tests = [
     name: 'test-runner/output/test-timeout-flag.js',
     flags: [
       '--test-reporter=tap',
-      '--test-timeout=20',
+      '--test-timeout=100',
       '--test',
     ],
   },

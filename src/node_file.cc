@@ -333,12 +333,10 @@ BaseObjectPtr<BaseObject> FileHandle::TransferData::Deserialize(
   return BaseObjectPtr<BaseObject> { FileHandle::New(bd, fd) };
 }
 
-// Close the file descriptor if it hasn't already been closed. A process
-// warning will be emitted using a SetImmediate to avoid calling back to
-// JS during GC. If closing the fd fails at this point, a fatal exception
-// will crash the process immediately.
+// Throw an exception if the file handle has not yet been closed.
 inline void FileHandle::Close() {
   if (closed_ || closing_) return;
+
   uv_fs_t req;
   CHECK_NE(fd_, -1);
   FS_SYNC_TRACE_BEGIN(close);
@@ -352,42 +350,38 @@ inline void FileHandle::Close() {
 
   AfterClose();
 
-  if (ret < 0) {
-    // Do not unref this
-    env()->SetImmediate([detail](Environment* env) {
+  // Even though we closed the file descriptor, we still throw an error
+  // if the FileHandle object was not closed before garbage collection.
+  // Because this method is called during garbage collection, we will defer
+  // throwing the error until the next immediate queue tick so as not
+  // to interfere with the gc process.
+  //
+  // This exception will end up being fatal for the process because
+  // it is being thrown from within the SetImmediate handler and
+  // there is no JS stack to bubble it to. In other words, tearing
+  // down the process is the only reasonable thing we can do here.
+  env()->SetImmediate([detail](Environment* env) {
+    HandleScope handle_scope(env->isolate());
+
+    // If there was an error while trying to close the file descriptor,
+    // we will throw that instead.
+    if (detail.ret < 0) {
       char msg[70];
-      snprintf(msg, arraysize(msg),
-              "Closing file descriptor %d on garbage collection failed",
-              detail.fd);
-      // This exception will end up being fatal for the process because
-      // it is being thrown from within the SetImmediate handler and
-      // there is no JS stack to bubble it to. In other words, tearing
-      // down the process is the only reasonable thing we can do here.
+      snprintf(msg,
+               arraysize(msg),
+               "Closing file descriptor %d on garbage collection failed",
+               detail.fd);
       HandleScope handle_scope(env->isolate());
       env->ThrowUVException(detail.ret, "close", msg);
-    });
-    return;
-  }
-
-  // If the close was successful, we still want to emit a process warning
-  // to notify that the file descriptor was gc'd. We want to be noisy about
-  // this because not explicitly closing the FileHandle is a bug.
-
-  env()->SetImmediate([detail](Environment* env) {
-    ProcessEmitWarning(env,
-                       "Closing file descriptor %d on garbage collection",
-                       detail.fd);
-    if (env->filehandle_close_warning()) {
-      env->set_filehandle_close_warning(false);
-      USE(ProcessEmitDeprecationWarning(
-          env,
-          "Closing a FileHandle object on garbage collection is deprecated. "
-          "Please close FileHandle objects explicitly using "
-          "FileHandle.prototype.close(). In the future, an error will be "
-          "thrown if a file descriptor is closed during garbage collection.",
-          "DEP0137"));
+      return;
     }
-  }, CallbackFlags::kUnrefed);
+
+    THROW_ERR_INVALID_STATE(
+        env,
+        "A FileHandle object was closed during garbage collection. "
+        "This used to be allowed with a deprecation warning but is now "
+        "considered an error. Please close FileHandle objects explicitly.");
+  });
 }
 
 void FileHandle::CloseReq::Resolve() {
@@ -3266,24 +3260,25 @@ static void CpSyncCheckPaths(const FunctionCallbackInfo<Value>& args) {
   if (!error_code) {
     // Check if src and dest are identical.
     if (std::filesystem::equivalent(src_path, dest_path)) {
-      std::string message = "src and dest cannot be the same %s";
-      return THROW_ERR_FS_CP_EINVAL(env, message.c_str(), dest_path_str);
+      static constexpr const char* message =
+          "src and dest cannot be the same %s";
+      return THROW_ERR_FS_CP_EINVAL(env, message, dest_path_str);
     }
 
     const bool dest_is_dir =
         dest_status.type() == std::filesystem::file_type::directory;
     if (src_is_dir && !dest_is_dir) {
-      std::string message =
+      static constexpr const char* message =
           "Cannot overwrite non-directory %s with directory %s";
       return THROW_ERR_FS_CP_DIR_TO_NON_DIR(
-          env, message.c_str(), dest_path_str, src_path_str);
+          env, message, dest_path_str, src_path_str);
     }
 
     if (!src_is_dir && dest_is_dir) {
-      std::string message =
+      static constexpr const char* message =
           "Cannot overwrite directory %s with non-directory %s";
       return THROW_ERR_FS_CP_NON_DIR_TO_DIR(
-          env, message.c_str(), dest_path_str, src_path_str);
+          env, message, dest_path_str, src_path_str);
     }
   }
 
@@ -3292,9 +3287,9 @@ static void CpSyncCheckPaths(const FunctionCallbackInfo<Value>& args) {
   }
   // Check if dest_path is a subdirectory of src_path.
   if (src_is_dir && dest_path_str.starts_with(src_path_str)) {
-    std::string message = "Cannot copy %s to a subdirectory of self %s";
-    return THROW_ERR_FS_CP_EINVAL(
-        env, message.c_str(), src_path_str, dest_path_str);
+    static constexpr const char* message =
+        "Cannot copy %s to a subdirectory of self %s";
+    return THROW_ERR_FS_CP_EINVAL(env, message, src_path_str, dest_path_str);
   }
 
   auto dest_parent = dest_path.parent_path();
@@ -3305,9 +3300,9 @@ static void CpSyncCheckPaths(const FunctionCallbackInfo<Value>& args) {
          dest_parent.parent_path() != dest_parent) {
     if (std::filesystem::equivalent(
             src_path, dest_path.parent_path(), error_code)) {
-      std::string message = "Cannot copy %s to a subdirectory of self %s";
-      return THROW_ERR_FS_CP_EINVAL(
-          env, message.c_str(), src_path_str, dest_path_str);
+      static constexpr const char* message =
+          "Cannot copy %s to a subdirectory of self %s";
+      return THROW_ERR_FS_CP_EINVAL(env, message, src_path_str, dest_path_str);
     }
 
     // If equivalent fails, it's highly likely that dest_parent does not exist
@@ -3319,23 +3314,24 @@ static void CpSyncCheckPaths(const FunctionCallbackInfo<Value>& args) {
   }
 
   if (src_is_dir && !recursive) {
-    std::string message =
+    static constexpr const char* message =
         "Recursive option not enabled, cannot copy a directory: %s";
-    return THROW_ERR_FS_EISDIR(env, message.c_str(), src_path_str);
+    return THROW_ERR_FS_EISDIR(env, message, src_path_str);
   }
 
   switch (src_status.type()) {
     case std::filesystem::file_type::socket: {
-      std::string message = "Cannot copy a socket file: %s";
-      return THROW_ERR_FS_CP_SOCKET(env, message.c_str(), dest_path_str);
+      static constexpr const char* message = "Cannot copy a socket file: %s";
+      return THROW_ERR_FS_CP_SOCKET(env, message, dest_path_str);
     }
     case std::filesystem::file_type::fifo: {
-      std::string message = "Cannot copy a FIFO pipe: %s";
-      return THROW_ERR_FS_CP_FIFO_PIPE(env, message.c_str(), dest_path_str);
+      static constexpr const char* message = "Cannot copy a FIFO pipe: %s";
+      return THROW_ERR_FS_CP_FIFO_PIPE(env, message, dest_path_str);
     }
     case std::filesystem::file_type::unknown: {
-      std::string message = "Cannot copy an unknown file type: %s";
-      return THROW_ERR_FS_CP_UNKNOWN(env, message.c_str(), dest_path_str);
+      static constexpr const char* message =
+          "Cannot copy an unknown file type: %s";
+      return THROW_ERR_FS_CP_UNKNOWN(env, message, dest_path_str);
     }
     default:
       break;
@@ -3855,7 +3851,7 @@ void BindingData::Deserialize(Local<Context> context,
                               int index,
                               InternalFieldInfoBase* info) {
   DCHECK_IS_SNAPSHOT_SLOT(index);
-  HandleScope scope(context->GetIsolate());
+  HandleScope scope(Isolate::GetCurrent());
   Realm* realm = Realm::GetCurrent(context);
   InternalFieldInfo* casted_info = static_cast<InternalFieldInfo*>(info);
   BindingData* binding =

@@ -468,9 +468,13 @@
           'defines': [ 'OPENSSL_API_COMPAT=0x10100000L', ],
           'dependencies': [
             './deps/openssl/openssl.gyp:openssl',
+            './deps/ngtcp2/ngtcp2.gyp:ngtcp2',
+            './deps/ngtcp2/ngtcp2.gyp:nghttp3',
 
             # For tests
             #'./deps/openssl/openssl.gyp:openssl-cli',
+            #'./deps/ngtcp2/ngtcp2.gyp:ngtcp2_test_server',
+            #'./deps/ngtcp2/ngtcp2.gyp:ngtcp2_test_client',
           ],
           'conditions': [
             # -force_load or --whole-archive are not applicable for
@@ -508,12 +512,6 @@
             }],
           ]
         }],
-        [ 'openssl_quic=="true" and node_shared_ngtcp2=="false"', {
-          'dependencies': [ './deps/ngtcp2/ngtcp2.gyp:ngtcp2' ]
-        }],
-        [ 'openssl_quic=="true" and node_shared_nghttp3=="false"', {
-          'dependencies': [ './deps/ngtcp2/ngtcp2.gyp:nghttp3' ]
-        }]
       ]
     }, {
       'defines': [ 'HAVE_OPENSSL=0' ]

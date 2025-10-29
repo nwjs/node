@@ -1022,6 +1022,9 @@ in the `$schema` must be replaced with the version of Node.js you are using.
   },
   "testRunner": {
     "test-isolation": "process"
+  },
+  "watch": {
+    "watch-preserve-output": true
   }
 }
 ```
@@ -3987,6 +3990,8 @@ documented here:
 ### `--expose-gc`
 
 ### `--harmony-shadow-realm`
+
+### `--heap-snapshot-on-oom`
 
 ### `--interpreted-frames-native-stack`
 

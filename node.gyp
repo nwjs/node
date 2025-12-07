@@ -179,7 +179,6 @@
 'lib/internal/modules/esm/module_job.js',
 'lib/internal/modules/esm/get_format.js',
 'lib/internal/modules/esm/create_dynamic_module.js',
-'lib/internal/modules/esm/initialize_import_meta.js',
 'lib/internal/modules/esm/assert.js',
 'lib/internal/modules/esm/load.js',
 'lib/internal/modules/esm/utils.js',
@@ -1264,6 +1263,9 @@
         'NODE_ARCH="<(target_arch)"',
         'NODE_PLATFORM="<(OS)"',
         'NODE_WANT_INTERNALS=1',
+        # Define NAPI_EXPERIMENTAL to enable Node-API experimental function symbols being exposed.
+        'NAPI_EXPERIMENTAL=1',
+        'NODE_API_EXPERIMENTAL_NO_WARNING=1',
         # Warn when using deprecated V8 APIs.
         'V8_DEPRECATION_WARNINGS=1',
         'BUILDING_NW_NODE=1',

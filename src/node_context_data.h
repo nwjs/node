@@ -135,7 +135,8 @@ class ContextEmbedderTag {
     // context.
     context->SetAlignedPointerInEmbedderData(
         ContextEmbedderIndex::kContextTag,
-        ContextEmbedderTag::kNodeContextTagPtr);
+        ContextEmbedderTag::kNodeContextTagPtr,
+        v8::kEmbedderDataTypeTagDefault);
   }
 
   static inline bool IsNodeContext(v8::Local<v8::Context> context) {
@@ -147,7 +148,7 @@ class ContextEmbedderTag {
       return false;
     }
     if (context->GetAlignedPointerFromEmbedderData(
-            ContextEmbedderIndex::kContextTag) !=
+            ContextEmbedderIndex::kContextTag, v8::kEmbedderDataTypeTagDefault) !=
         ContextEmbedderTag::kNodeContextTagPtr) [[unlikely]] {
       return false;
     }

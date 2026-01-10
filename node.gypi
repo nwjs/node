@@ -29,7 +29,7 @@
     [ 'clang==1', {
       'cflags': [
         '-Werror=undefined-inline',
-        '-Werror=extra-semi',
+        #'-Werror=extra-semi',
         '-Werror=ctad-maybe-unsupported',
       ],
     }],

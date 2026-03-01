@@ -115,9 +115,8 @@ ModuleCacheKey ModuleCacheKey::From(Local<Context> context,
     DCHECK(DataIsString(import_attributes->Get(context, i)));
     DCHECK(DataIsString(import_attributes->Get(context, i + 1)));
 
-    Local<String> v8_key = import_attributes->Get(context, i).As<String>();
-    Local<String> v8_value =
-        import_attributes->Get(context, i + 1).As<String>();
+    Local<String> v8_key = import_attributes->Get(i).As<String>();
+    Local<String> v8_value = import_attributes->Get(i + 1).As<String>();
     Utf8Value key_utf8(isolate, v8_key);
     Utf8Value value_utf8(isolate, v8_value);
 
@@ -549,8 +548,8 @@ static Local<Object> createImportAttributesContainer(
   LocalVector<Value> values(isolate, num_attributes);
 
   for (int i = 0; i < raw_attributes->Length(); i += elements_per_attribute) {
-    Local<Data> key = raw_attributes->Get(realm->context(), i);
-    Local<Data> value = raw_attributes->Get(realm->context(), i + 1);
+    Local<Data> key = raw_attributes->Get(i);
+    Local<Data> value = raw_attributes->Get(i + 1);
     DCHECK(DataIsString(key));
     DCHECK(DataIsString(value));
 
@@ -575,7 +574,7 @@ static Local<Array> createModuleRequestsContainer(
   for (int i = 0; i < raw_requests->Length(); i++) {
     DCHECK(raw_requests->Get(context, i)->IsModuleRequest());
     Local<ModuleRequest> module_request =
-        raw_requests->Get(realm->context(), i).As<ModuleRequest>();
+        raw_requests->Get(i).As<ModuleRequest>();
 
     Local<String> specifier = module_request->GetSpecifier();
 
@@ -664,7 +663,7 @@ void ModuleWrap::Link(const FunctionCallbackInfo<Value>& args) {
     // This currently doesn't sort the import attributes.
     Local<Value> module_value = modules_vector[i].Get(isolate);
     ModuleCacheKey module_cache_key = ModuleCacheKey::From(
-        context, requests->Get(context, i).As<ModuleRequest>());
+        context, requests->Get(i).As<ModuleRequest>());
     auto it = module_request_map.find(module_cache_key);
     if (it == module_request_map.end()) {
       // This is the first request with this identity, record it - any mismatch
@@ -1008,7 +1007,7 @@ void ModuleWrap::HasAsyncGraph(Local<Name> property,
   Isolate* isolate = args.GetIsolate();
   Environment* env = Environment::GetCurrent(isolate);
   ModuleWrap* obj;
-  ASSIGN_OR_RETURN_UNWRAP(&obj, args.This());
+  ASSIGN_OR_RETURN_UNWRAP(&obj, args.HolderV2());
 
   Local<Module> module = obj->module_.Get(isolate);
   if (module->GetStatus() < Module::kInstantiated) {
@@ -1062,7 +1061,7 @@ static std::string GetSpecifierFromModuleRequest(Local<Context> context,
                                                  size_t module_request_index) {
   Local<ModuleRequest> raw_request =
       referrer->GetModuleRequests()
-          ->Get(context, static_cast<int>(module_request_index))
+          ->Get(static_cast<int>(module_request_index))
           .As<ModuleRequest>();
   Local<String> specifier = raw_request->GetSpecifier();
   Utf8Value specifier_utf8(Isolate::GetCurrent(), specifier);
@@ -1142,7 +1141,7 @@ MaybeLocal<Promise> ImportModuleDynamicallyWithPhase(
   // If the host-defined options are empty, get the referrer id symbol
   // from the realm global object.
   if (options->Length() == HostDefinedOptions::kLength) {
-    id = options->Get(context, HostDefinedOptions::kID).As<Symbol>();
+    id = options->Get(HostDefinedOptions::kID).As<Symbol>();
   } else if (!context->Global()
                   ->GetPrivate(context, env->host_defined_option_symbol())
                   .ToLocal(&id)) {
@@ -1227,7 +1226,7 @@ void ModuleWrap::SetImportMetaResolveInitializer(
 static void ImportMetaResolveLazyGetter(
     Local<v8::Name> name, const PropertyCallbackInfo<Value>& info) {
   Isolate* isolate = info.GetIsolate();
-  Local<Value> receiver_val = info.This();
+  Local<Value> receiver_val = info.HolderV2();
   if (!receiver_val->IsObject()) {
     THROW_ERR_INVALID_INVOCATION(isolate);
     return;
@@ -1268,7 +1267,7 @@ static void PathHelpersLazyGetter(Local<v8::Name> name,
   // When this getter is invoked in a vm context, the `Realm::GetCurrent(info)`
   // returns a nullptr and retrieve the creation context via `this` object and
   // get the creation Realm.
-  Local<Value> receiver_val = info.This();
+  Local<Value> receiver_val = info.HolderV2();
   if (!receiver_val->IsObject()) {
     THROW_ERR_INVALID_INVOCATION(isolate);
     return;

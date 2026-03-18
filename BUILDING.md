@@ -178,7 +178,7 @@ Binaries at <https://nodejs.org/download/release/> are produced on:
 Starting with Node.js 25, official Linux binaries are linked with `libatomic` and these systems
 must have the `libatomic` runtime installed and available at execution time to run the binaries.
 The package name for the `libatomic` runtime is typically `libatomic` or `libatomic1` depending
-on your Linux distibution.
+on your Linux distribution.
 
 <!--lint disable final-definition-->
 
@@ -222,9 +222,9 @@ Supported platforms and toolchains change with each major version of Node.js.
 This document is only valid for the current major version of Node.js.
 Consult previous versions of this document for older versions of Node.js:
 
-* [Node.js 21](https://github.com/nodejs/node/blob/v21.x/BUILDING.md)
+* [Node.js 24](https://github.com/nodejs/node/blob/v24.x/BUILDING.md)
+* [Node.js 22](https://github.com/nodejs/node/blob/v22.x/BUILDING.md)
 * [Node.js 20](https://github.com/nodejs/node/blob/v20.x/BUILDING.md)
-* [Node.js 18](https://github.com/nodejs/node/blob/v18.x/BUILDING.md)
 
 ## Building Node.js on supported platforms
 
@@ -443,7 +443,7 @@ tools/test.py parallel/test-stream-*  # The test/ prefix can be omitted
 tools/test.py "test/parallel/test-stream-*"
 ```
 
-The whildcard `*` can be used in any part of the path. For example, to run all tests
+The wildcard `*` can be used in any part of the path. For example, to run all tests
 with a name that starts with `test-inspector-`, regardless of the directory they are in:
 
 ```bash
@@ -635,7 +635,7 @@ on Linux, you can try [Docker](https://www.docker.com/products/docker-desktop/)
 (using an image like `gengjiawen/node-build:2020-02-14`).
 
 The `--debug` is not necessary and will slow down build and testing, but it can
-show clear stacktrace if ASan hits an issue.
+show a clear stack trace if ASan hits an issue.
 
 ```bash
 ./configure --debug --enable-asan && make -j4
@@ -713,8 +713,8 @@ the number of parallel build tasks (`-j<n>`).
 
 #### Tips
 
-You may need disable vcpkg integration if you got link error about symbol
-redefine related to zlib.lib(zlib1.dll), even you never install it by hand,
+You may need to disable vcpkg integration if you encounter a link error about symbol
+redefinition related to zlib.lib(zlib1.dll), even if you never installed it by hand,
 as vcpkg is part of CLion and Visual Studio now.
 
 ```powershell
@@ -735,16 +735,22 @@ Refs:
 
 ##### Option 1: Manual install
 
-* The current [version of Python][Python versions] from the
-  [Microsoft Store](https://apps.microsoft.com/store/search?publisher=Python+Software+Foundation)
-* The "Desktop development with C++" workload from
-  [Visual Studio 2022 (17.13 or newer)](https://visualstudio.microsoft.com/downloads/)
-  or the "C++ build tools" workload from the
-  [Build Tools](https://aka.ms/vs/17/release/vs_buildtools.exe),
-  with the default optional components. Starting with Node.js v24, ClangCL is required to compile
-  on Windows. To enable it, two additional components are needed:
+* The current [version of Python][Python downloads] by following the instructions in
+  [Using Python on Windows][].
+* Select and download the Visual Studio Community Edition 2026 from
+  [Visual Studio Downloads](https://visualstudio.microsoft.com/downloads/) or alternatively download
+  [Build Tools for Visual Studio 2026](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2026),
+  and then install.
+  The Build Tools Edition has the lowest disk space requirements of all editions.
+  Professional or Enterprise Editions can also be alternatively selected.
+* During installation of Visual Studio, select the "Desktop development with C++" workload.
+  As of Node.js 24.0.0, ClangCL is required to compile on Windows.
+  To install it, select the following two optional components:
   * C++ Clang Compiler for Windows (Microsoft.VisualStudio.Component.VC.Llvm.Clang)
-  * MSBuild support for LLVM toolset (Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset)
+  * MSBuild support for LLVM (clang-cl) toolset (Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset)
+* As an alternative to Visual Studio 2026, download Visual Studio 2022 Current channel Version 17.4 from the
+  [Evergreen bootstrappers](https://learn.microsoft.com/en-us/visualstudio/releases/2022/release-history#evergreen-bootstrappers)
+  table and install using the same workload and optional component selection as described above.
 * Basic Unix tools required for some tests,
   [Git for Windows](https://git-scm.com/download/win) includes Git Bash
   and tools which can be included in the global `PATH`.
@@ -753,24 +759,23 @@ Refs:
   to `PATH`. A build with the `openssl-no-asm` option does not need this, nor
   does a build targeting ARM64 Windows.
 
-Optional requirements to build the MSI installer package:
+After you have installed any Visual Studio Edition you can add optional components using the
+Modify / Individual Components tab of Visual Studio Installer.
 
-* The .NET SDK component from [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/)
-  * This component can be installed via the Visual Studio Installer Application
+Optional component required to build the MSI installer package:
 
-Optional requirements for compiling for Windows on ARM (ARM64):
+* The .NET SDK individual component (Microsoft.NetCore.Component.SDK)
 
-* Visual Studio 17.13.0 or newer
-* Visual Studio optional components
-  * Visual C++ compilers and libraries for ARM64
-  * Visual C++ ATL for ARM64
-* Windows 10 SDK 10.0.17763.0 or newer
+Optional components required to compile for Windows on ARM64:
+
+* MSVC Build Tools for ARM64/ARM64EC (Microsoft.VisualStudio.Component.VC.Tools.ARM64)
+* C++ ATL for ARM64 (Microsoft.VisualStudio.Component.VC.ATL.ARM64)
 
 NOTE: Currently we only support compiling with Clang that comes from Visual Studio.
 
-When building with ClangCL, if the output from `vcbuild.bat` shows that the components are not installed
+When building with ClangCL, if the output from `vcbuild.bat` shows that the components are not installed,
 even when the Visual Studio Installer shows that they are installed, try removing the components
-first and then reinstalling them again.
+first and then reinstalling them.
 
 ##### Option 2: Automated install with WinGet
 
@@ -780,24 +785,16 @@ easily. These files will install the following
 [WinGet](https://learn.microsoft.com/en-us/windows/package-manager/winget/) packages:
 
 * Git for Windows with the `git` and Unix tools added to the `PATH`
-* `Python 3.12`
+* `Python 3.14`
 * `Visual Studio 2022` (Community, Enterprise or Professional)
 * `Visual Studio 2022 Build Tools` with Visual C++ workload, Clang and ClangToolset
 * `NetWide Assembler`
 
-To install Node.js prerequisites from Powershell Terminal:
+To install Node.js prerequisites from PowerShell Terminal:
 
 ```powershell
 winget configure .\.configurations\configuration.dsc.yaml
 ```
-
-Alternatively, you can use [Dev Home](https://learn.microsoft.com/en-us/windows/dev-home/)
-to install the prerequisites:
-
-* Switch to `Machine Configuration` tab
-* Click on `Configuration File`
-* Choose the corresponding WinGet configuration file
-* Click on `Set up as admin`
 
 ##### Option 3: Automated install with Boxstarter
 
@@ -870,6 +867,11 @@ To test if Node.js was built correctly:
 Release\node -e "console.log('Hello from Node.js', process.version)"
 ```
 
+> \[!TIP]
+> On Windows, creating symlinks requires [Developer Mode][] to be enabled or
+> running the command as Administrator. Tests that rely on creating symlinks
+> may fail with EPERM errors if symlink creation is not permitted.
+
 ##### Using ccache:
 
 Follow <https://github.com/ccache/ccache/wiki/MS-Visual-Studio>, and you
@@ -884,7 +886,7 @@ cp c:\ccache\ccache.exe c:\ccache\cl.exe
 ```
 
 With newer version of Visual Studio, it may need the copy to be `clang-cl.exe`
-instead. If the output of `vcbuild.bat` suggestion missing `clang-cl.exe`, copy
+instead. If the output of `vcbuild.bat` suggests missing `clang-cl.exe`, copy
 it differently:
 
 ```powershell
@@ -1130,4 +1132,7 @@ by opening a pull request against the registry available at
 <https://github.com/nodejs/node/blob/HEAD/doc/abi_version_registry.json>.
 
 [AIX toolbox]: https://www.ibm.com/support/pages/aix-toolbox-open-source-software-overview
+[Developer Mode]: https://learn.microsoft.com/en-us/windows/advanced-settings/developer-mode
+[Python downloads]: https://www.python.org/downloads/
 [Python versions]: https://devguide.python.org/versions/
+[Using Python on Windows]: https://docs.python.org/3/using/windows.html

@@ -36,6 +36,17 @@ const bits = ['arm64', 'loong64', 'mips', 'mipsel', 'ppc64', 'riscv64', 's390x',
   .includes(process.arch) ? 64 : 32;
 const hasIntl = !!process.config.variables.v8_enable_i18n_support;
 
+// small-icu doesn't support non-English locales
+const hasFullICU = (() => {
+  try {
+    const january = new Date(9e8);
+    const spanish = new Intl.DateTimeFormat('es', { month: 'long' });
+    return spanish.format(january) === 'enero';
+  } catch {
+    return false;
+  }
+})();
+
 const {
   atob,
   btoa,
@@ -51,6 +62,8 @@ if (isMainThread)
 
 const noop = () => {};
 
+// Whether the executable is linked against the shared library i.e. libnode.
+const usesSharedLibrary = process.config.variables.node_shared;
 const hasCrypto = Boolean(process.versions.openssl) &&
                   !process.env.NODE_SKIP_CRYPTO;
 
@@ -351,8 +364,6 @@ const knownGlobals = new Set([
  'CompressionStream',
  'DecompressionStream',
  'Storage',
- 'localStorage',
- 'sessionStorage',
 ].forEach((i) => {
   if (globalThis[i] !== undefined) {
     knownGlobals.add(globalThis[i]);
@@ -364,6 +375,11 @@ if (hasCrypto) {
   knownGlobals.add(globalThis.Crypto);
   knownGlobals.add(globalThis.CryptoKey);
   knownGlobals.add(globalThis.SubtleCrypto);
+}
+
+if (hasSQLite) {
+  knownGlobals.add(globalThis.localStorage);
+  knownGlobals.add(globalThis.sessionStorage);
 }
 
 const { Worker } = require('node:worker_threads');
@@ -921,6 +937,13 @@ function sleepSync(ms) {
   Atomics.wait(i32, 0, 0, ms);
 }
 
+function resolveBuiltBinary(binary) {
+  if (isWindows) {
+    binary += '.exe';
+  }
+  return path.join(path.dirname(process.execPath), binary);
+}
+
 const common = {
   allowGlobals,
   buildType,
@@ -936,6 +959,7 @@ const common = {
   getBufferSources,
   getTTYfd,
   hasIntl,
+  hasFullICU,
   hasCrypto,
   hasQuic,
   hasInspector,
@@ -964,6 +988,7 @@ const common = {
   printSkipMessage,
   pwdCommand,
   requireNoPackageJSONAbove,
+  resolveBuiltBinary,
   runWithInvalidFD,
   skip,
   skipIf32Bits,
@@ -972,6 +997,7 @@ const common = {
   skipIfSQLiteMissing,
   spawnPromisified,
   sleepSync,
+  usesSharedLibrary,
 
   get enoughTestMem() {
     return require('os').totalmem() > 0x70000000; /* 1.75 Gb */

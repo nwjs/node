@@ -1,7 +1,9 @@
 'use strict';
 
 const common = require('../common');
-
+if (!process.config.variables.node_use_amaro) {
+  common.skip('Requires Amaro');
+}
 const fixtures = require('../common/fixtures');
 const file = fixtures.path('get-call-sites.js');
 
@@ -29,15 +31,14 @@ const assert = require('node:assert');
   );
 }
 
-// Guarantee dot-right numbers are ignored
+// frameCount must be an integer
 {
-  const callSites = getCallSites(3.6);
-  assert.strictEqual(callSites.length, 3);
-}
-
-{
-  const callSites = getCallSites(3.4);
-  assert.strictEqual(callSites.length, 3);
+  assert.throws(() => {
+    const callSites = getCallSites(3.6);
+    assert.strictEqual(callSites.length, 3);
+  }, common.expectsError({
+    code: 'ERR_OUT_OF_RANGE'
+  }));
 }
 
 {

@@ -38,11 +38,12 @@ std::optional<std::string_view> ConfigReader::GetDataFromArgs(
 }
 
 ParseResult ConfigReader::ProcessOptionValue(
-    const std::pair<std::string, options_parser::OptionType>& option_info,
+    const std::pair<std::string, options_parser::OptionMappingDetails>&
+        option_details,
     simdjson::ondemand::value* option_value,
     std::vector<std::string>* output) {
-  const std::string& option_name = option_info.first;
-  const options_parser::OptionType option_type = option_info.second;
+  const std::string& option_name = option_details.first;
+  const options_parser::OptionType option_type = option_details.second.type;
 
   switch (option_type) {
     case options_parser::OptionType::kBoolean: {
@@ -153,7 +154,8 @@ ParseResult ConfigReader::ParseOptions(
     std::unordered_set<std::string>* unique_options,
     const std::string& namespace_name) {
   // Determine which options map to use and output vector
-  std::unordered_map<std::string, options_parser::OptionType> options_map;
+  std::unordered_map<std::string, options_parser::OptionMappingDetails>
+      options_map;
   std::vector<std::string>* output_vector;
 
   if (namespace_name == "nodeOptions") {
@@ -255,6 +257,9 @@ ParseResult ConfigReader::ParseConfig(const std::string_view& config_path) {
                                                    available_namespaces.end());
   // Create a set to track unique options
   std::unordered_set<std::string> unique_options;
+  // Namespaces in OPTION_NAMESPACE_LIST
+  std::unordered_set<std::string> namespaces_with_implicit_flags;
+
   // Iterate through the main object to find all namespaces
   for (auto field : main_object) {
     std::string_view field_name;
@@ -262,11 +267,32 @@ ParseResult ConfigReader::ParseConfig(const std::string_view& config_path) {
       return ParseResult::InvalidContent;
     }
 
-    // Check if this field is a valid namespace
     std::string namespace_name(field_name);
+
+    // TODO(@marco-ippolito): Remove warning for testRunner namespace
+    if (namespace_name == "testRunner") {
+      FPrintF(stderr,
+              "the \"testRunner\" namespace has been removed. "
+              "Use \"test\" instead.\n");
+      // Better to throw an error than to ignore it
+      // Otherwise users might think their test suite is green
+      // when it's not running
+      return ParseResult::InvalidContent;
+    }
+
+    // Check if this field is a valid namespace
     if (!valid_namespaces.contains(namespace_name)) {
       // If not, skip it
       continue;
+    }
+
+    // List of implicit namespace flags
+    for (auto ns_enum : options_parser::AllNamespaces()) {
+      std::string ns_str = options_parser::NamespaceEnumToString(ns_enum);
+      if (!ns_str.empty() && namespace_name == ns_str) {
+        namespaces_with_implicit_flags.insert(namespace_name);
+        break;
+      }
     }
 
     // Get the namespace object
@@ -287,6 +313,17 @@ ParseResult ConfigReader::ParseConfig(const std::string_view& config_path) {
         ParseOptions(&namespace_object, &unique_options, namespace_name);
     if (result != ParseResult::Valid) {
       return result;
+    }
+  }
+
+  // Add implicit flags for namespaces (--test, --permission, --watch)
+  // These flags are automatically enabled when their namespace is present
+  for (const auto& ns : namespaces_with_implicit_flags) {
+    std::string flag = "--" + ns;
+    std::string no_flag = "--no-" + ns;
+    // We skip if the user has already set the flag or its negation
+    if (!unique_options.contains(flag) && !unique_options.contains(no_flag)) {
+      namespace_options_.push_back(flag);
     }
   }
 

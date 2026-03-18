@@ -1473,8 +1473,18 @@ void CreateUnsafeArrayBuffer(const FunctionCallbackInfo<Value>& args) {
   // 0-length, or zero-fill flag is set, or building snapshot
   if (size == 0 || per_process::cli_options->zero_fill_all_buffers ||
       env->isolate_data()->is_building_snapshot()) {
-    buf = ArrayBuffer::New(isolate, size);
-    buf->set_nodejs(true);
+    std::unique_ptr<BackingStore> store = ArrayBuffer::NewBackingStore(
+        isolate,
+        size,
+        BackingStoreInitializationMode::kZeroInitialized,
+        v8::BackingStoreOnFailureMode::kReturnNull);
+
+    if (!store) [[unlikely]] {
+      THROW_ERR_MEMORY_ALLOCATION_FAILED(env);
+      return;
+    }
+
+    buf = ArrayBuffer::NewNode(isolate, std::move(store));
   } else {
     std::unique_ptr<BackingStore> store = ArrayBuffer::NewBackingStore(
         isolate,

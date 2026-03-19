@@ -8,7 +8,7 @@
       'type': 'static_library',
       'include_dirs': [
         '.',
-        '../v8/third_party/simdutf',
+        '../../../simdutf',
       ],
       'direct_dependent_settings': {
         'include_dirs': ['.'],
@@ -22,6 +22,11 @@
               'AdditionalOptions': ['/std:c++20'],
             },
           },
+          'include_dirs': [
+            '<(PRODUCT_DIR)/../../third_party/libc++/src/include',
+            '<(PRODUCT_DIR)/../../third_party/libc++',
+            '<(PRODUCT_DIR)/../../buildtools/third_party/libc++',
+          ],
         }],
         ['OS!="win"', {
           'cflags_cc': ['-std=c++20'],

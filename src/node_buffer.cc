@@ -128,7 +128,7 @@ Local<ArrayBuffer> CallbackInfo::CreateTrackedArrayBuffer(
       ArrayBuffer::NewBackingStore(data, length, [](void*, size_t, void* arg) {
         static_cast<CallbackInfo*>(arg)->OnBackingStoreFree();
       }, self);
-  Local<ArrayBuffer> ab = ArrayBuffer::NewNode(env->isolate(), std::move(bs));
+  Local<ArrayBuffer> ab = ArrayBuffer::New(env->isolate(), std::move(bs));
 
   // V8 simply ignores the BackingStore deleter callback if data == nullptr,
   // but our API contract requires it being called.
@@ -1484,7 +1484,7 @@ void CreateUnsafeArrayBuffer(const FunctionCallbackInfo<Value>& args) {
       return;
     }
 
-    buf = ArrayBuffer::NewNode(isolate, std::move(store));
+    buf = ArrayBuffer::New(isolate, std::move(store));
   } else {
     std::unique_ptr<BackingStore> store = ArrayBuffer::NewBackingStore(
         isolate,
@@ -1497,7 +1497,7 @@ void CreateUnsafeArrayBuffer(const FunctionCallbackInfo<Value>& args) {
       return;
     }
 
-    buf = ArrayBuffer::NewNode(isolate, std::move(store));
+    buf = ArrayBuffer::New(isolate, std::move(store));
   }
 
   args.GetReturnValue().Set(buf);

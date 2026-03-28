@@ -757,6 +757,8 @@ maintaining the Node.js project.
   **Oliver Medhurst** <<honk@goose.icu>> (they/them)
 * [daeyeon](https://github.com/daeyeon) -
   **Daeyeon Jeong** <<daeyeon.dev@gmail.com>> (he/him)
+* [efekrskl](https://github.com/efekrskl) -
+  **Efe Karasakal** <<hi@efe.dev>> (he/him)
 * [gireeshpunathil](https://github.com/gireeshpunathil) -
   **Gireesh Punathil** <<gpunathi@in.ibm.com>> (he/him)
 * [gurgunday](https://github.com/gurgunday) -
@@ -889,15 +891,15 @@ releases on a rotation basis as outlined in the
   * [bengl](https://github.com/bengl) -
     **Bryan English** <<bryan@bryanenglish.com>> (he/him)
 * [HeroDevs](https://www.herodevs.com/)
-  * [marco-ippolito](https://github.com/marco-ippolito) - OpenJSF handle: `Marco Ippolito`
+  * [juanarbol](https://github.com/juanarbol) - OpenJS Slack handle: `juanarbol`
+    **Juan José Arboleda** <<soyjuanarbol@gmail.com>> (he/him)
+  * [marco-ippolito](https://github.com/marco-ippolito) - OpenJS Slack handle: `Marco Ippolito`
     **Marco Ippolito** <<marcoippolito54@gmail.com>> (he/him)
 * [NodeSource](https://nodesource.com/)
-  * [juanarbol](https://github.com/juanarbol) -
-    **Juan José Arboleda** <<soyjuanarbol@gmail.com>> (he/him)
-  * [RafaelGSS](https://github.com/RafaelGSS) - OpenJSF handle: `RafaelGSS`
+  * [RafaelGSS](https://github.com/RafaelGSS) - OpenJS Slack handle: `RafaelGSS`
     **Rafael Gonzaga** <<rafael.nunu@hotmail.com>> (he/him)
 * [Platformatic](https://platformatic.dev/)
-  * [mcollina](https://github.com/mcollina) - OpenJSF handle: `mcollina`
+  * [mcollina](https://github.com/mcollina) - OpenJS Slack handle: `mcollina`
     **Matteo Collina** <<matteo.collina@gmail.com>> (he/him)
 * [Red Hat](https://redhat.com) / [IBM](https://ibm.com)
   * [BethGriggs](https://github.com/BethGriggs) -

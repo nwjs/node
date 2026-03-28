@@ -930,6 +930,11 @@ The [`require.extensions`][] property is deprecated.
 
 <!-- YAML
 changes:
+  - version:
+    - v23.7.0
+    - v22.14.0
+    pr-url: https://github.com/nodejs/node/pull/56632
+    description: Application deprecation.
   - version: v21.0.0
     pr-url: https://github.com/nodejs/node/pull/47202
     description: Runtime deprecation.
@@ -941,7 +946,7 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: Application (non-`node_modules` code only)
 
 The [`punycode`][] module is deprecated. Please use a userland alternative
 instead.
@@ -2656,10 +2661,14 @@ future release.
 <!-- YAML
 changes:
   - version:
+      - v24.0.0
+    pr-url: https://github.com/nodejs/node/pull/55017
+    description: DEP0169 covers also `url.format()` and `url.resolve()`.
+  - version:
       - v19.0.0
       - v18.13.0
     pr-url: https://github.com/nodejs/node/pull/44919
-    description: \`url.parse()` is deprecated again in DEP0169.
+    description: DEP0169 deprecates `url.parse()` again.
   - version:
       - v15.13.0
       - v14.17.0
@@ -3770,7 +3779,7 @@ Type: Application (non-`node_modules` code only)
 have security implications. Use the [WHATWG URL API][] instead. CVEs are not
 issued for `url.parse()` vulnerabilities.
 
-Passing a string argument to [`url.format()`][] invokes `url.parse()`
+Calling [`url.format(urlString)`][] or [`url.resolve()`][] invokes `url.parse()`
 internally, and is therefore also covered by this deprecation.
 
 ### DEP0170: Invalid port when using `url.parse()`
@@ -4400,6 +4409,57 @@ import { opendir } from 'node:fs/promises';
 }
 ```
 
+### DEP0201: Passing `options.type` to `Duplex.toWeb()`
+
+<!-- YAML
+changes:
+  - version: v25.7.0
+    pr-url: https://github.com/nodejs/node/pull/61632
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only
+
+Passing the `type` option to [`Duplex.toWeb()`][] is deprecated. To specify the
+type of the readable half of the constructed readable-writable pair, use the
+`readableType` option instead.
+
+### DEP0202: `Http1IncomingMessage` and `Http1ServerResponse` options of HTTP/2 servers
+
+<!-- YAML
+changes:
+  - version: v25.7.0
+    pr-url: https://github.com/nodejs/node/pull/61713
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only
+
+The `Http1IncomingMessage` and `Http1ServerResponse` options of
+[`http2.createServer()`][] and [`http2.createSecureServer()`][] are
+deprecated. Use `http1Options.IncomingMessage` and
+`http1Options.ServerResponse` instead.
+
+```cjs
+// Deprecated
+const server = http2.createSecureServer({
+  allowHTTP1: true,
+  Http1IncomingMessage: MyIncomingMessage,
+  Http1ServerResponse: MyServerResponse,
+});
+```
+
+```cjs
+// Use this instead
+const server = http2.createSecureServer({
+  allowHTTP1: true,
+  http1Options: {
+    IncomingMessage: MyIncomingMessage,
+    ServerResponse: MyServerResponse,
+  },
+});
+```
+
 [DEP0142]: #dep0142-repl_builtinlibs
 [NIST SP 800-38D]: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf
 [RFC 6066]: https://tools.ietf.org/html/rfc6066#section-3
@@ -4418,6 +4478,7 @@ import { opendir } from 'node:fs/promises';
 [`Buffer.isBuffer()`]: buffer.md#static-method-bufferisbufferobj
 [`Cipheriv`]: crypto.md#class-cipheriv
 [`Decipheriv`]: crypto.md#class-decipheriv
+[`Duplex.toWeb()`]: stream.md#streamduplextowebstreamduplex-options
 [`Error.isError`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/isError
 [`REPLServer.clearBufferedCommand()`]: repl.md#replserverclearbufferedcommand
 [`ReadStream.open()`]: fs.md#class-fsreadstream
@@ -4478,6 +4539,8 @@ import { opendir } from 'node:fs/promises';
 [`http.ServerResponse`]: http.md#class-httpserverresponse
 [`http.get()`]: http.md#httpgetoptions-callback
 [`http.request()`]: http.md#httprequestoptions-callback
+[`http2.createSecureServer()`]: http2.md#http2createsecureserveroptions-onrequesthandler
+[`http2.createServer()`]: http2.md#http2createserveroptions-onrequesthandler
 [`https.get()`]: https.md#httpsgetoptions-callback
 [`https.request()`]: https.md#httpsrequestoptions-callback
 [`message.connection`]: http.md#messageconnection
@@ -4521,6 +4584,7 @@ import { opendir } from 'node:fs/promises';
 [`tls.createSecureContext()`]: tls.md#tlscreatesecurecontextoptions
 [`tls.createServer()`]: tls.md#tlscreateserveroptions-secureconnectionlistener
 [`url.format()`]: url.md#urlformaturlobject
+[`url.format(urlString)`]: url.md#urlformaturlstring
 [`url.parse()`]: url.md#urlparseurlstring-parsequerystring-slashesdenotehost
 [`url.resolve()`]: url.md#urlresolvefrom-to
 [`util._extend()`]: util.md#util_extendtarget-source

@@ -181,7 +181,6 @@
 'lib/internal/quic/stats.js',
 'lib/internal/quic/symbols.js',
 'lib/internal/modules/package_json_reader.js',
-'lib/internal/modules/esm/formats.js',
 'lib/internal/modules/esm/loader.js',
 'lib/internal/modules/esm/module_map.js',
 'lib/internal/modules/esm/resolve.js',
@@ -479,6 +478,7 @@
       'src/node_main_instance.cc',
       'src/node_messaging.cc',
       'src/node_metadata.cc',
+      'src/node_diagnostics_channel.cc',
       'src/node_modules.cc',
       'src/node_options.cc',
       'src/node_os.cc',
@@ -616,6 +616,7 @@
       'src/node_messaging.h',
       'src/node_metadata.h',
       'src/node_mutex.h',
+      'src/node_diagnostics_channel.h',
       'src/node_modules.h',
       'src/node_object_wrap.h',
       'src/node_options.h',
@@ -990,7 +991,6 @@
           'xcode_settings': {
             'OTHER_LDFLAGS': [
               '-Wl,-force_load,<(PRODUCT_DIR)/<(STATIC_LIB_PREFIX)<(node_core_target_name)<(STATIC_LIB_SUFFIX)',
-              '-Wl,-force_load,<(PRODUCT_DIR)/<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)',
             ],
           },
           'msvs_settings': {
@@ -1002,11 +1002,25 @@
             },
           },
           'conditions': [
-            ['OS != "aix" and OS != "os400" and OS != "mac" and OS != "ios"', {
+            ['node_use_bundled_v8=="true"', {
+              'xcode_settings': {
+                'OTHER_LDFLAGS': [
+                  '-Wl,-force_load,<(PRODUCT_DIR)/<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)',
+                ],
+              },
+            }],
+            ['node_use_bundled_v8=="true" and OS != "aix" and OS != "os400" and OS != "mac" and OS != "ios"', {
               'ldflags': [
                 '-Wl,--whole-archive',
                 '<(obj_dir)/<(STATIC_LIB_PREFIX)<(node_core_target_name)<(STATIC_LIB_SUFFIX)',
                 #'<(obj_dir)/tools/v8_gypfiles/<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)',
+                '-Wl,--no-whole-archive',
+              ],
+            }],
+            ['node_use_bundled_v8!="true" and OS != "aix" and OS != "os400" and OS != "mac" and OS != "ios"', {
+              'ldflags': [
+                '-Wl,--whole-archive',
+                '<(obj_dir)/<(STATIC_LIB_PREFIX)<(node_core_target_name)<(STATIC_LIB_SUFFIX)',
                 '-Wl,--no-whole-archive',
               ],
             }],
@@ -1240,7 +1254,6 @@
         '../simdutf',
       ],
       'dependencies': [
-        #'tools/v8_gypfiles/abseil.gyp:abseil',
         'node_js2c#host',
         #'deps/ada/ada.gyp:ada',
       ],
@@ -1328,6 +1341,9 @@
           'sources': [
             'src/node_snapshot_stub.cc',
           ]
+        }],
+        [ 'node_use_bundled_v8!="false"', {
+          'dependencies': [ 'tools/v8_gypfiles/abseil.gyp:abseil' ],
         }],
         [ 'node_shared_gtest=="false"', {
           'dependencies': [
@@ -1654,7 +1670,6 @@
 
       'dependencies': [
         '<(node_lib_target_name)',
-        #'tools/v8_gypfiles/abseil.gyp:abseil',
       ],
 
       'includes': [
@@ -1687,6 +1702,9 @@
         }],
         [ 'node_shared_gtest=="true"', {
           'libraries': [ '-lgtest_main' ],
+        }],
+        [ 'node_use_bundled_v8!="false"', {
+          'dependencies': [ 'tools/v8_gypfiles/abseil.gyp:abseil' ],
         }],
         [ 'node_shared_hdr_histogram=="false"', {
           'dependencies': [
@@ -1925,8 +1943,11 @@
         '../simdutf/simdutf.cpp',
       ],
       'conditions': [
-        [ 'node_shared_simdutf=="false"', {
-          #'dependencies': [ 'tools/v8_gypfiles/v8.gyp:simdutf#host' ],
+        [ 'OS=="mac"', {
+          'libraries': [ '-framework CoreFoundation -framework Security' ],
+        }],
+        [ 'node_shared_simdutf=="false" and node_use_bundled_v8!="false"', {
+          'dependencies': [ 'tools/v8_gypfiles/v8.gyp:simdutf#host' ],
         }],
         [ 'node_shared_libuv=="false"', {
           'dependencies': [ 'deps/uv/uv.gyp:libuv#host' ],

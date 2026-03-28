@@ -460,7 +460,7 @@ vm.measureMemory();
 .It Fl -disable-wasm-trap-handler
 By default, Node.js enables trap-handler-based WebAssembly bound
 checks. As a result, V8 does not need to insert inline bound checks
-int the code compiled from WebAssembly which may speedup WebAssembly
+in the code compiled from WebAssembly which may speed up WebAssembly
 execution significantly, but this optimization requires allocating
 a big virtual memory cage (currently 10GB). If the Node.js process
 does not have access to a large enough virtual memory address space
@@ -1114,6 +1114,11 @@ WASI - manageable through \fB--allow-wasi\fR flag
 .It
 Addons - manageable through \fB--allow-addons\fR flag
 .El
+.
+.It Fl -permission-audit
+Enable audit only for the permission model. When enabled, permission checks
+are performed but access is not denied. Instead, a warning is emitted for
+each permission violation via diagnostics channel.
 .
 .It Fl -preserve-symlinks
 Instructs the module loader to preserve symbolic links when resolving and
@@ -1977,6 +1982,8 @@ one is included in the list below.
 \fB--pending-deprecation\fR
 .It
 \fB--permission\fR
+.It
+\fB--permission-audit\fR
 .It
 \fB--preserve-symlinks-main\fR
 .It

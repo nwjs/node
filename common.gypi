@@ -147,6 +147,9 @@
       ['OS=="linux" and target_arch=="arm" and <(building_nw)==1', {
         'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_sid_arm-sysroot',
       }],
+      ['OS=="linux" and target_arch=="arm64" and <(building_nw)==1', {
+        'sysroot': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_bullseye_arm64-sysroot',
+      }],
       ['OS=="mac"', {
         'obj_dir%': '<(PRODUCT_DIR)/obj.target',
         #'v8_base': '<(PRODUCT_DIR)/libv8_snapshot.a',
@@ -773,6 +776,10 @@
               [ 'target_arch=="s390x" and OS=="linux"', {
                 'cflags': [ '-m64', '-march=z196' ],
                 'ldflags': [ '-m64', '-march=z196' ],
+              }],
+              [ 'target_arch=="arm64" and OS=="linux"', {
+                'cflags': [ '--target=aarch64-linux-gnu' ],
+                'ldflags': [ '--target=aarch64-linux-gnu' ],
               }],
             ],
           }],

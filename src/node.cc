@@ -2051,6 +2051,11 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
     arguments.erase(it);
     node::g_nw_stdin = true;
   }
+  it = std::find(arguments.begin(), arguments.end(), "--nw-mixed-context");
+  if (it != arguments.end()) {
+    arguments.erase(it);
+    env_flags |= node::EnvironmentFlags::kNoBrowserGlobals; // NWJS#8226
+  }
   if (!node_init_called) {
     std::shared_ptr<node::InitializationResultImpl> result =
       node::InitializeOncePerProcessInternal(

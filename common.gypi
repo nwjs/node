@@ -753,7 +753,8 @@
                 'ldflags': [ '--sysroot=<(sysroot)','<!(<(DEPTH)/content/nw/tools/sysroot_ld_path.sh <(sysroot))', '-nostdlib++' ],
               }],
               ['clang==1', {
-                'cflags': ['-Wno-error=missing-declarations', '-Wno-error=array-bounds'],
+                'cflags': ['-Wno-error=missing-declarations', '-Wno-error=array-bounds',
+                           '-Dnullptr_t=std::nullptr_t'],
                 'defines': [ '_LIBCPP_ABI_NAMESPACE=__1' ],
               }],
               [ 'target_arch=="ia32"', {

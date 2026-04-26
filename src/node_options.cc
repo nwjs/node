@@ -599,6 +599,10 @@ EnvironmentOptionsParser::EnvironmentOptionsParser() {
             &EnvironmentOptions::experimental_sqlite,
             kAllowedInEnvvar,
             true);
+  AddOption("--experimental-stream-iter",
+            "experimental iterable streams API (node:stream/iter)",
+            &EnvironmentOptions::experimental_stream_iter,
+            kAllowedInEnvvar);
   AddOption("--experimental-quic",
 #ifndef OPENSSL_NO_QUIC
             "experimental QUIC support",
@@ -1228,6 +1232,7 @@ PerIsolateOptionsParser::PerIsolateOptionsParser(
             "help system profilers to translate JavaScript interpreted frames",
             V8Option{},
             kAllowedInEnvvar);
+  AddOption("--max-heap-size", "", V8Option{}, kAllowedInEnvvar);
   AddOption("--max-old-space-size", "", V8Option{}, kAllowedInEnvvar);
   AddOption("--max-old-space-size-percentage",
             "set V8's max old space size as a percentage of available memory "

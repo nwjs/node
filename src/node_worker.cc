@@ -1127,7 +1127,8 @@ static bool serializeProfile(Isolate* isolate, std::ostringstream& out_stream) {
   if (!profile) {
     return false;
   }
-  JSONWriter writer(out_stream, false);
+  profiler->StopSamplingHeapProfiler();
+  JSONWriter writer(out_stream, true);
   writer.json_start();
 
   writer.json_arraystart("samples");
@@ -1145,7 +1146,6 @@ static bool serializeProfile(Isolate* isolate, std::ostringstream& out_stream) {
   writer.json_objectend();
 
   writer.json_end();
-  profiler->StopSamplingHeapProfiler();
   return true;
 }
 

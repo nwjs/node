@@ -4164,7 +4164,7 @@ Type: Documentation-only
 `process.features.tls_alpn`, `process.features.tls_ocsp`, and `process.features.tls_sni` are
 deprecated, as their values are guaranteed to be identical to that of `process.features.tls`.
 
-### DEP0190: Passing `args` to `node:child_process` `execFile`/`spawn` with `shell` option `true`
+### DEP0190: Passing `args` to `node:child_process` `execFile`/`spawn` with `shell` option
 
 <!-- YAML
 changes:
@@ -4181,7 +4181,8 @@ changes:
 Type: Runtime
 
 When an `args` array is passed to [`child_process.execFile`][] or [`child_process.spawn`][] with the option
-`{ shell: true }`, the values are not escaped, only space-separated, which can lead to shell injection.
+`{ shell: true }` or `{ shell: '/path/to/shell' }`, the values are not escaped, only space-separated,
+which can lead to shell injection.
 
 ### DEP0191: `repl.builtinModules`
 
@@ -4460,6 +4461,64 @@ const server = http2.createSecureServer({
 });
 ```
 
+### DEP0203: Passing `CryptoKey` to `node:crypto` APIs
+
+<!-- YAML
+changes:
+  - version: v25.9.0
+    pr-url: https://github.com/nodejs/node/pull/62321
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only
+
+Passing a [`CryptoKey`][] to `node:crypto` functions is deprecated and
+will throw an error in a future version. This includes
+[`crypto.createPublicKey()`][], [`crypto.createPrivateKey()`][],
+[`crypto.sign()`][], [`crypto.verify()`][],
+[`crypto.publicEncrypt()`][], [`crypto.publicDecrypt()`][],
+[`crypto.privateEncrypt()`][], [`crypto.privateDecrypt()`][],
+[`Sign.prototype.sign()`][], [`Verify.prototype.verify()`][],
+[`crypto.createHmac()`][], [`crypto.createCipheriv()`][],
+[`crypto.createDecipheriv()`][], [`crypto.encapsulate()`][], and
+[`crypto.decapsulate()`][].
+
+### DEP0204: `KeyObject.from()` with non-extractable `CryptoKey`
+
+<!-- YAML
+changes:
+  - version: v25.9.0
+    pr-url: https://github.com/nodejs/node/pull/62321
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only
+
+Passing a non-extractable [`CryptoKey`][] to [`KeyObject.from()`][] is
+deprecated and will throw an error in a future version.
+
+### DEP0205: `module.register()`
+
+<!-- YAML
+changes:
+  - version: v25.9.0
+    pr-url: https://github.com/nodejs/node/pull/62395
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only
+
+[`module.register()`][] is deprecated. Use [`module.registerHooks()`][]
+instead.
+
+The `module.register()` API provides off-thread async hooks for customizing ES modules;
+the `module.registerHooks()` API provides similar hooks that are synchronous, in-thread, and
+work for all types of modules.
+Supporting async hooks has proven to be complex, involving worker threads orchestration, and there are issues
+that have proven unresolveable. See [caveats of asynchronous customization hooks][]. Please migrate to
+`module.registerHooks()` as soon as possible as `module.register()` will be
+removed in a future version of Node.js.
+
 [DEP0142]: #dep0142-repl_builtinlibs
 [NIST SP 800-38D]: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf
 [RFC 6066]: https://tools.ietf.org/html/rfc6066#section-3
@@ -4477,14 +4536,18 @@ const server = http2.createSecureServer({
 [`Buffer.from(buffer)`]: buffer.md#static-method-bufferfrombuffer
 [`Buffer.isBuffer()`]: buffer.md#static-method-bufferisbufferobj
 [`Cipheriv`]: crypto.md#class-cipheriv
+[`CryptoKey`]: webcrypto.md#class-cryptokey
 [`Decipheriv`]: crypto.md#class-decipheriv
 [`Duplex.toWeb()`]: stream.md#streamduplextowebstreamduplex-options
 [`Error.isError`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/isError
+[`KeyObject.from()`]: crypto.md#static-method-keyobjectfromkey
 [`REPLServer.clearBufferedCommand()`]: repl.md#replserverclearbufferedcommand
 [`ReadStream.open()`]: fs.md#class-fsreadstream
 [`Server.getConnections()`]: net.md#servergetconnectionscallback
 [`Server.listen({fd: <number>})`]: net.md#serverlistenhandle-backlog-callback
+[`Sign.prototype.sign()`]: crypto.md#signsignprivatekey-outputencoding
 [`String.prototype.toWellFormed`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/toWellFormed
+[`Verify.prototype.verify()`]: crypto.md#verifyverifyobject-signature-signatureencoding
 [`WriteStream.open()`]: fs.md#class-fswritestream
 [`assert`]: assert.md
 [`asyncResource.runInAsyncScope()`]: async_context.md#asyncresourceruninasyncscopefn-thisarg-args
@@ -4502,11 +4565,21 @@ const server = http2.createSecureServer({
 [`crypto.createDecipheriv()`]: crypto.md#cryptocreatedecipherivalgorithm-key-iv-options
 [`crypto.createHash()`]: crypto.md#cryptocreatehashalgorithm-options
 [`crypto.createHmac()`]: crypto.md#cryptocreatehmacalgorithm-key-options
+[`crypto.createPrivateKey()`]: crypto.md#cryptocreateprivatekeykey
+[`crypto.createPublicKey()`]: crypto.md#cryptocreatepublickeykey
+[`crypto.decapsulate()`]: crypto.md#cryptodecapsulatekey-ciphertext-callback
+[`crypto.encapsulate()`]: crypto.md#cryptoencapsulatekey-callback
 [`crypto.fips`]: crypto.md#cryptofips
 [`crypto.pbkdf2()`]: crypto.md#cryptopbkdf2password-salt-iterations-keylen-digest-callback
+[`crypto.privateDecrypt()`]: crypto.md#cryptoprivatedecryptprivatekey-buffer
+[`crypto.privateEncrypt()`]: crypto.md#cryptoprivateencryptprivatekey-buffer
+[`crypto.publicDecrypt()`]: crypto.md#cryptopublicdecryptkey-buffer
+[`crypto.publicEncrypt()`]: crypto.md#cryptopublicencryptkey-buffer
 [`crypto.randomBytes()`]: crypto.md#cryptorandombytessize-callback
 [`crypto.scrypt()`]: crypto.md#cryptoscryptpassword-salt-keylen-options-callback
 [`crypto.setEngine()`]: crypto.md#cryptosetengineengine-flags
+[`crypto.sign()`]: crypto.md#cryptosignalgorithm-data-key-callback
+[`crypto.verify()`]: crypto.md#cryptoverifyalgorithm-data-key-signature-callback
 [`decipher.final()`]: crypto.md#decipherfinaloutputencoding
 [`decipher.setAuthTag()`]: crypto.md#deciphersetauthtagbuffer-encoding
 [`dirent.parentPath`]: fs.md#direntparentpath
@@ -4550,6 +4623,8 @@ const server = http2.createSecureServer({
 [`message.trailersDistinct`]: http.md#messagetrailersdistinct
 [`message.trailers`]: http.md#messagetrailers
 [`module.createRequire()`]: module.md#modulecreaterequirefilename
+[`module.register()`]: module.md#moduleregisterspecifier-parenturl-options
+[`module.registerHooks()`]: module.md#moduleregisterhooksoptions
 [`os.networkInterfaces()`]: os.md#osnetworkinterfaces
 [`os.tmpdir()`]: os.md#ostmpdir
 [`process.env`]: process.md#processenv
@@ -4603,6 +4678,7 @@ const server = http2.createSecureServer({
 [`zlib.bytesWritten`]: zlib.md#zlibbyteswritten
 [alloc]: buffer.md#static-method-bufferallocsize-fill-encoding
 [alloc_unsafe_size]: buffer.md#static-method-bufferallocunsafesize
+[caveats of asynchronous customization hooks]: module.md#caveats-of-asynchronous-customization-hooks
 [from_arraybuffer]: buffer.md#static-method-bufferfromarraybuffer-byteoffset-length
 [from_string_encoding]: buffer.md#static-method-bufferfromstring-encoding
 [legacy URL API]: url.md#legacy-url-api

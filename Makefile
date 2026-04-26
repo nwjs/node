@@ -338,7 +338,7 @@ coverage-run-js: ## Run JavaScript tests with coverage.
 
 .PHONY: test
 # This does not run tests of third-party libraries inside deps.
-test: all ## Run default tests, linters, and build docs.
+test: all ## Run default tests and build docs.
 	$(MAKE) -s tooltest
 	$(MAKE) -s build-addons
 	$(MAKE) -s build-js-native-api-tests
@@ -348,7 +348,7 @@ test: all ## Run default tests, linters, and build docs.
 	$(MAKE) -s jstest
 
 .PHONY: test-only
-test-only: all  ## Run default tests, without linters or building the docs.
+test-only: all  ## Run default tests without building the docs.
 	$(MAKE) build-addons
 	$(MAKE) build-js-native-api-tests
 	$(MAKE) build-node-api-tests
@@ -384,7 +384,7 @@ ifeq ($(OSTYPE),os400)
 DOCBUILDSTAMP_PREREQS := $(DOCBUILDSTAMP_PREREQS) out/$(BUILDTYPE)/node.exp
 endif
 
-DOC_KIT ?= tools/doc/node_modules/@nodejs/doc-kit/bin/cli.mjs
+DOC_KIT ?= tools/doc/node_modules/@node-core/doc-kit/bin/cli.mjs
 
 node_use_openssl_and_icu = $(call available-node,"-p" \
 			 "process.versions.openssl != undefined && process.versions.icu != undefined")
@@ -838,6 +838,10 @@ out/doc/api: doc/api
 # Using grouped targets (&:) so Make knows one command produces all outputs
 ifeq ($(OSTYPE),aix)
 # TODO(@nodejs/web-infra): AIX is currently hanging during HTML minification
+$(apidocs_html) $(apidocs_json) out/doc/api/all.html out/doc/api/all.json:
+	@echo "Skipping $@ (not currently supported by $(OSTYPE) machines)"
+else ifeq ($(OSTYPE),os400)
+# TODO(@nodejs/web-infra): IBMi is currently hanging during HTML minification
 $(apidocs_html) $(apidocs_json) out/doc/api/all.html out/doc/api/all.json:
 	@echo "Skipping $@ (not currently supported by $(OSTYPE) machines)"
 else

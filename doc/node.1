@@ -720,6 +720,11 @@ top-level awaits, and print their location to help users find them.
 .It Fl -experimental-quic
 Enable experimental support for the QUIC protocol.
 .
+.It Fl -experimental-stream-iter
+Enable the experimental
+.Sy node:stream/iter
+module.
+.
 .It Fl -experimental-sea-config
 Use this flag to generate a blob that can be injected into the Node.js
 binary to produce a single executable application. See the documentation
@@ -2293,7 +2298,7 @@ that run in libuv's threadpool will experience degraded performance. In order to
 mitigate this issue, one potential solution is to increase the size of libuv's
 threadpool by setting the \fB'UV_THREADPOOL_SIZE'\fR environment variable to a value
 greater than \fB4\fR (its current default value). However, setting this from inside
-the process using \fBprocess.env.UV_THREADPOOL_SIZE=size\fR is not guranteed to work
+the process using \fBprocess.env.UV_THREADPOOL_SIZE=size\fR is not guaranteed to work
 as the threadpool would have been created as part of the runtime initialisation
 much before user code is run. For more information, see the libuv threadpool documentation.
 .

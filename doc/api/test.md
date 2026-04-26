@@ -2480,16 +2480,32 @@ changes:
     generates a new mock module. If `true`, subsequent calls will return the same
     module mock, and the mock module is inserted into the CommonJS cache.
     **Default:** false.
+  * `exports` {Object} Optional mocked exports. The `default` property, if
+    provided, is used as the mocked module's default export. All other own
+    enumerable properties are used as named exports.
+    **This option cannot be used with `defaultExport` or `namedExports`.**
+    * If the mock is a CommonJS or builtin module, `exports.default` is used as
+      the value of `module.exports`.
+    * If `exports.default` is not provided for a CommonJS or builtin mock,
+      `module.exports` defaults to an empty object.
+    * If named exports are provided with a non-object default export, the mock
+      throws an exception when used as a CommonJS or builtin module.
   * `defaultExport` {any} An optional value used as the mocked module's default
     export. If this value is not provided, ESM mocks do not include a default
     export. If the mock is a CommonJS or builtin module, this setting is used as
     the value of `module.exports`. If this value is not provided, CJS and builtin
     mocks use an empty object as the value of `module.exports`.
+    **This option cannot be used with `options.exports`.**
+    This option is deprecated and will be removed in a later version.
+    Prefer `options.exports.default`.
   * `namedExports` {Object} An optional object whose keys and values are used to
     create the named exports of the mock module. If the mock is a CommonJS or
     builtin module, these values are copied onto `module.exports`. Therefore, if a
     mock is created with both named exports and a non-object default export, the
     mock will throw an exception when used as a CJS or builtin module.
+    **This option cannot be used with `options.exports`.**
+    This option is deprecated and will be removed in a later version.
+    Prefer `options.exports`.
 * Returns: {MockModuleContext} An object that can be used to manipulate the mock.
 
 This function is used to mock the exports of ECMAScript modules, CommonJS modules, JSON modules, and
@@ -2497,14 +2513,19 @@ Node.js builtin modules. Any references to the original module prior to mocking 
 order to enable module mocking, Node.js must be started with the
 [`--experimental-test-module-mocks`][] command-line flag.
 
+**Note**: [module customization hooks][] registered via the **synchronous** API effect resolution of
+the `specifier` provided to `mock.module`. Customization hooks registered via the **asynchronous**
+API are currently ignored (because the test runner's loader is synchronous, and node does not
+support multi-chain / cross-chain loading).
+
 The following example demonstrates how a mock is created for a module.
 
 ```js
 test('mocks a builtin module in both module systems', async (t) => {
-  // Create a mock of 'node:readline' with a named export named 'fn', which
+  // Create a mock of 'node:readline' with a named export named 'foo', which
   // does not exist in the original 'node:readline' module.
   const mock = t.mock.module('node:readline', {
-    namedExports: { fn() { return 42; } },
+    exports: { foo: () => 42 },
   });
 
   let esmImpl = await import('node:readline');
@@ -4244,6 +4265,7 @@ Can be used to abort test subtasks when the test has been aborted.
 [configuration files]: cli.md#--experimental-config-fileconfig
 [describe options]: #describename-options-fn
 [it options]: #testname-options-fn
+[module customization hooks]: module.md#customization-hooks
 [running tests from the command line]: #running-tests-from-the-command-line
 [stream.compose]: stream.md#streamcomposestreams
 [subtests]: #subtests

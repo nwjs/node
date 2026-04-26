@@ -735,6 +735,7 @@
       'src/crypto/crypto_kem.cc',
       'src/crypto/crypto_hmac.cc',
       'src/crypto/crypto_kmac.cc',
+      'src/crypto/crypto_turboshake.cc',
       'src/crypto/crypto_random.cc',
       'src/crypto/crypto_rsa.cc',
       'src/crypto/crypto_spkac.cc',
@@ -753,6 +754,7 @@
       'src/crypto/crypto_dh.h',
       'src/crypto/crypto_hmac.h',
       'src/crypto/crypto_kmac.h',
+      'src/crypto/crypto_turboshake.h',
       'src/crypto/crypto_rsa.h',
       'src/crypto/crypto_spkac.h',
       'src/crypto/crypto_util.h',
@@ -1335,7 +1337,13 @@
           },
         }],
         [ 'node_builtin_modules_path!=""', {
-          'defines': [ 'NODE_BUILTIN_MODULES_PATH="<(node_builtin_modules_path)"' ]
+          'defines': [ 'NODE_BUILTIN_MODULES_PATH="<(node_builtin_modules_path)"' ],
+          # When loading builtins from disk, JS source files do not need to
+          # trigger rebuilds since the binary reads them at runtime.
+          'sources!': [
+            '<@(library_files)',
+            '<@(deps_files)',
+          ],
         }],
         [ 'node_shared=="true"', {
           'sources': [
@@ -1494,6 +1502,16 @@
             '<@(library_files)',
             '<@(deps_files)',
             'config.gypi'
+          ],
+          'conditions': [
+            [ 'node_builtin_modules_path!=""', {
+              # When loading builtins from disk, JS source files do not need
+              # to trigger rebuilds since the binary reads them at runtime.
+              'inputs!': [
+                '<@(library_files)',
+                '<@(deps_files)',
+              ],
+            }],
           ],
           'outputs': [
             '<(SHARED_INTERMEDIATE_DIR)/node_javascript.cc',

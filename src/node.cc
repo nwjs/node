@@ -2023,6 +2023,8 @@ NODE_EXTERN void g_stop_nw_instance() {
   //std::cerr << "QUIT LOOP" << std::endl;
 }
 
+static std::vector<node::Environment*> g_envs_to_free;
+
 NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Context> context, void* icu_data) {
 
   static bool node_init_called = false;
@@ -2080,10 +2082,10 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
     uv_key_set(&node::thread_ctx_key, tls_ctx);
     node::binding::RegisterBuiltinBindings();
   }
-  if (tls_ctx->env) {
-    node::FreeEnvironment(tls_ctx->env);
-    tls_ctx->env = nullptr;
-  }
+  for (auto* dead_env : g_envs_to_free)
+    node::FreeEnvironment(dead_env);
+  g_envs_to_free.clear();
+
   node::NodePlatform* platform = new node::NodePlatform(node::per_process::cli_options->v8_thread_pool_size, new v8::TracingController());
   platform->RegisterIsolate(isolate, uv_default_loop());
   node::IsolateData* isolate_data = node::CreateIsolateData(isolate, uv_default_loop(), platform);
@@ -2139,6 +2141,11 @@ NODE_EXTERN void g_emit_exit(node::Environment* env) {
 
 NODE_EXTERN void g_run_at_exit(node::Environment* env) {
   node::RunAtExit(env);
+}
+
+NODE_EXTERN void g_queue_nw_env_for_free(node::Environment* env) {
+  if (env)
+    g_envs_to_free.push_back(env);
 }
 
 NODE_EXTERN void g_promise_reject_callback(v8::PromiseRejectMessage* data) {

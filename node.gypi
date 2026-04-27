@@ -383,7 +383,7 @@
       'xcode_settings': {
         'OTHER_LDFLAGS': [
           '-L<(PRODUCT_DIR)/../nw/', '-lv8',
-          '<(PRODUCT_DIR)/../nw/nwjs\ Framework.framework/nwjs\ Framework',
+          '<(PRODUCT_DIR)/../nw/nwjs\\ Framework.framework/nwjs\\ Framework',
                   '-Wl,-force_load <(V8_LIBBASE)',
                   '-Wl,-force_load <(LIBABSL)',
                   '-Wl,-force_load <(LIBCXXABI)',
@@ -417,7 +417,7 @@
     [ 'OS=="mac" and component != "shared_library"', {
      'xcode_settings': {
        'OTHER_LDFLAGS': [
-         '<(PRODUCT_DIR)/../nw/nwjs\ Framework.framework/nwjs\ Framework',
+         '<(PRODUCT_DIR)/../nw/nwjs\\ Framework.framework/nwjs\\ Framework',
                  '-Wl,-force_load <(V8_LIBBASE)',
                  '-Wl,-force_load <(LIBABSL)',
                  '-Wl,-force_load <(LIBCXX)',

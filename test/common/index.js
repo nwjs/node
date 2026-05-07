@@ -72,6 +72,13 @@ const hasSQLite = Boolean(process.versions.sqlite);
 
 const hasQuic = hasCrypto && !!process.features.quic;
 
+const hasLocalStorage = (() => {
+  // Check enumerable property to avoid triggering the getter which emits a warning.
+  // localStorage is enumerable only when --localstorage-file is provided.
+  const desc = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  return hasSQLite && desc?.enumerable === true;
+})();
+
 /**
  * Parse test metadata from the specified file.
  * @param {string} filename - The name of the file to parse.
@@ -377,8 +384,10 @@ if (hasCrypto) {
   knownGlobals.add(globalThis.SubtleCrypto);
 }
 
-if (hasSQLite) {
+if (hasLocalStorage) {
   knownGlobals.add(globalThis.localStorage);
+}
+if (hasSQLite) {
   knownGlobals.add(globalThis.sessionStorage);
 }
 
@@ -404,6 +413,11 @@ if (process.env.NODE_TEST_KNOWN_GLOBALS !== '0') {
       // globalThis.crypto is a getter that throws if Node.js was compiled
       // without OpenSSL so we'll skip it if it is not available.
       if (val === 'crypto' && !hasCrypto) {
+        continue;
+      }
+      // globalThis.localStorage is a getter that throws if Node.js was
+      // executed without a --localstorage-file path.
+      if (val === 'localStorage' && !hasLocalStorage) {
         continue;
       }
       if (!knownGlobals.has(globalThis[val])) {
@@ -964,6 +978,7 @@ const common = {
   hasQuic,
   hasInspector,
   hasSQLite,
+  hasLocalStorage,
   invalidArgTypeHelper,
   isAlive,
   isASan,

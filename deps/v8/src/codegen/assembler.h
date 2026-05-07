@@ -359,8 +359,11 @@ class V8_EXPORT_PRIVATE AssemblerBase : public Malloced {
   bool is_constant_pool_available() const {
     if (V8_EMBEDDED_CONSTANT_POOL_BOOL) {
       // We need to disable constant pool here for embeded builtins
-      // because the metadata section is not adjacent to instructions
-      return constant_pool_available_ && !options().isolate_independent_code;
+      // because the metadata section is not adjacent to instructions.
+      // We also need to disable it on Wasm as the constant pool register is not
+      // yet handled during stack switching.
+      return constant_pool_available_ && !options().isolate_independent_code &&
+             !options().is_wasm;
     } else {
       // Embedded constant pool not supported on this architecture.
       UNREACHABLE();
@@ -423,10 +426,11 @@ class V8_EXPORT_PRIVATE AssemblerBase : public Malloced {
     if (V8_LIKELY(!v8_flags.code_comments)) return;
     if (options().emit_code_comments) {
       std::string comment_str(comment);
-      if (loc.FileName()) {
+      if (loc) {
         comment_str += " - " + loc.ToString();
       }
-      code_comments_writer_.Add(pc_offset(), comment_str);
+
+      code_comments_writer_.Add(pc_offset(), std::move(comment_str));
     }
   }
 
@@ -472,6 +476,12 @@ class V8_EXPORT_PRIVATE AssemblerBase : public Malloced {
   // The default buffer size used if we do not know the final size of the
   // generated code.
   static constexpr int kDefaultBufferSize = 4 * KB;
+
+  void RecordJSDispatchHandle(JSDispatchHandle handle, uint16_t argument_count);
+  const std::vector<std::pair<JSDispatchHandle, uint16_t>>&
+  js_dispatch_handles() const {
+    return js_dispatch_handles_;
+  }
 
  protected:
   // Add 'target' to the {code_targets_} vector, if necessary, and return the
@@ -548,6 +558,8 @@ class V8_EXPORT_PRIVATE AssemblerBase : public Malloced {
                      IndirectHandle<HeapObject>::hash,
                      IndirectHandle<HeapObject>::equal_to>
       embedded_objects_map_;
+
+  std::vector<std::pair<JSDispatchHandle, uint16_t>> js_dispatch_handles_;
 
   const AssemblerOptions options_;
   uint64_t enabled_cpu_features_;

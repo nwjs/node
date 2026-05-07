@@ -5,6 +5,7 @@
 #ifndef V8_BASE_MACROS_H_
 #define V8_BASE_MACROS_H_
 
+#include <bit>
 #include <limits>
 #include <type_traits>
 
@@ -39,6 +40,9 @@
 #define GET_NTH_ARG_IMPL_5(_0, _1, _2, _3, _4, _5, ...) _5
 #define GET_NTH_ARG_IMPL_6(_0, _1, _2, _3, _4, _5, _6, ...) _6
 #define GET_NTH_ARG_IMPL_7(_0, _1, _2, _3, _4, _5, _6, _7, ...) _7
+
+// Expands to true if __VA_ARGS__ is empty, false otherwise.
+#define IS_VA_EMPTY(...) GET_NTH_ARG(0, __VA_OPT__(false, ) true)
 
 // UNPAREN(x) removes a layer of nested parentheses on x, if any. This means
 // that both UNPAREN(x) and UNPAREN((x)) expand to x. This is helpful for macros
@@ -122,6 +126,9 @@ char (&ArraySizeHelper(const T (&array)[N]))[N];
   SUPPRESSED_DANGLING_ELSE_WARNING_IF(init; false) {} \
   SUPPRESSED_DANGLING_ELSE_WARNING_ELSE
 
+// -- Copied from chromium's "base/bit_cast.h", but uses `std::bit_cast` instead
+// of `__builtin_bit_cast`.
+//
 // This is an equivalent to C++20's std::bit_cast<>(), but with additional
 // warnings. It morally does what `*reinterpret_cast<Dest*>(&source)` does, but
 // the cast/deref pair is undefined behavior, while bit_cast<>() isn't.
@@ -134,7 +141,7 @@ char (&ArraySizeHelper(const T (&array)[N]))[N];
 namespace v8::base {
 
 template <class Dest, class Source>
-V8_INLINE Dest bit_cast(Source const& source) {
+V8_INLINE constexpr Dest bit_cast(Source const& source) noexcept {
   static_assert(!std::is_pointer_v<Source>,
                 "bit_cast must not be used on pointer types");
   static_assert(!std::is_pointer_v<Dest>,
@@ -150,13 +157,7 @@ V8_INLINE Dest bit_cast(Source const& source) {
       std::is_trivially_copyable_v<Dest>,
       "bit_cast requires the destination type to be trivially copyable");
 
-#if V8_HAS_BUILTIN_BIT_CAST
-  return __builtin_bit_cast(Dest, source);
-#else
-  Dest dest;
-  memcpy(&dest, &source, sizeof(dest));
-  return dest;
-#endif
+  return std::bit_cast<Dest, Source>(source);
 }
 
 }  // namespace v8::base
@@ -199,34 +200,6 @@ V8_INLINE Dest bit_cast(Source const& source) {
   void* operator new[](size_t) { v8::base::OS::Abort(); }        \
   void operator delete(void*, size_t) { v8::base::OS::Abort(); } \
   void operator delete[](void*, size_t) { v8::base::OS::Abort(); }
-
-// Define V8_USE_ADDRESS_SANITIZER macro.
-#if defined(__has_feature)
-#if __has_feature(address_sanitizer)
-#define V8_USE_ADDRESS_SANITIZER 1
-#endif
-#endif
-
-// Define V8_USE_HWADDRESS_SANITIZER macro.
-#if defined(__has_feature)
-#if __has_feature(hwaddress_sanitizer)
-#define V8_USE_HWADDRESS_SANITIZER 1
-#endif
-#endif
-
-// Define V8_USE_MEMORY_SANITIZER macro.
-#if defined(__has_feature)
-#if __has_feature(memory_sanitizer)
-#define V8_USE_MEMORY_SANITIZER 1
-#endif
-#endif
-
-// Define V8_USE_UNDEFINED_BEHAVIOR_SANITIZER macro.
-#if defined(__has_feature)
-#if __has_feature(undefined_behavior_sanitizer)
-#define V8_USE_UNDEFINED_BEHAVIOR_SANITIZER 1
-#endif
-#endif
 
 // Define V8_USE_SAFE_STACK macro.
 #if defined(__has_feature)
@@ -535,6 +508,18 @@ bool is_inbounds(float_t v) {
 #define IF_TSAN(V, ...)
 #endif  // V8_IS_TSAN
 
+#ifdef V8_ENABLE_SANDBOX_HARDWARE_SUPPORT
+#define IF_HARDWARE_SANDBOX(V, ...) EXPAND(V(__VA_ARGS__))
+#else
+#define IF_HARDWARE_SANDBOX(V, ...)
+#endif  // V8_ENABLE_SANDBOX_HARDWARE_SUPPORT
+
+#ifdef V8_ENABLE_SANDBOX
+#define IF_SANDBOX(V, ...) EXPAND(V(__VA_ARGS__))
+#else
+#define IF_SANDBOX(V, ...)
+#endif  // V8_ENABLE_SANDBOX
+
 // Defines IF_INTL, to be used in macro lists for elements that should only be
 // there if INTL is enabled.
 #ifdef V8_INTL_SUPPORT
@@ -600,6 +585,18 @@ bool is_inbounds(float_t v) {
 #else
 #define START_PROHIBIT_SIGN_CONVERSION()
 #define END_PROHIBIT_SIGN_CONVERSION()
+#endif  // defined(__clang__)
+
+// Disable/enable -Wmissing-designated-field-initializers warnings in code.
+#if defined(__clang__)
+#define START_ALLOW_MISSING_DESIGNATED_FIELD_INITIALIZERS() \
+  _Pragma("clang diagnostic push") _Pragma(                 \
+      "clang diagnostic ignored \"-Wmissing-designated-field-initializers\"")
+#define END_ALLOW_MISSING_DESIGNATED_FIELD_INITIALIZERS() \
+  _Pragma("clang diagnostic pop")
+#else
+#define START_ALLOW_MISSING_DESIGNATED_FIELD_INITIALIZERS()
+#define END_ALLOW_MISSING_DESIGNATED_FIELD_INITIALIZERS()
 #endif  // defined(__clang__)
 
 #endif  // V8_BASE_MACROS_H_

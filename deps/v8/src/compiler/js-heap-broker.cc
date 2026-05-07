@@ -131,16 +131,6 @@ StringRef JSHeapBroker::GetTypedArrayStringTag(ElementsKind kind) {
   }
 }
 
-bool JSHeapBroker::IsArrayOrObjectPrototype(JSObjectRef object) const {
-  return IsArrayOrObjectPrototype(object.object());
-}
-
-bool JSHeapBroker::IsArrayOrObjectPrototype(Handle<JSObject> object) const {
-  return isolate()->IsInCreationContext(
-             *object, Context::INITIAL_ARRAY_PROTOTYPE_INDEX) ||
-         object->map(isolate_)->instance_type() == JS_OBJECT_PROTOTYPE_TYPE;
-}
-
 ObjectData* JSHeapBroker::GetOrCreateData(Handle<Object> object,
                                           GetOrCreateDataFlags flags) {
   ObjectData* return_value = TryGetOrCreateData(object, flags | kCrashOnError);
@@ -207,7 +197,8 @@ NamedAccessFeedback const& ElementAccessFeedback::Refine(JSHeapBroker* broker,
   // key is know to be a known name.
   CHECK(transition_groups_.empty());
   ZoneVector<MapRef> maps(broker->zone());
-  return *broker->zone()->New<NamedAccessFeedback>(name, maps, slot_kind());
+  return *broker->zone()->New<NamedAccessFeedback>(broker, name, maps,
+                                                   slot_kind());
 }
 
 ElementAccessFeedback const& ElementAccessFeedback::Refine(
@@ -413,10 +404,12 @@ MegaDOMPropertyAccessFeedback::MegaDOMPropertyAccessFeedback(
 }
 
 NamedAccessFeedback::NamedAccessFeedback(
-    NameRef name, ZoneVector<MapRef> const& maps, FeedbackSlotKind slot_kind,
+    JSHeapBroker* broker, NameRef name, ZoneVector<MapRef> const& maps,
+    FeedbackSlotKind slot_kind,
     bool has_deprecated_map_without_migration_target)
     : ProcessedFeedback(kNamedAccess, slot_kind),
-      name_(name),
+      name_(name.UnpackIfThin(broker)),
+      original_name_maybe_thin_(name),
       maps_(maps),
       has_deprecated_map_without_migration_target_(
           has_deprecated_map_without_migration_target) {
@@ -531,7 +524,7 @@ ProcessedFeedback const& JSHeapBroker::ReadFeedbackForPropertyAccess(
     DCHECK_IMPLIES(maps.empty(),
                    nexus.ic_state() == InlineCacheState::MEGAMORPHIC);
     return *zone()->New<NamedAccessFeedback>(
-        *name, maps, kind, has_deprecated_map_without_migration_target);
+        this, *name, maps, kind, has_deprecated_map_without_migration_target);
   } else if (nexus.GetKeyType() == IcCheckType::kElement && !maps.empty()) {
     return ProcessFeedbackMapsForElementAccess(
         maps, KeyedAccessMode::FromNexus(nexus), kind);

@@ -661,6 +661,11 @@ A browser-compatible implementation of {Headers}.
 <!-- YAML
 added: v22.4.0
 changes:
+  - version: v26.0.0
+    pr-url: https://github.com/nodejs/node/pull/60351
+    description: Accessing the `localStorage` global without providing
+                 `--localstorage-file` now throws a `DOMException`, for
+                 compliance with the Web Storage specification.
   - version: v25.0.0
     pr-url: https://github.com/nodejs/node/pull/57666
     description: When webstorage is enabled and `--localstorage-file` is not
@@ -970,6 +975,14 @@ DataHandler.prototype.load = async function load(key) {
   this.emit('load', data);
 };
 ```
+
+## Class: `QuotaExceededError`
+
+<!-- YAML
+added: v26.0.0
+-->
+
+The WHATWG {QuotaExceededError} class. Extends {DOMException}.
 
 ## Class: `ReadableByteStreamController`
 

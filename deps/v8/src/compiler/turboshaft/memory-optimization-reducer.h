@@ -142,6 +142,7 @@ struct MemoryAnalyzer {
     const Operation& value = input_graph.Get(store.value());
 
     WriteBarrierKind write_barrier_kind = store.write_barrier;
+    if (write_barrier_kind == WriteBarrierKind::kNoWriteBarrier) return false;
     if (write_barrier_kind != WriteBarrierKind::kAssertNoWriteBarrier) {
       // If we have {kAssertNoWriteBarrier}, we cannot skip elimination
       // checks.
@@ -218,13 +219,31 @@ class MemoryOptimizationReducer : public Next {
     if (analyzer_->skipped_write_barriers.count(ig_index)) {
       __ Store(__ MapToNewGraph(store.base()), __ MapToNewGraph(store.index()),
                __ MapToNewGraph(store.value()), store.kind, store.stored_rep,
-               WriteBarrierKind::kNoWriteBarrier, store.offset,
+               skipped_write_barrier_kind_, store.offset,
                store.element_size_log2,
                store.maybe_initializing_or_transitioning,
                store.indirect_pointer_tag());
       return V<None>::Invalid();
     }
     DCHECK_NE(store.write_barrier, WriteBarrierKind::kAssertNoWriteBarrier);
+
+    // Checking if we can realx a FullWriteBarrier into a PointerWriteBarrier.
+    // Note that it's important to do this here in REDUCE_INPUT_GRAPH rather
+    // than in a REDUCE method, since this allows DecideObjectIsSmi to see
+    // Allocates from the input_graph (which don't exist in the output graph
+    // since the current reducer lowers them).
+    if (store.write_barrier == WriteBarrierKind::kFullWriteBarrier &&
+        turboshaft::DecideObjectIsSmi(__ input_graph(), store.value()) ==
+            IsSmiDecision::kFalse) {
+      __ Store(__ MapToNewGraph(store.base()), __ MapToNewGraph(store.index()),
+               __ MapToNewGraph(store.value()), store.kind, store.stored_rep,
+               WriteBarrierKind::kPointerWriteBarrier, store.offset,
+               store.element_size_log2,
+               store.maybe_initializing_or_transitioning,
+               store.indirect_pointer_tag());
+      return V<None>::Invalid();
+    }
+
     return Next::ReduceInputGraphStore(ig_index, store);
   }
 
@@ -251,28 +270,9 @@ class MemoryOptimizationReducer : public Next {
       type = AllocationType::kOld;
     }
 
-    V<WordPtr> top_address;
-    if (isolate_ != nullptr) {
-      top_address = __ ExternalConstant(
-          type == AllocationType::kYoung
-              ? ExternalReference::new_space_allocation_top_address(isolate_)
-              : ExternalReference::old_space_allocation_top_address(isolate_));
-    } else {
-      // Wasm mode: producing isolate-independent code, loading the isolate
-      // address at runtime.
-#if V8_ENABLE_WEBASSEMBLY
-      V<WasmTrustedInstanceData> instance_data = __ WasmInstanceDataParameter();
-      int top_address_offset =
-          type == AllocationType::kYoung
-              ? WasmTrustedInstanceData::kNewAllocationTopAddressOffset
-              : WasmTrustedInstanceData::kOldAllocationTopAddressOffset;
-      top_address =
-          __ Load(instance_data, LoadOp::Kind::TaggedBase().Immutable(),
-                  MemoryRepresentation::UintPtr(), top_address_offset);
-#else
-      UNREACHABLE();
-#endif  // V8_ENABLE_WEBASSEMBLY
-    }
+    V<WordPtr> top_address = __ IsolateField(
+        type == AllocationType::kYoung ? IsolateFieldId::kNewAllocationInfoTop
+                                       : IsolateFieldId::kOldAllocationInfoTop);
 
     if (analyzer_->IsFoldedAllocation(__ current_operation_origin())) {
       DCHECK_NE(__ GetVariable(top(type)), V<WordPtr>::Invalid());
@@ -310,7 +310,7 @@ class MemoryOptimizationReducer : public Next {
         }
         static_assert(std::is_same_v<Smi, BuiltinPtr>,
                       "BuiltinPtr must be Smi");
-        allocate_builtin = __ NumberConstant(static_cast<int>(builtin));
+        allocate_builtin = __ SmiConstant(Smi::FromEnum(builtin));
       } else {
         if (type == AllocationType::kYoung) {
           allocate_builtin =
@@ -353,6 +353,9 @@ class MemoryOptimizationReducer : public Next {
         __ GotoIfNot(LIKELY(__ UintPtrLessThan(
                          size, __ IntPtrConstant(kMaxRegularHeapObjectSize))),
                      call_runtime);
+        if (v8_flags.verify_write_barriers) {
+          SetLastYoungAllocation(type, top_value);
+        }
         __ SetVariable(top(type), new_top);
         __ StoreOffHeap(top_address, new_top, MemoryRepresentation::UintPtr());
         __ Goto(done);
@@ -402,6 +405,11 @@ class MemoryOptimizationReducer : public Next {
     __ BindReachable(done);
     // Compute the new top and write it back.
     V<WordPtr> obj_addr = __ GetVariable(top(type));
+
+    if (v8_flags.verify_write_barriers) {
+      SetLastYoungAllocation(type, obj_addr);
+    }
+
     __ SetVariable(top(type), __ WordPtrAdd(__ GetVariable(top(type)), size));
     __ StoreOffHeap(top_address, __ GetVariable(top(type)),
                     MemoryRepresentation::UintPtr());
@@ -409,9 +417,9 @@ class MemoryOptimizationReducer : public Next {
         __ WordPtrAdd(obj_addr, __ IntPtrConstant(kHeapObjectTag)));
   }
 
-  V<WordPtr> REDUCE(DecodeExternalPointer)(V<Word32> handle,
-                                           ExternalPointerTagRange tag_range) {
-#ifdef V8_ENABLE_SANDBOX
+#if V8_ENABLE_SANDBOX
+  V<WordPtr> REDUCE(LoadExternalPointer)(V<Word32> handle,
+                                         ExternalPointerTagRange tag_range) {
     // Decode loaded external pointer.
     V<WordPtr> table;
     if (isolate_ != nullptr) {
@@ -435,7 +443,7 @@ class MemoryOptimizationReducer : public Next {
                     ExternalReference::external_pointer_table_address(
                         isolate_));
       table = __ LoadOffHeap(table_address,
-                             Internals::kExternalPointerTableBasePointerOffset,
+                             Internals::kExternalEntityTableBasePointerOffset,
                              MemoryRepresentation::UintPtr());
     } else {
 #if V8_ENABLE_WEBASSEMBLY
@@ -447,12 +455,12 @@ class MemoryOptimizationReducer : public Next {
                     IsolateData::shared_external_pointer_table_offset());
         table = __ Load(table_address, LoadOp::Kind::RawAligned(),
                         MemoryRepresentation::UintPtr(),
-                        Internals::kExternalPointerTableBasePointerOffset);
+                        Internals::kExternalEntityTableBasePointerOffset);
       } else {
         table = __ Load(isolate_root, LoadOp::Kind::RawAligned(),
                         MemoryRepresentation::UintPtr(),
                         IsolateData::external_pointer_table_offset() +
-                            Internals::kExternalPointerTableBasePointerOffset);
+                            Internals::kExternalEntityTableBasePointerOffset);
       }
 #else
       UNREACHABLE();
@@ -472,12 +480,11 @@ class MemoryOptimizationReducer : public Next {
     Block* done = __ NewBlock();
     if (tag_range.Size() == 1) {
       // The common and simple case: we expect a specific tag.
-      V<Word64> tag_bits = __ Word64BitwiseAnd(
-          pointer, __ Word64Constant(kExternalPointerTagMask));
+      V<Word64> tag_bits =
+          __ Word64BitwiseAnd(pointer, kExternalPointerTagMask);
       tag_bits = __ Word64ShiftRightLogical(tag_bits, kExternalPointerTagShift);
       V<Word32> tag = __ TruncateWord64ToWord32(tag_bits);
-      V<Word32> expected_tag = __ Word32Constant(tag_range.first);
-      __ GotoIf(__ Word32Equal(tag, expected_tag), done, BranchHint::kTrue);
+      __ GotoIf(__ Word32Equal(tag, tag_range.first), done, BranchHint::kTrue);
       // TODO(saelo): it would be nicer to abort here with
       // AbortReason::kExternalPointerTagMismatch. That might require adding a
       // builtin call here though, which is not currently available.
@@ -489,9 +496,13 @@ class MemoryOptimizationReducer : public Next {
     }
     __ BindReachable(done);
     return __ Word64BitwiseAnd(pointer, kExternalPointerPayloadMask);
-#else   // V8_ENABLE_SANDBOX
-    UNREACHABLE();
+  }
 #endif  // V8_ENABLE_SANDBOX
+
+  V<None> REDUCE(MajorGCForCompilerTesting)() {
+    __ template CallRuntime<runtime::MajorGCForCompilerTesting>(
+        __ NoContextConstant(), {});
+    return V<None>::Invalid();
   }
 
  private:
@@ -502,6 +513,8 @@ class MemoryOptimizationReducer : public Next {
   const TSCallDescriptor* allocate_wasm_shared_builtin_descriptor_ = nullptr;
 #endif
   std::optional<Variable> top_[2];
+  const WriteBarrierKind skipped_write_barrier_kind_ =
+      v8_flags.verify_write_barriers ? kSkippedWriteBarrier : kNoWriteBarrier;
 
   static_assert(static_cast<int>(AllocationType::kYoung) == 0);
   static_assert(static_cast<int>(AllocationType::kOld) == 1);
@@ -532,31 +545,19 @@ class MemoryOptimizationReducer : public Next {
   }
 #endif
 
+  void SetLastYoungAllocation(AllocationType type, V<WordPtr> obj) {
+    DCHECK(v8_flags.verify_write_barriers);
+    V<WordPtr> last_value =
+        type == AllocationType::kYoung ? obj : __ IntPtrConstant(0);
+
+    __ StoreOffHeap(__ IsolateField(IsolateFieldId::kLastYoungAllocation),
+                    last_value, MemoryRepresentation::UintPtr());
+  }
+
   V<WordPtr> GetLimitAddress(AllocationType type) {
-    V<WordPtr> limit_address;
-    if (isolate_ != nullptr) {
-      limit_address = __ ExternalConstant(
-          type == AllocationType::kYoung
-              ? ExternalReference::new_space_allocation_limit_address(isolate_)
-              : ExternalReference::old_space_allocation_limit_address(
-                    isolate_));
-    } else {
-      // Wasm mode: producing isolate-independent code, loading the isolate
-      // address at runtime.
-#if V8_ENABLE_WEBASSEMBLY
-      V<WasmTrustedInstanceData> instance_node = __ WasmInstanceDataParameter();
-      int limit_address_offset =
-          type == AllocationType::kYoung
-              ? WasmTrustedInstanceData::kNewAllocationLimitAddressOffset
-              : WasmTrustedInstanceData::kOldAllocationLimitAddressOffset;
-      limit_address =
-          __ Load(instance_node, LoadOp::Kind::TaggedBase(),
-                  MemoryRepresentation::UintPtr(), limit_address_offset);
-#else
-      UNREACHABLE();
-#endif  // V8_ENABLE_WEBASSEMBLY
-    }
-    return limit_address;
+    return __ IsolateField(type == AllocationType::kYoung
+                               ? IsolateFieldId::kNewAllocationInfoLimit
+                               : IsolateFieldId::kOldAllocationInfoLimit);
   }
 };
 

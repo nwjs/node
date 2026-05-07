@@ -1118,7 +1118,7 @@ Response V8DebuggerAgentImpl::searchInContent(
     return Response::ServerError("No script for id: " + scriptId.utf8());
 
   *results = std::make_unique<protocol::Array<protocol::Debugger::SearchMatch>>(
-      searchInTextByLinesImpl(m_session, it->second->source(0), query,
+      searchInTextByLinesImpl(m_inspector, it->second->source(0), query,
                               optionalCaseSensitive.value_or(false),
                               optionalIsRegex.value_or(false)));
   return Response::Success();
@@ -1140,6 +1140,8 @@ const char* buildStatus(v8::debug::LiveEditResult::Status status) {
     case v8::debug::LiveEditResult::BLOCKED_BY_TOP_LEVEL_ES_MODULE_CHANGE:
       return protocol::Debugger::SetScriptSource::StatusEnum::
           BlockedByTopLevelEsModuleChange;
+    case v8::debug::LiveEditResult::FEATURE_DISABLED:
+      UNREACHABLE();
   }
 }
 }  // namespace
@@ -1173,6 +1175,10 @@ Response V8DebuggerAgentImpl::setScriptSource(
   v8::debug::LiveEditResult result;
   it->second->setSource(newContent, dryRun.value_or(false),
                         allowTopFrameLiveEditing, &result);
+  if (result.status == v8::debug::LiveEditResult::FEATURE_DISABLED) {
+    return Response::ServerError(
+        "setScriptSource functionality no longer available");
+  }
   *status = buildStatus(result.status);
   if (result.status == v8::debug::LiveEditResult::COMPILE_ERROR) {
     *optOutCompileError =
@@ -2280,7 +2286,6 @@ void V8DebuggerAgentImpl::didPause(
   if (!response.IsSuccess())
     protocolCallFrames = std::make_unique<Array<CallFrame>>();
 
-  v8::debug::NotifyDebuggerPausedEventSent(m_debugger->isolate());
   m_frontend.paused(std::move(protocolCallFrames), breakReason,
                     std::move(breakAuxData), std::move(hitBreakpointIds),
                     currentAsyncStackTrace(), currentExternalStackTrace());

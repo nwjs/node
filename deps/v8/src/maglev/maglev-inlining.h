@@ -16,7 +16,6 @@
 namespace v8::internal::maglev {
 
 // We assume that we have visited all the deopt infos at this point.
-// ClearReturnedValueUsesFromDeoptFrames would do that.
 // That means that we don't have any uses of ReturnedValue in deopt infos.
 // If the node has an use > 0, we must create a conversion to tagged.
 class ReturnedValueRepresentationSelector {
@@ -36,16 +35,14 @@ class ReturnedValueRepresentationSelector {
 
 class MaglevInliner {
  public:
-  explicit MaglevInliner(Graph* graph) : graph_(graph) {}
+  explicit MaglevInliner(Graph* graph)
+      : graph_(graph), flags_(graph->compilation_info()->flags()) {}
 
   bool Run();
 
  private:
   Graph* graph_;
-
-  int max_inlined_bytecode_size_cumulative() const;
-  int max_inlined_bytecode_size_small_total() const;
-  int max_inlined_bytecode_size_small_with_heapnum_in_out() const;
+  const CompilationFlags flags_;
 
   bool IsSmallWithHeapNumberInputsOutputs(MaglevCallSiteInfo* call_site) const;
 
@@ -54,7 +51,10 @@ class MaglevInliner {
 
   bool is_tracing_enabled() const { return graph_->is_tracing_enabled(); }
 
+  bool CanInlineCall();
   MaglevCallSiteInfo* ChooseNextCallSite();
+  bool InlineCallSites();
+  void RunOptimizer();
 
   enum class InliningResult {
     kDone,
@@ -82,14 +82,12 @@ class MaglevInliner {
     return v8_flags.print_maglev_graphs && is_tracing_enabled();
   }
 
+  CodeTracer* GetCodeTracer() const;
+  void PrintMaglevGraph(const char* msg,
+                        compiler::OptionalSharedFunctionInfoRef ref = {});
+
   static void UpdatePredecessorsOf(BasicBlock* block, BasicBlock* prev_pred,
                                    BasicBlock* new_pred);
-  void RemovePredecessorFollowing(ControlNode* control, BasicBlock* call_block);
-
-  void RemoveUnreachableBlocks() {
-    graph_->set_may_have_unreachable_blocks();
-    graph_->RemoveUnreachableBlocks();
-  }
 };
 
 }  // namespace v8::internal::maglev

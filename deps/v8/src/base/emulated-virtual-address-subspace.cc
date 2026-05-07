@@ -106,7 +106,7 @@ void EmulatedVirtualAddressSubspace::FreePages(Address address, size_t size) {
 
 Address EmulatedVirtualAddressSubspace::AllocateSharedPages(
     Address hint, size_t size, PagePermissions permissions,
-    PlatformSharedMemoryHandle handle, uint64_t offset) {
+    SharedMemoryHandle handle, uint64_t offset) {
   // Can only allocate shared pages in the unmapped region.
   if (!IsUsableSizeForUnmappedRegion(size)) return kNullAddress;
 
@@ -174,7 +174,8 @@ std::unique_ptr<v8::VirtualAddressSpace>
 EmulatedVirtualAddressSubspace::AllocateSubspace(
     Address hint, size_t size, size_t alignment,
     PagePermissions max_page_permissions,
-    std::optional<MemoryProtectionKeyId> key) {
+    std::optional<MemoryProtectionKeyId> key,
+    std::optional<SharedMemoryHandle> handle) {
   UNIMPLEMENTED();
 }
 

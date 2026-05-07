@@ -6,8 +6,9 @@
 #define V8_WASM_BASELINE_PPC_LIFTOFF_ASSEMBLER_PPC_INL_H_
 
 #include "src/codegen/assembler.h"
+#include "src/codegen/atomic-memory-order.h"
 #include "src/codegen/interface-descriptors-inl.h"
-#include "src/heap/mutable-page-metadata.h"
+#include "src/heap/mutable-page.h"
 #include "src/wasm/baseline/liftoff-assembler.h"
 #include "src/wasm/baseline/parallel-move-inl.h"
 #include "src/wasm/object-access.h"
@@ -335,6 +336,7 @@ Register LiftoffAssembler::LoadOldFramePointer() {
     return fp;
   }
   LiftoffRegister old_fp = GetUnusedRegister(RegClass::kGpReg, {});
+  FreezeCacheState frozen(*this);
   Label done, call_runtime;
   LoadU64(old_fp.gp(), MemOperand(fp, TypedFrameConstants::kFrameTypeOffset));
   CmpU64(old_fp.gp(),
@@ -506,7 +508,15 @@ void LiftoffAssembler::StoreTaggedPointer(Register dst_addr,
   if (protected_store_pc) *protected_store_pc = pc_offset();
   StoreTaggedField(src, dst_op, r0);
 
-  if (skip_write_barrier || v8_flags.disable_write_barriers) return;
+  if (v8_flags.disable_write_barriers) return;
+
+  if (skip_write_barrier) {
+    if (v8_flags.verify_write_barriers) {
+      CallVerifySkippedWriteBarrierStubSaveRegisters(dst_addr, src,
+                                                     SaveFPRegsMode::kSave);
+    }
+    return;
+  }
 
   Label exit;
   JumpIfSmi(src, &exit);
@@ -740,8 +750,12 @@ void LiftoffAssembler::Store(Register dst_addr, Register offset_reg,
 void LiftoffAssembler::AtomicLoad(LiftoffRegister dst, Register src_addr,
                                   Register offset_reg, uintptr_t offset_imm,
                                   LoadType type, uint32_t* protected_load_pc,
+                                  AtomicMemoryOrder memory_order,
                                   LiftoffRegList /* pinned */, bool i64_offset,
                                   Endianness /* endianness */) {
+  if (memory_order == AtomicMemoryOrder::kSeqCst) {
+    sync();
+  }
   Load(dst, src_addr, offset_reg, offset_imm, type, protected_load_pc, true,
        i64_offset);
   lwsync();
@@ -750,9 +764,17 @@ void LiftoffAssembler::AtomicLoad(LiftoffRegister dst, Register src_addr,
 void LiftoffAssembler::AtomicStore(Register dst_addr, Register offset_reg,
                                    uintptr_t offset_imm, LiftoffRegister src,
                                    StoreType type, uint32_t* protected_store_pc,
+                                   AtomicMemoryOrder memory_order,
                                    LiftoffRegList pinned, bool i64_offset,
                                    Endianness /* endianness */) {
-  lwsync();
+  DCHECK(memory_order == AtomicMemoryOrder::kSeqCst ||
+         memory_order == AtomicMemoryOrder::kAcqRel);
+
+  if (memory_order == AtomicMemoryOrder::kSeqCst) {
+    sync();
+  } else {
+    lwsync();
+  }
   Store(dst_addr, offset_reg, offset_imm, src, type, pinned, protected_store_pc,
         true, i64_offset);
   sync();
@@ -2676,6 +2698,10 @@ void LiftoffAssembler::LoadTransform(LiftoffRegister dst, Register src_addr,
                                      LoadTransformationKind transform,
                                      uint32_t* protected_load_pc,
                                      bool i64_offset) {
+  if (!i64_offset && offset_reg != no_reg) {
+    ZeroExtWord32(ip, offset_reg);
+    offset_reg = ip;
+  }
   MemOperand src_op = MemOperand(src_addr, offset_reg, offset_imm);
   *protected_load_pc = pc_offset();
   MachineType memtype = type.mem_type();
@@ -3113,47 +3139,6 @@ void LiftoffAssembler::DeallocateStackSlot(uint32_t size) {
 }
 
 void LiftoffAssembler::MaybeOSR() {}
-
-void LiftoffAssembler::emit_store_nonzero_if_nan(Register dst,
-                                                 DoubleRegister src,
-                                                 ValueKind kind) {
-  Label return_nan, done;
-  fcmpu(src, src);
-  bunordered(&return_nan);
-  b(&done);
-  bind(&return_nan);
-  StoreF32(src, MemOperand(dst), r0);
-  bind(&done);
-}
-
-void LiftoffAssembler::emit_s128_store_nonzero_if_nan(Register dst,
-                                                      LiftoffRegister src,
-                                                      Register tmp_gp,
-                                                      LiftoffRegister tmp_s128,
-                                                      ValueKind lane_kind) {
-  Label done;
-  if (lane_kind == kF32) {
-    xvcmpeqsp(tmp_s128.fp().toSimd(), src.fp().toSimd(), src.fp().toSimd(),
-              SetRC);
-  } else {
-    DCHECK_EQ(lane_kind, kF64);
-    xvcmpeqdp(tmp_s128.fp().toSimd(), src.fp().toSimd(), src.fp().toSimd(),
-              SetRC);
-  }
-  // CR_LT which is targeting cr6 bit 0, indicating if all lanes true (no lanes
-  // are NaN).
-  Condition all_lanes_true = lt;
-  b(all_lanes_true, &done, cr6);
-  // Do not use the src register as a Fp register to store a value.
-  // We use two different sets for Fp and Simd registers on PPC.
-  li(tmp_gp, Operand(1));
-  StoreU32(tmp_gp, MemOperand(dst), r0);
-  bind(&done);
-}
-
-void LiftoffAssembler::emit_store_nonzero(Register dst) {
-  StoreU32(dst, MemOperand(dst), r0);
-}
 
 void LiftoffStackSlots::Construct(int param_slots) {
   DCHECK_LT(0, slots_.size());

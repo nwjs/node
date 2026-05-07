@@ -83,7 +83,7 @@ void HashTableBase::ElementsRemoved(int n) {
 }
 
 // static
-uint32_t HashTableBase::ComputeCapacity(uint32_t at_least_space_for) {
+constexpr uint32_t HashTableBase::ComputeCapacity(uint32_t at_least_space_for) {
   // Add 50% slack to make slot collisions sufficiently unlikely.
   // See matching computation in HashTable::HasSufficientCapacityToAdd().
   // Must be kept in sync with CodeStubAssembler::HashTableComputeCapacity().
@@ -175,6 +175,14 @@ InternalIndex HashTable<Derived, Shape>::FindInsertionEntry(IsolateT* isolate,
 // static
 template <typename Derived, typename Shape>
 bool HashTable<Derived, Shape>::IsKey(ReadOnlyRoots roots, Tagged<Object> k) {
+  // TODO(leszeks): Dictionaries that don't delete could skip the hole check.
+  return !IsUndefined(k, roots) && !IsTheHole(k, roots);
+}
+
+// static
+template <typename Derived, typename Shape>
+bool HashTable<Derived, Shape>::IsKey(EarlyReadOnlyRoots roots,
+                                      Tagged<Object> k) {
   // TODO(leszeks): Dictionaries that don't delete could skip the hole check.
   return !IsUndefined(k, roots) && !IsTheHole(k, roots);
 }

@@ -6,6 +6,7 @@
 #define V8_HEAP_SAFEPOINT_H_
 
 #include <optional>
+#include <type_traits>
 #include <vector>
 
 #include "src/base/platform/condition-variable.h"
@@ -19,6 +20,7 @@ namespace v8 {
 namespace internal {
 
 class Heap;
+class IsolateSafepointScope;
 class LocalHeap;
 class PerClientSafepointData;
 class RootVisitor;
@@ -46,33 +48,13 @@ class IsolateSafepoint final {
 
   V8_EXPORT_PRIVATE void AssertMainThreadIsOnlyThread();
 
-  template <typename Callback>
-  bool RunIfCanAvoidGlobalSafepoint(Callback callback) {
-    // If there is shared space, a global safepoint is not possible, and there's
-    // no need to lock.
-    const bool should_lock = (shared_space_isolate() != nullptr);
-    if (should_lock) {
-      if (!local_heaps_mutex_.TryLock()) {
-        return false;
-      }
-      local_heaps_mutex_.AssertHeld();
-    }
-    callback();
-    if (should_lock) {
-      local_heaps_mutex_.Unlock();
-    }
-    return true;
-  }
+  // This method ensures a safepoint for this Isolate but only if it can avoid a
+  // GC. This will always succeed without a shared heap but it might fail when a
+  // shared GC already locked this local_heaps_mutex_.
+  std::optional<IsolateSafepointScope> ReachSafepointWithoutTriggeringGC();
 
  private:
-  struct RunningLocalHeap {
-    LocalHeap* local_heap;
-#if V8_OS_DARWIN
-    pthread_override_t qos_override;
-#endif
-  };
-
-  using RunningLocalHeaps = base::SmallVector<RunningLocalHeap, 4>;
+  using RunningLocalHeaps = base::SmallVector<LocalHeap*, 4>;
 
   class Barrier {
     base::Mutex mutex_;
@@ -190,6 +172,12 @@ class V8_NODISCARD IsolateSafepointScope {
  public:
   V8_EXPORT_PRIVATE explicit IsolateSafepointScope(Heap* heap);
   V8_EXPORT_PRIVATE ~IsolateSafepointScope();
+
+  IsolateSafepointScope(const IsolateSafepointScope& other) = delete;
+  IsolateSafepointScope(IsolateSafepointScope&& other) V8_NOEXCEPT;
+
+  IsolateSafepointScope& operator=(IsolateSafepointScope& other) = delete;
+  IsolateSafepointScope& operator=(IsolateSafepointScope&& other) = delete;
 
  private:
   IsolateSafepoint* safepoint_;

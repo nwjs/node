@@ -87,6 +87,13 @@
   'WeakContainerTest.ConservativeGCTracesWeakContainer': [SKIP],
 }],  # arch == arm64 and msan
 
+['arch == arm64 and system == macos and not simulator_run', {
+  # printf, being a variadic function, has a different, stack-based ABI on
+  # Apple silicon. See:
+  # https://developer.apple.com/library/archive/documentation/Xcode/Conceptual/iPhoneOSABIReference/Articles/ARM64FunctionCallingConventions.html
+  'AssemblerArm64Test.printf_no_preserve': [SKIP],
+}],  # arch == arm64 and system == macos and not simulator_run
+
 ##############################################################################
 # TODO(v8:7777): Change this once wasm is supported in jitless mode.
 ['not has_webassembly or variant == jitless', {
@@ -119,7 +126,7 @@
   'SweeperTest.DiscardingNormalPageMemory': [SKIP],
 
   # https://crbug.com/v8/8766
-  'BytecodeGeneratorTest.WideRegisters': [SKIP],
+  'AllGolden/BytecodeGeneratorTest.CompilationMatchesExpectation/WideRegisters': [SKIP],
 }],  # arch == ppc64
 
 ##############################################################################
@@ -192,9 +199,10 @@
 ################################################################################
 ['arch == riscv64 or arch == riscv32', {
   # TODO(kasperl@rivosinc.com): Temporarily allow the tests to fail as we
-  # investigate what sometimes gives unexpected values for f32.{min,max,neg}.
-  'CrossCompilerDeterminismTest.TestFloat32Binop': [PASS, FAIL],
-  'CrossCompilerDeterminismTest.TestFloat32Unop': [PASS, FAIL],
+  # investigate what sometimes gives unexpected values for functions like
+  # f32.{min,max,neg} and friends.
+  'Float32CrossCompilerDeterminismTest.TestBinOp': [PASS, FAIL],
+  'Float32CrossCompilerDeterminismTest.TestUnOp': [PASS, FAIL],
 }],  # arch == riscv64 or arch == riscv32
 
 ['(arch == riscv64 or arch == riscv32) and not clang', {
@@ -218,6 +226,10 @@
   'LogInterpretedFramesNativeStackTest.LogInterpretedFramesNativeStack': [SKIP],
   'LogInterpretedFramesNativeStackWithSerializationTest.LogInterpretedFramesNativeStackWithSerialization': [SKIP],
   'InterpreterTest.InterpreterWithNativeStack': [SKIP],
+
+  # Crashes on native arm.
+  'MacroAssemblerTest.ExtractLane': [PASS, ['arch == arm and not simulator_run', SKIP]],
+  'MacroAssemblerTest.ReplaceLane': [PASS, ['arch == arm and not simulator_run', SKIP]],
 }], # jitless
 
 ##############################################################################
@@ -249,6 +261,8 @@
 ['lite_mode or variant == jitless', {
 
   # Tests that generate code at runtime.
+  'Assembler*': [SKIP],
+  'SyncPrimitivesArmTest*': [SKIP],
   'CodePagesTest.*': [SKIP],
   'MacroAssemblerX64Test.EmbeddedObj': [SKIP],
   'RegExpTest.MacroAssemblernativeAtStart': [SKIP],
@@ -306,6 +320,7 @@
 ##############################################################################
 ['no_simd_hardware == True', {
   'WasmDisassemblerTest.Simd': [SKIP],
+  'SimdCrossCompilerDeterminismTest.*': [SKIP],
 }],  # no_simd_hardware == True
 
 ['tsan and mode == debug', {
@@ -329,9 +344,6 @@
 ['variant in (stress_maglev, stress_maglev_non_eager_inlining, stress_maglev_future, stress_maglev_no_turbofan, maglev_no_turbofan)', {
   # Maglev doesn't support compiler::NodeObserver machinery.
   'SloppyEqualityTest.SloppyEqualityTest': [FAIL],
-  # Maglev doesn't produce optimized enough code to trigger expected
-  # deoptimization.
-  'FeedbackVectorTest.VectorCallSpeculationModeAndFeedbackContent': [FAIL],
 }],  # variant in (stress_maglev, stress_maglev_non_eager_inlining, stress_maglev_future, stress_maglev_no_turbofan, maglev_no_turbofan)
 
 ##############################################################################
@@ -383,5 +395,17 @@
   'LogFunctionEventsTest.LogFunctionEvents': [SKIP],
   'CompilerTest.ProfilerEnabledDuringBackgroundCompile': [SKIP],
 }],
+
+##############################################################################
+['full_debug', {
+  # Tests too slow in non-optimized debug mode.
+  'LogAllTest.LogAll': [SKIP],
+}],  # 'full_debug'
+
+##############################################################################
+['ubsan', {
+  # https://crbug.com/456051623
+  'SimdShuffleTest.TryMatch32x4OneLaneSwizzle': [SKIP],
+}],  # 'ubsan'
 
 ]

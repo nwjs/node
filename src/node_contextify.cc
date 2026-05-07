@@ -603,29 +603,29 @@ Intercepted ContextifyContext::PropertySetterCallback(
   // reported by V8 via PropertyDefinerCallback.
   bool is_declared = is_declared_on_global_proxy || is_declared_on_sandbox;
 
-/*
-  // true for x = 5
-  // false for this.x = 5
-  // false for Object.defineProperty(this, 'foo', ...)
-  // false for vmResult.x = 5 where vmResult = vm.runInContext();
+  /*
+    // true for x = 5
+    // false for this.x = 5
+    // false for Object.defineProperty(this, 'foo', ...)
+    // false for vmResult.x = 5 where vmResult = vm.runInContext();
 
-  bool is_contextual_store = ctx->global_proxy() != args.This();
+    bool is_contextual_store = ctx->global_proxy() != args.This();
 
-  // Indicator to not return before setting (undeclared) function declarations
-  // on the sandbox in strict mode, i.e. args.ShouldThrowOnError() = true.
-  // True for 'function f() {}', 'this.f = function() {}',
-  // 'var f = function()'.
-  // In effect only for 'function f() {}' because
-  // var f = function(), is_declared = true
-  // this.f = function() {}, is_contextual_store = false.
-  bool is_function = value->IsFunction();
+    // Indicator to not return before setting (undeclared) function declarations
+    // on the sandbox in strict mode, i.e. args.ShouldThrowOnError() = true.
+    // True for 'function f() {}', 'this.f = function() {}',
+    // 'var f = function()'.
+    // In effect only for 'function f() {}' because
+    // var f = function(), is_declared = true
+    // this.f = function() {}, is_contextual_store = false.
+    bool is_function = value->IsFunction();
 
-  bool is_declared = is_declared_on_global_proxy || is_declared_on_sandbox;
-  if (!is_declared && args.ShouldThrowOnError() && is_contextual_store &&
-      !is_function) {
-    return Intercepted::kNo;
-  }
-*/
+    bool is_declared = is_declared_on_global_proxy || is_declared_on_sandbox;
+    if (!is_declared && args.ShouldThrowOnError() && is_contextual_store &&
+        !is_function) {
+      return Intercepted::kNo;
+    }
+  */
   if (!is_declared && property->IsSymbol()) {
     return Intercepted::kNo;
   }

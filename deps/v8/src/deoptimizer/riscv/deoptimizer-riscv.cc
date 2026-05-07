@@ -8,8 +8,8 @@
 namespace v8 {
 namespace internal {
 
-const int Deoptimizer::kEagerDeoptExitSize = 2 * kInstrSize;
-const int Deoptimizer::kLazyDeoptExitSize = 2 * kInstrSize;
+const int Deoptimizer::kEagerDeoptExitSize = 1 * kInstrSize;
+const int Deoptimizer::kLazyDeoptExitSize = 1 * kInstrSize;
 
 const int Deoptimizer::kAdaptShadowStackOffsetToSubtract = 0;
 
@@ -49,6 +49,7 @@ void RegisterValues::SetDoubleRegister(unsigned n, Float64 value) {
 
 void FrameDescription::SetCallerPc(unsigned offset, intptr_t value) {
   SetFrameSlot(offset, value);
+  caller_pc_ = value;
 }
 
 void FrameDescription::SetCallerFp(unsigned offset, intptr_t value) {

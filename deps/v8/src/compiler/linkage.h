@@ -71,6 +71,9 @@ class V8_EXPORT_PRIVATE CallDescriptor final
     kInitializeRootRegister = 1u << 3,
     // Does not ever try to allocate space on our heap.
     kNoAllocate = 1u << 4,
+    // Repurpose this bit during instruction selection. Signal the presence of
+    // an effect handler to code generation.
+    kHasEffectHandler = kNoAllocate,
     // Use the kJavaScriptCallCodeStartRegister (fixed) register for the
     // indirect target address when calling.
     kFixedTargetRegister = 1u << 5,
@@ -111,7 +114,6 @@ class V8_EXPORT_PRIVATE CallDescriptor final
                  RegList callee_saved_registers,
                  DoubleRegList callee_saved_fp_registers, Flags flags,
                  const char* debug_name = "",
-                 StackArgumentOrder stack_order = StackArgumentOrder::kDefault,
                  const RegList allocatable_registers = {},
                  size_t return_slot_count = 0,
                  uint64_t signature_hash = kInvalidWasmSignatureHash)
@@ -127,7 +129,6 @@ class V8_EXPORT_PRIVATE CallDescriptor final
         callee_saved_fp_registers_(callee_saved_fp_registers),
         allocatable_registers_(allocatable_registers),
         flags_(flags),
-        stack_order_(stack_order),
         debug_name_(debug_name),
         signature_hash_(signature_hash) {
 #ifdef V8_ENABLE_WEBASSEMBLY
@@ -186,6 +187,11 @@ class V8_EXPORT_PRIVATE CallDescriptor final
 
   // Returns {true} if this descriptor is a call to a Wasm C API function.
   bool IsWasmCapiFunction() const { return kind_ == kCallWasmCapiFunction; }
+
+  // Returns {true} if this descriptor is a call to a Wasm continuation.
+  bool IsResumeWasmContinuation() const {
+    return kind_ == kResumeWasmContinuation;
+  }
 #endif  // V8_ENABLE_WEBASSEMBLY
 
   bool IsBuiltinPointerCall() const { return kind_ == kCallBuiltinPointer; }
@@ -237,15 +243,6 @@ class V8_EXPORT_PRIVATE CallDescriptor final
     return param_slot_count_;
   }
 
-  int GetStackIndexFromSlot(int slot_index) const {
-    switch (GetStackArgumentOrder()) {
-      case StackArgumentOrder::kDefault:
-        return -slot_index - 1;
-      case StackArgumentOrder::kJS:
-        return slot_index + static_cast<int>(ParameterSlotCount());
-    }
-  }
-
   // The total number of inputs to this call, which includes the target,
   // receiver, context, etc.
   // TODO(titzer): this should input the framestate input too.
@@ -291,8 +288,6 @@ class V8_EXPORT_PRIVATE CallDescriptor final
   MachineType GetParameterType(size_t index) const {
     return location_sig_->GetParam(index).GetType();
   }
-
-  StackArgumentOrder GetStackArgumentOrder() const { return stack_order_; }
 
   // Operator properties describe how this call can be optimized, if at all.
   Operator::Properties properties() const { return properties_; }
@@ -360,7 +355,6 @@ class V8_EXPORT_PRIVATE CallDescriptor final
   // register allocator to use.
   const RegList allocatable_registers_;
   const Flags flags_;
-  const StackArgumentOrder stack_order_;
   const char* const debug_name_;
 
   uint64_t signature_hash_;
@@ -420,15 +414,15 @@ class V8_EXPORT_PRIVATE Linkage : public NON_EXPORTED_BASE(ZoneObject) {
           Operator::kNoProperties /* use with care! */);
 
   static CallDescriptor* GetRuntimeCallDescriptor(
-      Zone* zone, Runtime::FunctionId function, int js_parameter_count,
+      Zone* zone, Runtime::FunctionId function, int parameter_count,
       Operator::Properties properties, CallDescriptor::Flags flags,
       LazyDeoptOnThrow lazy_deopt_on_throw = LazyDeoptOnThrow::kNo);
 
-  static CallDescriptor* GetCEntryStubCallDescriptor(
-      Zone* zone, int return_count, int js_parameter_count,
-      const char* debug_name, Operator::Properties properties,
-      CallDescriptor::Flags flags,
-      StackArgumentOrder stack_order = StackArgumentOrder::kDefault);
+  // |js_parameter_count| must include BuiltinArguments::kNumExtraArgs and
+  // receiver.
+  static CallDescriptor* GetCPPBuiltinCallDescriptor(
+      Zone* zone, int js_parameter_count, const char* debug_name,
+      Operator::Properties properties, CallDescriptor::Flags flags);
 
   static CallDescriptor* GetStubCallDescriptor(
       Zone* zone, const CallInterfaceDescriptor& descriptor,
@@ -520,6 +514,12 @@ class V8_EXPORT_PRIVATE Linkage : public NON_EXPORTED_BASE(ZoneObject) {
   static const int kOsrAccumulatorRegisterIndex = -1;
 
  private:
+  template <StackArgumentOrder kStackArgumentOrder>
+  static CallDescriptor* GetCEntryStubCallDescriptor(
+      Zone* zone, int return_count, int stack_parameter_count,
+      const char* debug_name, Operator::Properties properties,
+      CallDescriptor::Flags flags, CodeEntrypointTag entrypoint_tag);
+
   CallDescriptor* const incoming_;
 };
 

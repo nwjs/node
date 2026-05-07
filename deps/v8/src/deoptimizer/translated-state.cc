@@ -557,18 +557,21 @@ Tagged<Object> TranslatedValue::GetRawValue() const {
   // If we have a value, return it.
   if (materialization_state() == kFinished) {
     int smi;
-    if (!IsAnyHole(*storage_) && IsHeapNumber(*storage_) &&
+    if (IsHeapNumber(*storage_) &&
         DoubleToSmiInteger(Object::NumberValue(*storage_), &smi)) {
       return Smi::FromInt(smi);
     }
     return *storage_;
   }
 
+  AllowSandboxAccess sandbox_access(
+      "Accessing in-sandbox data for obtaining translated value");
+
   // Otherwise, do a best effort to get the value without allocation.
   switch (kind()) {
     case kTagged: {
       Tagged<Object> object = raw_literal();
-      if (!IsAnyHole(object) && IsSlicedString(object)) {
+      if (IsSlicedString(object)) {
         // If {object} is a sliced string of length smaller than
         // SlicedString::kMinLength, then trim the underlying SeqString and
         // return it. This assumes that such sliced strings are only built by
@@ -664,9 +667,9 @@ Tagged<Object> TranslatedValue::GetRawValue() const {
 
     case kHoleyDouble:
       if (double_value().is_hole_nan()
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
           || double_value().is_undefined_nan()
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
       ) {
         // Hole NaNs and undefined NaNs that made it to here represent the
         // undefined value.
@@ -1441,8 +1444,6 @@ int TranslatedState::CreateNextTranslatedValue(
       intptr_t value = registers->GetRegister(input_reg);
       Address uncompressed_value = DecompressIfNeeded(value);
       if (trace_file != nullptr) {
-        // Need temporary access to in-sandbox memory for printing the object.
-        AllowSandboxAccess temporary_sandbox_access;
         PrintF(trace_file, V8PRIxPTR_FMT " ; %s ", uncompressed_value,
                converter.NameOfCPURegister(input_reg));
         ShortPrint(Tagged<Object>(uncompressed_value), trace_file);
@@ -1628,14 +1629,13 @@ int TranslatedState::CreateNextTranslatedValue(
       }
       Simd128 value = registers->GetSimd128Register(input_reg);
       if (trace_file != nullptr) {
-        int8x16 val = value.to_i8x16();
+        Simd128::int8x16 val = value.to_i8x16();
         PrintF(trace_file,
                "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x "
                "%02x %02x %02x %02x ; %s (Simd128)",
-               val.val[0], val.val[1], val.val[2], val.val[3], val.val[4],
-               val.val[5], val.val[6], val.val[7], val.val[8], val.val[9],
-               val.val[10], val.val[11], val.val[12], val.val[13], val.val[14],
-               val.val[15], RegisterName(DoubleRegister::from_code(input_reg)));
+               val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7],
+               val[8], val[9], val[10], val[11], val[12], val[13], val[14],
+               val[15], RegisterName(DoubleRegister::from_code(input_reg)));
       }
       TranslatedValue translated_value =
           TranslatedValue::NewSimd128(this, value);
@@ -1649,8 +1649,6 @@ int TranslatedState::CreateNextTranslatedValue(
       intptr_t value = *(reinterpret_cast<intptr_t*>(fp + slot_offset));
       Address uncompressed_value = DecompressIfNeeded(value);
       if (trace_file != nullptr) {
-        // Need temporary access to in-sandbox memory for printing the object.
-        AllowSandboxAccess temporary_sandbox_access;
         PrintF(trace_file, V8PRIxPTR_FMT " ;  [fp %c %3d]  ",
                uncompressed_value, slot_offset < 0 ? '-' : '+',
                std::abs(slot_offset));
@@ -1779,14 +1777,13 @@ int TranslatedState::CreateNextTranslatedValue(
           iterator->NextOperand());
       Simd128 value = getSimd128Slot(fp, slot_offset);
       if (trace_file != nullptr) {
-        int8x16 val = value.to_i8x16();
+        Simd128::int8x16 val = value.to_i8x16();
         PrintF(trace_file,
                "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x "
                "%02x %02x %02x %02x ; (Simd128) [fp %c %d]",
-               val.val[0], val.val[1], val.val[2], val.val[3], val.val[4],
-               val.val[5], val.val[6], val.val[7], val.val[8], val.val[9],
-               val.val[10], val.val[11], val.val[12], val.val[13], val.val[14],
-               val.val[15], slot_offset < 0 ? '-' : '+', std::abs(slot_offset));
+               val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7],
+               val[8], val[9], val[10], val[11], val[12], val[13], val[14],
+               val[15], slot_offset < 0 ? '-' : '+', std::abs(slot_offset));
       }
       TranslatedValue translated_value =
           TranslatedValue::NewSimd128(this, value);
@@ -2188,11 +2185,11 @@ void TranslatedState::MaterializeFixedDoubleArray(TranslatedFrame* frame,
     CHECK_NE(TranslatedValue::kCapturedObject,
              frame->values_[*value_index].kind());
     DirectHandle<Object> value = frame->values_[*value_index].GetValue();
-    if (value.is_identical_to(isolate()->factory()->the_hole_value())) {
-      array->set_the_hole(isolate(), i);
-    } else {
-      CHECK(IsNumber(*value));
+    if (IsNumber(*value)) {
       array->set(i, Object::NumberValue(*value));
+    } else {
+      CHECK(value.is_identical_to(isolate()->factory()->the_hole_value()));
+      array->set_the_hole(isolate(), i);
     }
     (*value_index)++;
   }
@@ -2205,9 +2202,16 @@ void TranslatedState::MaterializeHeapNumber(TranslatedFrame* frame,
   CHECK_NE(TranslatedValue::kCapturedObject,
            frame->values_[*value_index].kind());
   DirectHandle<Object> value = frame->values_[*value_index].GetValue();
-  CHECK(IsNumber(*value));
-  Handle<HeapNumber> box =
-      isolate()->factory()->NewHeapNumber(Object::NumberValue(*value));
+  Handle<HeapNumber> box;
+  if (value.is_identical_to(isolate()->factory()->the_hole_value())) {
+    // See is_hole_nan conversions in maglev-code-generator.cc and
+    // turbolev-graph-builder.cc.
+    box = isolate()->factory()->NewHeapNumber(
+        std::numeric_limits<double>::quiet_NaN());
+  } else {
+    CHECK(IsNumber(*value));
+    box = isolate()->factory()->NewHeapNumber(Object::NumberValue(*value));
+  }
   (*value_index)++;
   slot->set_storage(box);
 }
@@ -2558,7 +2562,6 @@ void TranslatedState::InitializeJSObjectAt(
     uint8_t marker = object_storage->ReadField<uint8_t>(offset);
     InstanceType instance_type = map->instance_type();
     USE(instance_type);
-#ifdef V8_ENABLE_LEAPTIERING
     if (InstanceTypeChecker::IsJSFunction(instance_type) &&
         offset == JSFunction::kDispatchHandleOffset) {
       // The JSDispatchHandle will be materialized as a number, but we need
@@ -2571,7 +2574,6 @@ void TranslatedState::InitializeJSObjectAt(
           JSFunction::kDispatchHandleOffset, handle.value());
       continue;
     }
-#endif  // V8_ENABLE_LEAPTIERING
 #ifdef V8_ENABLE_SANDBOX
     if (InstanceTypeChecker::IsJSRegExp(instance_type) &&
         offset == JSRegExp::kDataOffset) {
@@ -2602,7 +2604,7 @@ void TranslatedState::InitializeJSObjectAt(
 
     CHECK_EQ(kStoreTagged, marker);
     DirectHandle<Object> field_value = slot->GetValue();
-    DCHECK_IMPLIES(!IsAnyHole(*field_value) && IsHeapNumber(*field_value),
+    DCHECK_IMPLIES(IsHeapNumber(*field_value),
                    !IsSmiDouble(Object::NumberValue(*field_value)));
     WRITE_FIELD(*object_storage, offset, *field_value);
     WRITE_BARRIER(*object_storage, offset, *field_value);
@@ -2653,7 +2655,7 @@ void TranslatedState::InitializeObjectWithTaggedFieldsAt(
     } else {
       CHECK(marker == kStoreTagged || i == 1);
       field_value = slot->GetValue();
-      DCHECK_IMPLIES(!IsAnyHole(*field_value) && IsHeapNumber(*field_value),
+      DCHECK_IMPLIES(IsHeapNumber(*field_value),
                      !IsSmiDouble(Object::NumberValue(*field_value)));
     }
     WRITE_FIELD(*object_storage, offset, *field_value);

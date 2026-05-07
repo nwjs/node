@@ -311,8 +311,6 @@ class Endpoint final : public AsyncWrap, public Packet::Listener {
   // be prevented.
   void CloseGracefully();
 
-  void Release();
-
   void PacketDone(int status) override;
 
   void EmitNewSession(const BaseObjectPtr<Session>& session);
@@ -346,7 +344,6 @@ class Endpoint final : public AsyncWrap, public Packet::Listener {
   // packets.
   // @param bool on - If true, mark the Endpoint as busy.
   JS_METHOD(MarkBusy);
-  static void FastMarkBusy(v8::Local<v8::Object> receiver, bool on);
 
   // DoCloseGracefully is the signal that endpoint should close. Any packets
   // that are already in the queue or in flight will be allowed to finish, but
@@ -360,7 +357,6 @@ class Endpoint final : public AsyncWrap, public Packet::Listener {
 
   // Ref() causes a listening Endpoint to keep the event loop active.
   JS_METHOD(Ref);
-  static void FastRef(v8::Local<v8::Object> receiver, bool on);
 
   void Receive(const uv_buf_t& buf, const SocketAddress& from);
 

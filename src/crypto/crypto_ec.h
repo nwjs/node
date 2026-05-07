@@ -80,7 +80,8 @@ struct ECDHBitsTraits final {
   static bool DeriveBits(Environment* env,
                          const ECDHBitsConfig& params,
                          ByteSource* out_,
-                         CryptoJobMode mode);
+                         CryptoJobMode mode,
+                         CryptoErrorStore* errors);
 
   static v8::MaybeLocal<v8::Value> EncodeOutput(Environment* env,
                                                 const ECDHBitsConfig& params,
@@ -114,32 +115,6 @@ struct EcKeyGenTraits final {
 
 using ECKeyPairGenJob = KeyGenJob<KeyPairGenTraits<EcKeyGenTraits>>;
 
-// There is currently no additional information that the
-// ECKeyExport needs to collect, but we need to provide
-// the base struct anyway.
-struct ECKeyExportConfig final : public MemoryRetainer {
-  SET_NO_MEMORY_INFO()
-  SET_MEMORY_INFO_NAME(ECKeyExportConfig)
-  SET_SELF_SIZE(ECKeyExportConfig)
-};
-
-struct ECKeyExportTraits final {
-  static constexpr const char* JobName = "ECKeyExportJob";
-  using AdditionalParameters = ECKeyExportConfig;
-
-  static v8::Maybe<void> AdditionalConfig(
-      const v8::FunctionCallbackInfo<v8::Value>& args,
-      unsigned int offset,
-      ECKeyExportConfig* config);
-
-  static WebCryptoKeyExportStatus DoExport(const KeyObjectData& key_data,
-                                           WebCryptoKeyFormat format,
-                                           const ECKeyExportConfig& params,
-                                           ByteSource* out);
-};
-
-using ECKeyExportJob = KeyExportJob<ECKeyExportTraits>;
-
 bool ExportJWKEcKey(Environment* env,
                     const KeyObjectData& key,
                     v8::Local<v8::Object> target);
@@ -148,10 +123,9 @@ bool ExportJWKEdKey(Environment* env,
                     const KeyObjectData& key,
                     v8::Local<v8::Object> target);
 
-KeyObjectData ImportJWKEcKey(Environment* env,
-                             v8::Local<v8::Object> jwk,
-                             const v8::FunctionCallbackInfo<v8::Value>& args,
-                             unsigned int offset);
+KeyObjectData ImportJWKEdKey(Environment* env, v8::Local<v8::Object> jwk);
+
+KeyObjectData ImportJWKEcKey(Environment* env, v8::Local<v8::Object> jwk);
 
 bool GetEcKeyDetail(Environment* env,
                     const KeyObjectData& key,

@@ -18,6 +18,7 @@
 #include "src/objects/heap-number-inl.h"
 #include "src/objects/js-array-inl.h"
 #include "src/objects/js-raw-json-inl.h"
+#include "src/objects/literal-objects-inl.h"
 #include "src/objects/lookup.h"
 #include "src/objects/objects-inl.h"
 #include "src/objects/oddball-inl.h"
@@ -1424,6 +1425,27 @@ JsonStringifier::Result JsonStringifier::SerializeJSObject(
           Cast<JSAny>(Object::GetPropertyOrElement(isolate_, object, key_name)),
           EXCEPTION);
     }
+
+    // Handle Lazy Closures
+    if (Handle<SharedFunctionInfo> shared;
+        TryCast<SharedFunctionInfo>(property, &shared)) {
+      if (Tagged<PrototypeSharedClosureInfo> closure_infos;
+          map->TryGetPrototypeSharedClosureInfo(&closure_infos)) {
+        DirectHandle<FeedbackCell> feedback_cell(
+            closure_infos->closure_feedback_cell_array()->get(
+                shared->feedback_slot()),
+            isolate_);
+        property =
+            Factory::JSFunctionBuilder{
+                isolate_, shared, handle(closure_infos->context(), isolate_)}
+                .set_feedback_cell(feedback_cell)
+                .set_allocation_type(AllocationType::kYoung)
+                .Build();
+      } else {
+        UNREACHABLE();
+      }
+    }
+
     Result result = SerializeProperty(property, comma, key_name);
     if (!comma && result == SUCCESS) comma = true;
     if (result == EXCEPTION || result == NEED_STACK) return result;
@@ -3377,7 +3399,7 @@ bool FastJsonStringifier<Char>::AppendStringSIMD(
   const SrcChar* block = chars;
   const SrcChar* end = chars + length;
   hw::FixedTag<SrcChar, 16> tag;
-  static constexpr size_t stride = hw::Lanes(tag);
+  static const size_t stride = hw::Lanes(tag);
 
   const auto mask_0x20 = hw::Set(tag, 0x20);
   const auto mask_0x22 = hw::Set(tag, 0x22);
@@ -3385,9 +3407,11 @@ bool FastJsonStringifier<Char>::AppendStringSIMD(
 
   for (; block + (stride - 1) < end; block += stride) {
     const auto input = hw::LoadU(tag, block);
-    const auto has_lower_than_0x20 = input < mask_0x20;
-    const auto has_0x22 = input == mask_0x22;
-    const auto has_0x5c = input == mask_0x5c;
+    // TODO(floitsch): use operators for the comparisons when they are available
+    // on RISC-V.
+    const auto has_lower_than_0x20 = hw::Lt(input, mask_0x20);
+    const auto has_0x22 = hw::Eq(input, mask_0x22);
+    const auto has_0x5c = hw::Eq(input, mask_0x5c);
     const auto result = hw::Or(hw::Or(has_lower_than_0x20, has_0x22), has_0x5c);
 
     // No character that needs escaping found in block.

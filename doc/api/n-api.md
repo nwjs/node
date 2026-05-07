@@ -2288,7 +2288,9 @@ object such that no properties can be set on it, and no prototype.
 
 <!-- YAML
 changes:
-  - version: v25.4.0
+  - version:
+     - v25.5.0
+     - v24.13.1
     pr-url: https://github.com/nodejs/node/pull/58879
     description: Added `napi_float16_array` for Float16Array support.
 -->
@@ -2648,7 +2650,9 @@ ECMAScript Language Specification.
 #### `node_api_create_object_with_properties`
 
 <!-- YAML
-added: v25.2.0
+added:
+  - v25.2.0
+  - v24.12.0
 -->
 
 > Stability: 1 - Experimental
@@ -2815,7 +2819,9 @@ exceeds the size of the `ArrayBuffer`, a `RangeError` exception is raised.
 added: v8.3.0
 napiVersion: 1
 changes:
-  - version: v25.4.0
+  - version:
+     - v25.5.0
+     - v24.13.1
     pr-url: https://github.com/nodejs/node/pull/60473
     description: Added support for `SharedArrayBuffer`.
 -->
@@ -3351,7 +3357,9 @@ Specification.
 added: v8.0.0
 napiVersion: 1
 changes:
-  - version: v24.9.0
+  - version:
+     - v24.9.0
+     - v22.21.0
     pr-url: https://github.com/nodejs/node/pull/59071
     description: Added support for `SharedArrayBuffer`.
 -->
@@ -4335,7 +4343,9 @@ Specification.
 ### `node_api_is_sharedarraybuffer`
 
 <!-- YAML
-added: v24.9.0
+added:
+ - v24.9.0
+ - v22.21.0
 -->
 
 > Stability: 1 - Experimental
@@ -4355,7 +4365,9 @@ This API checks if the Object passed in is a `SharedArrayBuffer`.
 ### `node_api_create_sharedarraybuffer`
 
 <!-- YAML
-added: v24.9.0
+added:
+ - v24.9.0
+ - v22.21.0
 -->
 
 > Stability: 1 - Experimental
@@ -5054,7 +5066,9 @@ of the ECMA-262 specification.
 #### `node_api_set_prototype`
 
 <!-- YAML
-added: v25.4.0
+added:
+ - v25.4.0
+ - v24.13.1
 -->
 
 > Stability: 1 - Experimental

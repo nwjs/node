@@ -28,6 +28,7 @@ class ExposedTrustedObject;
 class ObjectVisitor;
 class WritableFreeSpace;
 class WriteBarrierModeScope;
+class EarlyReadOnlyRoots;
 
 // A safe HeapObject size is a uint32_t that's guaranteed to yield in OOB within
 // the sandbox. The alias exists to force appropriate conversions at the
@@ -91,7 +92,7 @@ V8_OBJECT class HeapObjectLayout {
 
   // This is slower that GetReadOnlyRoots, but safe to call during
   // bootstrapping.
-  inline ReadOnlyRoots EarlyGetReadOnlyRoots() const;
+  inline EarlyReadOnlyRoots EarlyGetReadOnlyRoots() const;
 
   // Returns the heap object's size in bytes
   inline int Size() const;
@@ -203,11 +204,6 @@ class HeapObject : public TaggedImpl<HeapObjectReferenceType::STRONG, Address> {
   inline void set_map_safe_transition(IsolateT* isolate, Tagged<Map> value,
                                       ReleaseStoreTag);
 
-  // Compare-and-swaps map word using release store, returns true if the map
-  // word was actually swapped.
-  inline bool release_compare_and_swap_map_word_forwarded(
-      MapWord old_map_word, Tagged<HeapObject> new_target_object);
-
   // Compare-and-swaps map word using relaxed store, returns true if the map
   // word was actually swapped.
   inline bool relaxed_compare_and_swap_map_word_forwarded(
@@ -238,7 +234,7 @@ class HeapObject : public TaggedImpl<HeapObjectReferenceType::STRONG, Address> {
 
   // This is slower than GetReadOnlyRoots, but safe to call during
   // bootstrapping.
-  inline ReadOnlyRoots EarlyGetReadOnlyRoots() const;
+  inline EarlyReadOnlyRoots EarlyGetReadOnlyRoots() const;
 
   // Converts an address to a HeapObject pointer.
   static inline Tagged<HeapObject> FromAddress(Address address) {
@@ -327,9 +323,15 @@ class HeapObject : public TaggedImpl<HeapObjectReferenceType::STRONG, Address> {
   inline void InitExternalPointerField(
       size_t offset, IsolateForSandbox isolate, Address value,
       WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
+  inline void InitExternalPointerField(
+      size_t offset, IsolateForSandbox isolate, ExternalPointerTag tag,
+      Address value, WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
   template <ExternalPointerTagRange tag_range>
   inline Address ReadExternalPointerField(size_t offset,
                                           IsolateForSandbox isolate) const;
+  inline Address ReadExternalPointerField(
+      size_t offset, IsolateForSandbox isolate,
+      ExternalPointerTagRange tag_range) const;
   // Similar to `ReadExternalPointerField()` but uses the CppHeapPointerTable.
   template <CppHeapPointerTag lower_bound, CppHeapPointerTag upper_bound>
   inline Address ReadCppHeapPointerField(
@@ -341,6 +343,9 @@ class HeapObject : public TaggedImpl<HeapObjectReferenceType::STRONG, Address> {
   inline void WriteExternalPointerField(size_t offset,
                                         IsolateForSandbox isolate,
                                         Address value);
+  inline void WriteExternalPointerField(size_t offset,
+                                        IsolateForSandbox isolate,
+                                        ExternalPointerTag tag, Address value);
 
   // Set up a lazily-initialized external pointer field. If the sandbox is
   // enabled, this will set the field to the kNullExternalPointerHandle. It will
@@ -372,9 +377,6 @@ class HeapObject : public TaggedImpl<HeapObjectReferenceType::STRONG, Address> {
       ExternalPointerTag tag);
 
   inline void SetupLazilyInitializedCppHeapPointerField(size_t offset);
-  template <CppHeapPointerTag tag>
-  inline void WriteLazilyInitializedCppHeapPointerField(
-      size_t offset, IsolateForPointerCompression isolate, Address value);
   inline void WriteLazilyInitializedCppHeapPointerField(
       size_t offset, IsolateForPointerCompression isolate, Address value,
       CppHeapPointerTag tag);
@@ -385,9 +387,13 @@ class HeapObject : public TaggedImpl<HeapObjectReferenceType::STRONG, Address> {
   //
   // These are only available when the sandbox is enabled, in which case they
   // are the under-the-hood implementation of trusted pointers.
+
   inline void InitSelfIndirectPointerField(
       size_t offset, IsolateForSandbox isolate,
       TrustedPointerPublishingScope* opt_publishing_scope);
+
+  inline void InitSelfIndirectPointerFieldWithoutPublishing(
+      size_t offset, IsolateForSandbox isolate);
 #endif  // V8_ENABLE_SANDBOX
 
   // Trusted pointers.
@@ -397,69 +403,21 @@ class HeapObject : public TaggedImpl<HeapObjectReferenceType::STRONG, Address> {
   // is disabled, they are regular tagged pointers. They must always point to an
   // ExposedTrustedObject as (only) these objects can be referenced through the
   // trusted pointer table.
-  template <IndirectPointerTag tag>
-  inline auto CastExposedTrustedObjectByTag(Tagged<Object> object) const {
-    if constexpr (tag == kCodeIndirectPointerTag) {
-      return TrustedCast<Code>(object);
-    }
-    if constexpr (tag == kBytecodeArrayIndirectPointerTag) {
-      return TrustedCast<BytecodeArray>(object);
-    }
-    if constexpr (tag == kInterpreterDataIndirectPointerTag) {
-      return TrustedCast<InterpreterData>(object);
-    }
-    if constexpr (tag == kUncompiledDataIndirectPointerTag) {
-      return TrustedCast<UncompiledData>(object);
-    }
-    if constexpr (tag == kRegExpDataIndirectPointerTag) {
-      return TrustedCast<RegExpData>(object);
-    }
-#if V8_ENABLE_WEBASSEMBLY
-    if constexpr (tag == kWasmDispatchTableIndirectPointerTag ||
-                  tag == kSharedWasmDispatchTableIndirectPointerTag) {
-      return TrustedCast<WasmDispatchTable>(object);
-    }
-    if constexpr (tag == kWasmTrustedInstanceDataIndirectPointerTag ||
-                  tag == kSharedWasmTrustedInstanceDataIndirectPointerTag) {
-      return TrustedCast<WasmTrustedInstanceData>(object);
-    }
-    if constexpr (tag == kWasmInternalFunctionIndirectPointerTag) {
-      return TrustedCast<WasmInternalFunction>(object);
-    }
-    if constexpr (tag == kWasmSuspenderIndirectPointerTag) {
-      return TrustedCast<WasmSuspenderObject>(object);
-    }
-    if constexpr (tag == kWasmFunctionDataIndirectPointerTag) {
-      return TrustedCast<WasmFunctionData>(object);
-    }
-#endif  // V8_ENABLE_WEBASSEMBLY
-    UNREACHABLE();
-  }
-
-  template <IndirectPointerTag tag>
+  template <IndirectPointerTagRange tag_range>
   inline auto ReadTrustedPointerField(size_t offset,
-                                      IsolateForSandbox isolate) const {
-    // Currently, trusted pointer loads always use acquire semantics as the
-    // under-the-hood indirect pointer loads use acquire loads anyway.
-    return ReadTrustedPointerField<tag>(offset, isolate, kAcquireLoad);
-  }
+                                      IsolateForSandbox isolate) const;
 
-  template <IndirectPointerTag tag>
+  template <IndirectPointerTagRange tag_range>
   inline auto ReadTrustedPointerField(size_t offset, IsolateForSandbox isolate,
-                                      AcquireLoadTag acquire_load) const {
-    Tagged<Object> object =
-        ReadMaybeEmptyTrustedPointerField<tag>(offset, isolate, acquire_load);
-
-    return CastExposedTrustedObjectByTag<tag>(object);
-  }
+                                      AcquireLoadTag acquire_load) const;
 
   // Like ReadTrustedPointerField, but if the field is cleared, this will
   // return Smi::zero().
-  template <IndirectPointerTag tag>
+  template <IndirectPointerTagRange tag_range>
   inline Tagged<Object> ReadMaybeEmptyTrustedPointerField(
       size_t offset, IsolateForSandbox isolate, AcquireLoadTag) const;
 
-  template <IndirectPointerTag tag>
+  template <IndirectPointerTagRange tag_range>
   inline void WriteTrustedPointerField(size_t offset,
                                        Tagged<ExposedTrustedObject> value);
 
@@ -469,9 +427,9 @@ class HeapObject : public TaggedImpl<HeapObjectReferenceType::STRONG, Address> {
   // in the TrustedPointerTable which just contains nullptr). When the sandbox
   // is disabled, this will set the field to Smi::zero().
   inline bool IsTrustedPointerFieldEmpty(size_t offset) const;
-  inline bool IsTrustedPointerFieldUnpublished(size_t offset,
-                                               IndirectPointerTag tag,
-                                               IsolateForSandbox isolate) const;
+  inline bool IsTrustedPointerFieldUnpublished(
+      size_t offset, IndirectPointerTagRange tag_range,
+      IsolateForSandbox isolate) const;
   inline void ClearTrustedPointerField(size_t offest);
   inline void ClearTrustedPointerField(size_t offest, ReleaseStoreTag);
 
@@ -515,7 +473,7 @@ class HeapObject : public TaggedImpl<HeapObjectReferenceType::STRONG, Address> {
       int byte_offset, ExternalPointerTagRange tag_range) const;
   inline CppHeapPointerSlot RawCppHeapPointerField(int byte_offset) const;
   inline IndirectPointerSlot RawIndirectPointerField(
-      int byte_offset, IndirectPointerTag tag) const;
+      int byte_offset, IndirectPointerTagRange tag_range) const;
 
   // Return the write barrier mode for this. Callers of this function
   // must be able to present a reference to an DisallowGarbageCollection
@@ -659,10 +617,6 @@ IS_TYPE_FUNCTION_DECL(PropertyDictionary)
 IS_TYPE_FUNCTION_DECL(AnyHole)
 #undef IS_TYPE_FUNCTION_DECL
 
-// Predicate for IsAnyHole which can be used on any object type -- the standard
-// IsAnyHole check cannot be used for Code space objects.
-V8_INLINE bool SafeIsAnyHole(Tagged<HeapObject> obj);
-
 // Most calls to Is<Oddball> should go via the Tagged<Object> overloads, withst
 // an Isolate/LocalIsolate/ReadOnlyRoots parameter.
 #define IS_TYPE_FUNCTION_DECL(Type, ...)                                  \
@@ -689,7 +643,7 @@ STRUCT_LIST(DECL_STRUCT_PREDICATE)
 
 // Whether the object is located outside of the sandbox or in read-only
 // space. Currently only needed due to Code objects. Once they are fully
-// migrated into trusted space, this can be replaced by !InsideSandbox().
+// migrated into trusted space, this can be replaced by OutsideSandbox().
 static_assert(!kAllCodeObjectsLiveInTrustedSpace);
 V8_INLINE bool OutsideSandboxOrInReadonlySpace(Tagged<HeapObject> obj);
 

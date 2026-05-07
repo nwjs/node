@@ -128,10 +128,10 @@ ValKind V8ValueTypeToWasm(T v8_valtype)
       return ValKind::F64;
     case i::wasm::kRef:
     case i::wasm::kRefNull:
-      switch (v8_valtype.heap_representation()) {
-        case i::wasm::HeapType::kFunc:
+      switch (v8_valtype.generic_kind()) {
+        case i::wasm::GenericKind::kFunc:
           return ValKind::FUNCREF;
-        case i::wasm::HeapType::kExtern:
+        case i::wasm::GenericKind::kExtern:
           return ValKind::EXTERNREF;
         default:
           UNREACHABLE();
@@ -163,8 +163,8 @@ i::wasm::ValueType WasmValKindToV8(ValKind kind) {
 
 Name GetNameFromWireBytes(const i::wasm::WireBytesRef& ref,
                           v8::base::Vector<const uint8_t> wire_bytes) {
-  DCHECK_LE(ref.offset(), wire_bytes.length());
-  DCHECK_LE(ref.end_offset(), wire_bytes.length());
+  DCHECK_LE(ref.offset(), wire_bytes.size());
+  DCHECK_LE(ref.end_offset(), wire_bytes.size());
   if (ref.length() == 0) return Name::make();
   Name name = Name::make_uninitialized(ref.length());
   std::memcpy(name.get(), wire_bytes.begin() + ref.offset(), ref.length());
@@ -189,7 +189,8 @@ own<ExternType> GetImportExportType(const i::wasm::WasmModule* module,
                                     const i::wasm::ImportExportKindCode kind,
                                     const uint32_t index) {
   switch (kind) {
-    case i::wasm::kExternalFunction: {
+    case i::wasm::kExternalFunction:
+    case i::wasm::kExternalExactFunction: {
       return FunctionSigToFuncType(module->functions[index].sig);
     }
     case i::wasm::kExternalTable: {
@@ -1342,18 +1343,26 @@ WASM_EXPORT auto Module::deserialize(Store* store_abs,
   v8::Isolate::Scope isolate_scope(store->isolate());
   i::HandleScope handle_scope(isolate);
   const byte_t* ptr = serialized.get();
-  uint64_t binary_size = ReadLebU64(&ptr);
+  size_t binary_size = static_cast<size_t>(ReadLebU64(&ptr));
   ptrdiff_t size_size = ptr - serialized.get();
   size_t serial_size = serialized.size() - size_size - binary_size;
+  v8::base::OwnedVector<const uint8_t> wire_bytes =
+      v8::base::OwnedCopyOf(reinterpret_cast<const uint8_t*>(ptr), binary_size);
   i::DirectHandle<i::WasmModuleObject> module_obj;
   if (serial_size > 0) {
-    size_t data_size = static_cast<size_t>(binary_size);
-    i::wasm::CompileTimeImports compile_imports{};
+    // The C-API does not allow passing compile imports.
+    // We thus use an empty `CompileTimeImports` object, analogous to module
+    // creation.
+    // Note that in contrast to the JS API, this does not handle different
+    // denormals flushing modes (see base::FPU::GetFlushDenormals /
+    // `CompileTimeImport::kDisableDenormalFloats`).
+    i::wasm::CompileTimeImports compile_imports;
+    i::wasm::WasmEnabledFeatures features =
+        i::wasm::WasmEnabledFeatures::FromIsolate(isolate);
     if (!i::wasm::DeserializeNativeModule(
-             isolate,
-             {reinterpret_cast<const uint8_t*>(ptr + data_size), serial_size},
-             {reinterpret_cast<const uint8_t*>(ptr), data_size},
-             compile_imports, {})
+             isolate, features,
+             {reinterpret_cast<const uint8_t*>(ptr + binary_size), serial_size},
+             wire_bytes, compile_imports, {})
              .ToHandle(&module_obj)) {
       // We were given a serialized module, but failed to deserialize. Report
       // this as an error.
@@ -1581,7 +1590,7 @@ auto make_func(Store* store_abs, std::shared_ptr<FuncData> data) -> own<Func> {
       i::wasm::GetTypeCanonicalizer()->LookupFunctionSignature(sig_index);
   i::DirectHandle<i::WasmCapiFunction> function = i::WasmCapiFunction::New(
       isolate, reinterpret_cast<i::Address>(&FuncData::v8_callback),
-      embedder_data, sig_index, sig);
+      embedder_data, sig);
   i::TrustedCast<i::WasmImportData>(
       function->shared()->wasm_capi_function_data()->internal()->implicit_arg())
       ->set_callable(*function);
@@ -2017,7 +2026,7 @@ WASM_EXPORT auto Global::make(Store* store_abs, const GlobalType* type,
 
 WASM_EXPORT auto Global::type() const -> own<GlobalType> {
   i::DirectHandle<i::WasmGlobalObject> v8_global = impl(this)->v8_object();
-  ValKind kind = V8ValueTypeToWasm(v8_global->type());
+  ValKind kind = V8ValueTypeToWasm(v8_global->unsafe_type());
   Mutability mutability =
       v8_global->is_mutable() ? Mutability::VAR : Mutability::CONST;
   return GlobalType::make(ValType::make(kind), mutability);
@@ -2028,7 +2037,7 @@ WASM_EXPORT auto Global::get() const -> Val {
   v8::Isolate::Scope isolate_scope(reinterpret_cast<v8::Isolate*>(isolate));
   PtrComprCageAccessScope ptr_compr_cage_access_scope(isolate);
   i::DirectHandle<i::WasmGlobalObject> v8_global = impl(this)->v8_object();
-  switch (v8_global->type().kind()) {
+  switch (v8_global->unsafe_type().kind()) {
     case i::wasm::kI32:
       return Val(v8_global->GetI32());
     case i::wasm::kI64:
@@ -2085,9 +2094,10 @@ WASM_EXPORT void Global::set(const Val& val) {
       i::Isolate* isolate = impl(this)->store()->i_isolate();
       auto external = WasmRefToV8(impl(this)->store()->i_isolate(), val.ref());
       const char* error_message;
-      auto internal = i::wasm::JSToWasmObject(isolate, nullptr, external,
-                                              v8_global->type(), &error_message)
-                          .ToHandleChecked();
+      auto internal =
+          i::wasm::JSToWasmObject(isolate, nullptr, external,
+                                  v8_global->unsafe_type(), &error_message)
+              .ToHandleChecked();
       v8_global->SetRef(internal);
       return;
     }
@@ -2168,11 +2178,11 @@ WASM_EXPORT auto Table::type() const -> own<TableType> {
   uint32_t max = static_cast<uint32_t>(std::min<uint64_t>(
       i::kMaxUInt32, table->maximum_length_u64().value_or(i::kMaxUInt32)));
   ValKind kind;
-  switch (table->unsafe_type().heap_representation()) {
-    case i::wasm::HeapType::kFunc:
+  switch (table->unsafe_type().raw_bit_field()) {
+    case i::wasm::kWasmFuncRef.raw_bit_field():
       kind = ValKind::FUNCREF;
       break;
-    case i::wasm::HeapType::kExtern:
+    case i::wasm::kWasmExternRef.raw_bit_field():
       kind = ValKind::EXTERNREF;
       break;
     default:
@@ -2294,7 +2304,7 @@ WASM_EXPORT auto Memory::make(Store* store_abs, const MemoryType* type)
 WASM_EXPORT auto Memory::type() const -> own<MemoryType> {
   PtrComprCageAccessScope ptr_compr_cage_access_scope(impl(this)->isolate());
   i::DirectHandle<i::WasmMemoryObject> memory = impl(this)->v8_object();
-  uint32_t min = static_cast<uint32_t>(memory->array_buffer()->byte_length() /
+  uint32_t min = static_cast<uint32_t>(memory->backing_store()->byte_length() /
                                        i::wasm::kWasmPageSize);
   uint32_t max =
       memory->has_maximum_pages() ? memory->maximum_pages() : 0xFFFFFFFFu;
@@ -2306,14 +2316,14 @@ WASM_EXPORT auto Memory::data() const -> byte_t* {
   v8::Isolate::Scope isolate_scope(reinterpret_cast<v8::Isolate*>(isolate));
   PtrComprCageAccessScope ptr_compr_cage_access_scope(isolate);
   return reinterpret_cast<byte_t*>(
-      impl(this)->v8_object()->array_buffer()->backing_store());
+      impl(this)->v8_object()->backing_store()->buffer_start());
 }
 
 WASM_EXPORT auto Memory::data_size() const -> size_t {
   i::Isolate* isolate = impl(this)->isolate();
   v8::Isolate::Scope isolate_scope(reinterpret_cast<v8::Isolate*>(isolate));
   PtrComprCageAccessScope ptr_compr_cage_access_scope(isolate);
-  return impl(this)->v8_object()->array_buffer()->byte_length();
+  return impl(this)->v8_object()->backing_store()->byte_length();
 }
 
 WASM_EXPORT auto Memory::size() const -> pages_t {
@@ -2321,7 +2331,7 @@ WASM_EXPORT auto Memory::size() const -> pages_t {
   v8::Isolate::Scope isolate_scope(reinterpret_cast<v8::Isolate*>(isolate));
   PtrComprCageAccessScope ptr_compr_cage_access_scope(isolate);
   return static_cast<pages_t>(
-      impl(this)->v8_object()->array_buffer()->byte_length() /
+      impl(this)->v8_object()->backing_store()->byte_length() /
       i::wasm::kWasmPageSize);
 }
 

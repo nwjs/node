@@ -14,7 +14,9 @@
 #include "src/compiler/turboshaft/representations.h"
 #include "src/deoptimizer/deoptimize-reason.h"
 #include "src/objects/contexts.h"
+#include "src/objects/descriptor-array-inl.h"
 #include "src/objects/instance-type-inl.h"
+#include "src/objects/instance-type.h"
 
 namespace v8::internal::compiler::turboshaft {
 
@@ -45,17 +47,10 @@ class TurbolevEarlyLoweringReducer : public Next {
 
     if (first_instance_type == last_instance_type) {
 #if V8_STATIC_ROOTS_BOOL
-      if (InstanceTypeChecker::UniqueMapOfInstanceType(first_instance_type)) {
-        std::optional<RootIndex> expected_index =
-            InstanceTypeChecker::UniqueMapOfInstanceType(first_instance_type);
-        CHECK(expected_index.has_value());
-        Handle<HeapObject> expected_map =
-            Cast<HeapObject>(isolate_->root_handle(expected_index.value()));
-        __ DeoptimizeIfNot(__ TaggedEqual(map, __ HeapConstant(expected_map)),
-                           frame_state, DeoptimizeReason::kWrongInstanceType,
-                           feedback);
-        return;
-      }
+      // If this DCHECK fails, then we could special-case for this and just do a
+      // single map compare rather than loading the instance type.
+      DCHECK(
+          !InstanceTypeChecker::UniqueMapOfInstanceType(first_instance_type));
 #endif  // V8_STATIC_ROOTS_BOOL
       V<Word32> instance_type = __ LoadInstanceTypeField(map);
       __ DeoptimizeIfNot(__ Word32Equal(instance_type, first_instance_type),
@@ -166,8 +161,8 @@ class TurbolevEarlyLoweringReducer : public Next {
 
     BIND(do_throw);
     {
-      __ CallRuntime_ThrowConstructorReturnedNonObject(
-          isolate_, frame_state, native_context, lazy_deopt_on_throw);
+      __ template CallRuntime<runtime::ThrowConstructorReturnedNonObject>(
+          frame_state, native_context, {}, lazy_deopt_on_throw);
       // ThrowConstructorReturnedNonObject should not return.
       __ Unreachable();
     }
@@ -224,9 +219,9 @@ class TurbolevEarlyLoweringReducer : public Next {
         if (is_simple) {
           __ StoreField(object, AccessBuilder::ForMap(), target_map);
         } else {
-          __ CallRuntime_TransitionElementsKind(
-              isolate_, __ NoContextConstant(), V<HeapObject>::Cast(object),
-              target_map);
+          __ template CallRuntime<runtime::TransitionElementsKind>(
+              __ NoContextConstant(), {.object = V<HeapObject>::Cast(object),
+                                       .target_map = target_map});
         }
         GOTO(end, target_map);
       }
@@ -282,9 +277,10 @@ class TurbolevEarlyLoweringReducer : public Next {
         GOTO(call_runtime);
 
         BIND(call_runtime);
-        GOTO(done, __ CallRuntime_HasInPrototypeChain(
-                       isolate_, frame_state, native_context,
-                       lazy_deopt_on_throw, object, target_proto));
+        GOTO(done, __ template CallRuntime<runtime::HasInPrototypeChain>(
+                       frame_state, native_context,
+                       {.object = object, .prototype = target_proto},
+                       lazy_deopt_on_throw));
       }
       GOTO(object_is_direct);
 
@@ -311,8 +307,9 @@ class TurbolevEarlyLoweringReducer : public Next {
         __ template LoadField<Word32>(map, AccessBuilder::ForMapBitField3());
     IF (UNLIKELY(__ Word32BitwiseAnd(bitfield3,
                                      Map::Bits3::IsDeprecatedBit::kMask))) {
-      V<Object> object_or_smi = __ CallRuntime_TryMigrateInstance(
-          isolate_, __ NoContextConstant(), object);
+      V<Object> object_or_smi =
+          __ template CallRuntime<runtime::TryMigrateInstance>(
+              __ NoContextConstant(), {.heap_object = object});
       __ DeoptimizeIf(__ ObjectIsSmi(object_or_smi), frame_state,
                       DeoptimizeReason::kInstanceMigrationFailed, feedback);
       // Reload the map since TryMigrateInstance might have changed it.
@@ -323,8 +320,32 @@ class TurbolevEarlyLoweringReducer : public Next {
   }
 
   V<PropertyArray> ExtendPropertiesBackingStore(
-      V<PropertyArray> old_property_array, V<JSObject> object, int old_length,
+      V<PropertyArray> old_property_array, V<JSObject> object,
+      const compiler::MapRef& old_map, int old_length,
       V<FrameState> frame_state, const FeedbackSource& feedback) {
+    int in_object_length = old_map.GetInObjectProperties();
+
+    // Find the descriptor index corresponding to the first out-of-object
+    // property.
+    DescriptorArrayRef descs = old_map.instance_descriptors(broker_);
+    InternalIndex first_out_of_object_descriptor(in_object_length);
+    InternalIndex number_of_descriptors(
+        descs.object()->number_of_descriptors());
+    for (InternalIndex i(in_object_length); i < number_of_descriptors; ++i) {
+      PropertyDetails details = descs.GetPropertyDetails(i);
+      // Skip over non-field properties.
+      if (details.location() != PropertyLocation::kField) {
+        continue;
+      }
+      // Skip over in-object fields.
+      // TODO(leszeks): We could make this smarter, like a binary search.
+      if (details.field_index() < in_object_length) {
+        continue;
+      }
+      first_out_of_object_descriptor = i;
+      break;
+    }
+
     // Allocate new PropertyArray.
     int new_length = old_length + JSObject::kFieldsAdded;
     Uninitialized<PropertyArray> new_property_array =
@@ -335,18 +356,34 @@ class TurbolevEarlyLoweringReducer : public Next {
                        __ HeapConstant(factory_->property_array_map()));
 
     // Copy existing properties over.
-    for (int i = 0; i < old_length; i++) {
+    InternalIndex descriptor = first_out_of_object_descriptor;
+    for (int i = 0; i < old_length; ++i, ++descriptor) {
+      PropertyDetails details = descs.GetPropertyDetails(descriptor);
+      while (details.location() != PropertyLocation::kField) {
+        ++descriptor;
+        details = descs.GetPropertyDetails(descriptor);
+      }
+      DCHECK_EQ(i, details.field_index() - in_object_length);
+
+      Representation repr = details.representation();
+      MapRef field_owner_map = old_map.FindFieldOwner(broker_, descriptor);
+      broker_->dependencies()->DependOnFieldRepresentation(
+          old_map, field_owner_map, descriptor, repr);
+
       V<Object> old_value = __ template LoadField<Object>(
-          old_property_array, AccessBuilder::ForPropertyArraySlot(i));
+          old_property_array,
+          AccessBuilder::ForPropertyArraySlot(i, repr, true));
       __ InitializeField(new_property_array,
-                         AccessBuilder::ForPropertyArraySlot(i), old_value);
+                         AccessBuilder::ForPropertyArraySlot(i, repr, true),
+                         old_value);
     }
 
     // Initialize new properties to undefined.
     V<Undefined> undefined = __ HeapConstant(factory_->undefined_value());
     for (int i = 0; i < JSObject::kFieldsAdded; ++i) {
       __ InitializeField(new_property_array,
-                         AccessBuilder::ForPropertyArraySlot(old_length + i),
+                         AccessBuilder::ForPropertyArraySlot(
+                             old_length + i, Representation::Tagged(), true),
                          undefined);
     }
 
@@ -413,6 +450,34 @@ class TurbolevEarlyLoweringReducer : public Next {
              MemoryRepresentation::AnyTagged(),
              WriteBarrierKind::kFullWriteBarrier,
              JSGeneratorObject::kContextOffset);
+  }
+
+  V<Boolean> ObjectIsArray(V<Object> value, V<FrameState> frame_state,
+                           V<NativeContext> native_context,
+                           LazyDeoptOnThrow lazy_deopt_on_throw) {
+    Label<Boolean> done(this);
+
+    V<Boolean> true_bool = __ HeapConstant(factory_->true_value());
+    V<Boolean> false_bool = __ HeapConstant(factory_->false_value());
+
+    GOTO_IF(__ ObjectIsSmi(value), done, false_bool);
+
+    V<Map> map = __ LoadMapField(value);
+    V<Word32> instance_type = __ LoadInstanceTypeField(map);
+
+    // Check if {value} is a JSArray
+    GOTO_IF(__ Word32Equal(instance_type, JS_ARRAY_TYPE), done, true_bool);
+
+    // Check if {value} is not a JSProxy
+    GOTO_IF_NOT(__ Word32Equal(instance_type, JS_PROXY_TYPE), done, false_bool);
+
+    // {value} is a JSProxy, let the %ArrayIsArray runtime function dea with it.
+    GOTO(done, __ template CallRuntime<runtime::ArrayIsArray>(
+                   frame_state, native_context, {.input = value},
+                   lazy_deopt_on_throw));
+
+    BIND(done, result);
+    return result;
   }
 
  private:

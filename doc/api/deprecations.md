@@ -792,7 +792,9 @@ The [`domain`][] module is deprecated and should not be used.
 
 <!-- YAML
 changes:
-  - version: v25.4.0
+  - version:
+     - v25.4.0
+     - v24.14.0
     pr-url: https://github.com/nodejs/node/pull/60214
     description: Deprecation revoked.
   - version:
@@ -1628,6 +1630,9 @@ instead.
 
 <!-- YAML
 changes:
+  - version: v26.0.0
+    pr-url: https://github.com/nodejs/node/pull/60635
+    description: End-of-Life.
   - version: v25.0.0
     pr-url: https://github.com/nodejs/node/pull/59060
     description: Runtime deprecation.
@@ -1636,7 +1641,7 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 The `node:http` module `ServerResponse.prototype.writeHeader()` API is
 deprecated. Please use `ServerResponse.prototype.writeHead()` instead.
@@ -2836,12 +2841,15 @@ This property is a reference to the instance itself.
 
 <!-- YAML
 changes:
+  - version: v26.0.0
+    pr-url: https://github.com/nodejs/node/pull/60657
+    description: End-of-Life.
   - version: v12.0.0
     pr-url: https://github.com/nodejs/node/pull/26245
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 The `node:_stream_wrap` module is deprecated.
 
@@ -4025,6 +4033,9 @@ Please use the [`crypto.createHmac()`][] method to create Hmac instances.
 
 <!-- YAML
 changes:
+  - version: v26.0.0
+    pr-url: https://github.com/nodejs/node/pull/61084
+    description: End-of-Life.
   - version: v23.0.0
     pr-url: https://github.com/nodejs/node/pull/52552
     description: Runtime deprecation.
@@ -4033,15 +4044,15 @@ changes:
     description: Documentation-only deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
-Applications that intend to use authentication tags that are shorter than the
-default authentication tag length must set the `authTagLength` option of the
+For ciphers in GCM mode, the [`decipher.setAuthTag()`][] function used to accept
+authentication tags of any valid length (see also [DEP0090](#DEP0090)). This
+exception has been removed to better align with recommendations per
+[NIST SP 800-38D][], and applications that intend to use authentication tags
+that are shorter than the default authentication tag length (i.e., shorter than
+16 bytes for AES-GCM) must explicitly set the `authTagLength` option of the
 [`crypto.createDecipheriv()`][] function to the appropriate length.
-
-For ciphers in GCM mode, the [`decipher.setAuthTag()`][] function accepts
-authentication tags of any valid length (see [DEP0090](#DEP0090)). This behavior
-is deprecated to better align with recommendations per [NIST SP 800-38D][].
 
 ### DEP0183: OpenSSL engine-based APIs
 
@@ -4216,6 +4227,7 @@ changes:
   - version:
       - v24.2.0
       - v22.17.0
+      - v20.19.6
     pr-url: https://github.com/nodejs/node/pull/57643
     description: Runtime deprecation.
 -->
@@ -4229,14 +4241,18 @@ an internal nodejs implementation rather than a public facing API, use `node:tls
 
 <!-- YAML
 changes:
+  - version: v26.0.0
+    pr-url: https://github.com/nodejs/node/pull/60657
+    description: End-of-Life.
   - version:
       - v24.2.0
       - v22.17.0
+      - v20.19.6
     pr-url: https://github.com/nodejs/node/pull/58337
     description: Runtime deprecation.
 -->
 
-Type: Runtime
+Type: End-of-Life
 
 The `node:_stream_duplex`, `node:_stream_passthrough`, `node:_stream_readable`, `node:_stream_transform`,
 `node:_stream_wrap` and `node:_stream_writable` modules are deprecated as they should be considered
@@ -4252,6 +4268,7 @@ changes:
   - version:
       - v24.2.0
       - v22.17.0
+      - v20.19.6
     pr-url: https://github.com/nodejs/node/pull/58313
     description: Documentation-only deprecation.
 -->
@@ -4414,12 +4431,15 @@ import { opendir } from 'node:fs/promises';
 
 <!-- YAML
 changes:
+  - version: v26.0.0
+    pr-url: https://github.com/nodejs/node/pull/62173
+    description: Runtime deprecation.
   - version: v25.7.0
     pr-url: https://github.com/nodejs/node/pull/61632
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 Passing the `type` option to [`Duplex.toWeb()`][] is deprecated. To specify the
 type of the readable half of the constructed readable-writable pair, use the
@@ -4465,12 +4485,15 @@ const server = http2.createSecureServer({
 
 <!-- YAML
 changes:
-  - version: v25.9.0
+  - version: v26.0.0
+    pr-url: https://github.com/nodejs/node/pull/62453
+    description: Runtime deprecation.
+  - version: v26.0.0
     pr-url: https://github.com/nodejs/node/pull/62321
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 Passing a [`CryptoKey`][] to `node:crypto` functions is deprecated and
 will throw an error in a future version. This includes
@@ -4487,12 +4510,15 @@ will throw an error in a future version. This includes
 
 <!-- YAML
 changes:
-  - version: v25.9.0
+  - version: v26.0.0
+    pr-url: https://github.com/nodejs/node/pull/62453
+    description: Runtime deprecation.
+  - version: v26.0.0
     pr-url: https://github.com/nodejs/node/pull/62321
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 Passing a non-extractable [`CryptoKey`][] to [`KeyObject.from()`][] is
 deprecated and will throw an error in a future version.
@@ -4501,12 +4527,15 @@ deprecated and will throw an error in a future version.
 
 <!-- YAML
 changes:
-  - version: v25.9.0
+  - version: v26.0.0
+    pr-url: https://github.com/nodejs/node/pull/62401
+    description: Runtime deprecation.
+  - version: v26.0.0
     pr-url: https://github.com/nodejs/node/pull/62395
     description: Documentation-only deprecation.
 -->
 
-Type: Documentation-only
+Type: Runtime
 
 [`module.register()`][] is deprecated. Use [`module.registerHooks()`][]
 instead.

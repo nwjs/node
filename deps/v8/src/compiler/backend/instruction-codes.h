@@ -109,6 +109,9 @@ inline RecordWriteMode WriteBarrierKindToRecordWriteMode(
   V(ArchStoreWithWriteBarrier)                             \
   V(ArchAtomicStoreWithWriteBarrier)                       \
   V(ArchStoreIndirectWithWriteBarrier)                     \
+  V(ArchStoreSkippedWriteBarrier)                          \
+  V(ArchAtomicStoreSkippedWriteBarrier)                    \
+  V(ArchStoreIndirectSkippedWriteBarrier)                  \
   V(AtomicLoadInt8)                                        \
   V(AtomicLoadUint8)                                       \
   V(AtomicLoadInt16)                                       \
@@ -134,7 +137,6 @@ inline RecordWriteMode WriteBarrierKindToRecordWriteMode(
   V(ArchCallJSFunction)                                                    \
   IF_WASM(V, ArchCallWasmFunction)                                         \
   IF_WASM(V, ArchCallWasmFunctionIndirect)                                 \
-  IF_WASM(V, ArchResumeWasmContinuation)                                   \
   V(ArchCallCFunction)                                                     \
   V(ArchCallBuiltinPointer)                                                \
   /* Update IsCallWithDescriptorFlags if further Call opcodes are added */ \
@@ -150,6 +152,7 @@ inline RecordWriteMode WriteBarrierKindToRecordWriteMode(
   V(ArchPause)                                                             \
   V(ArchAbortCSADcheck)                                                    \
   V(ArchDebugBreak)                                                        \
+  IF_HARDWARE_SANDBOX(V, ArchSwitchSandboxMode)                            \
   V(ArchComment)                                                           \
   V(ArchDeoptimize)                                                        \
   V(ArchRet)                                                               \
@@ -460,7 +463,7 @@ using BranchHintField = StackCheckField::Next<bool, 1>;
 // back fixes that add new opcodes.
 // It is OK to temporarily reduce the required slack if we have a tracking bug
 // to reduce the number of used opcodes again.
-static_assert(ArchOpcodeField::kMax - kLastArchOpcode >= 16,
+static_assert(ArchOpcodeField::kMax - kLastArchOpcode >= 15,
               "We are running close to the number of available opcodes.");
 
 }  // namespace compiler

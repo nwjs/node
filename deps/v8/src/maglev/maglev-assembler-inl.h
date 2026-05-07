@@ -30,7 +30,9 @@
 #elif V8_TARGET_ARCH_S390X
 #include "src/maglev/s390/maglev-assembler-s390-inl.h"
 #elif V8_TARGET_ARCH_PPC64
-#include "src/maglev/ppc64/maglev-assembler-ppc64-inl.h"
+#include "src/maglev/ppc/maglev-assembler-ppc-inl.h"
+#elif V8_TARGET_ARCH_LOONG64
+#include "src/maglev/loong64/maglev-assembler-loong64-inl.h"
 #else
 #error "Maglev does not supported this architecture."
 #endif
@@ -313,7 +315,7 @@ inline void MaglevAssembler::StoreContextCellSmiValue(Register cell,
                                  value);
 }
 
-#if !defined(V8_TARGET_ARCH_RISCV64)
+#if !defined(V8_TARGET_ARCH_RISCV64) && !defined(V8_TARGET_ARCH_LOONG64)
 
 inline void MaglevAssembler::CompareInstanceTypeAndJumpIf(
     Register map, InstanceType type, Condition cond, Label* target,
@@ -763,10 +765,32 @@ void MoveArgumentsForBuiltin(MaglevAssembler* masm, Args&&... args) {
 
 }  // namespace detail
 
+inline void MaglevAssembler::CallJSBuiltin(Builtin builtin,
+                                           uint16_t parameter_count) {
+  // Non-JS builtins must be called via CallBuiltin().
+  DCHECK(Builtins::HasJSLinkage(builtin));
+
+  // This SBXCHECK is a defense-in-depth measure to ensure that we always
+  // generate valid calls here (with matching signatures).
+  SBXCHECK(Builtins::IsCompatibleJSBuiltin(builtin, parameter_count));
+
+  CallBuiltinImpl(builtin);
+}
+
 inline void MaglevAssembler::CallBuiltin(Builtin builtin) {
+  // JS builtins must be called via CallJSBuiltin().
+  DCHECK(!Builtins::HasJSLinkage(builtin));
+  CallBuiltinImpl(builtin);
+}
+
+inline void MaglevAssembler::CallBuiltinImpl(Builtin builtin) {
   // Special case allowing calls to DoubleToI, which takes care to preserve all
   // registers and therefore doesn't require special spill handling.
-  DCHECK(allow_call() || builtin == Builtin::kDoubleToI);
+  DCHECK(allow_call() || builtin == Builtin::kDoubleToI
+#ifdef V8_DUMPLING
+         || builtin == Builtin::kDumpFrame
+#endif  // V8_DUMPLING
+  );
 
   // Checking that the allow_allocate effect is correct.
   // TODO(dmercadier): also check this on Bazel (currently disabled by the
@@ -774,8 +798,11 @@ inline void MaglevAssembler::CallBuiltin(Builtin builtin) {
   // builtins-effects.cc in the final v8 binary.
 #ifndef GOOGLE3
   DCHECK_IMPLIES(!allow_allocate(), builtin == Builtin::kDoubleToI ||
+#ifdef V8_DUMPLING
+                                        builtin == Builtin::kDumpFrame ||
+#endif  // V8_DUMPLING
                                         !BuiltinCanAllocate(builtin));
-#endif
+#endif  // GOOGLE3
 
   // Temporaries have to be reset before calling CallBuiltin, in case it uses
   // temporaries that alias register parameters.
@@ -1146,22 +1173,16 @@ inline void MaglevAssembler::AssertElidedWriteBarrier(
   Label* deferred_write_barrier_check = MakeDeferredCode(
       [](MaglevAssembler* masm, ZoneLabelRef ok, Register object,
          Register value, RegisterSnapshot snapshot) {
-#if DEBUG
-        masm->set_allow_call(true);
-#endif  // DEBUG
-        {
-          SaveRegisterStateForCall save_register_state(masm, snapshot);
 #ifdef V8_COMPRESS_POINTERS
-          masm->DecompressTagged(object, object);
-          masm->DecompressTagged(value, value);
+        masm->DecompressTagged(value, value);
 #endif
-          masm->Push(object, value);
-          masm->Move(kContextRegister, masm->native_context().object());
-          masm->CallRuntime(Runtime::kCheckNoWriteBarrierNeeded, 2);
+        {
+          TemporaryRegisterScope temps(masm);
+          Register scratch = temps.AcquireScratch();
+          masm->PreCheckSkippedWriteBarrier(object, value, scratch, *ok);
         }
-#if DEBUG
-        masm->set_allow_call(false);
-#endif  // DEBUG
+        masm->CallVerifySkippedWriteBarrierStubSaveRegisters(
+            object, value, SaveFPRegsMode::kSave);
         masm->Jump(*ok);
       },
       ok, object, value, snapshot);

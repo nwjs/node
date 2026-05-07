@@ -92,13 +92,10 @@ TEST_MAP = {
 }
 
 DEFAULT_FLAGS = {
-  'standard_runner': [
-    '--testing-d8-test-runner',
-  ],
+  'standard_runner': [],
   'num_fuzzer': [
     '--fuzzing',
     '--exit-on-contradictory-flags',
-    '--testing-d8-test-runner',
     '--no-fail',
   ],
 }
@@ -612,7 +609,10 @@ class BaseTestRunner(object):
         not self.build_config.simd_mips):
       return True
 
-    if self.build_config.arch == 'loong64':
+    # LoongArch64 simulator or hosts without LSX do not support Simd.
+    if (self.build_config.arch == 'loong64' and
+        (self.build_config.simulator_run or
+         not utils.IsLoongArchLSXSupported())):
       return True
 
     # S390 hosts without VEF1 do not support Simd.

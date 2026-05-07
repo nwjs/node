@@ -49,6 +49,9 @@
   [0.1, "--precise-object-pinning"],
   [0.1, "--ephemeron-fixpoint-iterations=0"],
   [0.25, "--experimental-wasm-revectorize"],
-  [0.5, "--additive-safe-int-feedback"],
-  [0.1, "--hashes-collide"]
+  [0.1, "--no-additive-safe-int-feedback"],
+  [0.1, "--hashes-collide"],
+  [0.1, "--proto-assign-seq-opt"],
+  [0.5, "--proto-assign-seq-opt --proto-assign-seq-opt-count=1"],
+  [0.1, "--scavenger-chaos-mode"]
 ]

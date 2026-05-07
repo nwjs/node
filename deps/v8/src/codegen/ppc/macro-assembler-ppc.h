@@ -191,6 +191,10 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
 
   void SubS64(Register dst, Register src, const Operand& value,
               Register scratch = r0, OEBit s = LeaveOE, RCBit r = LeaveRC);
+  void SubS64(Register dst, Register src, int32_t imm, Register scratch = r0,
+              OEBit s = LeaveOE, RCBit r = LeaveRC) {
+    SubS64(dst, src, Operand(imm), scratch, s, r);
+  }
   void SubS64(Register dst, Register src, Register value, OEBit s = LeaveOE,
               RCBit r = LeaveRC);
   void AddS32(Register dst, Register src, const Operand& value,
@@ -266,10 +270,8 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
 
   void CountLeadingZerosU32(Register dst, Register src, RCBit r = LeaveRC);
   void CountLeadingZerosU64(Register dst, Register src, RCBit r = LeaveRC);
-  void CountTrailingZerosU32(Register dst, Register src, Register scratch1 = ip,
-                             Register scratch2 = r0, RCBit r = LeaveRC);
-  void CountTrailingZerosU64(Register dst, Register src, Register scratch1 = ip,
-                             Register scratch2 = r0, RCBit r = LeaveRC);
+  void CountTrailingZerosU32(Register dst, Register src, RCBit r = LeaveRC);
+  void CountTrailingZerosU64(Register dst, Register src, RCBit r = LeaveRC);
 
   void ClearByteU64(Register dst, int byte_idx);
   void ReverseBitsU64(Register dst, Register src, Register scratch1,
@@ -556,6 +558,11 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
       Register object, Register slot_address, SaveFPRegsMode fp_mode,
       StubCallMode mode = StubCallMode::kCallBuiltinPointer);
 
+  void CallVerifySkippedWriteBarrierStubSaveRegisters(Register object,
+                                                      Register value,
+                                                      SaveFPRegsMode fp_mode);
+  void CallVerifySkippedWriteBarrierStub(Register object, Register value);
+
   void MultiPush(RegList regs, Register location = sp);
   void MultiPop(RegList regs, Register location = sp);
 
@@ -697,6 +704,11 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   void LoadRootRelative(Register destination, int32_t offset) final;
   void StoreRootRelative(int32_t offset, Register value) final;
 
+  MemOperand AsMemOperand(IsolateFieldId id) {
+    DCHECK(root_array_available());
+    return MemOperand(kRootRegister, IsolateData::GetOffset(id));
+  }
+
   // Operand pointing to an external reference.
   // May emit code to set up the scratch register. The operand is
   // only guaranteed to be correct as long as the scratch register
@@ -731,25 +743,20 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   void LoadEntryFromBuiltin(Builtin builtin, Register destination);
   MemOperand EntryFromBuiltinAsOperand(Builtin builtin);
 
-#ifdef V8_ENABLE_LEAPTIERING
   void LoadEntrypointFromJSDispatchTable(Register destination,
                                          Register dispatch_handle,
                                          Register scratch);
-#endif  // V8_ENABLE_LEAPTIERING
 
   // Load the code entry point from the Code object.
-  void LoadCodeInstructionStart(
-      Register destination, Register code_object,
-      CodeEntrypointTag tag = kDefaultCodeEntrypointTag);
+  void LoadCodeInstructionStart(Register destination, Register code_object,
+                                CodeEntrypointTag tag = kInvalidEntrypointTag);
   void CallCodeObject(Register code_object);
   void JumpCodeObject(Register code_object,
                       JumpMode jump_mode = JumpMode::kJump);
 
   void CallBuiltinByIndex(Register builtin_index, Register target);
 
-  // TODO(olivf, 42204201) Rename this to AssertNotDeoptimized once
-  // non-leaptiering is removed from the codebase.
-  void BailoutIfDeoptimized(Register scratch);
+  void AssertNotDeoptimized(Register scratch);
   void CallForDeoptimization(Builtin target, int deopt_id, Label* exit,
                              DeoptimizeKind kind, Label* ret,
                              Label* jump_deoptimization_entry_label);
@@ -773,6 +780,9 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   }
   void CheckPageFlag(Register object, Register scratch, int mask, Condition cc,
                      Label* condition_met);
+
+  void PreCheckSkippedWriteBarrier(Register object, Register value,
+                                   Register scratch, Label* ok);
 
   // Move values between integer and floating point registers.
   void MovIntToDouble(DoubleRegister dst, Register src, Register scratch);
@@ -938,6 +948,7 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
 
   void JumpIfEqual(Register x, int32_t y, Label* dest);
   void JumpIfLessThan(Register x, int32_t y, Label* dest);
+  void JumpIfUnsignedLessThan(Register x, int32_t y, Label* dest);
 
   // Caution: if {reg} is a 32-bit negative int, it should be sign-extended to
   // 64-bit before calling this function.
@@ -973,11 +984,7 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   // Usage: call the appropriate arithmetic function and then call one of the
   // flow control functions with the corresponding label.
   void MoveToCrFromXer(CRegister cr) {
-    if (CpuFeatures::IsSupported(PPC_9_PLUS)) {
       mcrxrx(cr);
-    } else {
-      mcrxr(cr);
-    }
   }
 
   // Compute dst = left + right, setting condition codes. dst may be same as
@@ -1020,10 +1027,8 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   void CallJSFunction(Register function_object, uint16_t argument_count);
   void JumpJSFunction(Register function_object, Register scratch,
                       JumpMode jump_mode = JumpMode::kJump);
-#ifdef V8_ENABLE_LEAPTIERING
   void CallJSDispatchEntry(JSDispatchHandle dispatch_handle,
                            uint16_t argument_count);
-#endif
 #ifdef V8_ENABLE_WEBASSEMBLY
   void ResolveWasmCodePointer(Register target);
   void CallWasmCodePointer(Register target,
@@ -1539,6 +1544,8 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   // ---------------------------------------------------------------------------
   // GC Support
 
+  void MaybeJumpIfReadOnlyOrSmallSmi(Register, Label*) {}
+
   // Notify the garbage collector that we wrote a pointer into an object.
   // |object| is the object being stored into, |value| is the object being
   // stored.  value and scratch registers are clobbered by the operation.
@@ -1723,18 +1730,6 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
                             Register scratch) NOOP_UNLESS_DEBUG_CODE;
   // TODO(olivf): Rename to GenerateTailCallToUpdatedFunction.
   void GenerateTailCallToReturnedCode(Runtime::FunctionId function_id);
-#ifndef V8_ENABLE_LEAPTIERING
-  void ReplaceClosureCodeWithOptimizedCode(Register optimized_code,
-                                           Register closure, Register scratch1,
-                                           Register slot_address);
-  Condition LoadFeedbackVectorFlagsAndCheckIfNeedsProcessing(
-      Register flags, Register feedback_vector, CodeKind current_code_kind);
-  void LoadFeedbackVectorFlagsAndJumpIfNeedsProcessing(
-      Register flags, Register feedback_vector, CodeKind current_code_kind,
-      Label* flags_need_processing);
-  void OptimizeCodeOrTailCallOptimizedCodeSlot(Register flags,
-                                               Register feedback_vector);
-#endif  // V8_ENABLE_LEAPTIERING
 
   // ---------------------------------------------------------------------------
   // Runtime calls
@@ -1905,7 +1900,8 @@ void CallApiFunctionAndReturn(MacroAssembler* masm, bool with_profiling,
                               ExternalReference thunk_ref, Register thunk_arg,
                               int slots_to_drop_on_return,
                               MemOperand* argc_operand,
-                              MemOperand return_value_operand);
+                              MemOperand return_value_operand,
+                              bool handle_interceptor_result);
 
 #define ACCESS_MASM(masm) masm->
 

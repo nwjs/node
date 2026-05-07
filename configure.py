@@ -55,7 +55,7 @@ valid_mips_fpu = ('fp32', 'fp64', 'fpxx')
 valid_mips_float_abi = ('soft', 'hard')
 valid_intl_modes = ('none', 'small-icu', 'full-icu', 'system-icu')
 icu_versions = json.loads((tools_path / 'icu' / 'icu_versions.json').read_text(encoding='utf-8'))
-maglev_enabled_architectures = ('x64', 'arm', 'arm64')
+maglev_enabled_architectures = ('x64', 'arm', 'arm64', 's390x')
 
 # builtins may be removed later if they have been disabled by options
 shareable_builtins = {'undici/undici': 'deps/undici/undici.js',
@@ -1156,6 +1156,11 @@ parser.add_argument('--v8-enable-snapshot-compression',
     default=None,
     help='Enable the built-in snapshot compression in V8.')
 
+parser.add_argument('--v8-disable-temporal-support',
+    action='store_true',
+    dest='v8_disable_temporal_support',
+    default=None,
+    help='Disable Temporal support in V8.')
 
 parser.add_argument('--v8-enable-temporal-support',
     action='store_true',
@@ -1444,6 +1449,44 @@ def get_openssl_version(o):
     warn(f'Failed to determine OpenSSL version from header: {e}')
     return 0
 
+def get_cargo_version(cargo):
+  try:
+    proc = subprocess.Popen(shlex.split(cargo) + ['--version'],
+                            stdin=subprocess.PIPE, stderr=subprocess.PIPE,
+                            stdout=subprocess.PIPE)
+  except OSError:
+    return '0.0'
+
+  with proc:
+    cargo_ret = to_utf8(proc.communicate()[0])
+
+  match = re.match(r"cargo ([0-9]+\.[0-9]+\.[0-9]+)", cargo_ret)
+
+  if match:
+    return match.group(1)
+
+  warn(f'Could not recognize `cargo`: {cargo_ret}')
+  return '0.0'
+
+def get_rustc_version(rustc):
+  try:
+    proc = subprocess.Popen(shlex.split(rustc) + ['--version'],
+                            stdin=subprocess.PIPE, stderr=subprocess.PIPE,
+                            stdout=subprocess.PIPE)
+  except OSError:
+    return '0.0'
+
+  with proc:
+    rustc_ret = to_utf8(proc.communicate()[0])
+
+  match = re.match(r"rustc ([0-9]+\.[0-9]+\.[0-9]+)", rustc_ret)
+
+  if match:
+    return match.group(1)
+
+  warn(f'Could not recognize `rustc`: {rustc_ret}')
+  return '0.0'
+
 # Note: Apple clang self-reports as clang 4.2.0 and gcc 4.2.1.  It passes
 # the version check more by accident than anything else but a more rigorous
 # check involves checking the build number against an allowlist.  I'm not
@@ -1475,8 +1518,8 @@ def check_compiler(o):
   print_verbose(f"Detected {'Apple ' if is_apple else ''}{'clang ' if is_clang else ''}C++ compiler (CXX={CXX}) version: {version_str}")
   if not ok:
     warn(f'failed to autodetect C++ compiler version (CXX={CXX})')
-  elif ((is_apple and clang_version < (17, 0, 0)) or (not is_apple and clang_version < (19, 1, 0))) if is_clang else gcc_version < (12, 2, 0):
-    warn(f"C++ compiler (CXX={CXX}, {version_str}) too old, need g++ 12.2.0 or clang++ 19.1.0{' or Apple clang++ 17.0.0' if is_apple else ''}")
+  elif ((is_apple and clang_version < (17, 0, 0)) or (not is_apple and clang_version < (19, 1, 0))) if is_clang else gcc_version < (13, 2, 0):
+    warn(f"C++ compiler (CXX={CXX}, {version_str}) too old, need g++ 13.2.0 or clang++ 19.1.0{' or Apple clang++ 17.0.0' if is_apple else ''}")
 
   ok, is_clang, clang_version, gcc_version, is_apple = try_check_compiler(CC, 'c')
   version_str = ".".join(map(str, clang_version if is_clang else gcc_version))
@@ -1490,6 +1533,53 @@ def check_compiler(o):
     warn(f'C compiler (CC={CC}, {version_str}) too old, need gcc 4.2 or clang 3.2')
 
   o['variables']['llvm_version'] = get_llvm_version(CC) if is_clang else '0.0'
+
+  # cargo and rustc are needed for Temporal.
+  if not options.v8_disable_temporal_support or not options.shared_temporal_capi:
+    # Minimum cargo and rustc versions should match values in BUILDING.md.
+    min_cargo_ver_tuple = (1, 82)
+    min_rustc_ver_tuple = (1, 82)
+    cargo = os.environ.get('CARGO', 'cargo')
+    cargo_ver = get_cargo_version(cargo)
+    print_verbose(f'Detected cargo (CARGO={cargo}): {cargo_ver}')
+    if cargo_ver == '0.0':
+      # Error if --v8-enable-temporal-support is explicitly set,
+      # otherwise disable support for Temporal.
+      if options.v8_enable_temporal_support:
+        error('''No acceptable cargo found!
+
+       Enabling Temporal support requires cargo.
+       Please make sure you have cargo installed on your system and/or
+       consider adjusting the CARGO environment variable if you have installed
+       it in a non-standard prefix.''')
+      else:
+        warn('cargo not found! Support for Temporal will be disabled.')
+        options.v8_disable_temporal_support = True
+    else:
+      cargo_ver_tuple = tuple(map(int, cargo_ver.split('.')))
+      if cargo_ver_tuple < min_cargo_ver_tuple:
+        warn(f'cargo {cargo_ver} too old, need cargo {".".join(map(str, min_cargo_ver_tuple))}')
+    # cargo supports RUSTC environment variable to override "rustc".
+    rustc = os.environ.get('RUSTC', 'rustc')
+    rustc_ver = get_rustc_version(rustc)
+    if rustc_ver == '0.0':
+      # Error if --v8-enable-temporal-support is explicitly set,
+      # otherwise disable support for Temporal.
+      if options.v8_enable_temporal_support:
+        error('''No acceptable rustc compiler found!
+
+       Enabling Temporal support requires a Rust toolchain.
+       Please make sure you have a Rust compiler installed on your system and/or
+       consider adjusting the RUSTC environment variable if you have installed
+       it in a non-standard prefix.''')
+      else:
+        warn(f'{rustc} not found! Support for Temporal will be disabled.')
+        options.v8_disable_temporal_support = True
+    else:
+      print_verbose(f'Detected rustc (RUSTC={rustc}): {rustc_ver}')
+      rust_ver_tuple = tuple(map(int, rustc_ver.split('.')))
+      if rust_ver_tuple < min_rustc_ver_tuple:
+        warn(f'rustc {rustc_ver} too old, need rustc {".".join(map(str, min_rustc_ver_tuple))}')
 
   # Need xcode_version or gas_version when openssl asm files are compiled.
   if options.without_ssl or options.openssl_no_asm or options.shared_openssl:
@@ -1714,6 +1804,18 @@ def configure_node(o):
   o['variables']['host_arch'] = host_arch
   o['variables']['target_arch'] = target_arch
   o['variables']['node_byteorder'] = sys.byteorder
+
+  # On Windows, cargo may default to the GNU target (e.g. x86_64-pc-windows-gnu)
+  # but Node.js requires MSVC-compatible libraries. Set explicit Rust target
+  # triple for the target architecture.
+  o['variables']['cargo_rust_target'] = ''
+  if flavor == 'win':
+    o['variables']['cargo_rust_target'] = \
+      'aarch64-pc-windows-msvc' if target_arch == 'arm64' else 'x86_64-pc-windows-msvc'
+  # Always set the Rust target for x64 macOS in case we will be building
+  # under Rosetta 2.
+  if flavor == 'mac' and target_arch == 'x64':
+    o['variables']['cargo_rust_target'] = 'x86_64-apple-darwin'
 
   # Allow overriding the compiler - needed by embedders.
   if options.use_clang:
@@ -1975,6 +2077,7 @@ def configure_v8(o, configs):
   o['variables']['v8_promise_internal_field_count'] = 1 # Add internal field to promises for async hooks.
   o['variables']['v8_use_siphash'] = 0 if options.without_siphash else 1
   o['variables']['v8_enable_maglev'] = B(not options.v8_disable_maglev and
+                                         flavor != 'zos' and
                                          o['variables']['target_arch'] in maglev_enabled_architectures)
   o['variables']['v8_enable_pointer_compression'] = 1 if options.enable_pointer_compression else 0
   # Using the sandbox requires always allocating array buffer backing stores in the sandbox.
@@ -1991,7 +2094,19 @@ def configure_v8(o, configs):
   o['variables']['v8_enable_external_code_space'] = 1 if options.enable_pointer_compression else 0
   o['variables']['v8_enable_31bit_smis_on_64bit_arch'] = 1 if options.enable_pointer_compression else 0
   o['variables']['v8_enable_extensible_ro_snapshot'] = 0
-  o['variables']['v8_enable_temporal_support'] = 1 if options.v8_enable_temporal_support else 0
+  # TODO(richardlau): Temporal objects in V8 currently reference a private
+  # ICU header file and fail to compile with shared ICU or no ICU. For now,
+  # if auto-detecting, warn and disable Temporal in those cases.
+  # Refs: https://github.com/nodejs/node/issues/62676
+  if (not options.v8_disable_temporal_support and not options.v8_enable_temporal_support):
+    match options.with_intl:
+      case 'none':
+        warn('Temporal support disabled when compiling without ICU')
+        options.v8_disable_temporal_support = True
+      case 'system-icu':
+        warn('Temporal support disabled when compiling with a shared ICU library')
+        options.v8_disable_temporal_support = True
+  o['variables']['v8_enable_temporal_support'] = 0 if options.v8_disable_temporal_support else 1
   o['variables']['v8_trace_maps'] = 1 if options.trace_maps else 0
   o['variables']['node_use_v8_platform'] = b(not options.without_v8_platform)
   o['variables']['node_use_bundled_v8'] = b(not options.without_bundled_v8)
@@ -2022,6 +2137,10 @@ def configure_v8(o, configs):
   if all(opt in sys.argv for opt in ['--v8-enable-object-print', '--v8-disable-object-print']):
     raise Exception(
         'Only one of the --v8-enable-object-print or --v8-disable-object-print options '
+        'can be specified at a time.')
+  if all(opt in sys.argv for opt in ['--v8-enable-temporal-support', '--v8-disable-temporal-support']):
+    raise Exception(
+        'Only one of the --v8-enable-temporal-support or --v8-disable-temporal-support options '
         'can be specified at a time.')
   if sys.platform != 'darwin':
     if o['variables']['v8_enable_webassembly'] and o['variables']['target_arch'] == 'x64':
@@ -2496,7 +2615,7 @@ def make_bin_override():
   if sys.platform == 'win32':
     raise Exception('make_bin_override should not be called on win32.')
   # If the system python is not the python we are running (which should be
-  # python 3.9+), then create a directory with a symlink called `python` to our
+  # python 3.10+), then create a directory with a symlink called `python` to our
   # sys.executable. This directory will be prefixed to the PATH, so that
   # other tools that shell out to `python` will use the appropriate python
 
@@ -2687,6 +2806,11 @@ if flavor == 'win' and python.lower().endswith('.exe'):
 # Always set 'python' variable, otherwise environments that only have python3
 # will fail to run python scripts.
 gyp_args += ['-Dpython=' + python]
+
+if not options.v8_disable_temporal_support or not options.shared_temporal_capi:
+  cargo = os.environ.get('CARGO')
+  if cargo:
+    gyp_args += ['-Dcargo=' + cargo]
 
 if options.use_ninja:
   gyp_args += ['-f', 'ninja-' + flavor]

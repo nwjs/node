@@ -18,6 +18,7 @@
 #include "src/heap/factory-base.h"
 #include "src/heap/heap.h"
 #include "src/objects/feedback-cell.h"
+#include "src/objects/name.h"
 #include "src/objects/property-cell.h"
 // TODO(leszeks): Remove this by forward declaring JSRegExp::Flags.
 #include "src/objects/js-regexp.h"
@@ -82,7 +83,6 @@ class TemplateObjectDescription;
 class WasmCapiFunctionData;
 class WasmExportedFunctionData;
 class WasmJSFunctionData;
-class WeakCell;
 
 #if V8_ENABLE_WEBASSEMBLY
 namespace wasm {
@@ -94,7 +94,7 @@ class ArrayType;
 class StructType;
 class ContType;
 struct WasmElemSegment;
-class WasmImportWrapperHandle;
+class WasmWrapperHandle;
 class WasmValue;
 enum class OnResume : int;
 enum Suspend : int;
@@ -154,7 +154,7 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   // NewFixedArray as a fallback.
   V8_WARN_UNUSED_RESULT
   MaybeHandle<FixedArray> TryNewFixedArray(
-      int length, AllocationType allocation = AllocationType::kYoung);
+      uint32_t length, AllocationType allocation = AllocationType::kYoung);
 
   // Allocates a feedback vector whose slots are initialized with undefined
   // values.
@@ -189,6 +189,10 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
 
   // Create a new PrototypeInfo struct.
   DirectHandle<PrototypeInfo> NewPrototypeInfo();
+  DirectHandle<PrototypeSharedClosureInfo> NewPrototypeSharedClosureInfo(
+      DirectHandle<ObjectBoilerplateDescription> object_boilerplate_description,
+      DirectHandle<Context> context,
+      DirectHandle<ClosureFeedbackCellArray> feedback_array);
 
   // Create a new EnumCache struct.
   DirectHandle<EnumCache> NewEnumCache(
@@ -405,6 +409,7 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   Handle<Symbol> NewPrivateSymbol(
       AllocationType allocation = AllocationType::kOld);
   DirectHandle<Symbol> NewPrivateNameSymbol(DirectHandle<String> name);
+  DirectHandle<Symbol> NewPrivateBrandSymbol(DirectHandle<String> name);
 
   // Create a global (but otherwise uninitialized) context.
   Handle<NativeContext> NewNativeContext();
@@ -638,7 +643,7 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   Handle<JSObject> NewJSObject(
       DirectHandle<JSFunction> constructor,
       AllocationType allocation = AllocationType::kYoung,
-      NewJSObjectType = NewJSObjectType::kNoAPIWrapper);
+      NewJSObjectType = NewJSObjectType::kMaybeEmbedderFieldsAndNoApiWrapper);
   // JSObject without a prototype.
   Handle<JSObject> NewJSObjectWithNullProto();
   // JSObject without a prototype, in dictionary mode.
@@ -657,14 +662,14 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       DirectHandle<Map> map, AllocationType allocation = AllocationType::kYoung,
       DirectHandle<AllocationSite> allocation_site =
           DirectHandle<AllocationSite>::null(),
-      NewJSObjectType = NewJSObjectType::kNoAPIWrapper);
+      NewJSObjectType = NewJSObjectType::kMaybeEmbedderFieldsAndNoApiWrapper);
   // Like NewJSObjectFromMap, but includes allocating a properties dictionary.);
   Handle<JSObject> NewSlowJSObjectFromMap(
       DirectHandle<Map> map, int number_of_slow_properties,
       AllocationType allocation = AllocationType::kYoung,
       DirectHandle<AllocationSite> allocation_site =
           DirectHandle<AllocationSite>::null(),
-      NewJSObjectType = NewJSObjectType::kNoAPIWrapper);
+      NewJSObjectType = NewJSObjectType::kMaybeEmbedderFieldsAndNoApiWrapper);
   Handle<JSObject> NewSlowJSObjectFromMap(DirectHandle<Map> map);
   // Calls NewJSObjectFromMap or NewSlowJSObjectFromMap depending on whether the
   // map is a dictionary map.
@@ -673,7 +678,7 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       AllocationType allocation = AllocationType::kYoung,
       DirectHandle<AllocationSite> allocation_site =
           DirectHandle<AllocationSite>::null(),
-      NewJSObjectType = NewJSObjectType::kNoAPIWrapper);
+      NewJSObjectType = NewJSObjectType::kMaybeEmbedderFieldsAndNoApiWrapper);
   inline Handle<JSObject> NewFastOrSlowJSObjectFromMap(DirectHandle<Map> map);
   // Allocates and initializes a new JavaScript object with the given
   // {prototype} and {properties}. The newly created object will be
@@ -690,7 +695,7 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   // Create a JSArray with a specified length and elements initialized
   // according to the specified mode.
   Handle<JSArray> NewJSArray(
-      ElementsKind elements_kind, int length, int capacity,
+      ElementsKind elements_kind, uint32_t length, uint32_t capacity,
       ArrayStorageAllocationMode mode =
           ArrayStorageAllocationMode::DONT_INITIALIZE_ARRAY_ELEMENTS,
       AllocationType allocation = AllocationType::kYoung);
@@ -734,6 +739,8 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
 
   DirectHandle<JSModuleNamespace> NewJSModuleNamespace();
 
+  DirectHandle<JSDeferredModuleNamespace> NewJSDeferredModuleNamespace();
+
   DirectHandle<JSWrappedFunction> NewJSWrappedFunction(
       DirectHandle<NativeContext> creation_context,
       DirectHandle<Object> target);
@@ -748,26 +755,27 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   DirectHandle<WasmTrustedInstanceData> NewWasmTrustedInstanceData(bool shared);
   DirectHandle<WasmDispatchTable> NewWasmDispatchTable(
       int length, wasm::CanonicalValueType table_type, bool shared);
+  DirectHandle<WasmDispatchTableForImports> NewWasmDispatchTableForImports(
+      int length, bool shared);
   DirectHandle<WasmTypeInfo> NewWasmTypeInfo(
       wasm::CanonicalValueType type, wasm::CanonicalValueType element_type,
       DirectHandle<Map> opt_parent, int num_supertypes, bool shared);
   DirectHandle<WasmInternalFunction> NewWasmInternalFunction(
       DirectHandle<TrustedObject> ref, int function_index, bool shared,
-      WasmCodePointer call_target);
+      WasmCodePointer call_target, const wasm::CanonicalSig* sig);
   DirectHandle<WasmFuncRef> NewWasmFuncRef(
       DirectHandle<WasmInternalFunction> internal_function,
       DirectHandle<Map> rtt, bool shared);
   DirectHandle<WasmCapiFunctionData> NewWasmCapiFunctionData(
       Address call_target, DirectHandle<Foreign> embedder_data,
       DirectHandle<Code> wrapper_code, DirectHandle<Map> rtt,
-      wasm::CanonicalTypeIndex sig_index, const wasm::CanonicalSig* sig);
+      const wasm::CanonicalSig* sig);
   DirectHandle<WasmExportedFunctionData> NewWasmExportedFunctionData(
       DirectHandle<Code> export_wrapper,
       DirectHandle<WasmTrustedInstanceData> instance_data,
       DirectHandle<WasmFuncRef> func_ref,
-      DirectHandle<WasmInternalFunction> internal_function,
-      const wasm::CanonicalSig* sig, wasm::CanonicalTypeIndex type_index,
-      int wrapper_budget, wasm::Promise promise);
+      DirectHandle<WasmInternalFunction> internal_function, int wrapper_budget,
+      wasm::Promise promise);
   DirectHandle<WasmImportData> NewWasmImportData(
       DirectHandle<HeapObject> callable, wasm::Suspend suspend,
       MaybeDirectHandle<WasmTrustedInstanceData> instance_data,
@@ -781,23 +789,25 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   // {opt_call_target} is kNullAddress for JavaScript functions, and
   // non-null for exported Wasm functions.
   DirectHandle<WasmJSFunctionData> NewWasmJSFunctionData(
-      wasm::CanonicalTypeIndex sig_index, DirectHandle<JSReceiver> callable,
+      const wasm::CanonicalSig* sig, DirectHandle<JSReceiver> callable,
       DirectHandle<Code> wrapper_code, DirectHandle<Map> rtt,
       wasm::Suspend suspend, wasm::Promise promise,
-      std::shared_ptr<wasm::WasmImportWrapperHandle> wrapper_handle);
+      std::shared_ptr<wasm::WasmWrapperHandle> wrapper_handle);
   DirectHandle<WasmResumeData> NewWasmResumeData(
       DirectHandle<WasmSuspenderObject> suspender, wasm::OnResume on_resume);
   DirectHandle<WasmSuspenderObject> NewWasmSuspenderObject();
-  DirectHandle<WasmContinuationObject> NewWasmContinuationObject();
+  DirectHandle<WasmSuspenderObject> NewWasmSuspenderObjectInitialized();
+  DirectHandle<WasmContinuationObject> NewWasmContinuationObject(
+      wasm::StackMemory* stack);
   DirectHandle<WasmStruct> NewWasmStruct(const wasm::StructType* type,
                                          wasm::WasmValue* args,
                                          DirectHandle<Map> map);
   // The resulting struct will be uninitialized, which means GC might fail for
   // reference structs until initialization. Follow this up with a
   // {DisallowGarbageCollection} scope until initialization.
-  Handle<WasmStruct> NewWasmStructUninitialized(
-      const wasm::StructType* type, DirectHandle<Map> map,
-      AllocationType allocation = AllocationType::kYoung);
+  Handle<WasmStruct> NewWasmStructUninitialized(const wasm::StructType* type,
+                                                DirectHandle<Map> map,
+                                                AllocationType allocation);
 
   DirectHandle<WasmArray> NewWasmArray(wasm::ValueType element_type,
                                        uint32_t length,
@@ -808,7 +818,8 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       DirectHandle<Map> map);
   DirectHandle<WasmArray> NewWasmArrayFromMemory(
       uint32_t length, DirectHandle<Map> map,
-      wasm::CanonicalValueType element_type, Address source);
+      wasm::CanonicalValueType element_type,
+      base::Vector<const uint8_t> source);
   // Returns a handle to a WasmArray if successful, or a Smi containing a
   // {MessageTemplate} if computing the array's elements leads to an error.
   DirectHandle<Object> NewWasmArrayFromElementSegment(
@@ -902,7 +913,8 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
 
   // Create an External object for V8's external API.
   Handle<JSObject> NewExternal(
-      void* value, AllocationType allocation = AllocationType::kYoung);
+      void* value, ExternalPointerTag tag,
+      AllocationType allocation = AllocationType::kYoung);
 
   // Create a CppHeapExternal object for V8's external API.
   Handle<CppHeapExternalObject> NewCppHeapExternal(
@@ -1337,7 +1349,7 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       size_t byte_length);
 
   Tagged<Symbol> NewSymbolInternal(
-      AllocationType allocation = AllocationType::kOld);
+      PrivateSymbolKind kind, AllocationType allocation = AllocationType::kOld);
 
   // Allocates new context with given map, sets length and initializes the
   // after-header part with uninitialized values and leaves the context header
@@ -1388,11 +1400,13 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
 
   // Initializes a JSObject based on its map.
   void InitializeJSObjectFromMap(
-      Tagged<JSObject> obj, Tagged<Object> properties, Tagged<Map> map,
-      NewJSObjectType = NewJSObjectType::kNoAPIWrapper);
+      Tagged<Map> map, Tagged<JSObject> obj,
+      std::optional<Tagged<Object>> maybe_properties,
+      NewJSObjectType = NewJSObjectType::kMaybeEmbedderFieldsAndNoApiWrapper);
   // Initializes JSObject body starting at given offset.
-  void InitializeJSObjectBody(Tagged<JSObject> obj, Tagged<Map> map,
-                              int start_offset);
+  void InitializeJSObjectBody(
+      Tagged<JSObject> obj, Tagged<Map> map, int start_offset,
+      NewJSObjectType = NewJSObjectType::kMaybeEmbedderFieldsAndNoApiWrapper);
 
   Handle<WeakArrayList> NewUninitializedWeakArrayList(
       int capacity, AllocationType allocation = AllocationType::kYoung);

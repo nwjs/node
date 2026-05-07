@@ -71,16 +71,14 @@ class InstructionSelectorTest : public TestWithNativeContextAndZone {
               MachineOperatorBuilder::kAllOptionalOps),
           test_(test) {}
 
-    Stream Build(CpuFeature feature) {
-      return Build(InstructionSelector::Features(feature));
-    }
+    Stream Build(CpuFeature feature) { return Build(CpuFeatureSet{feature}); }
     Stream Build(CpuFeature feature1, CpuFeature feature2) {
-      return Build(InstructionSelector::Features(feature1, feature2));
+      return Build(CpuFeatureSet{feature1, feature2});
     }
     Stream Build(StreamBuilderMode mode = kTargetInstructions) {
-      return Build(InstructionSelector::Features(), mode);
+      return Build(CpuFeatureSet{}, mode);
     }
-    Stream Build(InstructionSelector::Features features,
+    Stream Build(CpuFeatureSet features,
                  StreamBuilderMode mode = kTargetInstructions,
                  InstructionSelector::SourcePositionMode source_position_mode =
                      InstructionSelector::kAllSourcePositions);
@@ -123,7 +121,7 @@ class InstructionSelectorTest : public TestWithNativeContextAndZone {
 
       return zone->New<CallDescriptor>(  // --
           CallDescriptor::kCallAddress,  // kind
-          kDefaultCodeEntrypointTag,     // tag
+          kCodeEntrypointTagForTesting,  // tag
           target_type,                   // target MachineType
           target_loc,                    // target location
           locations.Get(),               // location_sig

@@ -28,9 +28,11 @@ namespace compiler {
   V(RiscvLw)                                               \
   V(RiscvSw)                                               \
   V(RiscvLoadDouble)                                       \
+  V(RiscvLoadFloat)                                        \
+  V(RiscvLoadHalf)                                         \
   V(RiscvStoreDouble)                                      \
   V(RiscvStoreFloat)                                       \
-  V(RiscvLoadFloat)                                        \
+  V(RiscvStoreHalf)                                        \
   V(RiscvStoreCompressTagged)                              \
   V(RiscvLoadDecompressTaggedSigned)                       \
   V(RiscvLoadDecompressTagged)                             \
@@ -70,6 +72,8 @@ namespace compiler {
   V(RiscvTruncLS)                                    \
   V(RiscvTruncLD)                                    \
   V(RiscvTruncUlS)                                   \
+  V(RiscvFloat64ToFloat16RawBits)                    \
+  V(RiscvFloat16RawBitsToFloat64)                    \
   V(RiscvTruncUlD)                                   \
   V(RiscvCvtSL)                                      \
   V(RiscvCvtSUl)                                     \
@@ -379,9 +383,15 @@ namespace compiler {
 #define TARGET_ARCH_OPCODE_LIST_ZBB_32(V)
 #endif
 
+#define TARGET_ARCH_OPCODE_LIST_ZBA(V) \
+  V(RiscvSh1add)                       \
+  V(RiscvSh2add)                       \
+  V(RiscvSh3add)
+
 #define TARGET_ARCH_OPCODE_LIST(V)   \
   TARGET_ARCH_OPCODE_LIST_COMMON(V)  \
   TARGET_ARCH_OPCODE_LIST_SPECIAL(V) \
+  TARGET_ARCH_OPCODE_LIST_ZBA(V)     \
   TARGET_ARCH_OPCODE_LIST_ZBB(V)     \
   TARGET_ARCH_OPCODE_LIST_ZBB_32(V)
 

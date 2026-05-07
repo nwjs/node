@@ -42,20 +42,26 @@ bool ValidStructSubtypeDefinition(ModuleTypeIndex subtype_index,
   }
   if (sub_def.descriptor.valid()) {
     // If a type has a descriptor, its supertype must either have no descriptor,
-    // or the supertype's descriptor must be a supertype of the subtype's
-    // descriptor.
+    // or the supertype's descriptor must be a declared supertype of the
+    // subtype's descriptor.
     if (super_def.descriptor.valid() &&
-        !IsHeapSubtypeOf(module->heap_type(sub_def.descriptor),
-                         module->heap_type(super_def.descriptor), module)) {
+        module->supertype(sub_def.descriptor) != super_def.descriptor) {
       return false;
     }
   } else {
     // If a type has no descriptor, its supertype must not have one either.
     if (super_def.descriptor.valid()) return false;
   }
-  // A type and its supertype must either both be descriptors, or both not.
-  if (sub_def.describes.valid() != super_def.describes.valid()) {
-    return false;
+  if (sub_def.describes.valid()) {
+    // If a type is a descriptor, its supertype must also be a descriptor, and
+    // must describe a declared supertype of the subtype's described type.
+    if (!super_def.describes.valid()) return false;
+    if (module->supertype(sub_def.describes) != super_def.describes) {
+      return false;
+    }
+  } else {
+    // A type and its supertype must either both be descriptors, or both not.
+    if (super_def.describes.valid()) return false;
   }
   return true;
 }
@@ -355,12 +361,6 @@ HeapType NullSentinelImpl(HeapType type) {
   UNREACHABLE();
 }
 
-bool IsNullSentinel(ValueTypeBase type) {
-  DCHECK(!type.is_numeric());
-  if (!type.is_abstract_ref()) return false;
-  return IsNullKind(type.generic_kind());
-}
-
 bool IsGenericSubtypeOfIndexedTypes(ValueTypeBase type) {
   DCHECK(type.is_generic());
   GenericKind kind = type.generic_kind();
@@ -582,9 +582,9 @@ Exactness UnionExactness(ValueType type1, ValueType type2,
       return same ? Exactness::kExact : Exactness::kAnySubtype;
     }
     // Possibly compatible, actual subtyping check will follow.
-    if (IsNullSentinel(type2)) return Exactness::kExact;
+    if (type2.is_none_type()) return Exactness::kExact;
   } else if (type2.is_exact()) {
-    if (IsNullSentinel(type1)) return Exactness::kExact;
+    if (type1.is_none_type()) return Exactness::kExact;
   }
   return Exactness::kAnySubtype;
 }
@@ -634,7 +634,7 @@ TypeInModule Intersection(ValueType type1, ValueType type2,
       type1.is_nullable() && type2.is_nullable() ? kNullable : kNonNullable;
   // non-nullable null type is not a valid type.
   if (nullability == kNonNullable &&
-      (IsNullSentinel(type1) || IsNullSentinel(type2))) {
+      (type1.is_none_type() || type2.is_none_type())) {
     return {kWasmBottom, module};
   }
   if (IsHeapSubtypeOf(type1.heap_type(), type2.heap_type(), module)) {
@@ -660,8 +660,27 @@ ValueType ToNullSentinel(TypeInModule type) {
   return ValueType::RefNull(null_heap);
 }
 
-bool IsSameTypeHierarchy(HeapType type1, HeapType type2,
-                         const WasmModule* module) {
+ValueType ToTopType(ValueType type) {
+  StandardType standard = UpcastToStandardType(type);
+  constexpr StandardType candidates[] = {
+#define TOPTYPE(name, ...) StandardType::k##name,
+      FOREACH_TOP_TYPE(TOPTYPE)
+#undef TOPTYPE
+  };
+  for (StandardType candidate : candidates) {
+    if (SubtypeLookup(standard, candidate)) {
+      return ValueType::Generic(ToGenericKind(candidate), kNullable,
+                                type.is_shared());
+    }
+  }
+  if (type.is_string_view()) {
+    // TODO(12868): Unresolved discussion.
+    return kWasmTop;
+  }
+  UNREACHABLE();
+}
+
+bool IsSameTypeHierarchy(HeapType type1, HeapType type2) {
   return NullSentinelImpl(type1) == NullSentinelImpl(type2);
 }
 

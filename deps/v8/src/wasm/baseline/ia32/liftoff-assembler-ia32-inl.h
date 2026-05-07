@@ -9,7 +9,7 @@
 
 #include "src/codegen/assembler.h"
 #include "src/codegen/interface-descriptors-inl.h"
-#include "src/heap/mutable-page-metadata.h"
+#include "src/heap/mutable-page.h"
 #include "src/wasm/baseline/liftoff-assembler.h"
 #include "src/wasm/baseline/liftoff-register.h"
 #include "src/wasm/object-access.h"
@@ -415,11 +415,12 @@ Register LiftoffAssembler::LoadOldFramePointer() {
   if (!v8_flags.experimental_wasm_growable_stacks) {
     return ebp;
   }
+  LiftoffRegister old_fp = GetUnusedRegister(RegClass::kGpReg, {});
+  FreezeCacheState frozen(*this);
   Label done, call_runtime;
   cmp(MemOperand(ebp, TypedFrameConstants::kFrameTypeOffset),
       Immediate(StackFrame::TypeToMarker(StackFrame::WASM_SEGMENT_START)));
   j(equal, &call_runtime);
-  LiftoffRegister old_fp = GetUnusedRegister(RegClass::kGpReg, {});
   mov(old_fp.gp(), ebp);
   jmp(&done);
 
@@ -592,7 +593,16 @@ void LiftoffAssembler::StoreTaggedPointer(Register dst_addr,
 
   mov(dst_op, src);
 
-  if (skip_write_barrier || v8_flags.disable_write_barriers) return;
+  if (v8_flags.disable_write_barriers) return;
+
+  if (skip_write_barrier) {
+    if (v8_flags.verify_write_barriers) {
+      CallVerifySkippedWriteBarrierStubSaveRegisters(dst_addr, src,
+                                                     SaveFPRegsMode::kSave);
+    }
+    return;
+  }
+
   EmitWriteBarrier(dst_addr, dst_op, src, pinned);
 }
 
@@ -766,9 +776,11 @@ void LiftoffAssembler::Store(Register dst_addr, Register offset_reg,
 void LiftoffAssembler::AtomicLoad(LiftoffRegister dst, Register src_addr,
                                   Register offset_reg, uint32_t offset_imm,
                                   LoadType type, uint32_t* protected_load_pc,
+                                  AtomicMemoryOrder /* memory_order */,
                                   LiftoffRegList /* pinned */,
                                   bool /* i64_offset */,
                                   Endianness /* endianness */) {
+  // x86 loads are suitable for both acquire and seqcst loads.
   if (type.value() != LoadType::kI64Load) {
     Load(dst, src_addr, offset_reg, offset_imm, type, nullptr, true);
     return;
@@ -787,8 +799,11 @@ void LiftoffAssembler::AtomicLoad(LiftoffRegister dst, Register src_addr,
 void LiftoffAssembler::AtomicStore(Register dst_addr, Register offset_reg,
                                    uint32_t offset_imm, LiftoffRegister src,
                                    StoreType type, uint32_t* protected_store_pc,
+                                   AtomicMemoryOrder memory_order,
                                    LiftoffRegList pinned, bool /* i64_offset */,
                                    Endianness /* endianness */) {
+  DCHECK(memory_order == AtomicMemoryOrder::kSeqCst ||
+         memory_order == AtomicMemoryOrder::kAcqRel);
   DCHECK_LE(offset_imm, std::numeric_limits<int32_t>::max());
   Operand dst_op = liftoff::MemOperand(dst_addr, offset_reg, offset_imm);
 
@@ -799,9 +814,11 @@ void LiftoffAssembler::AtomicStore(Register dst_addr, Register offset_reg,
     movd(scratch2, src.high().gp());
     Punpckldq(liftoff::kScratchDoubleReg, scratch2);
     movsd(dst_op, liftoff::kScratchDoubleReg);
-    // This lock+or is needed to achieve sequential consistency.
-    lock();
-    or_(Operand(esp, 0), Immediate(0));
+    if (memory_order == AtomicMemoryOrder::kSeqCst) {
+      // This lock+or is needed to achieve sequential consistency.
+      lock();
+      or_(Operand(esp, 0), Immediate(0));
+    }
     return;
   }
 
@@ -831,21 +848,41 @@ void LiftoffAssembler::AtomicStore(Register dst_addr, Register offset_reg,
     }
   }
 
-  switch (type.value()) {
-    case StoreType::kI64Store8:
-    case StoreType::kI32Store8:
-      xchg_b(src_gp, dst_op);
-      return;
-    case StoreType::kI64Store16:
-    case StoreType::kI32Store16:
-      xchg_w(src_gp, dst_op);
-      return;
-    case StoreType::kI64Store32:
-    case StoreType::kI32Store:
-      xchg(src_gp, dst_op);
-      return;
-    default:
-      UNREACHABLE();
+  if (memory_order == AtomicMemoryOrder::kSeqCst) {
+    switch (type.value()) {
+      case StoreType::kI64Store8:
+      case StoreType::kI32Store8:
+        xchg_b(src_gp, dst_op);
+        return;
+      case StoreType::kI64Store16:
+      case StoreType::kI32Store16:
+        xchg_w(src_gp, dst_op);
+        return;
+      case StoreType::kI64Store32:
+      case StoreType::kI32Store:
+        xchg(src_gp, dst_op);
+        return;
+      default:
+        UNREACHABLE();
+    }
+  } else {
+    DCHECK_EQ(memory_order, AtomicMemoryOrder::kAcqRel);
+    switch (type.value()) {
+      case StoreType::kI64Store8:
+      case StoreType::kI32Store8:
+        mov_b(dst_op, src.gp());
+        return;
+      case StoreType::kI64Store16:
+      case StoreType::kI32Store16:
+        mov_w(dst_op, src.gp());
+        return;
+      case StoreType::kI64Store32:
+      case StoreType::kI32Store:
+        mov(dst_op, src.gp());
+        return;
+      default:
+        UNREACHABLE();
+    }
   }
 }
 
@@ -3960,7 +3997,12 @@ void LiftoffAssembler::emit_i16x8_relaxed_q15mulr_s(LiftoffRegister dst,
 void LiftoffAssembler::emit_i16x8_dot_i8x16_i7x16_s(LiftoffRegister dst,
                                                     LiftoffRegister lhs,
                                                     LiftoffRegister rhs) {
-  I16x8DotI8x16I7x16S(dst.fp(), lhs.fp(), rhs.fp());
+  DoubleRegister lhs_src = lhs.fp();
+  if (!CpuFeatures::IsSupported(AVX) && dst == lhs && dst != rhs) {
+    movdqa(kScratchDoubleReg, lhs.fp());
+    lhs_src = kScratchDoubleReg;
+  }
+  I16x8DotI8x16I7x16S(dst.fp(), lhs_src, rhs.fp());
 }
 
 void LiftoffAssembler::emit_i32x4_dot_i8x16_i7x16_add_s(LiftoffRegister dst,
@@ -5250,42 +5292,6 @@ void LiftoffAssembler::DeallocateStackSlot(uint32_t size) {
 }
 
 void LiftoffAssembler::MaybeOSR() {}
-
-void LiftoffAssembler::emit_store_nonzero_if_nan(Register dst,
-                                                 DoubleRegister src,
-                                                 ValueKind kind) {
-  if (kind == kF32) {
-    ucomiss(src, src);
-  } else {
-    DCHECK_EQ(kind, kF64);
-    ucomisd(src, src);
-  }
-  Label ret;
-  j(parity_odd, &ret);
-  mov(Operand(dst, 0), Immediate(1));
-  bind(&ret);
-}
-
-void LiftoffAssembler::emit_s128_store_nonzero_if_nan(Register dst,
-                                                      LiftoffRegister src,
-                                                      Register tmp_gp,
-                                                      LiftoffRegister tmp_s128,
-                                                      ValueKind lane_kind) {
-  if (lane_kind == kF32) {
-    movaps(tmp_s128.fp(), src.fp());
-    cmpunordps(tmp_s128.fp(), tmp_s128.fp());
-  } else {
-    DCHECK_EQ(lane_kind, kF64);
-    movapd(tmp_s128.fp(), src.fp());
-    cmpunordpd(tmp_s128.fp(), tmp_s128.fp());
-  }
-  pmovmskb(tmp_gp, tmp_s128.fp());
-  or_(Operand(dst, 0), tmp_gp);
-}
-
-void LiftoffAssembler::emit_store_nonzero(Register dst) {
-  mov(Operand(dst, 0), Immediate(1));
-}
 
 void LiftoffStackSlots::Construct(int param_slots) {
   DCHECK_LT(0, slots_.size());

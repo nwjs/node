@@ -19,7 +19,7 @@ namespace internal {
 
 #define DEOPTIMIZE_REASON_LIST(V)                                              \
   DEOPTIMIZE_IN_BUILTIN_REASON_LIST(V)                                         \
-  V(ArrayBufferWasDetached, "array buffer was detached")                       \
+  V(ArrayBufferWasDetached, "array buffer was detached or immutable")          \
   V(ArrayLengthChanged, "the array length changed")                            \
   V(BigIntTooBig, "BigInt too big")                                            \
   V(ConstTrackingLet, "const tracking let constness invalidated")              \
@@ -32,6 +32,7 @@ namespace internal {
   V(GreaterThanMaxFastElementArray,                                            \
     "length is greater than the maximum for fast elements array")              \
   V(Hole, "hole")                                                              \
+  V(HoleOrUndefined, "hole or undefined")                                      \
   V(InstanceMigrationFailed, "instance migration failed")                      \
   V(InsufficientTypeFeedbackForArrayLiteral,                                   \
     "Insufficient type feedback for array literal")                            \
@@ -72,6 +73,7 @@ namespace internal {
     "not a JavaScript object, Null or Undefined")                              \
   V(NotANumber, "not a Number")                                                \
   V(NotANumberOrBoolean, "not a Number or Boolean")                            \
+  V(NotANumberOrUndefined, "not a Number or Undefined")                        \
   V(NotANumberOrOddball, "not a Number or Oddball")                            \
   V(NotASmi, "not a Smi")                                                      \
   V(NotAString, "not a String")                                                \
@@ -172,7 +174,10 @@ constexpr bool AlwaysPreserveDeoptReason(DeoptimizeReason reason) {
 #undef CASE
     return true;
     default:
-      return false;
+      // OSR related deopt handling (e.g., not discarding optimized code on OSR
+      // deopt) relies on checking the deoptimization reason, so we need to
+      // preserve the OSR related deopt reasons.
+      return IsDeoptimizationWithoutCodeInvalidation(reason);
   }
 }
 

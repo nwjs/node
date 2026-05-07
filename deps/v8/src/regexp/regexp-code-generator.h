@@ -42,11 +42,16 @@ class RegExpCodeGenerator final {
   V8_NODISCARD Result Assemble(DirectHandle<String> source, RegExpFlags flags);
 
  private:
-  // Returns the value for |operand_id| of bytecode at |pc| in the format
+  // Returns the value for |operand_id| of the current bytecode in the format
   // expected by the macro assembler.
   // E.g. converts an uint32_t bytecode offset to a Label*.
   template <typename Operands, typename Operands::Operand operand_id>
-  auto GetArgumentValue(const uint8_t* pc) const;
+  auto GetArgumentValue();
+
+  // Returns all the argument values of the current bytecode as a tuple.
+  template <typename Operands>
+  auto GetArgumentValuesAsTuple();
+
   // Visit all bytecodes before any code is emmited.
   // Allocates labels for all jump targets to support forward jumps.
   void PreVisitBytecodes();
@@ -67,6 +72,10 @@ class RegExpCodeGenerator final {
   // BitVector indicating if a specific offset is a valid jump target.
   // Labels are allocated for all offsets that are jump targets.
   BitVector jump_targets_;
+  // BitVector indicating if a specific offset is an indirect jump target.
+  // Indirect Jump Targets are all targets of `PushBacktrack`.
+  // This is required for CFI.
+  BitVector indirect_jump_targets_;
   bool has_unsupported_bytecode_;
 };
 

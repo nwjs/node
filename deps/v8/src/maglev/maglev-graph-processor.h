@@ -48,17 +48,23 @@ class GraphBackwardProcessor;
 
 enum class BlockProcessResult {
   kContinue,  // Process exited normally.
-  kSkip,      // Skip processing this block (no MultiProcessor support).
+  kSkip,      // Skip processing this blockand and do not call the following
+              // processors.
 };
 
 enum class ProcessResult {
-  kContinue,   // Process exited normally, and the following processors will be
-               // called on the node.
-  kRemove,     // Remove the current node from the graph (and do not call the
-               // following processors).
-  kHoist,      // Hoist the current instruction to the parent basic block
-               // and reset the current instruction to the beginning of the
-               // block. Parent block must be dominating.
+  kContinue,  // Process exited normally, and the following processors will be
+              // called on the node.
+  kRemove,    // Remove the current node from the graph (and do not call the
+              // following processors).
+  kRevisit,   // Process this node again. Note that the node is allowed to have
+              // changed.
+  kTruncateBlock,  // Remove all nodes from this point from the basic block
+                   // (including the current node) and do not call the following
+                   // processors.
+  kHoist,          // Hoist the current instruction to the parent basic block
+                   // and reset the current instruction to the beginning of the
+                   // block. Parent block must be dominating.
   kAbort,      // Stop processing now, do not process subsequent nodes/blocks.
                // Should not be used when processing Constants.
   kSkipBlock,  // Stop processing this block and skip the remaining nodes (no
@@ -118,9 +124,12 @@ class GraphProcessor {
           [[likely]] case ProcessResult::kContinue:
             ++it;
             break;
+          case ProcessResult::kRevisit:
+            break;
           case ProcessResult::kRemove:
             it = map.erase(it);
             break;
+          case ProcessResult::kTruncateBlock:
           case ProcessResult::kHoist:
           case ProcessResult::kAbort:
           case ProcessResult::kSkipBlock:
@@ -128,6 +137,7 @@ class GraphProcessor {
         }
       }
     };
+    // LINT.IfChange(maglev_constant_nodes)
     process_constants(graph->constants());
     process_constants(graph->root());
     process_constants(graph->smi());
@@ -136,10 +146,13 @@ class GraphProcessor {
     process_constants(graph->uint32());
     process_constants(graph->intptr());
     process_constants(graph->float64());
+    process_constants(graph->holey_float64());
     process_constants(graph->heap_number());
     process_constants(graph->trusted_constants());
+    // LINT.ThenChange()
 
     for (block_it_ = graph->begin(); block_it_ != graph->end(); ++block_it_) {
+      bool process_control_block = true;
       BasicBlock* block = *block_it_;
       if (V8_UNLIKELY(block->is_dead())) continue;
 
@@ -162,6 +175,8 @@ class GraphProcessor {
             [[likely]] case ProcessResult::kContinue:
               ++it;
               break;
+            case ProcessResult::kRevisit:
+              break;
             case ProcessResult::kRemove:
               it = phis.RemoveAt(it);
               break;
@@ -169,6 +184,7 @@ class GraphProcessor {
               return;
             case ProcessResult::kSkipBlock:
               goto skip_block;
+            case ProcessResult::kTruncateBlock:
             case ProcessResult::kHoist:
               UNREACHABLE();
           }
@@ -177,23 +193,35 @@ class GraphProcessor {
 
       node_processor_.PostPhiProcessing();
 
-      for (node_it_ = block->nodes().begin(); node_it_ != block->nodes().end();
-           ++node_it_) {
+      for (node_it_ = block->nodes().begin();
+           node_it_ != block->nodes().end();) {
         Node* node = *node_it_;
-        if (node == nullptr) continue;
+        if (node == nullptr) {
+          ++node_it_;
+          continue;
+        }
         ProcessResult result = ProcessNodeBase(
             node, GetCurrentState(node_it_ - block->nodes().begin()));
         switch (result) {
           [[likely]] case ProcessResult::kContinue:
+            ++node_it_;
+            break;
+          case ProcessResult::kRevisit:
             break;
           case ProcessResult::kRemove:
             *node_it_ = nullptr;
+            ++node_it_;
+            break;
+          case ProcessResult::kTruncateBlock:
+            block->nodes().resize(node_it_ - block->nodes().begin());
+            node_it_ = block->nodes().end();
+            graph_->set_may_have_unreachable_blocks(true);
             break;
           case ProcessResult::kHoist: {
             DCHECK(block->predecessor_count() == 1 ||
                    (block->predecessor_count() == 2 && block->is_loop()));
             BasicBlock* target = block->predecessor_at(0);
-            DCHECK(target->successors().size() == 1);
+            DCHECK_EQ(target->successors().size(), 1);
             Node* cur = *node_it_;
             cur->set_owner(target);
             *node_it_ = nullptr;
@@ -208,16 +236,22 @@ class GraphProcessor {
         }
       }
 
-      {
+      while (process_control_block) {
         ProcessResult control_result =
             ProcessNodeBase(block->control_node(), GetCurrentState());
+        process_control_block = false;
         switch (control_result) {
           [[likely]] case ProcessResult::kContinue:
+            break;
+          case ProcessResult::kRevisit:
+            process_control_block = true;
+            break;
           case ProcessResult::kSkipBlock:
             break;
           case ProcessResult::kAbort:
             return;
           case ProcessResult::kRemove:
+          case ProcessResult::kTruncateBlock:
           case ProcessResult::kHoist:
             UNREACHABLE();
         }
@@ -278,7 +312,9 @@ class GraphBackwardProcessor {
             break;
           case ProcessResult::kAbort:
             return;
+          case ProcessResult::kRevisit:
           case ProcessResult::kRemove:
+          case ProcessResult::kTruncateBlock:
           case ProcessResult::kHoist:
           case ProcessResult::kSkipBlock:
             UNREACHABLE();
@@ -293,7 +329,9 @@ class GraphBackwardProcessor {
             break;
           case ProcessResult::kAbort:
             return;
+          case ProcessResult::kRevisit:
           case ProcessResult::kRemove:
+          case ProcessResult::kTruncateBlock:
           case ProcessResult::kHoist:
           case ProcessResult::kSkipBlock:
             UNREACHABLE();
@@ -314,6 +352,8 @@ class GraphBackwardProcessor {
               break;
             case ProcessResult::kAbort:
               return;
+            case ProcessResult::kTruncateBlock:
+            case ProcessResult::kRevisit:
             case ProcessResult::kSkipBlock:
             case ProcessResult::kHoist:
               UNREACHABLE();
@@ -334,8 +374,10 @@ class GraphBackwardProcessor {
           case ProcessResult::kRemove:
             it = map.erase(it);
             break;
+          case ProcessResult::kRevisit:
           case ProcessResult::kHoist:
           case ProcessResult::kAbort:
+          case ProcessResult::kTruncateBlock:
           case ProcessResult::kSkipBlock:
             UNREACHABLE();
         }
@@ -410,8 +452,11 @@ class NodeMultiProcessor<Processor, Processors...>
     switch (res) {
       [[likely]] case ProcessResult::kContinue:
         return Base::Process(node, state);
+      case ProcessResult::kRevisit:
       case ProcessResult::kAbort:
       case ProcessResult::kRemove:
+        return res;
+      case ProcessResult::kTruncateBlock:
         return res;
       case ProcessResult::kHoist:
       case ProcessResult::kSkipBlock:

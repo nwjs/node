@@ -118,6 +118,10 @@ class V8_EXPORT_PRIVATE LocalIsolate final : private HiddenLocalFactory {
     UNREACHABLE();
   }
 
+  JSDispatchTable& js_dispatch_table() const {
+    return isolate_->js_dispatch_table();
+  }
+
   int GetNextScriptId();
   uint32_t GetAndIncNextUniqueSfiId() {
     return isolate_->GetAndIncNextUniqueSfiId();
@@ -138,11 +142,9 @@ class V8_EXPORT_PRIVATE LocalIsolate final : private HiddenLocalFactory {
     return bigint_processor_;
   }
 
-#ifdef V8_ENABLE_LEAPTIERING
   JSDispatchTable::Space* GetJSDispatchTableSpaceFor(Address owning_slot) {
     return isolate_->GetJSDispatchTableSpaceFor(owning_slot);
   }
-#endif  // V8_ENABLE_LEAPTIERING
 
   // AsIsolate is only allowed on the main-thread.
   Isolate* AsIsolate() {

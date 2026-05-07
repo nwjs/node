@@ -1242,6 +1242,9 @@ TEST(HashOf, DoubleSignCollision) {
 
 // Test for collisions in short strings if PrecombineLengthMix is low quality.
 TEST(PrecombineLengthMix, ShortStringCollision) {
+#if defined(__wasm__)
+  GTEST_SKIP() << "Fails flakily on wasm due to no ASLR and 32-bit size_t.";
+#endif
   std::string s1 = "00";
   std::string s2 = "000";
   constexpr char kMinChar = 0;
@@ -1281,7 +1284,7 @@ TEST(SwisstableCollisions, LowEntropyStrings) {
   constexpr char kMinChar = 0;
   constexpr char kMaxChar = 64;
   // These sizes cover the different hashing cases.
-  for (size_t size : {8u, 16u, 32u, 64u}) {
+  for (size_t size : {8u, 16u, 32u, 64u, 128u}) {
     for (size_t b = 0; b < size - 1; ++b) {
       absl::flat_hash_set<std::string> set;
       std::string s(size, '\0');
@@ -1308,7 +1311,7 @@ TEST(SwisstableCollisions, LowEntropyInts) {
     for (size_t i = 0; i < 128 * 1024; ++i) {
       size_t v = absl::rotl(i, bit);
       set.insert(v);
-      ASSERT_LT(HashtableDebugAccess<decltype(set)>::GetNumProbes(set, v), 32)
+      ASSERT_LT(HashtableDebugAccess<decltype(set)>::GetNumProbes(set, v), 48)
           << bit << " " << i;
     }
   }

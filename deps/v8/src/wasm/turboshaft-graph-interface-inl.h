@@ -52,8 +52,8 @@ auto WasmGraphBuilderBase<Assembler>::BuildChangeInt64ToBigInt(
     return V<BigInt>::Cast(__ Call(target, {input}, ts_call_descriptor));
   }
   V<Word32> low_word = __ TruncateWord64ToWord32(input);
-  V<Word32> high_word = __ TruncateWord64ToWord32(__ ShiftRightLogical(
-      input, __ Word32Constant(32), WordRepresentation::Word64()));
+  V<Word32> high_word =
+      __ TruncateWord64ToWord32(__ Word64ShiftRightLogical(input, 32));
   return V<BigInt>::Cast(
       __ Call(target, {low_word, high_word}, ts_call_descriptor));
 }
@@ -63,35 +63,41 @@ auto WasmGraphBuilderBase<Assembler>::BuildImportedFunctionTargetAndImplicitArg(
     ConstOrV<Word32> func_index,
     V<WasmTrustedInstanceData> trusted_instance_data)
     -> std::pair<V<Word32>, V<HeapObject>> {
-  V<WasmDispatchTable> dispatch_table = LOAD_IMMUTABLE_PROTECTED_INSTANCE_FIELD(
-      trusted_instance_data, DispatchTableForImports, WasmDispatchTable);
+  V<WasmDispatchTableForImports> dispatch_table =
+      LOAD_IMMUTABLE_PROTECTED_INSTANCE_FIELD(trusted_instance_data,
+                                              DispatchTableForImports,
+                                              WasmDispatchTableForImports);
   // Handle constant indexes specially to reduce graph size, even though later
   // optimization would optimize this to the same result.
   if (func_index.is_constant()) {
-    int offset = WasmDispatchTable::OffsetOf(func_index.constant_value());
-    V<Word32> target = __ Load(dispatch_table, LoadOp::Kind::TaggedBase(),
-                               MemoryRepresentation::Uint32(),
-                               offset + WasmDispatchTable::kTargetBias);
+    int offset =
+        WasmDispatchTableForImports::OffsetOf(func_index.constant_value());
+    V<Word32> target =
+        __ Load(dispatch_table, LoadOp::Kind::TaggedBase(),
+                MemoryRepresentation::Uint32(),
+                offset + WasmDispatchTableForImports::kTargetBias);
     V<ExposedTrustedObject> implicit_arg =
         V<ExposedTrustedObject>::Cast(__ LoadProtectedPointerField(
             dispatch_table, LoadOp::Kind::TaggedBase(),
-            offset + WasmDispatchTable::kImplicitArgBias));
+            offset + WasmDispatchTableForImports::kImplicitArgBias));
     return {target, implicit_arg};
   }
 
   V<WordPtr> dispatch_table_entry_offset =
       __ WordPtrMul(__ ChangeUint32ToUintPtr(func_index.value()),
-                    WasmDispatchTable::kEntrySize);
-  V<Word32> target = __ Load(
-      dispatch_table, dispatch_table_entry_offset, LoadOp::Kind::TaggedBase(),
-      MemoryRepresentation::Uint32(),
-      WasmDispatchTable::kEntriesOffset + WasmDispatchTable::kTargetBias);
-  V<ExposedTrustedObject> implicit_arg = V<ExposedTrustedObject>::Cast(
-      __ LoadProtectedPointerField(dispatch_table, dispatch_table_entry_offset,
-                                   LoadOp::Kind::TaggedBase(),
-                                   WasmDispatchTable::kEntriesOffset +
-                                       WasmDispatchTable::kImplicitArgBias,
-                                   0));
+                    WasmDispatchTableForImports::kEntrySize);
+  V<Word32> target =
+      __ Load(dispatch_table, dispatch_table_entry_offset,
+              LoadOp::Kind::TaggedBase(), MemoryRepresentation::Uint32(),
+              WasmDispatchTableForImports::kEntriesOffset +
+                  WasmDispatchTableForImports::kTargetBias);
+  V<ExposedTrustedObject> implicit_arg =
+      V<ExposedTrustedObject>::Cast(__ LoadProtectedPointerField(
+          dispatch_table, dispatch_table_entry_offset,
+          LoadOp::Kind::TaggedBase(),
+          WasmDispatchTableForImports::kEntriesOffset +
+              WasmDispatchTableForImports::kImplicitArgBias,
+          0));
   return {target, implicit_arg};
 }
 
@@ -166,7 +172,7 @@ void WasmGraphBuilderBase<Assembler>::BuildSetNewStackLimit(
   // Set the new interrupt limit and real limit. Use a compare-and-swap for
   // the interrupt limit to avoid overwriting a pending interrupt.
   __ AtomicCompareExchange(
-      __ IsolateField(IsolateFieldId::kJsLimitAddress), __ UintPtrConstant(0),
+      __ IsolateField(IsolateFieldId::kJsLimit), __ UintPtrConstant(0),
       old_limit, new_limit, RegisterRepresentation::WordPtr(),
       MemoryRepresentation::UintPtr(), compiler::MemoryAccessKind::kNormal,
       RegisterRepresentation::WordPtr());

@@ -84,8 +84,6 @@ class WithUnifiedHeapSnapshot : public TMixin {
     v8::HeapProfiler* heap_profiler = TMixin::v8_isolate()->GetHeapProfiler();
 
     v8::HeapProfiler::HeapSnapshotOptions options;
-    options.control = nullptr;
-    options.global_object_name_resolver = nullptr;
     options.snapshot_mode = snapshot_mode;
     options.numerics_mode = v8::HeapProfiler::NumericsMode::kHideNumericValues;
     options.stack_state = stack_state;
@@ -301,8 +299,6 @@ class UnifiedHeapWithCustomSpaceSnapshotTest
     v8::HeapProfiler* heap_profiler = v8_isolate()->GetHeapProfiler();
 
     v8::HeapProfiler::HeapSnapshotOptions options;
-    options.control = nullptr;
-    options.global_object_name_resolver = nullptr;
     options.snapshot_mode = snapshot_mode;
     options.numerics_mode = v8::HeapProfiler::NumericsMode::kHideNumericValues;
     options.stack_state = stack_state;
@@ -783,7 +779,7 @@ class WrappedContext : public cppgc::GarbageCollected<WrappedContext>,
     v8::Local<v8::Context> context = v8::Context::New(isolate);
     v8::Local<v8::Object> obj =
         WrapperHelper::CreateWrapper(context, nullptr, "js WrappedContext");
-    context->SetEmbedderData(kContextDataIndex, obj);
+    context->SetEmbedderDataV2(kContextDataIndex, obj);
     cppgc::Persistent<WrappedContext> ref =
         cppgc::MakeGarbageCollected<WrappedContext>(
             isolate->GetCppHeap()->GetAllocationHandle(), isolate, obj,

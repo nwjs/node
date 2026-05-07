@@ -195,7 +195,7 @@ int InterruptBudgetFor(Isolate* isolate, std::optional<CodeKind> code_kind,
   }
 
   if (TiersUpToMaglev(code_kind) &&
-      !function->IsTieringRequestedOrInProgress()) {
+      !function->IsTieringRequestedOrInProgress(isolate)) {
     if (v8_flags.profile_guided_optimization) {
       switch (cached_tiering_decision) {
         case CachedTieringDecision::kDelayMaglev:
@@ -215,7 +215,7 @@ int InterruptBudgetFor(Isolate* isolate, std::optional<CodeKind> code_kind,
       // The enum value is coming from inside the sandbox and while the switch
       // is exhaustive, it's not guaranteed that value is one of the declared
       // values.
-      SBXCHECK(false);
+      UNREACHABLE();
     }
     return v8_flags.invocation_count_for_maglev * bytecode_length;
   }
@@ -321,7 +321,7 @@ void TieringManager::MaybeOptimizeFrame(Tagged<JSFunction> function,
     return;
   }
 
-  if (V8_UNLIKELY(v8_flags.testing_d8_test_runner) &&
+  if (V8_UNLIKELY(v8_flags.allow_natives_syntax) &&
       ManualOptimizationTable::IsMarkedForManualOptimization(isolate_,
                                                              function)) {
     TraceHeuristicOptimizationDisallowed(function);
@@ -450,7 +450,7 @@ bool ShouldResetInterruptBudgetByICChange(
   }
   // The enum value is coming from inside the sandbox and while the switch is
   // exhaustive, it's not guaranteed that value is one of the declared values.
-  SBXCHECK(false);
+  UNREACHABLE();
 }
 
 }  // namespace
@@ -459,13 +459,6 @@ void TieringManager::NotifyICChanged(Tagged<FeedbackVector> vector) {
   CodeKind code_kind = vector->shared_function_info()->HasBaselineCode()
                            ? CodeKind::BASELINE
                            : CodeKind::INTERPRETED_FUNCTION;
-
-#ifndef V8_ENABLE_LEAPTIERING
-  if (vector->has_optimized_code()) {
-    code_kind = vector->optimized_code(isolate_)->kind();
-  }
-#endif  // !V8_ENABLE_LEAPTIERING
-
   if (code_kind == CodeKind::INTERPRETED_FUNCTION &&
       CanCompileWithBaseline(isolate_, vector->shared_function_info()) &&
       vector->shared_function_info()->cached_tiering_decision() ==

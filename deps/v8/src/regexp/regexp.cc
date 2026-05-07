@@ -11,11 +11,13 @@
 #include "src/heap/heap-inl.h"
 #include "src/objects/js-regexp-inl.h"
 #include "src/regexp/experimental/experimental.h"
+#include "src/regexp/regexp-ast-printer.h"
 #include "src/regexp/regexp-bytecode-generator.h"
 #include "src/regexp/regexp-bytecodes.h"
 #include "src/regexp/regexp-code-generator.h"
 #include "src/regexp/regexp-compiler.h"
 #include "src/regexp/regexp-dotprinter.h"
+#include "src/regexp/regexp-graph-printer.h"
 #include "src/regexp/regexp-interpreter.h"
 #include "src/regexp/regexp-macro-assembler-arch.h"
 #include "src/regexp/regexp-macro-assembler-tracer.h"
@@ -93,10 +95,10 @@ class RegExpImpl final : public AllStatic {
       DirectHandle<String> subject, int index, int32_t* result_offsets_vector,
       uint32_t result_offsets_vector_length);
 
-  static bool CompileIrregexpFromSource(Isolate* isolate,
-                                        DirectHandle<IrRegExpData> re_data,
-                                        DirectHandle<String> sample_subject,
-                                        bool is_one_byte);
+  static bool CompileIrregexpFromSource(
+      Isolate* isolate, DirectHandle<IrRegExpData> re_data,
+      DirectHandle<String> sample_subject, bool is_one_byte,
+      RegExpCompilationTarget compilation_target);
   static bool CompileIrregexpFromBytecode(Isolate* isolate,
                                           DirectHandle<IrRegExpData> re_data,
                                           DirectHandle<String> sample_subject,
@@ -552,10 +554,12 @@ bool RegExpImpl::EnsureCompiledIrregexp(Isolate* isolate,
   // strategy is not in use, this value is always false.
   bool needs_tier_up_compilation = re_data->MarkedForTierUp() && has_bytecode;
 
-  if (v8_flags.trace_regexp_tier_up && needs_tier_up_compilation) {
+#ifdef V8_ENABLE_REGEXP_DIAGNOSTICS
+  if (V8_UNLIKELY(v8_flags.trace_regexp_tier_up && needs_tier_up_compilation)) {
     PrintF("JSRegExp object (data: %p) needs tier-up compilation\n",
            reinterpret_cast<void*>(re_data->ptr()));
   }
+#endif
 
   if (!needs_initial_compilation && !needs_tier_up_compilation) {
     DCHECK(re_data->has_code(is_one_byte));
@@ -587,8 +591,16 @@ bool RegExpImpl::EnsureCompiledIrregexp(Isolate* isolate,
           reinterpret_cast<void*>(re_data->ptr()));
     }
   }
+  // The compilation target is a kBytecode if we're interpreting all regexp
+  // objects, or if we're using the tier-up strategy but the tier-up hasn't
+  // happened yet. The compilation target is a kNative if we're using the
+  // tier-up strategy and we need to recompile to tier-up, or if we're producing
+  // native code for all regexp objects.
+  RegExpCompilationTarget compilation_target =
+      re_data->ShouldProduceBytecode() ? RegExpCompilationTarget::kBytecode
+                                       : RegExpCompilationTarget::kNative;
   return CompileIrregexpFromSource(isolate, re_data, sample_subject,
-                                   is_one_byte);
+                                   is_one_byte, compilation_target);
 }
 
 namespace {
@@ -654,10 +666,10 @@ DirectHandle<FixedArray> RegExp::CreateCaptureNameMap(
   return array;
 }
 
-bool RegExpImpl::CompileIrregexpFromSource(Isolate* isolate,
-                                           DirectHandle<IrRegExpData> re_data,
-                                           DirectHandle<String> sample_subject,
-                                           bool is_one_byte) {
+bool RegExpImpl::CompileIrregexpFromSource(
+    Isolate* isolate, DirectHandle<IrRegExpData> re_data,
+    DirectHandle<String> sample_subject, bool is_one_byte,
+    RegExpCompilationTarget compilation_target) {
   // Since we can't abort gracefully during compilation, check for sufficient
   // stack space (including the additional gap as used for Turbofan
   // compilation) here in advance.
@@ -690,16 +702,14 @@ bool RegExpImpl::CompileIrregexpFromSource(Isolate* isolate,
                                      compile_data.error));
     return false;
   }
+
+  // The capture_count cannot change in any valid scenario. Prevent corrupted
+  // pattern strings from generating invalid regexp code.
+  SBXCHECK_EQ(compile_data.capture_count, re_data->capture_count());
+
   const bool can_be_zero_length = compile_data.tree->min_match() == 0;
   re_data->set_can_be_zero_length(can_be_zero_length);
-  // The compilation target is a kBytecode if we're interpreting all regexp
-  // objects, or if we're using the tier-up strategy but the tier-up hasn't
-  // happened yet. The compilation target is a kNative if we're using the
-  // tier-up strategy and we need to recompile to tier-up, or if we're producing
-  // native code for all regexp objects.
-  compile_data.compilation_target = re_data->ShouldProduceBytecode()
-                                        ? RegExpCompilationTarget::kBytecode
-                                        : RegExpCompilationTarget::kNative;
+  compile_data.compilation_target = compilation_target;
   const bool compilation_succeeded =
       Compile(isolate, &zone, &compile_data, flags, pattern, sample_subject,
               re_data, is_one_byte);
@@ -734,7 +744,8 @@ bool RegExpImpl::CompileIrregexpFromSource(Isolate* isolate,
     re_data->set_max_register_count(compile_data.register_count);
   }
 
-  if (v8_flags.trace_regexp_tier_up) {
+#ifdef V8_ENABLE_REGEXP_DIAGNOSTICS
+  if (V8_UNLIKELY(v8_flags.trace_regexp_tier_up)) {
     PrintF("JSRegExp data object %p %s size: %d\n",
            reinterpret_cast<void*>(re_data->ptr()),
            re_data->ShouldProduceBytecode() ? "bytecode" : "native code",
@@ -742,6 +753,7 @@ bool RegExpImpl::CompileIrregexpFromSource(Isolate* isolate,
                ? re_data->bytecode(is_one_byte)->AllocatedSize()
                : re_data->code(isolate, is_one_byte)->Size());
   }
+#endif
 
   return true;
 }
@@ -752,9 +764,8 @@ namespace {
 std::unique_ptr<RegExpMacroAssembler> CreateNativeMacroAssembler(
     Isolate* isolate, Zone* zone, bool is_one_byte, int output_register_count) {
   std::unique_ptr<RegExpMacroAssembler> macro_assembler;
-  NativeRegExpMacroAssembler::Mode mode =
-      is_one_byte ? NativeRegExpMacroAssembler::LATIN1
-                  : NativeRegExpMacroAssembler::UC16;
+  RegExpMacroAssembler::Mode mode =
+      is_one_byte ? RegExpMacroAssembler::LATIN1 : RegExpMacroAssembler::UC16;
 
 #if V8_TARGET_ARCH_IA32
   macro_assembler.reset(
@@ -790,8 +801,8 @@ std::unique_ptr<RegExpMacroAssembler> CreateNativeMacroAssembler(
 #error "Unsupported architecture"
 #endif
 
-#ifdef DEBUG
-  if (v8_flags.trace_regexp_assembler) {
+#ifdef V8_ENABLE_REGEXP_DIAGNOSTICS
+  if (V8_UNLIKELY(v8_flags.trace_regexp_assembler)) {
     return std::make_unique<RegExpMacroAssemblerTracer>(
         std::move(macro_assembler));
   }
@@ -832,13 +843,11 @@ bool RegExpImpl::CompileIrregexpFromBytecode(
     // subject strings or global mode. For this case we create bytecode and
     // immediately assemble JIT code from it.
     DCHECK(!re_data->has_code(is_one_byte));
-    re_data->ResetLastTierUpTick();
-    DCHECK(re_data->ShouldProduceBytecode());
-    if (V8_UNLIKELY(!CompileIrregexpFromSource(isolate, re_data, sample_subject,
-                                               is_one_byte))) {
+    if (V8_UNLIKELY(!CompileIrregexpFromSource(
+            isolate, re_data, sample_subject, is_one_byte,
+            RegExpCompilationTarget::kBytecode))) {
       return false;
     }
-    re_data->MarkTierUpForNextExec();
   }
 
   DCHECK(re_data->has_bytecode(is_one_byte));
@@ -884,7 +893,7 @@ bool RegExpImpl::CompileIrregexpFromBytecode(
 
   // Code printing.
 #ifdef ENABLE_DISASSEMBLER
-  if (v8_flags.print_regexp_code) {
+  if (V8_UNLIKELY(v8_flags.print_regexp_code)) {
     CodeTracer::Scope trace_scope(isolate->GetCodeTracer());
     OFStream os(trace_scope.file());
     auto code = Cast<Code>(result.code());
@@ -893,11 +902,13 @@ bool RegExpImpl::CompileIrregexpFromBytecode(
   }
 #endif
 
-  if (v8_flags.trace_regexp_tier_up) {
+#ifdef V8_ENABLE_REGEXP_DIAGNOSTICS
+  if (V8_UNLIKELY(v8_flags.trace_regexp_tier_up)) {
     PrintF("JSRegExp data object %p native code size: %d\n",
            reinterpret_cast<void*>(re_data->ptr()),
            re_data->code(isolate, is_one_byte)->Size());
   }
+#endif
 
   return true;
 }
@@ -1012,14 +1023,6 @@ std::optional<int> RegExpImpl::IrregexpExec(
     int32_t* result_offsets_vector, uint32_t result_offsets_vector_length) {
   subject = String::Flatten(isolate, subject);
 
-#ifdef DEBUG
-  if (v8_flags.trace_regexp_bytecodes && regexp_data->ShouldProduceBytecode()) {
-    PrintF("\n\nRegexp match:   /%s/\n\n",
-           regexp_data->source()->ToCString().get());
-    PrintF("\n\nSubject string: '%s'\n\n", subject->ToCString().get());
-  }
-#endif
-
   const int original_register_count =
       JSRegExp::RegistersForCaptureCount(regexp_data->capture_count());
 
@@ -1032,21 +1035,25 @@ std::optional<int> RegExpImpl::IrregexpExec(
       // tier-up if the subject string length is equal or greater than the given
       // heuristic value.
       regexp_data->MarkTierUpForNextExec();
-      if (v8_flags.trace_regexp_tier_up) {
+#ifdef V8_ENABLE_REGEXP_DIAGNOSTICS
+      if (V8_UNLIKELY(v8_flags.trace_regexp_tier_up)) {
         PrintF(
             "Forcing tier-up for very long strings in "
             "RegExpImpl::IrregexpExec\n");
       }
+#endif
     } else if (static_cast<uint32_t>(original_register_count) <
                result_offsets_vector_length) {
       // Tier up because the interpreter doesn't do global execution.
       regexp_data->MarkTierUpForNextExec();
-      if (v8_flags.trace_regexp_tier_up) {
+#ifdef V8_ENABLE_REGEXP_DIAGNOSTICS
+      if (V8_UNLIKELY(v8_flags.trace_regexp_tier_up)) {
         PrintF(
             "Forcing tier-up of RegExpData object %p for global irregexp "
             "mode\n",
             reinterpret_cast<void*>(regexp_data->ptr()));
       }
+#endif
     }
   }
 
@@ -1117,7 +1124,9 @@ DirectHandle<RegExpMatchInfo> RegExp::SetLastMatchInfo(
 
 // static
 void RegExp::DotPrintForTesting(const char* label, RegExpNode* node) {
+#ifdef V8_ENABLE_REGEXP_DIAGNOSTICS
   DotPrinter::DotPrint(label, node);
+#endif
 }
 
 namespace {
@@ -1164,6 +1173,33 @@ bool RegExpImpl::Compile(Isolate* isolate, Zone* zone, RegExpCompileData* data,
 
   RegExpCompiler compiler(isolate, zone, data->capture_count, flags,
                           is_one_byte);
+#ifdef V8_ENABLE_REGEXP_DIAGNOSTICS
+  const bool needs_graph_printer = v8_flags.print_regexp_graph ||
+                                   v8_flags.trace_regexp_graph_building ||
+                                   v8_flags.trace_regexp_compiler;
+  const bool needs_ast_printer = v8_flags.trace_regexp_graph_building;
+  std::unique_ptr<RegExpDiagnostics> diagnostics;
+  if (V8_UNLIKELY(needs_ast_printer || needs_graph_printer)) {
+    diagnostics = std::make_unique<RegExpDiagnostics>(std::cout, zone);
+  }
+  if (V8_UNLIKELY(needs_ast_printer)) {
+    diagnostics->set_tree_labeller(
+        std::make_unique<RegExpGraphLabeller<RegExpTree>>());
+    diagnostics->set_ast_printer(std::make_unique<RegExpAstNodePrinter>(
+        diagnostics->os(), diagnostics->tree_labeller(), diagnostics->zone()));
+  }
+  if (V8_UNLIKELY(needs_graph_printer)) {
+    diagnostics->set_graph_labeller(
+        std::make_unique<RegExpGraphLabeller<RegExpNode>>());
+    diagnostics->set_graph_printer(std::make_unique<RegExpGraphPrinter>(
+        std::make_unique<RegExpGraphNodePrinter>(diagnostics->os(),
+                                                 diagnostics->graph_labeller(),
+                                                 diagnostics->zone())));
+  }
+  if (V8_UNLIKELY(needs_ast_printer || needs_graph_printer)) {
+    compiler.set_diagnostics(std::move(diagnostics));
+  }
+#endif
 
   if (compiler.optimize()) {
     compiler.set_optimize(!TooMuchRegExpCode(isolate, pattern));
@@ -1194,7 +1230,11 @@ bool RegExpImpl::Compile(Isolate* isolate, Zone* zone, RegExpCompileData* data,
     return false;
   }
 
+#ifdef V8_ENABLE_REGEXP_DIAGNOSTICS
+  if (V8_UNLIKELY(v8_flags.print_regexp_graph))
+    compiler.diagnostics()->graph_printer()->PrintGraph(data->node);
   if (v8_flags.trace_regexp_graph) DotPrinter::DotPrint("Start", data->node);
+#endif
 
   std::unique_ptr<RegExpMacroAssembler> macro_assembler;
   if (data->compilation_target == RegExpCompilationTarget::kNative) {
@@ -1208,9 +1248,12 @@ bool RegExpImpl::Compile(Isolate* isolate, Zone* zone, RegExpCompileData* data,
   } else {
     DCHECK_EQ(data->compilation_target, RegExpCompilationTarget::kBytecode);
     // Interpreted regexp implementation.
-    macro_assembler.reset(new RegExpBytecodeGenerator(isolate, zone));
-#ifdef DEBUG
-    if (v8_flags.trace_regexp_assembler) {
+    macro_assembler.reset(
+        new RegExpBytecodeGenerator(isolate, zone,
+                                    is_one_byte ? RegExpMacroAssembler::LATIN1
+                                                : RegExpMacroAssembler::UC16));
+#ifdef V8_ENABLE_REGEXP_DIAGNOSTICS
+    if (V8_UNLIKELY(v8_flags.trace_regexp_assembler)) {
       std::unique_ptr<RegExpMacroAssembler> tracer_macro_assembler =
           std::make_unique<RegExpMacroAssemblerTracer>(
               std::move(macro_assembler));
@@ -1249,22 +1292,26 @@ bool RegExpImpl::Compile(Isolate* isolate, Zone* zone, RegExpCompileData* data,
   // Code / bytecode printing.
   {
 #ifdef ENABLE_DISASSEMBLER
-    if (v8_flags.print_regexp_code &&
-        data->compilation_target == RegExpCompilationTarget::kNative) {
+    if (V8_UNLIKELY(v8_flags.print_regexp_code &&
+                    data->compilation_target ==
+                        RegExpCompilationTarget::kNative &&
+                    result.Succeeded())) {
       CodeTracer::Scope trace_scope(isolate->GetCodeTracer());
       OFStream os(trace_scope.file());
       auto code = CheckedCast<Code>(result.code);
       std::unique_ptr<char[]> pattern_cstring = pattern->ToCString();
       code->Disassemble(pattern_cstring.get(), os, isolate);
     }
-#endif
-    if (v8_flags.print_regexp_bytecode &&
-        data->compilation_target == RegExpCompilationTarget::kBytecode) {
+    if (V8_UNLIKELY(v8_flags.print_regexp_bytecode &&
+                    data->compilation_target ==
+                        RegExpCompilationTarget::kBytecode &&
+                    result.Succeeded())) {
       auto bytecode = CheckedCast<TrustedByteArray>(result.code);
       std::unique_ptr<char[]> pattern_cstring = pattern->ToCString();
       RegExpBytecodeDisassemble(bytecode->begin(), bytecode->length(),
                                 pattern_cstring.get());
     }
+#endif
   }
 
   if (result.error != RegExpError::kNone) {
@@ -1593,8 +1640,9 @@ bool RegExpResultsCache_MatchGlobalAtom::TryGet(Isolate* isolate,
 }
 
 void RegExpResultsCache_MatchGlobalAtom::Clear(Heap* heap) {
-  MemsetTagged(heap->regexp_match_global_atom_cache()->RawFieldOfFirstElement(),
-               Smi::zero(), kSize);
+  Relaxed_MemsetTagged(
+      heap->regexp_match_global_atom_cache()->RawFieldOfFirstElement(),
+      Smi::zero(), kSize);
 }
 
 std::ostream& operator<<(std::ostream& os, RegExpFlags flags) {

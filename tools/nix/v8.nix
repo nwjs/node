@@ -60,13 +60,16 @@ pkgs.stdenv.mkDerivation (finalAttrs: {
     };
 
   # We need to patch tools/gyp/ to work from within Nix sandbox
-  patches = pkgs.lib.optional pkgs.stdenv.buildPlatform.isDarwin (
-    pkgs.fetchpatch2 {
-      url = "https://github.com/NixOS/nixpkgs/raw/2343bbb58f99267223bc2aac4fc9ea301a155a16/pkgs/development/web/nodejs/gyp-patches-set-fallback-value-for-CLT-darwin.patch";
-      hash = "sha256-BLF3mf3ME+ED1Qt84Qp9tswJ+3lVnEa10Zr/xdy+IhE=";
-      includes = [ "tools/gyp/*" ];
-    }
-  );
+  prePatch = ''
+    patches=()
+    for patch in ${pkgs.lib.concatStringsSep " " nodejs.patches}; do
+      filtered=$(mktemp)
+      filterdiff -p1 -i 'tools/gyp/*' "$patch" > "$filtered"
+      if [ -s "$filtered" ]; then
+        patches+=("$filtered")
+      fi
+    done
+  '';
 
   inherit (nodejs) configureScript;
   inherit configureFlags buildInputs;

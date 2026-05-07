@@ -35,8 +35,8 @@ void AllocateRaw(MaglevAssembler* masm, Isolate* isolate,
   if (v8_flags.single_generation) {
     alloc_type = AllocationType::kOld;
   }
-  ExternalReference top = SpaceAllocationTopAddress(isolate, alloc_type);
-  ExternalReference limit = SpaceAllocationLimitAddress(isolate, alloc_type);
+  IsolateFieldId top = SpaceAllocationTopAddress(alloc_type);
+  IsolateFieldId limit = SpaceAllocationLimitAddress(alloc_type);
 
   ZoneLabelRef done(masm);
   MaglevAssembler::TemporaryRegisterScope temps(masm);
@@ -48,9 +48,9 @@ void AllocateRaw(MaglevAssembler* masm, Isolate* isolate,
   // {size_in_bytes}.
   Register new_top = object;
   // Check if there is enough space.
-  __ LoadWord(object, __ ExternalReferenceAsOperand(top, scratch));
+  __ LoadWord(object, __ ExternalReferenceAsOperand(top));
   __ AddWord(new_top, object, Operand(size_in_bytes));
-  __ LoadWord(scratch, __ ExternalReferenceAsOperand(limit, scratch));
+  __ LoadWord(scratch, __ ExternalReferenceAsOperand(limit));
 
   // Call runtime if new_top >= limit.
   __ MacroAssembler::Branch(
@@ -65,7 +65,7 @@ void AllocateRaw(MaglevAssembler* masm, Isolate* isolate,
       ge, new_top, Operand(scratch));
 
   // Store new top and tag object.
-  __ Move(__ ExternalReferenceAsOperand(top, scratch), new_top);
+  __ Move(__ ExternalReferenceAsOperand(top), new_top);
 #if V8_VERIFY_WRITE_BARRIERS
   if (v8_flags.verify_write_barriers) {
     ExternalReference last_young_allocation =
@@ -157,38 +157,15 @@ void MaglevAssembler::Prologue(Graph* graph) {
   DCHECK(!graph->is_osr());
 
   CallTarget();
-  BailoutIfDeoptimized();
+  if (v8_flags.debug_code) {
+    AssertNotDeoptimized();
+  }
 
   if (graph->has_recursive_calls()) {
     BindCallTarget(code_gen_state()->entry_label());
   }
 
   // Tiering support.
-#ifndef V8_ENABLE_LEAPTIERING
-  if (v8_flags.turbofan) {
-    using D = MaglevOptimizeCodeOrTailCallOptimizedCodeSlotDescriptor;
-    Register flags = D::GetRegisterParameter(D::kFlags);
-    Register feedback_vector = D::GetRegisterParameter(D::kFeedbackVector);
-    DCHECK(!AreAliased(
-        flags, feedback_vector,
-        kJavaScriptCallArgCountRegister,  // flags - t4, feedback - a6,
-                                          // kJavaScriptCallArgCountRegister -
-                                          // a0
-        kJSFunctionRegister, kContextRegister,
-        kJavaScriptCallNewTargetRegister));
-    DCHECK(!temps.Available().has(flags));
-    DCHECK(!temps.Available().has(feedback_vector));
-    Move(feedback_vector,
-         compilation_info()->toplevel_compilation_unit()->feedback().object());
-    Label needs_processing, done;
-    LoadFeedbackVectorFlagsAndJumpIfNeedsProcessing(
-        flags, feedback_vector, CodeKind::MAGLEV, &needs_processing);
-    Jump(&done);
-    bind(&needs_processing);
-    TailCallBuiltin(Builtin::kMaglevOptimizeCodeOrTailCallOptimizedCodeSlot);
-    bind(&done);
-  }
-#endif
 
   EnterFrame(StackFrame::MAGLEV);
   // Save arguments in frame.
@@ -246,20 +223,27 @@ void MaglevAssembler::MaybeEmitDeoptBuiltinsCall(size_t eager_deopt_count,
                                                  Label* eager_deopt_entry,
                                                  size_t lazy_deopt_count,
                                                  Label* lazy_deopt_entry) {
-  // On most platforms, we emit two shared tail calls to the eager and lazy
-  // deoptimization builtins and the individual exits just call them to save
-  // space. We do not currently do this on RISC-V, so we don't bind the two
-  // provided labels here. This matches how it is done in the RISC-V variant
-  // of CodeGenerator::PrepareForDeoptimizationExits.
-
   // We do have to avoid getting the trampoline pool emitted in the middle
   // of the deoptimization exits, because it destroys our ability to compute
   // the deoptimization index based on the 'pc' and the offset of the start
   // of the exits section.
-  ForceConstantPoolEmissionWithoutJump();
   size_t total_size = eager_deopt_count * Deoptimizer::kEagerDeoptExitSize +
                       lazy_deopt_count * Deoptimizer::kLazyDeoptExitSize;
-  CheckTrampolinePoolQuick(static_cast<int>(total_size));
+  StartBlockPools(static_cast<int>(total_size));
+  if (eager_deopt_count > 0) {
+    bind(eager_deopt_entry);
+    TemporaryRegisterScope scope(this);
+    Register scratch = scope.AcquireScratch();
+    LoadEntryFromBuiltin(Builtin::kDeoptimizationEntry_Eager, scratch);
+    MacroAssembler::Jump(scratch);
+  }
+  if (lazy_deopt_count > 0) {
+    bind(lazy_deopt_entry);
+    TemporaryRegisterScope scope(this);
+    Register scratch = scope.AcquireScratch();
+    LoadEntryFromBuiltin(Builtin::kDeoptimizationEntry_Lazy, scratch);
+    MacroAssembler::Jump(scratch);
+  }
 }
 
 void MaglevAssembler::LoadSingleCharacterString(Register result,
@@ -342,6 +326,10 @@ void MaglevAssembler::IsObjectType(Register object, Register scratch1,
     std::optional<RootIndex> expected =
         InstanceTypeChecker::UniqueMapOfInstanceType(type);
     Tagged_t expected_ptr = ReadOnlyRootPtr(*expected);
+    TemporaryRegisterScope temps(this);
+    if (scratch1 == scratch2) {
+      scratch2 = temps.AcquireScratch();
+    }
     li(scratch2, expected_ptr);
     SignExtendWord(scratch2, scratch2);
     MacroAssembler::Branch(&ConditionMet, Condition::kEqual, scratch1,
@@ -669,6 +657,14 @@ void MaglevAssembler::TryChangeFloat64ToIndex(Register result,
   CompareF64(rcmp, EQ, value, converted_back);  // rcmp is 0 if not equal
   MacroAssembler::Branch(fail, eq, rcmp, Operand(zero_reg));
   Jump(success);
+}
+
+void MaglevAssembler::Move(ExternalReference dst, int32_t imm) {
+  TemporaryRegisterScope temps(this);
+  Register scratch_imm = temps.AcquireScratch();
+  Register scratch_dst = temps.AcquireScratch();
+  Move(scratch_imm, imm);
+  StoreWord(scratch_imm, ExternalReferenceAsOperand(dst, scratch_dst));
 }
 
 }  // namespace maglev

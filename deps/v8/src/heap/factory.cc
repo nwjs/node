@@ -22,14 +22,14 @@
 #include "src/execution/isolate-inl.h"
 #include "src/execution/protectors-inl.h"
 #include "src/flags/flags.h"
+#include "src/heap/base-page.h"
 #include "src/heap/heap-allocator-inl.h"
 #include "src/heap/heap-inl.h"
 #include "src/heap/heap-layout-inl.h"
 #include "src/heap/incremental-marking.h"
-#include "src/heap/large-page-metadata-inl.h"
+#include "src/heap/large-page-inl.h"
 #include "src/heap/mark-compact-inl.h"
-#include "src/heap/memory-chunk-metadata.h"
-#include "src/heap/mutable-page-metadata.h"
+#include "src/heap/mutable-page.h"
 #include "src/heap/read-only-heap.h"
 #include "src/ic/handler-configuration-inl.h"
 #include "src/init/bootstrapper.h"
@@ -72,6 +72,7 @@
 #include "src/objects/megadom-handler-inl.h"
 #include "src/objects/microtask-inl.h"
 #include "src/objects/module-inl.h"
+#include "src/objects/name.h"
 #include "src/objects/objects.h"
 #include "src/objects/promise-inl.h"
 #include "src/objects/property-descriptor-object-inl.h"
@@ -275,12 +276,19 @@ Tagged<HeapObject> Factory::CodeBuilder::AllocateUninitializedInstructionStream(
         heap->heap()->allocator()->AllocateRawWith<HeapAllocator::kRetryOrFail>(
             object_size, AllocationType::kCode, AllocationOrigin::kRuntime);
     CHECK(!result.is_null());
+#if CONTIGUOUS_COMPRESSED_READ_ONLY_SPACE_BOOL
+    CHECK_NE(result.ptr() & kContiguousReadOnlySpaceMask, 0);
+#endif  //  CONTIGUOUS_COMPRESSED_READ_ONLY_SPACE_BOOL
     return result;
-  } else {
-    // Return null if we cannot allocate the code object.
-    return heap->AllocateRawWith<HeapAllocator::kLightRetry>(
-        object_size, AllocationType::kCode);
   }
+  // Return null if we cannot allocate the code object.
+  result = heap->AllocateRawWith<HeapAllocator::kLightRetry>(
+      object_size, AllocationType::kCode);
+#if CONTIGUOUS_COMPRESSED_READ_ONLY_SPACE_BOOL
+  CHECK_IMPLIES(!result.is_null(),
+                (result.ptr() & kContiguousReadOnlySpaceMask) != 0);
+#endif  //  CONTIGUOUS_COMPRESSED_READ_ONLY_SPACE_BOOL
+  return result;
 }
 
 MaybeHandle<Code> Factory::CodeBuilder::TryBuild() {
@@ -339,8 +347,9 @@ void Factory::InitializeAllocationMemento(
 
 Tagged<HeapObject> Factory::New(DirectHandle<Map> map,
                                 AllocationType allocation) {
-  DCHECK(map->instance_type() != MAP_TYPE);
+  DCHECK_NE(map->instance_type(), MAP_TYPE);
   int size = map->instance_size();
+  DCHECK_NE(size, kVariableSizeSentinel);
   Tagged<HeapObject> result =
       allocator()->AllocateRawWith<HeapAllocator::kRetryOrFail>(size,
                                                                 allocation);
@@ -380,6 +389,19 @@ DirectHandle<PrototypeInfo> Factory::NewPrototypeInfo() {
   return direct_handle(result, isolate());
 }
 
+DirectHandle<PrototypeSharedClosureInfo> Factory::NewPrototypeSharedClosureInfo(
+    DirectHandle<ObjectBoilerplateDescription> object_boilerplate_description,
+    DirectHandle<Context> context,
+    DirectHandle<ClosureFeedbackCellArray> feedback_array) {
+  auto result = NewStructInternal<PrototypeSharedClosureInfo>(
+      PROTOTYPE_SHARED_CLOSURE_INFO_TYPE, AllocationType::kOld);
+  DisallowGarbageCollection no_gc;
+  result->set_boilerplate_description(*object_boilerplate_description);
+  result->set_context(*context);
+  result->set_closure_feedback_cell_array(*feedback_array);
+  return direct_handle(result, isolate());
+}
+
 DirectHandle<EnumCache> Factory::NewEnumCache(DirectHandle<FixedArray> keys,
                                               DirectHandle<FixedArray> indices,
                                               AllocationType allocation) {
@@ -412,9 +434,7 @@ DirectHandle<Tuple2> Factory::NewTuple2(DirectHandle<Object> value1,
 }
 
 DirectHandle<Hole> Factory::NewHole() {
-  DirectHandle<Hole> hole(
-      Cast<Hole>(New(hole_map(), AllocationType::kReadOnly)), isolate());
-  return hole;
+  UNREACHABLE();
 }
 
 DirectHandle<PropertyArray> Factory::NewPropertyArray(
@@ -433,8 +453,7 @@ DirectHandle<PropertyArray> Factory::NewPropertyArray(
 }
 
 MaybeHandle<FixedArray> Factory::TryNewFixedArray(
-    int length, AllocationType allocation_type) {
-  DCHECK_LE(0, length);
+    uint32_t length, AllocationType allocation_type) {
   if (length == 0) return empty_fixed_array();
 
   int size = FixedArray::SizeFor(length);
@@ -444,7 +463,7 @@ MaybeHandle<FixedArray> Factory::TryNewFixedArray(
   if (!allocation.To(&result)) return MaybeHandle<FixedArray>();
   if ((size > heap->MaxRegularHeapObjectSize(allocation_type)) &&
       v8_flags.use_marking_progress_bar) {
-    LargePageMetadata::FromHeapObject(result)
+    LargePage::FromHeapObject(isolate(), result)
         ->marking_progress_tracker()
         .Enable(size);
   }
@@ -475,10 +494,6 @@ Handle<FeedbackVector> Factory::NewFeedbackVector(
   vector->set_invocation_count_before_stable(0);
   vector->reset_osr_state();
   vector->reset_flags();
-#ifndef V8_ENABLE_LEAPTIERING
-  vector->set_maybe_optimized_code(kClearedWeakValue);
-  vector->set_log_next_execution(v8_flags.log_function_events);
-#endif  // !V8_ENABLE_LEAPTIERING
   vector->set_closure_feedback_cell_array(*closure_feedback_cell_array);
   vector->set_parent_feedback_cell(*parent_feedback_cell);
 
@@ -972,6 +987,12 @@ StringTransitionStrategy Factory::ComputeInternalizationStrategyForString(
   if (v8_flags.shared_string_table && !HeapLayout::InAnySharedSpace(*string)) {
     return StringTransitionStrategy::kCopy;
   }
+  // If the string table is not shared and the string is in shared space, we
+  // need to copy the string to the local heap.
+  if (!v8_flags.shared_string_table && HeapLayout::InAnySharedSpace(*string)) {
+    DCHECK(v8_flags.shared_strings);
+    return StringTransitionStrategy::kCopy;
+  }
   DCHECK_NOT_NULL(internalized_map);
   DisallowGarbageCollection no_gc;
   // This method may be called concurrently, so snapshot the map from the input
@@ -1012,7 +1033,7 @@ template DirectHandle<ExternalTwoByteString> Factory::InternalizeExternalString<
 
 StringTransitionStrategy Factory::ComputeSharingStrategyForString(
     DirectHandle<String> string, MaybeDirectHandle<Map>* shared_map) {
-  DCHECK(v8_flags.shared_string_table);
+  DCHECK(v8_flags.shared_strings);
   // TODO(pthier): Avoid copying LO-space strings. Update page flags instead.
   if (!HeapLayout::InAnySharedSpace(*string)) {
     return StringTransitionStrategy::kCopy;
@@ -1212,7 +1233,8 @@ DirectHandle<JSStringIterator> Factory::NewJSStringIterator(
   return iterator;
 }
 
-Tagged<Symbol> Factory::NewSymbolInternal(AllocationType allocation) {
+Tagged<Symbol> Factory::NewSymbolInternal(PrivateSymbolKind kind,
+                                          AllocationType allocation) {
   DCHECK(allocation != AllocationType::kYoung);
   // Statically ensure that it is safe to allocate symbols in paged spaces.
   static_assert(sizeof(Symbol) <= kMaxRegularHeapObjectSize);
@@ -1234,26 +1256,32 @@ Tagged<Symbol> Factory::NewSymbolInternal(AllocationType allocation) {
                                SKIP_WRITE_BARRIER);
   }
   symbol->set_flags(0);
-  DCHECK(!symbol->is_private());
+  symbol->set_private_symbol_kind(kind);
   return symbol;
 }
 
 Handle<Symbol> Factory::NewSymbol(AllocationType allocation) {
-  return handle(NewSymbolInternal(allocation), isolate());
+  return handle(NewSymbolInternal(PrivateSymbolKind::kPublic, allocation),
+                isolate());
 }
 
 Handle<Symbol> Factory::NewPrivateSymbol(AllocationType allocation) {
   DCHECK(allocation != AllocationType::kYoung);
-  Tagged<Symbol> symbol = NewSymbolInternal(allocation);
-  DisallowGarbageCollection no_gc;
-  symbol->set_is_private(true);
+  Tagged<Symbol> symbol =
+      NewSymbolInternal(PrivateSymbolKind::kInternal, allocation);
   return handle(symbol, isolate());
 }
 
 DirectHandle<Symbol> Factory::NewPrivateNameSymbol(DirectHandle<String> name) {
-  Tagged<Symbol> symbol = NewSymbolInternal();
+  Tagged<Symbol> symbol = NewSymbolInternal(PrivateSymbolKind::kFieldName);
   DisallowGarbageCollection no_gc;
-  symbol->set_is_private_name();
+  symbol->set_description(*name);
+  return direct_handle(symbol, isolate());
+}
+
+DirectHandle<Symbol> Factory::NewPrivateBrandSymbol(DirectHandle<String> name) {
+  Tagged<Symbol> symbol = NewSymbolInternal(PrivateSymbolKind::kBrand);
+  DisallowGarbageCollection no_gc;
   symbol->set_description(*name);
   return direct_handle(symbol, isolate());
 }
@@ -1527,8 +1555,8 @@ DirectHandle<AccessorInfo> Factory::NewAccessorInfo() {
   Tagged<AccessorInfo> info =
       Cast<AccessorInfo>(New(accessor_info_map(), AllocationType::kOld));
   DisallowGarbageCollection no_gc;
-  info->set_name(*empty_string(), SKIP_WRITE_BARRIER);
   info->set_data(*undefined_value(), SKIP_WRITE_BARRIER);
+  info->set_name(*empty_string(), SKIP_WRITE_BARRIER);
   info->set_flags(0);  // Must clear the flags, it was initialized as undefined.
   info->set_is_sloppy(true);
   info->set_initial_property_attributes(NONE);
@@ -1687,7 +1715,7 @@ DirectHandle<WasmTrustedInstanceData> Factory::NewWasmTrustedInstanceData(
           shared ? AllocationType::kSharedTrusted : AllocationType::kTrusted,
           read_only_roots().wasm_trusted_instance_data_map()));
   DisallowGarbageCollection no_gc;
-  result->init_self_indirect_pointer(isolate());
+  result->InitAndPublish(isolate());
   result->clear_padding();
   for (int offset : WasmTrustedInstanceData::kTaggedFieldOffsets) {
     result->RawField(offset).store(read_only_roots().undefined_value());
@@ -1713,12 +1741,43 @@ DirectHandle<WasmDispatchTable> Factory::NewWasmDispatchTable(
           shared ? AllocationType::kSharedTrusted : AllocationType::kTrusted,
           read_only_roots().wasm_dispatch_table_map()));
   DisallowGarbageCollection no_gc;
-  result->init_self_indirect_pointer(isolate());
+  result->InitAndPublish(isolate());
   result->WriteField<int>(WasmDispatchTable::kLengthOffset, length);
   result->WriteField<int>(WasmDispatchTable::kCapacityOffset, length);
   result->set_protected_offheap_data(*offheap_data);
   result->set_protected_uses(*empty_protected_weak_fixed_array());
   result->set_table_type(table_type);
+  for (int i = 0; i < length; ++i) {
+    result->Clear(i, WasmDispatchTable::kNewEntry);
+  }
+  return direct_handle(result, isolate());
+}
+
+DirectHandle<WasmDispatchTableForImports>
+Factory::NewWasmDispatchTableForImports(int length, bool shared) {
+  CHECK_LE(length, WasmDispatchTableForImports::kMaxLength);
+
+  // Very rough estimate: half the imports need wrappers, each wrapper needs
+  // an entry in a std::unordered_map<int, std::shared_ptr<...>>, the map
+  // is probably about half full.
+  constexpr size_t kPerEntrySize =
+      sizeof(int) + sizeof(std::shared_ptr<wasm::WasmWrapperHandle>) +
+      2 * sizeof(void*);
+  size_t estimated_offheap_size = length * kPerEntrySize;
+  DirectHandle<TrustedManaged<WasmDispatchTableData>> offheap_data =
+      TrustedManaged<WasmDispatchTableData>::From(
+          isolate(), estimated_offheap_size,
+          std::make_shared<WasmDispatchTableData>(), shared);
+
+  int bytes = WasmDispatchTableForImports::SizeFor(length);
+  Tagged<WasmDispatchTableForImports> result =
+      UncheckedCast<WasmDispatchTableForImports>(AllocateRawWithImmortalMap(
+          bytes,
+          shared ? AllocationType::kSharedTrusted : AllocationType::kTrusted,
+          read_only_roots().wasm_dispatch_table_for_imports_map()));
+  DisallowGarbageCollection no_gc;
+  result->WriteField<int>(WasmDispatchTableForImports::kLengthOffset, length);
+  result->set_protected_offheap_data(*offheap_data);
   for (int i = 0; i < length; ++i) {
     result->Clear(i, WasmDispatchTable::kNewEntry);
   }
@@ -1739,10 +1798,7 @@ DirectHandle<WasmTypeInfo> Factory::NewWasmTypeInfo(
   // kMinimumSupertypeArraySize, so that generated code can skip the bounds
   // check when the index is statically known to be sufficiently small.
   // {num_supertypes-1} supertypes will be copied from {opt_parent}'s
-  // supertypes list; any remaining slots will be filled with {opt_parent}.
-  // Padding any over-allocated slots with copies of {opt_parent} is
-  // load-bearing for casts to exact types: for those, we look at the last
-  // slot's value, ignoring the target type's inheritance depth.
+  // supertypes list, then {opt_parent} is appended.
   int min_supertypes = wasm::kMinimumSupertypeArraySize;
   int actual_supertypes = std::max(min_supertypes, num_supertypes);
 
@@ -1752,19 +1808,16 @@ DirectHandle<WasmTypeInfo> Factory::NewWasmTypeInfo(
       shared ? AllocationType::kSharedOld : AllocationType::kOld, map));
   DisallowGarbageCollection no_gc;
   result->set_supertypes_length(actual_supertypes);
-  if (opt_parent.is_null()) {
-    for (int i = 0; i < actual_supertypes; i++) {
-      result->set_supertypes(i, *undefined_value());
-    }
-  } else {
+  int i = 0;
+  if (!opt_parent.is_null()) {
     Tagged<WasmTypeInfo> parent_type_info = opt_parent->wasm_type_info();
-    int i = 0;
     for (; i < num_supertypes - 1; i++) {
       result->set_supertypes(i, parent_type_info->supertypes(i));
     }
-    for (; i < actual_supertypes; i++) {
-      result->set_supertypes(i, *opt_parent);
-    }
+    result->set_supertypes(i++, *opt_parent);
+  }
+  for (; i < actual_supertypes; i++) {
+    result->set_supertypes(i, *undefined_value());
   }
   result->set_canonical_type(type.raw_bit_field());
   result->set_canonical_element_type(element_type.raw_bit_field());
@@ -1820,23 +1873,22 @@ DirectHandle<WasmFastApiCallData> Factory::NewWasmFastApiCallData(
 
 DirectHandle<WasmInternalFunction> Factory::NewWasmInternalFunction(
     DirectHandle<TrustedObject> implicit_arg, int function_index, bool shared,
-    WasmCodePointer call_target) {
+    WasmCodePointer call_target, const wasm::CanonicalSig* sig) {
   Tagged<WasmInternalFunction> internal =
       TrustedCast<WasmInternalFunction>(AllocateRawWithImmortalMap(
           WasmInternalFunction::kSize,
           shared ? AllocationType::kSharedTrusted : AllocationType::kTrusted,
           *wasm_internal_function_map()));
-  internal->init_self_indirect_pointer(isolate());
-  {
-    DisallowGarbageCollection no_gc;
-    internal->set_call_target(call_target);
-    DCHECK(IsWasmTrustedInstanceData(*implicit_arg) ||
-           IsWasmImportData(*implicit_arg));
-    internal->set_implicit_arg(*implicit_arg);
-    // Default values, will be overwritten by the caller.
-    internal->set_function_index(function_index);
-    internal->set_external(*undefined_value());
-  }
+
+  DisallowGarbageCollection no_gc;
+  internal->InitAndPublish(isolate());
+  internal->set_call_target(call_target);
+  DCHECK(IsWasmTrustedInstanceData(*implicit_arg) ||
+         IsWasmImportData(*implicit_arg));
+  internal->set_implicit_arg(*implicit_arg);
+  internal->set_function_index(function_index);
+  internal->set_external(*undefined_value());
+  internal->set_sig(sig);
 
   return direct_handle(internal, isolate());
 }
@@ -1857,19 +1909,16 @@ DirectHandle<WasmFuncRef> Factory::NewWasmFuncRef(
 }
 
 DirectHandle<WasmJSFunctionData> Factory::NewWasmJSFunctionData(
-    wasm::CanonicalTypeIndex sig_index, DirectHandle<JSReceiver> callable,
+    const wasm::CanonicalSig* sig, DirectHandle<JSReceiver> callable,
     DirectHandle<Code> wrapper_code, DirectHandle<Map> rtt,
     wasm::Suspend suspend, wasm::Promise promise,
-    std::shared_ptr<wasm::WasmImportWrapperHandle> wrapper_handle) {
-  // TODO(clemensb): Should this be passed instead of looked up here?
-  const wasm::CanonicalSig* sig =
-      wasm::GetTypeCanonicalizer()->LookupFunctionSignature(sig_index);
+    std::shared_ptr<wasm::WasmWrapperHandle> wrapper_handle) {
   constexpr bool kShared = false;
   DirectHandle<WasmImportData> import_data = NewWasmImportData(
       callable, suspend, DirectHandle<WasmTrustedInstanceData>(), sig, kShared);
 
   DirectHandle<WasmInternalFunction> internal = NewWasmInternalFunction(
-      import_data, -1, kShared, wrapper_handle->code_pointer());
+      import_data, -1, kShared, wrapper_handle->code_pointer(), sig);
   DirectHandle<WasmFuncRef> func_ref = NewWasmFuncRef(internal, rtt, kShared);
   import_data->SetFuncRefAsCallOrigin(*internal);
 
@@ -1887,12 +1936,11 @@ DirectHandle<WasmJSFunctionData> Factory::NewWasmJSFunctionData(
   Tagged<WasmJSFunctionData> result =
       TrustedCast<WasmJSFunctionData>(AllocateRawWithImmortalMap(
           map->instance_size(), AllocationType::kTrusted, map));
-  result->init_self_indirect_pointer(isolate());
+  result->InitAndPublish(isolate());
   DisallowGarbageCollection no_gc;
   result->set_func_ref(*func_ref);
   result->set_internal(*internal);
   result->set_wrapper_code(*wrapper_code);
-  result->set_canonical_sig_index(sig_index.index);
   result->set_js_promise_flags(WasmFunctionData::SuspendField::encode(suspend) |
                                WasmFunctionData::PromiseField::encode(promise));
   result->set_protected_offheap_data(*offheap_data);
@@ -1912,19 +1960,25 @@ DirectHandle<WasmResumeData> Factory::NewWasmResumeData(
 }
 
 DirectHandle<WasmSuspenderObject> Factory::NewWasmSuspenderObject() {
-  DirectHandle<JSPromise> promise = NewJSPromise();
   Tagged<Map> map = *wasm_suspender_object_map();
   Tagged<WasmSuspenderObject> obj =
       TrustedCast<WasmSuspenderObject>(AllocateRawWithImmortalMap(
           map->instance_size(), AllocationType::kTrusted, map));
   auto suspender = handle(obj, isolate());
   // Ensure that all properties are initialized before the allocation below.
-  suspender->init_self_indirect_pointer(isolate());
+  suspender->InitAndPublish(isolate());
   suspender->init_stack(IsolateForSandbox(isolate()), nullptr);
   suspender->clear_parent();
-  suspender->set_promise(*promise);
+  suspender->set_promise(*undefined_value());
   suspender->set_resume(*undefined_value());
   suspender->set_reject(*undefined_value());
+  return suspender;
+}
+
+DirectHandle<WasmSuspenderObject> Factory::NewWasmSuspenderObjectInitialized() {
+  DirectHandle<JSPromise> promise = NewJSPromise();
+  DirectHandle<WasmSuspenderObject> suspender = NewWasmSuspenderObject();
+  suspender->set_promise(*promise);
   // Instantiate the callable object which resumes this Suspender. This will be
   // used implicitly as the onFulfilled callback of the returned JS promise.
   DirectHandle<WasmResumeData> resume_data =
@@ -1947,20 +2001,14 @@ DirectHandle<WasmSuspenderObject> Factory::NewWasmSuspenderObject() {
   return suspender;
 }
 
-DirectHandle<WasmContinuationObject> Factory::NewWasmContinuationObject() {
+DirectHandle<WasmContinuationObject> Factory::NewWasmContinuationObject(
+    wasm::StackMemory* stack) {
   Tagged<Map> map = *wasm_continuation_object_map();
   Tagged<WasmContinuationObject> obj =
       Cast<WasmContinuationObject>(AllocateRawWithImmortalMap(
           map->instance_size(), AllocationType::kYoung, map));
   DirectHandle<WasmContinuationObject> cont(obj, isolate());
-  cont->init_stack(IsolateForSandbox(isolate()), nullptr);
-  std::unique_ptr<wasm::StackMemory> stack = wasm::StackMemory::New();
-  stack->jmpbuf()->fp = stack->base();
-  stack->jmpbuf()->sp = stack->base();
-  stack->jmpbuf()->state = wasm::JumpBuffer::Suspended;
-  stack->set_index(isolate()->wasm_stacks().size());
-  cont->set_stack(isolate(), stack.get());
-  isolate()->wasm_stacks().emplace_back(std::move(stack));
+  cont->init_stack(IsolateForSandbox(isolate()), stack);
   return cont;
 }
 
@@ -1968,9 +2016,8 @@ DirectHandle<WasmExportedFunctionData> Factory::NewWasmExportedFunctionData(
     DirectHandle<Code> export_wrapper,
     DirectHandle<WasmTrustedInstanceData> instance_data,
     DirectHandle<WasmFuncRef> func_ref,
-    DirectHandle<WasmInternalFunction> internal_function,
-    const wasm::CanonicalSig* sig, wasm::CanonicalTypeIndex type_index,
-    int wrapper_budget, wasm::Promise promise) {
+    DirectHandle<WasmInternalFunction> internal_function, int wrapper_budget,
+    wasm::Promise promise) {
   int func_index = internal_function->function_index();
   DirectHandle<Cell> wrapper_budget_cell =
       NewCell(Smi::FromInt(wrapper_budget));
@@ -1978,15 +2025,13 @@ DirectHandle<WasmExportedFunctionData> Factory::NewWasmExportedFunctionData(
   Tagged<WasmExportedFunctionData> result =
       TrustedCast<WasmExportedFunctionData>(AllocateRawWithImmortalMap(
           map->instance_size(), AllocationType::kTrusted, map));
-  result->init_self_indirect_pointer(isolate());
+  result->InitAndPublish(isolate());
   DisallowGarbageCollection no_gc;
   result->set_func_ref(*func_ref);
   result->set_internal(*internal_function);
   result->set_wrapper_code(*export_wrapper);
   result->set_instance_data(*instance_data);
   result->set_function_index(func_index);
-  result->set_sig(sig);
-  result->set_canonical_type_index(type_index.index);
   result->set_receiver_is_first_param(0);
   result->set_wrapper_budget(*wrapper_budget_cell);
   // We can't skip the write barrier because Code objects are not immovable.
@@ -2002,7 +2047,7 @@ DirectHandle<WasmExportedFunctionData> Factory::NewWasmExportedFunctionData(
 DirectHandle<WasmCapiFunctionData> Factory::NewWasmCapiFunctionData(
     Address call_target, DirectHandle<Foreign> embedder_data,
     DirectHandle<Code> wrapper_code, DirectHandle<Map> rtt,
-    wasm::CanonicalTypeIndex sig_index, const wasm::CanonicalSig* sig) {
+    const wasm::CanonicalSig* sig) {
   constexpr bool kShared = false;
   DirectHandle<WasmImportData> import_data =
       NewWasmImportData(undefined_value(), wasm::kNoSuspend,
@@ -2010,7 +2055,8 @@ DirectHandle<WasmCapiFunctionData> Factory::NewWasmCapiFunctionData(
   DirectHandle<WasmInternalFunction> internal = NewWasmInternalFunction(
       import_data, -1, kShared,
       wasm::GetProcessWideWasmCodePointerTable()
-          ->GetOrCreateHandleForNativeFunction(call_target));
+          ->GetOrCreateHandleForNativeFunction(call_target),
+      sig);
   DirectHandle<WasmFuncRef> func_ref = NewWasmFuncRef(internal, rtt, kShared);
   // We have no generic wrappers for C-API functions, so we don't need to
   // set any call origin on {import_data}.
@@ -2018,14 +2064,12 @@ DirectHandle<WasmCapiFunctionData> Factory::NewWasmCapiFunctionData(
   Tagged<WasmCapiFunctionData> result =
       TrustedCast<WasmCapiFunctionData>(AllocateRawWithImmortalMap(
           map->instance_size(), AllocationType::kTrusted, map));
-  result->init_self_indirect_pointer(isolate());
+  result->InitAndPublish(isolate());
   DisallowGarbageCollection no_gc;
   result->set_func_ref(*func_ref);
   result->set_internal(*internal);
-  result->set_canonical_sig_index(sig_index.index);
   result->set_wrapper_code(*wrapper_code);
   result->set_embedder_data(*embedder_data);
-  result->set_sig(sig);
   result->set_js_promise_flags(
       WasmFunctionData::SuspendField::encode(wasm::kNoSuspend) |
       WasmFunctionData::PromiseField::encode(wasm::kNoPromise));
@@ -2034,10 +2078,11 @@ DirectHandle<WasmCapiFunctionData> Factory::NewWasmCapiFunctionData(
 
 Tagged<WasmArray> Factory::NewWasmArrayUninitialized(uint32_t length,
                                                      DirectHandle<Map> map) {
-  Tagged<HeapObject> raw = AllocateRaw(WasmArray::SizeFor(*map, length),
-                                       HeapLayout::InAnySharedSpace(*map)
-                                           ? AllocationType::kSharedOld
-                                           : AllocationType::kYoung);
+  const bool is_shared = HeapLayout::InAnySharedSpace(*map);
+  Tagged<HeapObject> raw = AllocateRaw(
+      WasmArray::SizeFor(*map, length),
+      is_shared ? AllocationType::kSharedOld : AllocationType::kYoung,
+      is_shared ? kDoubleUnaligned : kTaggedAligned);
   DisallowGarbageCollection no_gc;
   raw->set_map_after_allocation(isolate(), *map);
   Tagged<WasmArray> result = Cast<WasmArray>(raw);
@@ -2094,18 +2139,19 @@ DirectHandle<WasmArray> Factory::NewWasmArrayFromElements(
 
 DirectHandle<WasmArray> Factory::NewWasmArrayFromMemory(
     uint32_t length, DirectHandle<Map> map,
-    wasm::CanonicalValueType element_type, Address source) {
+    wasm::CanonicalValueType element_type, base::Vector<const uint8_t> source) {
   DCHECK(element_type.is_numeric());
   Tagged<WasmArray> result = NewWasmArrayUninitialized(length, map);
   DisallowGarbageCollection no_gc;
 #if V8_TARGET_BIG_ENDIAN
   MemCopyAndSwitchEndianness(reinterpret_cast<void*>(result->ElementAddress(0)),
-                             reinterpret_cast<void*>(source), length,
+                             source.data(), length,
                              element_type.value_kind_size());
 #else
-  MemCopy(reinterpret_cast<void*>(result->ElementAddress(0)),
-          reinterpret_cast<void*>(source),
-          length * element_type.value_kind_size());
+  size_t byte_length = length * element_type.value_kind_size();
+  DCHECK_LE(byte_length, source.size());
+  MemCopy(reinterpret_cast<void*>(result->ElementAddress(0)), source.data(),
+          byte_length);
 #endif
 
   return direct_handle(result, isolate());
@@ -2116,14 +2162,12 @@ DirectHandle<Object> Factory::NewWasmArrayFromElementSegment(
     DirectHandle<WasmTrustedInstanceData> shared_trusted_instance_data,
     uint32_t segment_index, uint32_t start_offset, uint32_t length,
     DirectHandle<Map> map, wasm::CanonicalValueType element_type) {
-  DCHECK(element_type.is_reference());
+  DCHECK(element_type.is_ref());
 
   // If the element segment has not been initialized yet, lazily initialize it
   // now.
-  AccountingAllocator allocator;
-  Zone zone(&allocator, ZONE_NAME);
   std::optional<MessageTemplate> opt_error = wasm::InitializeElementSegment(
-      &zone, isolate(), trusted_instance_data, shared_trusted_instance_data,
+      isolate(), trusted_instance_data, shared_trusted_instance_data,
       segment_index);
   if (opt_error.has_value()) {
     return direct_handle(Smi::FromEnum(opt_error.value()), isolate());
@@ -2149,7 +2193,11 @@ DirectHandle<Object> Factory::NewWasmArrayFromElementSegment(
 Handle<WasmStruct> Factory::NewWasmStructUninitialized(
     const wasm::StructType* type, DirectHandle<Map> map,
     AllocationType allocation) {
-  Tagged<HeapObject> raw = AllocateRaw(WasmStruct::Size(type), allocation);
+  DCHECK_IMPLIES(type->is_shared(), allocation == AllocationType::kSharedOld);
+  AllocationAlignment alignment =
+      type->is_shared() ? kDoubleAligned : kTaggedAligned;
+  Tagged<HeapObject> raw =
+      AllocateRaw(WasmStruct::Size(type), allocation, alignment);
   raw->set_map_after_allocation(isolate(), *map);
   Tagged<WasmStruct> result = Cast<WasmStruct>(raw);
   result->set_raw_properties_or_hash(*empty_fixed_array(), kRelaxedStore);
@@ -2159,10 +2207,13 @@ Handle<WasmStruct> Factory::NewWasmStructUninitialized(
 DirectHandle<WasmStruct> Factory::NewWasmStruct(const wasm::StructType* type,
                                                 wasm::WasmValue* args,
                                                 DirectHandle<Map> map) {
-  Tagged<HeapObject> raw =
-      AllocateRaw(WasmStruct::Size(type), HeapLayout::InAnySharedSpace(*map)
-                                              ? AllocationType::kSharedOld
-                                              : AllocationType::kYoung);
+  AllocationAlignment alignment =
+      type->is_shared() ? kDoubleAligned : kTaggedAligned;
+  Tagged<HeapObject> raw = AllocateRaw(WasmStruct::Size(type),
+                                       HeapLayout::InAnySharedSpace(*map)
+                                           ? AllocationType::kSharedOld
+                                           : AllocationType::kYoung,
+                                       alignment);
   raw->set_map_after_allocation(isolate(), *map);
   Tagged<WasmStruct> result = Cast<WasmStruct>(raw);
   result->set_raw_properties_or_hash(*empty_fixed_array(), kRelaxedStore);
@@ -2234,9 +2285,7 @@ DirectHandle<FeedbackCell> Factory::NewNoClosuresCell() {
   DisallowGarbageCollection no_gc;
   result->set_value(read_only_roots().undefined_value());
   result->clear_interrupt_budget();
-#ifdef V8_ENABLE_LEAPTIERING
   result->clear_dispatch_handle();
-#endif  // V8_ENABLE_LEAPTIERING
   result->clear_padding();
   return direct_handle(result, isolate());
 }
@@ -2249,9 +2298,7 @@ DirectHandle<FeedbackCell> Factory::NewOneClosureCell(
   DisallowGarbageCollection no_gc;
   result->set_value(*value);
   result->clear_interrupt_budget();
-#ifdef V8_ENABLE_LEAPTIERING
   result->clear_dispatch_handle();
-#endif  // V8_ENABLE_LEAPTIERING
   result->clear_padding();
   return direct_handle(result, isolate());
 }
@@ -2531,32 +2578,44 @@ Handle<JSObject> Factory::CopyJSObject(DirectHandle<JSObject> source) {
   return CopyJSObjectWithAllocationSite(source, DirectHandle<AllocationSite>());
 }
 
+namespace {
+
+// We can only clone regexps, normal objects, api objects, errors or arrays.
+// Copying anything else will break invariants.
+constexpr bool IsCloneable(InstanceType instance_type) {
+  if (InstanceTypeChecker::IsJSApiObject(instance_type)) {
+    return true;
+  }
+  switch (instance_type) {
+    case JS_OBJECT_TYPE:
+    case JS_ARRAY_TYPE:
+    case JS_REG_EXP_TYPE:
+    case JS_ERROR_TYPE:
+    case JS_SPECIAL_API_OBJECT_TYPE:
+#if V8_ENABLE_WEBASSEMBLY
+    case WASM_GLOBAL_OBJECT_TYPE:
+    case WASM_INSTANCE_OBJECT_TYPE:
+    case WASM_MEMORY_OBJECT_TYPE:
+    case WASM_MODULE_OBJECT_TYPE:
+    case WASM_TABLE_OBJECT_TYPE:
+#endif  // V8_ENABLE_WEBASSEMBLY
+      return true;
+    default:
+      return false;
+  }
+}
+
+}  // namespace
+
 Handle<JSObject> Factory::CopyJSObjectWithAllocationSite(
     DirectHandle<JSObject> source, DirectHandle<AllocationSite> site) {
-  DirectHandle<Map> map(source->map(), isolate());
+  Tagged<Map> raw_map = source->map();
+  const InstanceType instance_type = raw_map->instance_type();
+  CHECK(IsCloneable(instance_type));
+  DCHECK_IMPLIES(!site.is_null(), AllocationSite::CanTrack(instance_type));
 
-  // We can only clone regexps, normal objects, api objects, errors or arrays.
-  // Copying anything else will break invariants.
-  InstanceType instance_type = map->instance_type();
-  bool is_clonable_js_type =
-      instance_type == JS_REG_EXP_TYPE || instance_type == JS_OBJECT_TYPE ||
-      instance_type == JS_ERROR_TYPE || instance_type == JS_ARRAY_TYPE ||
-      instance_type == JS_SPECIAL_API_OBJECT_TYPE ||
-      InstanceTypeChecker::IsJSApiObject(instance_type);
-  bool is_clonable_wasm_type = false;
-#if V8_ENABLE_WEBASSEMBLY
-  is_clonable_wasm_type = instance_type == WASM_GLOBAL_OBJECT_TYPE ||
-                          instance_type == WASM_INSTANCE_OBJECT_TYPE ||
-                          instance_type == WASM_MEMORY_OBJECT_TYPE ||
-                          instance_type == WASM_MODULE_OBJECT_TYPE ||
-                          instance_type == WASM_TABLE_OBJECT_TYPE;
-#endif  // V8_ENABLE_WEBASSEMBLY
-  CHECK(is_clonable_js_type || is_clonable_wasm_type);
-
-  DCHECK(site.is_null() || AllocationSite::CanTrack(instance_type));
-
-  int object_size = map->instance_size();
-  int aligned_object_size = ALIGN_TO_ALLOCATION_ALIGNMENT(object_size);
+  const int object_size = raw_map->instance_size();
+  const int aligned_object_size = ALIGN_TO_ALLOCATION_ALIGNMENT(object_size);
   int adjusted_object_size = aligned_object_size;
   if (!site.is_null()) {
     DCHECK(V8_ALLOCATION_SITE_TRACKING_BOOL);
@@ -2574,7 +2633,7 @@ Handle<JSObject> Factory::CopyJSObjectWithAllocationSite(
       SafeHeapObjectSize(static_cast<uint32_t>(object_size)).value());
   Handle<JSObject> clone(Cast<JSObject>(raw_clone), isolate());
 
-  if (v8_flags.enable_unconditional_write_barriers) {
+  if constexpr (v8_flags.enable_unconditional_write_barriers.value()) {
     // By default, we shouldn't need to update the write barrier here, as the
     // clone will be allocated in new space.
     const ObjectSlot start(raw_clone.address());
@@ -2947,11 +3006,11 @@ DirectHandle<JSObject> Factory::NewFunctionPrototype(
   return prototype;
 }
 
-Handle<JSObject> Factory::NewExternal(void* value,
+Handle<JSObject> Factory::NewExternal(void* value, ExternalPointerTag tag,
                                       AllocationType allocation_type) {
   auto external = Cast<JSExternalObject>(
       NewJSObjectFromMap(external_map(), allocation_type));
-  external->init_value(isolate(), value);
+  external->init_value(isolate(), tag, value);
   return external;
 }
 
@@ -3018,6 +3077,10 @@ DirectHandle<Code> Factory::NewCodeObjectForEmbeddedBuiltin(
 
 DirectHandle<BytecodeArray> Factory::CopyBytecodeArray(
     DirectHandle<BytecodeArray> source) {
+  // We don't validate bytecode when copying it, as we assume that the source
+  // bytecode was verified before. This DCHECK makes this assumption explicit
+  // (BytecodeArrays are unpublished until they are verified).
+  CHECK(source->IsPublished(isolate()));
   DirectHandle<BytecodeWrapper> wrapper = NewBytecodeWrapper();
   int size = BytecodeArray::SizeFor(source->length());
   Tagged<BytecodeArray> copy =
@@ -3025,7 +3088,7 @@ DirectHandle<BytecodeArray> Factory::CopyBytecodeArray(
           size, AllocationType::kTrusted, *bytecode_array_map()));
   DisallowGarbageCollection no_gc;
   Tagged<BytecodeArray> raw_source = *source;
-  copy->init_self_indirect_pointer(isolate());
+  copy->InitAndPublish(isolate());
   copy->set_length(raw_source->length());
   copy->set_frame_size(raw_source->frame_size());
   copy->set_parameter_count(raw_source->parameter_count());
@@ -3119,8 +3182,8 @@ Handle<JSGlobalObject> Factory::NewJSGlobalObject(
   // Allocate the global object and initialize it with the backing store.
   Handle<JSGlobalObject> global(
       Cast<JSGlobalObject>(New(map, AllocationType::kOld)), isolate());
-  InitializeJSObjectFromMap(*global, *dictionary, *map,
-                            NewJSObjectType::kAPIWrapper);
+  InitializeJSObjectFromMap(*map, *global, {*dictionary},
+                            NewJSObjectType::kMaybeEmbedderFieldsAndApiWrapper);
 
   // Create a new map for the global object.
   DirectHandle<Map> new_map = Map::CopyDropDescriptors(isolate(), map);
@@ -3138,12 +3201,16 @@ Handle<JSGlobalObject> Factory::NewJSGlobalObject(
   return global;
 }
 
-void Factory::InitializeJSObjectFromMap(Tagged<JSObject> obj,
-                                        Tagged<Object> properties,
-                                        Tagged<Map> map,
-                                        NewJSObjectType new_js_object_type) {
+void Factory::InitializeJSObjectFromMap(
+    Tagged<Map> map, Tagged<JSObject> obj,
+    std::optional<Tagged<Object>> maybe_properties,
+    NewJSObjectType new_js_object_type) {
   DisallowGarbageCollection no_gc;
-  obj->set_raw_properties_or_hash(properties, kRelaxedStore);
+  if (!maybe_properties.has_value()) {
+    obj->set_raw_properties_or_hash(*empty_fixed_array(), SKIP_WRITE_BARRIER);
+  } else {
+    obj->set_raw_properties_or_hash(maybe_properties.value(), kRelaxedStore);
+  }
   obj->initialize_elements();
   // TODO(1240798): Initialize the object's body using valid initial values
   // according to the object's initial map.  For example, if the map's
@@ -3152,19 +3219,24 @@ void Factory::InitializeJSObjectFromMap(Tagged<JSObject> obj,
   // fixed array (e.g. Heap::empty_fixed_array()).  Currently, the object
   // verification code has to cope with (temporarily) invalid objects.  See
   // for example, JSArray::JSArrayVerify).
-  DCHECK_EQ(IsJSApiWrapperObjectMap(map),
-            new_js_object_type == NewJSObjectType::kAPIWrapper);
-  InitializeJSObjectBody(obj, map,
-                         new_js_object_type == NewJSObjectType::kNoAPIWrapper
-                             ? JSObject::kHeaderSize
-                             : JSAPIObjectWithEmbedderSlots::kHeaderSize);
-  if (new_js_object_type == NewJSObjectType::kAPIWrapper) {
+  DCHECK_EQ(
+      IsJSApiWrapperObjectMap(map),
+      new_js_object_type == NewJSObjectType::kMaybeEmbedderFieldsAndApiWrapper);
+  InitializeJSObjectBody(
+      obj, map,
+      new_js_object_type == NewJSObjectType::kMaybeEmbedderFieldsAndApiWrapper
+          ? JSAPIObjectWithEmbedderSlots::kHeaderSize
+          : JSObject::kHeaderSize,
+      new_js_object_type);
+  if (new_js_object_type ==
+      NewJSObjectType::kMaybeEmbedderFieldsAndApiWrapper) {
     CppHeapObjectWrapper(obj).InitializeCppHeapWrapper();
   }
 }
 
 void Factory::InitializeJSObjectBody(Tagged<JSObject> obj, Tagged<Map> map,
-                                     int start_offset) {
+                                     int start_offset,
+                                     NewJSObjectType new_js_object_type) {
   DisallowGarbageCollection no_gc;
   if (start_offset == map->instance_size()) return;
   DCHECK_LT(start_offset, map->instance_size());
@@ -3179,9 +3251,7 @@ void Factory::InitializeJSObjectBody(Tagged<JSObject> obj, Tagged<Map> map,
   // In case of Array subclassing the |map| could already be transitioned
   // to different elements kind from the initial map on which we track slack.
   bool in_progress = map->IsInobjectSlackTrackingInProgress();
-  obj->InitializeBody(map, start_offset, in_progress,
-                      ReadOnlyRoots(isolate()).one_pointer_filler_map_word(),
-                      *undefined_value());
+  obj->InitializeBody(map, start_offset, in_progress, new_js_object_type);
   if (in_progress) {
     map->FindRootMap(isolate())->InobjectSlackTrackingStep(isolate());
   }
@@ -3202,8 +3272,7 @@ Handle<JSObject> Factory::NewJSObjectFromMap(
   Tagged<JSObject> js_obj = Cast<JSObject>(
       AllocateRawWithAllocationSite(map, allocation, allocation_site));
 
-  InitializeJSObjectFromMap(js_obj, *empty_fixed_array(), *map,
-                            new_js_object_type);
+  InitializeJSObjectFromMap(*map, js_obj, {}, new_js_object_type);
 
   DCHECK(js_obj->HasFastElements() ||
          (isolate()->bootstrapper()->IsActive() ||
@@ -3263,8 +3332,8 @@ DirectHandle<JSObject> Factory::NewSlowJSObjectWithPropertiesAndElements(
   return object;
 }
 
-Handle<JSArray> Factory::NewJSArray(ElementsKind elements_kind, int length,
-                                    int capacity,
+Handle<JSArray> Factory::NewJSArray(ElementsKind elements_kind, uint32_t length,
+                                    uint32_t capacity,
                                     ArrayStorageAllocationMode mode,
                                     AllocationType allocation) {
   DCHECK(capacity >= length);
@@ -3409,12 +3478,27 @@ DirectHandle<JSModuleNamespace> Factory::NewJSModuleNamespace() {
   DirectHandle<JSModuleNamespace> module_namespace(
       Cast<JSModuleNamespace>(NewJSObjectFromMap(
           map, AllocationType::kYoung, DirectHandle<AllocationSite>::null(),
-          NewJSObjectType::kAPIWrapper)));
+          NewJSObjectType::kMaybeEmbedderFieldsAndApiWrapper)));
   FieldIndex index = FieldIndex::ForDescriptor(
       *map, InternalIndex(JSModuleNamespace::kToStringTagFieldIndex));
   module_namespace->FastPropertyAtPut(index, read_only_roots().Module_string(),
                                       SKIP_WRITE_BARRIER);
   return module_namespace;
+}
+
+DirectHandle<JSDeferredModuleNamespace>
+Factory::NewJSDeferredModuleNamespace() {
+  DirectHandle<Map> map = isolate()->js_deferred_module_namespace_map();
+  DirectHandle<JSDeferredModuleNamespace> deferred_namespace(
+      Cast<JSDeferredModuleNamespace>(NewJSObjectFromMap(
+          map, AllocationType::kYoung, DirectHandle<AllocationSite>::null(),
+          NewJSObjectType::kMaybeEmbedderFieldsAndApiWrapper)));
+  FieldIndex index = FieldIndex::ForDescriptor(
+      *map, InternalIndex(JSDeferredModuleNamespace::kToStringTagFieldIndex));
+  deferred_namespace->FastPropertyAtPut(
+      index, read_only_roots().Deferred_Module_string(), SKIP_WRITE_BARRIER);
+
+  return deferred_namespace;
 }
 
 DirectHandle<JSWrappedFunction> Factory::NewJSWrappedFunction(
@@ -3500,6 +3584,8 @@ DirectHandle<SourceTextModule> Factory::NewSourceTextModule(
   module->set_regular_imports(*regular_imports);
   module->set_hash(isolate()->GenerateIdentityHash(Smi::kMaxValue));
   module->set_module_namespace(roots.undefined_value(), SKIP_WRITE_BARRIER);
+  module->set_deferred_module_namespace(roots.undefined_value(),
+                                        SKIP_WRITE_BARRIER);
   module->set_requested_modules(*requested_modules);
   module->set_status(Module::kUnlinked);
   module->set_exception(roots.the_hole_value(), SKIP_WRITE_BARRIER);
@@ -3533,6 +3619,8 @@ Handle<SyntheticModule> Factory::NewSyntheticModule(
   DisallowGarbageCollection no_gc;
   module->set_hash(isolate()->GenerateIdentityHash(Smi::kMaxValue));
   module->set_module_namespace(roots.undefined_value(), SKIP_WRITE_BARRIER);
+  module->set_deferred_module_namespace(roots.undefined_value(),
+                                        SKIP_WRITE_BARRIER);
   module->set_status(Module::kUnlinked);
   module->set_exception(roots.the_hole_value(), SKIP_WRITE_BARRIER);
   module->set_top_level_capability(roots.undefined_value(), SKIP_WRITE_BARRIER);
@@ -3554,7 +3642,7 @@ Handle<JSArrayBuffer> Factory::NewJSArrayBuffer(
   }
   auto result = Cast<JSArrayBuffer>(
       NewJSObjectFromMap(map, allocation, DirectHandle<AllocationSite>::null(),
-                         NewJSObjectType::kAPIWrapper));
+                         NewJSObjectType::kMaybeEmbedderFieldsAndApiWrapper));
   result->Setup(SharedFlag::kNotShared, resizable_by_js,
                 std::move(backing_store), isolate());
   return result;
@@ -3599,7 +3687,7 @@ MaybeHandle<JSArrayBuffer> Factory::NewJSArrayBufferAndBackingStore(
       isolate());
   auto array_buffer = Cast<JSArrayBuffer>(
       NewJSObjectFromMap(map, allocation, DirectHandle<AllocationSite>::null(),
-                         NewJSObjectType::kAPIWrapper));
+                         NewJSObjectType::kMaybeEmbedderFieldsAndApiWrapper));
   array_buffer->Setup(SharedFlag::kNotShared, resizable,
                       std::move(backing_store), isolate());
   return array_buffer;
@@ -3612,7 +3700,7 @@ Handle<JSArrayBuffer> Factory::NewJSSharedArrayBuffer(
       isolate());
   auto result = Cast<JSArrayBuffer>(NewJSObjectFromMap(
       map, AllocationType::kYoung, DirectHandle<AllocationSite>::null(),
-      NewJSObjectType::kAPIWrapper));
+      NewJSObjectType::kMaybeEmbedderFieldsAndApiWrapper));
   ResizableFlag resizable = backing_store->is_resizable_by_js()
                                 ? ResizableFlag::kResizable
                                 : ResizableFlag::kNotResizable;
@@ -3693,7 +3781,7 @@ Handle<JSArrayBufferView> Factory::NewJSArrayBufferView(
   Handle<JSArrayBufferView> array_buffer_view =
       Cast<JSArrayBufferView>(NewJSObjectFromMap(
           map, AllocationType::kYoung, DirectHandle<AllocationSite>::null(),
-          NewJSObjectType::kAPIWrapper));
+          NewJSObjectType::kMaybeEmbedderFieldsAndApiWrapper));
   DisallowGarbageCollection no_gc;
   Tagged<JSArrayBufferView> raw = *array_buffer_view;
   raw->set_elements(*elements, SKIP_WRITE_BARRIER);
@@ -3701,6 +3789,7 @@ Handle<JSArrayBufferView> Factory::NewJSArrayBufferView(
   raw->set_byte_offset(byte_offset);
   raw->set_byte_length(byte_length);
   raw->set_bit_field(0);
+  buffer->AttachView(*array_buffer_view);
   // TODO(v8) remove once embedder data slots are always zero-initialized.
   InitEmbedderFields(raw, Smi::zero());
   DCHECK_EQ(raw->GetEmbedderFieldCount(),
@@ -3857,6 +3946,9 @@ Handle<JSProxy> Factory::NewJSProxy(DirectHandle<JSReceiver> target,
   result->set_target(*target, SKIP_WRITE_BARRIER);
   result->set_handler(*handler, SKIP_WRITE_BARRIER);
   result->set_flags(JSProxy::IsRevocableBit::encode(revocable));
+#if TAGGED_SIZE_8_BYTES
+  result->set_padding(0);
+#endif
   return handle(result, isolate());
 }
 
@@ -3874,7 +3966,7 @@ Handle<JSGlobalProxy> Factory::NewUninitializedJSGlobalProxy(int size) {
   }
   Handle<JSGlobalProxy> proxy = Cast<JSGlobalProxy>(NewJSObjectFromMap(
       map, AllocationType::kOld, DirectHandle<AllocationSite>::null(),
-      NewJSObjectType::kAPIWrapper));
+      NewJSObjectType::kMaybeEmbedderFieldsAndApiWrapper));
   // Create identity hash early in case there is any JS collection containing
   // a global proxy key and needs to be rehashed after deserialization.
   proxy->GetOrCreateIdentityHash(isolate());
@@ -3912,8 +4004,8 @@ void Factory::ReinitializeJSGlobalProxy(DirectHandle<JSGlobalProxy> object,
   raw->set_map(isolate(), *map, kReleaseStore);
 
   // Reinitialize the object from the constructor map.
-  InitializeJSObjectFromMap(raw, *raw_properties_or_hash, *map,
-                            NewJSObjectType::kAPIWrapper);
+  InitializeJSObjectFromMap(*map, raw, {*raw_properties_or_hash},
+                            NewJSObjectType::kMaybeEmbedderFieldsAndApiWrapper);
   // Ensure that the object and constructor belongs to the same native context.
   DCHECK_EQ(object->map()->map(), constructor->map()->map());
 }
@@ -3985,7 +4077,7 @@ DirectHandle<InterpreterData> Factory::NewInterpreterData(
       AllocateRawWithImmortalMap(map->instance_size(), AllocationType::kTrusted,
                                  *interpreter_data_map()));
   DisallowGarbageCollection no_gc;
-  interpreter_data->init_self_indirect_pointer(isolate());
+  interpreter_data->InitAndPublish(isolate());
   interpreter_data->set_bytecode_array(*bytecode_array);
   interpreter_data->set_interpreter_trampoline(*code);
   return direct_handle(interpreter_data, isolate());
@@ -4257,7 +4349,7 @@ DirectHandle<RegExpData> Factory::NewAtomRegExpData(
       size, AllocationType::kTrusted, read_only_roots().atom_regexp_data_map());
   DisallowGarbageCollection no_gc;
   Tagged<AtomRegExpData> instance = TrustedCast<AtomRegExpData>(result);
-  instance->init_self_indirect_pointer(isolate());
+  instance->InitAndPublish(isolate());
   instance->set_type_tag(RegExpData::Type::ATOM);
   instance->set_source(*source);
   instance->set_flags(flags);
@@ -4279,7 +4371,7 @@ DirectHandle<RegExpData> Factory::NewIrRegExpData(DirectHandle<String> source,
       size, AllocationType::kTrusted, read_only_roots().ir_regexp_data_map());
   DisallowGarbageCollection no_gc;
   Tagged<IrRegExpData> instance = TrustedCast<IrRegExpData>(result);
-  instance->init_self_indirect_pointer(isolate());
+  instance->InitAndPublish(isolate());
   instance->set_type_tag(RegExpData::Type::IRREGEXP);
   instance->set_source(*source);
   instance->set_flags(flags);
@@ -4317,7 +4409,7 @@ DirectHandle<RegExpData> Factory::NewExperimentalRegExpData(
   // struct. `RegExpExecInternal` should probably distinguish between
   // EXPERIMENTAL and IRREGEXP, and then we can get rid of all the IRREGEXP only
   // fields.
-  instance->init_self_indirect_pointer(isolate());
+  instance->InitAndPublish(isolate());
   instance->set_type_tag(RegExpData::Type::EXPERIMENTAL);
   instance->set_source(*source);
   instance->set_flags(flags);
@@ -4870,7 +4962,6 @@ Handle<JSFunction> Factory::JSFunctionBuilder::BuildRaw(
     function->set_context(*context_, kReleaseStore, mode);
     function->set_raw_feedback_cell(*feedback_cell, mode);
 
-#ifdef V8_ENABLE_LEAPTIERING
     if (!many_closures_cell) {
       // TODO(olivf, 42204201): Here we are explicitly not updating (only
       // potentially initializing) the code. Worst case the dispatch handle
@@ -4881,8 +4972,8 @@ Handle<JSFunction> Factory::JSFunctionBuilder::BuildRaw(
       DCHECK_NE(feedback_cell->dispatch_handle(), kNullJSDispatchHandle);
 
       JSDispatchHandle dispatch_handle = feedback_cell->dispatch_handle();
-      JSDispatchTable* jdt = IsolateGroup::current()->js_dispatch_table();
-      Tagged<Code> old_code = jdt->GetCode(dispatch_handle);
+      JSDispatchTable& jdt = isolate_->js_dispatch_table();
+      Tagged<Code> old_code = jdt.GetCode(dispatch_handle);
 
       // A write barrier is needed when settings code, because the update can
       // race with marking which could leave the dispatch slot unmarked.
@@ -4896,7 +4987,7 @@ Handle<JSFunction> Factory::JSFunctionBuilder::BuildRaw(
       // needed and maybe find some alternative to initialize it correctly
       // from the beginning.
       if (old_code->is_builtin()) {
-        jdt->SetCodeNoWriteBarrier(dispatch_handle, *code);
+        jdt.SetCodeNoWriteBarrier(dispatch_handle, *code);
         function->set_dispatch_handle(dispatch_handle, mode_if_setting_code);
       } else {
         // On a transition of a feedback cell from one closure to many, make
@@ -4904,7 +4995,7 @@ Handle<JSFunction> Factory::JSFunctionBuilder::BuildRaw(
         // specialized, and if it was, eagerly re-optimize.
         if (cell_transition == FeedbackCell::kOneToMany &&
             old_code->is_context_specialized()) {
-          jdt->SetCodeNoWriteBarrier(dispatch_handle, *code);
+          jdt.SetCodeNoWriteBarrier(dispatch_handle, *code);
           function->set_dispatch_handle(dispatch_handle, mode_if_setting_code);
           DCHECK(old_code->kind() == CodeKind::MAGLEV ||
                  old_code->kind() == CodeKind::TURBOFAN_JS);
@@ -4916,10 +5007,6 @@ Handle<JSFunction> Factory::JSFunctionBuilder::BuildRaw(
         }
       }
     }
-#else
-    USE(cell_transition, many_closures_cell);
-    function->UpdateCode(isolate, *code, mode);
-#endif  // V8_ENABLE_LEAPTIERING
 
     if (function->has_prototype_slot()) {
       function->set_prototype_or_initial_map(
@@ -4934,7 +5021,6 @@ Handle<JSFunction> Factory::JSFunctionBuilder::BuildRaw(
     function_handle = handle(function, isolate_);
   }
 
-#ifdef V8_ENABLE_LEAPTIERING
   // If the FeedbackCell doesn't have a dispatch handle, we need to allocate a
   // dispatch entry now. This should only be the case for functions using the
   // generic many_closures_cell (for example builtin functions), and only for
@@ -4956,7 +5042,6 @@ Handle<JSFunction> Factory::JSFunctionBuilder::BuildRaw(
   } else {
     DCHECK_NE(function_handle->dispatch_handle(), kNullJSDispatchHandle);
   }
-#endif
 
   return function_handle;
 }

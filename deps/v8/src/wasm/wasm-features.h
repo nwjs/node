@@ -27,6 +27,7 @@
   V(extended_const)                      \
   V(relaxed_simd)                        \
   V(gc)                                  \
+  V(imported_strings)                    \
   V(typed_funcref)                       \
   V(multi_memory)                        \
   V(multi_value)                         \
@@ -34,7 +35,8 @@
   V(bulk_memory)                         \
   V(mutable_globals)                     \
   V(non_trapping_float_to_int)           \
-  V(sign_extension_ops)
+  V(sign_extension_ops)                  \
+  V(jspi)
 
 // All features, including features that do not have flags.
 #define FOREACH_WASM_FEATURE(V) \
@@ -168,15 +170,6 @@ class CompileTimeImports {
     bits_ = other.bits_;
     constants_module_ = std::move(other.constants_module_);
     return *this;
-  }
-  static CompileTimeImports FromSerialized(
-      CompileTimeImportFlags::StorageType flags,
-      base::Vector<const char> constants_module) {
-    CompileTimeImports result;
-    result.bits_ = CompileTimeImportFlags::FromIntegral(flags);
-    result.constants_module_.assign(constants_module.begin(),
-                                    constants_module.end());
-    return result;
   }
 
   bool empty() const { return bits_.empty(); }

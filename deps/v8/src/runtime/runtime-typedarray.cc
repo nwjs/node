@@ -35,7 +35,7 @@ RUNTIME_FUNCTION(Runtime_ArrayBufferDetach) {
 RUNTIME_FUNCTION(Runtime_ArrayBufferSetDetachKey) {
   HandleScope scope(isolate);
   DCHECK_EQ(2, args.length());
-  Handle<Object> argument = args.at(0);
+  DirectHandle<Object> argument = args.at(0);
   DirectHandle<Object> key = args.at(1);
   // This runtime function is exposed in ClusterFuzz and as such has to
   // support arbitrary arguments.
@@ -44,7 +44,7 @@ RUNTIME_FUNCTION(Runtime_ArrayBufferSetDetachKey) {
         isolate, NewTypeError(MessageTemplate::kNotTypedArray));
   }
   auto array_buffer = Cast<JSArrayBuffer>(argument);
-  array_buffer->set_detach_key(*key);
+  JSArrayBuffer::SetDetachKey(array_buffer, key, isolate);
   return ReadOnlyRoots(isolate).undefined_value();
 }
 
@@ -120,6 +120,10 @@ RUNTIME_FUNCTION(Runtime_TypedArraySortFast) {
   }
 #endif
 
+  // After reading the byte length, avoid reading the bytelength or length
+  // again. If the buffer is shared, it might have been grown by a
+  // background thread. In that case we should ignore the new length and just
+  // sort the old elements and write them into the beginning of the array.
   const size_t byte_length = array->GetByteLength();
 
   // In case of a SAB, the data is copied into temporary memory, as
@@ -151,15 +155,15 @@ RUNTIME_FUNCTION(Runtime_TypedArraySortFast) {
 
   DisallowGarbageCollection no_gc;
 
-  size_t length = array->GetLength();
-  DCHECK_LT(1, length);
-
+  // The type is not necessarily consistent with the byte_length we read (a
+  // sandbox attacker might have changed it). The code below must handle it
+  // gracefully.
   switch (array->type()) {
 #define TYPED_ARRAY_SORT(Type, type, TYPE, ctype)                            \
   case kExternal##Type##Array: {                                             \
     ctype* data = copy_data ? reinterpret_cast<ctype*>(data_copy_ptr)        \
                             : static_cast<ctype*>(array->DataPtr());         \
-    SBXCHECK(length * sizeof(ctype) == byte_length);                         \
+    size_t length = byte_length / sizeof(ctype);                             \
     if (kExternal##Type##Array == kExternalFloat64Array ||                   \
         kExternal##Type##Array == kExternalFloat32Array) {                   \
       if (COMPRESS_POINTERS_BOOL && alignof(ctype) > kTaggedSize) {          \

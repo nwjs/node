@@ -1555,15 +1555,17 @@ THREADED_TEST(FunctionTemplateSetLength) {
   }
 }
 
-
 static void* expected_ptr;
+// This tag value has been picked arbitrarily between 0 and
+// V8_EXTERNAL_POINTER_TAG_COUNT.
+constexpr v8::ExternalPointerTypeTag kTestPtrTag = 16;
+
 static void callback(const v8::FunctionCallbackInfo<v8::Value>& args) {
   CHECK(i::ValidateCallbackInfo(args));
-  void* ptr = v8::External::Cast(*args.Data())->Value();
+  void* ptr = v8::External::Cast(*args.Data())->Value(kTestPtrTag);
   CHECK_EQ(expected_ptr, ptr);
   args.GetReturnValue().Set(true);
 }
-
 
 static void TestExternalPointerWrapping() {
   LocalContext env;
@@ -1573,7 +1575,8 @@ static void TestExternalPointerWrapping() {
   int* ptr = new int;
   expected_ptr = ptr;
 
-  v8::Local<v8::Value> data = v8::External::New(isolate, expected_ptr);
+  v8::Local<v8::Value> data =
+      v8::External::New(isolate, expected_ptr, kTestPtrTag);
 
   v8::Local<v8::Object> obj = v8::Object::New(isolate);
   CHECK(obj->Set(env.local(), v8_str("func"),
@@ -1591,7 +1594,6 @@ static void TestExternalPointerWrapping() {
 
   delete ptr;
 }
-
 
 THREADED_TEST(ExternalWrap) {
   // Check heap allocated object.
@@ -2870,7 +2872,7 @@ THREADED_TEST(DescriptorInheritance2) {
 void SimpleAccessorGetter(Local<String> name,
                           const v8::PropertyCallbackInfo<v8::Value>& info) {
   CHECK(i::ValidateCallbackInfo(info));
-  Local<Object> self = info.This().As<Object>();
+  Local<Object> self = info.HolderV2();
   info.GetReturnValue().Set(
       self->Get(info.GetIsolate()->GetCurrentContext(),
                 String::Concat(info.GetIsolate(), v8_str("accessor_"), name))
@@ -2880,7 +2882,7 @@ void SimpleAccessorGetter(Local<String> name,
 void SimpleAccessorSetter(Local<String> name, Local<Value> value,
                           const v8::PropertyCallbackInfo<void>& info) {
   CHECK(i::ValidateCallbackInfo(info));
-  Local<Object> self = info.This().As<Object>();
+  Local<Object> self = info.HolderV2();
   CHECK(self->Set(info.GetIsolate()->GetCurrentContext(),
                   String::Concat(info.GetIsolate(), v8_str("accessor_"), name),
                   value)
@@ -3272,18 +3274,13 @@ THREADED_TEST(InternalFieldsOfRegularObjects) {
   }
 }
 
-// Allow usages of v8::Object::GetPrototype() for now.
-// TODO(https://crbug.com/333672197): remove.
-START_ALLOW_USE_DEPRECATED()
-
 THREADED_TEST(GlobalObjectInternalFields) {
   v8::Isolate* isolate = CcTest::isolate();
   v8::HandleScope scope(isolate);
   Local<v8::ObjectTemplate> global_template = v8::ObjectTemplate::New(isolate);
   global_template->SetInternalFieldCount(1);
   LocalContext env(nullptr, global_template);
-  v8::Local<v8::Object> global_proxy = env->Global();
-  v8::Local<v8::Object> global = global_proxy->GetPrototype().As<v8::Object>();
+  v8::Local<v8::Object> global = env->Global();
   CHECK_EQ(1, global->InternalFieldCount());
   CHECK(global->GetInternalField(0).As<v8::Value>()->IsUndefined());
   global->SetInternalField(0, v8_num(17));
@@ -3292,10 +3289,6 @@ THREADED_TEST(GlobalObjectInternalFields) {
                    ->Int32Value(env.local())
                    .FromJust());
 }
-
-// Allow usages of v8::Object::GetPrototype() for now.
-// TODO(https://crbug.com/333672197): remove.
-END_ALLOW_USE_DEPRECATED()
 
 THREADED_TEST(GlobalObjectHasRealIndexedProperty) {
   LocalContext env;
@@ -3311,9 +3304,9 @@ static void CheckAlignedPointerInInternalField(Local<v8::Object> obj,
   CHECK(HAS_SMI_TAG(reinterpret_cast<i::Address>(value)));
   obj->SetAlignedPointerInInternalField(0, value, kTestTypeTagA);
   i::heap::InvokeMajorGC(CcTest::heap());
-  CHECK_EQ(value, obj->GetAlignedPointerFromInternalField(0));
-  CHECK_EQ(value,
-           obj->GetAlignedPointerFromInternalField(CcTest::isolate(), 0));
+  CHECK_EQ(value, obj->GetAlignedPointerFromInternalField(0, kTestTypeTagA));
+  CHECK_EQ(value, obj->GetAlignedPointerFromInternalField(CcTest::isolate(), 0,
+                                                          kTestTypeTagA));
 }
 
 THREADED_TEST(InternalFieldsAlignedPointers) {
@@ -3346,58 +3339,9 @@ THREADED_TEST(InternalFieldsAlignedPointers) {
 
   v8::Global<v8::Object> persistent(isolate, obj);
   CHECK_EQ(1, Object::InternalFieldCount(persistent));
-  CHECK_EQ(huge, Object::GetAlignedPointerFromInternalField(persistent, 0));
+  CHECK_EQ(huge, Object::GetAlignedPointerFromInternalField(persistent, 0,
+                                                            kTestTypeTagA));
 }
-
-START_ALLOW_USE_DEPRECATED()
-THREADED_TEST(SetAlignedPointerInInternalFields) {
-  LocalContext env;
-  v8::Isolate* isolate = env.isolate();
-  v8::HandleScope scope(isolate);
-
-  Local<v8::FunctionTemplate> templ = v8::FunctionTemplate::New(isolate);
-  Local<v8::ObjectTemplate> instance_templ = templ->InstanceTemplate();
-  instance_templ->SetInternalFieldCount(2);
-  Local<v8::Object> obj = templ->GetFunction(env.local())
-                              .ToLocalChecked()
-                              ->NewInstance(env.local())
-                              .ToLocalChecked();
-  CHECK_EQ(2, obj->InternalFieldCount());
-
-  int* heap_allocated_1 = new int[100];
-  int* heap_allocated_2 = new int[100];
-  int indices[] = {0, 1};
-  void* values[] = {heap_allocated_1, heap_allocated_2};
-
-  obj->SetAlignedPointerInInternalFields(2, indices, values);
-  i::heap::InvokeMajorGC(CcTest::heap());
-  {
-    v8::SealHandleScope no_handle_leak(isolate);
-    CHECK_EQ(heap_allocated_1, obj->GetAlignedPointerFromInternalField(0));
-    CHECK_EQ(heap_allocated_2, obj->GetAlignedPointerFromInternalField(1));
-
-    CHECK_EQ(heap_allocated_1,
-             obj->GetAlignedPointerFromInternalField(isolate, 0));
-    CHECK_EQ(heap_allocated_2,
-             obj->GetAlignedPointerFromInternalField(isolate, 1));
-  }
-
-  indices[0] = 1;
-  indices[1] = 0;
-  obj->SetAlignedPointerInInternalFields(2, indices, values);
-  i::heap::InvokeMajorGC(CcTest::heap());
-  CHECK_EQ(heap_allocated_2, obj->GetAlignedPointerFromInternalField(0));
-  CHECK_EQ(heap_allocated_1, obj->GetAlignedPointerFromInternalField(1));
-
-  CHECK_EQ(heap_allocated_2,
-           obj->GetAlignedPointerFromInternalField(isolate, 0));
-  CHECK_EQ(heap_allocated_1,
-           obj->GetAlignedPointerFromInternalField(isolate, 1));
-
-  delete[] heap_allocated_1;
-  delete[] heap_allocated_2;
-}
-END_ALLOW_USE_DEPRECATED()
 
 static void CheckAlignedPointerInEmbedderData(LocalContext* env,
                                               v8::Local<v8::Object> some_obj,
@@ -3405,17 +3349,17 @@ static void CheckAlignedPointerInEmbedderData(LocalContext* env,
   CHECK_EQ(0, static_cast<int>(reinterpret_cast<uintptr_t>(value) & 0x1));
   (*env)->SetAlignedPointerInEmbedderData(index, value, kTestTypeTagA);
   i::heap::InvokeMajorGC(CcTest::heap());
-  CHECK_EQ(value, (*env)->GetAlignedPointerFromEmbedderData(index));
   CHECK_EQ(value,
-           some_obj->GetAlignedPointerFromEmbedderDataInCreationContext(index));
+           (*env)->GetAlignedPointerFromEmbedderData(index, kTestTypeTagA));
   CHECK_EQ(value, some_obj->GetAlignedPointerFromEmbedderDataInCreationContext(
-                      CcTest::isolate(), index));
+                      index, kTestTypeTagA));
+  CHECK_EQ(value, some_obj->GetAlignedPointerFromEmbedderDataInCreationContext(
+                      CcTest::isolate(), index, kTestTypeTagA));
 }
 
 static void* AlignedTestPointer(int i) {
   return reinterpret_cast<void*>(i * 1234);
 }
-
 
 THREADED_TEST(EmbedderDataAlignedPointers) {
   LocalContext env;
@@ -3450,7 +3394,8 @@ THREADED_TEST(EmbedderDataAlignedPointers) {
   i::heap::InvokeMajorGC(CcTest::heap());
   for (int i = 0; i < 100; i++) {
     v8::SealHandleScope no_handle_leak(env.isolate());
-    CHECK_EQ(AlignedTestPointer(i), env->GetAlignedPointerFromEmbedderData(i));
+    CHECK_EQ(AlignedTestPointer(i), env->GetAlignedPointerFromEmbedderData(
+                                        i, i % V8_EMBEDDER_DATA_TAG_COUNT));
   }
 }
 
@@ -3471,7 +3416,8 @@ THREADED_TEST(EmbedderDataAlignedPointersViaDetachedGlobal) {
   i::heap::InvokeMajorGC(CcTest::heap());
 
   CHECK_EQ(stack_allocated,
-           obj->GetAlignedPointerFromEmbedderDataInCreationContext(isolate, 1));
+           obj->GetAlignedPointerFromEmbedderDataInCreationContext(
+               isolate, 1, kTestTypeTagA));
 
   env->DetachGlobal();
 
@@ -3479,15 +3425,16 @@ THREADED_TEST(EmbedderDataAlignedPointersViaDetachedGlobal) {
   // directly from current native context as long as its global object IS the
   // detached global object.
   CHECK_EQ(stack_allocated,
-           obj->GetAlignedPointerFromEmbedderDataInCreationContext(isolate, 1));
+           obj->GetAlignedPointerFromEmbedderDataInCreationContext(
+               isolate, 1, kTestTypeTagA));
 }
 
 static void CheckEmbedderData(LocalContext* env, int index,
                               v8::Local<Value> data) {
-  (*env)->SetEmbedderData(index, data);
-  CHECK((*env)->GetEmbedderData(index)->StrictEquals(data));
+  (*env)->SetEmbedderDataV2(index, data);
+  CHECK(v8::Local<v8::Value>::Cast((*env)->GetEmbedderDataV2(index))
+            ->StrictEquals(data));
 }
-
 
 THREADED_TEST(EmbedderData) {
   LocalContext env;
@@ -4238,16 +4185,16 @@ THREADED_TEST(Regress97784) {
                    .FromJust());
 }
 
-
 THREADED_TEST(External) {
   v8::HandleScope scope(CcTest::isolate());
   int x = 3;
-  Local<v8::External> ext = v8::External::New(CcTest::isolate(), &x);
+  Local<v8::External> ext =
+      v8::External::New(CcTest::isolate(), &x, kTestPtrTag);
   LocalContext env;
   CHECK(env->Global()->Set(env.local(), v8_str("ext"), ext).FromJust());
   Local<Value> reext_obj = CompileRun("this.ext");
   v8::Local<v8::External> reext = reext_obj.As<v8::External>();
-  int* ptr = static_cast<int*>(reext->Value());
+  int* ptr = static_cast<int*>(reext->Value(kTestPtrTag));
   CHECK_EQ(3, x);
   *ptr = 10;
   CHECK_EQ(x, 10);
@@ -4264,22 +4211,29 @@ THREADED_TEST(External) {
 
   // Make sure unaligned pointers are wrapped properly.
   char* data = i::StrDup("0123456789");
-  Local<v8::Value> zero = v8::External::New(CcTest::isolate(), &data[0]);
-  Local<v8::Value> one = v8::External::New(CcTest::isolate(), &data[1]);
-  Local<v8::Value> two = v8::External::New(CcTest::isolate(), &data[2]);
-  Local<v8::Value> three = v8::External::New(CcTest::isolate(), &data[3]);
+  Local<v8::Value> zero =
+      v8::External::New(CcTest::isolate(), &data[0], kTestPtrTag);
+  Local<v8::Value> one =
+      v8::External::New(CcTest::isolate(), &data[1], kTestPtrTag);
+  Local<v8::Value> two =
+      v8::External::New(CcTest::isolate(), &data[2], kTestPtrTag);
+  Local<v8::Value> three =
+      v8::External::New(CcTest::isolate(), &data[3], kTestPtrTag);
 
-  char* char_ptr = reinterpret_cast<char*>(v8::External::Cast(*zero)->Value());
+  char* char_ptr =
+      reinterpret_cast<char*>(v8::External::Cast(*zero)->Value(kTestPtrTag));
   CHECK_EQ('0', *char_ptr);
-  char_ptr = reinterpret_cast<char*>(v8::External::Cast(*one)->Value());
+  char_ptr =
+      reinterpret_cast<char*>(v8::External::Cast(*one)->Value(kTestPtrTag));
   CHECK_EQ('1', *char_ptr);
-  char_ptr = reinterpret_cast<char*>(v8::External::Cast(*two)->Value());
+  char_ptr =
+      reinterpret_cast<char*>(v8::External::Cast(*two)->Value(kTestPtrTag));
   CHECK_EQ('2', *char_ptr);
-  char_ptr = reinterpret_cast<char*>(v8::External::Cast(*three)->Value());
+  char_ptr =
+      reinterpret_cast<char*>(v8::External::Cast(*three)->Value(kTestPtrTag));
   CHECK_EQ('3', *char_ptr);
   i::DeleteArray(data);
 }
-
 
 THREADED_TEST(GlobalHandle) {
   v8::Isolate* isolate = CcTest::isolate();
@@ -4303,7 +4257,6 @@ THREADED_TEST(GlobalHandle) {
   }
   global.Reset();
 }
-
 
 THREADED_TEST(ResettingGlobalHandle) {
   v8::Isolate* isolate = CcTest::isolate();
@@ -4652,7 +4605,8 @@ class PhantomStdMapTraits : public v8::StdMapTraits<K, V> {
   static void DisposeCallbackData(WeakCallbackDataType* data) { delete data; }
   static void Dispose(v8::Isolate* isolate, v8::Global<V> value, K key) {
     CHECK_EQ(IntKeyToVoidPointer(key),
-             v8::Object::GetAlignedPointerFromInternalField(value, 0));
+             v8::Object::GetAlignedPointerFromInternalField(value, 0,
+                                                            kTestTypeTagA));
   }
   static void OnWeakCallback(
       const v8::WeakCallbackInfo<WeakCallbackDataType>&) {}
@@ -6276,11 +6230,15 @@ TEST(CustomErrorMessage) {
   context.isolate()->RemoveMessageListeners(check_custom_error_message);
 }
 
+// This tag value has been picked arbitrarily between 0 and
+// V8_EXTERNAL_POINTER_TAG_COUNT.
+constexpr v8::ExternalPointerTypeTag kIntPointerTag = 17;
 
 static void check_custom_rethrowing_message(v8::Local<v8::Message> message,
                                             v8::Local<v8::Value> data) {
   CHECK(data->IsExternal());
-  int* callcount = static_cast<int*>(data.As<v8::External>()->Value());
+  int* callcount =
+      static_cast<int*>(data.As<v8::External>()->Value(kIntPointerTag));
   ++*callcount;
 
   const char* uncaught_error = "Uncaught exception";
@@ -6295,14 +6253,14 @@ static void check_custom_rethrowing_message(v8::Local<v8::Message> message,
             .FromJust());
 }
 
-
 TEST(CustomErrorRethrowsOnToString) {
   int callcount = 0;
   LocalContext context;
   v8::Isolate* isolate = context.isolate();
   v8::HandleScope scope(isolate);
-  context.isolate()->AddMessageListener(check_custom_rethrowing_message,
-                                        v8::External::New(isolate, &callcount));
+  context.isolate()->AddMessageListener(
+      check_custom_rethrowing_message,
+      v8::External::New(isolate, &callcount, kIntPointerTag));
 
   CompileRun(
       "var e = { toString: function() { throw e; } };"
@@ -6319,8 +6277,9 @@ TEST(CustomErrorRethrowsOnToStringInsideVerboseTryCatch) {
   v8::HandleScope scope(isolate);
   v8::TryCatch try_catch(isolate);
   try_catch.SetVerbose(true);
-  context.isolate()->AddMessageListener(check_custom_rethrowing_message,
-                                        v8::External::New(isolate, &callcount));
+  context.isolate()->AddMessageListener(
+      check_custom_rethrowing_message,
+      v8::External::New(isolate, &callcount, kIntPointerTag));
 
   CompileRun(
       "var e = { toString: function() { throw e; } };"
@@ -8232,6 +8191,7 @@ static void SetFlag(const v8::WeakCallbackInfo<FlagAndPersistent>& data) {
 }
 
 static void IndependentWeakHandle(bool global_gc, bool interlinked) {
+  if (i::v8_flags.scavenger_chaos_mode) return;
   i::ManualGCScope manual_gc_scope;
   // Parallel scavenge introduces too much fragmentation.
   i::v8_flags.parallel_scavenge = false;
@@ -8374,12 +8334,13 @@ void InternalFieldCallback(bool global_gc) {
     t2 = new Trivial2(103, 9);
 
     obj->SetAlignedPointerInInternalField(0, t1, kTestTypeTagA);
-    t1 = reinterpret_cast<Trivial*>(obj->GetAlignedPointerFromInternalField(0));
+    t1 = reinterpret_cast<Trivial*>(
+        obj->GetAlignedPointerFromInternalField(0, kTestTypeTagA));
     CHECK_EQ(42, t1->x());
 
     obj->SetAlignedPointerInInternalField(1, t2, kTestTypeTagB);
-    t2 =
-        reinterpret_cast<Trivial2*>(obj->GetAlignedPointerFromInternalField(1));
+    t2 = reinterpret_cast<Trivial2*>(
+        obj->GetAlignedPointerFromInternalField(1, kTestTypeTagB));
     CHECK_EQ(103, t2->x());
 
     handle.SetWeak<v8::Persistent<v8::Object>>(
@@ -8420,6 +8381,7 @@ static void ResetUseValueAndSetFlag(
 }
 
 void i::heap::HeapTester::ResetWeakHandle(bool global_gc) {
+  if (v8_flags.scavenger_chaos_mode) return;
   if (v8_flags.stress_incremental_marking) return;
   using v8::Context;
   using v8::Local;
@@ -8586,27 +8548,6 @@ void PGetter(Local<Name> name,
       info.HolderV2()
           ->Equals(context, global->Get(context, v8_str("o1")).ToLocalChecked())
           .FromJust());
-  if (name->Equals(context, v8_str("p1")).FromJust()) {
-    CHECK(info.This()
-              ->Equals(context,
-                       global->Get(context, v8_str("o1")).ToLocalChecked())
-              .FromJust());
-  } else if (name->Equals(context, v8_str("p2")).FromJust()) {
-    CHECK(info.This()
-              ->Equals(context,
-                       global->Get(context, v8_str("o2")).ToLocalChecked())
-              .FromJust());
-  } else if (name->Equals(context, v8_str("p3")).FromJust()) {
-    CHECK(info.This()
-              ->Equals(context,
-                       global->Get(context, v8_str("o3")).ToLocalChecked())
-              .FromJust());
-  } else if (name->Equals(context, v8_str("p4")).FromJust()) {
-    CHECK(info.This()
-              ->Equals(context,
-                       global->Get(context, v8_str("o4")).ToLocalChecked())
-              .FromJust());
-  }
 }
 
 void RunHolderTest(v8::Local<v8::ObjectTemplate> obj) {
@@ -8639,31 +8580,12 @@ v8::Intercepted PGetter2(Local<Name> name,
       info.HolderV2()
           ->Equals(context, global->Get(context, v8_str("o1")).ToLocalChecked())
           .FromJust());
-  if (name->Equals(context, v8_str("p1")).FromJust()) {
-    CHECK(info.This()
-              ->Equals(context,
-                       global->Get(context, v8_str("o1")).ToLocalChecked())
-              .FromJust());
-  } else if (name->Equals(context, v8_str("p2")).FromJust()) {
-    CHECK(info.This()
-              ->Equals(context,
-                       global->Get(context, v8_str("o2")).ToLocalChecked())
-              .FromJust());
-  } else if (name->Equals(context, v8_str("p3")).FromJust()) {
-    CHECK(info.This()
-              ->Equals(context,
-                       global->Get(context, v8_str("o3")).ToLocalChecked())
-              .FromJust());
-  } else if (name->Equals(context, v8_str("p4")).FromJust()) {
-    CHECK(info.This()
-              ->Equals(context,
-                       global->Get(context, v8_str("o4")).ToLocalChecked())
-              .FromJust());
-  }
+
   // Return something to indicate that the operation was intercepted.
   info.GetReturnValue().Set(True(isolate));
   return v8::Intercepted::kYes;
 }
+
 }  // namespace
 
 THREADED_TEST(GetterHolders) {
@@ -8743,7 +8665,7 @@ THREADED_TEST(StringWrite) {
   v8::Isolate* isolate = context.isolate();
   v8::HandleScope scope(isolate);
   v8::Local<String> str = v8_str("abcde");
-  // abc<Icelandic eth><Unicode snowman>.
+  // "abc<Icelandic eth><Unicode snowman>" represented as u"abc\xf0\u2603".
   v8::Local<String> str2 = v8_str("abc\xC3\xB0\xE2\x98\x83");
   v8::Local<String> str3 =
       v8::String::NewFromUtf8Literal(context.isolate(), "abc\0def");
@@ -9040,6 +8962,39 @@ THREADED_TEST(StringWrite) {
   CHECK_NE(0, strcmp("abcde", buf));
   buf[5] = '\0';
   CHECK_EQ(0, strcmp("abcde", buf));
+
+  memset(buf, 0x1, sizeof(buf));
+  memset(wbuf, 0x1, sizeof(wbuf));
+  str2->WriteOneByteV2(isolate, 0, 5, reinterpret_cast<uint8_t*>(buf));
+  str2->WriteV2(isolate, 0, 5, wbuf);
+  CHECK_EQ(0, strncmp("abc\xf0\x03\x01", buf, 6));
+  uint16_t answer9[] = {'a', 'b', 'c', 0xf0, 0x2603, 0x101};
+  CHECK_EQ(0, StrNCmp16(answer9, wbuf, 6));
+
+  memset(buf, 0x1, sizeof(buf));
+  memset(wbuf, 0x1, sizeof(wbuf));
+  str2->WriteOneByteV2(isolate, 0, 3, reinterpret_cast<uint8_t*>(buf));
+  str2->WriteV2(isolate, 0, 3, wbuf);
+  CHECK_EQ(0, strncmp("abc\x01\x01\x01", buf, 6));
+  uint16_t answer10[] = {'a', 'b', 'c', 0x101, 0x101, 0x101};
+  CHECK_EQ(0, StrNCmp16(answer10, wbuf, 6));
+
+  memset(buf, 0x1, sizeof(buf));
+  memset(wbuf, 0x1, sizeof(wbuf));
+  str2->WriteOneByteV2(isolate, 1, 3, reinterpret_cast<uint8_t*>(buf));
+  str2->WriteV2(isolate, 1, 3, wbuf);
+  CHECK_EQ(0, strncmp("bc\xf0\x01\x01\x01", buf, 6));
+  uint16_t answer11[] = {'b', 'c', 0xf0, 0x101, 0x101, 0x101};
+  CHECK_EQ(0, StrNCmp16(answer11, wbuf, 6));
+
+  memset(buf, 0x1, sizeof(buf));
+  memset(wbuf, 0x1, sizeof(wbuf));
+  str2->WriteOneByteV2(isolate, 4, 1, reinterpret_cast<uint8_t*>(buf),
+                       String::WriteFlags::kNullTerminate);
+  str2->WriteV2(isolate, 4, 1, wbuf, String::WriteFlags::kNullTerminate);
+  CHECK_EQ(0, strcmp("\x03", buf));
+  uint16_t answer12[] = {0x2603, '\0'};
+  CHECK_EQ(0, StrCmp16(answer12, wbuf));
 
   memset(utf8buf, 0x1, sizeof(utf8buf));
   utf8buf[8] = 'X';
@@ -9470,22 +9425,27 @@ THREADED_TEST(ExceptionCreateMessageLength) {
   CHECK_LT(1000, try_catch.Message()->Get()->Length());
 }
 
-static void YGetter(Local<Name> name,
-                    const v8::PropertyCallbackInfo<v8::Value>& info) {
+namespace {
+
+void YGetter(Local<Name> name,
+             const v8::PropertyCallbackInfo<v8::Value>& info) {
   CHECK(i::ValidateCallbackInfo(info));
   ApiTestFuzzer::Fuzz();
   info.GetReturnValue().Set(v8_num(10));
 }
 
-static void YSetter(Local<Name> name, Local<Value> value,
-                    const v8::PropertyCallbackInfo<void>& info) {
+void YSetter(Local<Name> name, Local<Value> value,
+             const v8::PropertyCallbackInfo<void>& info) {
   CHECK(i::ValidateCallbackInfo(info));
-  Local<Object> this_obj = info.This().As<Object>();
+  Local<Object> this_obj = info.HolderV2();
   v8::Local<v8::Context> context = info.GetIsolate()->GetCurrentContext();
-  if (this_obj->Has(context, name).FromJust())
+  if (this_obj->Has(context, name).FromJust()) {
     this_obj->Delete(context, name).FromJust();
+  }
   CHECK(this_obj->Set(context, name, value).FromJust());
 }
+
+}  // namespace
 
 THREADED_TEST(DeleteAccessor) {
   v8::Isolate* isolate = CcTest::isolate();
@@ -12147,8 +12107,8 @@ v8::Intercepted InterceptorCallICFastApi(
   CHECK(i::ValidateCallbackInfo(info));
   // The request is not intercepted so don't call ApiTestFuzzer::Fuzz() here.
   CheckReturnValue(info, FUNCTION_ADDR(InterceptorCallICFastApi));
-  int* call_count =
-      reinterpret_cast<int*>(v8::External::Cast(*info.Data())->Value());
+  int* call_count = reinterpret_cast<int*>(
+      v8::External::Cast(*info.Data())->Value(kIntPointerTag));
   ++(*call_count);
   if ((*call_count) % 20 == 0) {
     i::heap::InvokeMajorGC(CcTest::heap());
@@ -12335,7 +12295,7 @@ THREADED_PROFILED_TEST(InterceptorCallICFastApi_TrivialSignature) {
   v8::Local<v8::ObjectTemplate> templ = fun_templ->InstanceTemplate();
   templ->SetHandler(v8::NamedPropertyHandlerConfiguration(
       InterceptorCallICFastApi, nullptr, nullptr, nullptr, nullptr,
-      v8::External::New(isolate, &interceptor_call_count)));
+      v8::External::New(isolate, &interceptor_call_count, kIntPointerTag)));
   LocalContext context;
   v8::Local<v8::Function> fun =
       fun_templ->GetFunction(context.local()).ToLocalChecked();
@@ -13578,9 +13538,9 @@ static void TestAllocateAndNewForTwoIsolateGroups(
     v8::Isolate::Initialize(isolate1bis, create_params_1);
     v8::Isolate::Initialize(isolate2, create_params_2);
 
-    isolate1->Dispose();
-    isolate1bis->Dispose();
     isolate2->Dispose();
+    isolate1bis->Dispose();
+    isolate1->Dispose();
   }
 
   // New() can control groups into which isolates are allocated.
@@ -13593,9 +13553,9 @@ static void TestAllocateAndNewForTwoIsolateGroups(
     CHECK_EQ(group1, isolate1bis->GetGroup());
     CHECK_EQ(group2, isolate2->GetGroup());
 
-    isolate1->Dispose();
-    isolate1bis->Dispose();
     isolate2->Dispose();
+    isolate1bis->Dispose();
+    isolate1->Dispose();
   }
 }
 
@@ -13790,8 +13750,6 @@ bool ApiTestFuzzer::NextThread() {
 }
 
 void ApiTestFuzzer::Run() {
-  v8::SandboxHardwareSupport::PrepareCurrentThreadForHardwareSandboxing();
-
   // Wait until it is our turn.
   gate_.Wait();
   {
@@ -14544,10 +14502,10 @@ UNINITIALIZED_TEST(SetJitCodeEventHandler) {
       foos[i].Reset(isolate, v8::Utils::ToLocal(foo));
 
       i::PagedSpace* foo_owning_space = reinterpret_cast<i::PagedSpace*>(
-          i::PageMetadata::FromHeapObject(foo->abstract_code(i_isolate))
+          i::NormalPage::FromHeapObject(foo->abstract_code(i_isolate))
               ->owner());
       i::PagedSpace* bar_owning_space = reinterpret_cast<i::PagedSpace*>(
-          i::PageMetadata::FromHeapObject(bar->abstract_code(i_isolate))
+          i::NormalPage::FromHeapObject(bar->abstract_code(i_isolate))
               ->owner());
 
       CHECK_EQ(foo_owning_space, bar_owning_space);
@@ -16317,8 +16275,10 @@ THREADED_TEST(ScriptContextDependence) {
   CHECK_EQ(
       dep->Run(c1.local()).ToLocalChecked()->Int32Value(c1.local()).FromJust(),
       100);
-  CHECK_EQ(indep->BindToCurrentContext()
-               ->Run(c1.local())
+  v8::Local<v8::Script> bound_script = indep->BindToCurrentContext();
+  CHECK_EQ(indep->ScriptId(), bound_script->ScriptId());
+  CHECK_NE(bound_script->ScriptId(), v8::UnboundScript::kNoScriptId);
+  CHECK_EQ(bound_script->Run(c1.local())
                .ToLocalChecked()
                ->Int32Value(c1.local())
                .FromJust(),
@@ -16331,8 +16291,10 @@ THREADED_TEST(ScriptContextDependence) {
   CHECK_EQ(
       dep->Run(c2.local()).ToLocalChecked()->Int32Value(c2.local()).FromJust(),
       100);
-  CHECK_EQ(indep->BindToCurrentContext()
-               ->Run(c2.local())
+  bound_script = indep->BindToCurrentContext();
+  CHECK_EQ(indep->ScriptId(), bound_script->ScriptId());
+  CHECK_NE(bound_script->ScriptId(), v8::UnboundScript::kNoScriptId);
+  CHECK_EQ(bound_script->Run(c2.local())
                .ToLocalChecked()
                ->Int32Value(c2.local())
                .FromJust(),
@@ -17552,16 +17514,14 @@ static bool TestStackOverflow(v8::Isolate* isolate) {
   return value->IsTrue();
 }
 
-class StackOverflowThread : public v8::base::Thread {
+class StackOverflowThread : public v8::internal::SandboxableThread {
  public:
   explicit StackOverflowThread(int stack_size, int js_stack_size)
-      : Thread(Options("StackOverflowThread", stack_size)),
+      : SandboxableThread(Options("StackOverflowThread", stack_size)),
         js_stack_size_(js_stack_size),
         result_(false) {}
 
   void Run() override {
-    v8::SandboxHardwareSupport::PrepareCurrentThreadForHardwareSandboxing();
-
     uintptr_t stack_top = v8::base::Stack::GetStackStart();
     // Compute isolate stack limit by js stack size.
     uintptr_t stack_base = stack_top - js_stack_size_;
@@ -17582,8 +17542,6 @@ class StackOverflowThread : public v8::base::Thread {
 TEST(SetStackLimitInThreadAndStackOverflow) {
   // Set a small --stack-size flag.
   i::FlagScope<int> f_stack_size(&i::v8_flags.stack_size, 100);
-  // Trigger GC aggressively to verify that GC does not crash with stack litmit.
-  i::FlagScope<size_t> f_heap_size(&i::v8_flags.max_heap_size, 8);
   i::FlagScope<bool> f_expose_gc(&i::v8_flags.expose_gc, true);
 
   // ASAN requires more stack space.
@@ -18184,7 +18142,7 @@ TEST(Regress528) {
 
     context->Enter();
     Local<v8::String> obj = v8_str("");
-    context->SetEmbedderData(0, obj);
+    context->SetEmbedderDataV2(0, obj);
     CompileRun(source_simple);
     context->Exit();
   }
@@ -18503,8 +18461,8 @@ THREADED_TEST(FunctionGetScriptId) {
       env->Global()->Get(env.local(), v8_str("foo")).ToLocalChecked());
   v8::Local<v8::Function> bar = v8::Local<v8::Function>::Cast(
       env->Global()->Get(env.local(), v8_str("bar")).ToLocalChecked());
-  CHECK_EQ(script->GetUnboundScript()->GetId(), foo->ScriptId());
-  CHECK_EQ(script->GetUnboundScript()->GetId(), bar->ScriptId());
+  CHECK_EQ(script->ScriptId(), foo->ScriptId());
+  CHECK_EQ(script->ScriptId(), bar->ScriptId());
 }
 
 
@@ -18569,7 +18527,6 @@ THREADED_TEST(FunctionProtoToString) {
 static void GetterWhichReturns42(
     Local<Name> name, const v8::PropertyCallbackInfo<v8::Value>& info) {
   CHECK(i::ValidateCallbackInfo(info));
-  CHECK(IsJSObject(*v8::Utils::OpenDirectHandle(*info.This())));
   CHECK(IsJSObject(*v8::Utils::OpenDirectHandle(*info.HolderV2())));
   info.GetReturnValue().Set(v8_num(42));
 }
@@ -18578,10 +18535,8 @@ static void SetterWhichSetsYOnThisTo23(
     Local<Name> name, Local<Value> value,
     const v8::PropertyCallbackInfo<void>& info) {
   CHECK(i::ValidateCallbackInfo(info));
-  CHECK(IsJSObject(*v8::Utils::OpenDirectHandle(*info.This())));
   CHECK(IsJSObject(*v8::Utils::OpenDirectHandle(*info.HolderV2())));
-  info.This()
-      .As<Object>()
+  info.HolderV2()
       ->Set(info.GetIsolate()->GetCurrentContext(), v8_str("y"), v8_num(23))
       .FromJust();
 }
@@ -18589,7 +18544,6 @@ static void SetterWhichSetsYOnThisTo23(
 v8::Intercepted FooGetInterceptor(
     Local<Name> name, const v8::PropertyCallbackInfo<v8::Value>& info) {
   CHECK(i::ValidateCallbackInfo(info));
-  CHECK(IsJSObject(*v8::Utils::OpenDirectHandle(*info.This())));
   CHECK(IsJSObject(*v8::Utils::OpenDirectHandle(*info.HolderV2())));
   if (!name->Equals(info.GetIsolate()->GetCurrentContext(), v8_str("foo"))
            .FromJust()) {
@@ -18602,14 +18556,12 @@ v8::Intercepted FooGetInterceptor(
 v8::Intercepted FooSetInterceptor(Local<Name> name, Local<Value> value,
                                   const v8::PropertyCallbackInfo<void>& info) {
   CHECK(i::ValidateCallbackInfo(info));
-  CHECK(IsJSObject(*v8::Utils::OpenDirectHandle(*info.This())));
   CHECK(IsJSObject(*v8::Utils::OpenDirectHandle(*info.HolderV2())));
   if (!name->Equals(info.GetIsolate()->GetCurrentContext(), v8_str("foo"))
            .FromJust()) {
     return v8::Intercepted::kNo;
   }
-  info.This()
-      .As<Object>()
+  info.HolderV2()
       ->Set(info.GetIsolate()->GetCurrentContext(), v8_str("y"), v8_num(23))
       .FromJust();
   return v8::Intercepted::kYes;
@@ -18673,7 +18625,7 @@ v8::Intercepted NamedPropertySetterWhichSetsYOnThisTo23(
   CHECK(i::ValidateCallbackInfo(info));
   v8::Local<v8::Context> context = info.GetIsolate()->GetCurrentContext();
   if (name->Equals(context, v8_str("x")).FromJust()) {
-    info.This().As<Object>()->Set(context, v8_str("y"), v8_num(23)).FromJust();
+    info.HolderV2()->Set(context, v8_str("y"), v8_num(23)).FromJust();
     return v8::Intercepted::kYes;
   }
   return v8::Intercepted::kNo;
@@ -19386,13 +19338,14 @@ static int CalcFibonacci(v8::Isolate* isolate, int limit) {
   return static_cast<int>(value->NumberValue(context.local()).FromJust());
 }
 
-class IsolateThread : public v8::base::Thread {
+class IsolateThread : public v8::internal::SandboxableThread {
  public:
   explicit IsolateThread(int fib_limit)
-      : Thread(Options("IsolateThread")), fib_limit_(fib_limit), result_(0) {}
+      : SandboxableThread(Options("IsolateThread")),
+        fib_limit_(fib_limit),
+        result_(0) {}
 
   void Run() override {
-    v8::SandboxHardwareSupport::PrepareCurrentThreadForHardwareSandboxing();
     v8::Isolate::CreateParams create_params = CreateTestParams();
     v8::Isolate* isolate = v8::Isolate::New(create_params);
     result_ = CalcFibonacci(isolate, fib_limit_);
@@ -19405,7 +19358,6 @@ class IsolateThread : public v8::base::Thread {
   int fib_limit_;
   int result_;
 };
-
 
 TEST(MultipleIsolatesOnIndividualThreads) {
   IsolateThread thread1(21);
@@ -19762,31 +19714,13 @@ TEST(RegExp) {
   }
 }
 
-// Allow usages of v8::Object::GetPrototype() for now.
-// TODO(https://crbug.com/333672197): remove.
-START_ALLOW_USE_DEPRECATED()
-
 THREADED_TEST(Equals) {
   LocalContext localContext;
   v8::HandleScope handleScope(localContext.isolate());
 
-  v8::Local<v8::Object> globalProxy = localContext->Global();
-  v8::Local<Value> global = globalProxy->GetPrototype();
-
+  v8::Local<v8::Object> global = localContext->Global();
   CHECK(global->StrictEquals(global));
-  CHECK(!global->StrictEquals(globalProxy));
-  CHECK(!globalProxy->StrictEquals(global));
-  CHECK(globalProxy->StrictEquals(globalProxy));
-
-  CHECK(global->Equals(localContext.local(), global).FromJust());
-  CHECK(!global->Equals(localContext.local(), globalProxy).FromJust());
-  CHECK(!globalProxy->Equals(localContext.local(), global).FromJust());
-  CHECK(globalProxy->Equals(localContext.local(), globalProxy).FromJust());
 }
-
-// Allow usages of v8::Object::GetPrototype() for now.
-// TODO(https://crbug.com/333672197): remove.
-END_ALLOW_USE_DEPRECATED()
 
 namespace {
 v8::Intercepted Getter(v8::Local<v8::Name> property,
@@ -22064,7 +21998,7 @@ class RequestInterruptTestBase {
       const v8::FunctionCallbackInfo<Value>& info) {
     RequestInterruptTestBase* test =
         reinterpret_cast<RequestInterruptTestBase*>(
-            info.Data().As<v8::External>()->Value());
+            info.Data().As<v8::External>()->Value(kTestPtrTag));
     info.GetReturnValue().Set(test->ShouldContinue());
   }
 
@@ -22106,14 +22040,14 @@ class RequestInterruptTestBaseWithSimpleInterrupt
   InterruptThread i_thread;
 };
 
-
 class RequestInterruptTestWithFunctionCall
     : public RequestInterruptTestBaseWithSimpleInterrupt {
  public:
   void TestBody() override {
-    Local<Function> func = Function::New(env_.local(), ShouldContinueCallback,
-                                         v8::External::New(isolate_, this))
-                               .ToLocalChecked();
+    Local<Function> func =
+        Function::New(env_.local(), ShouldContinueCallback,
+                      v8::External::New(isolate_, this, kTestPtrTag))
+            .ToLocalChecked();
     CHECK(env_->Global()
               ->Set(env_.local(), v8_str("ShouldContinue"), func)
               .FromJust());
@@ -22122,16 +22056,16 @@ class RequestInterruptTestWithFunctionCall
   }
 };
 
-
 class RequestInterruptTestWithMethodCall
     : public RequestInterruptTestBaseWithSimpleInterrupt {
  public:
   void TestBody() override {
     v8::Local<v8::FunctionTemplate> t = v8::FunctionTemplate::New(isolate_);
     v8::Local<v8::Template> proto = t->PrototypeTemplate();
-    proto->Set(isolate_, "shouldContinue",
-               FunctionTemplate::New(isolate_, ShouldContinueCallback,
-                                     v8::External::New(isolate_, this)));
+    proto->Set(
+        isolate_, "shouldContinue",
+        FunctionTemplate::New(isolate_, ShouldContinueCallback,
+                              v8::External::New(isolate_, this, kTestPtrTag)));
     CHECK(env_->Global()
               ->Set(env_.local(), v8_str("Klass"),
                     t->GetFunction(env_.local()).ToLocalChecked())
@@ -22141,15 +22075,16 @@ class RequestInterruptTestWithMethodCall
   }
 };
 
-
 class RequestInterruptTestWithAccessor
     : public RequestInterruptTestBaseWithSimpleInterrupt {
  public:
   void TestBody() override {
     v8::Local<v8::FunctionTemplate> t = v8::FunctionTemplate::New(isolate_);
     v8::Local<v8::Template> proto = t->PrototypeTemplate();
-    proto->SetAccessorProperty(v8_str("shouldContinue"), FunctionTemplate::New(
-        isolate_, ShouldContinueCallback, v8::External::New(isolate_, this)));
+    proto->SetAccessorProperty(
+        v8_str("shouldContinue"),
+        FunctionTemplate::New(isolate_, ShouldContinueCallback,
+                              v8::External::New(isolate_, this, kTestPtrTag)));
     CHECK(env_->Global()
               ->Set(env_.local(), v8_str("Klass"),
                     t->GetFunction(env_.local()).ToLocalChecked())
@@ -22167,7 +22102,7 @@ class RequestInterruptTestWithNativeAccessor
     v8::Local<v8::FunctionTemplate> t = v8::FunctionTemplate::New(isolate_);
     t->InstanceTemplate()->SetNativeDataProperty(
         v8_str("shouldContinue"), &ShouldContinueNativeGetter, nullptr,
-        v8::External::New(isolate_, this));
+        v8::External::New(isolate_, this, kTestPtrTag));
     CHECK(env_->Global()
               ->Set(env_.local(), v8_str("Klass"),
                     t->GetFunction(env_.local()).ToLocalChecked())
@@ -22182,11 +22117,10 @@ class RequestInterruptTestWithNativeAccessor
     CHECK(i::ValidateCallbackInfo(info));
     RequestInterruptTestBase* test =
         reinterpret_cast<RequestInterruptTestBase*>(
-            info.Data().As<v8::External>()->Value());
+            info.Data().As<v8::External>()->Value(kTestPtrTag));
     info.GetReturnValue().Set(test->ShouldContinue());
   }
 };
-
 
 class RequestInterruptTestWithMethodCallAndInterceptor
     : public RequestInterruptTestBaseWithSimpleInterrupt {
@@ -22194,9 +22128,10 @@ class RequestInterruptTestWithMethodCallAndInterceptor
   void TestBody() override {
     v8::Local<v8::FunctionTemplate> t = v8::FunctionTemplate::New(isolate_);
     v8::Local<v8::Template> proto = t->PrototypeTemplate();
-    proto->Set(isolate_, "shouldContinue",
-               FunctionTemplate::New(isolate_, ShouldContinueCallback,
-                                     v8::External::New(isolate_, this)));
+    proto->Set(
+        isolate_, "shouldContinue",
+        FunctionTemplate::New(isolate_, ShouldContinueCallback,
+                              v8::External::New(isolate_, this, kTestPtrTag)));
     v8::Local<v8::ObjectTemplate> instance_template = t->InstanceTemplate();
     instance_template->SetHandler(
         v8::NamedPropertyHandlerConfiguration(EmptyInterceptor));
@@ -22217,7 +22152,6 @@ class RequestInterruptTestWithMethodCallAndInterceptor
   }
 };
 
-
 class RequestInterruptTestWithMathAbs
     : public RequestInterruptTestBaseWithSimpleInterrupt {
  public:
@@ -22225,14 +22159,14 @@ class RequestInterruptTestWithMathAbs
     env_->Global()
         ->Set(env_.local(), v8_str("WakeUpInterruptor"),
               Function::New(env_.local(), WakeUpInterruptorCallback,
-                            v8::External::New(isolate_, this))
+                            v8::External::New(isolate_, this, kTestPtrTag))
                   .ToLocalChecked())
         .FromJust();
 
     env_->Global()
         ->Set(env_.local(), v8_str("ShouldContinue"),
               Function::New(env_.local(), ShouldContinueCallback,
-                            v8::External::New(isolate_, this))
+                            v8::External::New(isolate_, this, kTestPtrTag))
                   .ToLocalChecked())
         .FromJust();
 
@@ -22267,7 +22201,7 @@ class RequestInterruptTestWithMathAbs
 
     RequestInterruptTestBase* test =
         reinterpret_cast<RequestInterruptTestBase*>(
-            info.Data().As<v8::External>()->Value());
+            info.Data().As<v8::External>()->Value(kTestPtrTag));
     test->WakeUpInterruptor();
   }
 
@@ -22275,7 +22209,7 @@ class RequestInterruptTestWithMathAbs
       const v8::FunctionCallbackInfo<Value>& info) {
     RequestInterruptTestBase* test =
         reinterpret_cast<RequestInterruptTestBase*>(
-            info.Data().As<v8::External>()->Value());
+            info.Data().As<v8::External>()->Value(kTestPtrTag));
     info.GetReturnValue().Set(test->should_continue());
   }
 };
@@ -22316,9 +22250,10 @@ class RequestMultipleInterrupts : public RequestInterruptTestBase {
   void StartInterruptThread() override { CHECK(i_thread.Start()); }
 
   void TestBody() override {
-    Local<Function> func = Function::New(env_.local(), ShouldContinueCallback,
-                                         v8::External::New(isolate_, this))
-                               .ToLocalChecked();
+    Local<Function> func =
+        Function::New(env_.local(), ShouldContinueCallback,
+                      v8::External::New(isolate_, this, kTestPtrTag))
+            .ToLocalChecked();
     CHECK(env_->Global()
               ->Set(env_.local(), v8_str("ShouldContinue"), func)
               .FromJust());
@@ -22586,20 +22521,11 @@ TEST(EscapableHandleScope) {
   }
 }
 
-// Allow usages of v8::PropertyCallbackInfo<T>::Holder() for now.
-// TODO(https://crbug.com/333672197): remove.
-START_ALLOW_USE_DEPRECATED()
-
 static void SetterWhichExpectsThisAndHolderToDiffer(
     Local<Name>, Local<Value>, const v8::PropertyCallbackInfo<void>& info) {
-  CHECK(i::ValidateCallbackInfo(info));
-  CHECK(info.Holder() != info.This());
-  CHECK(info.HolderV2() != info.This());
+  // Writes through prototypes do not trigger interceptor setter callback.
+  UNREACHABLE();
 }
-
-// Allow usages of v8::PropertyCallbackInfo<T>::Holder() for now.
-// TODO(https://crbug.com/333672197): remove.
-END_ALLOW_USE_DEPRECATED()
 
 TEST(Regress239669) {
   LocalContext context;
@@ -22670,9 +22596,18 @@ class ApiCallOptimizationChecker {
     }
   }
 
-  // Allow usages of v8::Object::GetPrototype() for now.
   // TODO(https://crbug.com/333672197): remove.
-  START_ALLOW_USE_DEPRECATED()
+  static v8::Local<v8::Object> GetHiddenPrototype(
+      v8::Isolate* isolate, v8::Local<v8::Object> global_proxy) {
+    i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
+    DCHECK(IsJSGlobalProxy(*v8::Utils::OpenHandle(*global_proxy)));
+    i::DirectHandle<i::JSGlobalProxy> i_global_proxy =
+        i::Cast<i::JSGlobalProxy>(v8::Utils::OpenHandle(*global_proxy));
+    DCHECK(!i_global_proxy->IsDetached());
+    i::DirectHandle<i::JSObject> global(
+        i::Cast<i::JSObject>(i_global_proxy->map()->prototype()), i_isolate);
+    return v8::Utils::ToLocal(global);
+  }
 
   void Run(SignatureType signature_type, bool global, int key) {
     v8::Isolate* isolate = CcTest::isolate();
@@ -22709,8 +22644,7 @@ class ApiCallOptimizationChecker {
               ->Set(context, v8_str("function_receiver"), function_receiver)
               .FromJust());
     // Get the holder objects.
-    Local<Object> inner_global =
-        Local<Object>::Cast(context->Global()->GetPrototype());
+    Local<Object> inner_global = GetHiddenPrototype(isolate, context->Global());
     Local<Object> new_object = Object::New(isolate);
     data.Reset(isolate, new_object);
     Local<FunctionTemplate> function_template = FunctionTemplate::New(
@@ -22720,8 +22654,8 @@ class ApiCallOptimizationChecker {
     Local<Object> global_holder = inner_global;
     Local<Object> function_holder = function_receiver;
     if (signature_type == kSignatureOnPrototype) {
-      function_holder = Local<Object>::Cast(function_holder->GetPrototype());
-      global_holder = Local<Object>::Cast(global_holder->GetPrototype());
+      function_holder = Local<Object>::Cast(function_holder->GetPrototypeV2());
+      global_holder = Local<Object>::Cast(global_holder->GetPrototypeV2());
     }
     global_holder->Set(context, v8_str("g_f"), function).FromJust();
     global_holder->SetAccessorProperty(v8_str("g_acc"), function, function);
@@ -22813,10 +22747,6 @@ class ApiCallOptimizationChecker {
     holder.Reset();
     callee.Reset();
   }
-
-  // Allow usages of v8::Object::GetPrototype() for now.
-  // TODO(https://crbug.com/333672197): remove.
-  END_ALLOW_USE_DEPRECATED()
 };
 
 v8::Global<Object> ApiCallOptimizationChecker::data;
@@ -26853,10 +26783,10 @@ TEST(SetPrototypeTemplate) {
   ExpectTrue("Image.prototype === HTMLImageElement.prototype");
 }
 
-void ensure_receiver_is_global_proxy(
+void EnsureHolderIsJSGlobalProxy(
     v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
   CHECK(i::ValidateCallbackInfo(info));
-  CHECK(IsJSGlobalProxy(*v8::Utils::OpenDirectHandle(*info.This())));
+  CHECK(IsJSGlobalProxy(*v8::Utils::OpenDirectHandle(*info.HolderV2())));
 }
 
 THREADED_TEST(GlobalAccessorInfo) {
@@ -26866,7 +26796,7 @@ THREADED_TEST(GlobalAccessorInfo) {
   global_template->SetNativeDataProperty(
       v8::String::NewFromUtf8Literal(isolate, "prop",
                                      v8::NewStringType::kInternalized),
-      &ensure_receiver_is_global_proxy);
+      &EnsureHolderIsJSGlobalProxy);
   LocalContext env(nullptr, global_template);
   CompileRun("for (var i = 0; i < 10; i++) this.prop");
   CompileRun("for (var i = 0; i < 10; i++) prop");
@@ -26935,11 +26865,11 @@ enum ContextId { EnteredContext, CurrentContext };
 
 void CheckContexts(v8::Isolate* isolate) {
   CHECK_EQ(CurrentContext, isolate->GetCurrentContext()
-                               ->GetEmbedderData(1)
+                               ->GetEmbedderDataV2(1)
                                .As<v8::Integer>()
                                ->Value());
   CHECK_EQ(EnteredContext, isolate->GetEnteredOrMicrotaskContext()
-                               ->GetEmbedderData(1)
+                               ->GetEmbedderDataV2(1)
                                .As<v8::Integer>()
                                ->Value());
 }
@@ -26967,10 +26897,10 @@ TEST(CorrectEnteredContext) {
   v8::HandleScope scope(CcTest::isolate());
 
   LocalContext currentContext;
-  currentContext->SetEmbedderData(
+  currentContext->SetEmbedderDataV2(
       1, v8::Integer::New(currentContext.isolate(), CurrentContext));
   LocalContext enteredContext;
-  enteredContext->SetEmbedderData(
+  enteredContext->SetEmbedderDataV2(
       1, v8::Integer::New(enteredContext.isolate(), EnteredContext));
 
   v8::Context::Scope contextScope(enteredContext.local());
@@ -27077,13 +27007,11 @@ HostImportModuleDynamicallyWithAttributesCallbackResolve(
        i < import_attributes->Length() / kAttributeEntrySizeForDynamicImport;
        ++i) {
     Local<String> attribute_key =
-        import_attributes
-            ->Get(context, (i * kAttributeEntrySizeForDynamicImport))
+        import_attributes->Get((i * kAttributeEntrySizeForDynamicImport))
             .As<Value>()
             .As<String>();
     Local<String> attribute_value =
-        import_attributes
-            ->Get(context, (i * kAttributeEntrySizeForDynamicImport) + 1)
+        import_attributes->Get((i * kAttributeEntrySizeForDynamicImport) + 1)
             .As<Value>()
             .As<String>();
     if (v8_str("a")->StrictEquals(attribute_key)) {
@@ -27191,9 +27119,9 @@ MaybeLocal<Object> CheckResolveSource(Local<Context> context,
   return {};
 }
 
-TEST(ImportSourceResolveModuleAndSource) {
-  i::FlagScope<bool> f(&i::v8_flags.js_source_phase_imports, true);
-
+TEST_WITH_FLAGS(ImportSourceResolveModuleAndSource,
+                "--js-source-phase-imports") {
+  DCHECK(i::v8_flags.js_source_phase_imports);
   LocalContext context;
   v8::Isolate* isolate = context.isolate();
   v8::HandleScope scope(isolate);
@@ -27362,8 +27290,9 @@ v8::MaybeLocal<v8::Context> HostCreateShadowRealmContextCallbackStatic(
   return v8::Context::New(CcTest::isolate());
 }
 
-TEST(CreateShadowRealmContextHostNotSupported) {
-  i::v8_flags.harmony_shadow_realm = true;
+TEST_WITH_FLAGS(CreateShadowRealmContextHostNotSupported,
+                "--harmony-shadow-realm") {
+  DCHECK(i::v8_flags.harmony_shadow_realm);
   LocalContext context;
   v8::Isolate* isolate = context.isolate();
   v8::HandleScope scope(isolate);
@@ -27388,8 +27317,8 @@ TEST(CreateShadowRealmContextHostNotSupported) {
             .FromJust());
 }
 
-TEST(CreateShadowRealmContext) {
-  i::v8_flags.harmony_shadow_realm = true;
+TEST_WITH_FLAGS(CreateShadowRealmContext, "--harmony-shadow-realm") {
+  DCHECK(i::v8_flags.harmony_shadow_realm);
   LocalContext context;
   v8::Isolate* isolate = context.isolate();
   v8::HandleScope scope(isolate);
@@ -27417,8 +27346,8 @@ v8::MaybeLocal<v8::Context> HostCreateShadowRealmContextCallbackThrow(
   return v8::MaybeLocal<v8::Context>();
 }
 
-TEST(CreateShadowRealmContextThrow) {
-  i::v8_flags.harmony_shadow_realm = true;
+TEST_WITH_FLAGS(CreateShadowRealmContextThrow, "--harmony-shadow-realm") {
+  DCHECK(i::v8_flags.harmony_shadow_realm);
   LocalContext context;
   v8::Isolate* isolate = context.isolate();
   v8::HandleScope scope(isolate);
@@ -27508,11 +27437,13 @@ TEST(ModuleScriptId) {
   v8::ScriptCompiler::Source source(source_text, origin);
   Local<Module> module =
       v8::ScriptCompiler::CompileModule(isolate, &source).ToLocalChecked();
+  int unbound_module_id = module->GetUnboundModuleScript()->ScriptId();
   int id_before_instantiation = module->ScriptId();
   module->InstantiateModule(context.local(), UnexpectedModuleResolveCallback)
       .ToChecked();
   int id_after_instantiation = module->ScriptId();
 
+  CHECK_EQ(unbound_module_id, id_before_instantiation);
   CHECK_EQ(id_before_instantiation, id_after_instantiation);
   CHECK_NE(id_before_instantiation, v8::UnboundScript::kNoScriptId);
 }
@@ -28374,8 +28305,8 @@ UNINITIALIZED_TEST(NestedIsolates) {
     ExpectInt32("c", 4);
   }
 
-  isolate_1->Dispose();
   isolate_2->Dispose();
+  isolate_1->Dispose();
 }
 
 #undef THREADED_PROFILED_TEST
@@ -28548,8 +28479,9 @@ struct ApiNumberChecker : BasicApiChecker<T, ApiNumberChecker<T>, void> {
                            v8::FastApiCallbackOptions& options) {
     v8::Object* receiver_obj = *receiver;
     CHECK(IsValidUnwrapObject(receiver_obj));
-    ApiNumberChecker<T>* receiver_ptr =
-        GetInternalField<ApiNumberChecker<T>>(receiver_obj);
+    ApiNumberChecker<T>* receiver_ptr = reinterpret_cast<ApiNumberChecker<T>*>(
+        receiver_obj->GetAlignedPointerFromInternalField(kV8WrapperObjectIndex,
+                                                         kTestTypeTagA));
     receiver_ptr->SetCallFast();
     receiver_ptr->fast_value_ = argument;
   }
@@ -28562,7 +28494,7 @@ struct ApiNumberChecker : BasicApiChecker<T, ApiNumberChecker<T>, void> {
       return;
     }
     ApiNumberChecker<T>* checker =
-        GetInternalField<ApiNumberChecker<T>>(receiver);
+        GetInternalField<ApiNumberChecker<T>>(receiver, kTestTypeTagA);
     CHECK_EQ(info.Length(), checker->args_count_);
 
     checker->SetCallSlow();
@@ -28587,7 +28519,7 @@ struct UnexpectedObjectChecker
                            v8::Local<v8::Value> argument,
                            v8::FastApiCallbackOptions& options) {
     UnexpectedObjectChecker* receiver_ptr =
-        GetInternalField<UnexpectedObjectChecker>(*receiver);
+        GetInternalField<UnexpectedObjectChecker>(*receiver, kTestTypeTagA);
     receiver_ptr->SetCallFast();
     if (argument->IsObject()) {
       v8::Object* argument_obj = v8::Object::Cast(*argument);
@@ -28598,7 +28530,7 @@ struct UnexpectedObjectChecker
   static void SlowCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
     CHECK(i::ValidateCallbackInfo(info));
     UnexpectedObjectChecker* receiver_ptr =
-        GetInternalField<UnexpectedObjectChecker>(*info.This());
+        GetInternalField<UnexpectedObjectChecker>(*info.This(), kTestTypeTagA);
     receiver_ptr->SetCallSlow();
     if (info[0]->IsObject()) {
       v8::Object* argument_obj = v8::Object::Cast(*info[0]);
@@ -28620,11 +28552,12 @@ struct ApiObjectChecker
                            v8::Local<v8::Value> argument,
                            v8::FastApiCallbackOptions& options) {
     ApiObjectChecker* receiver_ptr =
-        GetInternalField<ApiObjectChecker>(*receiver);
+        GetInternalField<ApiObjectChecker>(*receiver, kTestTypeTagA);
     receiver_ptr->SetCallFast();
 
     v8::Object* argument_obj = v8::Object::Cast(*argument);
-    EmbedderType* argument_ptr = GetInternalField<EmbedderType>(argument_obj);
+    EmbedderType* argument_ptr =
+        GetInternalField<EmbedderType>(argument_obj, kTestTypeTagA);
     CHECK(receiver_ptr->ctor_->IsLeafTemplateForApiObject(argument));
 
     argument_ptr->data = receiver_ptr->initial_data_;
@@ -28632,7 +28565,7 @@ struct ApiObjectChecker
   static void SlowCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
     CHECK(i::ValidateCallbackInfo(info));
     ApiObjectChecker* receiver_ptr =
-        GetInternalField<ApiObjectChecker>(*info.This());
+        GetInternalField<ApiObjectChecker>(*info.This(), kTestTypeTagA);
     receiver_ptr->SetCallSlow();
 
     CHECK(info[0]->IsObject());
@@ -28958,7 +28891,7 @@ struct ReturnValueChecker : BasicApiChecker<T, ReturnValueChecker<T>, T> {
   static T FastCallback(v8::Local<v8::Object> receiver, T arg,
                         v8::FastApiCallbackOptions& options) {
     ReturnValueChecker<T>* receiver_ptr =
-        GetInternalField<ReturnValueChecker<T>>(*receiver);
+        GetInternalField<ReturnValueChecker<T>>(*receiver, kTestTypeTagA);
     receiver_ptr->SetCallFast();
     return arg;
   }
@@ -28966,7 +28899,7 @@ struct ReturnValueChecker : BasicApiChecker<T, ReturnValueChecker<T>, T> {
   static void SlowCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
     CHECK(i::ValidateCallbackInfo(info));
     ReturnValueChecker<T>* receiver_ptr =
-        GetInternalField<ReturnValueChecker<T>>(*info.This());
+        GetInternalField<ReturnValueChecker<T>>(*info.This(), kTestTypeTagA);
     receiver_ptr->SetCallSlow();
     info.GetReturnValue().Set(info[0]);
   }
@@ -28989,7 +28922,7 @@ struct AllocationChecker : BasicApiChecker<int32_t, AllocationChecker, void> {
   static void FastCallback(v8::Local<v8::Object> receiver, int32_t argument,
                            v8::FastApiCallbackOptions& options) {
     AllocationChecker* receiver_ptr =
-        GetInternalField<AllocationChecker>(*receiver);
+        GetInternalField<AllocationChecker>(*receiver, kTestTypeTagA);
     CHECK_EQ(receiver_ptr->expected_argument_, argument);
     receiver_ptr->SetCallFast();
     i::Isolate* isolate = receiver_ptr->isolate_;
@@ -29003,14 +28936,15 @@ struct AllocationChecker : BasicApiChecker<int32_t, AllocationChecker, void> {
       v8::Context::Scope context_scope(receiver_ptr->context_);
       CompileRun("gc();");
     }
-    CHECK_EQ(receiver_ptr, GetInternalField<AllocationChecker>(*receiver));
+    CHECK_EQ(receiver_ptr,
+             GetInternalField<AllocationChecker>(*receiver, kTestTypeTagA));
     CHECK_EQ(receiver_ptr->expected_argument_, number->value());
   }
 
   static void SlowCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
     CHECK(i::ValidateCallbackInfo(info));
     AllocationChecker* receiver_ptr =
-        GetInternalField<AllocationChecker>(*info.This());
+        GetInternalField<AllocationChecker>(*info.This(), kTestTypeTagA);
     receiver_ptr->SetCallSlow();
     info.GetReturnValue().Set(info[0]);
   }
@@ -29031,7 +28965,7 @@ struct ThrowInReentrantJSChecker
   static void FastCallback(v8::Local<v8::Object> receiver, int32_t argument,
                            v8::FastApiCallbackOptions& options) {
     ThrowInReentrantJSChecker* receiver_ptr =
-        GetInternalField<ThrowInReentrantJSChecker>(*receiver);
+        GetInternalField<ThrowInReentrantJSChecker>(*receiver, kTestTypeTagA);
     receiver_ptr->SetCallFast();
     i::Isolate* isolate = receiver_ptr->isolate_;
     i::HandleScope handle_scope(isolate);
@@ -29042,7 +28976,8 @@ struct ThrowInReentrantJSChecker
   static void SlowCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
     CHECK(i::ValidateCallbackInfo(info));
     ThrowInReentrantJSChecker* receiver_ptr =
-        GetInternalField<ThrowInReentrantJSChecker>(*info.This());
+        GetInternalField<ThrowInReentrantJSChecker>(*info.This(),
+                                                    kTestTypeTagA);
     receiver_ptr->SetCallSlow();
     v8::Isolate* isolate = info.GetIsolate();
     v8::HandleScope handle_scope(isolate);
@@ -29179,7 +29114,6 @@ void FastApiCallWithAllocationAndGC(AllocationChecker::GCLocation gc_location) {
   i::v8_flags.turbofan = true;
   i::v8_flags.turbo_fast_api_calls = true;
   i::v8_flags.allow_natives_syntax = true;
-  i::v8_flags.allow_allocation_in_fast_api_call = true;
   i::v8_flags.expose_gc = true;
   i::FlagList::EnforceFlagImplications();
 
@@ -29222,7 +29156,6 @@ TEST(FastApiCallWithThrowInReentrantCode) {
   i::v8_flags.turbofan = true;
   i::v8_flags.turbo_fast_api_calls = true;
   i::v8_flags.allow_natives_syntax = true;
-  i::v8_flags.allow_allocation_in_fast_api_call = true;
   i::FlagList::EnforceFlagImplications();
 
   CcTest::InitializeVM();
@@ -29268,7 +29201,7 @@ struct RecursiveReentrantJSChecker
   static void FastCallback(v8::Local<v8::Object> receiver, int32_t argument,
                            v8::FastApiCallbackOptions& options) {
     RecursiveReentrantJSChecker* receiver_ptr =
-        GetInternalField<RecursiveReentrantJSChecker>(*receiver);
+        GetInternalField<RecursiveReentrantJSChecker>(*receiver, kTestTypeTagA);
     receiver_ptr->SetCallFast();
     *(receiver_ptr->sum_) += argument;
     i::Isolate* isolate = receiver_ptr->isolate_;
@@ -29288,7 +29221,8 @@ struct RecursiveReentrantJSChecker
   static void SlowCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
     CHECK(i::ValidateCallbackInfo(info));
     RecursiveReentrantJSChecker* receiver_ptr =
-        GetInternalField<RecursiveReentrantJSChecker>(*info.This());
+        GetInternalField<RecursiveReentrantJSChecker>(*info.This(),
+                                                      kTestTypeTagA);
     receiver_ptr->SetCallSlow();
     v8::Isolate* isolate = info.GetIsolate();
     v8::HandleScope handle_scope(isolate);
@@ -29327,7 +29261,6 @@ void FastApiCallRecursion(bool inner_most_throws) {
   i::v8_flags.turbofan = true;
   i::v8_flags.turbo_fast_api_calls = true;
   i::v8_flags.allow_natives_syntax = true;
-  i::v8_flags.allow_allocation_in_fast_api_call = true;
   i::FlagList::EnforceFlagImplications();
 
   CcTest::InitializeVM();
@@ -29984,7 +29917,7 @@ struct SeqOneByteStringChecker {
   static Ret FastCallback(v8::Local<v8::Object> receiver,
                           const v8::FastOneByteString& string) {
     SeqOneByteStringChecker* receiver_ptr =
-        GetInternalField<SeqOneByteStringChecker>(*receiver);
+        GetInternalField<SeqOneByteStringChecker>(*receiver, kTestTypeTagA);
     receiver_ptr->result_ |= ApiCheckerResult::kFastCalled;
 
     return receiver_ptr->func_();
@@ -29992,15 +29925,15 @@ struct SeqOneByteStringChecker {
 
   static void SlowCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
     SeqOneByteStringChecker* receiver_ptr =
-        GetInternalField<SeqOneByteStringChecker>(*info.This());
+        GetInternalField<SeqOneByteStringChecker>(*info.This(), kTestTypeTagA);
     receiver_ptr->result_ |= ApiCheckerResult::kSlowCalled;
 
     CHECK(info[0]->IsString());
     if constexpr (std::is_void_v<Ret>) {
       // do nothing
     } else if constexpr (std::is_same_v<Ret, void*>) {
-      info.GetReturnValue().Set(
-          v8::External::New(info.GetIsolate(), receiver_ptr->func_()));
+      info.GetReturnValue().Set(v8::External::New(
+          info.GetIsolate(), receiver_ptr->func_(), kTestPtrTag));
     } else if constexpr (sizeof(Ret) == 8 &&
                          Int64Repr ==
                              v8::CFunctionInfo::Int64Representation::kBigInt) {
@@ -30276,7 +30209,7 @@ TEST(TriggerMainThreadMetricsEvent) {
   v8::Isolate* iso = CcTest::isolate();
   i::Isolate* i_iso = reinterpret_cast<i::Isolate*>(iso);
   CHECK(i_iso->metrics_recorder());
-  v8::metrics::WasmModuleDecoded event;
+  v8::metrics::WasmModuleDecoded event{false, false, false, 0, 0};
   v8::metrics::Recorder::ContextId context_id;
   std::shared_ptr<MetricsRecorder> recorder =
       std::make_shared<MetricsRecorder>(iso);
@@ -30287,14 +30220,10 @@ TEST(TriggerMainThreadMetricsEvent) {
     context_id = v8::metrics::Recorder::GetContextId(context);
 
     // Check that event submission works.
-    {
-      i::metrics::TimedScope<v8::metrics::WasmModuleDecoded> timed_scope(
-          &event);
-      v8::base::OS::Sleep(v8::base::TimeDelta::FromMilliseconds(100));
-    }
+    event.wall_clock_duration_in_us = 100;
     i_iso->metrics_recorder()->AddMainThreadEvent(event, context_id);
     CHECK_EQ(recorder->count_, 1);  // Increased.
-    CHECK_GT(recorder->time_in_us_, 100);
+    CHECK_EQ(recorder->time_in_us_, 100);
   }
 
   {
@@ -30321,7 +30250,7 @@ TEST(TriggerDelayedMainThreadMetricsEvent) {
   v8::Isolate* iso = CcTest::isolate();
   i::Isolate* i_iso = reinterpret_cast<i::Isolate*>(iso);
   CHECK(i_iso->metrics_recorder());
-  v8::metrics::WasmModuleDecoded event;
+  v8::metrics::WasmModuleDecoded event{false, false, false, 0, 0};
   v8::metrics::Recorder::ContextId context_id;
   std::shared_ptr<MetricsRecorder> recorder =
       std::make_shared<MetricsRecorder>(iso);
@@ -30332,11 +30261,7 @@ TEST(TriggerDelayedMainThreadMetricsEvent) {
     context_id = v8::metrics::Recorder::GetContextId(context);
 
     // Check that event submission works.
-    {
-      i::metrics::TimedScope<v8::metrics::WasmModuleDecoded> timed_scope(
-          &event);
-      v8::base::OS::Sleep(v8::base::TimeDelta::FromMilliseconds(100));
-    }
+    event.wall_clock_duration_in_us = 100;
     i_iso->metrics_recorder()->DelayMainThreadEvent(event, context_id);
     CHECK_EQ(recorder->count_, 0);        // Unchanged.
     CHECK_EQ(recorder->time_in_us_, -1);  // Unchanged.
@@ -30344,7 +30269,7 @@ TEST(TriggerDelayedMainThreadMetricsEvent) {
     while (v8::platform::PumpMessageLoop(i::V8::GetCurrentPlatform(), iso)) {
     }
     CHECK_EQ(recorder->count_, 1);  // Increased.
-    CHECK_GT(recorder->time_in_us_, 100);
+    CHECK_EQ(recorder->time_in_us_, 100);
   }
 
   {
@@ -30369,13 +30294,12 @@ TEST(TriggerThreadSafeMetricsEvent) {
   v8::Isolate* iso = CcTest::isolate();
   i::Isolate* i_iso = reinterpret_cast<i::Isolate*>(iso);
   CHECK(i_iso->metrics_recorder());
-  v8::metrics::WasmModulesPerIsolate event;
+  v8::metrics::WasmModulesPerIsolate event{42};
   std::shared_ptr<MetricsRecorder> recorder =
       std::make_shared<MetricsRecorder>(iso);
   iso->SetMetricsRecorder(recorder);
 
   // Check that event submission works.
-  event.count = 42;
   i_iso->metrics_recorder()->AddThreadSafeEvent(event);
   CHECK_EQ(recorder->count_, 1);  // Increased.
   CHECK_EQ(recorder->module_count_, 42);
@@ -31072,6 +30996,10 @@ class MyObject {
   v8::Local<v8::Object> internal_data_;
 };
 
+// This tag value has been picked arbitrarily between 0 and
+// V8_EXTERNAL_POINTER_TAG_COUNT.
+constexpr v8::ExternalPointerTypeTag kMyObjectTag = 18;
+
 class HiddenDataDelegate : public v8::Context::DeepFreezeDelegate {
  public:
   explicit HiddenDataDelegate(v8::Local<v8::External> my_object)
@@ -31100,8 +31028,8 @@ class HiddenDataDelegate : public v8::Context::DeepFreezeDelegate {
  private:
   bool FreezeExternal(v8::Local<v8::External> ext,
                       v8::LocalVector<v8::Object>& children_out) {
-    if (ext->Value() == my_object_->Value()) {
-      MyObject* my_obj = static_cast<MyObject*>(ext->Value());
+    if (ext->Value(kMyObjectTag) == my_object_->Value(kMyObjectTag)) {
+      MyObject* my_obj = static_cast<MyObject*>(ext->Value(kMyObjectTag));
       if (my_obj->Freeze()) {
         children_out.push_back(my_obj->internal_data_);
         return true;
@@ -31120,7 +31048,8 @@ TEST(DeepFreezeDoesntFreezeJSApiObjectFunctionData) {
   v8::HandleScope scope(isolate);
 
   MyObject foo;
-  v8::Local<v8::External> v8_foo = v8::External::New(isolate, &foo);
+  v8::Local<v8::External> v8_foo =
+      v8::External::New(isolate, &foo, kMyObjectTag);
 
   v8::Local<v8::ObjectTemplate> global_template =
       v8::ObjectTemplate::New(isolate);
@@ -31170,7 +31099,8 @@ TEST(DeepFreezeForbidsJSApiObjectWithoutDelegate) {
   v8::Local<v8::Context> context = env.local();
 
   MyObject foo{false, v8::Object::New(isolate)};
-  v8::Local<v8::External> v8_foo = v8::External::New(isolate, &foo);
+  v8::Local<v8::External> v8_foo =
+      v8::External::New(isolate, &foo, kMyObjectTag);
 
   v8::Local<v8::Value> val =
       context->Global()->Get(context, v8_str("jsApiObject")).ToLocalChecked();
@@ -31204,7 +31134,8 @@ TEST(DeepFreezeFreezesJSApiObjectData) {
   v8::Local<v8::Context> context = env.local();
 
   MyObject foo{false, v8::Object::New(isolate)};
-  v8::Local<v8::External> v8_foo = v8::External::New(isolate, &foo);
+  v8::Local<v8::External> v8_foo =
+      v8::External::New(isolate, &foo, kMyObjectTag);
 
   v8::Local<v8::Value> val =
       context->Global()->Get(context, v8_str("jsApiObject")).ToLocalChecked();
@@ -31243,7 +31174,8 @@ TEST(DeepFreezeFreezesExternalObjectData) {
   v8::Local<v8::Context> context = env.local();
 
   MyObject foo{false, v8::Object::New(isolate)};
-  v8::Local<v8::External> v8_foo = v8::External::New(isolate, &foo);
+  v8::Local<v8::External> v8_foo =
+      v8::External::New(isolate, &foo, kMyObjectTag);
   v8::Maybe<bool> success =
       context->Global()->CreateDataProperty(context, v8_str("foo"), v8_foo);
   CHECK(!success.IsNothing() && success.FromJust());

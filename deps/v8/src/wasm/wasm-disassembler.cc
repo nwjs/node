@@ -402,7 +402,7 @@ class ImmediatesPrinter {
   void HeapType(HeapTypeImmediate& imm) {
     out_ << " ";
     names()->PrintHeapType(out_, imm.type);
-    if (imm.type.is_index()) use_type(imm.type.ref_index());
+    if (imm.type.has_index()) use_type(imm.type.ref_index());
   }
 
   void ValueType(ValueType type) {
@@ -799,13 +799,13 @@ void ModuleDisassembler::PrintTypeDefinition(uint32_t type_index,
   }
   if (type.is_descriptor()) {
     out_ << " (describes ";
-    num_closing_parens++;
     names_->PrintTypeName(out_, type.describes);
+    out_ << ")";
   }
   if (type.has_descriptor()) {
     out_ << " (descriptor ";
-    num_closing_parens++;
     names_->PrintTypeName(out_, type.descriptor);
+    out_ << ")";
   }
   if (type.kind == TypeDefinition::kArray) {
     const ArrayType* atype = type.array_type;
@@ -813,7 +813,7 @@ void ModuleDisassembler::PrintTypeDefinition(uint32_t type_index,
     if (type.is_shared) out_ << " shared";
     out_ << " (field ";
     PrintMutableType(atype->mutability(), atype->element_type());
-    out_ << ")";  // Closes "(field ...".
+    num_closing_parens++;  // Closes "(field ...".
   } else if (type.kind == TypeDefinition::kStruct) {
     const StructType* stype = type.struct_type;
     out_ << " (struct";
@@ -932,14 +932,19 @@ void ModuleDisassembler::PrintModule(Indentation indentation, size_t max_mb) {
         PrintTable(table);
         break;
       }
-      case kExternalFunction: {
+      case kExternalFunction:
+      case kExternalExactFunction: {
         out_ << "(func ";
         names_->PrintFunctionName(out_, import.index, NamesProvider::kDevTools,
                                   kIndicesAsComments);
         const WasmFunction& func = module_->functions[import.index];
+        // Exports always use non-exact kExternalFunction, because exact
+        // exports would provide no benefit.
         if (func.exported) PrintExportName(kExternalFunction, import.index);
         PrintImportName(import);
+        if (import.kind == kExternalExactFunction) out_ << "(exact ";
         PrintSignatureOneLine(out_, func.sig, import.index, names_, false);
+        if (import.kind == kExternalExactFunction) out_ << ")";
         break;
       }
       case kExternalGlobal: {

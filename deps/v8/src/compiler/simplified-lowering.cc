@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "include/v8-fast-api-calls.h"
+#include "src/base/iterator.h"
 #include "src/base/logging.h"
 #include "src/base/platform/platform.h"
 #include "src/base/small-vector.h"
@@ -161,11 +162,11 @@ UseInfo TruncatingUseInfoFromRepresentation(
     case MachineRepresentation::kMapWord:
       return UseInfo::AnyTagged();
     case MachineRepresentation::kFloat64:
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
       if (type_hint.Maybe(Type::Undefined())) {
         return UseInfo::TruncatingFloat64OrUndefined();
       }
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
       return UseInfo::TruncatingFloat64();
     case MachineRepresentation::kFloat32:
       return UseInfo::Float32();
@@ -724,14 +725,13 @@ class RepresentationSelector {
     DCHECK(revisit_queue_.empty());
 
     // Process nodes in reverse post order, with End as the root.
-    for (auto it = traversal_nodes_.crbegin(); it != traversal_nodes_.crend();
-         ++it) {
-      PropagateTruncation(*it);
+    for (Node* node : base::Reversed(traversal_nodes_)) {
+      PropagateTruncation(node);
 
       while (!revisit_queue_.empty()) {
-        Node* node = revisit_queue_.front();
+        Node* revisited_node = revisit_queue_.front();
         revisit_queue_.pop();
-        PropagateTruncation(node);
+        PropagateTruncation(revisited_node);
       }
     }
   }
@@ -1134,11 +1134,13 @@ class RepresentationSelector {
 
   // Helper for no-op node.
   template <Phase T>
-  void VisitNoop(Node* node, Truncation truncation) {
+  void VisitNoop(Node* node, Truncation truncation,
+                 Type restriction_type = Type::Any()) {
     if (truncation.IsUnused()) return VisitUnused<T>(node);
     MachineRepresentation representation =
         GetOutputInfoForPhi(TypeOf(node), truncation);
-    VisitUnop<T>(node, UseInfo(representation, truncation), representation);
+    VisitUnop<T>(node, UseInfo(representation, truncation), representation,
+                 restriction_type);
     if (lower<T>()) DeferReplacement(node, node->InputAt(0));
   }
 
@@ -1602,8 +1604,10 @@ class RepresentationSelector {
       BaseTaggedness base_taggedness,
       MachineRepresentation field_representation, Type field_type,
       MachineRepresentation value_representation, Node* value) {
-    if (base_taggedness == kTaggedBase &&
-        CanBeTaggedPointer(field_representation)) {
+    if (CanBeIndirectPointer(field_representation)) {
+      return kIndirectPointerWriteBarrier;
+    } else if (base_taggedness == kTaggedBase &&
+               CanBeTaggedPointer(field_representation)) {
       Type value_type = NodeProperties::GetType(value);
       if (value_representation == MachineRepresentation::kTaggedSigned) {
         // Write barriers are only for stores of heap objects.
@@ -2167,15 +2171,13 @@ class RepresentationSelector {
 
     FastApiCallNode n(node);
 
-    base::SmallVector<UseInfo, kInitialArgumentsCount> arg_use_info(
-        c_arg_count);
     // Propagate representation information from TypeInfo.
     int cursor = 0;
     for (int i = 0; i < c_arg_count; i++) {
-      arg_use_info[i] = UseInfoForFastApiCallArgument(
+      UseInfo use_info = UseInfoForFastApiCallArgument(
           c_signature->ArgumentInfo(i), c_signature->GetInt64Representation(),
           op_params.feedback());
-      ProcessInput<T>(node, cursor++, arg_use_info[i]);
+      ProcessInput<T>(node, cursor++, use_info);
     }
     // Callback data for fast call.
     DCHECK_EQ(n.CallbackDataIndex(), cursor);
@@ -2409,9 +2411,6 @@ class RepresentationSelector {
     DCHECK_EQ(wasm_arg_count, params.arity_without_implicit_args());
     DCHECK_EQ(wasm_arg_count, n.ArgumentCount());
 
-    base::SmallVector<UseInfo, kInitialArgumentsCount> arg_use_info(
-        wasm_arg_count);
-
     // Visit JSFunction and Receiver nodes.
     ProcessInput<T>(node, JSWasmCallNode::TargetIndex(), UseInfo::Any());
     ProcessInput<T>(node, JSWasmCallNode::ReceiverIndex(), UseInfo::Any());
@@ -2420,9 +2419,9 @@ class RepresentationSelector {
     for (int i = 0; i < wasm_arg_count; i++) {
       TNode<Object> input = n.Argument(i);
       DCHECK_NOT_NULL(input);
-      arg_use_info[i] = UseInfoForJSWasmCallArgument(
+      UseInfo use_info = UseInfoForJSWasmCallArgument(
           input, wasm_signature->GetParam(i), params.feedback());
-      ProcessInput<T>(node, JSWasmCallNode::ArgumentIndex(i), arg_use_info[i]);
+      ProcessInput<T>(node, JSWasmCallNode::ArgumentIndex(i), use_info);
     }
 
     // Visit value, context and frame state inputs as tagged.
@@ -2440,7 +2439,7 @@ class RepresentationSelector {
     if (wasm_signature->return_count() == 1) {
       wasm::CanonicalValueType return_type = wasm_signature->GetReturn();
       DCHECK_IMPLIES(return_type.is_ref(),
-                     return_type.is_reference_to(wasm::HeapType::kExtern));
+                     return_type.is_reference_to(wasm::GenericKind::kExtern));
       MachineType machine_type = MachineTypeForWasmReturnType(return_type);
       SetOutput<T>(node, machine_type.representation(),
                    JSWasmCallNode::TypeForWasmReturnKind(return_type.kind()));
@@ -3957,8 +3956,11 @@ class RepresentationSelector {
       }
       case IrOpcode::kStringToLowerCaseIntl:
       case IrOpcode::kStringToUpperCaseIntl: {
-        VisitUnop<T>(node, UseInfo::AnyTagged(),
-                     MachineRepresentation::kTaggedPointer);
+        ProcessInput<T>(node, 0, UseInfo::AnyTagged());
+        ProcessInput<T>(node, 1, UseInfo::TaggedPointer());
+        ProcessInput<T>(node, 2, UseInfo::TaggedPointer());
+        ProcessRemainingInputs<T>(node, 3);
+        SetOutput<T>(node, MachineRepresentation::kTaggedPointer);
         return;
       }
       case IrOpcode::kCheckBounds:
@@ -4009,7 +4011,7 @@ class RepresentationSelector {
                          MachineRepresentation::kFloat64, output_type);
             if (lower<T>()) DeferReplacement(node, node->InputAt(0));
           } else {
-            VisitNoop<T>(node, truncation);
+            VisitNoop<T>(node, truncation, output_type);
           }
         } else {
           VisitUnop<T>(node, UseInfo::AnyTagged(),
@@ -4898,6 +4900,9 @@ class RepresentationSelector {
       case IrOpcode::kDeadValue:
         ProcessInput<T>(node, 0, UseInfo::Any());
         return SetOutput<T>(node, MachineRepresentation::kNone);
+      case IrOpcode::kMajorGCForCompilerTesting:
+        ProcessRemainingInputs<T>(node, 0);
+        return SetOutput<T>(node, MachineRepresentation::kTagged);
       case IrOpcode::kStaticAssert:
         DCHECK(TypeOf(node->InputAt(0)).Is(Type::Boolean()));
         return VisitUnop<T>(node, UseInfo::Bool(),

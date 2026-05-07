@@ -10,6 +10,7 @@
 #include "src/base/export-template.h"
 #include "src/common/globals.h"
 #include "src/objects/hash-table.h"
+#include "src/objects/objects.h"
 #include "src/objects/property-array.h"
 #include "src/objects/smi.h"
 #include "src/roots/roots.h"
@@ -44,7 +45,9 @@ class EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE) Dictionary
   inline std::optional<Tagged<Object>> TryValueAt(InternalIndex entry);
 
   // Set the value for entry.
-  inline void ValueAtPut(InternalIndex entry, Tagged<Object> value);
+  inline void ValueAtPut(
+      InternalIndex entry, Tagged<Object> value,
+      WriteBarrierMode write_barrier_mode = UPDATE_WRITE_BARRIER);
   inline void ValueAtPut(InternalIndex entry, Tagged<Object> value,
                          SeqCstAccessTag);
 
@@ -91,6 +94,10 @@ class EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE) Dictionary
   // Sets the entry to (key, value) pair.
   inline void SetEntry(InternalIndex entry, Tagged<Object> key,
                        Tagged<Object> value, PropertyDetails details);
+  inline void SetEntry(InternalIndex entry, Tagged<Object> key,
+                       Tagged<Object> value, PropertyDetails details,
+                       WriteBarrierMode mode,
+                       const DisallowGarbageCollection& no_gc);
 
   // Garbage collection support.
   inline ObjectSlot RawFieldOfValueAt(InternalIndex entry);
@@ -126,9 +133,10 @@ class EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE) Dictionary
   // Generic at put operation.
   template <template <typename> typename HandleType>
     requires(std::is_convertible_v<HandleType<Derived>, DirectHandle<Derived>>)
-  V8_WARN_UNUSED_RESULT static HandleType<Derived> AtPut(
-      Isolate* isolate, HandleType<Derived> dictionary, Key key,
-      DirectHandle<Object> value, PropertyDetails details);
+  V8_WARN_UNUSED_RESULT static auto AtPut(Isolate* isolate,
+                                          HandleType<Derived> dictionary,
+                                          Key key, DirectHandle<Object> value,
+                                          PropertyDetails details);
   static void UncheckedAtPut(Isolate* isolate, DirectHandle<Derived> dictionary,
                              Key key, DirectHandle<Object> value,
                              PropertyDetails details);
@@ -220,7 +228,7 @@ class EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE) BaseNameDictionary
 
   template <template <typename> typename HandleType>
     requires(std::is_convertible_v<HandleType<Derived>, DirectHandle<Derived>>)
-  V8_WARN_UNUSED_RESULT static HandleType<Derived> Add(
+  V8_WARN_UNUSED_RESULT static HandleType<Derived>::MaybeType Add(
       Isolate* isolate, HandleType<Derived> dictionary, Key key,
       DirectHandle<Object> value, PropertyDetails details,
       InternalIndex* entry_out = nullptr);
@@ -350,6 +358,10 @@ class V8_EXPORT_PRIVATE GlobalDictionary
                                      InternalIndex entry);
   inline void SetEntry(InternalIndex entry, Tagged<Object> key,
                        Tagged<Object> value, PropertyDetails details);
+  inline void SetEntry(InternalIndex entry, Tagged<Object> key,
+                       Tagged<Object> value, PropertyDetails details,
+                       WriteBarrierMode mode,
+                       const DisallowGarbageCollection& no_gc);
   inline void ClearEntry(InternalIndex entry);
   inline Tagged<Name> NameAt(InternalIndex entry);
   inline Tagged<Name> NameAt(PtrComprCageBase cage_base, InternalIndex entry);

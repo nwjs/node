@@ -12,7 +12,8 @@
     brotli
     gtest
     libuv
-    nghttp2
+    merve
+    nbytes
     simdjson
     simdutf
     uvwasi
@@ -22,26 +23,19 @@
   cares = pkgs.c-ares;
   hdr-histogram = pkgs.hdrhistogram_c;
   http-parser = pkgs.llhttp;
-  nbytes = pkgs.callPackage "${
-    pkgs.fetchgit {
-      url = "https://github.com/NixOS/nixpkgs.git";
-      rev = "3146c6aa9995e7351a398e17470e15305e6e18ff";
-      sparseCheckout = [
-        "/pkgs/by-name/nb/nbytes/"
-      ];
-      hash = "sha256-8cbu4ftn5ke7vd4cniwxuyKl6FRxwdToBj77oyYmsfk=";
-    }
-  }/pkgs/by-name/nb/nbytes/package.nix" { };
-  merve = pkgs.callPackage (builtins.fetchurl {
-    url = "https://github.com/NixOS/nixpkgs/raw/469b8e35e54d2880d73337c5ef2f1416b9b1dd43/pkgs/by-name/me/merve/package.nix";
-    sha256 = "0r2fmip48hcy4za6xfaml627x9m4218g6vlk5fiajmypfvxybzfy";
-  }) { };
+  nghttp2 = pkgs.nghttp2.overrideAttrs {
+    patches = [
+      (pkgs.fetchpatch2 {
+        url = "https://github.com/nghttp2/nghttp2/commit/7784fa979d0bcf801a35f1afbb25fb048d815cd7.patch?full_index=1";
+        revert = true;
+        excludes = [ "lib/includes/nghttp2/nghttp2.h" ];
+        hash = "sha256-RG87Qifjpl7HTP9ac2JwHj2XAbDlFgOpAnpZX3ET6gU=";
+      })
+    ];
+  };
 }
 // (pkgs.lib.optionalAttrs withLief {
-  lief = pkgs.callPackage (builtins.fetchurl {
-    url = "https://github.com/NixOS/nixpkgs/raw/8368442cb2c52e6b7badf0467b454c461ffc981f/pkgs/by-name/li/lief/package.nix";
-    sha256 = "0isxv5rw7m1x10k06rgwimmcbl6a1w18v8k6dqp60jr4i66lac08";
-  }) { };
+  inherit (pkgs) lief;
 })
 // (pkgs.lib.optionalAttrs withQuic {
   inherit (pkgs)
@@ -55,22 +49,9 @@
 // (pkgs.lib.optionalAttrs withSSL (
   let
     version = "3.5.5";
-    opensslSrc = "/pkgs/development/libraries/openssl/";
-    inherit
-      (pkgs.callPackage "${
-        pkgs.fetchgit {
-          url = "https://github.com/NixOS/nixpkgs.git";
-          rev = "a5b50d31e0fd60227495ad2b2760cbda3581ec77";
-          sparseCheckout = [ opensslSrc ];
-          nonConeMode = true;
-          hash = "sha256-Qo3IoUeccGO2GxFSYufyYjZmN5LGSek0z82pN73YXic=";
-        }
-      }${opensslSrc}" { })
-      openssl_3_6
-      ;
   in
   {
-    openssl = openssl_3_6.overrideAttrs (old: {
+    openssl = pkgs.openssl_3_6.overrideAttrs (old: {
       inherit version;
       src = pkgs.fetchurl {
         url = builtins.replaceStrings [ old.version ] [ version ] old.src.url;

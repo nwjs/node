@@ -57,6 +57,7 @@ FunctionTester::FunctionTester(Isolate* isolate, DirectHandle<Code> code,
       function((v8_flags.allow_natives_syntax = true,
                 NewFunction(BuildFunction(param_count).c_str()))),
       flags_(0) {
+  CHECK_LE(0, param_count);
   CHECK(!code.is_null());
   Compile(function);
   function->UpdateCode(isolate, *code);
@@ -76,6 +77,17 @@ void FunctionTester::CheckThrows(Handle<Object> a, Handle<Object> b) {
   CHECK(isolate->has_exception());
   CHECK(try_catch.HasCaught());
   CHECK(no_result.is_null());
+}
+
+v8::Local<v8::Message> FunctionTester::CheckThrowsReturnMessage(
+    Handle<Object> a) {
+  TryCatch try_catch(reinterpret_cast<v8::Isolate*>(isolate));
+  MaybeDirectHandle<Object> no_result = Call(a);
+  CHECK(isolate->has_exception());
+  CHECK(try_catch.HasCaught());
+  CHECK(no_result.is_null());
+  CHECK(!try_catch.Message().IsEmpty());
+  return try_catch.Message();
 }
 
 v8::Local<v8::Message> FunctionTester::CheckThrowsReturnMessage(

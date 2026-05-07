@@ -5,9 +5,10 @@
 #ifndef V8_WASM_BASELINE_MIPS64_LIFTOFF_ASSEMBLER_MIPS64_INL_H_
 #define V8_WASM_BASELINE_MIPS64_LIFTOFF_ASSEMBLER_MIPS64_INL_H_
 
+#include "src/codegen/atomic-memory-order.h"
 #include "src/codegen/machine-type.h"
 #include "src/compiler/linkage.h"
-#include "src/heap/mutable-page-metadata.h"
+#include "src/heap/mutable-page.h"
 #include "src/wasm/baseline/liftoff-assembler.h"
 #include "src/wasm/baseline/parallel-move-inl.h"
 #include "src/wasm/object-access.h"
@@ -582,7 +583,15 @@ void LiftoffAssembler::StoreTaggedPointer(Register dst_addr,
     *protected_store_pc = pc_offset() - kInstrSize;
   }
 
-  if (skip_write_barrier || v8_flags.disable_write_barriers) return;
+  if (v8_flags.disable_write_barriers) return;
+
+  if (skip_write_barrier) {
+    if (v8_flags.verify_write_barriers) {
+      CallVerifySkippedWriteBarrierStubSaveRegisters(dst_addr, src,
+                                                     SaveFPRegsMode::kSave);
+    }
+    return;
+  }
 
   Label exit;
   JumpIfSmi(src, &exit);
@@ -726,6 +735,7 @@ void LiftoffAssembler::Store(Register dst_addr, Register offset_reg,
 void LiftoffAssembler::AtomicLoad(LiftoffRegister dst, Register src_addr,
                                   Register offset_reg, uintptr_t offset_imm,
                                   LoadType type, uint32_t* protected_load_pc,
+                                  AtomicMemoryOrder /* memory_order */,
                                   LiftoffRegList pinned, bool i64_offset,
                                   Endianness /* endianness */) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
@@ -778,12 +788,10 @@ void LiftoffAssembler::AtomicLoad(LiftoffRegister dst, Register src_addr,
   if (protected_load_pc) *protected_load_pc = pc_offset() - kInstrSize * 2;
 }
 
-void LiftoffAssembler::AtomicLoadTaggedPointer(Register dst, Register src_addr,
-                                               Register offset_reg,
-                                               int32_t offset_imm,
-                                               AtomicMemoryOrder memory_order,
-                                               uint32_t* protected_load_pc,
-                                               bool needs_shift) {
+void LiftoffAssembler::AtomicLoadTaggedPointer(
+    Register dst, Register src_addr, Register offset_reg, int32_t offset_imm,
+    AtomicMemoryOrder /* memory_order */, uint32_t* protected_load_pc,
+    bool needs_shift) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
   MemOperand src_op = liftoff::GetMemOp(this, src_addr, offset_reg, offset_imm);
   uint32_t pc_offset_of_load = 0;
@@ -803,8 +811,11 @@ void LiftoffAssembler::AtomicLoadTaggedPointer(Register dst, Register src_addr,
 void LiftoffAssembler::AtomicStore(Register dst_addr, Register offset_reg,
                                    uintptr_t offset_imm, LiftoffRegister src,
                                    StoreType type, uint32_t* protected_store_pc,
+                                   AtomicMemoryOrder memory_order,
                                    LiftoffRegList pinned, bool i64_offset,
                                    Endianness /* endianness */) {
+  DCHECK(memory_order == AtomicMemoryOrder::kSeqCst ||
+         memory_order == AtomicMemoryOrder::kAcqRel);
   BlockTrampolinePoolScope block_trampoline_pool(this);
   UseScratchRegisterScope temps(this);
   MemOperand dst_op =
@@ -836,6 +847,7 @@ void LiftoffAssembler::AtomicStore(Register dst_addr, Register offset_reg,
     default:
       UNREACHABLE();
   }
+  if (memory_order == AtomicMemoryOrder::kSeqCst) sync();
 
   // protected_store_pc should be the address of the store instruction.
   // The MacroAssembler store may contain some instructions for adjusting
@@ -848,7 +860,8 @@ void LiftoffAssembler::AtomicStoreTaggedPointer(
     LiftoffRegList pinned, AtomicMemoryOrder memory_order,
     uint32_t* protected_store_pc) {
   AtomicStore(dst_addr, offset_reg, offset_imm, LiftoffRegister(src),
-              StoreType::kI32Store, protected_store_pc, pinned, false);
+              StoreType::kI32Store, protected_store_pc, memory_order, pinned,
+              false);
 }
 
 #define ASSEMBLE_ATOMIC_BINOP(load_linked, store_conditional, bin_instr) \
@@ -4197,46 +4210,6 @@ void LiftoffAssembler::DeallocateStackSlot(uint32_t size) {
 }
 
 void LiftoffAssembler::MaybeOSR() {}
-
-void LiftoffAssembler::emit_store_nonzero_if_nan(Register dst, FPURegister src,
-                                                 ValueKind kind) {
-  UseScratchRegisterScope temps(this);
-  Register scratch = temps.Acquire();
-  Label not_nan;
-  if (kind == kF32) {
-    CompareIsNanF32(src, src);
-  } else {
-    DCHECK_EQ(kind, kF64);
-    CompareIsNanF64(src, src);
-  }
-  BranchFalseShortF(&not_nan, USE_DELAY_SLOT);
-  li(scratch, 1);
-  Sw(dst, MemOperand(dst));
-  bind(&not_nan);
-}
-
-void LiftoffAssembler::emit_s128_store_nonzero_if_nan(Register dst,
-                                                      LiftoffRegister src,
-                                                      Register tmp_gp,
-                                                      LiftoffRegister tmp_s128,
-                                                      ValueKind lane_kind) {
-  Label not_nan;
-  if (lane_kind == kF32) {
-    fcun_w(tmp_s128.fp().toW(), src.fp().toW(), src.fp().toW());
-  } else {
-    DCHECK_EQ(lane_kind, kF64);
-    fcun_d(tmp_s128.fp().toW(), src.fp().toW(), src.fp().toW());
-  }
-  BranchMSA(&not_nan, MSA_BRANCH_V, all_zero, tmp_s128.fp().toW(),
-            USE_DELAY_SLOT);
-  li(tmp_gp, 1);
-  Sw(tmp_gp, MemOperand(dst));
-  bind(&not_nan);
-}
-
-void LiftoffAssembler::emit_store_nonzero(Register dst) {
-  Sd(dst, MemOperand(dst));
-}
 
 void LiftoffStackSlots::Construct(int param_slots) {
   DCHECK_LT(0, slots_.size());

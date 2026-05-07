@@ -92,7 +92,9 @@ callbackFunction((err, ret) => {
 ## `util.convertProcessSignalToExitCode(signal)`
 
 <!-- YAML
-added: v25.4.0
+added:
+ - v25.4.0
+ - v24.14.0
 -->
 
 * `signal` {string} A signal name (e.g. `'SIGTERM'`)
@@ -263,7 +265,9 @@ logging when only using `util.debuglog().enabled`.
 <!-- YAML
 added: v0.8.0
 changes:
-  - version: v25.2.0
+  - version:
+      - v25.2.0
+      - v24.12.0
     pr-url: https://github.com/nodejs/node/pull/59982
     description: Add options object with modifyPrototype to conditionally
                  modify the prototype of the deprecated object.
@@ -676,8 +680,7 @@ anotherFunction();
 
 It is possible to reconstruct the original locations by setting the option `sourceMap` to `true`.
 If the source map is not available, the original location will be the same as the current location.
-When the `--enable-source-maps` flag is enabled, for example when using `--experimental-transform-types`,
-`sourceMap` will be true by default.
+When the `--enable-source-maps` flag is enabled,`sourceMap` will be true by default.
 
 ```ts
 import { getCallSites } from 'node:util';
@@ -2256,7 +2259,9 @@ added:
   - v21.7.0
   - v20.12.0
 changes:
-  - version: v24.10.0
+  - version:
+     - v24.10.0
+     - v22.21.0
     pr-url: https://github.com/nodejs/node/pull/59925
     description: This API is no longer experimental.
 -->

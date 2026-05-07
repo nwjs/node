@@ -84,7 +84,14 @@ class V8_NODISCARD SharedStringAccessGuardIfNeeded {
 
   static bool IsNeeded(Tagged<String> str, bool check_local_heap = true) {
     if (check_local_heap) {
-      if (LocalHeap::Current()->is_main_thread()) {
+      LocalHeap* current = LocalHeap::TryGetCurrent();
+
+      if (!current) {
+        // GC worker threads may access the string content but do not have a
+        // LocalHeap.
+        DCHECK_EQ(Isolate::Current()->heap()->gc_state(), Heap::MARK_COMPACT);
+        return false;
+      } else if (current->is_main_thread()) {
         // Don't acquire the lock for the main thread.
         return false;
       }
@@ -116,15 +123,14 @@ class V8_NODISCARD SharedStringAccessGuardIfNeeded {
   static Isolate* GetIsolateIfNeeded(Tagged<String> str) {
     if (!IsNeeded(str)) return nullptr;
 
-    Isolate* isolate;
-    if (!GetIsolateFromHeapObject(str, &isolate)) {
-      // If we can't get the isolate from the String, it must be read-only.
-      DCHECK(ReadOnlyHeap::Contains(str));
-      return nullptr;
+    DCHECK(!ReadOnlyHeap::Contains(str));
+    Isolate* isolate = Isolate::Current();
+    // For strings in the shared space we need the shared space isolate instead
+    // of the current isolate.
+    if (HeapLayout::InWritableSharedSpace(str)) {
+      isolate = isolate->shared_space_isolate();
     }
-    // TODO(431584880): Replace `GetIsolateFromHeapObject` by
-    // `Isolate::Current()`.
-    DCHECK_EQ(isolate, Isolate::TryGetCurrent());
+    DCHECK_EQ(isolate->heap(), Heap::FromWritableHeapObject(str));
     return isolate;
   }
 
@@ -610,14 +616,6 @@ template <typename SeqString>
 class SeqSubStringKey final : public StringTableKey {
  public:
   using Char = typename SeqString::Char;
-// VS 2017 on official builds gives this spurious warning:
-// warning C4789: buffer 'key' of size 16 bytes will be overrun; 4 bytes will
-// be written starting at offset 16
-// https://bugs.chromium.org/p/v8/issues/detail?id=6068
-#if defined(V8_CC_MSVC)
-#pragma warning(push)
-#pragma warning(disable : 4789)
-#endif
   SeqSubStringKey(Isolate* isolate, DirectHandle<SeqString> string, int from,
                   int len, bool convert = false)
       : StringTableKey(0, len),
@@ -635,9 +633,6 @@ class SeqSubStringKey final : public StringTableKey {
     DCHECK_EQ(IsSeqOneByteString(*string_), sizeof(Char) == 1);
     DCHECK_EQ(IsSeqTwoByteString(*string_), sizeof(Char) == 2);
   }
-#if defined(V8_CC_MSVC)
-#pragma warning(pop)
-#endif
 
   bool IsMatch(Isolate* isolate, Tagged<String> string) {
     DCHECK(!SharedStringAccessGuardIfNeeded::IsNeeded(string));
@@ -1081,7 +1076,7 @@ String::FlatContent String::GetFlatContent(
 template <typename T, template <typename> typename HandleType>
   requires(std::is_convertible_v<HandleType<T>, DirectHandle<String>>)
 HandleType<String> String::Share(Isolate* isolate, HandleType<T> string) {
-  DCHECK(v8_flags.shared_string_table);
+  DCHECK(v8_flags.shared_strings);
   MaybeDirectHandle<Map> new_map;
   switch (
       isolate->factory()->ComputeSharingStrategyForString(string, &new_map)) {

@@ -15,7 +15,7 @@
 #include "src/heap/heap-layout-inl.h"
 #include "src/heap/local-factory-inl.h"
 #include "src/heap/local-heap-inl.h"
-#include "src/heap/mutable-page-metadata.h"
+#include "src/heap/mutable-page.h"
 #include "src/heap/read-only-heap.h"
 #include "src/numbers/conversions.h"
 #include "src/objects/instance-type.h"
@@ -40,7 +40,7 @@ template <template <typename> typename HandleType>
   requires(std::is_convertible_v<HandleType<String>, DirectHandle<String>>)
 HandleType<String> String::SlowShare(Isolate* isolate,
                                      HandleType<String> source) {
-  DCHECK(v8_flags.shared_string_table);
+  DCHECK(v8_flags.shared_strings);
   HandleType<String> flat =
       Flatten(isolate, source, AllocationType::kSharedOld);
 
@@ -323,10 +323,9 @@ void String::MakeExternalDuringGC(Isolate* isolate, T* resource) {
   static_cast<ExternalString*>(this)
       ->InitExternalPointerFieldsDuringExternalization(new_map, isolate);
 
-  // We are storing the new map using release store after creating a filler in
-  // the NotifyObjectSizeChange call for the left-over space to avoid races with
-  // the sweeper thread.
-  this->set_map(isolate, new_map, kReleaseStore);
+  // This is run during GC when no sweeping is running, so updating the map can
+  // be relaxed.
+  this->set_map_no_write_barrier(isolate, new_map, kRelaxedStore);
 
   if constexpr (is_one_byte) {
     Tagged<ExternalOneByteString> self = Cast<ExternalOneByteString>(this);
@@ -357,9 +356,10 @@ bool String::MakeExternal(Isolate* isolate,
 #ifdef ENABLE_SLOW_DCHECKS
   if (v8_flags.enable_slow_asserts) {
     // Assert that the resource and the string are equivalent.
-    DCHECK(static_cast<size_t>(this->length()) == resource->length());
-    base::ScopedVector<base::uc16> smart_chars(this->length());
-    String::WriteToFlat(this, smart_chars.begin(), 0, this->length());
+    uint32_t str_length = this->length();
+    DCHECK(static_cast<size_t>(str_length) == resource->length());
+    base::ScopedVector<base::uc16> smart_chars(str_length);
+    String::WriteToFlat(this, smart_chars.begin(), 0, str_length);
     DCHECK_EQ(0, memcmp(smart_chars.begin(), resource->data(),
                         resource->length() * sizeof(smart_chars[0])));
   }
@@ -446,14 +446,15 @@ bool String::MakeExternal(Isolate* isolate,
 #ifdef ENABLE_SLOW_DCHECKS
   if (v8_flags.enable_slow_asserts) {
     // Assert that the resource and the string are equivalent.
-    DCHECK(static_cast<size_t>(this->length()) == resource->length());
+    uint32_t str_length = this->length();
+    DCHECK(static_cast<size_t>(str_length) == resource->length());
     if (this->IsTwoByteRepresentation()) {
-      base::ScopedVector<uint16_t> smart_chars(this->length());
-      String::WriteToFlat(this, smart_chars.begin(), 0, this->length());
-      DCHECK(String::IsOneByte(smart_chars.begin(), this->length()));
+      base::ScopedVector<uint16_t> smart_chars(str_length);
+      String::WriteToFlat(this, smart_chars.begin(), 0, str_length);
+      DCHECK(String::IsOneByte(smart_chars.begin(), str_length));
     }
-    base::ScopedVector<char> smart_chars(this->length());
-    String::WriteToFlat(this, smart_chars.begin(), 0, this->length());
+    base::ScopedVector<char> smart_chars(str_length);
+    String::WriteToFlat(this, smart_chars.begin(), 0, str_length);
     DCHECK_EQ(0, memcmp(smart_chars.begin(), resource->data(),
                         resource->length() * sizeof(smart_chars[0])));
   }
@@ -556,6 +557,13 @@ bool String::SupportsExternalization(v8::String::Encoding encoding) {
 
   // Only strings in old space can be externalized.
   if (HeapLayout::InYoungGeneration(Tagged(this))) {
+    return false;
+  }
+
+  // Externalization of shared strings is only supported with shared string
+  // table.
+  if (HeapLayout::InAnySharedSpace(Tagged(this)) &&
+      !v8_flags.shared_string_table) {
     return false;
   }
 
@@ -1262,6 +1270,25 @@ bool String::SlowEquals(
 #endif
     if (this_hash != other_hash) return false;
   }
+
+  return SlowEqualsNonThinSameLength(len, other, access_guard);
+}
+
+bool String::SlowEqualsNonThinSameLength(uint32_t len,
+                                         Tagged<String> other) const {
+  DCHECK(!SharedStringAccessGuardIfNeeded::IsNeeded(this));
+  DCHECK(!SharedStringAccessGuardIfNeeded::IsNeeded(other));
+  return SlowEqualsNonThinSameLength(
+      len, other, SharedStringAccessGuardIfNeeded::NotNeeded());
+}
+
+bool String::SlowEqualsNonThinSameLength(
+    uint32_t len, Tagged<String> other,
+    const SharedStringAccessGuardIfNeeded& access_guard) const {
+  DisallowGarbageCollection no_gc;
+  DCHECK_NE(0, len);
+  DCHECK_EQ(len, length());
+  DCHECK_EQ(len, other->length());
 
   // We know the strings are both non-empty. Compare the first chars
   // before we try to flatten the strings.

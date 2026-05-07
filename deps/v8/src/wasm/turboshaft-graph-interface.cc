@@ -5,6 +5,7 @@
 #include "src/wasm/turboshaft-graph-interface.h"
 
 #include <optional>
+#include <type_traits>
 
 #include "absl/container/btree_map.h"
 #include "include/v8-fast-api-calls.h"
@@ -26,13 +27,13 @@
 #include "src/wasm/function-compiler.h"
 #include "src/wasm/inlining-tree.h"
 #include "src/wasm/jump-table-assembler.h"
-#include "src/wasm/memory-tracing.h"
 #include "src/wasm/turboshaft-graph-interface-inl.h"
 #include "src/wasm/wasm-engine.h"
 #include "src/wasm/wasm-linkage.h"
 #include "src/wasm/wasm-objects-inl.h"
 #include "src/wasm/wasm-objects.h"
 #include "src/wasm/wasm-opcodes-inl.h"
+#include "src/wasm/wasm-tracing.h"
 
 namespace v8::internal::wasm {
 
@@ -44,7 +45,6 @@ using compiler::MemoryAccessKind;
 using compiler::Operator;
 using compiler::TrapId;
 using TSBlock = compiler::turboshaft::Block;
-using compiler::turboshaft::BuiltinCallDescriptor;
 using compiler::turboshaft::CallOp;
 using compiler::turboshaft::ConditionWithHint;
 using compiler::turboshaft::ConstantOp;
@@ -83,6 +83,7 @@ using compiler::turboshaft::WasmTypeCastOp;
 using compiler::turboshaft::Word32;
 using compiler::turboshaft::WordPtr;
 using compiler::turboshaft::WordRepresentation;
+using compiler::turboshaft::deprecated::BuiltinCallDescriptor;
 
 namespace {
 
@@ -146,7 +147,7 @@ class BranchHintingStresser {
 
 }  // namespace
 
-using Assembler = compiler::turboshaft::TSAssembler<
+using Assembler = compiler::turboshaft::Assembler<
     compiler::turboshaft::SelectLoweringReducer,
     compiler::turboshaft::DataViewLoweringReducer,
     compiler::turboshaft::VariableReducer>;
@@ -171,6 +172,7 @@ class TurboshaftGraphBuildingInterface
   struct Value : public ValueBase<ValidationTag> {
     OpIndex op = OpIndex::Invalid();
     template <typename... Args>
+      requires std::constructible_from<ValueBase, Args...>
     explicit Value(Args&&... args) V8_NOEXCEPT
         : ValueBase(std::forward<Args>(args)...) {}
   };
@@ -285,7 +287,7 @@ class TurboshaftGraphBuildingInterface
       ValueType type = decoder->local_type(index);
       OpIndex op;
       if (!type.is_defaultable()) {
-        DCHECK(type.is_reference());
+        DCHECK(type.is_ref());
         op = __ RootConstant(RootIndex::kOptimizedOut);
       } else {
         op = DefaultValue(type);
@@ -296,12 +298,33 @@ class TurboshaftGraphBuildingInterface
       }
     }
 
+    // For type assertions the optimization pass needs to insert type checks
+    // (which include control-flow once lowered) into the graph. These checks
+    // need to be inserted *after* all parameters are defined because parameter
+    // operations need to be placed in the first block.
+    // So we eagerly insert annotations here that the optimizer will then
+    // convert into type checks with --wasm-assert-types. Note that adding these
+    // annotations should otherwise not change the inferred types as the
+    // optimizer also types Parameter operations directly.
+    if (v8_flags.wasm_assert_types) [[unlikely]] {
+      for (size_t i = 0; i < decoder->sig_->parameter_count(); ++i) {
+        ValueType expected_type = decoder->sig_->GetParam(i);
+        if (expected_type.is_ref()) {
+          ssa_env_[i] =
+              __ AnnotateWasmType(V<Object>::Cast(ssa_env_[i]), expected_type);
+        }
+      }
+    }
+
     if (v8_flags.wasm_inlining) {
       if (mode_ == kRegular) {
-        if (v8_flags.liftoff) {
+        if (v8_flags.liftoff ||
+            (v8_flags.experimental_wasm_compilation_hints &&
+             !decoder->module_->instruction_frequencies.empty())) {
           inlining_decisions_ = InliningTree::CreateRoot(
-              decoder->zone_, decoder->module_, func_index_);
-        } else {
+              decoder->zone_, decoder->module_, wire_bytes_, func_index_);
+        }
+        if (!v8_flags.liftoff) {
           set_no_liftoff_inlining_budget(
               InliningTree::NoLiftoffBudget(decoder->module_, func_index_));
         }
@@ -316,7 +339,8 @@ class TurboshaftGraphBuildingInterface
           DCHECK(inlining_decisions_->is_inlined());
           DCHECK_EQ(inlining_decisions_->function_index(), func_index_);
           base::MutexGuard mutex_guard(&decoder->module_->type_feedback.mutex);
-          if (inlining_decisions_->feedback_found()) {
+          if (inlining_decisions_->feedback_found() &&
+              inlining_decisions_->mode() == InliningTree::Mode::kVector) {
             DCHECK_NE(
                 decoder->module_->type_feedback.feedback_for_function.find(
                     func_index_),
@@ -373,7 +397,8 @@ class TurboshaftGraphBuildingInterface
 
   void FinishFunction(FullDecoder* decoder) {
     if (v8_flags.liftoff && inlining_decisions_ &&
-        inlining_decisions_->feedback_found()) {
+        inlining_decisions_->feedback_found() &&
+        inlining_decisions_->mode() == InliningTree::Mode::kVector) {
       DCHECK_EQ(
           feedback_slot_,
           static_cast<int>(inlining_decisions_->function_calls().size()) - 1);
@@ -776,7 +801,8 @@ class TurboshaftGraphBuildingInterface
             PendingLoopPhiOp& pending_phi = to->Cast<PendingLoopPhiOp>();
             OpIndex replaced = __ output_graph().Index(*to);
             __ output_graph().Replace<compiler::turboshaft::PhiOp>(
-                replaced, base::VectorOf({pending_phi.first(), ssa_env_[*it]}),
+                replaced,
+                base::VectorOf<OpIndex>({pending_phi.first(), ssa_env_[*it]}),
                 pending_phi.rep);
           }
           for (uint32_t i = 0; i < block->br_merge()->arity; ++i, ++to) {
@@ -907,7 +933,8 @@ class TurboshaftGraphBuildingInterface
     bool shared = decoder->module_->globals[imm.index].shared;
     result->op = __ GlobalGet(trusted_instance_data(shared), imm.global);
 
-    if (V8_UNLIKELY(v8_flags.trace_wasm_globals)) {
+    if (V8_UNLIKELY(v8_flags.trace_wasm_globals) &&
+        !is_asmjs_module(decoder->module_)) {
       TraceGlobalOperation(decoder, imm.index, false);
     }
   }
@@ -917,7 +944,8 @@ class TurboshaftGraphBuildingInterface
     bool shared = decoder->module_->globals[imm.index].shared;
     __ GlobalSet(trusted_instance_data(shared), value.op, imm.global);
 
-    if (V8_UNLIKELY(v8_flags.trace_wasm_globals)) {
+    if (V8_UNLIKELY(v8_flags.trace_wasm_globals) &&
+        !is_asmjs_module(decoder->module_)) {
       TraceGlobalOperation(decoder, imm.index, true);
     }
   }
@@ -946,36 +974,9 @@ class TurboshaftGraphBuildingInterface
   void Select(FullDecoder* decoder, const Value& cond, const Value& fval,
               const Value& tval, Value* result) {
     using Implementation = compiler::turboshaft::SelectOp::Implementation;
-    bool use_select = false;
-    switch (tval.type.kind()) {
-      case kI32:
-        if (SupportedOperations::word32_select()) use_select = true;
-        break;
-      case kI64:
-        if (SupportedOperations::word64_select()) use_select = true;
-        break;
-      case kF32:
-        if (SupportedOperations::float32_select()) use_select = true;
-        break;
-      case kF64:
-        if (SupportedOperations::float64_select()) use_select = true;
-        break;
-      case kRef:
-      case kRefNull:
-      case kS128:
-        break;
-      case kI8:
-      case kI16:
-      case kF16:
-      case kVoid:
-      case kTop:
-      case kBottom:
-        UNREACHABLE();
-    }
-    result->op = __ Select(
-        cond.op, tval.op, fval.op, RepresentationFor(tval.type),
-        BranchHint::kNone,
-        use_select ? Implementation::kCMove : Implementation::kBranch);
+    result->op =
+        __ Select(cond.op, tval.op, fval.op, RepresentationFor(tval.type),
+                  BranchHint::kNone, Implementation::kAny);
   }
 
   OpIndex BuildChangeEndiannessStore(OpIndex node,
@@ -1629,8 +1630,8 @@ class TurboshaftGraphBuildingInterface
 
   void DataViewDetachedBufferCheck(FullDecoder* decoder, V<Object> dataview,
                                    DataViewOp op_type) {
-    IF (UNLIKELY(
-            __ ArrayBufferIsDetached(V<JSArrayBufferView>::Cast(dataview)))) {
+    IF (UNLIKELY(__ ArrayBufferNotValid(V<JSArrayBufferView>::Cast(dataview),
+                                        TypedArrayAccessMode::kRead))) {
       ThrowDataViewDetachedError(decoder, op_type);
     }
   }
@@ -1821,10 +1822,10 @@ class TurboshaftGraphBuildingInterface
   // the extern string type.
   template <typename T>
   V<T> AnnotateAsString(V<T> value, wasm::ValueType type) {
-    DCHECK(type.is_reference_to(HeapType::kString) ||
-           type.is_reference_to(HeapType::kExternString) ||
-           type.is_reference_to(HeapType::kExtern));
-    if (type.is_reference_to(HeapType::kExtern)) {
+    DCHECK(type.is_reference_to(GenericKind::kString) ||
+           type.is_reference_to(GenericKind::kExternString) ||
+           type.is_reference_to(GenericKind::kExtern));
+    if (type.is_reference_to(GenericKind::kExtern)) {
       type = ValueType::RefMaybeNull(kWasmRefExternString, type.nullability());
     }
     return __ AnnotateWasmType(value, type);
@@ -1870,7 +1871,7 @@ class TurboshaftGraphBuildingInterface
     DCHECK_LE(sig->return_count(), 1);
 
     const MachineSignature* callback_sig =
-        env_->fast_api_signatures[func_index];
+        env_->fast_api_data[func_index].signature;
     // All normal parameters + the options as additional parameter at the end.
     MachineSignature::Builder builder(decoder->zone(), sig->return_count(),
                                       param_count + 1);
@@ -1893,7 +1894,8 @@ class TurboshaftGraphBuildingInterface
 
     Label<> value_out_of_range(&asm_);
     for (size_t i = 1; i < param_count; ++i) {
-      if (sig->GetParam(i).is_reference()) {
+      inputs[i] = OpIndex::Invalid();
+      if (sig->GetParam(i).is_ref()) {
         inputs[i] = __ AdaptLocalArgument(args[i].op);
       } else if (callback_sig->GetParam(i - 1).representation() ==
                  MachineRepresentation::kWord64) {
@@ -1921,7 +1923,8 @@ class TurboshaftGraphBuildingInterface
                         __ Word32Equal(__ template Projection<1>(truncate), 0)),
                     value_out_of_range);
           }
-        } else if (callback_sig->GetParam(i - 1) == MachineType::Uint64()) {
+        } else {
+          CHECK_EQ(callback_sig->GetParam(i - 1), MachineType::Uint64());
           if (sig->GetParam(i) == kWasmF64) {
             V<Tuple<Word64, Word32>> truncate =
                 __ TryTruncateFloat64ToUint64(args[i].op);
@@ -1945,6 +1948,7 @@ class TurboshaftGraphBuildingInterface
       } else {
         inputs[i] = args[i].op;
       }
+      DCHECK(__ generating_unreachable_operations() || inputs[i].valid());
     }
 
     OpIndex options_object;
@@ -1982,7 +1986,7 @@ class TurboshaftGraphBuildingInterface
         call_descriptor, compiler::CanThrow::kNo,
         compiler::LazyDeoptOnThrow::kNo, __ graph_zone());
     OpIndex target_address = __ ExternalConstant(ExternalReference::Create(
-        env_->fast_api_targets[func_index].load(std::memory_order_relaxed),
+        env_->fast_api_data[func_index].target.load(std::memory_order_relaxed),
         ExternalReference::FAST_C_CALL));
 
     V<Context> native_context = instance_cache_.native_context();
@@ -2008,8 +2012,8 @@ class TurboshaftGraphBuildingInterface
         __ LoadRootRegister(), LoadOp::Kind::RawAligned(),
         MemoryRepresentation::UintPtr(), IsolateData::exception_offset());
 
-    IF_NOT (LIKELY(
-                __ TaggedEqual(exception, LOAD_ROOT(TheHoleValue)))) {
+    IF_NOT (LIKELY(__ TaggedEqual(exception,
+                                  __ LoadRoot<RootIndex::kTheHoleValue>()))) {
       CallBuiltinThroughJumptable<
           BuiltinCallDescriptor::WasmPropagateException>(
           decoder, {}, CheckForException::kCatchInThisFrame);
@@ -2220,7 +2224,7 @@ class TurboshaftGraphBuildingInterface
             BuiltinCallDescriptor::WasmFloat64ToString>(decoder, {args[0].op});
         result = AnnotateAsString(result_value, returns[0].type);
         decoder->detected_->Add(
-            returns[0].type.is_reference_to(wasm::HeapType::kString)
+            returns[0].type.is_reference_to(wasm::GenericKind::kString)
                 ? WasmDetectedFeature::stringref
                 : WasmDetectedFeature::imported_strings);
         break;
@@ -2231,7 +2235,7 @@ class TurboshaftGraphBuildingInterface
                 decoder, {args[0].op, args[1].op});
         result = AnnotateAsString(result_value, returns[0].type);
         decoder->detected_->Add(
-            returns[0].type.is_reference_to(wasm::HeapType::kString)
+            returns[0].type.is_reference_to(wasm::GenericKind::kString)
                 ? WasmDetectedFeature::stringref
                 : WasmDetectedFeature::imported_strings);
         break;
@@ -2274,7 +2278,7 @@ class TurboshaftGraphBuildingInterface
           Label<String> search_done_label(&asm_);
           GOTO_IF_NOT(__ IsNull(search, args[1].type), search_done_label,
                       search);
-          GOTO(search_done_label, LOAD_ROOT(null_string));
+          GOTO(search_done_label, __ LoadRoot<RootIndex::knull_string>());
           BIND(search_done_label, search_value);
           search = search_value;
         }
@@ -2560,8 +2564,7 @@ class TurboshaftGraphBuildingInterface
             decoder, index_wordptr, imm, kNeedsTypeOrNullCheck);
 
         size_t return_count = imm.sig->return_count();
-        base::Vector<InliningTree*> feedback_cases =
-            inlining_decisions_->function_calls()[feedback_slot_];
+        base::Vector<InliningTree*> feedback_cases = GetFeedbackCases(decoder);
         std::vector<base::SmallVector<OpIndex, 2>> case_returns(return_count);
         // The slow path is the non-inlined generic `call_indirect`,
         // or a deopt node if that is enabled.
@@ -2576,15 +2579,15 @@ class TurboshaftGraphBuildingInterface
         // Block for merging results after the inlined code.
         TSBlock* merge = __ NewBlock();
 
-        // Always create a frame state, but rely on DCE to remove it in case we
-        // end up not using deopts. This allows us to share the frame state
+        // Creating the frame state here allows us to share the frame state
         // between a deopt due to wrong instance and deopt due to wrong target.
         V<FrameState> frame_state =
-            CreateFrameState(decoder, imm.sig, &index, args);
+            deopts_enabled() ? CreateFrameState(decoder, imm.sig, &index, args)
+                             : OpIndex::Invalid();
+        // CreateFrameState may have disabled deopts.
         bool use_deopt_slowpath = deopts_enabled();
         DCHECK_IMPLIES(use_deopt_slowpath, frame_state.valid());
-        if (use_deopt_slowpath &&
-            inlining_decisions_->has_non_inlineable_targets()[feedback_slot_]) {
+        if (use_deopt_slowpath && GetHasNonInlinableTargets(decoder)) {
           if (v8_flags.trace_wasm_inlining) {
             PrintF(
                 "[function %d%s: Not emitting deopt slow-path for "
@@ -2632,6 +2635,18 @@ class TurboshaftGraphBuildingInterface
           if (!InlineTargetIsTypeCompatible(
                   decoder->module_, imm.sig,
                   decoder->module_->functions[inlined_index].sig)) {
+            if (v8_flags.trace_wasm_inlining ||
+                (v8_flags.trace_wasm_compilation_hints &&
+                 InliningTargetsProvidedByCustomSection())) {
+              PrintF(
+                  "[function %d%s: Will not inline function %d: "
+                  "wrong signature.%s]\n",
+                  func_index_, mode_ == kRegular ? "" : " (inlined)",
+                  inlined_index,
+                  InliningTargetsProvidedByCustomSection()
+                      ? " Maybe a faulty compilation hint?"
+                      : "");
+            }
             __ Goto(case_blocks[i + 1]);
             continue;
           }
@@ -2652,8 +2667,8 @@ class TurboshaftGraphBuildingInterface
             __ Bind(inline_block);
           }
 
-          SmallZoneVector<Value, 4> direct_returns(return_count,
-                                                   decoder->zone_);
+          SmallZoneVector<Value, 4> direct_returns(decoder->zone_);
+          direct_returns.resize_no_init(return_count);
           if (v8_flags.trace_wasm_inlining) {
             PrintF(
                 "[function %d%s: Speculatively inlining call_indirect #%d, "
@@ -2686,8 +2701,8 @@ class TurboshaftGraphBuildingInterface
           auto [call_target, call_implicit_arg] =
               BuildIndirectCallTargetAndImplicitArg(decoder, index_wordptr,
                                                     imm);
-          SmallZoneVector<Value, 4> indirect_returns(return_count,
-                                                     decoder->zone_);
+          SmallZoneVector<Value, 4> indirect_returns(decoder->zone_);
+          indirect_returns.resize_no_init(return_count);
           BuildWasmCall(decoder, imm.sig, call_target, call_implicit_arg, args,
                         indirect_returns.data(),
                         compiler::kWasmIndirectFunction);
@@ -2743,8 +2758,7 @@ class TurboshaftGraphBuildingInterface
         auto [target, implicit_arg] = BuildIndirectCallTargetAndImplicitArg(
             decoder, index_wordptr, imm, kNeedsTypeOrNullCheck);
 
-        base::Vector<InliningTree*> feedback_cases =
-            inlining_decisions_->function_calls()[feedback_slot_];
+        base::Vector<InliningTree*> feedback_cases = GetFeedbackCases(decoder);
         constexpr int kSlowpathCase = 1;
         base::SmallVector<TSBlock*, wasm::kMaxPolymorphism + kSlowpathCase>
             case_blocks;
@@ -2786,6 +2800,18 @@ class TurboshaftGraphBuildingInterface
           if (!InlineTargetIsTypeCompatible(
                   decoder->module_, imm.sig,
                   decoder->module_->functions[inlined_index].sig)) {
+            if (v8_flags.trace_wasm_inlining ||
+                (v8_flags.trace_wasm_compilation_hints &&
+                 InliningTargetsProvidedByCustomSection())) {
+              PrintF(
+                  "[function %d%s: Will not inline function %d: "
+                  "wrong signature.%s]\n",
+                  func_index_, mode_ == kRegular ? "" : " (inlined)",
+                  inlined_index,
+                  InliningTargetsProvidedByCustomSection()
+                      ? " Maybe a faulty compilation hint?"
+                      : "");
+            }
             __ Goto(case_blocks[i + 1]);
             continue;
           }
@@ -2845,8 +2871,7 @@ class TurboshaftGraphBuildingInterface
           MemoryRepresentation::TaggedPointer());
 
       size_t return_count = sig->return_count();
-      base::Vector<InliningTree*> feedback_cases =
-          inlining_decisions_->function_calls()[feedback_slot_];
+      base::Vector<InliningTree*> feedback_cases = GetFeedbackCases(decoder);
       std::vector<base::SmallVector<OpIndex, 2>> case_returns(return_count);
       // The slow path is the non-inlined generic `call_ref`,
       // or a deopt node if that is enabled.
@@ -2873,13 +2898,36 @@ class TurboshaftGraphBuildingInterface
         }
         uint32_t inlined_index = tree->function_index();
         DCHECK(!decoder->module_->function_is_shared(inlined_index));
+
+        if (InliningTargetsProvidedByCustomSection()) {
+          const WasmFunction& inlinee =
+              decoder->module_->functions[inlined_index];
+          if (!InlineTargetIsTypeCompatible(decoder->module_, sig,
+                                            inlinee.sig)) {
+            if (v8_flags.trace_wasm_inlining ||
+                v8_flags.trace_wasm_compilation_hints) {
+              PrintF(
+                  "[function %d%s: Ignoring inlining hint to function %d: "
+                  "wrong signature]\n",
+                  func_index_, mode_ == kRegular ? "" : " (inlined)",
+                  inlined_index);
+            }
+            // Fall through to the next case.
+            __ Goto(case_blocks[i + 1]);
+            // Do not use the deopt slowpath if we decided to not inline (at
+            // least) one call target. Otherwise, this could lead to a deopt
+            // loop. This however is ensured for kMap mode.
+            DCHECK(!use_deopt_slowpath);
+            continue;
+          }
+        }
+
         V<Object> inlined_func_ref =
             __ LoadFixedArrayElement(func_refs, inlined_index);
 
         bool is_last_feedback_case = (i == feedback_cases.size() - 1);
         if (use_deopt_slowpath && is_last_feedback_case) {
-          if (inlining_decisions_
-                  ->has_non_inlineable_targets()[feedback_slot_]) {
+          if (GetHasNonInlinableTargets(decoder)) {
             if (v8_flags.trace_wasm_inlining) {
               PrintF(
                   "[function %d%s: Not emitting deopt slow-path for "
@@ -2912,7 +2960,8 @@ class TurboshaftGraphBuildingInterface
           __ Bind(inline_block);
         }
 
-        SmallZoneVector<Value, 4> direct_returns(return_count, decoder->zone_);
+        SmallZoneVector<Value, 4> direct_returns(decoder->zone_);
+        direct_returns.resize_no_init(return_count);
         if (v8_flags.trace_wasm_inlining) {
           PrintF(
               "[function %d%s: Speculatively inlining call_ref #%d, case #%zu, "
@@ -2941,7 +2990,8 @@ class TurboshaftGraphBuildingInterface
         auto [target, implicit_arg] =
             BuildFunctionReferenceTargetAndImplicitArg(func_ref.op,
                                                        func_ref.type);
-        SmallZoneVector<Value, 4> ref_returns(return_count, decoder->zone_);
+        SmallZoneVector<Value, 4> ref_returns(decoder->zone_);
+        ref_returns.resize_no_init(return_count);
         BuildWasmCall(decoder, sig, target, implicit_arg, args,
                       ref_returns.data(), compiler::kWasmIndirectFunction);
         for (size_t ret = 0; ret < ref_returns.size(); ret++) {
@@ -2974,8 +3024,7 @@ class TurboshaftGraphBuildingInterface
           trusted_instance_data(kNotShared), FuncRefs,
           MemoryRepresentation::TaggedPointer());
 
-      base::Vector<InliningTree*> feedback_cases =
-          inlining_decisions_->function_calls()[feedback_slot_];
+      base::Vector<InliningTree*> feedback_cases = GetFeedbackCases(decoder);
       constexpr int kSlowpathCase = 1;
       base::SmallVector<TSBlock*, wasm::kMaxPolymorphism + kSlowpathCase>
           case_blocks;
@@ -2995,6 +3044,26 @@ class TurboshaftGraphBuildingInterface
         }
         uint32_t inlined_index = tree->function_index();
         DCHECK(!decoder->module_->function_is_shared(inlined_index));
+
+        if (InliningTargetsProvidedByCustomSection()) {
+          const WasmFunction& inlinee =
+              decoder->module_->functions[inlined_index];
+          if (!InlineTargetIsTypeCompatible(decoder->module_, sig,
+                                            inlinee.sig)) {
+            if (v8_flags.trace_wasm_inlining ||
+                v8_flags.trace_wasm_compilation_hints) {
+              PrintF(
+                  "[function %d%s: Ignoring inlining hint to function %d: "
+                  "wrong signature]\n",
+                  func_index_, mode_ == kRegular ? "" : " (inlined)",
+                  inlined_index);
+            }
+            // Fall through to the next case.
+            __ Goto(case_blocks[i + 1]);
+            continue;
+          }
+        }
+
         V<Object> inlined_func_ref =
             __ LoadFixedArrayElement(func_refs, inlined_index);
 
@@ -3400,15 +3469,17 @@ class TurboshaftGraphBuildingInterface
     block->merge_block = NewBlockWithPhis(decoder, block->br_merge());
   }
 
-  void Throw(FullDecoder* decoder, const TagIndexImmediate& imm,
-             const Value arg_values[]) {
+  V<FixedArray> EncodeExceptionArray(FullDecoder* decoder,
+                                     const TagIndexImmediate& imm,
+                                     const Value args[]) {
     size_t count = imm.tag->sig->parameter_count();
     SmallZoneVector<OpIndex, 16> values(count, decoder->zone_);
     for (size_t index = 0; index < count; index++) {
-      values[index] = arg_values[index].op;
+      values[index] = args[index].op;
     }
 
-    uint32_t encoded_size = WasmExceptionPackage::GetEncodedSize(imm.tag);
+    uint32_t encoded_size =
+        WasmExceptionPackage::GetEncodedSize(decoder->module_, imm.tag);
 
     V<FixedArray> values_array = CallBuiltinThroughJumptable<
         BuiltinCallDescriptor::WasmAllocateFixedArray>(
@@ -3478,16 +3549,23 @@ class TurboshaftGraphBuildingInterface
           UNREACHABLE();
       }
     }
+    return values_array;
+  }
+
+  void Throw(FullDecoder* decoder, const TagIndexImmediate& imm,
+             const Value arg_values[]) {
+    V<FixedArray> values_array = EncodeExceptionArray(decoder, imm, arg_values);
 
     // TODO(14616): Support shared tags.
     V<FixedArray> instance_tags =
         LOAD_IMMUTABLE_INSTANCE_FIELD(trusted_instance_data(false), TagsTable,
                                       MemoryRepresentation::TaggedPointer());
-    auto tag = V<WasmTagObject>::Cast(
+    auto tag = V<WasmExceptionTag>::Cast(
         __ LoadFixedArrayElement(instance_tags, imm.index));
 
     CallBuiltinThroughJumptable<BuiltinCallDescriptor::WasmThrow>(
-        decoder, {tag, values_array}, CheckForException::kCatchInThisFrame);
+        decoder, {tag, values_array, trusted_instance_data(false)},
+        CheckForException::kCatchInThisFrame);
     __ Unreachable();
   }
 
@@ -3512,15 +3590,16 @@ class TurboshaftGraphBuildingInterface
     BindBlockAndGeneratePhis(decoder, block->false_or_loop_or_catch_block,
                              nullptr, &block->exception);
     V<NativeContext> native_context = instance_cache_.native_context();
-    V<WasmTagObject> caught_tag = V<WasmTagObject>::Cast(
+    V<WasmExceptionTag> caught_tag = V<WasmExceptionTag>::Cast(
         CallBuiltinThroughJumptable<BuiltinCallDescriptor::WasmGetOwnProperty>(
             decoder, native_context,
-            {block->exception, LOAD_ROOT(wasm_exception_tag_symbol)}));
+            {block->exception,
+             __ LoadRoot<RootIndex::kwasm_exception_tag_symbol>()}));
     // TODO(14616): Support shared tags.
     V<FixedArray> instance_tags =
         LOAD_IMMUTABLE_INSTANCE_FIELD(trusted_instance_data(false), TagsTable,
                                       MemoryRepresentation::TaggedPointer());
-    auto expected_tag = V<WasmTagObject>::Cast(
+    auto expected_tag = V<WasmExceptionTag>::Cast(
         __ LoadFixedArrayElement(instance_tags, imm.index));
     TSBlock* if_no_catch = NewBlockWithPhis(decoder, nullptr);
     SetupControlFlowEdge(decoder, if_no_catch);
@@ -3531,7 +3610,7 @@ class TurboshaftGraphBuildingInterface
     block->false_or_loop_or_catch_block = if_no_catch;
 
     if (imm.tag->sig->parameter_count() == 1 &&
-        imm.tag->sig->GetParam(0).is_reference_to(HeapType::kExtern)) {
+        imm.tag->sig->GetParam(0).is_reference_to(GenericKind::kExtern)) {
       // Check for the special case where the tag is WebAssembly.JSTag and the
       // exception is not a WebAssembly.Exception. In this case the exception is
       // caught and pushed on the operand stack.
@@ -3539,7 +3618,7 @@ class TurboshaftGraphBuildingInterface
       // the JSTag signature, i.e. a single externref or (ref extern), otherwise
       // we know statically that it cannot be the JSTag.
       V<Word32> caught_tag_undefined =
-          __ TaggedEqual(caught_tag, LOAD_ROOT(UndefinedValue));
+          __ TaggedEqual(caught_tag, __ LoadRoot<RootIndex::kUndefinedValue>());
       Label<Object> if_catch(&asm_);
       Label<> no_catch_merge(&asm_);
 
@@ -3646,15 +3725,16 @@ class TurboshaftGraphBuildingInterface
       return;
     }
     V<NativeContext> native_context = instance_cache_.native_context();
-    V<WasmTagObject> caught_tag = V<WasmTagObject>::Cast(
+    V<WasmExceptionTag> caught_tag = V<WasmExceptionTag>::Cast(
         CallBuiltinThroughJumptable<BuiltinCallDescriptor::WasmGetOwnProperty>(
             decoder, native_context,
-            {block->exception, LOAD_ROOT(wasm_exception_tag_symbol)}));
+            {block->exception,
+             __ LoadRoot<RootIndex::kwasm_exception_tag_symbol>()}));
     // TODO(14616): Support shared tags.
     V<FixedArray> instance_tags =
         LOAD_IMMUTABLE_INSTANCE_FIELD(trusted_instance_data(false), TagsTable,
                                       MemoryRepresentation::TaggedPointer());
-    auto expected_tag = V<WasmTagObject>::Cast(__ LoadFixedArrayElement(
+    auto expected_tag = V<WasmExceptionTag>::Cast(__ LoadFixedArrayElement(
         instance_tags, catch_case.maybe_tag.tag_imm.index));
     TSBlock* if_no_catch = NewBlockWithPhis(decoder, nullptr);
     SetupControlFlowEdge(decoder, if_no_catch);
@@ -3673,7 +3753,7 @@ class TurboshaftGraphBuildingInterface
       // the JSTag signature, i.e. a single externref, otherwise
       // we know statically that it cannot be the JSTag.
       V<Word32> caught_tag_undefined =
-          __ TaggedEqual(caught_tag, LOAD_ROOT(UndefinedValue));
+          __ TaggedEqual(caught_tag, __ LoadRoot<RootIndex::kUndefinedValue>());
       Label<Object> if_catch(&asm_);
       Label<> no_catch_merge(&asm_);
 
@@ -3747,37 +3827,174 @@ class TurboshaftGraphBuildingInterface
                            __ NoContextConstant());
   }
 
+  V<WordPtr> CheckContAndGetStack(Value cont_ref) {
+    // 1. Null check.
+    __ TrapIf(__ IsNull(cont_ref.op, cont_ref.type),
+              TrapId::kTrapNullDereference);
+    V<WordPtr> stack = __ LoadExternalPointerFromObject(
+        cont_ref.op, WasmContinuationObject::kStackOffset, kWasmStackMemoryTag);
+    // 2. Validity check: only the continuation that was created when this stack
+    // was suspended for the last time can be used to resume it.
+    V<WasmContinuationObject> stack_cont = __ Load(
+        stack, LoadOp::Kind::RawAligned(), MemoryRepresentation::UintPtr(),
+        StackMemory::current_continuation_offset());
+    __ TrapIfNot(__ TaggedEqual(cont_ref.op, stack_cont), TrapId::kTrapResume);
+    return stack;
+  }
+
+  MemoryRepresentation MemoryRepresentationOffHeap(ValueType type) {
+    return type.is_ref() ? MemoryRepresentation::AnyUncompressedTagged()
+                         : MemoryRepresentationFor(type);
+  }
+
   void ContBind(FullDecoder* decoder, const ContIndexImmediate& orig_imm,
                 Value input_cont, const Value args[],
                 const ContIndexImmediate& new_imm, Value* result) {
-    UNIMPLEMENTED();
+    V<WordPtr> stack = CheckContAndGetStack(input_cont);
+    const FunctionSig* input_sig =
+        decoder->module_->signature(orig_imm.cont_type->contfun_typeindex());
+    const FunctionSig* output_sig =
+        decoder->module_->signature(new_imm.cont_type->contfun_typeindex());
+    V<WordPtr> arg_buffer = __ Load(stack, LoadOp::Kind::RawAligned(),
+                                    MemoryRepresentation::UintPtr(),
+                                    StackMemory::arg_buffer_offset());
+    size_t delta =
+        input_sig->parameters().size() - output_sig->parameters().size();
+    IterateWasmFXArgBuffer(
+        input_sig->parameters(), [&](size_t index, int offset) {
+          if (index < delta) {
+            DCHECK_EQ(args[index].type, input_sig->GetParam(index));
+            this->Asm().StoreOffHeap(
+                arg_buffer, args[index].op,
+                MemoryRepresentationOffHeap(args[index].type), offset);
+          }
+        });
+    V<Context> native_context = instance_cache_.native_context();
+    // Allocate a new continuation for this stack, and invalidate the old one by
+    // pointing {StackMemory::current_cont_} to the new one.
+    V<WasmContinuationObject> cont = __ WasmCallRuntime(
+        decoder->zone(), Runtime::kWasmAllocateBoundContinuation,
+        {input_cont.op, __ SmiConstant(Smi::FromInt(static_cast<int>(delta)))},
+        native_context);
+    result->op = cont;
+  }
+
+  // Implements "resume" or "resume_throw" depending on the optional {exc_imm}
+  // argument.
+  void ResumeHelper(FullDecoder* decoder, const ContIndexImmediate& imm,
+                    base::Vector<HandlerCase> handlers, const Value& cont_ref,
+                    const Value args[], Value returns[],
+                    std::optional<TagIndexImmediate> exc_imm) {
+    V<WordPtr> stack = CheckContAndGetStack(cont_ref);
+    base::Vector<compiler::turboshaft::EffectHandler> asm_handlers =
+        __ output_graph().graph_zone()
+            -> AllocateVector<compiler::turboshaft::EffectHandler>(
+                             handlers.size());
+    for (size_t i = 0; i < handlers.size(); ++i) {
+      if (handlers[i].kind != kOnSuspend) UNIMPLEMENTED();
+      asm_handlers[i].tag_index = handlers[i].tag.index;
+      asm_handlers[i].block = __ NewBlock();
+    }
+
+    // Reserve a stack buffer, move the tag params there and pass it to the
+    // target stack.
+    const FunctionSig* sig =
+        decoder->module_->signature(imm.cont_type->contfun_typeindex());
+    V<WordPtr> arg_buffer = __ Load(stack, LoadOp::Kind::RawAligned(),
+                                    MemoryRepresentation::UintPtr(),
+                                    StackMemory::arg_buffer_offset());
+    IterateWasmFXArgBuffer(sig->parameters(), [&](size_t index, int offset) {
+      DCHECK_EQ(args[index].type, sig->GetParam(index));
+      this->Asm().StoreOffHeap(arg_buffer, args[index].op,
+                               MemoryRepresentationOffHeap(args[index].type),
+                               offset);
+    });
+
+    OpIndex result_buffer;
+    if (!exc_imm.has_value()) {
+      // Regular resume.
+      asm_.set_effect_handlers_for_next_call(asm_handlers);
+      result_buffer =
+          CallBuiltinThroughJumptable<BuiltinCallDescriptor::WasmFXResume,
+                                      HandleEffects::kYes>(
+              decoder, {stack, arg_buffer},
+              CheckForException::kCatchInThisFrame);
+    } else {
+      // resume_throw.
+      V<FixedArray> array = EncodeExceptionArray(decoder, *exc_imm, args);
+      V<FixedArray> instance_tags =
+          LOAD_IMMUTABLE_INSTANCE_FIELD(trusted_instance_data(false), TagsTable,
+                                        MemoryRepresentation::TaggedPointer());
+      V<WasmExceptionTag> tag = V<WasmExceptionTag>::Cast(
+          __ LoadFixedArrayElement(instance_tags, exc_imm->index));
+      asm_.set_effect_handlers_for_next_call(asm_handlers);
+      result_buffer =
+          CallBuiltinThroughJumptable<BuiltinCallDescriptor::WasmFXResumeThrow,
+                                      HandleEffects::kYes>(
+              decoder, {stack, tag, array, trusted_instance_data(false)},
+              CheckForException::kCatchInThisFrame);
+    }
+
+    IterateWasmFXArgBuffer(sig->returns(), [&](size_t index, int offset) {
+      DCHECK_EQ(returns[index].type, sig->GetReturn(index));
+      returns[index].op =
+          __ LoadOffHeap(result_buffer, offset,
+                         MemoryRepresentationOffHeap(sig->GetReturn(index)));
+    });
   }
 
   void Resume(FullDecoder* decoder, const ContIndexImmediate& imm,
               base::Vector<HandlerCase> handlers, const Value& cont_ref,
               const Value args[], Value returns[]) {
-    __ TrapIf(__ IsNull(cont_ref.op, cont_ref.type),
-              TrapId::kTrapNullDereference);
-    const FunctionSig* sig =
-        decoder->module_->signature(imm.cont_type->contfun_typeindex());
-    V<WordPtr> stack = __ LoadExternalPointerFromObject(
-        cont_ref.op, WasmContinuationObject::kStackOffset, kWasmStackMemoryTag);
-    // TODO(thibaudm): Switch to the target stack here.
-    V<WordPtr> pc = __ Load(stack, LoadOp::Kind::RawAligned(),
-                            MemoryRepresentation::UintPtr(), kStackPcOffset);
-    const TSCallDescriptor* descriptor = TSCallDescriptor::Create(
-        compiler::GetWasmCallDescriptor(
-            __ graph_zone(), sig, compiler::WasmCallKind::kWasmContinuation),
-        compiler::CanThrow::kYes, compiler::LazyDeoptOnThrow::kNo,
-        __ graph_zone());
-    __ Call(pc, {stack}, descriptor);
+    ResumeHelper(decoder, imm, handlers, cont_ref, args, returns, {});
+  }
+
+  void ResumeHandler(FullDecoder* decoder,
+                     base::Vector<const HandlerCase> handlers,
+                     size_t handler_index, Value* cont_val, Value* tag_params) {
+    if (handler_index == 0) {
+      resume_return_block_ = __ NewBlock();
+      __ Goto(resume_return_block_);
+    }
+    __ Bind(asm_.effect_handlers_for_next_call()[handler_index].block);
+    // Reuse the "CatchBlockBegin" pseudo op to mark the beginning of an effect
+    // handler block. It works the same way but generates the continuation
+    // object instead of the exception.
+    OpIndex cont = __ CatchBlockBegin();
+    OpIndex arg_buffer = __ WasmFXArgBuffer();
+
+    // Unpack tag params.
+    const FunctionSig* sig = handlers[handler_index].tag.tag->sig;
+    IterateWasmFXArgBuffer(sig->parameters(), [&](size_t index, int offset) {
+      DCHECK_EQ(tag_params[index].type, sig->GetParam(index));
+      tag_params[index].op = this->Asm().LoadOffHeap(
+          arg_buffer, offset,
+          MemoryRepresentationOffHeap(sig->GetParam(index)));
+    });
+
+    instance_cache_.ReloadCachedMemory();
+    cont_val->op = cont;
+    DCHECK_EQ(kOnSuspend, handlers[handler_index].kind);
+    BrOrRet(decoder, handlers[handler_index].maybe_depth.br.depth);
+    if (handler_index == handlers.size() - 1) {
+      asm_.clear_effect_handlers();
+      __ Bind(resume_return_block_);
+    }
   }
 
   void ResumeThrow(FullDecoder* decoder,
                    const wasm::ContIndexImmediate& cont_imm,
                    const TagIndexImmediate& exc_imm,
-                   base::Vector<wasm::HandlerCase> handlers, const Value args[],
-                   const Value returns[]) {
+                   base::Vector<wasm::HandlerCase> handlers,
+                   const Value& cont_ref, const Value args[], Value returns[]) {
+    ResumeHelper(decoder, cont_imm, handlers, cont_ref, args, returns, exc_imm);
+  }
+
+  void ResumeThrowRef(FullDecoder* decoder,
+                      const wasm::ContIndexImmediate& cont_imm,
+                      base::Vector<wasm::HandlerCase> handlers,
+                      const Value& cont, const Value& exn,
+                      const Value returns[]) {
     UNIMPLEMENTED();
   }
 
@@ -3787,9 +4004,67 @@ class TurboshaftGraphBuildingInterface
     UNIMPLEMENTED();
   }
 
+  MemoryRepresentation MemoryRepresentationFor(ValueType type) {
+    return MemoryRepresentation::FromMachineType(type.machine_type());
+  }
+
   void Suspend(FullDecoder* decoder, const TagIndexImmediate& imm,
-               const Value args[], const Value returns[]) {
-    UNIMPLEMENTED();
+               const Value args[], Value returns[]) {
+    V<WordPtr> root = __ LoadRootRegister();
+    V<Word32> is_on_central_stack =
+        __ Load(root, LoadOp::Kind::RawAligned(), MemoryRepresentation::Uint8(),
+                IsolateData::is_on_central_stack_flag_offset());
+    V<Context> native_context = instance_cache_.native_context();
+    IF (is_on_central_stack) {
+      __ WasmCallRuntime(__ phase_zone(), Runtime::kThrowWasmFXSuspendError, {},
+                         native_context);
+      __ Unreachable();
+    }
+
+    // Reserve a stack buffer, move the tag params there and pass it to the
+    // target stack.
+    const FunctionSig* sig = imm.tag->sig;
+    V<FixedArray> instance_tags =
+        LOAD_IMMUTABLE_INSTANCE_FIELD(trusted_instance_data(false), TagsTable,
+                                      MemoryRepresentation::TaggedPointer());
+    auto wanted_tag = V<WasmExceptionTag>::Cast(
+        __ LoadFixedArrayElement(instance_tags, imm.index));
+    V<WasmContinuationObject> cont = __ WasmCallRuntime(
+        decoder->zone(), Runtime::kWasmAllocateEmptyContinuation, {},
+        native_context);
+    auto [arg_size, arg_alignment] =
+        GetBufferSizeAndAlignmentFor(sig->parameters());
+    auto [return_size, return_alignment] =
+        GetBufferSizeAndAlignmentFor(sig->returns());
+    OpIndex arg_buffer =
+        __ StackSlot(std::max(arg_size, return_size),
+                     std::max(arg_alignment, return_alignment));
+
+    ModuleTypeIndex sig_index = decoder->module_->tags[imm.index].sig_index;
+    CanonicalTypeIndex csig_index =
+        decoder->module_->canonical_type_id(sig_index);
+    const CanonicalSig* csig =
+        GetWasmEngine()->type_canonicalizer()->LookupFunctionSignature(
+            csig_index);
+
+    IterateWasmFXArgBuffer(sig->parameters(), [&](size_t index, int offset) {
+      DCHECK_EQ(args[index].type, sig->GetParam(index));
+      __ StoreOffHeap(arg_buffer, args[index].op,
+                      MemoryRepresentationOffHeap(args[index].type), offset);
+    });
+    CallBuiltinThroughJumptable<BuiltinCallDescriptor::WasmFXSuspend>(
+        decoder, native_context,
+        {wanted_tag, cont, arg_buffer,
+         __ WordPtrConstant(reinterpret_cast<uintptr_t>(csig))},
+        CheckForException::kCatchInThisFrame);
+
+    // Unpack tag returns.
+    IterateWasmFXArgBuffer(sig->returns(), [&](size_t index, int offset) {
+      DCHECK_EQ(returns[index].type, sig->GetReturn(index));
+      returns[index].op = this->Asm().LoadOffHeap(
+          arg_buffer, offset,
+          MemoryRepresentationOffHeap(sig->GetReturn(index)));
+    });
   }
 
   void AtomicNotify(FullDecoder* decoder, const MemoryAccessImmediate& imm,
@@ -4359,15 +4634,13 @@ class TurboshaftGraphBuildingInterface
   void DataDrop(FullDecoder* decoder, const IndexImmediate& imm) {
     // TODO(14616): Data segments aren't available during streaming compilation.
     // Discussion: github.com/WebAssembly/shared-everything-threads/issues/83
-    bool shared = decoder->enabled_.has_shared() &&
-                  decoder->module_->data_segments[imm.index].shared;
-    V<FixedUInt32Array> data_segment_sizes = LOAD_IMMUTABLE_INSTANCE_FIELD(
-        trusted_instance_data(shared), DataSegmentSizes,
-        MemoryRepresentation::TaggedPointer());
-    __ Store(data_segment_sizes, __ Word32Constant(0),
-             StoreOp::Kind::TaggedBase(), MemoryRepresentation::Int32(),
-             compiler::kNoWriteBarrier,
-             FixedUInt32Array::OffsetOfElementAt(imm.index));
+    // TODO(14616): Fix sharedness.
+    CHECK(!decoder->module_->data_segments[imm.index].shared);
+    auto sig = FixedSizeSignature<MachineType>::Params(MachineType::Pointer(),
+                                                       MachineType::Uint32());
+    CallC(&sig, ExternalReference::wasm_data_drop(),
+          {__ BitcastHeapObjectToWordPtr(trusted_instance_data(false)),
+           __ Word32Constant(imm.index)});
   }
 
   void TableGet(FullDecoder* decoder, const Value& index, Value* result,
@@ -4448,14 +4721,15 @@ class TurboshaftGraphBuildingInterface
     V<Word32> size = size_val.op;
     DCHECK_EQ(table->shared, table->shared);
     CallBuiltinThroughJumptable<BuiltinCallDescriptor::WasmTableInit>(
-        decoder, {
-                     dst_wordptr,
-                     src,
-                     size,
-                     __ NumberConstant(imm.table.index),
-                     __ NumberConstant(imm.element_segment.index),
-                     __ NumberConstant((!shared_ && table->shared) ? 1 : 0),
-                 });
+        decoder,
+        {
+            dst_wordptr,
+            src,
+            size,
+            __ SmiConstant(Smi::FromInt(imm.table.index)),
+            __ SmiConstant(Smi::FromInt(imm.element_segment.index)),
+            __ SmiConstant(Smi::FromInt((!shared_ && table->shared) ? 1 : 0)),
+        });
   }
 
   void TableCopy(FullDecoder* decoder, const TableCopyImmediate& imm,
@@ -4476,10 +4750,11 @@ class TurboshaftGraphBuildingInterface
     // TODO(14616): Is this too restrictive?
     DCHECK_EQ(table_is_shared, imm.table_src.table->shared);
     CallBuiltinThroughJumptable<BuiltinCallDescriptor::WasmTableCopy>(
-        decoder, {dst_wordptr, src_wordptr, size_wordptr,
-                  __ NumberConstant(imm.table_dst.index),
-                  __ NumberConstant(imm.table_src.index),
-                  __ NumberConstant((!shared_ && table_is_shared) ? 1 : 0)});
+        decoder,
+        {dst_wordptr, src_wordptr, size_wordptr,
+         __ SmiConstant(Smi::FromInt(imm.table_dst.index)),
+         __ SmiConstant(Smi::FromInt(imm.table_src.index)),
+         __ SmiConstant(Smi::FromInt((!shared_ && table_is_shared) ? 1 : 0))});
   }
 
   void TableGrow(FullDecoder* decoder, const TableIndexImmediate& imm,
@@ -4503,7 +4778,7 @@ class TurboshaftGraphBuildingInterface
     DCHECK_GE(kSmiMaxValue, wasm::max_table_size());
     V<Word32> call_result = __ UntagSmi(
         CallBuiltinThroughJumptable<BuiltinCallDescriptor::WasmTableGrow>(
-            decoder, {__ NumberConstant(imm.index), delta_wordptr,
+            decoder, {__ SmiConstant(Smi::FromInt(imm.index)), delta_wordptr,
                       __ Word32Constant(extract_shared_data), value.op}));
     GOTO(end, call_result);
 
@@ -4525,7 +4800,7 @@ class TurboshaftGraphBuildingInterface
     CallBuiltinThroughJumptable<BuiltinCallDescriptor::WasmTableFill>(
         decoder,
         {start_wordptr, count_wordptr, __ Word32Constant(extract_shared_data),
-         __ NumberConstant(imm.index), value.op});
+         __ SmiConstant(Smi::FromInt(imm.index)), value.op});
   }
 
   V<WasmTableObject> LoadTable(FullDecoder* decoder,
@@ -4559,7 +4834,7 @@ class TurboshaftGraphBuildingInterface
         trusted_instance_data(shared), ElementSegments,
         MemoryRepresentation::TaggedPointer());
     __ StoreFixedArrayElement(elem_segments, imm.index,
-                              LOAD_ROOT(EmptyFixedArray),
+                              __ LoadRoot<RootIndex::kEmptyFixedArray>(),
                               compiler::kFullWriteBarrier);
   }
 
@@ -4997,8 +5272,7 @@ class TurboshaftGraphBuildingInterface
   void ArrayFill(FullDecoder* decoder, ArrayIndexImmediate& imm,
                  const Value& array, const Value& index, const Value& value,
                  const Value& length) {
-    const bool emit_write_barrier =
-        imm.array_type->element_type().is_reference();
+    const bool emit_write_barrier = imm.array_type->element_type().is_ref();
     auto array_value = V<WasmArrayNullable>::Cast(array.op);
     V<WasmArray> array_not_null = BoundsCheckArrayWithLength(
         array_value, index.op, length.op,
@@ -5031,7 +5305,7 @@ class TurboshaftGraphBuildingInterface
                        const ArrayIndexImmediate& array_imm,
                        const IndexImmediate& segment_imm, const Value& offset,
                        const Value& length, Value* result) {
-    bool is_element = array_imm.array_type->element_type().is_reference();
+    bool is_element = array_imm.array_type->element_type().is_ref();
     // TODO(14616): Data segments aren't available during streaming compilation.
     // Discussion: github.com/WebAssembly/shared-everything-threads/issues/83
     bool segment_is_shared =
@@ -5039,6 +5313,8 @@ class TurboshaftGraphBuildingInterface
         (is_element
              ? decoder->module_->elem_segments[segment_imm.index].shared
              : decoder->module_->data_segments[segment_imm.index].shared);
+    const bool array_is_shared =
+        decoder->module_->type(array_imm.index).is_shared;
     // TODO(14616): Add DCHECK that array sharedness is equal to `shared`?
     V<WasmArray> result_value =
         CallBuiltinThroughJumptable<BuiltinCallDescriptor::WasmArrayNewSegment>(
@@ -5046,7 +5322,7 @@ class TurboshaftGraphBuildingInterface
             {__ Word32Constant(segment_imm.index), offset.op, length.op,
              __ SmiConstant(Smi::FromInt(is_element ? 1 : 0)),
              __ SmiConstant(Smi::FromInt(!shared_ && segment_is_shared)),
-             __ RttCanon(managed_object_maps(segment_is_shared),
+             __ RttCanon(managed_object_maps(array_is_shared),
                          array_imm.index)});
     result->op = __ AnnotateWasmType(result_value, result->type);
   }
@@ -5056,7 +5332,7 @@ class TurboshaftGraphBuildingInterface
                         const IndexImmediate& segment_imm, const Value& array,
                         const Value& array_index, const Value& segment_offset,
                         const Value& length) {
-    bool is_element = array_imm.array_type->element_type().is_reference();
+    bool is_element = array_imm.array_type->element_type().is_ref();
     // TODO(14616): Segments aren't available during streaming compilation.
     bool segment_is_shared =
         decoder->enabled_.has_shared() &&
@@ -5127,36 +5403,20 @@ class TurboshaftGraphBuildingInterface
     }
   }
 
-  void RefGetDesc(FullDecoder* decoder, const Value& ref_val, Value* result) {
-    const ValueType type = ref_val.type;
-    const StructType* struct_type =
-        decoder->module_->struct_type(type.ref_index());
+  void RefGetDesc(FullDecoder* decoder, ModuleTypeIndex struct_index,
+                  const Value& ref_val, Value* result) {
+    // We need {struct_index} because it's guaranteed to be a valid index of
+    // a type that has a descriptor, whereas {ref_val.type} could be "null".
+    const StructType* struct_type = decoder->module_->struct_type(struct_index);
     result->op = __ StructGet(
-        V<WasmStructNullable>::Cast(ref_val.op), struct_type, type.ref_index(),
+        V<WasmStructNullable>::Cast(ref_val.op), struct_type, struct_index,
         StructGetOp::kDescFieldIndex, true /* "signed" is default */,
-        type.is_nullable() ? compiler::kWithNullCheck
-                           : compiler::kWithoutNullCheck,
+        ref_val.type.is_nullable() ? compiler::kWithNullCheck
+                                   : compiler::kWithoutNullCheck,
         {});
   }
 
   using SubtypeCheckExactness = compiler::SubtypeCheckExactness;
-
-  SubtypeCheckExactness GetExactness(FullDecoder* decoder, HeapType target) {
-    // For exact target types, an exact match is needed for correctness;
-    // for final target types, it's a performance optimization.
-    // For types with custom descriptors, we need to look at their immediate
-    // supertype instead of the object's map.
-    // See Liftoff's {SubtypeCheck()} for detailed explanation. This function
-    // here is not called for instructions using custom descriptors
-    // (ref.cast_desc, br_on_cast_desc{,_fail}).
-    const TypeDefinition& type = decoder->module_->type(target.ref_index());
-    if (type.is_final || target.is_exact()) {
-      return type.has_descriptor()
-                 ? SubtypeCheckExactness::kExactMatchLastSupertype
-                 : SubtypeCheckExactness::kExactMatchOnly;
-    }
-    return SubtypeCheckExactness::kMayBeSubtype;
-  }
 
   void RefTest(FullDecoder* decoder, HeapType target, const Value& object,
                Value* result, bool null_succeeds) {
@@ -5166,7 +5426,7 @@ class TurboshaftGraphBuildingInterface
         object.type,
         ValueType::RefMaybeNull(target,
                                 null_succeeds ? kNullable : kNonNullable),
-        GetExactness(decoder, target)};
+        compiler::GetExactness(decoder->module_, target)};
     result->op = __ WasmTypeCheck(object.op, rtt, config);
   }
 
@@ -5175,7 +5435,7 @@ class TurboshaftGraphBuildingInterface
     compiler::WasmTypeCheckConfig config{
         object.type, ValueType::RefMaybeNull(
                          type, null_succeeds ? kNullable : kNonNullable)};
-    V<Map> rtt = OpIndex::Invalid();
+    OptionalV<Map> rtt = OpIndex::Invalid();
     result->op = __ WasmTypeCheck(object.op, rtt, config);
   }
 
@@ -5189,12 +5449,13 @@ class TurboshaftGraphBuildingInterface
     V<Map> rtt = __ RttCanon(managed_object_maps(target.is_shared()),
                              target.ref_index());
     compiler::WasmTypeCheckConfig config{
-        object.type, target, GetExactness(decoder, target.heap_type())};
+        object.type, target,
+        compiler::GetExactness(decoder->module_, target.heap_type())};
     result->op = __ WasmTypeCast(object.op, rtt, config);
   }
 
-  void RefCastDesc(FullDecoder* decoder, const Value& object, const Value& desc,
-                   Value* result) {
+  void RefCastDescEq(FullDecoder* decoder, const Value& object,
+                     const Value& desc, Value* result) {
     if (v8_flags.experimental_wasm_assume_ref_cast_succeeds) {
       // TODO(14108): Implement type guards.
       Forward(decoder, object, result);
@@ -5233,16 +5494,17 @@ class TurboshaftGraphBuildingInterface
         target_type, null_succeeds ? kNullable : kNonNullable);
     V<Map> rtt = __ RttCanon(managed_object_maps(target.is_shared()),
                              target_type.ref_index());
-    compiler::WasmTypeCheckConfig config{object.type, target,
-                                         GetExactness(decoder, target_type)};
+    compiler::WasmTypeCheckConfig config{
+        object.type, target,
+        compiler::GetExactness(decoder->module_, target_type)};
     return BrOnCastImpl(decoder, rtt, config, object, value_on_branch, br_depth,
                         null_succeeds);
   }
 
-  void BrOnCastDesc(FullDecoder* decoder, HeapType target_type,
-                    const Value& object, const Value& descriptor,
-                    Value* value_on_branch, uint32_t br_depth,
-                    bool null_succeeds) {
+  void BrOnCastDescEq(FullDecoder* decoder, HeapType target_type,
+                      const Value& object, const Value& descriptor,
+                      Value* value_on_branch, uint32_t br_depth,
+                      bool null_succeeds) {
     ValueType target = ValueType::RefMaybeNull(
         target_type, null_succeeds ? kNullable : kNonNullable);
     V<Map> rtt = GetRttFromDescriptor(descriptor);
@@ -5270,16 +5532,17 @@ class TurboshaftGraphBuildingInterface
         target_type, null_succeeds ? kNullable : kNonNullable);
     V<Map> rtt = __ RttCanon(managed_object_maps(target.is_shared()),
                              target_type.ref_index());
-    compiler::WasmTypeCheckConfig config{object.type, target,
-                                         GetExactness(decoder, target_type)};
+    compiler::WasmTypeCheckConfig config{
+        object.type, target,
+        compiler::GetExactness(decoder->module_, target_type)};
     return BrOnCastFailImpl(decoder, rtt, config, object, value_on_fallthrough,
                             br_depth, null_succeeds);
   }
 
-  void BrOnCastDescFail(FullDecoder* decoder, HeapType target_type,
-                        const Value& object, const Value& descriptor,
-                        Value* value_on_fallthrough, uint32_t br_depth,
-                        bool null_succeeds) {
+  void BrOnCastDescEqFail(FullDecoder* decoder, HeapType target_type,
+                          const Value& object, const Value& descriptor,
+                          Value* value_on_fallthrough, uint32_t br_depth,
+                          bool null_succeeds) {
     ValueType target = ValueType::RefMaybeNull(
         target_type, null_succeeds ? kNullable : kNonNullable);
     V<Map> rtt = GetRttFromDescriptor(descriptor);
@@ -7803,8 +8066,7 @@ class TurboshaftGraphBuildingInterface
 
         if (needs_null_check) {
           // Trap on null element.
-          __ TrapIf(__ Word32Equal(loaded_sig, -1),
-                    TrapId::kTrapFuncSigMismatch);
+          __ TrapIf(__ Word32Equal(loaded_sig, -1), TrapId::kTrapNullFunc);
         }
         bool shared = decoder->module_->type(sig_index).is_shared;
         V<Map> formal_rtt = __ RttCanon(managed_object_maps(shared), sig_index);
@@ -7817,7 +8079,7 @@ class TurboshaftGraphBuildingInterface
         // Note: The reference cannot have been cleared: Since the loaded_sig
         // corresponds to a function of the same canonical type, that function
         // will have kept the type alive.
-        V<WeakFixedArray> rtts = LOAD_ROOT(WasmCanonicalRtts);
+        V<WeakFixedArray> rtts = __ LoadRoot<RootIndex::kWasmCanonicalRtts>();
         V<Object> weak_rtt = __ Load(
             rtts, __ ChangeInt32ToIntPtr(loaded_sig),
             LoadOp::Kind::TaggedBase(), MemoryRepresentation::TaggedPointer(),
@@ -7859,7 +8121,7 @@ class TurboshaftGraphBuildingInterface
           __ Load(dispatch_table, dispatch_table_entry_offset,
                   LoadOp::Kind::TaggedBase(), MemoryRepresentation::Uint32(),
                   WasmDispatchTable::kSigBias);
-      __ TrapIf(__ Word32Equal(-1, loaded_sig), TrapId::kTrapFuncSigMismatch);
+      __ TrapIf(__ Word32Equal(-1, loaded_sig), TrapId::kTrapNullFunc);
     }
 
     /* Step 4: Extract ref and target. */
@@ -7893,17 +8155,15 @@ class TurboshaftGraphBuildingInterface
             : LoadOp::Kind::TaggedBase().Immutable();
 
     V<WasmInternalFunction> internal_function =
-        V<WasmInternalFunction>::Cast(__ LoadTrustedPointerField(
+        V<WasmInternalFunction>::Cast(__ LoadTrustedPointer(
             func_ref, load_kind, kWasmInternalFunctionIndirectPointerTag,
             WasmFuncRef::kTrustedInternalOffset));
-
     return BuildFunctionTargetAndImplicitArg(internal_function);
   }
 
   OpIndex AnnotateResultIfReference(OpIndex result, wasm::ValueType type) {
-    return type.is_object_reference()
-               ? __ AnnotateWasmType(V<Object>::Cast(result), type)
-               : result;
+    return type.is_ref() ? __ AnnotateWasmType(V<Object>::Cast(result), type)
+                         : result;
   }
 
   void BuildWasmCall(
@@ -7965,7 +8225,8 @@ class TurboshaftGraphBuildingInterface
       // Transform the tail call into a regular call, and return the return
       // values to the caller.
       size_t return_count = sig->return_count();
-      SmallZoneVector<Value, 16> returns(return_count, decoder->zone_);
+      SmallZoneVector<Value, 16> returns(decoder->zone_);
+      returns.resize_no_init(return_count);
       // Since an exception in a tail call cannot be caught in this frame, we
       // should only catch exceptions in the generated call if this is a
       // recursively inlined function, and the parent frame provides a handler.
@@ -7978,7 +8239,8 @@ class TurboshaftGraphBuildingInterface
     }
   }
 
-  template <typename Descriptor>
+  enum HandleEffects : bool { kYes = true, kNo = false };
+  template <typename Descriptor, HandleEffects handle_effects = kNo>
   compiler::turboshaft::detail::index_type_for_t<typename Descriptor::results_t>
   CallBuiltinThroughJumptable(
       FullDecoder* decoder, const typename Descriptor::arguments_t& args,
@@ -7997,7 +8259,7 @@ class TurboshaftGraphBuildingInterface
         },
         args);
 
-    return CallAndMaybeCatchException(
+    return CallAndMaybeCatchException<handle_effects>(
         decoder, callee, base::VectorOf(arguments),
         Descriptor::Create(StubCallMode::kCallWasmRuntimeStub,
                            __ output_graph().graph_zone()),
@@ -8070,6 +8332,7 @@ class TurboshaftGraphBuildingInterface
     }
   }
 
+  template <HandleEffects handle_effects = kNo>
   OpIndex CallAndMaybeCatchException(FullDecoder* decoder, V<CallTarget> callee,
                                      base::Vector<const OpIndex> args,
                                      const TSCallDescriptor* descriptor,
@@ -8081,46 +8344,49 @@ class TurboshaftGraphBuildingInterface
     bool handled_in_this_frame =
         decoder && decoder->current_catch() != -1 &&
         check_for_exception == CheckForException::kCatchInThisFrame;
-    if (!handled_in_this_frame && mode_ != kInlinedWithCatch) {
+    if (!handled_in_this_frame && mode_ != kInlinedWithCatch &&
+        !handle_effects) {
       OpIndex call =
           __ Call(callee, OpIndex::Invalid(), args, descriptor, effects);
       MaybeSetPositionToParent(call, check_for_exception);
       return call;
     }
 
-    TSBlock* catch_block;
+    TSBlock* catch_block = nullptr;
     if (handled_in_this_frame) {
       Control* current_catch =
           decoder->control_at(decoder->control_depth_of_current_catch());
       catch_block = current_catch->false_or_loop_or_catch_block;
-    } else {
-      DCHECK_EQ(mode_, kInlinedWithCatch);
+    } else if (mode_ == kInlinedWithCatch) {
       catch_block = return_catch_block_;
     }
     TSBlock* success_block = __ NewBlock();
     TSBlock* exception_block = __ NewBlock();
     OpIndex call;
     {
-      Assembler::CatchScope scope(asm_, exception_block);
-
+      std::optional<Assembler::CatchScope> scope;
+      if (catch_block) {
+        scope.emplace(asm_, exception_block);
+      }
       call = __ Call(callee, OpIndex::Invalid(), args, descriptor, effects);
       __ Goto(success_block);
     }
 
-    __ Bind(exception_block);
-    OpIndex exception = __ CatchBlockBegin();
-    if (handled_in_this_frame) {
-      // The exceptional operation could have modified memory size; we need
-      // to reload the memory context into the exceptional control path.
-      instance_cache_.ReloadCachedMemory();
-      SetupControlFlowEdge(decoder, catch_block, 0, exception);
-    } else {
-      DCHECK_EQ(mode_, kInlinedWithCatch);
-      if (exception.valid()) return_phis_->AddIncomingException(exception);
-      // Reloading the InstanceCache will happen when {return_exception_phis_}
-      // are retrieved.
+    if (catch_block) {
+      __ Bind(exception_block);
+      OpIndex exception = __ CatchBlockBegin();
+      if (handled_in_this_frame) {
+        // The exceptional operation could have modified memory size; we need
+        // to reload the memory context into the exceptional control path.
+        instance_cache_.ReloadCachedMemory();
+        SetupControlFlowEdge(decoder, catch_block, 0, exception);
+      } else if (mode_ == kInlinedWithCatch) {
+        if (exception.valid()) return_phis_->AddIncomingException(exception);
+        // Reloading the InstanceCache will happen when {return_exception_phis_}
+        // are retrieved.
+      }
+      __ Goto(catch_block);
     }
-    __ Goto(catch_block);
 
     __ Bind(success_block);
 
@@ -8289,7 +8555,8 @@ class TurboshaftGraphBuildingInterface
     V<FixedArray> exception_values_array = V<FixedArray>::Cast(
         CallBuiltinThroughJumptable<BuiltinCallDescriptor::WasmGetOwnProperty>(
             decoder, instance_cache_.native_context(),
-            {exception, LOAD_ROOT(wasm_exception_values_symbol)}));
+            {exception,
+             __ LoadRoot<RootIndex::kwasm_exception_values_symbol>()}));
 
     int index = 0;
     for (Value& value : values) {
@@ -8545,6 +8812,8 @@ class TurboshaftGraphBuildingInterface
       struct_value = CallBuiltinThroughJumptable<
           BuiltinCallDescriptor::WasmAllocateDescriptorStruct>(
           decoder, {rtt, __ Word32Constant(imm.index.index), first_field});
+      struct_value = __ AnnotateWasmType(
+          struct_value, ValueType::Ref(decoder->module_->heap_type(imm.index)));
     } else {
       const bool shared = type.is_shared;
       struct_value = __ WasmAllocateStruct(rtt, imm.struct_type, shared);
@@ -8642,16 +8911,32 @@ class TurboshaftGraphBuildingInterface
     }
 
     // Differently to values on the heap, stack slots are always uncompressed.
-    MemoryRepresentation memory_rep =
-        type.is_reference() ? MemoryRepresentation::UncompressedTaggedPointer()
-                            : MemoryRepresentation::FromMachineRepresentation(
-                                  input_type.machine_representation());
-    V<WordPtr> stack_slot =
-        __ StackSlot(memory_rep.SizeInBytes(), memory_rep.SizeInBytes(),
-                     type.is_reference());
+    MemoryRepresentation memory_rep = MemoryRepresentationOffHeap(input_type);
+    V<WordPtr> stack_slot = __ StackSlot(
+        memory_rep.SizeInBytes(), memory_rep.SizeInBytes(), type.is_ref());
     __ Store(stack_slot, value, StoreOp::Kind::RawAligned(), memory_rep,
              compiler::WriteBarrierKind::kNoWriteBarrier);
     return stack_slot;
+  }
+
+  base::Vector<InliningTree*> GetFeedbackCases(FullDecoder* decoder) {
+    if (inlining_decisions_->mode() == InliningTree::Mode::kVector) {
+      return inlining_decisions_->function_calls()[feedback_slot_];
+    }
+    DCHECK(inlining_decisions_->function_calls_map().contains(
+        decoder->pc_relative_offset()));
+    return inlining_decisions_
+        ->function_calls_map()[decoder->pc_relative_offset()];
+  }
+
+  bool GetHasNonInlinableTargets(FullDecoder* decoder) {
+    if (inlining_decisions_->mode() == InliningTree::Mode::kVector) {
+      return inlining_decisions_->has_non_inlineable_targets()[feedback_slot_];
+    }
+    DCHECK(inlining_decisions_->has_non_inlineable_targets_map().contains(
+        decoder->pc_relative_offset()));
+    return inlining_decisions_
+        ->has_non_inlineable_targets_map()[decoder->pc_relative_offset()];
   }
 
   bool InlineTargetIsTypeCompatible(const WasmModule* module,
@@ -8668,6 +8953,12 @@ class TurboshaftGraphBuildingInterface
         return false;
     }
     return true;
+  }
+
+  bool InliningTargetsProvidedByCustomSection() {
+    // Currently this is a convenient way to distinguish section-provided hints
+    // from dynamically-collected feedback.
+    return inlining_decisions_->mode() == InliningTree::Mode::kMap;
   }
 
   void InlineWasmCall(FullDecoder* decoder, uint32_t func_index,
@@ -8789,13 +9080,19 @@ class TurboshaftGraphBuildingInterface
     if (!deopts_enabled()) {
       inlinee_decoder.interface().disable_deopts();
     }
-    if (v8_flags.liftoff) {
-      if (inlining_decisions_ && inlining_decisions_->feedback_found()) {
+    if (inlining_decisions_ && inlining_decisions_->feedback_found()) {
+      if (inlining_decisions_->mode() == InliningTree::Mode::kVector) {
         inlinee_decoder.interface().set_inlining_decisions(
             inlining_decisions_
                 ->function_calls()[feedback_slot_][feedback_case]);
+      } else {
+        inlinee_decoder.interface().set_inlining_decisions(
+            inlining_decisions_
+                ->function_calls_map()[decoder->pc_relative_offset()]
+                                      [feedback_case]);
       }
-    } else {
+    }
+    if (!v8_flags.liftoff) {
       no_liftoff_inlining_budget_ -= inlinee.code.length();
       inlinee_decoder.interface().set_no_liftoff_inlining_budget(
           no_liftoff_inlining_budget_);
@@ -8919,8 +9216,42 @@ class TurboshaftGraphBuildingInterface
     // is shared (which also implies the target cannot be shared either).
     if (shared_) return false;
 
-    // Configuration without Liftoff and feedback, e.g., for testing.
-    if (!v8_flags.liftoff) {
+    if (inlining_decisions_ && inlining_decisions_->feedback_found()) {
+      if (inlining_decisions_->mode() == InliningTree::Mode::kVector) {
+        // Default, production configuration (without compilation hints):
+        // Liftoff collects feedback, which decides whether we inline:
+        DCHECK_GT(inlining_decisions_->function_calls().size(), feedback_slot);
+        // We should inline if at least one case for this feedback slot needs
+        // to be inlined.
+        for (InliningTree* tree :
+             inlining_decisions_->function_calls()[feedback_slot]) {
+          if (tree && tree->is_inlined()) {
+            DCHECK(
+                !decoder->module_->function_is_shared(tree->function_index()));
+            return true;
+          }
+        }
+      } else {
+        // We found compilation hints for this function.
+        DCHECK_EQ(inlining_decisions_->mode(), InliningTree::Mode::kMap);
+        auto it = inlining_decisions_->function_calls_map().find(
+            decoder->pc_relative_offset());
+        if (it == inlining_decisions_->function_calls_map().end()) {
+          return false;
+        }
+        // We should inline if at least one case for this offset needs to be
+        // inlined.
+        for (InliningTree* tree : it->second) {
+          if (tree && tree->is_inlined()) {
+            DCHECK(
+                !decoder->module_->function_is_shared(tree->function_index()));
+            return true;
+          }
+        }
+      }
+      return false;
+    } else if (!v8_flags.liftoff) {
+      // Configuration without Liftoff and feedback, e.g., for testing.
       return size < no_liftoff_inlining_budget_ &&
              // In a production configuration, `InliningTree` decides what to
              // (not) inline, e.g., asm.js functions or to not exceed
@@ -8928,22 +9259,6 @@ class TurboshaftGraphBuildingInterface
              // comply with these constraints here.
              !is_asmjs_module(decoder->module_) &&
              inlining_positions_->size() < InliningTree::kMaxInlinedCount;
-    }
-
-    // Default, production configuration: Liftoff collects feedback, which
-    // decides whether we inline:
-    if (inlining_decisions_ && inlining_decisions_->feedback_found()) {
-      DCHECK_GT(inlining_decisions_->function_calls().size(), feedback_slot);
-      // We should inline if at least one case for this feedback slot needs
-      // to be inlined.
-      for (InliningTree* tree :
-           inlining_decisions_->function_calls()[feedback_slot]) {
-        if (tree && tree->is_inlined()) {
-          DCHECK(!decoder->module_->function_is_shared(tree->function_index()));
-          return true;
-        }
-      }
-      return false;
     }
     return false;
   }
@@ -8968,6 +9283,14 @@ class TurboshaftGraphBuildingInterface
   void disable_deopts() { deopts_enabled_ = false; }
   bool deopts_enabled() {
     if (!deopts_enabled_.has_value()) {
+      if (inlining_decisions_ && InliningTargetsProvidedByCustomSection()) {
+        // We have to disable deopts in this case. Deopts need function feedback
+        // for GetLiftoffFrameSize.
+        // TODO(manoskouk): Find a way to enable deopts in the presence of
+        // compilation hints.
+        deopts_enabled_ = false;
+        return false;
+      }
       deopts_enabled_ = v8_flags.wasm_deopt;
       if (v8_flags.wasm_deopt) {
         const wasm::TypeFeedbackStorage& feedback = env_->module->type_feedback;
@@ -9026,7 +9349,7 @@ class TurboshaftGraphBuildingInterface
   std::unique_ptr<AssumptionsJournal>* assumptions_;
   ZoneVector<WasmInliningPosition>* inlining_positions_;
   uint8_t inlining_id_ = kNoInliningId;
-  ZoneVector<OpIndex> ssa_env_;
+  ZoneVector<V<Any>> ssa_env_;
   compiler::NullCheckStrategy null_check_strategy_ =
       trap_handler::IsTrapHandlerEnabled() && V8_STATIC_ROOTS_BOOL
           ? compiler::NullCheckStrategy::kTrapHandler
@@ -9067,6 +9390,9 @@ class TurboshaftGraphBuildingInterface
 #else
   const int graph_generation_bit_ = 0;
 #endif
+  // Target block after returning normally from a resume. Saved temporarily here
+  // so that we can bind it later after generating the handler branches.
+  TSBlock* resume_return_block_ = nullptr;
 
   // Manages code coverage instrumentation.
   std::unique_ptr<WasmCoverageInstrumentation<FullDecoder>>
@@ -9074,14 +9400,14 @@ class TurboshaftGraphBuildingInterface
 };
 
 V8_EXPORT_PRIVATE void BuildTSGraph(
-    compiler::turboshaft::PipelineData* data, AccountingAllocator* allocator,
-    CompilationEnv* env, WasmDetectedFeatures* detected, Graph& graph,
-    const FunctionBody& func_body, const WireBytesStorage* wire_bytes,
+    compiler::turboshaft::PipelineData* data, CompilationEnv* env,
+    WasmDetectedFeatures* detected, Graph& graph, const FunctionBody& func_body,
+    const WireBytesStorage* wire_bytes,
     std::unique_ptr<AssumptionsJournal>* assumptions,
     ZoneVector<WasmInliningPosition>* inlining_positions, int func_index,
     WasmFunctionCoverageData* coverage_data) {
   DCHECK(env->module->function_was_validated(func_index));
-  Zone zone(allocator, ZONE_NAME);
+  Zone zone(data->allocator(), ZONE_NAME);
   Assembler assembler(data, graph, graph, &zone);
   WasmFullDecoder<TurboshaftGraphBuildingInterface::ValidationTag,
                   TurboshaftGraphBuildingInterface>

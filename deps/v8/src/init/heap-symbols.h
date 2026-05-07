@@ -142,6 +142,7 @@
   V(_, usage_string, "usage")                                       \
   V(_, useGrouping_string, "useGrouping")                           \
   V(_, unitDisplay_string, "unitDisplay")                           \
+  V(_, variants_string, "variants")                                 \
   V(_, weekday_string, "weekday")                                   \
   V(_, weekend_string, "weekend")                                   \
   V(_, weeksDisplay_string, "weeksDisplay")                         \
@@ -585,9 +586,9 @@
   V(_, AtomicsCondition_string, "Atomics.Condition")                          \
   V(_, AtomicsMutex_string, "Atomics.Mutex")                                  \
   V(_, auto_string, "auto")                                                   \
+  V(_, BigInt64Array_string, "BigInt64Array")                                 \
   V(_, BigInt_string, "BigInt")                                               \
   V(_, bigint_string, "bigint")                                               \
-  V(_, BigInt64Array_string, "BigInt64Array")                                 \
   V(_, BigUint64Array_string, "BigUint64Array")                               \
   V(_, bind_string, "bind")                                                   \
   V(_, blank_string, "blank")                                                 \
@@ -598,7 +599,6 @@
   V(_, buffer_string, "buffer")                                               \
   V(_, byte_length_string, "byteLength")                                      \
   V(_, byte_offset_string, "byteOffset")                                      \
-  V(_, CompileError_string, "CompileError")                                   \
   V(_, calendar_string, "calendar")                                           \
   V(_, calendarId_string, "calendarId")                                       \
   V(_, calendarName_string, "calendarName")                                   \
@@ -608,6 +608,7 @@
   V(_, character_string, "character")                                         \
   V(_, code_string, "code")                                                   \
   V(_, column_string, "column")                                               \
+  V(_, CompileError_string, "CompileError")                                   \
   V(_, computed_string, "<computed>")                                         \
   V(_, conjunction_string, "conjunction")                                     \
   V(_, console_string, "console")                                             \
@@ -627,6 +628,8 @@
   V(_, daysInWeek_string, "daysInWeek")                                       \
   V(_, daysInYear_string, "daysInYear")                                       \
   V(_, default_string, "default")                                             \
+  V(_, defer_string, "defer")                                                 \
+  V(_, Deferred_Module_string, "Deferred Module")                             \
   V(_, defineProperty_string, "defineProperty")                               \
   V(_, deleteProperty_string, "deleteProperty")                               \
   V(_, detached_string, "detached")                                           \
@@ -642,22 +645,23 @@
   V(_, dot_generator_object_string, ".generator_object")                      \
   V(_, dot_home_object_string, ".home_object")                                \
   V(_, dot_new_target_string, ".new.target")                                  \
-  V(_, dot_result_string, ".result")                                          \
   V(_, dot_repl_result_string, ".repl_result")                                \
+  V(_, dot_result_string, ".result")                                          \
   V(_, dot_static_home_object_string, ".static_home_object")                  \
   V(_, dot_switch_tag_string, ".switch_tag")                                  \
+  V(_, dot_this_function_string, ".this_function")                            \
   V(_, dotAll_string, "dotAll")                                               \
-  V(_, Error_string, "Error")                                                 \
-  V(_, EvalError_string, "EvalError")                                         \
   V(_, element_string, "element")                                             \
   V(_, epochMilliseconds_string, "epochMilliseconds")                         \
   V(_, epochNanoseconds_string, "epochNanoseconds")                           \
   V(_, era_string, "era")                                                     \
   V(_, eraYear_string, "eraYear")                                             \
+  V(_, Error_string, "Error")                                                 \
   V(_, error_string, "error")                                                 \
-  V(_, errors_string, "errors")                                               \
   V(_, error_to_string, "[object Error]")                                     \
+  V(_, errors_string, "errors")                                               \
   V(_, eval_string, "eval")                                                   \
+  V(_, EvalError_string, "EvalError")                                         \
   V(_, exception_string, "exception")                                         \
   V(_, exec_string, "exec")                                                   \
   V(_, false_string, "false")                                                 \
@@ -669,8 +673,10 @@
   V(_, Float64Array_string, "Float64Array")                                   \
   V(_, fractionalSecondDigits_string, "fractionalSecondDigits")               \
   V(_, from_string, "from")                                                   \
-  V(_, Function_string, "Function")                                           \
   V(_, function_native_code_string, "function () { [native code] }")          \
+  V(_, Function_prototype_apply_string, "Function.prototype.apply")           \
+  V(_, Function_prototype_call_string, "Function.prototype.call")             \
+  V(_, Function_string, "Function")                                           \
   V(_, function_string, "function")                                           \
   V(_, function_to_string, "[object Function]")                               \
   V(_, Generator_string, "Generator")                                         \
@@ -690,15 +696,16 @@
   V(_, hour_string, "hour")                                                   \
   V(_, hours_string, "hours")                                                 \
   V(_, hoursInDay_string, "hoursInDay")                                       \
-  V(_, ignoreCase_string, "ignoreCase")                                       \
   V(_, id_string, "id")                                                       \
+  V(_, ignoreCase_string, "ignoreCase")                                       \
   V(_, illegal_access_string, "illegal access")                               \
   V(_, illegal_argument_string, "illegal argument")                           \
-  V(_, inLeapYear_string, "inLeapYear")                                       \
+  V(_, immutable_string, "immutable")                                         \
   V(_, index_string, "index")                                                 \
   V(_, indices_string, "indices")                                             \
   V(_, Infinity_string, "Infinity")                                           \
   V(_, infinity_string, "infinity")                                           \
+  V(_, inLeapYear_string, "inLeapYear")                                       \
   V(_, input_string, "input")                                                 \
   V(_, instance_members_initializer_string, "<instance_members_initializer>") \
   V(_, Int16Array_string, "Int16Array")                                       \
@@ -734,26 +741,25 @@
   V(_, mergeFields_string, "mergeFields")                                     \
   V(_, message_string, "message")                                             \
   V(_, meta_string, "meta")                                                   \
-  V(_, minus_Infinity_string, "-Infinity")                                    \
   V(_, microsecond_string, "microsecond")                                     \
   V(_, microseconds_string, "microseconds")                                   \
   V(_, millisecond_string, "millisecond")                                     \
   V(_, milliseconds_string, "milliseconds")                                   \
+  V(_, minus_Infinity_string, "-Infinity")                                    \
   V(_, minute_string, "minute")                                               \
   V(_, minutes_string, "minutes")                                             \
   V(_, Module_string, "Module")                                               \
   V(_, month_string, "month")                                                 \
+  V(_, monthCode_string, "monthCode")                                         \
   V(_, monthDayFromFields_string, "monthDayFromFields")                       \
   V(_, months_string, "months")                                               \
   V(_, monthsInYear_string, "monthsInYear")                                   \
-  V(_, monthCode_string, "monthCode")                                         \
   V(_, multiline_string, "multiline")                                         \
   V(_, NaN_string, "NaN")                                                     \
   V(_, nanosecond_string, "nanosecond")                                       \
   V(_, nanoseconds_string, "nanoseconds")                                     \
   V(_, narrow_string, "narrow")                                               \
   V(_, native_string, "native")                                               \
-  V(_, new_target_string, ".new.target")                                      \
   V(_, NFC_string, "NFC")                                                     \
   V(_, NFD_string, "NFD")                                                     \
   V(_, NFKC_string, "NFKC")                                                   \
@@ -764,10 +770,10 @@
   V(_, Number_string, "Number")                                               \
   V(_, number_string, "number")                                               \
   V(_, number_to_string, "[object Number]")                                   \
+  V(_, Object_prototype_string, "Object.prototype")                           \
   V(_, Object_string, "Object")                                               \
   V(_, object_string, "object")                                               \
   V(_, object_to_string, "[object Object]")                                   \
-  V(_, Object_prototype_string, "Object.prototype")                           \
   V(_, offset_string, "offset")                                               \
   V(_, offsetNanoseconds_string, "offsetNanoseconds")                         \
   V(_, ok_string, "ok")                                                       \
@@ -804,16 +810,13 @@
   V(_, roundingIncrement_string, "roundingIncrement")                         \
   V(_, roundingMode_string, "roundingMode")                                   \
   V(_, RuntimeError_string, "RuntimeError")                                   \
-  V(_, WebAssemblyException_string, "WebAssembly.Exception")                  \
-  V(_, WebAssemblyModule_string, "WebAssembly.Module")                        \
   V(_, Script_string, "Script")                                               \
   V(_, script_string, "script")                                               \
   V(_, second_string, "second")                                               \
   V(_, seconds_string, "seconds")                                             \
-  V(_, short_string, "short")                                                 \
-  V(_, Set_string, "Set")                                                     \
   V(_, sentence_string, "sentence")                                           \
   V(_, set_space_string, "set ")                                              \
+  V(_, Set_string, "Set")                                                     \
   V(_, set_string, "set")                                                     \
   V(_, SetIterator_string, "Set Iterator")                                    \
   V(_, setPrototypeOf_string, "setPrototypeOf")                               \
@@ -821,6 +824,7 @@
   V(_, SharedArray_string, "SharedArray")                                     \
   V(_, SharedArrayBuffer_string, "SharedArrayBuffer")                         \
   V(_, SharedStruct_string, "SharedStruct")                                   \
+  V(_, short_string, "short")                                                 \
   V(_, sign_string, "sign")                                                   \
   V(_, size_string, "size")                                                   \
   V(_, smallestUnit_string, "smallestUnit")                                   \
@@ -846,7 +850,6 @@
   V(_, symbol_string, "symbol")                                               \
   V(_, SyntaxError_string, "SyntaxError")                                     \
   V(_, target_string, "target")                                               \
-  V(_, this_function_string, ".this_function")                                \
   V(_, this_string, "this")                                                   \
   V(_, throw_string, "throw")                                                 \
   V(_, timed_out_string, "timed-out")                                         \
@@ -855,8 +858,8 @@
   V(_, timeZoneName_string, "timeZoneName")                                   \
   V(_, toJSON_string, "toJSON")                                               \
   V(_, toString_string, "toString")                                           \
-  V(_, true_string, "true")                                                   \
   V(_, total_string, "total")                                                 \
+  V(_, true_string, "true")                                                   \
   V(_, TypedArrayLength_string, "get TypedArray.prototype.length")            \
   V(_, TypeError_string, "TypeError")                                         \
   V(_, Uint16Array_string, "Uint16Array")                                     \
@@ -873,16 +876,18 @@
   V(_, WeakMap_string, "WeakMap")                                             \
   V(_, WeakRef_string, "WeakRef")                                             \
   V(_, WeakSet_string, "WeakSet")                                             \
+  V(_, WebAssemblyException_string, "WebAssembly.Exception")                  \
+  V(_, WebAssemblyModule_string, "WebAssembly.Module")                        \
   V(_, week_string, "week")                                                   \
-  V(_, weeks_string, "weeks")                                                 \
   V(_, weekOfYear_string, "weekOfYear")                                       \
+  V(_, weeks_string, "weeks")                                                 \
   V(_, with_string, "with")                                                   \
   V(_, word_string, "word")                                                   \
   V(_, written_string, "written")                                             \
-  V(_, yearMonthFromFields_string, "yearMonthFromFields")                     \
   V(_, year_string, "year")                                                   \
-  V(_, years_string, "years")                                                 \
-  V(_, yearOfWeek_string, "yearOfWeek")
+  V(_, yearMonthFromFields_string, "yearMonthFromFields")                     \
+  V(_, yearOfWeek_string, "yearOfWeek")                                       \
+  V(_, years_string, "years")
 
 #define INTERNALIZED_STRING_LIST_GENERATOR(V, _)           \
   EXTRA_IMPORTANT_INTERNALIZED_STRING_LIST_GENERATOR(V, _) \
@@ -902,6 +907,7 @@
   V(_, call_site_info_symbol)                             \
   V(_, class_fields_symbol)                               \
   V(_, class_positions_symbol)                            \
+  V(_, detached_symbol)                                   \
   V(_, error_end_pos_symbol)                              \
   V(_, error_message_symbol)                              \
   V(_, error_script_symbol)                               \
@@ -1039,14 +1045,15 @@
   F(SCAVENGER_FREE_REMEMBERED_SET)                      \
   F(SCAVENGER_RESIZE_NEW_SPACE)                         \
   F(SCAVENGER_SCAVENGE)                                 \
+  F(SCAVENGER_SCAVENGE_COLLECT_OLD_TO_NEW_PAGES)        \
   F(SCAVENGER_SCAVENGE_WEAK_GLOBAL_HANDLES_IDENTIFY)    \
   F(SCAVENGER_SCAVENGE_WEAK_GLOBAL_HANDLES_PROCESS)     \
   F(SCAVENGER_SCAVENGE_PARALLEL)                        \
   F(SCAVENGER_SCAVENGE_PARALLEL_PHASE)                  \
-  F(SCAVENGER_SCAVENGE_PIN_OBJECTS)                     \
+  F(SCAVENGER_SCAVENGE_PIN_OBJECTS_CONSERVATIVE)        \
+  F(SCAVENGER_SCAVENGE_PIN_OBJECTS_PRECISE)             \
   F(SCAVENGER_SCAVENGE_ROOTS)                           \
   F(SCAVENGER_SCAVENGE_STACK_ROOTS)                     \
-  F(SCAVENGER_SCAVENGE_UPDATE_REFS)                     \
   F(SCAVENGER_SCAVENGE_WEAK)                            \
   F(SCAVENGER_SCAVENGE_FINALIZE)                        \
   F(SCAVENGER_SCAVENGE_RESTORE_AND_QUARANTINE_PINNED)   \
@@ -1054,80 +1061,81 @@
   F(SCAVENGER_TRACED_HANDLES_COMPUTE_WEAKNESS_PARALLEL) \
   F(SCAVENGER_TRACED_HANDLES_RESET_PARALLEL)
 
-#define MC_MAIN_THREAD_SCOPES(F)                 \
-  F(MARK_COMPACTOR)                              \
-  TOP_MC_SCOPES(F)                               \
-  F(MC_CLEAR_DEPENDENT_CODE)                     \
-  F(MC_CLEAR_EXTERNAL_STRING_TABLE)              \
-  F(MC_CLEAR_STRING_FORWARDING_TABLE)            \
-  F(MC_CLEAR_FLUSHABLE_BYTECODE)                 \
-  F(MC_CLEAR_FLUSHED_JS_FUNCTIONS)               \
-  F(MC_CLEAR_JOIN_JOB)                           \
-  F(MC_CLEAR_JS_WEAK_REFERENCES)                 \
-  F(MC_CLEAR_MAPS)                               \
-  F(MC_CLEAR_SLOTS_BUFFER)                       \
-  F(MC_CLEAR_STRING_TABLE)                       \
-  F(MC_CLEAR_WEAK_COLLECTIONS)                   \
-  F(MC_CLEAR_WEAK_GLOBAL_HANDLES)                \
-  F(MC_CLEAR_WEAK_LISTS)                         \
-  F(MC_CLEAR_WEAK_REFERENCES_FILTER_NON_TRIVIAL) \
-  F(MC_CLEAR_WEAK_REFERENCES_JOIN_FILTER_JOB)    \
-  F(MC_CLEAR_WEAK_REFERENCES_NON_TRIVIAL)        \
-  F(MC_CLEAR_WEAK_REFERENCES_TRIVIAL)            \
-  F(MC_SWEEP_EXTERNAL_POINTER_TABLE)             \
-  F(MC_SWEEP_TRUSTED_POINTER_TABLE)              \
-  F(MC_SWEEP_CODE_POINTER_TABLE)                 \
-  F(MC_SWEEP_WASM_CODE_POINTER_TABLE)            \
-  F(MC_SWEEP_JS_DISPATCH_TABLE)                  \
-  F(MC_COMPLETE_SWEEP_ARRAY_BUFFERS)             \
-  F(MC_COMPLETE_SWEEPING)                        \
-  F(MC_EVACUATE_CANDIDATES)                      \
-  F(MC_EVACUATE_CLEAN_UP)                        \
-  F(MC_EVACUATE_COPY)                            \
-  F(MC_EVACUATE_COPY_PARALLEL)                   \
-  F(MC_EVACUATE_EPILOGUE)                        \
-  F(MC_EVACUATE_PIN_PAGES)                       \
-  F(MC_EVACUATE_PROLOGUE)                        \
-  F(MC_EVACUATE_REBALANCE)                       \
-  F(MC_EVACUATE_UPDATE_POINTERS)                 \
-  F(MC_EVACUATE_UPDATE_POINTERS_CLIENT_HEAPS)    \
-  F(MC_EVACUATE_UPDATE_POINTERS_PARALLEL)        \
-  F(MC_EVACUATE_UPDATE_POINTERS_SLOTS_MAIN)      \
-  F(MC_EVACUATE_UPDATE_POINTERS_TO_NEW_ROOTS)    \
-  F(MC_EVACUATE_UPDATE_POINTERS_WEAK)            \
-  F(MC_EVACUATE_UPDATE_POINTERS_POINTER_TABLES)  \
-  F(MC_FINISH_SWEEP_ARRAY_BUFFERS)               \
-  F(MC_MARK_CLIENT_HEAPS)                        \
-  F(MC_MARK_EMBEDDER_PROLOGUE)                   \
-  F(MC_MARK_EMBEDDER_TRACING)                    \
-  F(MC_MARK_FINISH_INCREMENTAL)                  \
-  F(MC_MARK_FULL_CLOSURE_PARALLEL)               \
-  F(MC_MARK_FULL_CLOSURE_PARALLEL_JOIN)          \
-  F(MC_MARK_FULL_CLOSURE_SERIAL)                 \
-  F(MC_MARK_RETAIN_MAPS)                         \
-  F(MC_MARK_ROOTS)                               \
-  F(MC_MARK_FULL_CLOSURE)                        \
-  F(MC_MARK_WEAK_CLOSURE_EPHEMERON_MARKING)      \
-  F(MC_MARK_WEAK_CLOSURE_EPHEMERON_LINEAR)       \
-  F(MC_MARK_VERIFY)                              \
-  F(MC_SWEEP_CODE)                               \
-  F(MC_SWEEP_CODE_LO)                            \
-  F(MC_SWEEP_LO)                                 \
-  F(MC_SWEEP_MAP)                                \
-  F(MC_SWEEP_NEW)                                \
-  F(MC_SWEEP_NEW_LO)                             \
-  F(MC_SWEEP_OLD)                                \
-  F(MC_SWEEP_SHARED)                             \
-  F(MC_SWEEP_SHARED_LO)                          \
-  F(MC_SWEEP_TRUSTED)                            \
-  F(MC_SWEEP_TRUSTED_LO)                         \
-  F(MC_SWEEP_START_JOBS)                         \
+#define MC_MAIN_THREAD_SCOPES(F)                \
+  F(MARK_COMPACTOR)                             \
+  TOP_MC_SCOPES(F)                              \
+  F(MC_CLEAR_DEPENDENT_CODE)                    \
+  F(MC_CLEAR_EXTERNAL_STRING_TABLE)             \
+  F(MC_CLEAR_FLUSHABLE_BYTECODE)                \
+  F(MC_CLEAR_FLUSHED_JS_FUNCTIONS)              \
+  F(MC_CLEAR_JOIN_JOB)                          \
+  F(MC_CLEAR_JS_WEAK_REFERENCES)                \
+  F(MC_CLEAR_MAPS)                              \
+  F(MC_CLEAR_SHARED_STRUCT_TYPE_REGISTRY)       \
+  F(MC_CLEAR_SLOTS_BUFFER)                      \
+  F(MC_CLEAR_STRING_FORWARDING_TABLE)           \
+  F(MC_CLEAR_SWEEP_CODE_POINTER_TABLE)          \
+  F(MC_CLEAR_SWEEP_EXTERNAL_POINTER_TABLE)      \
+  F(MC_CLEAR_SWEEP_JS_DISPATCH_TABLE)           \
+  F(MC_CLEAR_SWEEP_TRUSTED_POINTER_TABLE)       \
+  F(MC_CLEAR_SWEEP_WASM_CODE_POINTER_TABLE)     \
+  F(MC_CLEAR_WEAK_COLLECTIONS)                  \
+  F(MC_CLEAR_WEAK_GLOBAL_HANDLES)               \
+  F(MC_CLEAR_WEAK_LISTS)                        \
+  F(MC_CLEAR_WEAK_REFERENCES_JOIN_FILTER_JOB)   \
+  F(MC_CLEAR_WEAK_REFERENCES_NON_TRIVIAL)       \
+  F(MC_CLEAR_WEAK_REFERENCES_TRIVIAL)           \
+  F(MC_CLEAR_WEAK_REFERENCES_TRUSTED)           \
+  F(MC_COMPLETE_SWEEP_ARRAY_BUFFERS)            \
+  F(MC_COMPLETE_SWEEPING)                       \
+  F(MC_EVACUATE_CANDIDATES)                     \
+  F(MC_EVACUATE_CLEAN_UP)                       \
+  F(MC_EVACUATE_COPY)                           \
+  F(MC_EVACUATE_COPY_PARALLEL)                  \
+  F(MC_EVACUATE_EPILOGUE)                       \
+  F(MC_EVACUATE_PIN_PAGES)                      \
+  F(MC_EVACUATE_PROLOGUE)                       \
+  F(MC_EVACUATE_REBALANCE)                      \
+  F(MC_EVACUATE_UPDATE_POINTERS)                \
+  F(MC_EVACUATE_UPDATE_POINTERS_CLIENT_HEAPS)   \
+  F(MC_EVACUATE_UPDATE_POINTERS_PARALLEL)       \
+  F(MC_EVACUATE_UPDATE_POINTERS_SLOTS_MAIN)     \
+  F(MC_EVACUATE_UPDATE_POINTERS_TO_NEW_ROOTS)   \
+  F(MC_EVACUATE_UPDATE_POINTERS_WEAK)           \
+  F(MC_EVACUATE_UPDATE_POINTERS_POINTER_TABLES) \
+  F(MC_FINISH_SWEEP_ARRAY_BUFFERS)              \
+  F(MC_MARK_CLIENT_HEAPS)                       \
+  F(MC_MARK_EMBEDDER_PROLOGUE)                  \
+  F(MC_MARK_EMBEDDER_TRACING)                   \
+  F(MC_MARK_FINISH_INCREMENTAL)                 \
+  F(MC_MARK_FULL_CLOSURE_PARALLEL)              \
+  F(MC_MARK_FULL_CLOSURE_PARALLEL_JOIN)         \
+  F(MC_MARK_FULL_CLOSURE_SERIAL)                \
+  F(MC_MARK_RETAIN_MAPS)                        \
+  F(MC_MARK_ROOTS)                              \
+  F(MC_MARK_FULL_CLOSURE)                       \
+  F(MC_MARK_WEAK_CLOSURE_EPHEMERON_MARKING)     \
+  F(MC_MARK_WEAK_CLOSURE_EPHEMERON_LINEAR)      \
+  F(MC_MARK_VERIFY)                             \
+  F(MC_SWEEP_CODE)                              \
+  F(MC_SWEEP_CODE_LO)                           \
+  F(MC_SWEEP_LO)                                \
+  F(MC_SWEEP_MAP)                               \
+  F(MC_SWEEP_NEW)                               \
+  F(MC_SWEEP_NEW_LO)                            \
+  F(MC_SWEEP_OLD)                               \
+  F(MC_SWEEP_SHARED)                            \
+  F(MC_SWEEP_SHARED_LO)                         \
+  F(MC_SWEEP_TRUSTED)                           \
+  F(MC_SWEEP_TRUSTED_LO)                        \
+  F(MC_SWEEP_START_JOBS)                        \
   F(MC_WEAKNESS_HANDLING)
 
 #define TRACER_SCOPES(F)                 \
   MC_INCREMENTAL_SCOPES(F)               \
   MINOR_MS_INCREMENTAL_SCOPES(F)         \
   F(HEAP_EMBEDDER_TRACING_EPILOGUE)      \
+  F(HEAP_ENSURE_SWEEPING_COMPLETED)      \
   F(HEAP_EPILOGUE)                       \
   F(HEAP_EPILOGUE_SAFEPOINT)             \
   F(HEAP_EXTERNAL_EPILOGUE)              \
@@ -1159,6 +1167,7 @@
   F(MC_BACKGROUND_EVACUATE_UPDATE_POINTERS)             \
   F(MC_BACKGROUND_MARKING)                              \
   F(MC_BACKGROUND_SWEEPING)                             \
+  F(MC_CLEAR_STRING_TABLE)                              \
   F(MINOR_MS_BACKGROUND_MARKING)                        \
   F(MINOR_MS_BACKGROUND_SWEEPING)                       \
   F(MINOR_MS_BACKGROUND_MARKING_CLOSURE)                \

@@ -263,6 +263,7 @@ test('todo() method with message', (t) => {
 <!-- YAML
 added:
  - v25.5.0
+ - v24.14.0
 -->
 
 This flips the pass/fail reporting for a specific test or suite: a flagged test
@@ -1476,7 +1477,9 @@ added:
   - v18.9.0
   - v16.19.0
 changes:
-  - version: v25.6.0
+  - version:
+     - v25.6.0
+     - v24.14.0
     pr-url: https://github.com/nodejs/node/pull/61367
     description: Add the `env` option.
   - version: v24.7.0

@@ -138,6 +138,289 @@ bool TryEmitExtendingLoad(InstructionSelector* selector, OpIndex node,
   return false;
 }
 
+static InstructionCode GetShxaddCode(int64_t shift) {
+  DCHECK(base::IsInRange(shift, 1, 3));
+
+  switch (shift) {
+    case 1:
+      return kRiscvSh1add;
+    case 2:
+      return kRiscvSh2add;
+    case 3:
+      return kRiscvSh3add;
+  }
+  UNREACHABLE();
+}
+
+static void EmitInstrToFoldImpl(InstructionSelector* selector,
+                                InstructionCode addr_opcode,
+                                InstructionCode opcode, OpIndex addr_left_node,
+                                OpIndex base, InstructionOperand output,
+                                OpIndex value, InstructionOperand imm,
+                                bool read) {
+  RiscvOperandGenerator g(selector);
+
+  InstructionOperand addr_reg = g.TempRegister();
+
+  selector->Emit(addr_opcode | AddressingModeField::encode(kMode_None),
+                 addr_reg, g.UseRegister(addr_left_node), g.UseRegister(base));
+  if (read) {
+    selector->Emit(opcode | AddressingModeField::encode(kMode_MRI), output,
+                   addr_reg, imm);
+  } else {
+    selector->Emit(opcode | AddressingModeField::encode(kMode_MRI), output,
+                   g.UseRegisterOrImmediateZero(value), addr_reg, imm);
+  }
+}
+
+static void EmitInstrToFold(InstructionSelector* selector,
+                            InstructionCode addr_opcode, InstructionCode opcode,
+                            OpIndex addr_left_node, OpIndex base,
+                            InstructionOperand output, OpIndex value,
+                            int32_t imm, bool read) {
+  RiscvOperandGenerator g(selector);
+  EmitInstrToFoldImpl(selector, addr_opcode, opcode, addr_left_node, base,
+                      output, value, g.TempImmediate(imm), read);
+}
+
+static void EmitInstrToFold(InstructionSelector* selector,
+                            InstructionCode addr_opcode, InstructionCode opcode,
+                            OpIndex addr_left_node, OpIndex base,
+                            InstructionOperand output, OpIndex value,
+                            OpIndex index, bool read) {
+  RiscvOperandGenerator g(selector);
+  EmitInstrToFoldImpl(selector, addr_opcode, opcode, addr_left_node, base,
+                      output, value, g.UseImmediate(index), read);
+}
+
+// TODO(zhijin): Refactoring is needed to make the function's implementation
+// match its name. The bailout path in case 2 does not use the shxadd
+// instruction.
+static bool TryFoldLoadStoreImpl(InstructionSelector* selector, OpIndex node,
+                                 InstructionCode opcode, OpIndex base,
+                                 OpIndex index, InstructionOperand output,
+                                 OpIndex value, bool read) {
+  RiscvOperandGenerator g(selector);
+
+  const Operation& base_op = selector->Get(base);
+  const Operation& index_op = selector->Get(index);
+
+  bool index_is_imm = g.CanBeImmediate(index, opcode);
+
+  const WordBinopOp* binop = index_is_imm ? base_op.TryCast<WordBinopOp>()
+                                          : index_op.TryCast<WordBinopOp>();
+
+  if (binop && binop->kind == WordBinopOp::Kind::kAdd) {
+    OpIndex bin_left_idx = binop->left();
+    OpIndex bin_right_idx = binop->right();
+
+    const Operation& bin_rhs_op = selector->Get(bin_right_idx);
+
+    if (index_is_imm && CpuFeatures::IsSupported(ZBA) &&
+        bin_rhs_op.Is<Opmask::kWord64ShiftLeft>()) {
+      // Easiest case: use Shxadd without needing to reshuffle anything.
+      // *((x << shift) + y + index) -> *((x << shift + y) + index).
+      const ShiftOp& shift_op = bin_rhs_op.Cast<ShiftOp>();
+
+      const Operation& shift_rhs = selector->Get(shift_op.right());
+
+      if (!shift_rhs.Is<Opmask::kWord32Constant>()) {
+        return false;
+      }
+
+      // The optimization is less beneficial if 'base' has additional uses.
+      if (!selector->CanCover(base, bin_right_idx) ||
+          !selector->CanCover(node, base)) {
+        return false;
+      }
+
+      int64_t shift_by = shift_rhs.Cast<ConstantOp>().signed_integral();
+      if (!base::IsInRange(shift_by, 1, 3)) {
+        return false;
+      }
+
+      //
+      // Case 1, fold the following instructions,
+      //   slli t7, t7, 3
+      //       bin_right = ShiftLeft(shift_op.left(), shift_by)
+      //              t7 = ShiftLeft(t7, 3)
+      //   add  t1, t1, t7
+      //        bin_left = t1
+      //            base = Add(bin_left, bin_right)
+      //              t1 = Add(t1, t7)
+      //   ld   t3, 8(t1)
+      //           index = 8
+      //          output = Load(base, index)
+      //              t3 = Load(t1, 8)
+      // into
+      //   sh3add t1, t7, t1
+      //        bin_left = t1
+      //           base' = ShiftLeftAdd(shift_op.left(), bin_left)
+      //              t1 = ShiftLeftAdd(t7, t1)
+      //   ld   t3, 8(t1)
+      //           index = 8
+      //          output = Load(base', index)
+      //              t3 = Load(t1, 8)
+      //
+      EmitInstrToFold(selector, GetShxaddCode(shift_by), opcode,
+                      shift_op.left(), bin_left_idx, output, value, index,
+                      read);
+      return true;
+    } else if (!index_is_imm && (bin_rhs_op.Is<Opmask::kWord32Constant>() ||
+                                 bin_rhs_op.Is<Opmask::kWord64Constant>())) {
+      // *(base + (x + imm)) -> *((x + base) + imm), or
+      // *(base + ((y << shift) + imm)) -> *((y << shift + base) + imm).
+      int64_t constant = bin_rhs_op.Cast<ConstantOp>().signed_integral();
+      // The range of offset in load instruction is -2048~2047.
+      if (!base::IsInRange(constant, -2048, 2047) ||
+          !selector->CanCover(node, index)) {
+        return false;
+      }
+
+      int32_t imm = static_cast<int32_t>(constant);
+
+      const Operation& bin_lhs_op = selector->Get(bin_left_idx);
+
+      if (!CpuFeatures::IsSupported(ZBA) ||
+          !bin_lhs_op.Is<Opmask::kWord64ShiftLeft>()) {
+        //
+        // Case 2, fold the following instructions,
+        //   addi t1, t7, 15
+        //       bin_right = imm = 15
+        //        bin_left = t7
+        //           index = Addi(bin_left, bin_right)
+        //              t1 = Addi(t7, 15)
+        //   add  t1, t2, t1
+        //            base = t2
+        //            addr = Add(base, index)
+        //              t1 = Add(t2, t1)
+        //   ld   t3, 0(t1)
+        //          output = Load(addr, 0)
+        //              t3 = Load(t1, 0)
+        // into
+        //   add  t1, t7, t2
+        //       bin_right = imm = 15
+        //        bin_left = t7
+        //            base = t2
+        //           base' = Add(bin_left, base)
+        //              t1 = Add(t7, t2)
+        //   ld   t3, 15(t1)
+        //          index' = bin_right = imm = 15
+        //          output = Load(base', index')
+        //             t3  = Load(t1, 15)
+        //
+        EmitInstrToFold(selector, kRiscvAdd64, opcode, bin_left_idx, base,
+                        output, value, imm, read);
+        return true;
+      }
+
+      const Operation& shift_rhs = selector->Get(bin_lhs_op.input(1));
+
+      if (shift_rhs.Is<Opmask::kWord32Constant>() &&
+          selector->CanCover(index, bin_left_idx)) {
+        int64_t shift_by = shift_rhs.Cast<ConstantOp>().signed_integral();
+        if (base::IsInRange(shift_by, 1, 3)) {
+          //
+          // Case 3, fold the following instructions,
+          //   slli t7, t7, 3
+          //       bin_left = ShiftLeft(bin_lhs_op.input(0), shift_by)
+          //             t7 = ShiftLeft(t7, 3)
+          //   addi t1, t7, 15
+          //      bin_right = imm = 15
+          //          index = Addi(bin_left, bin_right)
+          //             t1 = Addi(t7, 15)
+          //   add  t1, t2, t1
+          //           base = t2
+          //           addr = Add(base, index)
+          //             t1 = Add(t2, t1)
+          //   ld   t3, 0(t1)
+          //         output = Load(addr, 0)
+          //             t3 = Load(t1, 0)
+          // into
+          //   sh3add t1, t7, t2
+          //           base = t2
+          //          base' = ShiftLeftAdd(bin_lhs_op.input(0), base)
+          //             t1 = ShiftLeftAdd(t7, t2)
+          //   ld   t3, 15(t1)
+          //         index' = bin_right = imm = 15
+          //         output = Load(base', index')
+          //             t3 = Load(t1, 15)
+          //
+          EmitInstrToFold(selector, GetShxaddCode(shift_by), opcode,
+                          bin_lhs_op.input(0), base, output, value, imm, read);
+
+          return true;
+        }
+      }
+      // Like case 2.
+      EmitInstrToFold(selector, kRiscvAdd64, opcode, bin_left_idx, base, output,
+                      value, imm, read);
+      return true;
+    }
+  } else if (!index_is_imm && index_op.Is<Opmask::kWord64ShiftLeft>() &&
+             CpuFeatures::IsSupported(ZBA)) {
+    // *(base + (x << shift)) -> *((x << shift + base) + 0).
+    const ShiftOp& shift_op = index_op.Cast<ShiftOp>();
+
+    const Operation& shift_rhs = selector->Get(shift_op.right());
+
+    if (!shift_rhs.Is<Opmask::kWord32Constant>()) {
+      return false;
+    }
+
+    if (!selector->CanCover(node, index)) {
+      return false;
+    }
+
+    int64_t shift_by = shift_rhs.Cast<ConstantOp>().signed_integral();
+    if (!base::IsInRange(shift_by, 1, 3)) {
+      return false;
+    }
+
+    //
+    // Case 4, fold the following instructions,
+    //   slli t7, t7, 3
+    //        index = ShiftLeft(shift_lhs, shift_by)
+    //           t7 = ShiftLeft(t7, 3)
+    //   add  t1, t1, t7
+    //         base = t1
+    //         addr = Add(base, index)
+    //           t1 = Add(t1, t7)
+    //   ld   t3, 0(t1)
+    //       output = Load(addr, 0)
+    //           t3 = Load(t1, 0)
+    // into
+    //   sh3add t1, t7, t1
+    //         base = t1
+    //         addr = ShiftLeftAdd(shift_lhs, base)
+    //           t1 = ShiftLeftAdd(t7, t1)
+    //   ld   t3, 0(t1)
+    //       output = Load(addr, 0)
+    //           t3 = Load(t1, 0)
+    //
+    EmitInstrToFold(selector, GetShxaddCode(shift_by), opcode, shift_op.left(),
+                    base, output, value, 0, read);
+    return true;
+  }
+  return false;
+}
+
+static bool TryFoldLoad(InstructionSelector* selector, OpIndex node,
+                        InstructionCode opcode, OpIndex base, OpIndex index,
+                        OpIndex output) {
+  RiscvOperandGenerator g(selector);
+  return TryFoldLoadStoreImpl(
+      selector, node, opcode, base, index,
+      g.DefineAsRegister(output.valid() ? output : node), OpIndex(), true);
+}
+
+static bool TryFoldStore(InstructionSelector* selector, OpIndex node,
+                         InstructionCode opcode, OpIndex base, OpIndex index,
+                         InstructionOperand output, OpIndex value) {
+  return TryFoldLoadStoreImpl(selector, node, opcode, base, index, output,
+                              value, false);
+}
+
 void EmitLoad(InstructionSelector* selector, OpIndex node,
               InstructionCode opcode, OpIndex output = OpIndex()) {
   RiscvOperandGenerator g(selector);
@@ -192,6 +475,10 @@ void EmitLoad(InstructionSelector* selector, OpIndex node,
     return;
   }
 
+  if (TryFoldLoad(selector, node, opcode, base, index, output)) {
+    return;
+  }
+
   if (g.CanBeImmediate(index, opcode)) {
     selector->Emit(opcode | AddressingModeField::encode(kMode_MRI),
                    g.DefineAsRegister(output.valid() ? output : node),
@@ -242,14 +529,21 @@ void InstructionSelector::VisitStoreLane(OpIndex node) {
   OpIndex base = op.input(0);
   OpIndex index = op.input(1);
   InstructionOperand addr_reg = g.TempRegister();
-  Emit(kRiscvAdd64, addr_reg, g.UseRegister(base), g.UseRegister(index));
+  if (g.CanBeImmediate(index, kRiscvAdd64)) {
+    Emit(kRiscvAdd64 | AddressingModeField::encode(kMode_MRR), addr_reg,
+         g.UseRegister(base), g.UseImmediate(index));
+
+  } else {
+    Emit(kRiscvAdd64 | AddressingModeField::encode(kMode_MRR), addr_reg,
+         g.UseRegister(base), g.UseRegister(index));
+  }
+  opcode |= AddressingModeField::encode(kMode_MRI);
   InstructionOperand inputs[4] = {
       g.UseRegister(op.input(2)),
       g.UseImmediate(store.lane),
       addr_reg,
       g.TempImmediate(0),
   };
-  opcode |= AddressingModeField::encode(kMode_MRI);
   Emit(opcode, 0, nullptr, 4, inputs);
 }
 
@@ -267,7 +561,13 @@ void InstructionSelector::VisitLoadLane(OpIndex node) {
   OpIndex base = op.input(0);
   OpIndex index = op.input(1);
   InstructionOperand addr_reg = g.TempRegister();
-  Emit(kRiscvAdd64, addr_reg, g.UseRegister(base), g.UseRegister(index));
+  if (g.CanBeImmediate(index, kRiscvAdd64)) {
+    Emit(kRiscvAdd64 | AddressingModeField::encode(kMode_MRI), addr_reg,
+         g.UseRegister(base), g.UseImmediate(index));
+  } else {
+    Emit(kRiscvAdd64 | AddressingModeField::encode(kMode_MRR), addr_reg,
+         g.UseRegister(base), g.UseRegister(index));
+  }
   opcode |= AddressingModeField::encode(kMode_MRI);
   Emit(opcode, g.DefineSameAsFirst(node), g.UseRegister(op.input(2)),
        g.UseImmediate(load.lane), addr_reg, g.TempImmediate(0));
@@ -304,7 +604,7 @@ ArchOpcode GetLoadOpcode(MemoryRepresentation loaded_rep,
       DCHECK_EQ(result_rep, RegisterRepresentation::Word64());
       return kRiscvLd;
     case MemoryRepresentation::Float16():
-      UNIMPLEMENTED();
+      return kRiscvLoadHalf;
     case MemoryRepresentation::Float32():
       DCHECK_EQ(result_rep, RegisterRepresentation::Float32());
       return kRiscvLoadFloat;
@@ -366,7 +666,7 @@ ArchOpcode GetStoreOpcode(MemoryRepresentation stored_rep) {
     case MemoryRepresentation::Uint64():
       return kRiscvSd;
     case MemoryRepresentation::Float16():
-      UNIMPLEMENTED();
+      return kRiscvStoreHalf;
     case MemoryRepresentation::Float32():
       return kRiscvStoreFloat;
     case MemoryRepresentation::Float64():
@@ -425,30 +725,43 @@ void InstructionSelector::VisitStore(OpIndex node) {
       store_view.stored_rep().write_barrier_kind();
   const MachineRepresentation rep = store_view.stored_rep().representation();
 
+  DCHECK_IMPLIES(write_barrier_kind == kSkippedWriteBarrier,
+                 v8_flags.verify_write_barriers);
+
   // TODO(riscv): I guess this could be done in a better way.
   if (write_barrier_kind != kNoWriteBarrier &&
       V8_LIKELY(!v8_flags.disable_write_barriers)) {
     DCHECK(CanBeTaggedOrCompressedOrIndirectPointer(rep));
     InstructionOperand inputs[4];
+    InstructionCode code;
     size_t input_count = 0;
     inputs[input_count++] = g.UseUniqueRegister(base);
-    inputs[input_count++] = g.UseUniqueRegister(index);
+    inputs[input_count++] = g.CanBeImmediate(index, kRiscvAdd64)
+                                ? g.UseImmediate(index)
+                                : g.UseUniqueRegister(index);
     inputs[input_count++] = g.UseUniqueRegister(value);
-    RecordWriteMode record_write_mode =
-        WriteBarrierKindToRecordWriteMode(write_barrier_kind);
     InstructionOperand temps[] = {g.TempRegister(), g.TempRegister()};
     size_t const temp_count = arraysize(temps);
-    InstructionCode code;
+
     if (rep == MachineRepresentation::kIndirectPointer) {
-      DCHECK_EQ(write_barrier_kind, kIndirectPointerWriteBarrier);
+      DCHECK(write_barrier_kind == kIndirectPointerWriteBarrier ||
+             write_barrier_kind == kSkippedWriteBarrier);
       // In this case we need to add the IndirectPointerTag as additional input.
-      code = kArchStoreIndirectWithWriteBarrier;
+      code = write_barrier_kind == kSkippedWriteBarrier
+                 ? kArchStoreIndirectSkippedWriteBarrier
+                 : kArchStoreIndirectWithWriteBarrier;
+      code |= RecordWriteModeField::encode(
+          RecordWriteMode::kValueIsIndirectPointer);
       IndirectPointerTag tag = store_view.indirect_pointer_tag();
       inputs[input_count++] = g.UseImmediate64(static_cast<int64_t>(tag));
+    } else if (write_barrier_kind == kSkippedWriteBarrier) {
+      code = kArchStoreSkippedWriteBarrier;
     } else {
+      RecordWriteMode record_write_mode =
+          WriteBarrierKindToRecordWriteMode(write_barrier_kind);
       code = kArchStoreWithWriteBarrier;
+      code |= RecordWriteModeField::encode(record_write_mode);
     }
-    code |= RecordWriteModeField::encode(record_write_mode);
     if (store_view.is_store_trap_on_null()) {
       code |= AccessModeField::encode(kMemoryAccessProtectedNullDereference);
     }
@@ -478,6 +791,10 @@ void InstructionSelector::VisitStore(OpIndex node) {
   } else if (store_view.access_kind() ==
              MemoryAccessKind::kProtectedByTrapHandler) {
     code |= AccessModeField::encode(kMemoryAccessProtectedMemOutOfBounds);
+  }
+
+  if (TryFoldStore(this, node, code, base, index, g.NoOutput(), value)) {
+    return;
   }
 
   if (g.CanBeImmediate(index, code)) {
@@ -677,7 +994,39 @@ void InstructionSelector::VisitInt32Add(OpIndex node) {
   Emit(kRiscvAdd32, g.DefineAsRegister(node), inputs[0], inputs[1]);
 }
 
+// Try to match Add(z, a, slli(x, y)) and emit shxadd(z, x, a) for it.
+bool TryEmitShxadd(InstructionSelector* selector, OpIndex add, OpIndex lhs,
+                   OpIndex rhs) {
+  if (!CpuFeatures::IsSupported(ZBA)) return false;
+  const Operation& left_op = selector->Get(lhs);
+  if ((left_op.Is<Opmask::kWord64ShiftLeft>() &&
+       selector->CanCover(add, lhs))) {
+    const ShiftOp& shift_op = left_op.Cast<ShiftOp>();
+    const Operation& shift_rhs = selector->Get(shift_op.right());
+    if (shift_rhs.Is<Opmask::kWord32Constant>()) {
+      int64_t shift_by = shift_rhs.Cast<ConstantOp>().signed_integral();
+      if (base::IsInRange(shift_by, 1, 3)) {
+        RiscvOperandGenerator g(selector);
+        selector->Emit(
+            GetShxaddCode(shift_by) | AddressingModeField::encode(kMode_None),
+            g.UseRegister(add), g.UseRegister(shift_op.left()),
+            g.UseRegister(rhs));
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 void InstructionSelector::VisitInt64Add(OpIndex node) {
+  const WordBinopOp& add = this->Get(node).Cast<WordBinopOp>();
+  DCHECK(add.Is<Opmask::kWord64Add>());
+  OpIndex right = add.right();
+  OpIndex left = add.left();
+  if (TryEmitShxadd(this, node, left, right) ||
+      TryEmitShxadd(this, node, right, left)) {
+    return;
+  }
   VisitBinop<Int64BinopMatcher>(this, node, kRiscvAdd64, true, kRiscvAdd64);
 }
 
@@ -1139,6 +1488,18 @@ void InstructionSelector::VisitChangeUint32ToUint64(OpIndex node) {
   if (ZeroExtendsWord32ToWord64(value)) {
     Emit(kArchNop, g.DefineSameAsFirst(node), g.Use(value));
     return;
+  }
+  if (this->Get(value).opcode == Opcode::kChange) {
+    const ChangeOp& change = this->Get(value).Cast<ChangeOp>();
+    OpIndex change_input = change.input();
+    // ToUint64(ToUint32(fp32)) wll drop Nan boxing
+    // So riscv use kRiscvBitcastDL to change fp32 into Uint64, which can keep
+    // Nan Box.See issues/469801435.
+    if (change.Is<Opmask::kChangeFloat32ToUint32>()) {
+      Emit(kRiscvBitcastDL, g.DefineAsRegister(node),
+           g.UseRegister(change_input));
+      return;
+    }
   }
   Emit(kRiscvZeroExtendWord, g.DefineAsRegister(node), g.UseRegister(value));
 }
@@ -1651,11 +2012,9 @@ void VisitAtomicLoad(InstructionSelector* selector, OpIndex node,
 
   bool traps_on_null;
   if (load.is_protected(&traps_on_null)) {
-    // Atomic loads and null dereference are mutually exclusive. This might
-    // change with multi-threaded wasm-gc in which case the access mode should
-    // probably be kMemoryAccessProtectedNullDereference.
-    DCHECK(!traps_on_null);
-    code |= AccessModeField::encode(kMemoryAccessProtectedMemOutOfBounds);
+    code |= AccessModeField::encode(traps_on_null
+                                        ? kMemoryAccessProtectedNullDereference
+                                        : kMemoryAccessProtectedMemOutOfBounds);
   }
 
   if (g.CanBeImmediate(index, code)) {
@@ -1703,24 +2062,47 @@ void VisitAtomicStore(InstructionSelector* selector, OpIndex node,
     write_barrier_kind = kFullWriteBarrier;
   }
 
+  DCHECK_IMPLIES(write_barrier_kind == kSkippedWriteBarrier,
+                 v8_flags.verify_write_barriers);
+
   InstructionCode code;
 
   if (write_barrier_kind != kNoWriteBarrier &&
       !v8_flags.disable_write_barriers) {
     DCHECK(CanBeTaggedPointer(rep));
     DCHECK_EQ(AtomicWidthSize(width), kTaggedSize);
-
+    AddressingMode addressing_mode;
     InstructionOperand inputs[3];
     size_t input_count = 0;
     inputs[input_count++] = g.UseUniqueRegister(base);
-    inputs[input_count++] = g.UseUniqueRegister(index);
+    if (g.CanBeImmediate(index, kRiscvAdd64)) {
+      inputs[input_count++] = g.UseImmediate(index);
+      addressing_mode = kMode_MRI;
+    } else {
+      inputs[input_count++] = g.UseUniqueRegister(index);
+      addressing_mode = kMode_MRR;
+    }
     inputs[input_count++] = g.UseUniqueRegister(value);
-    RecordWriteMode record_write_mode =
-        WriteBarrierKindToRecordWriteMode(write_barrier_kind);
     InstructionOperand temps[] = {g.TempRegister(), g.TempRegister()};
     size_t const temp_count = arraysize(temps);
-    code = kArchAtomicStoreWithWriteBarrier;
-    code |= RecordWriteModeField::encode(record_write_mode);
+
+    if (write_barrier_kind == kSkippedWriteBarrier) {
+      code = kArchAtomicStoreSkippedWriteBarrier;
+    } else {
+      RecordWriteMode record_write_mode =
+          WriteBarrierKindToRecordWriteMode(write_barrier_kind);
+      code = kArchAtomicStoreWithWriteBarrier;
+      code |= RecordWriteModeField::encode(record_write_mode);
+    }
+
+    if (store.is_store_trap_on_null()) {
+      code |= AccessModeField::encode(kMemoryAccessProtectedNullDereference);
+    } else if (store_params.kind() ==
+               MemoryAccessKind::kProtectedByTrapHandler) {
+      code |= AccessModeField::encode(kMemoryAccessProtectedMemOutOfBounds);
+    }
+
+    code |= AddressingModeField::encode(addressing_mode);
     selector->Emit(code, 0, nullptr, input_count, inputs, temp_count, temps);
   } else {
     switch (rep) {
@@ -1782,11 +2164,17 @@ void VisitAtomicBinop(InstructionSelector* selector, OpIndex node,
   OpIndex index = atomic_op.index();
   OpIndex value = atomic_op.value();
 
-  AddressingMode addressing_mode = kMode_MRI;
+  AddressingMode addressing_mode;
   InstructionOperand inputs[3];
   size_t input_count = 0;
   inputs[input_count++] = g.UseUniqueRegister(base);
-  inputs[input_count++] = g.UseUniqueRegister(index);
+  if (g.CanBeImmediate(index, kRiscvAdd64)) {
+    inputs[input_count++] = g.UseImmediate(index);
+    addressing_mode = kMode_MRI;
+  } else {
+    inputs[input_count++] = g.UseUniqueRegister(index);
+    addressing_mode = kMode_MRR;
+  }
   inputs[input_count++] = g.UseUniqueRegister(value);
   InstructionOperand outputs[1];
   outputs[0] = g.UseUniqueRegister(node);
@@ -2205,10 +2593,17 @@ void VisitAtomicExchange(InstructionSelector* selector, OpIndex node,
   OpIndex index = atomic_op.index();
   OpIndex value = atomic_op.value();
 
+  AddressingMode addressing_mode;
   InstructionOperand inputs[3];
   size_t input_count = 0;
   inputs[input_count++] = g.UseUniqueRegister(base);
-  inputs[input_count++] = g.UseUniqueRegister(index);
+  if (g.CanBeImmediate(index, kRiscvAdd64)) {
+    inputs[input_count++] = g.UseImmediate(index);
+    addressing_mode = kMode_MRI;
+  } else {
+    inputs[input_count++] = g.UseUniqueRegister(index);
+    addressing_mode = kMode_MRR;
+  }
   inputs[input_count++] = g.UseUniqueRegister(value);
   InstructionOperand outputs[1];
   outputs[0] = g.UseUniqueRegister(node);
@@ -2217,7 +2612,7 @@ void VisitAtomicExchange(InstructionSelector* selector, OpIndex node,
   temp[1] = g.TempRegister();
   temp[2] = g.TempRegister();
 
-  InstructionCode code = opcode | AddressingModeField::encode(kMode_MRI) |
+  InstructionCode code = opcode | AddressingModeField::encode(addressing_mode) |
                          AtomicWidthField::encode(width);
   if (access_kind == MemoryAccessKind::kProtectedByTrapHandler) {
     code |= AccessModeField::encode(kMemoryAccessProtectedMemOutOfBounds);
@@ -2237,21 +2632,33 @@ void VisitAtomicCompareExchange(InstructionSelector* selector, OpIndex node,
   OpIndex new_value = atomic_op.value();
 
   bool has_write_barrier = opcode == kAtomicCompareExchangeWithWriteBarrier;
-  InstructionOperand inputs[] = {
-      has_write_barrier ? g.UseUniqueRegister(base) : g.UseRegister(base),
-      has_write_barrier ? g.UseUniqueRegister(index) : g.UseRegister(index),
-      g.UseUniqueRegister(old_value), g.UseUniqueRegister(new_value)};
+  InstructionOperand inputs[4];
+  size_t input_count = 0;
+  inputs[input_count++] =
+      has_write_barrier ? g.UseUniqueRegister(base) : g.UseRegister(base);
+
+  AddressingMode addressing_mode;
+  if (g.CanBeImmediate(index, kRiscvAdd64)) {
+    inputs[input_count++] = g.UseImmediate(index);
+    addressing_mode = kMode_MRI;
+  } else {
+    inputs[input_count++] = g.UseUniqueRegister(index);
+    addressing_mode = kMode_MRR;
+  }
+
+  inputs[input_count++] = g.UseUniqueRegister(old_value);
+  inputs[input_count++] = g.UseUniqueRegister(new_value);
 
   InstructionOperand outputs[] = {g.UseUniqueRegister(node)};
   InstructionOperand temps[] = {g.TempRegister(), g.TempRegister(),
                                 g.TempRegister()};
 
-  InstructionCode code = opcode | AddressingModeField::encode(kMode_MRR) |
+  InstructionCode code = opcode | AddressingModeField::encode(addressing_mode) |
                          AtomicWidthField::encode(width);
   if (access_kind == MemoryAccessKind::kProtectedByTrapHandler) {
     code |= AccessModeField::encode(kMemoryAccessProtectedMemOutOfBounds);
   }
-  selector->Emit(code, arraysize(outputs), outputs, arraysize(inputs), inputs,
+  selector->Emit(code, arraysize(outputs), outputs, input_count, inputs,
                  arraysize(temps), temps);
 }
 
@@ -2487,6 +2894,10 @@ InstructionSelector::SupportedMachineOperatorFlags() {
              MachineOperatorBuilder::kWord64Ctz |
              MachineOperatorBuilder::kWord32Popcnt |
              MachineOperatorBuilder::kWord64Popcnt;
+  }
+  if (CpuFeatures::IsSupported(ZFH)) {
+    flags |= MachineOperatorBuilder::kFloat16 |
+             MachineOperatorBuilder::kFloat16RawBitsConversion;
   }
   return flags;
 }

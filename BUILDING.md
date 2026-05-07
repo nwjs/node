@@ -57,6 +57,7 @@ file a new issue.
     * [Windows](#windows-4)
 * [Configuring OpenSSL config appname](#configure-openssl-appname)
 * [Building Node.js with FIPS-compliant OpenSSL](#building-nodejs-with-fips-compliant-openssl)
+* [Building Node.js with Temporal support](#building-nodejs-with-temporal-support)
 * [Building Node.js with external core modules](#building-nodejs-with-external-core-modules)
   * [Unix/macOS](#unixmacos-4)
   * [Windows](#windows-5)
@@ -111,8 +112,8 @@ platforms. This is true regardless of entries in the table below.
 | GNU/Linux        | arm64            | kernel >= 4.18[^1], glibc >= 2.28 | Tier 1       | e.g. Ubuntu 20.04, Debian 10, RHEL 8 |
 | GNU/Linux        | armv7            | kernel >= 4.18[^1], glibc >= 2.28 | Experimental | Downgraded as of Node.js 24          |
 | GNU/Linux        | armv6            | kernel >= 4.14, glibc >= 2.24     | Experimental | Downgraded as of Node.js 12          |
-| GNU/Linux        | ppc64le >=power8 | kernel >= 4.18[^1], glibc >= 2.28 | Tier 2       | e.g. Ubuntu 20.04, RHEL 8            |
-| GNU/Linux        | s390x            | kernel >= 4.18[^1], glibc >= 2.28 | Tier 2       | e.g. RHEL 8                          |
+| GNU/Linux        | ppc64le >=power9 | kernel >= 4.18[^1], glibc >= 2.28 | Tier 2       | e.g. Ubuntu 20.04, RHEL 8            |
+| GNU/Linux        | s390x >=z14      | kernel >= 4.18[^1], glibc >= 2.28 | Tier 2       | e.g. RHEL 8                          |
 | GNU/Linux        | loong64          | kernel >= 5.19, glibc >= 2.36     | Experimental |                                      |
 | GNU/Linux        | riscv64          | kernel >= 5.19, glibc >= 2.36     | Experimental |                                      |
 | Windows          | x64              | >= Windows 10/Server 2016         | Tier 1       | [^2],[^3]                            |
@@ -120,7 +121,7 @@ platforms. This is true regardless of entries in the table below.
 | macOS            | x64              | >= 13.5                           | Tier 1       | For notes about compilation see [^4] |
 | macOS            | arm64            | >= 13.5                           | Tier 1       |                                      |
 | SmartOS          | x64              | >= 18                             | Tier 2       |                                      |
-| AIX              | ppc64be >=power8 | >= 7.2 TL04                       | Tier 2       |                                      |
+| AIX              | ppc64be >=power9 | >= 7.2 TL04                       | Tier 2       |                                      |
 | FreeBSD          | x64              | >= 13.2                           | Experimental |                                      |
 | OpenHarmony      | arm64            | >= 5.0                            | Experimental |                                      |
 
@@ -153,11 +154,11 @@ platforms. This is true regardless of entries in the table below.
 
 Depending on the host platform, the selection of toolchains may vary.
 
-| Operating System | Compiler Versions                                                         |
-| ---------------- | ------------------------------------------------------------------------- |
-| Linux            | GCC >= 12.2 or Clang >= 19.1                                              |
-| Windows          | Visual Studio 2022 or 2026 with the Windows 10 or 11 SDK on a 64-bit host |
-| macOS            | Xcode >= 16.4 (Apple LLVM >= 19)                                          |
+| Operating System | Compiler Versions                                                   |
+| ---------------- | ------------------------------------------------------------------- |
+| Linux            | GCC >= 13.2 or Clang >= 19.1                                        |
+| Windows          | Visual Studio 2022 or 2026 with the Windows 11 SDK on a 64-bit host |
+| macOS            | Xcode >= 16.4 (Apple LLVM >= 19)                                    |
 
 ### Official binary platforms and toolchains
 
@@ -237,7 +238,7 @@ Consult previous versions of this document for older versions of Node.js:
 
 #### Unix prerequisites
 
-* `gcc` and `g++` >= 12.2 or `clang` and `clang++` >= 19.1
+* `gcc` and `g++` >= 13.2 or `clang` and `clang++` >= 19.1
 * GNU Make 3.81 or newer
 * [A supported version of Python][Python versions]
   * For test coverage, your Python installation must include pip.
@@ -1033,6 +1034,16 @@ It is not necessary to rebuild Node.js to enable support for FIPS.
 
 See [FIPS mode](doc/api/crypto.md#fips-mode) for more information on how to
 enable FIPS support in Node.js.
+
+## Building Node.js with Temporal support
+
+Node.js supports the [Temporal](https://github.com/tc39/proposal-temporal) APIs, when
+linking statically or dynamically with a version of [temporal\_rs](https://github.com/boa-dev/temporal).
+
+To build Node.js with Temporal support, a Rust toolchain is required:
+
+* rustc >= 1.82 (with LLVM >= 19)
+* cargo >= 1.82
 
 ## Building Node.js with external core modules
 

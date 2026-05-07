@@ -739,7 +739,7 @@ This feature is not available in [`Worker`][] threads.
 ## `process.addUncaughtExceptionCaptureCallback(fn)`
 
 <!-- YAML
-added: v25.9.0
+added: v26.0.0
 -->
 
 > Stability: 1 - Experimental
@@ -2040,7 +2040,12 @@ added:
  - v23.0.0
  - v22.10.0
 changes:
-  - version: v25.2.0
+  - version: v26.0.0
+    pr-url: https://github.com/nodejs/node/pull/61803
+    description: Removed `transform` value.
+  - version:
+      - v25.2.0
+      - v24.12.0
     pr-url: https://github.com/nodejs/node/pull/60600
     description: Type stripping is now stable.
 -->
@@ -2049,8 +2054,7 @@ changes:
 
 * Type: {boolean|string}
 
-A value that is `"strip"` by default,
-`"transform"` if Node.js is run with `--experimental-transform-types`, and `false` if
+A value that is `"strip"` by default, and `false` if
 Node.js is run with `--no-strip-types`.
 
 ## `process.features.uv`
@@ -2739,7 +2743,9 @@ added:
   - v21.7.0
   - v20.12.0
 changes:
-  - version: v24.10.0
+  - version:
+     - v24.10.0
+     - v22.21.0
     pr-url: https://github.com/nodejs/node/pull/59925
     description: This API is no longer experimental.
 -->
@@ -4054,7 +4060,7 @@ This implies calling `module.setSourceMapsSupport()` with an option
 <!-- YAML
 added: v9.3.0
 changes:
-  - version: v25.9.0
+  - version: v26.0.0
     pr-url: https://github.com/nodejs/node/pull/61227
     description: Use `process.addUncaughtExceptionCaptureCallback()` to
       register multiple callbacks.

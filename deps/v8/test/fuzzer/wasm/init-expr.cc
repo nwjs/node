@@ -19,9 +19,9 @@
 #include "src/zone/accounting-allocator.h"
 #include "src/zone/zone.h"
 #include "test/common/flag-utils.h"
+#include "test/common/wasm/fuzzer-common.h"
 #include "test/common/wasm/wasm-module-runner.h"
 #include "test/fuzzer/fuzzer-support.h"
-#include "test/fuzzer/wasm/fuzzer-common.h"
 
 // This fuzzer fuzzes initializer expressions used e.g. in globals.
 // The fuzzer creates a set of globals with initializer expressions and a set of
@@ -140,7 +140,7 @@ void FuzzIt(base::Vector<const uint8_t> data) {
     snprintf(buffer, sizeof buffer, "g%zu", i);
     auto global =
         Cast<WasmGlobalObject>(GetExport(i_isolate, instance, buffer));
-    switch (global->type().kind()) {
+    switch (global->unsafe_type().kind()) {
       case ValueKind::kF32: {
         float global_val = global->GetF32();
         float func_val;
@@ -201,7 +201,7 @@ void FuzzIt(base::Vector<const uint8_t> data) {
         CHECK_EQ(IsNullOrWasmNull(*global_val),
                  IsNullOrWasmNull(*function_result));
         if (!IsNullOrWasmNull(*global_val)) {
-          if (IsSubtypeOf(global->type(), kWasmFuncRef, module)) {
+          if (IsSubtypeOf(global->unsafe_type(), kWasmFuncRef, module)) {
             // For any function the global should be an internal function
             // whose external function equals the call result. (The call goes
             // through JS conversions while the global is accessed directly.)
@@ -246,6 +246,12 @@ V8_SYMBOL_USED extern "C" int LLVMFuzzerInitialize(int* argc, char*** argv) {
 }
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
+  // Libfuzzer allows to specify a limit on the input size, which is set to 500
+  // bytes. Centipede ignores this though, so check explicitly against a
+  // slightly larger limit.
+  // Returning -1 tells the fuzzer to drop this input.
+  if (size > 512) return -1;
+
   FuzzIt({data, size});
   return 0;
 }

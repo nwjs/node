@@ -27,7 +27,13 @@ describe('Load tests', () => {
     const archivePath = path.join(helpers.BASE_DIR, 'input_archive');
 
     // Create 2 test cases with a maximum of 2 inputs per test.
-    const testRunner = new runner.RandomCorpusRunner(archivePath, 'v8', 2, 2);
+    const settings = {
+      input_dir: archivePath,
+      diff_fuzz: false,
+      engine: 'v8',
+      no_of_files: 2,
+    };
+    const testRunner = new runner.RandomCorpusRunner(settings, 2);
     var inputs = Array.from(testRunner.enumerateInputs());
 
     // Check the enumeration counter separately.
@@ -35,11 +41,12 @@ describe('Load tests', () => {
     assert.deepEqual([0, 1], inputs.map((x) => x[0]));
 
     assert.deepEqual(
-        ["v8/test/mjsunit/wasm/regress-123.js",
-         "v8/test/mjsunit/wasm/regress-456.js"],
+        ['v8/test/mjsunit/v8_test.js',
+         'v8/test/mjsunit/wasm/regress-456.js'],
         inputs[0][1].map((x) => x.relPath));
     assert.deepEqual(
-        ["v8/test/mjsunit/v8_test.js", "chakra/chakra_test2.js"],
+        ['spidermonkey/spidermonkey_test.js',
+         'v8/test/mjsunit/wasm/regress-456.js'],
         inputs[1][1].map((x) => x.relPath));
   });
 
@@ -71,8 +78,13 @@ describe('Load tests', () => {
     const archivePath = path.join(helpers.BASE_DIR, 'input_archive');
 
     // Create 2 test cases with a maximum of 2 inputs per test.
-    const testRunner = new runner.RandomCorpusRunnerWithFuzzilli(
-        archivePath, 'v8', 2, 2);
+    const settings = {
+      input_dir: archivePath,
+      diff_fuzz: false,
+      engine: 'v8',
+      no_of_files: 2,
+    };
+    const testRunner = new runner.RandomCorpusRunnerWithFuzzilli(settings, 2);
     var inputs = Array.from(testRunner.enumerateInputs());
 
     // Check the enumeration counter separately.
@@ -94,8 +106,13 @@ describe('Load tests', () => {
     const archivePath = path.join(helpers.BASE_DIR, 'input_archive');
 
     // Try to get 2 test cases, but there's only 1 viable in the test data.
-    const testRunner = new runner.RandomFuzzilliNoCrashCorpusRunner(
-        archivePath, 'v8', 2);
+    const settings = {
+      input_dir: archivePath,
+      diff_fuzz: false,
+      engine: 'v8',
+      no_of_files: 2,
+    };
+    const testRunner = new runner.RandomFuzzilliNoCrashCorpusRunner(settings);
     var inputs = Array.from(testRunner.enumerateInputs());
 
     assert.equal(1, inputs.length);
@@ -109,8 +126,13 @@ describe('Load tests', () => {
     const archivePath = path.join(helpers.BASE_DIR, 'input_archive');
 
     // Create 4 test cases with a maximum of 2 inputs per test.
-    const testRunner = new runner.RandomWasmCorpusRunner(
-        archivePath, 'v8', 4, 2);
+    const settings = {
+      input_dir: archivePath,
+      diff_fuzz: false,
+      engine: 'v8',
+      no_of_files: 4,
+    };
+    const testRunner = new runner.RandomWasmCorpusRunner(settings, 2);
     var inputs = Array.from(testRunner.enumerateInputs());
 
     // Check the enumeration counter separately.
@@ -122,15 +144,14 @@ describe('Load tests', () => {
          "fuzzilli/fuzzdir-2/crashes/program_3.js"],
         inputs[0][1].map((x) => x.relPath));
     assert.deepEqual(
-        ["v8/test/mjsunit/wasm/regress-456.js",
-         "fuzzilli/fuzzdir-2/crashes/program_3.js"],
+        ["fuzzilli/fuzzdir-2/crashes/program_3.js"],
         inputs[1][1].map((x) => x.relPath));
     assert.deepEqual(
-        ["fuzzilli/fuzzdir-2/crashes/program_3.js"],
+        ["v8/test/mjsunit/wasm/regress-123.js",
+         "v8/test/mjsunit/wasm/regress-456.js"],
         inputs[2][1].map((x) => x.relPath));
     assert.deepEqual(
-        ["fuzzilli/fuzzdir-2/crashes/program_3.js",
-         "v8/test/mjsunit/wasm/regress-456.js"],
+        ["v8/test/mjsunit/wasm/regress-123.js"],
         inputs[3][1].map((x) => x.relPath));
   });
 });

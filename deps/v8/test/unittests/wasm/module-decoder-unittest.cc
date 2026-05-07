@@ -80,6 +80,19 @@ namespace module_decoder_unittest {
                 'e', '.', 'c', 'o', 'm', 'p', 'i', 'l', 'a', 't', 'i', 'o', \
                 'n', '_', 'p', 'r', 'i', 'o', 'r', 'i', 't', 'y'),          \
       __VA_ARGS__)
+#define SECTION_INSTRUCTION_FREQUENCIES(...)                                 \
+  SECTION(                                                                   \
+      Unknown,                                                               \
+      ADD_COUNT('m', 'e', 't', 'a', 'd', 'a', 't', 'a', '.', 'c', 'o', 'd',  \
+                'e', '.', 'i', 'n', 's', 't', 'r', '_', 'f', 'r', 'e', 'q'), \
+      __VA_ARGS__)
+
+#define SECTION_CALL_TARGETS(...)                                          \
+  SECTION(Unknown,                                                         \
+          ADD_COUNT('m', 'e', 't', 'a', 'd', 'a', 't', 'a', '.', 'c', 'o', \
+                    'd', 'e', '.', 'c', 'a', 'l', 'l', '_', 't', 'a', 'r', \
+                    'g', 'e', 't', 's'),                                   \
+          __VA_ARGS__)
 
 #define X1(...) __VA_ARGS__
 #define X2(...) __VA_ARGS__, __VA_ARGS__
@@ -195,7 +208,7 @@ struct ValueTypePair {
     {kStringViewIterCode, kWasmStringViewIter},    // --
 };
 
-class WasmModuleVerifyTest : public TestWithIsolateAndZone {
+class WasmModuleVerifyTest : public TestWithPlatform {
  public:
   WasmEnabledFeatures enabled_features_ = WasmEnabledFeatures::None();
 
@@ -2502,22 +2515,362 @@ TEST_F(WasmModuleVerifyTest, CompilationPriorityDuplicateFunctions) {
   EXPECT_EQ(0U, hints.size());
 }
 
-class WasmSignatureDecodeTest : public TestWithZone {
+TEST_F(WasmModuleVerifyTest, InstructionFrequencies) {
+  WASM_FEATURE_SCOPE(compilation_hints);
+  static const uint8_t data[] = {
+      TYPE_SECTION(1, SIG_ENTRY_i_i), FUNCTION_SECTION(2, 0, 0),
+      SECTION(Code, ENTRY_COUNT(2),
+              ADD_COUNT(0,                  // Locals count
+                        kExprLocalGet, 0,   // --
+                        kExprIf, kI32Code,  // --
+                        kExprLocalGet, 0, kExprI32Const, 1, kExprI32Add,  // --
+                        kExprElse,                                        // --
+                        kExprLocalGet, 0, kExprI32Const, 1, kExprI32Sub,  // --
+                        kExprEnd,                                         // --
+                        kExprEnd),
+              ADD_COUNT(0,  // Locals count
+                        kExprLocalGet, 0, kExprI32Const, 1, kExprI32Add,  // --
+                        kExprEnd)),
+      SECTION_INSTRUCTION_FREQUENCIES(2,   // -- Functions count
+                                      0,   // -- Function index
+                                      2,   // -- Hints count
+                                      5,   // -- Byte offset
+                                      1,   // -- Hint Length
+                                      31,  // -- Frequency 0.5
+                                      11,  // -- Byte offset
+                                      1,   // -- Hint Length
+                                      31,  // -- Frequency 0.5
+                                      1,   // -- Function index
+                                      1,   // -- Hints count
+                                      1,   // -- Byte offset
+                                      1,   // -- Hint Length
+                                      32   // -- Frequency 1
+                                      )};
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
+  EXPECT_OK(result);
+  InstructionFrequencies& frequencies = result.value()->instruction_frequencies;
+  EXPECT_EQ(2U, frequencies.size());
+  EXPECT_EQ(2U, frequencies.at(0).size());
+  EXPECT_EQ((std::make_pair(uint32_t{5}, uint8_t{31})), frequencies.at(0)[0]);
+  EXPECT_EQ((std::make_pair(uint32_t{11}, uint8_t{31})), frequencies.at(0)[1]);
+  EXPECT_EQ(1U, frequencies.at(1).size());
+  EXPECT_EQ((std::make_pair(uint32_t{1}, uint8_t{32})), frequencies.at(1)[0]);
+}
+
+TEST_F(WasmModuleVerifyTest, InstructionFrequenciesOutOfOrderFunctions) {
+  WASM_FEATURE_SCOPE(compilation_hints);
+  static const uint8_t data[] = {
+      TYPE_SECTION(1, SIG_ENTRY_i_i), FUNCTION_SECTION(2, 0, 0),
+      SECTION(Code, ENTRY_COUNT(2),
+              ADD_COUNT(0,                  // Locals count
+                        kExprLocalGet, 0,   // --
+                        kExprIf, kI32Code,  // --
+                        kExprLocalGet, 0, kExprI32Const, 1, kExprI32Add,  // --
+                        kExprElse,                                        // --
+                        kExprLocalGet, 0, kExprI32Const, 1, kExprI32Sub,  // --
+                        kExprEnd,                                         // --
+                        kExprEnd),
+              ADD_COUNT(0,  // Locals count
+                        kExprLocalGet, 0, kExprI32Const, 1, kExprI32Add,  // --
+                        kExprEnd)),
+      SECTION_INSTRUCTION_FREQUENCIES(2,   // -- Functions count
+                                      1,   // -- Function index
+                                      1,   // -- Hints count
+                                      1,   // -- Byte offset
+                                      1,   // -- Hint Length
+                                      32,  // -- Frequency 1
+                                      0,   // -- Function index
+                                      2,   // -- Hints count
+                                      5,   // -- Byte offset
+                                      1,   // -- Hint Length
+                                      31,  // -- Frequency 0.5
+                                      11,  // -- Byte offset
+                                      1,   // -- Hint Length
+                                      31   // -- Frequency 0.5
+                                      )};
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
+  EXPECT_OK(result);
+  InstructionFrequencies& frequencies = result.value()->instruction_frequencies;
+  EXPECT_EQ(0U, frequencies.size());
+}
+
+TEST_F(WasmModuleVerifyTest, InstructionFrequenciesOutOfOrderByteOffsets) {
+  WASM_FEATURE_SCOPE(compilation_hints);
+  static const uint8_t data[] = {
+      TYPE_SECTION(1, SIG_ENTRY_i_i), FUNCTION_SECTION(1, 0),
+      SECTION(Code, ENTRY_COUNT(1),
+              ADD_COUNT(0,                  // Locals count
+                        kExprLocalGet, 0,   // --
+                        kExprIf, kI32Code,  // --
+                        kExprLocalGet, 0, kExprI32Const, 1, kExprI32Add,  // --
+                        kExprElse,                                        // --
+                        kExprLocalGet, 0, kExprI32Const, 1, kExprI32Sub,  // --
+                        kExprEnd,                                         // --
+                        kExprEnd)),
+      SECTION_INSTRUCTION_FREQUENCIES(1,   // -- Functions count
+                                      0,   // -- Function index
+                                      2,   // -- Hints count
+                                      11,  // -- Byte offset
+                                      1,   // -- Hint Length
+                                      31,  // -- Frequency 0.5
+                                      5,   // -- Byte offset
+                                      1,   // -- Hint Length
+                                      31   // -- Frequency 0.5
+                                      )};
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
+  EXPECT_OK(result);
+  InstructionFrequencies& frequencies = result.value()->instruction_frequencies;
+  EXPECT_EQ(0U, frequencies.size());
+}
+
+TEST_F(WasmModuleVerifyTest, InstructionFrequenciesHintLengthGreaterThanOne) {
+  WASM_FEATURE_SCOPE(compilation_hints);
+  static const uint8_t data[] = {
+      TYPE_SECTION(1, SIG_ENTRY_i_i), FUNCTION_SECTION(1, 0),
+      SECTION(Code, ENTRY_COUNT(1),
+              ADD_COUNT(0,                  // Locals count
+                        kExprLocalGet, 0,   // --
+                        kExprIf, kI32Code,  // --
+                        kExprLocalGet, 0, kExprI32Const, 1, kExprI32Add,  // --
+                        kExprElse,                                        // --
+                        kExprLocalGet, 0, kExprI32Const, 1, kExprI32Sub,  // --
+                        kExprEnd,                                         // --
+                        kExprEnd)),
+      SECTION_INSTRUCTION_FREQUENCIES(1,   // -- Functions count
+                                      0,   // -- Function index
+                                      1,   // -- Hints count
+                                      11,  // -- Byte offset
+                                      2,   // -- Hint Length
+                                      31,  // -- Frequency 0.5
+                                      0    // -- Additional byte
+                                      )};
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
+  EXPECT_OK(result);
+  InstructionFrequencies& frequencies = result.value()->instruction_frequencies;
+  EXPECT_EQ(1U, frequencies.size());
+  EXPECT_EQ(1U, frequencies.at(0).size());
+  EXPECT_EQ((std::make_pair(uint32_t{11}, uint8_t{31})), frequencies.at(0)[0]);
+}
+
+TEST_F(WasmModuleVerifyTest, InstructionFrequenciesHintLengthZero) {
+  WASM_FEATURE_SCOPE(compilation_hints);
+  static const uint8_t data[] = {
+      TYPE_SECTION(1, SIG_ENTRY_i_i), FUNCTION_SECTION(1, 0),
+      SECTION(Code, ENTRY_COUNT(1),
+              ADD_COUNT(0,                  // Locals count
+                        kExprLocalGet, 0,   // --
+                        kExprIf, kI32Code,  // --
+                        kExprLocalGet, 0, kExprI32Const, 1, kExprI32Add,  // --
+                        kExprElse,                                        // --
+                        kExprLocalGet, 0, kExprI32Const, 1, kExprI32Sub,  // --
+                        kExprEnd,                                         // --
+                        kExprEnd)),
+      SECTION_INSTRUCTION_FREQUENCIES(1,   // -- Functions count
+                                      0,   // -- Function index
+                                      1,   // -- Hints count
+                                      11,  // -- Byte offset
+                                      0    // -- Hint Length
+                                      )};
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
+  EXPECT_OK(result);
+  InstructionFrequencies& frequencies = result.value()->instruction_frequencies;
+  EXPECT_EQ(0U, frequencies.size());
+}
+
+TEST_F(WasmModuleVerifyTest, InstructionFrequenciesUnexpectedExtraBytes) {
+  WASM_FEATURE_SCOPE(compilation_hints);
+  static const uint8_t data[] = {
+      TYPE_SECTION(1, SIG_ENTRY_i_i), FUNCTION_SECTION(1, 0),
+      SECTION(Code, ENTRY_COUNT(1),
+              ADD_COUNT(0,                  // Locals count
+                        kExprLocalGet, 0,   // --
+                        kExprIf, kI32Code,  // --
+                        kExprLocalGet, 0, kExprI32Const, 1, kExprI32Add,  // --
+                        kExprElse,                                        // --
+                        kExprLocalGet, 0, kExprI32Const, 1, kExprI32Sub,  // --
+                        kExprEnd,                                         // --
+                        kExprEnd)),
+      SECTION_INSTRUCTION_FREQUENCIES(1,       // -- Functions count
+                                      0,       // -- Function index
+                                      1,       // -- Hints count
+                                      11,      // -- Byte offset
+                                      2,       // -- Hint Length
+                                      31,      // -- Frequency 0.5
+                                      0, 1, 2  // -- Unexpected extra bytes
+                                      )};
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
+  EXPECT_OK(result);
+  InstructionFrequencies& frequencies = result.value()->instruction_frequencies;
+  EXPECT_EQ(0U, frequencies.size());
+}
+
+TEST_F(WasmModuleVerifyTest, CallTargets) {
+  WASM_FEATURE_SCOPE(compilation_hints);
+  static const uint8_t data[] = {SECTION_CALL_TARGETS(
+      2,  // Functions count
+      0,  // Function index
+      2,  // Hints count
+
+      10,  // Byte offset
+      2,   // Hint length
+      0,   // Function index
+      99,  // Call frequency
+
+      20,                // Byte offset
+      7,                 // Hint length
+      0x80, 0x01,        // Function index 128
+      50,                // Call frequency
+      0xa0, 0xc2, 0x1e,  // Function index 500'000
+      40,                // Call frequency
+
+      1,  // Function index
+      1,  // Hints count
+
+      30,  // Byte offset
+      6,   // Hint length
+      0,   // Function index
+      10,  // Call frequency
+      1,   // Function index
+      20,  // Call frequency
+      2,   // Function index
+      30   // Call frequency
+      )};
+
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
+  EXPECT_OK(result);
+  CallTargets& targets = result.value()->call_targets;
+  EXPECT_EQ(2U, targets.size());
+
+  EXPECT_EQ(2U, targets.at(0).size());
+
+  std::pair<uint32_t, CallTargetVector>& elements0 = targets.at(0)[0];
+  EXPECT_EQ(10U, elements0.first);
+  EXPECT_EQ(1U, elements0.second.size());
+  EXPECT_EQ((CallTarget{0, 99}), elements0.second[0]);
+
+  std::pair<uint32_t, CallTargetVector>& elements1 = targets.at(0)[1];
+  EXPECT_EQ(20U, elements1.first);
+  EXPECT_EQ(2U, elements1.second.size());
+  EXPECT_EQ((CallTarget{128, 50}), elements1.second[0]);
+  EXPECT_EQ((CallTarget{500'000, 40}), elements1.second[1]);
+
+  EXPECT_EQ(1U, targets.at(1).size());
+
+  std::pair<uint32_t, CallTargetVector>& elements2 = targets.at(1)[0];
+  EXPECT_EQ(30U, elements2.first);
+  EXPECT_EQ(3U, elements2.second.size());
+  EXPECT_EQ((CallTarget{0, 10}), elements2.second[0]);
+  EXPECT_EQ((CallTarget{1, 20}), elements2.second[1]);
+  EXPECT_EQ((CallTarget{2, 30}), elements2.second[2]);
+}
+
+TEST_F(WasmModuleVerifyTest, CallTargetsFunctionIndexOverflows) {
+  WASM_FEATURE_SCOPE(compilation_hints);
+  static const uint8_t data[] = {SECTION_CALL_TARGETS(
+      1,           // Functions count
+      0,           // Function index
+      1,           // Hints count
+      10,          // Byte offset
+      1,           // Hint length
+      0x80, 0x01,  // Function index 128
+      99           // Call frequency
+      )};
+
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
+  EXPECT_OK(result);
+  CallTargets& targets = result.value()->call_targets;
+  EXPECT_EQ(0U, targets.size());
+}
+
+TEST_F(WasmModuleVerifyTest, CallTargetsCallFrequencyOverflows) {
+  WASM_FEATURE_SCOPE(compilation_hints);
+  static const uint8_t data[] = {SECTION_CALL_TARGETS(
+      1,           // Functions count
+      0,           // Function index
+      1,           // Hints count
+      10,          // Byte offset
+      2,           // Hint length
+      0x80, 0x01,  // Function index 128
+      99           // Call frequency
+      )};
+
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
+  EXPECT_OK(result);
+  CallTargets& targets = result.value()->call_targets;
+  EXPECT_EQ(0U, targets.size());
+}
+
+TEST_F(WasmModuleVerifyTest, CallTargetsReadFunctionIndexFails) {
+  WASM_FEATURE_SCOPE(compilation_hints);
+  static const uint8_t data[] = {SECTION_CALL_TARGETS(
+      1,    // Functions count
+      0,    // Function index
+      1,    // Hints count
+      10,   // Byte offset
+      2,    // Hint length
+      0x80  // Function index -- bytes missing
+      )};
+
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
+  EXPECT_OK(result);
+  CallTargets& targets = result.value()->call_targets;
+  EXPECT_EQ(0U, targets.size());
+}
+
+TEST_F(WasmModuleVerifyTest, CallTargetsPercentageOver100) {
+  WASM_FEATURE_SCOPE(compilation_hints);
+  static const uint8_t data[] = {SECTION_CALL_TARGETS(1,   // Functions count
+                                                      0,   // Function index
+                                                      1,   // Hints count
+                                                      10,  // Byte offset
+                                                      2,   // Hint length
+                                                      0,   // Function index
+                                                      101  // Call frequency
+                                                      )};
+
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
+  EXPECT_OK(result);
+  CallTargets& targets = result.value()->call_targets;
+  EXPECT_EQ(0U, targets.size());
+}
+
+TEST_F(WasmModuleVerifyTest, CallTargetsSumOfPercentagesOver100) {
+  WASM_FEATURE_SCOPE(compilation_hints);
+  static const uint8_t data[] = {SECTION_CALL_TARGETS(1,   // Functions count
+                                                      0,   // Function index
+                                                      1,   // Hints count
+                                                      10,  // Byte offset
+                                                      4,   // Hint length
+                                                      0,   // Function index
+                                                      60,  // Call frequency
+                                                      1,   // Function index
+                                                      41   // Call frequency
+                                                      )};
+
+  ModuleResult result = DecodeModule(base::ArrayVector(data));
+  EXPECT_OK(result);
+  CallTargets& targets = result.value()->call_targets;
+  EXPECT_EQ(0U, targets.size());
+}
+
+class WasmSignatureDecodeTest : public TestWithPlatform {
  public:
   WasmEnabledFeatures enabled_features_ = WasmEnabledFeatures::None();
 
-  const FunctionSig* DecodeSig(base::Vector<const uint8_t> bytes) {
-    Result<const FunctionSig*> res =
-        DecodeWasmSignatureForTesting(enabled_features_, zone(), bytes);
+  std::pair<WasmModuleSignatureStorage, const FunctionSig*> DecodeSig(
+      base::Vector<const uint8_t> bytes) {
+    Result<std::pair<WasmModuleSignatureStorage, const FunctionSig*>> res =
+        DecodeWasmSignatureForTesting(enabled_features_, bytes);
     EXPECT_TRUE(res.ok()) << res.error().message() << " at offset "
                           << res.error().offset();
-    return res.ok() ? res.value() : nullptr;
+    if (res.ok()) return std::move(res).value();
+    return {};
   }
 
   V8_NODISCARD testing::AssertionResult DecodeSigError(
       base::Vector<const uint8_t> bytes) {
-    Result<const FunctionSig*> res =
-        DecodeWasmSignatureForTesting(enabled_features_, zone(), bytes);
+    Result<std::pair<WasmModuleSignatureStorage, const FunctionSig*>> res =
+        DecodeWasmSignatureForTesting(enabled_features_, bytes);
     if (res.ok()) {
       return testing::AssertionFailure() << "unexpected valid signature";
     }
@@ -2527,9 +2880,7 @@ class WasmSignatureDecodeTest : public TestWithZone {
 
 TEST_F(WasmSignatureDecodeTest, Ok_v_v) {
   static const uint8_t data[] = {SIG_ENTRY_v_v};
-  v8::internal::AccountingAllocator allocator;
-  Zone zone(&allocator, ZONE_NAME);
-  const FunctionSig* sig = DecodeSig(base::ArrayVector(data));
+  auto [storage, sig] = DecodeSig(base::ArrayVector(data));
 
   ASSERT_TRUE(sig != nullptr);
   EXPECT_EQ(0u, sig->parameter_count());
@@ -2543,7 +2894,7 @@ TEST_F(WasmSignatureDecodeTest, Ok_t_v) {
   for (size_t i = 0; i < arraysize(kValueTypes); i++) {
     ValueTypePair ret_type = kValueTypes[i];
     const uint8_t data[] = {SIG_ENTRY_x(ret_type.code)};
-    const FunctionSig* sig = DecodeSig(base::ArrayVector(data));
+    auto [storage, sig] = DecodeSig(base::ArrayVector(data));
 
     SCOPED_TRACE("Return type " + ret_type.type.name());
     ASSERT_TRUE(sig != nullptr);
@@ -2560,7 +2911,7 @@ TEST_F(WasmSignatureDecodeTest, Ok_v_t) {
   for (size_t i = 0; i < arraysize(kValueTypes); i++) {
     ValueTypePair param_type = kValueTypes[i];
     const uint8_t data[] = {SIG_ENTRY_v_x(param_type.code)};
-    const FunctionSig* sig = DecodeSig(base::ArrayVector(data));
+    auto [storage, sig] = DecodeSig(base::ArrayVector(data));
 
     SCOPED_TRACE("Param type " + param_type.type.name());
     ASSERT_TRUE(sig != nullptr);
@@ -2579,7 +2930,7 @@ TEST_F(WasmSignatureDecodeTest, Ok_t_t) {
     for (size_t j = 0; j < arraysize(kValueTypes); j++) {
       ValueTypePair param_type = kValueTypes[j];
       const uint8_t data[] = {SIG_ENTRY_x_x(ret_type.code, param_type.code)};
-      const FunctionSig* sig = DecodeSig(base::ArrayVector(data));
+      auto [storage, sig] = DecodeSig(base::ArrayVector(data));
 
       SCOPED_TRACE("Param type " + param_type.type.name());
       ASSERT_TRUE(sig != nullptr);
@@ -2601,7 +2952,7 @@ TEST_F(WasmSignatureDecodeTest, Ok_i_tt) {
       ValueTypePair p1_type = kValueTypes[j];
       const uint8_t data[] = {
           SIG_ENTRY_x_xx(kI32Code, p0_type.code, p1_type.code)};
-      const FunctionSig* sig = DecodeSig(base::ArrayVector(data));
+      auto [storage, sig] = DecodeSig(base::ArrayVector(data));
 
       SCOPED_TRACE("Signature i32(" + p0_type.type.name() + ", " +
                    p1_type.type.name() + ")");
@@ -2624,7 +2975,7 @@ TEST_F(WasmSignatureDecodeTest, Ok_tt_tt) {
       ValueTypePair p1_type = kValueTypes[j];
       const uint8_t data[] = {SIG_ENTRY_xx_xx(p0_type.code, p1_type.code,
                                               p0_type.code, p1_type.code)};
-      const FunctionSig* sig = DecodeSig(base::ArrayVector(data));
+      auto [storage, sig] = DecodeSig(base::ArrayVector(data));
 
       SCOPED_TRACE("p0 = " + p0_type.type.name() +
                    ", p1 = " + p1_type.type.name());
@@ -2645,7 +2996,7 @@ TEST_F(WasmSignatureDecodeTest, Simd) {
     EXPECT_TRUE(DecodeSigError(base::ArrayVector(data)))
         << "Type S128 should not be allowed on this hardware";
   } else {
-    const FunctionSig* sig = DecodeSig(base::ArrayVector(data));
+    auto [storage, sig] = DecodeSig(base::ArrayVector(data));
     ASSERT_TRUE(sig != nullptr);
     EXPECT_EQ(0u, sig->parameter_count());
     EXPECT_EQ(1u, sig->return_count());
@@ -2704,46 +3055,6 @@ TEST_F(WasmSignatureDecodeTest, Fail_invalid_param_type1) {
 TEST_F(WasmSignatureDecodeTest, Fail_invalid_param_type2) {
   static const uint8_t data[] = {SIG_ENTRY_x_xx(kI32Code, kI32Code, kVoidCode)};
   EXPECT_TRUE(DecodeSigError(base::ArrayVector(data)));
-}
-
-class WasmFunctionVerifyTest : public TestWithIsolateAndZone {
- public:
-  FunctionResult DecodeWasmFunction(
-      ModuleWireBytes wire_bytes, const WasmModule* module,
-      base::Vector<const uint8_t> function_bytes) {
-    return DecodeWasmFunctionForTesting(WasmEnabledFeatures::All(), zone(),
-                                        wire_bytes, module, function_bytes);
-  }
-};
-
-TEST_F(WasmFunctionVerifyTest, Ok_v_v_empty) {
-  static const uint8_t data[] = {
-      SIG_ENTRY_v_v,  // signature entry
-      4,              // locals
-      3,
-      kI32Code,  // --
-      4,
-      kI64Code,  // --
-      5,
-      kF32Code,  // --
-      6,
-      kF64Code,  // --
-      kExprEnd   // body
-  };
-
-  WasmModule module;
-  FunctionResult result =
-      DecodeWasmFunction(ModuleWireBytes({}), &module, base::ArrayVector(data));
-  EXPECT_OK(result);
-
-  if (result.value() && result.ok()) {
-    WasmFunction* function = result.value().get();
-    EXPECT_EQ(0u, function->sig->parameter_count());
-    EXPECT_EQ(0u, function->sig->return_count());
-    EXPECT_EQ(COUNT_ARGS(SIG_ENTRY_v_v), function->code.offset());
-    EXPECT_EQ(sizeof(data), function->code.end_offset());
-    // TODO(titzer): verify encoding of local declarations
-  }
 }
 
 TEST_F(WasmModuleVerifyTest, SectionWithoutNameLength) {
@@ -3316,7 +3627,7 @@ TEST_F(WasmModuleVerifyTest, Section_Name_No_UTF8) {
   EXPECT_FAILURE(data);
 }
 
-class WasmModuleCustomSectionTest : public TestWithIsolateAndZone {
+class WasmModuleCustomSectionTest : public TestWithPlatform {
  public:
   void CheckSections(base::Vector<const uint8_t> wire_bytes,
                      const CustomSectionOffset* expected, size_t num_expected) {

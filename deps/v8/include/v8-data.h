@@ -53,6 +53,11 @@ class V8_EXPORT Data {
   bool IsFunctionTemplate() const;
 
   /**
+   * Returns true if this data is a |v8::DictionaryTemplate|.
+   */
+  bool IsDictionaryTemplate() const;
+
+  /**
    * Returns true if this data is a |v8::Context|.
    */
   bool IsContext() const;
@@ -72,7 +77,8 @@ class V8_EXPORT Data {
 class V8_EXPORT FixedArray : public Data {
  public:
   int Length() const;
-  Local<Data> Get(Local<Context> context, int i) const;
+
+  Local<Data> Get(int i) const;
 
   V8_INLINE static FixedArray* Cast(Data* data) {
 #ifdef V8_ENABLE_CHECKS

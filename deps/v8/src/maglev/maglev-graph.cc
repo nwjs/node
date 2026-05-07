@@ -70,7 +70,8 @@ void Graph::IterateGraphAndSweepDeadBlocks(Function&& is_dead) {
   }
 }
 
-compiler::OptionalScopeInfoRef Graph::TryGetScopeInfo(ValueNode* context) {
+compiler::OptionalScopeInfoRef Graph::TryGetScopeInfo(ValueNode* context,
+                                                      bool for_suspend) {
   auto it = scope_infos_.find(context);
   if (it != scope_infos_.end()) {
     return it->second;
@@ -78,32 +79,49 @@ compiler::OptionalScopeInfoRef Graph::TryGetScopeInfo(ValueNode* context) {
   compiler::OptionalScopeInfoRef res;
   if (auto context_const = context->TryCast<Constant>()) {
     res = context_const->object().AsContext().scope_info(broker());
-    DCHECK(res->HasContext());
-  } else if (auto load =
-                 context->TryCast<LoadTaggedFieldForContextSlotNoCells>()) {
+    if (!res->HasContext()) return {};
+  } else if (auto load = context->TryCast<LoadContextSlotNoCells>()) {
     compiler::OptionalScopeInfoRef cur =
         TryGetScopeInfoForContextLoad(load->input(0).node(), load->offset());
     if (cur.has_value()) res = cur;
-  } else if (auto load_script =
-                 context->TryCast<LoadTaggedFieldForContextSlot>()) {
+  } else if (auto load_script = context->TryCast<LoadContextSlot>()) {
     compiler::OptionalScopeInfoRef cur = TryGetScopeInfoForContextLoad(
         load_script->input(0).node(), load_script->offset());
     if (cur.has_value()) res = cur;
   } else if (context->Is<InitialValue>()) {
     // We should only fail to keep track of initial contexts originating from
-    // the OSR prequel.
+    // the OSR prequel; or when we suspend a generator without a nested context.
     // TODO(olivf): Keep track of contexts when analyzing OSR Prequel.
-    DCHECK(is_osr());
+    DCHECK_IMPLIES(!for_suspend, is_osr());
   } else {
     // Any context created within a function must be registered in
     // graph()->scope_infos(). Initial contexts must be registered before
     // BuildBody. We don't track context in generators (yet) and around eval
     // the bytecode compiler creates contexts by calling
     // Runtime::kNewFunctionInfo directly.
-    DCHECK(context->Is<Phi>() || context->Is<GeneratorRestoreRegister>() ||
-           context->Is<RegisterInput>() || context->Is<CallRuntime>());
+    DCHECK(
+        context->Is<Phi>() || context->Is<GeneratorRestoreRegister>() ||
+        context->Is<RegisterInput>() || context->Is<CallRuntime>() ||
+        (context->Is<LoadTaggedField>() &&
+         context->Cast<LoadTaggedField>()->load_type() == LoadType::kContext));
   }
   return scope_infos_[context] = res;
+}
+
+bool Graph::ContextMayAlias(ValueNode* context,
+                            compiler::OptionalScopeInfoRef scope_info) {
+  // Distinguishing contexts by their scope info only works if scope infos are
+  // guaranteed to be unique.
+  // TODO(crbug.com/401059828): reenable when crashes are gone.
+  if ((true) || !v8_flags.reuse_scope_infos) return true;
+  if (!scope_info.has_value()) {
+    return true;
+  }
+  auto other = TryGetScopeInfo(context);
+  if (!other.has_value()) {
+    return true;
+  }
+  return scope_info->equals(*other);
 }
 
 void Graph::RemoveUnreachableBlocks() {
@@ -121,11 +139,13 @@ void Graph::RemoveUnreachableBlocks() {
   while (!worklist.empty()) {
     BasicBlock* current = worklist.back();
     worklist.pop_back();
+    if (current->is_dead()) continue;
 
     for (auto handler : current->exception_handlers()) {
       if (!handler->HasExceptionHandler()) continue;
       if (handler->ShouldLazyDeopt()) continue;
       BasicBlock* catch_block = handler->catch_block();
+      if (catch_block->is_dead()) continue;
       if (!reachable_blocks[catch_block->id()]) {
         reachable_blocks[catch_block->id()] = true;
         worklist.push_back(catch_block);
@@ -142,6 +162,7 @@ void Graph::RemoveUnreachableBlocks() {
   // Sweep dead blocks and remove unreachable predecessors.
   IterateGraphAndSweepDeadBlocks([&](BasicBlock* bb) {
     if (!reachable_blocks[bb->id()]) return true;
+    DCHECK(!bb->is_dead());
     // If block doesn't have a merge state, it has only one predecessor, so
     // it must be the reachable one.
     if (!bb->has_state()) return false;

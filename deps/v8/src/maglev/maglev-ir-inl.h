@@ -84,29 +84,26 @@ inline void UseFixed(Input input, DoubleRegister reg) {
       compiler::UnallocatedOperand::FIXED_FP_REGISTER, reg.code(), kNoVreg);
   input.node()->SetHint(input.operand());
 }
+inline void UseAndClobberFixed(Input input, Register reg) {
+  input.location()->SetUnallocated(
+      compiler::UnallocatedOperand::FIXED_REGISTER, reg.code(),
+      compiler::UnallocatedOperand::USED_AT_START, kNoVreg);
+  input.node()->SetHint(input.operand());
+}
 
 CallKnownJSFunction::CallKnownJSFunction(
-    uint64_t bitfield,
-#ifdef V8_ENABLE_LEAPTIERING
-    JSDispatchHandle dispatch_handle,
-#endif
+    uint64_t bitfield, JSDispatchHandle dispatch_handle,
     compiler::SharedFunctionInfoRef shared_function_info, ValueNode* closure,
-    ValueNode* context, ValueNode* receiver, ValueNode* new_target)
+    ValueNode* context, ValueNode* receiver, ValueNode* new_target,
+    const compiler::FeedbackSource& feedback_source)
     : Base(bitfield),
-#ifdef V8_ENABLE_LEAPTIERING
       dispatch_handle_(dispatch_handle),
-#endif
       shared_function_info_(shared_function_info),
       expected_parameter_count_(
-#ifdef V8_ENABLE_LEAPTIERING
-          IsolateGroup::current()->js_dispatch_table()->GetParameterCount(
-              dispatch_handle)
-#else
-          shared_function_info
-              .internal_formal_parameter_count_with_receiver_deprecated()
-#endif
-      ) {
-  set_input(kClosureIndex, closure);
+          Isolate::Current()->js_dispatch_table().GetParameterCount(
+              dispatch_handle)),
+      feedback_source_(feedback_source) {
+  set_input(kTargetIndex, closure);
   set_input(kContextIndex, context);
   set_input(kReceiverIndex, receiver);
   set_input(kNewTargetIndex, new_target);
@@ -115,11 +112,45 @@ CallKnownJSFunction::CallKnownJSFunction(
 void NodeBase::UnwrapDeoptFrames() {
   // Unwrap (and remove uses of its inputs) of Identity and ReturnedValue.
   if (properties().can_eager_deopt() || properties().is_deopt_checkpoint()) {
-    eager_deopt_info()->UnwrapIdentities();
+    eager_deopt_info()->Unwrap();
   }
   if (properties().can_lazy_deopt()) {
-    lazy_deopt_info()->UnwrapIdentities();
+    lazy_deopt_info()->Unwrap();
   }
+}
+
+void NodeBase::ClearInputs() {
+  for (Input input : inputs()) {
+    input.clear();
+  }
+}
+
+void NodeBase::OverwriteWith(Opcode new_opcode,
+                             std::optional<OpProperties> maybe_new_properties) {
+  OpProperties new_properties = maybe_new_properties.has_value()
+                                    ? maybe_new_properties.value()
+                                    : StaticPropertiesForOpcode(new_opcode);
+#ifdef DEBUG
+  CheckCanOverwriteWith(new_opcode, new_properties);
+#endif
+  set_opcode(new_opcode);
+  set_properties(new_properties);
+  if (new_opcode == Opcode::kDead) return;
+  int new_input_count = StaticInputCountForOpcode(new_opcode);
+  if (input_count() != new_input_count) {
+    bitfield_ = InputCountField::update(bitfield_, new_input_count);
+  }
+}
+
+template <typename NodeT, typename... Args>
+NodeT* NodeBase::OverwriteWith(Args&&... args) {
+#ifdef DEBUG
+  CheckCanOverwriteWith(opcode_of<NodeT>, NodeT::kProperties);
+#endif
+  uint64_t bitfield = OpcodeField::encode(opcode_of<NodeT>) |
+                      OpPropertiesField::encode(NodeT::kProperties) |
+                      InputCountField::encode(NodeT::kInputCount);
+  return new (this) NodeT(bitfield, std::forward<Args>(args)...);
 }
 
 void NodeBase::OverwriteWithIdentityTo(ValueNode* node) {
@@ -130,9 +161,7 @@ void NodeBase::OverwriteWithIdentityTo(ValueNode* node) {
   // closest to the input_base().
   DCHECK_GE(input_count(), 1);
   // Remove use of all inputs first.
-  for (Input input : inputs()) {
-    input.clear();
-  }
+  ClearInputs();
   // Unfortunately we cannot remove uses from deopt frames, since these could be
   // shared with other nodes. But we can remove uses from Identity and
   // ReturnedValue nodes.
@@ -155,9 +184,7 @@ void NodeBase::OverwriteWithReturnValue(ValueNode* node) {
 
   DCHECK_GE(input_count(), 1);
   // Remove use of all inputs first.
-  for (Input input : inputs()) {
-    input.clear();
-  }
+  ClearInputs();
   // Unfortunately we cannot remove uses from deopt frames, since these could be
   // shared with other nodes. But we can remove uses from Identity and
   // ReturnedValue nodes.

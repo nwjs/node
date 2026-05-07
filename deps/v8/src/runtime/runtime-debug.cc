@@ -29,8 +29,52 @@
 #include "src/wasm/wasm-objects-inl.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+#include "src/builtins/builtins-iterator-inl.h"
+
 namespace v8 {
 namespace internal {
+
+RUNTIME_FUNCTION(Runtime_IterableForEach) {
+  HandleScope scope(isolate);
+  DCHECK_EQ(2, args.length());
+  Handle<Object> iterable = args.at(0);
+  Handle<JSReceiver> callback = args.at<JSReceiver>(1);
+
+  auto smi_visitor = [&](int32_t val) -> bool {
+    HandleScope loop_scope(isolate);
+    DirectHandle<Object> argv[] = {isolate->factory()->NewNumberFromInt(val)};
+    return !Execution::Call(isolate, callback,
+                            isolate->factory()->undefined_value(),
+                            base::VectorOf(argv))
+                .is_null();
+  };
+
+  auto double_visitor = [&](double val) -> bool {
+    HandleScope loop_scope(isolate);
+    DirectHandle<Object> argv[] = {isolate->factory()->NewNumber(val)};
+    return !Execution::Call(isolate, callback,
+                            isolate->factory()->undefined_value(),
+                            base::VectorOf(argv))
+                .is_null();
+  };
+
+  auto generic_visitor = [&](DirectHandle<Object> val) -> bool {
+    HandleScope loop_scope(isolate);
+    DirectHandle<Object> argv[] = {val};
+    return !Execution::Call(isolate, callback,
+                            isolate->factory()->undefined_value(),
+                            base::VectorOf(argv))
+                .is_null();
+  };
+
+  if (IterableForEach(isolate, iterable, smi_visitor, double_visitor,
+                      generic_visitor)
+          .is_null()) {
+    return ReadOnlyRoots(isolate).exception();
+  }
+
+  return ReadOnlyRoots(isolate).undefined_value();
+}
 
 RUNTIME_FUNCTION_RETURN_PAIR(Runtime_DebugBreakOnBytecode) {
   using interpreter::Bytecode;
@@ -937,8 +981,9 @@ RUNTIME_FUNCTION(Runtime_LiveEditPatchScript) {
   Handle<Script> script(Cast<Script>(script_function->shared()->script()),
                         isolate);
   v8::debug::LiveEditResult result;
-  LiveEdit::PatchScript(isolate, script, new_source, /* preview */ false,
-                        /* allow_top_frame_live_editing */ false, &result);
+  isolate->debug()->SetScriptSource(script, new_source, /* preview */ false,
+                                    /* allow_top_frame_live_editing */ false,
+                                    &result);
   switch (result.status) {
     case v8::debug::LiveEditResult::COMPILE_ERROR:
       return isolate->Throw(*isolate->factory()->NewStringFromAsciiChecked(
@@ -952,6 +997,9 @@ RUNTIME_FUNCTION(Runtime_LiveEditPatchScript) {
     case v8::debug::LiveEditResult::BLOCKED_BY_TOP_LEVEL_ES_MODULE_CHANGE:
       return isolate->Throw(*isolate->factory()->NewStringFromAsciiChecked(
           "LiveEdit failed: BLOCKED_BY_TOP_LEVEL_ES_MODULE_CHANGE"));
+    case v8::debug::LiveEditResult::FEATURE_DISABLED:
+      return isolate->Throw(*isolate->factory()->NewStringFromAsciiChecked(
+          "LiveEdit failed: FEATURE_DISABLED"));
     case v8::debug::LiveEditResult::OK:
       return ReadOnlyRoots(isolate).undefined_value();
   }

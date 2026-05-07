@@ -63,6 +63,11 @@ int detail::ArrayHeaderBase<S, true>::length() const {
 }
 
 template <class S>
+uint32_t detail::ArrayHeaderBase<S, true>::ulength() const {
+  return static_cast<uint32_t>(length());
+}
+
+template <class S>
 int detail::ArrayHeaderBase<S, true>::length(AcquireLoadTag tag) const {
   return length_.Acquire_Load().value();
 }
@@ -81,6 +86,11 @@ void detail::ArrayHeaderBase<S, true>::set_length(int value,
 template <class S>
 int detail::ArrayHeaderBase<S, true>::capacity() const {
   return length();
+}
+
+template <class S>
+uint32_t detail::ArrayHeaderBase<S, true>::ucapacity() const {
+  return static_cast<uint32_t>(capacity());
 }
 
 template <class S>
@@ -112,7 +122,7 @@ bool TaggedArrayBase<D, S, P>::IsCowArray() const {
 
 template <class D, class S, class P>
 Tagged<typename TaggedArrayBase<D, S, P>::ElementT>
-TaggedArrayBase<D, S, P>::get(int index) const {
+TaggedArrayBase<D, S, P>::get(uint32_t index) const {
   DCHECK(IsInBounds(index));
   // TODO(jgruber): This tag-less overload shouldn't be relaxed.
   return objects()[index].Relaxed_Load();
@@ -120,27 +130,27 @@ TaggedArrayBase<D, S, P>::get(int index) const {
 
 template <class D, class S, class P>
 Tagged<typename TaggedArrayBase<D, S, P>::ElementT>
-TaggedArrayBase<D, S, P>::get(int index, RelaxedLoadTag) const {
+TaggedArrayBase<D, S, P>::get(uint32_t index, RelaxedLoadTag) const {
   DCHECK(IsInBounds(index));
   return objects()[index].Relaxed_Load();
 }
 
 template <class D, class S, class P>
 Tagged<typename TaggedArrayBase<D, S, P>::ElementT>
-TaggedArrayBase<D, S, P>::get(int index, AcquireLoadTag) const {
+TaggedArrayBase<D, S, P>::get(uint32_t index, AcquireLoadTag) const {
   DCHECK(IsInBounds(index));
   return objects()[index].Acquire_Load();
 }
 
 template <class D, class S, class P>
 Tagged<typename TaggedArrayBase<D, S, P>::ElementT>
-TaggedArrayBase<D, S, P>::get(int index, SeqCstAccessTag) const {
+TaggedArrayBase<D, S, P>::get(uint32_t index, SeqCstAccessTag) const {
   DCHECK(IsInBounds(index));
   return objects()[index].SeqCst_Load();
 }
 
 template <class D, class S, class P>
-void TaggedArrayBase<D, S, P>::set(int index, Tagged<ElementT> value,
+void TaggedArrayBase<D, S, P>::set(uint32_t index, Tagged<ElementT> value,
                                    WriteBarrierMode mode) {
   DCHECK(!IsCowArray());
   DCHECK(IsInBounds(index));
@@ -150,12 +160,12 @@ void TaggedArrayBase<D, S, P>::set(int index, Tagged<ElementT> value,
 
 template <class D, class S, class P>
 template <typename, typename>
-void TaggedArrayBase<D, S, P>::set(int index, Tagged<Smi> value) {
+void TaggedArrayBase<D, S, P>::set(uint32_t index, Tagged<Smi> value) {
   set(index, value, SKIP_WRITE_BARRIER);
 }
 
 template <class D, class S, class P>
-void TaggedArrayBase<D, S, P>::set(int index, Tagged<ElementT> value,
+void TaggedArrayBase<D, S, P>::set(uint32_t index, Tagged<ElementT> value,
                                    RelaxedStoreTag tag, WriteBarrierMode mode) {
   DCHECK(!IsCowArray());
   DCHECK(IsInBounds(index));
@@ -164,13 +174,13 @@ void TaggedArrayBase<D, S, P>::set(int index, Tagged<ElementT> value,
 
 template <class D, class S, class P>
 template <typename, typename>
-void TaggedArrayBase<D, S, P>::set(int index, Tagged<Smi> value,
+void TaggedArrayBase<D, S, P>::set(uint32_t index, Tagged<Smi> value,
                                    RelaxedStoreTag tag) {
   set(index, value, tag, SKIP_WRITE_BARRIER);
 }
 
 template <class D, class S, class P>
-void TaggedArrayBase<D, S, P>::set(int index, Tagged<ElementT> value,
+void TaggedArrayBase<D, S, P>::set(uint32_t index, Tagged<ElementT> value,
                                    ReleaseStoreTag tag, WriteBarrierMode mode) {
   DCHECK(!IsCowArray());
   DCHECK(IsInBounds(index));
@@ -179,13 +189,13 @@ void TaggedArrayBase<D, S, P>::set(int index, Tagged<ElementT> value,
 
 template <class D, class S, class P>
 template <typename, typename>
-void TaggedArrayBase<D, S, P>::set(int index, Tagged<Smi> value,
+void TaggedArrayBase<D, S, P>::set(uint32_t index, Tagged<Smi> value,
                                    ReleaseStoreTag tag) {
   set(index, value, tag, SKIP_WRITE_BARRIER);
 }
 
 template <class D, class S, class P>
-void TaggedArrayBase<D, S, P>::set(int index, Tagged<ElementT> value,
+void TaggedArrayBase<D, S, P>::set(uint32_t index, Tagged<ElementT> value,
                                    SeqCstAccessTag tag, WriteBarrierMode mode) {
   DCHECK(!IsCowArray());
   DCHECK(IsInBounds(index));
@@ -194,14 +204,14 @@ void TaggedArrayBase<D, S, P>::set(int index, Tagged<ElementT> value,
 
 template <class D, class S, class P>
 template <typename, typename>
-void TaggedArrayBase<D, S, P>::set(int index, Tagged<Smi> value,
+void TaggedArrayBase<D, S, P>::set(uint32_t index, Tagged<Smi> value,
                                    SeqCstAccessTag tag) {
   set(index, value, tag, SKIP_WRITE_BARRIER);
 }
 
 template <class D, class S, class P>
 Tagged<typename TaggedArrayBase<D, S, P>::ElementT>
-TaggedArrayBase<D, S, P>::swap(int index, Tagged<ElementT> value,
+TaggedArrayBase<D, S, P>::swap(uint32_t index, Tagged<ElementT> value,
                                SeqCstAccessTag, WriteBarrierMode mode) {
   DCHECK(!IsCowArray());
   DCHECK(IsInBounds(index));
@@ -210,7 +220,8 @@ TaggedArrayBase<D, S, P>::swap(int index, Tagged<ElementT> value,
 
 template <class D, class S, class P>
 Tagged<typename TaggedArrayBase<D, S, P>::ElementT>
-TaggedArrayBase<D, S, P>::compare_and_swap(int index, Tagged<ElementT> expected,
+TaggedArrayBase<D, S, P>::compare_and_swap(uint32_t index,
+                                           Tagged<ElementT> expected,
                                            Tagged<ElementT> value,
                                            SeqCstAccessTag,
                                            WriteBarrierMode mode) {
@@ -221,8 +232,8 @@ TaggedArrayBase<D, S, P>::compare_and_swap(int index, Tagged<ElementT> expected,
 
 template <class D, class S, class P>
 void TaggedArrayBase<D, S, P>::MoveElements(Isolate* isolate, Tagged<D> dst,
-                                            int dst_index, Tagged<D> src,
-                                            int src_index, int len,
+                                            uint32_t dst_index, Tagged<D> src,
+                                            uint32_t src_index, uint32_t len,
                                             WriteBarrierMode mode) {
   if (len == 0) return;
 
@@ -240,8 +251,8 @@ void TaggedArrayBase<D, S, P>::MoveElements(Isolate* isolate, Tagged<D> dst,
 
 template <class D, class S, class P>
 void TaggedArrayBase<D, S, P>::CopyElements(Isolate* isolate, Tagged<D> dst,
-                                            int dst_index, Tagged<D> src,
-                                            int src_index, int len,
+                                            uint32_t dst_index, Tagged<D> src,
+                                            uint32_t src_index, uint32_t len,
                                             WriteBarrierMode mode) {
   if (len == 0) return;
 
@@ -282,29 +293,56 @@ TaggedArrayBase<D, S, P>::RawFieldOfFirstElement() const {
 
 template <class D, class S, class P>
 typename TaggedArrayBase<D, S, P>::SlotType
-TaggedArrayBase<D, S, P>::RawFieldOfElementAt(int index) const {
+TaggedArrayBase<D, S, P>::RawFieldOfElementAt(uint32_t index) const {
   return SlotType(&objects()[index]);
 }
 
 // static
 template <class IsolateT>
-Handle<FixedArray> FixedArray::New(IsolateT* isolate, int capacity,
+Handle<FixedArray> FixedArray::New(IsolateT* isolate, int length,
                                    AllocationType allocation,
                                    AllocationHint hint) {
-  if (V8_UNLIKELY(static_cast<unsigned>(capacity) >
-                  FixedArrayBase::kMaxLength)) {
-    FATAL("Fatal JavaScript invalid size error %d (see crbug.com/1201626)",
-          capacity);
-  } else if (V8_UNLIKELY(capacity == 0)) {
+  if (V8_UNLIKELY(static_cast<unsigned>(length) > FixedArrayBase::kMaxLength)) {
+    base::FatalNoSecurityImpact(
+        "Fatal JavaScript invalid size error %d (see crbug.com/1201626)",
+        length);
+  } else if (V8_UNLIKELY(length == 0)) {
     return isolate->factory()->empty_fixed_array();
   }
 
   std::optional<DisallowGarbageCollection> no_gc;
   Handle<FixedArray> result =
-      Cast<FixedArray>(Allocate(isolate, capacity, &no_gc, allocation, hint));
+      Cast<FixedArray>(Allocate(isolate, length, &no_gc, allocation, hint));
   ReadOnlyRoots roots{isolate};
   MemsetTagged((*result)->RawFieldOfFirstElement(), roots.undefined_value(),
-               capacity);
+               length);
+  return result;
+}
+
+// static
+template <class IsolateT, typename ElementsCallback>
+Handle<FixedArray> FixedArray::New(IsolateT* isolate, int length,
+                                   ElementsCallback elements_callback,
+                                   AllocationType allocation,
+                                   AllocationHint hint) {
+  if (V8_UNLIKELY(static_cast<unsigned>(length) > FixedArrayBase::kMaxLength)) {
+    base::FatalNoSecurityImpact(
+        "Fatal JavaScript invalid size error %d (see crbug.com/1201626)",
+        length);
+  } else if (V8_UNLIKELY(length == 0)) {
+    return isolate->factory()->empty_fixed_array();
+  }
+
+  std::optional<DisallowGarbageCollection> no_gc;
+  Handle<FixedArray> result =
+      Cast<FixedArray>(Allocate(isolate, length, &no_gc, allocation, hint));
+  const WriteBarrierMode write_barrier =
+      allocation == AllocationType::kYoung
+          ? WriteBarrierMode::SKIP_WRITE_BARRIER
+          : WriteBarrierMode::UPDATE_WRITE_BARRIER;
+  for (int i = 0; i < length; ++i) {
+    result->set(i, elements_callback(i), write_barrier);
+  }
   return result;
 }
 
@@ -318,8 +356,9 @@ Handle<TrustedFixedArray> TrustedFixedArray::New(IsolateT* isolate,
 
   if (V8_UNLIKELY(static_cast<unsigned>(capacity) >
                   TrustedFixedArray::kMaxLength)) {
-    FATAL("Fatal JavaScript invalid size error %d (see crbug.com/1201626)",
-          capacity);
+    base::FatalNoSecurityImpact(
+        "Fatal JavaScript invalid size error %d (see crbug.com/1201626)",
+        capacity);
   }
   // TODO(saelo): once we have trusted read-only roots, we can return the
   // empty_trusted_fixed_array here. Currently this isn't possible because the
@@ -340,8 +379,9 @@ Handle<ProtectedFixedArray> ProtectedFixedArray::New(IsolateT* isolate,
                                                      bool shared) {
   if (V8_UNLIKELY(static_cast<unsigned>(capacity) >
                   ProtectedFixedArray::kMaxLength)) {
-    FATAL("Fatal JavaScript invalid size error %d (see crbug.com/1201626)",
-          capacity);
+    base::FatalNoSecurityImpact(
+        "Fatal JavaScript invalid size error %d (see crbug.com/1201626)",
+        capacity);
   }
 
   std::optional<DisallowGarbageCollection> no_gc;
@@ -400,33 +440,34 @@ inline int WeakArrayList::capacity(RelaxedLoadTag) const {
   return value;
 }
 
-bool FixedArray::is_the_hole(Isolate* isolate, int index) {
+bool FixedArray::is_the_hole(Isolate* isolate, uint32_t index) {
   return IsTheHole(get(index), isolate);
 }
 
-void FixedArray::set_the_hole(Isolate* isolate, int index) {
+void FixedArray::set_the_hole(Isolate* isolate, uint32_t index) {
   set_the_hole(ReadOnlyRoots(isolate), index);
 }
 
-void FixedArray::set_the_hole(ReadOnlyRoots ro_roots, int index) {
+void FixedArray::set_the_hole(ReadOnlyRoots ro_roots, uint32_t index) {
   set(index, ro_roots.the_hole_value(), SKIP_WRITE_BARRIER);
 }
 
-void FixedArray::FillWithHoles(int from, int to) {
+void FixedArray::FillWithHoles(uint32_t from, uint32_t to) {
   ReadOnlyRoots roots = GetReadOnlyRoots();
-  for (int i = from; i < to; i++) {
+  for (uint32_t i = from; i < to; i++) {
     set(i, roots.the_hole_value(), SKIP_WRITE_BARRIER);
   }
 }
 
-void FixedArray::MoveElements(Isolate* isolate, int dst_index, int src_index,
-                              int len, WriteBarrierMode mode) {
+void FixedArray::MoveElements(Isolate* isolate, uint32_t dst_index,
+                              uint32_t src_index, uint32_t len,
+                              WriteBarrierMode mode) {
   MoveElements(isolate, this, dst_index, this, src_index, len, mode);
 }
 
-void FixedArray::CopyElements(Isolate* isolate, int dst_index,
-                              Tagged<FixedArray> src, int src_index, int len,
-                              WriteBarrierMode mode) {
+void FixedArray::CopyElements(Isolate* isolate, uint32_t dst_index,
+                              Tagged<FixedArray> src, uint32_t src_index,
+                              uint32_t len, WriteBarrierMode mode) {
   CopyElements(isolate, this, dst_index, src, src_index, len, mode);
 }
 
@@ -511,14 +552,37 @@ template <class IsolateT>
 Handle<FixedArrayBase> FixedDoubleArray::New(IsolateT* isolate, int length,
                                              AllocationType allocation) {
   if (V8_UNLIKELY(static_cast<unsigned>(length) > kMaxLength)) {
-    FATAL("Fatal JavaScript invalid size error %d (see crbug.com/1201626)",
-          length);
+    base::FatalNoSecurityImpact(
+        "Fatal JavaScript invalid size error %d (see crbug.com/1201626)",
+        length);
   } else if (V8_UNLIKELY(length == 0)) {
     return isolate->factory()->empty_fixed_array();
   }
 
   std::optional<DisallowGarbageCollection> no_gc;
   return Cast<FixedDoubleArray>(Allocate(isolate, length, &no_gc, allocation));
+}
+
+// static
+template <class IsolateT, typename ElementsCallback>
+Handle<FixedArrayBase> FixedDoubleArray::New(IsolateT* isolate, int length,
+                                             ElementsCallback elements_callback,
+                                             AllocationType allocation) {
+  if (V8_UNLIKELY(static_cast<unsigned>(length) > kMaxLength)) {
+    base::FatalNoSecurityImpact(
+        "Fatal JavaScript invalid size error %d (see crbug.com/1201626)",
+        length);
+  } else if (V8_UNLIKELY(length == 0)) {
+    return isolate->factory()->empty_fixed_array();
+  }
+
+  std::optional<DisallowGarbageCollection> no_gc;
+  Handle<FixedDoubleArray> array =
+      Cast<FixedDoubleArray>(Allocate(isolate, length, &no_gc, allocation));
+  for (int i = 0; i < length; ++i) {
+    array->set(i, elements_callback(i));
+  }
+  return array;
 }
 
 // static
@@ -548,30 +612,30 @@ Handle<D> PrimitiveArrayBase<D, S, P>::Allocate(
   return handle(xs, isolate);
 }
 
-double FixedDoubleArray::get_scalar(int index) {
+double FixedDoubleArray::get_scalar(uint32_t index) {
   DCHECK(!is_the_hole(index));
   return values()[index].value();
 }
 
-uint64_t FixedDoubleArray::get_representation(int index) {
+uint64_t FixedDoubleArray::get_representation(uint32_t index) {
   DCHECK(IsInBounds(index));
   return values()[index].value_as_bits();
 }
 
-Handle<Object> FixedDoubleArray::get(Tagged<FixedDoubleArray> array, int index,
-                                     Isolate* isolate) {
+Handle<Object> FixedDoubleArray::get(Tagged<FixedDoubleArray> array,
+                                     uint32_t index, Isolate* isolate) {
   if (array->is_the_hole(index)) {
     return isolate->factory()->the_hole_value();
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
   } else if (array->is_undefined(index)) {
     return isolate->factory()->undefined_value();
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
   } else {
     return isolate->factory()->NewNumber(array->get_scalar(index));
   }
 }
 
-void FixedDoubleArray::set(int index, double value) {
+void FixedDoubleArray::set(uint32_t index, double value) {
   if (std::isnan(value)) {
     value = std::numeric_limits<double>::quiet_NaN();
   }
@@ -579,44 +643,45 @@ void FixedDoubleArray::set(int index, double value) {
   DCHECK(!is_the_hole(index));
 }
 
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
-void FixedDoubleArray::set_undefined(int index) {
-  values()[index].set_value(UndefinedNan());
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
+void FixedDoubleArray::set_undefined(uint32_t index) {
+  DCHECK(IsInBounds(index));
+  values()[index].set_value_as_bits(kUndefinedNanInt64);
   DCHECK(!is_the_hole(index));
   DCHECK(is_undefined(index));
 }
 
-bool FixedDoubleArray::is_undefined(int index) {
+bool FixedDoubleArray::is_undefined(uint32_t index) {
   return get_representation(index) == kUndefinedNanInt64;
 }
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
 
-void FixedDoubleArray::set_the_hole(Isolate* isolate, int index) {
+void FixedDoubleArray::set_the_hole(Isolate* isolate, uint32_t index) {
   set_the_hole(index);
 }
 
-void FixedDoubleArray::set_the_hole(int index) {
+void FixedDoubleArray::set_the_hole(uint32_t index) {
   DCHECK(IsInBounds(index));
   values()[index].set_value_as_bits(kHoleNanInt64);
 }
 
-bool FixedDoubleArray::is_the_hole(Isolate* isolate, int index) {
+bool FixedDoubleArray::is_the_hole(Isolate* isolate, uint32_t index) {
   return is_the_hole(index);
 }
 
-bool FixedDoubleArray::is_the_hole(int index) {
+bool FixedDoubleArray::is_the_hole(uint32_t index) {
   return get_representation(index) == kHoleNanInt64;
 }
 
-void FixedDoubleArray::MoveElements(Isolate* isolate, int dst_index,
-                                    int src_index, int len,
+void FixedDoubleArray::MoveElements(Isolate* isolate, uint32_t dst_index,
+                                    uint32_t src_index, uint32_t len,
                                     WriteBarrierMode mode) {
   DCHECK_EQ(SKIP_WRITE_BARRIER, mode);
   MemMove(&values()[dst_index], &values()[src_index], len * kElementSize);
 }
 
-void FixedDoubleArray::FillWithHoles(int from, int to) {
-  for (int i = from; i < to; i++) {
+void FixedDoubleArray::FillWithHoles(uint32_t from, uint32_t to) {
+  for (uint32_t i = from; i < to; i++) {
     set_the_hole(i);
   }
 }
@@ -648,8 +713,9 @@ Handle<TrustedWeakFixedArray> TrustedWeakFixedArray::New(IsolateT* isolate,
                                                          int capacity) {
   if (V8_UNLIKELY(static_cast<unsigned>(capacity) >
                   TrustedFixedArray::kMaxLength)) {
-    FATAL("Fatal JavaScript invalid size error %d (see crbug.com/1201626)",
-          capacity);
+    base::FatalNoSecurityImpact(
+        "Fatal JavaScript invalid size error %d (see crbug.com/1201626)",
+        capacity);
   }
 
   std::optional<DisallowGarbageCollection> no_gc;
@@ -664,8 +730,9 @@ Handle<ProtectedWeakFixedArray> ProtectedWeakFixedArray::New(IsolateT* isolate,
                                                              int capacity) {
   if (V8_UNLIKELY(static_cast<unsigned>(capacity) >
                   TrustedFixedArray::kMaxLength)) {
-    FATAL("Fatal JavaScript invalid size error %d (see crbug.com/1201626)",
-          capacity);
+    base::FatalNoSecurityImpact(
+        "Fatal JavaScript invalid size error %d (see crbug.com/1201626)",
+        capacity);
   }
   std::optional<DisallowGarbageCollection> no_gc;
   Handle<ProtectedWeakFixedArray> result = TrustedCast<ProtectedWeakFixedArray>(
@@ -699,9 +766,9 @@ MaybeObjectSlot WeakArrayList::data_start() {
   return RawMaybeWeakField(kObjectsOffset);
 }
 
-void WeakArrayList::CopyElements(Isolate* isolate, int dst_index,
-                                 Tagged<WeakArrayList> src, int src_index,
-                                 int len, WriteBarrierMode mode) {
+void WeakArrayList::CopyElements(Isolate* isolate, uint32_t dst_index,
+                                 Tagged<WeakArrayList> src, uint32_t src_index,
+                                 uint32_t len, WriteBarrierMode mode) {
   if (len == 0) return;
   DCHECK_LE(dst_index + len, capacity());
   DCHECK_LE(src_index + len, src->capacity());
@@ -754,7 +821,8 @@ Handle<ByteArray> ByteArray::New(IsolateT* isolate, int length,
                                  AllocationType allocation,
                                  AllocationAlignment alignment) {
   if (V8_UNLIKELY(static_cast<unsigned>(length) > kMaxLength)) {
-    FATAL("Fatal JavaScript invalid size error %d", length);
+    base::FatalNoSecurityImpact("Fatal JavaScript invalid size error %d",
+                                length);
   } else if (V8_UNLIKELY(length == 0)) {
     return isolate->factory()->empty_byte_array();
   }
@@ -790,7 +858,8 @@ Handle<TrustedByteArray> TrustedByteArray::New(IsolateT* isolate, int length,
   DCHECK(allocation_type == AllocationType::kTrusted ||
          allocation_type == AllocationType::kSharedTrusted);
   if (V8_UNLIKELY(static_cast<unsigned>(length) > kMaxLength)) {
-    FATAL("Fatal JavaScript invalid size error %d", length);
+    base::FatalNoSecurityImpact("Fatal JavaScript invalid size error %d",
+                                length);
   }
 
   std::optional<DisallowGarbageCollection> no_gc;
@@ -904,22 +973,22 @@ Handle<PodArray<T>> PodArray<T>::New(LocalIsolate* isolate, int length,
 
 // static
 template <class T>
-DirectHandle<TrustedPodArray<T>> TrustedPodArray<T>::New(Isolate* isolate,
-                                                         int length) {
+DirectHandle<TrustedPodArray<T>> TrustedPodArray<T>::New(
+    Isolate* isolate, int length, AllocationType allocation_type) {
   int byte_length;
   CHECK(!base::bits::SignedMulOverflow32(length, sizeof(T), &byte_length));
   return TrustedCast<TrustedPodArray<T>>(
-      isolate->factory()->NewTrustedByteArray(byte_length));
+      isolate->factory()->NewTrustedByteArray(byte_length, allocation_type));
 }
 
 // static
 template <class T>
-DirectHandle<TrustedPodArray<T>> TrustedPodArray<T>::New(LocalIsolate* isolate,
-                                                         int length) {
+DirectHandle<TrustedPodArray<T>> TrustedPodArray<T>::New(
+    LocalIsolate* isolate, int length, AllocationType allocation_type) {
   int byte_length;
   CHECK(!base::bits::SignedMulOverflow32(length, sizeof(T), &byte_length));
   return TrustedCast<TrustedPodArray<T>>(
-      isolate->factory()->NewTrustedByteArray(byte_length));
+      isolate->factory()->NewTrustedByteArray(byte_length, allocation_type));
 }
 
 }  // namespace v8::internal

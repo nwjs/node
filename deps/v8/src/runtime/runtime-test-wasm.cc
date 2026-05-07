@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #include <cinttypes>
-#include <type_traits>
+#include <cstring>
 
 #include "include/v8-wasm.h"
 #include "src/base/memory.h"
@@ -11,21 +11,24 @@
 #include "src/builtins/builtins-inl.h"
 #include "src/execution/arguments-inl.h"
 #include "src/execution/frames-inl.h"
+#include "src/handles/handles.h"
 #include "src/heap/heap-inl.h"
 #include "src/objects/property-descriptor.h"
 #include "src/objects/smi.h"
 #include "src/trap-handler/trap-handler.h"
+#include "src/wasm/compilation-hints-generation.h"
 #include "src/wasm/function-body-decoder.h"
 #include "src/wasm/fuzzing/random-module-generation.h"
-#include "src/wasm/memory-tracing.h"
 #include "src/wasm/module-compiler.h"
 #include "src/wasm/wasm-code-manager.h"
 #include "src/wasm/wasm-code-pointer-table-inl.h"
 #include "src/wasm/wasm-engine.h"
+#include "src/wasm/wasm-module-builder.h"
 #include "src/wasm/wasm-module.h"
 #include "src/wasm/wasm-objects-inl.h"
 #include "src/wasm/wasm-result.h"
 #include "src/wasm/wasm-serialization.h"
+#include "src/wasm/wasm-tracing.h"
 
 namespace v8::internal {
 
@@ -155,6 +158,8 @@ int WasmStackSize(Isolate* isolate) {
 
 }  // namespace
 
+// TODO(jkummerow): I think this should just iterate the WasmCodePointerTable
+// directly, not individual dispatch tables.
 RUNTIME_FUNCTION(Runtime_CountUnoptimizedWasmToJSWrapper) {
   SealHandleScope shs(isolate);
   if (args.length() != 1 || !IsWasmInstanceObject(args[0])) {
@@ -168,7 +173,7 @@ RUNTIME_FUNCTION(Runtime_CountUnoptimizedWasmToJSWrapper) {
       Builtins::EmbeddedEntryOf(Builtin::kWasmToJsWrapperAsm);
 
   int result = 0;
-  Tagged<WasmDispatchTable> dispatch_table =
+  Tagged<WasmDispatchTableForImports> dispatch_table =
       trusted_data->dispatch_table_for_imports();
   int import_count = dispatch_table->length();
   wasm::WasmCodePointerTable* cpt = wasm::GetProcessWideWasmCodePointerTable();
@@ -421,6 +426,110 @@ RUNTIME_FUNCTION(Runtime_IsWasmPartialOOBWriteNoop) {
   return isolate->heap()->ToBoolean(wasm::kPartialOOBWritesAreNoops);
 }
 
+RUNTIME_FUNCTION(Runtime_GenerateWasmCompilationHints) {
+  if (!v8_flags.wasm_generate_compilation_hints &&
+      !v8_flags.trace_wasm_generate_compilation_hints) {
+    return ReadOnlyRoots(isolate).undefined_value();
+  }
+  HandleScope scope(isolate);
+  if (args.length() != 1 || !IsWasmInstanceObject(args[0])) {
+    // TODO(manoskouk): What is a more elegant way to report an error here?
+    return CrashUnlessFuzzing(isolate);
+  }
+
+  DisallowGarbageCollection no_gc;
+
+  DirectHandle<WasmInstanceObject> instance = args.at<WasmInstanceObject>(0);
+
+  wasm::NativeModule* native_module =
+      instance->trusted_data(isolate)->native_module();
+  const wasm::WasmModule* module = native_module->module();
+
+  wasm::TransitiveTypeFeedbackProcessor::ProcessAll(
+      isolate, instance->trusted_data(isolate));
+
+  if (v8_flags.trace_wasm_generate_compilation_hints) {
+    int num_imported_functions = module->num_imported_functions;
+    int num_total_functions = static_cast<int>(module->functions.size());
+
+    for (int i = num_imported_functions; i < num_total_functions; i++) {
+      wasm::WasmCodeRefScope code_ref_scope;
+      wasm::WasmCode* code = native_module->GetCode(i);
+      if (code) {
+        DCHECK(code->is_liftoff());
+        base::MutexGuard marked_for_tierup_mutex_guard(
+            &module->marked_for_tierup_mutex);
+        if (module->marked_for_tierup.contains(i)) {
+          PrintF("%d: optimized\n", i);
+        } else {
+          PrintF("%d: compiled\n", i);
+        }
+      } else {
+        PrintF("%d: uncompiled\n", i);
+      }
+    }
+
+    base::MutexGuard mutex(&module->type_feedback.mutex);
+
+    std::unordered_map<uint32_t, wasm::FunctionTypeFeedback>& feedback =
+        module->type_feedback.feedback_for_function;
+
+    for (int func_index = num_imported_functions;
+         func_index < num_total_functions; func_index++) {
+      PrintF("%d", func_index);
+      auto it = feedback.find(func_index);
+      if (it == feedback.end()) {
+        PrintF(" no feedback\n");
+        continue;
+      }
+      PrintF("\n");
+      wasm::FunctionTypeFeedback& feedback_for_function = it->second;
+
+      for (size_t num_slot = 0;
+           num_slot < feedback_for_function.feedback_vector.size();
+           num_slot++) {
+        wasm::CallSiteFeedback& slot =
+            feedback_for_function.feedback_vector[num_slot];
+        int total_count_at_slot = 0;
+        for (int call = 0; call < slot.num_cases(); call++) {
+          total_count_at_slot += slot.call_count(call);
+        }
+
+        PrintF(
+            "  slot %d, offset %d: total relative call count %lf\n",
+            static_cast<int>(num_slot),
+            module->feedback_slots_to_wire_byte_offsets[func_index][num_slot],
+            static_cast<double>(total_count_at_slot) /
+                feedback_for_function.num_invocations);
+        if (feedback_for_function.call_targets[num_slot] !=
+                wasm::FunctionTypeFeedback::kCallIndirect &&
+            feedback_for_function.call_targets[num_slot] !=
+                wasm::FunctionTypeFeedback::kCallRef) {
+          PrintF("    direct call to %d\n", slot.function_index(0));
+        } else {
+          for (int call = 0; call < slot.num_cases(); call++) {
+            // We floor the percentage so we do not end up with a sum of over
+            // 100.
+            PrintF("    call to %d, percentage %d\n", slot.function_index(call),
+                   static_cast<int>(
+                       std::floor(static_cast<double>(slot.call_count(call)) *
+                                  100 / total_count_at_slot)));
+          }
+        }
+      }
+    }
+  }
+
+  if (v8_flags.wasm_generate_compilation_hints) {
+    Zone zone{isolate->allocator(), "wasm::EmitCompilationHintsToBuffer"};
+    wasm::ZoneBuffer buffer{&zone};
+    wasm::EmitCompilationHintsToBuffer(buffer, native_module);
+    wasm::WriteCompilationHintsToFile(buffer, native_module);
+  }
+
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
 RUNTIME_FUNCTION(Runtime_GetWasmRecoveredTrapCount) {
   HandleScope scope(isolate);
   size_t trap_count = trap_handler::GetRecoveredTrapCount();
@@ -515,33 +624,9 @@ RUNTIME_FUNCTION(Runtime_WasmNumCodeSpaces) {
   return *isolate->factory()->NewNumberFromSize(num_spaces);
 }
 
-namespace {
-
-template <typename T1, typename T2 = T1>
-void PrintRep(Address address, const char* str) {
-  PrintF("%4s:", str);
-  const auto t1 = base::ReadLittleEndianValue<T1>(address);
-  if constexpr (std::is_floating_point_v<T1>) {
-    PrintF("%f", t1);
-  } else if constexpr (sizeof(T1) > sizeof(uint32_t)) {
-    PrintF("%" PRIu64, t1);
-  } else {
-    PrintF("%u", t1);
-  }
-  const auto t2 = base::ReadLittleEndianValue<T2>(address);
-  if constexpr (sizeof(T1) > sizeof(uint32_t)) {
-    PrintF(" / %016" PRIx64 "\n", t2);
-  } else {
-    PrintF(" / %0*x\n", static_cast<int>(2 * sizeof(T2)), t2);
-  }
-}
-
-}  // namespace
-
 RUNTIME_FUNCTION(Runtime_WasmTraceGlobal) {
   CHECK(v8_flags.trace_wasm_globals);
-
-  SealHandleScope scope(isolate);
+  HandleScope handle_scope(isolate);
   if (args.length() != 1 || !IsSmi(args[0])) {
     return CrashUnlessFuzzing(isolate);
   }
@@ -561,15 +646,39 @@ RUNTIME_FUNCTION(Runtime_WasmTraceGlobal) {
   const wasm::WasmGlobal& global =
       instance->module()->globals[info->global_index];
 
-  const char* tier = wasm::ExecutionTierToString(frame->wasm_code()->tier());
+  wasm::ExecutionTier tier = frame->wasm_code()->tier();
 
   wasm::WasmValue value =
       instance->trusted_data(isolate)->GetGlobalValue(isolate, global);
 
-  PrintF("%-11s func:%6d:0x%-4x global.%s %d val: %s\n", tier,
-         frame->function_index(), frame->position(),
-         info->is_store ? "set" : "get", info->global_index,
-         value.to_string().c_str());
+  wasm::GlobalTraceEntry trace_entry = {
+      .function_index = frame->function_index(),
+      .global_index = info->global_index,
+      .frame_position = frame->position(),
+      .tier = tier,
+      .kind = global.type.kind(),
+      .is_store = static_cast<bool>(info->is_store),
+      .value_bytes = {}};
+  CHECK_GE(sizeof(trace_entry.value_bytes), value.type().value_kind_size());
+
+  if (value.type().is_numeric()) {
+    value.CopyTo(trace_entry.value_bytes);
+  } else {
+    DirectHandle<Object> ref_handle = value.to_ref();
+    base::WriteUnalignedValue<Address>(
+        reinterpret_cast<Address>(trace_entry.value_bytes),
+        (*ref_handle).ptr());
+  }
+
+  wasm::WasmTracesForTesting& traces = wasm::GetWasmTracesForTesting();
+  if (traces.should_store_trace) {
+    traces.global_trace.push_back(trace_entry);
+  } else {
+    std::ostringstream ss;
+    PrintGlobalTraceString(trace_entry, frame->native_module(), ss);
+    ss << "\n";
+    PrintF("%s", ss.str().c_str());
+  }
 
   return ReadOnlyRoots(isolate).undefined_value();
 }
@@ -595,50 +704,39 @@ RUNTIME_FUNCTION(Runtime_WasmTraceMemory) {
 #endif  // V8_ENABLE_DRUMBRAKE
   WasmFrame* frame = WasmFrame::cast(it.frame());
 
-  const char* tier = wasm::ExecutionTierToString(frame->wasm_code()->tier());
+  wasm::ExecutionTier tier = frame->wasm_code()->tier();
+  MachineRepresentation mem_rep =
+      static_cast<MachineRepresentation>(info->mem_rep);
 
-  PrintF("%-11s func:%6d:0x%-4x mem:%d %s %016" PRIuPTR " val: ", tier,
-         frame->function_index(), frame->position(), info->mem_index,
-         // Note: The extra leading space makes " store to" the same width as
-         // "load from".
-         info->is_store ? " store to" : "load from", info->offset);
   const Address address =
       reinterpret_cast<Address>(frame->trusted_instance_data()
                                     ->memory_object(info->mem_index)
-                                    ->array_buffer()
-                                    ->backing_store()) +
+                                    ->backing_store()
+                                    ->buffer_start()) +
       info->offset;
-  switch (static_cast<MachineRepresentation>(info->mem_rep)) {
-    case MachineRepresentation::kWord8:
-      PrintRep<uint8_t>(address, "i8");
-      break;
-    case MachineRepresentation::kWord16:
-      PrintRep<uint16_t>(address, "i16");
-      break;
-    case MachineRepresentation::kWord32:
-      PrintRep<uint32_t>(address, "i32");
-      break;
-    case MachineRepresentation::kWord64:
-      PrintRep<uint64_t>(address, "i64");
-      break;
-    case MachineRepresentation::kFloat32:
-      PrintRep<float, uint32_t>(address, "f32");
-      break;
-    case MachineRepresentation::kFloat64:
-      PrintRep<double, uint64_t>(address, "f64");
-      break;
-    case MachineRepresentation::kSimd128: {
-      const auto a = base::ReadLittleEndianValue<uint32_t>(address);
-      const auto b = base::ReadLittleEndianValue<uint32_t>(address + 4);
-      const auto c = base::ReadLittleEndianValue<uint32_t>(address + 8);
-      const auto d = base::ReadLittleEndianValue<uint32_t>(address + 12);
-      PrintF("s128:%u %u %u %u / %08x %08x %08x %08x\n", a, b, c, d, a, b, c,
-             d);
-      break;
-    }
-    default:
-      PrintF("unknown\n");
-      break;
+
+  wasm::MemoryTraceEntry trace_entry = {
+      .offset = info->offset,
+      .function_index = frame->function_index(),
+      .mem_index = info->mem_index,
+      .frame_position = frame->position(),
+      .tier = tier,
+      .representation = mem_rep,
+      .is_store = static_cast<bool>(info->is_store),
+      .value_bytes = {}};
+  int mem_rep_size = ElementSizeInBytes(mem_rep);
+  CHECK_GE(sizeof(trace_entry.value_bytes), mem_rep_size);
+  memcpy(trace_entry.value_bytes, reinterpret_cast<void*>(address),
+         mem_rep_size);
+
+  wasm::WasmTracesForTesting& traces = wasm::GetWasmTracesForTesting();
+  if (traces.should_store_trace) {
+    traces.memory_trace.push_back(trace_entry);
+  } else {
+    std::ostringstream ss;
+    PrintMemoryTraceString(trace_entry, frame->native_module(), ss);
+    ss << "\n";
+    PrintF("%s", ss.str().c_str());
   }
 
   return ReadOnlyRoots(isolate).undefined_value();
@@ -926,25 +1024,6 @@ RUNTIME_FUNCTION(Runtime_FreezeWasmLazyCompilation) {
 
   instance_object->module_object()->native_module()->set_lazy_compile_frozen(
       true);
-  return ReadOnlyRoots(isolate).undefined_value();
-}
-
-// This runtime function enables WebAssembly imported strings through an
-// embedder callback and thereby bypasses the value in v8_flags.
-RUNTIME_FUNCTION(Runtime_SetWasmImportedStringsEnabled) {
-  if (args.length() != 1) {
-    return CrashUnlessFuzzing(isolate);
-  }
-  bool enable = Object::BooleanValue(*args.at(0), isolate);
-  v8::Isolate* v8_isolate = reinterpret_cast<v8::Isolate*>(isolate);
-  WasmImportedStringsEnabledCallback enabled = [](v8::Local<v8::Context>) {
-    return true;
-  };
-  WasmImportedStringsEnabledCallback disabled = [](v8::Local<v8::Context>) {
-    return false;
-  };
-  v8_isolate->SetWasmImportedStringsEnabledCallback(enable ? enabled
-                                                           : disabled);
   return ReadOnlyRoots(isolate).undefined_value();
 }
 

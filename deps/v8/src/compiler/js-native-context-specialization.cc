@@ -38,6 +38,7 @@
 #include "src/objects/elements-kind.h"
 #include "src/objects/feedback-vector.h"
 #include "src/objects/heap-number.h"
+#include "src/objects/property-details.h"
 #include "src/objects/string.h"
 
 namespace v8 {
@@ -146,10 +147,7 @@ Reduction JSNativeContextSpecialization::Reduce(Node* node) {
 std::optional<size_t> JSNativeContextSpecialization::GetMaxStringLength(
     JSHeapBroker* broker, Node* node) {
   HeapObjectMatcher matcher(node);
-  if (matcher.HasResolvedValue() &&
-      !matcher.Is(
-          broker->local_isolate_or_isolate()->factory()->the_hole_value()) &&
-      matcher.Ref(broker).IsString()) {
+  if (matcher.HasResolvedValue() && matcher.Ref(broker).IsString()) {
     StringRef input = matcher.Ref(broker).AsString();
     return input.length();
   }
@@ -1480,7 +1478,8 @@ Reduction JSNativeContextSpecialization::ReduceNamedAccess(
 
   // Ensure that {key} matches the specified name (if {key} is given).
   if (key != nullptr) {
-    effect = BuildCheckEqualsName(feedback.name(), key, effect, control);
+    effect = BuildCheckEqualsName(feedback.original_name_maybe_thin(), key,
+                                  effect, control);
   }
 
   // Collect call nodes to rewire exception edges.
@@ -3089,7 +3088,7 @@ JSNativeContextSpecialization::BuildPropertyAccess(
   UNREACHABLE();
 }
 
-JSNativeContextSpecialization::ValueEffectControl
+std::optional<JSNativeContextSpecialization::ValueEffectControl>
 JSNativeContextSpecialization::BuildPropertyStore(
     Node* receiver, Node* value, Node* context, Node* frame_state, Node* effect,
     Node* control, NameRef name, ZoneVector<Node*>* if_exceptions,
@@ -3244,7 +3243,10 @@ JSNativeContextSpecialization::BuildPropertyStore(
       // Check if we need to grow the properties backing store
       // with this transitioning store.
       MapRef transition_map_ref = transition_map.value();
-      MapRef original_map = transition_map_ref.GetBackPointer(broker()).AsMap();
+      OptionalHeapObjectRef back_pointer =
+          transition_map_ref.GetBackPointer(broker());
+      if (!back_pointer.has_value()) return std::nullopt;
+      MapRef original_map = back_pointer->AsMap();
       if (!field_index.is_inobject()) {
         // If slack tracking ends after this compilation started but before it's
         // finished, then we could {original_map} could be out-of-sync with
@@ -3273,12 +3275,16 @@ JSNativeContextSpecialization::BuildPropertyStore(
       }
       effect = graph()->NewNode(
           common()->BeginRegion(RegionObservability::kObservable), effect);
+      effect = graph()->NewNode(simplified()->StoreField(field_access), storage,
+                                value, effect, control);
+      // We store the map only at the end of the transition to avoid a potential
+      // race with background threads: a background thread could otherwise read
+      // a map, then try to read the new field based on this map, but this field
+      // hasn't been written yet.
       effect = graph()->NewNode(
           simplified()->StoreField(AccessBuilder::ForMap()), receiver,
           jsgraph()->ConstantNoHole(transition_map_ref, broker()), effect,
           control);
-      effect = graph()->NewNode(simplified()->StoreField(field_access), storage,
-                                value, effect, control);
       effect = graph()->NewNode(common()->FinishRegion(),
                                 jsgraph()->UndefinedConstant(), effect);
     } else {
@@ -3508,12 +3514,12 @@ JSNativeContextSpecialization::BuildElementAccess(
   MachineType element_machine_type = MachineType::AnyTagged();
   if (IsDoubleElementsKind(elements_kind)) {
     element_type = Type::Number();
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
     if (elements_kind == HOLEY_DOUBLE_ELEMENTS) {
       element_type =
           Type::Union(element_type, Type::Undefined(), graph()->zone());
     }
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
     element_machine_type = MachineType::Float64();
   } else if (IsSmiElementsKind(elements_kind)) {
     element_type = Type::SignedSmall();
@@ -3576,13 +3582,13 @@ JSNativeContextSpecialization::BuildElementAccess(
           // Return the signaling NaN hole directly if all uses are
           // truncating.
           if (LoadModeHandlesHoles(keyed_mode.load_mode())) {
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
             vtrue = graph()->NewNode(
                 simplified()->ChangeFloat64OrUndefinedOrHoleToTagged(), vtrue);
 #else
             vtrue = graph()->NewNode(simplified()->ChangeFloat64HoleToTagged(),
                                      vtrue);
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
           } else {
             vtrue = etrue = graph()->NewNode(
                 simplified()->CheckFloat64Hole(
@@ -3631,13 +3637,13 @@ JSNativeContextSpecialization::BuildElementAccess(
           if (LoadModeHandlesHoles(keyed_mode.load_mode())) {
             // Return the signaling NaN hole directly if all uses are
             // truncating.
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
             value = graph()->NewNode(
                 simplified()->ChangeFloat64OrUndefinedOrHoleToTagged(), value);
 #else
             value = graph()->NewNode(simplified()->ChangeFloat64HoleToTagged(),
                                      value);
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
           } else {
             value = effect = graph()->NewNode(
                 simplified()->CheckFloat64Hole(
@@ -3732,7 +3738,7 @@ JSNativeContextSpecialization::BuildElementAccess(
       value = effect = graph()->NewNode(
           simplified()->CheckSmi(FeedbackSource()), value, effect, control);
     } else if (IsDoubleElementsKind(elements_kind)) {
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
       if (elements_kind == HOLEY_DOUBLE_ELEMENTS) {
         value = effect = graph()->NewNode(
             simplified()->CheckNumberOrUndefined(FeedbackSource()), value,
@@ -3742,15 +3748,15 @@ JSNativeContextSpecialization::BuildElementAccess(
             simplified()->NumberSilenceNaN(SilenceNanMode::kPreserveUndefined),
             value);
       } else {
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
         value = effect =
             graph()->NewNode(simplified()->CheckNumber(FeedbackSource()), value,
                              effect, control);
         // Make sure we do not store signalling NaNs into double arrays.
         value = graph()->NewNode(simplified()->NumberSilenceNaN(), value);
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
       }
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
     }
 
     // Ensure that copy-on-write backing store is writable.
@@ -3948,7 +3954,9 @@ JSNativeContextSpecialization::
         simplified()->NumberEqual(),
         graph()->NewNode(
             simplified()->NumberBitwiseAnd(), buffer_bit_field,
-            jsgraph()->ConstantNoHole(JSArrayBuffer::WasDetachedBit::kMask)),
+            jsgraph()->ConstantNoHole(JSArrayBuffer::NotValidMask(
+                keyed_mode.IsStore() ? TypedArrayAccessMode::kWrite
+                                     : TypedArrayAccessMode::kRead))),
         jsgraph()->ZeroConstant());
     effect = graph()->NewNode(
         simplified()->CheckIf(DeoptimizeReason::kArrayBufferWasDetached), check,
@@ -4230,25 +4238,63 @@ Node* JSNativeContextSpecialization::BuildExtendPropertiesBackingStore(
   // for intermediate states of chains of property additions. That makes
   // it unclear what the best approach is here.
   DCHECK_EQ(map.UnusedPropertyFields(), 0);
-  int length = map.NextFreePropertyIndex() - map.GetInObjectProperties();
+  int in_object_length = map.GetInObjectProperties();
+  int length = map.NextFreePropertyIndex() - in_object_length;
   // Under normal circumstances, NextFreePropertyIndex() will always be larger
   // than GetInObjectProperties(). However, an attacker able to corrupt heap
   // memory can break this invariant, in which case we'll get confused here,
   // potentially causing a sandbox violation. This CHECK defends against that.
   SBXCHECK_GE(length, 0);
   int new_length = length + JSObject::kFieldsAdded;
+
+  // Find the descriptor index corresponding to the first out-of-object
+  // property.
+  DescriptorArrayRef descs = map.instance_descriptors(broker());
+  InternalIndex first_out_of_object_descriptor(in_object_length);
+  InternalIndex number_of_descriptors(descs.object()->number_of_descriptors());
+  for (InternalIndex i(in_object_length); i < number_of_descriptors; ++i) {
+    PropertyDetails details = descs.GetPropertyDetails(i);
+    // Skip over non-field properties.
+    if (details.location() != PropertyLocation::kField) {
+      continue;
+    }
+    // Skip over in-object fields.
+    // TODO(leszeks): We could make this smarter, like a binary search.
+    if (details.field_index() < in_object_length) {
+      continue;
+    }
+    first_out_of_object_descriptor = i;
+    break;
+  }
+
   // Collect the field values from the {properties}.
-  ZoneVector<Node*> values(zone());
+  ZoneVector<std::pair<Node*, Representation>> values(zone());
   values.reserve(new_length);
-  for (int i = 0; i < length; ++i) {
+
+  // Walk the property descriptors alongside the property values, to make
+  // sure to get and store them with the right machine type.
+  InternalIndex descriptor = first_out_of_object_descriptor;
+  for (int i = 0; i < length; ++i, ++descriptor) {
+    PropertyDetails details = descs.GetPropertyDetails(descriptor);
+    while (details.location() != PropertyLocation::kField) {
+      ++descriptor;
+      details = descs.GetPropertyDetails(descriptor);
+    }
+    DCHECK_EQ(i, details.field_index() - in_object_length);
+    Representation repr = details.representation();
+    MapRef field_owner_map = map.FindFieldOwner(broker(), descriptor);
+    dependencies()->DependOnFieldRepresentation(map, field_owner_map,
+                                                descriptor, repr);
     Node* value = effect = graph()->NewNode(
-        simplified()->LoadField(AccessBuilder::ForFixedArraySlot(i)),
+        simplified()->LoadField(
+            AccessBuilder::ForPropertyArraySlot(i, repr, false)),
         properties, effect, control);
-    values.push_back(value);
+    values.push_back({value, repr});
   }
   // Initialize the new fields to undefined.
   for (int i = 0; i < JSObject::kFieldsAdded; ++i) {
-    values.push_back(jsgraph()->UndefinedConstant());
+    values.push_back(
+        {jsgraph()->UndefinedConstant(), Representation::Tagged()});
   }
 
   // Compute new length and hash.
@@ -4286,7 +4332,8 @@ Node* JSNativeContextSpecialization::BuildExtendPropertiesBackingStore(
   a.Store(AccessBuilder::ForMap(), jsgraph()->PropertyArrayMapConstant());
   a.Store(AccessBuilder::ForPropertyArrayLengthAndHash(), new_length_and_hash);
   for (int i = 0; i < new_length; ++i) {
-    a.Store(AccessBuilder::ForFixedArraySlot(i), values[i]);
+    a.Store(AccessBuilder::ForPropertyArraySlot(i, values[i].second, false),
+            values[i].first);
   }
   return a.Finish();
 }
@@ -4296,9 +4343,17 @@ Node* JSNativeContextSpecialization::BuildCheckEqualsName(NameRef name,
                                                           Node* effect,
                                                           Node* control) {
   DCHECK(name.IsUniqueName());
-  Operator const* const op =
-      name.IsSymbol() ? simplified()->CheckEqualsSymbol()
-                      : simplified()->CheckEqualsInternalizedString();
+  Operator const* op;
+  if (name.IsSymbol()) {
+    op = simplified()->CheckEqualsSymbol();
+    // CheckEqualsSymbol is really just a TaggedEqual and will just return false
+    // if {value} is not a Symbol.
+  } else {
+    DCHECK(name.IsString());
+    op = simplified()->CheckEqualsInternalizedString();
+    effect = graph()->NewNode(simplified()->CheckString(FeedbackSource()),
+                              value, effect, control);
+  }
   return graph()->NewNode(op, jsgraph()->ConstantNoHole(name, broker()), value,
                           effect, control);
 }
@@ -4311,7 +4366,7 @@ bool JSNativeContextSpecialization::CanTreatHoleAsUndefined(
   for (MapRef receiver_map : receiver_maps) {
     ObjectRef receiver_prototype = receiver_map.prototype(broker());
     if (!receiver_prototype.IsJSObject() ||
-        !broker()->IsArrayOrObjectPrototype(receiver_prototype.AsJSObject())) {
+        !receiver_prototype.AsJSObject().IsArrayOrObjectPrototype(broker())) {
       return false;
     }
   }

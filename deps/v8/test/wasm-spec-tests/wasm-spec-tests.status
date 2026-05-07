@@ -12,13 +12,14 @@
   'f32*': [PASS, HEAVY],
   'f64*': [PASS, HEAVY],
 
-  # The test is incorrect as it exports a function with an exnref in the
-  # signature, which is a runtime type error.
-  'ref_null': [FAIL],
-
   # TODO(clemensb/evih): Resolve https://github.com/WebAssembly/memory64/pull/103#issuecomment-2548870034
-  'memory64': [FAIL],
+  'memory64/memory64': [FAIL],
+  'memory64/table64': [FAIL],
   'table': [FAIL],
+
+  # Implementation in progress.
+  'proposals/stack-switching/stack-switching/cont': [FAIL],
+  'proposals/stack-switching/stack-switching/resume_throw': [FAIL],
 }],  # ALWAYS
 
 ['arch == arm and not simulator_run', {
@@ -66,14 +67,6 @@
    'func': ['variant == stress', SKIP],
 }],  # 'arch == riscv32'
 
-['arch == riscv32 and mode == debug and simulator_run', {
-  # Fails in debug mode, because the vector unit isn't properly set up and
-  # the simulator catches it:
-  #   Fatal error in ../../src/execution/riscv/simulator-riscv.cc, line ????
-  #   Debug check failed: vu_enabled_.
-  'simd/simd_load_zero': [FAIL],
-}],  # 'arch == riscv32 and mode == debug and simulator_run'
-
 ['arch == ppc64', {
   # These tests fail because ppc float min and max doesn't convert sNaN to qNaN.
   'f32': [SKIP],
@@ -89,10 +82,27 @@
 }],  # 'arch == s390x'
 
 ##############################################################################
-# TODO(v8:7777): Change this once wasm is supported in jitless mode.
-['not has_webassembly or variant == jitless', {
+['not has_webassembly', {
   '*': [SKIP],
-}],  # not has_webassembly or variant == jitless
+}],  # not has_webassembly
+
+##############################################################################
+['not has_wasm_interpreter and variant == jitless', {
+  '*': [SKIP],
+}],  # not has_wasm_interpreter and variant == jitless
+
+##############################################################################
+['has_wasm_interpreter and variant == jitless', {
+  'memory64/*': [SKIP],
+  'multi-memory/*': [SKIP],
+  'instance': [SKIP],
+  'proposals/*': [SKIP],
+  'ref_null': [SKIP],
+  'exceptions/throw': [SKIP],
+  'exceptions/throw_ref': [SKIP],
+  'exceptions/try_table': [SKIP],
+  'simd/simd_memory-multi': [SKIP],
+ }],  # has_wasm_interpreter and variant == jitless
 
 ##############################################################################
 ['variant == stress_snapshot', {
@@ -105,15 +115,7 @@
 
   'relaxed-simd*': [SKIP],
   'simd*': [SKIP],
-  'proposals/exception-handling/simd*': [SKIP],
-  'proposals/extended-const/simd*': [SKIP],
-  'proposals/gc/simd*': [SKIP],
   'proposals/js-promise-integration/simd*': [SKIP],
-  'proposals/js-types/simd*': [SKIP],
-  'proposals/memory64/relaxed-simd*': [SKIP],
-  'proposals/memory64/simd*': [SKIP],
-  'proposals/multi-memory/simd*': [SKIP],
-  'proposals/tail-call/simd*': [SKIP],
 }],  # no_simd_hardware == True
 
 ##############################################################################
@@ -127,7 +129,13 @@
 # Skip tests that require a large amount of virtual address space (inside the
 # sandbox if that is enabled) if tsan is enabled.
 ['tsan == True', {
-  'memory_copy': [SKIP],
+  'bulk-memory/memory_copy': [SKIP],
 }],  # tsan == True
+
+['variant == nooptimization', {
+  # No Liftoff implementation yet.
+  'proposals/stack-switching/stack-switching/cont': [FAIL],
+  'proposals/stack-switching/stack-switching/resume_throw': [FAIL],
+}],
 
 ]

@@ -9,6 +9,7 @@
 #include "src/codegen/assembler-inl.h"
 #include "src/codegen/interface-descriptors.h"
 #include "src/objects/literal-objects-inl.h"
+#include "src/objects/oddball.h"
 namespace v8 {
 namespace internal {
 namespace baseline {
@@ -150,7 +151,7 @@ void BaselineAssembler::JumpIfInstanceType(Condition cc, Register map,
     __ GetObjectType(map, type, type);
     __ Assert(eq, AbortReason::kUnexpectedValue, type, Operand(MAP_TYPE));
   }
-  __ LoadWord(type, FieldMemOperand(map, Map::kInstanceTypeOffset));
+  __ Lhu(type, FieldMemOperand(map, Map::kInstanceTypeOffset));
   __ Branch(target, cc, type, Operand(instance_type), distance);
 }
 void BaselineAssembler::JumpIfPointer(Condition cc, Register value,
@@ -170,8 +171,38 @@ void BaselineAssembler::JumpIfSmi(Condition cc, Register lhs, Register rhs,
   // todo: compress pointer
   __ AssertSmi(lhs);
   __ AssertSmi(rhs);
-  __ CompareTaggedAndBranch(target, cc, lhs, Operand(rhs), distance);
+  __ CompareTaggedAndBranch(target, cc, lhs, Operand(rhs));
 }
+
+#ifdef V8_STATIC_ROOTS
+void BaselineAssembler::JumpIfStaticRootToBoolean(
+    Register value, Label* true_target, Label::Distance true_distance,
+    Label* false_target, Label::Distance false_distance) {
+  static_assert(StaticReadOnlyRoot::kFirstAllocatedRoot ==
+                StaticReadOnlyRoot::kUndefinedValue);
+  static_assert(StaticReadOnlyRoot::kUndefinedValue + sizeof(Undefined) ==
+                StaticReadOnlyRoot::kNullValue);
+  static_assert(StaticReadOnlyRoot::kNullValue + sizeof(Null) ==
+                StaticReadOnlyRoot::kempty_string);
+  static_assert(StaticReadOnlyRoot::kempty_string +
+                    SeqOneByteString::SizeFor(0) ==
+                StaticReadOnlyRoot::kFalseValue);
+  static_assert(StaticReadOnlyRoot::kFalseValue + sizeof(False) ==
+                StaticReadOnlyRoot::kTrueValue);
+  // Smi zero is falsey.
+  __ CompareTaggedAndBranch(false_target, kEqual, value, Operand(Smi::zero()));
+  // Other Smis are true.
+  __ JumpIfSmi(value, true_target);
+  // The falsey static roots are at the start of the cage, just before the true
+  // value.
+  __ CompareTaggedAndBranch(false_target, kUnsignedLessThan, value,
+                            Operand(StaticReadOnlyRoot::kTrueValue));
+  __ CompareTaggedAndBranch(true_target, kEqual, value,
+                            Operand(StaticReadOnlyRoot::kTrueValue));
+  // Fallthrough for more complex cases.
+}
+#endif
+
 void BaselineAssembler::JumpIfTagged(Condition cc, Register value,
                                      MemOperand operand, Label* target,
                                      Label::Distance distance) {
@@ -179,7 +210,7 @@ void BaselineAssembler::JumpIfTagged(Condition cc, Register value,
   ScratchRegisterScope temps(this);
   Register scratch = temps.AcquireScratch();
   __ LoadWord(scratch, operand);
-  __ CompareTaggedAndBranch(target, cc, value, Operand(scratch), distance);
+  __ CompareTaggedAndBranch(target, cc, value, Operand(scratch));
 }
 void BaselineAssembler::JumpIfTagged(Condition cc, MemOperand operand,
                                      Register value, Label* target,
@@ -188,7 +219,7 @@ void BaselineAssembler::JumpIfTagged(Condition cc, MemOperand operand,
   ScratchRegisterScope temps(this);
   Register scratch = temps.AcquireScratch();
   __ LoadWord(scratch, operand);
-  __ CompareTaggedAndBranch(target, cc, scratch, Operand(value), distance);
+  __ CompareTaggedAndBranch(target, cc, scratch, Operand(value));
 }
 void BaselineAssembler::JumpIfByte(Condition cc, Register value, int32_t byte,
                                    Label* target, Label::Distance distance) {
@@ -523,7 +554,7 @@ void BaselineAssembler::Switch(Register reg, int case_value_base,
   // We're going to use pc-relative addressing to load from the jump table,
   // so we need to block trampoline pool emission for the entire length of
   // the table including the preamble.
-  MacroAssembler::BlockTrampolinePoolScope block(
+  MacroAssembler::BlockPoolsScope block_pools(
       masm_, (2 + 5 + num_labels * 2) * kInstrSize);
 
   int64_t imm64;

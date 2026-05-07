@@ -434,32 +434,32 @@ static Instruction* VisitCompare(InstructionSelector* selector,
                                  InstructionOperand left,
                                  InstructionOperand right,
                                  FlagsContinuation* cont) {
+  RiscvOperandGenerator g(selector);
+  InstructionOperand inputs[4];
+  size_t input_count = 0;
+  inputs[input_count++] = left;
+  inputs[input_count++] = right;
+  if (cont->IsSelect()) {
+    inputs[input_count++] = g.UseRegisterOrImmediateZero(cont->true_value());
+    inputs[input_count++] = g.UseRegisterOrImmediateZero(cont->false_value());
+  }
 #ifdef V8_COMPRESS_POINTERS
   if (opcode == kRiscvCmp32) {
-    RiscvOperandGenerator g(selector);
-    InstructionOperand inputs[] = {left, right};
     if (right.IsImmediate()) {
       InstructionOperand temps[1] = {g.TempRegister()};
-      return selector->EmitWithContinuation(opcode, 0, nullptr,
-                                            arraysize(inputs), inputs,
-                                            arraysize(temps), temps, cont);
+      return selector->EmitWithContinuation(opcode, 0, nullptr, input_count,
+                                            inputs, arraysize(temps), temps,
+                                            cont);
     } else {
       InstructionOperand temps[2] = {g.TempRegister(), g.TempRegister()};
-      return selector->EmitWithContinuation(opcode, 0, nullptr,
-                                            arraysize(inputs), inputs,
-                                            arraysize(temps), temps, cont);
+      return selector->EmitWithContinuation(opcode, 0, nullptr, input_count,
+                                            inputs, arraysize(temps), temps,
+                                            cont);
     }
   }
 #endif
-  return selector->EmitWithContinuation(opcode, left, right, cont);
-}
-
-// Shared routine for multiple compare operations.
-
-static Instruction* VisitWordCompareZero(InstructionSelector* selector,
-                                         InstructionOperand value,
-                                         FlagsContinuation* cont) {
-  return selector->EmitWithContinuation(kRiscvCmpZero, value, cont);
+  return selector->EmitWithContinuation(opcode, 0, nullptr, input_count, inputs,
+                                        cont);
 }
 
 // Shared routine for multiple float32 compare operations.
@@ -536,35 +536,20 @@ Instruction* VisitWordCompare(InstructionSelector* selector, OpIndex node,
             return VisitCompare(selector, opcode, g.UseRegister(left),
                                 g.UseImmediate(right), cont);
           } else {
-            if (g.CanBeZero(right)) {
-              return VisitWordCompareZero(
-                  selector, g.UseRegisterOrImmediateZero(left), cont);
-            } else {
               return VisitCompare(selector, opcode, g.UseRegister(left),
                                   g.UseRegister(right), cont);
-            }
           }
           break;
         case kSignedLessThan:
         case kSignedGreaterThanOrEqual:
         case kUnsignedLessThan:
         case kUnsignedGreaterThanOrEqual: {
-          if (g.CanBeZero(right)) {
-            return VisitWordCompareZero(
-                selector, g.UseRegisterOrImmediateZero(left), cont);
-          } else {
             return VisitCompare(selector, opcode, g.UseRegister(left),
                                 g.UseImmediate(right), cont);
-          }
         } break;
         default:
-          if (g.CanBeZero(right)) {
-            return VisitWordCompareZero(
-                selector, g.UseRegisterOrImmediateZero(left), cont);
-          } else {
             return VisitCompare(selector, opcode, g.UseRegister(left),
                                 g.UseRegister(right), cont);
-          }
       }
     }
   } else {
@@ -609,8 +594,15 @@ void InstructionSelector::VisitSwitch(OpIndex node, const SwitchInfo& sw) {
 void EmitWordCompareZero(InstructionSelector* selector, OpIndex value,
                          FlagsContinuation* cont) {
   RiscvOperandGenerator g(selector);
-  selector->EmitWithContinuation(kRiscvCmpZero,
-                                 g.UseRegisterOrImmediateZero(value), cont);
+  size_t input_count = 0;
+  InstructionOperand inputs[4];
+  inputs[input_count++] = g.UseRegisterOrImmediateZero(value);
+  if (cont->IsSelect()) {
+    inputs[input_count++] = g.UseRegisterOrImmediateZero(cont->true_value());
+    inputs[input_count++] = g.UseRegisterOrImmediateZero(cont->false_value());
+  }
+  selector->EmitWithContinuation(kRiscvCmpZero, 0, nullptr, input_count, inputs,
+                                 cont);
 }
 
 #ifdef V8_TARGET_ARCH_RISCV64
@@ -618,9 +610,15 @@ void EmitWordCompareZero(InstructionSelector* selector, OpIndex value,
 void EmitWord32CompareZero(InstructionSelector* selector, OpIndex value,
                            FlagsContinuation* cont) {
   RiscvOperandGenerator g(selector);
-  InstructionOperand inputs[] = {g.UseRegisterOrImmediateZero(value)};
+  InstructionOperand inputs[3];
+  size_t input_count = 0;
+  inputs[input_count++] = g.UseRegisterOrImmediateZero(value);
   InstructionOperand temps[] = {g.TempRegister()};
-  selector->EmitWithContinuation(kRiscvCmpZero32, 0, nullptr, arraysize(inputs),
+  if (cont->IsSelect()) {
+    inputs[input_count++] = g.UseRegisterOrImmediateZero(cont->true_value());
+    inputs[input_count++] = g.UseRegisterOrImmediateZero(cont->false_value());
+  }
+  selector->EmitWithContinuation(kRiscvCmpZero32, 0, nullptr, input_count,
                                  inputs, arraysize(temps), temps, cont);
 }
 #endif
@@ -1374,14 +1372,24 @@ void InstructionSelector::VisitI16x8SConvertI32x4(OpIndex node) {
   const Operation& op = this->Get(node);
   DCHECK_EQ(op.input_count, 2);
   InstructionCode opcode = kRiscvI16x8SConvertI32x4;
-  // Request a register group (two adjacent registers starting at an even
-  // index). There is nothing special about the registers, as long as they
-  // are adjacent and start at an even index.
-  // Fixed registers also ensure that the inputs don't overlap with the output.
-  auto input0 = g.UseFixed(op.input(0), v28);
-  auto input1 = g.UseFixed(op.input(1), v29);
-  opcode |= EncodeRegisterConstraint(
-      RiscvRegisterConstraint::kRegisterGroupNoOverlap);
+  InstructionOperand input0;
+  InstructionOperand input1;
+  if (CpuFeatures::vlen() > 128) {
+    // No need for register groups, as one register is big enough to hold
+    // 256 bits.
+    input0 = g.UseRegister(op.input(0));
+    input1 = g.UseRegister(op.input(1));
+  } else {
+    // Request a register group (two adjacent registers starting at an even
+    // index). There is nothing special about the registers, as long as they
+    // are adjacent and start at an even index.
+    // Fixed registers also ensure that the inputs don't overlap with the
+    // output.
+    input0 = g.UseFixed(op.input(0), v28);
+    input1 = g.UseFixed(op.input(1), v29);
+    opcode |= EncodeRegisterConstraint(
+        RiscvRegisterConstraint::kRegisterGroupNoOverlap);
+  }
   Emit(opcode, g.DefineAsRegister(node), input0, input1);
 }
 
@@ -1390,14 +1398,24 @@ void InstructionSelector::VisitI16x8UConvertI32x4(OpIndex node) {
   const Operation& op = this->Get(node);
   DCHECK_EQ(op.input_count, 2);
   InstructionCode opcode = kRiscvI16x8UConvertI32x4;
-  // Request a register group (two adjacent registers starting at an even
-  // index). There is nothing special about the registers, as long as they
-  // are adjacent and start at an even index.
-  // Fixed registers also ensure that the inputs don't overlap with the output.
-  auto input0 = g.UseFixed(op.input(0), v28);
-  auto input1 = g.UseFixed(op.input(1), v29);
-  opcode |= EncodeRegisterConstraint(
-      RiscvRegisterConstraint::kRegisterGroupNoOverlap);
+  InstructionOperand input0;
+  InstructionOperand input1;
+  if (CpuFeatures::vlen() > 128) {
+    // No need for register groups, as one register is big enough to hold
+    // 256 bits.
+    input0 = g.UseRegister(op.input(0));
+    input1 = g.UseRegister(op.input(1));
+  } else {
+    // Request a register group (two adjacent registers starting at an even
+    // index). There is nothing special about the registers, as long as they
+    // are adjacent and start at an even index.
+    // Fixed registers also ensure that the inputs don't overlap with the
+    // output.
+    input0 = g.UseFixed(op.input(0), v28);
+    input1 = g.UseFixed(op.input(1), v29);
+    opcode |= EncodeRegisterConstraint(
+        RiscvRegisterConstraint::kRegisterGroupNoOverlap);
+  }
   Emit(opcode, g.DefineAsRegister(node), input0, input1);
 }
 
@@ -1414,14 +1432,24 @@ void InstructionSelector::VisitI8x16SConvertI16x8(OpIndex node) {
   const Operation& op = this->Get(node);
   DCHECK_EQ(op.input_count, 2);
   InstructionCode opcode = kRiscvI8x16SConvertI16x8;
-  // Request a register group (two adjacent registers starting at an even
-  // index). There is nothing special about the registers, as long as they
-  // are adjacent and start at an even index.
-  // Fixed registers also ensure that the inputs don't overlap with the output.
-  auto input0 = g.UseFixed(op.input(0), v28);
-  auto input1 = g.UseFixed(op.input(1), v29);
-  opcode |= EncodeRegisterConstraint(
-      RiscvRegisterConstraint::kRegisterGroupNoOverlap);
+  InstructionOperand input0;
+  InstructionOperand input1;
+  if (CpuFeatures::vlen() > 128) {
+    // No need for register groups, as one register is big enough to hold
+    // 256 bits.
+    input0 = g.UseRegister(op.input(0));
+    input1 = g.UseRegister(op.input(1));
+  } else {
+    // Request a register group (two adjacent registers starting at an even
+    // index). There is nothing special about the registers, as long as they
+    // are adjacent and start at an even index.
+    // Fixed registers also ensure that the inputs don't overlap with the
+    // output.
+    input0 = g.UseFixed(op.input(0), v28);
+    input1 = g.UseFixed(op.input(1), v29);
+    opcode |= EncodeRegisterConstraint(
+        RiscvRegisterConstraint::kRegisterGroupNoOverlap);
+  }
   Emit(opcode, g.DefineAsRegister(node), input0, input1);
 }
 
@@ -1430,14 +1458,24 @@ void InstructionSelector::VisitI8x16UConvertI16x8(OpIndex node) {
   const Operation& op = this->Get(node);
   DCHECK_EQ(op.input_count, 2);
   InstructionCode opcode = kRiscvI8x16UConvertI16x8;
-  // Request a register group (two adjacent registers starting at an even
-  // index). There is nothing special about the registers, as long as they
-  // are adjacent and start at an even index.
-  // Fixed registers also ensure that the inputs don't overlap with the output.
-  auto input0 = g.UseFixed(op.input(0), v28);
-  auto input1 = g.UseFixed(op.input(1), v29);
-  opcode |= EncodeRegisterConstraint(
-      RiscvRegisterConstraint::kRegisterGroupNoOverlap);
+  InstructionOperand input0;
+  InstructionOperand input1;
+  if (CpuFeatures::vlen() > 128) {
+    // No need for register groups, as one register is big enough to hold
+    // 256 bits.
+    input0 = g.UseRegister(op.input(0));
+    input1 = g.UseRegister(op.input(1));
+  } else {
+    // Request a register group (two adjacent registers starting at an even
+    // index). There is nothing special about the registers, as long as they
+    // are adjacent and start at an even index.
+    // Fixed registers also ensure that the inputs don't overlap with the
+    // output.
+    input0 = g.UseFixed(op.input(0), v28);
+    input1 = g.UseFixed(op.input(1), v29);
+    opcode |= EncodeRegisterConstraint(
+        RiscvRegisterConstraint::kRegisterGroupNoOverlap);
+  }
   Emit(opcode, g.DefineAsRegister(node), input0, input1);
 }
 
@@ -1470,12 +1508,15 @@ void InstructionSelector::VisitI32x4DotI8x16I7x16AddS(OpIndex node) {
   const Operation& op = this->Get(node);
   DCHECK_EQ(op.input_count, 3);
   InstructionCode opcode = kRiscvI32x4DotI8x16I7x16AddS;
+
   // Any even allocatable register can be used as input.
-  auto input0 = g.UseFixed(op.input(0), v12);
-  auto input1 = g.UseFixed(op.input(1), v14);
-  opcode |= EncodeRegisterConstraint(RiscvRegisterConstraint::kEvenRegisters01);
-  Emit(opcode, g.DefineAsRegister(node), input0, input1,
-       g.UseRegister(op.input(2)));
+  InstructionOperand temps[] = {g.TempSimd128Register()};
+  auto input0 = g.UseRegister(op.input(0));
+  auto input1 = g.UseRegister(op.input(1));
+  auto input2 = g.UseUniqueRegister(op.input(2));
+  opcode |= EncodeRegisterConstraint(RiscvRegisterConstraint::kNoInput2Overlap);
+  Emit(opcode, g.DefineAsRegister(node), input0, input1, input2,
+       arraysize(temps), temps);
 }
 
 void InstructionSelector::VisitI8x16Shuffle(OpIndex node) {
@@ -1676,11 +1717,23 @@ void InstructionSelector::VisitF64x2Pmax(OpIndex node) {
 }
 
 void InstructionSelector::VisitTruncateFloat64ToFloat16RawBits(OpIndex node) {
-  UNIMPLEMENTED();
+  RiscvOperandGenerator g(this);
+  const ChangeOp& op = Cast<ChangeOp>(node);
+  InstructionOperand inputs[] = {g.UseRegister(op.input())};
+  InstructionOperand outputs[] = {g.DefineAsRegister(node)};
+  InstructionOperand temps[] = {g.TempDoubleRegister()};
+  Emit(kRiscvFloat64ToFloat16RawBits, arraysize(outputs), outputs,
+       arraysize(inputs), inputs, arraysize(temps), temps);
 }
 
 void InstructionSelector::VisitChangeFloat16RawBitsToFloat64(OpIndex node) {
-  UNIMPLEMENTED();
+  RiscvOperandGenerator g(this);
+  const ChangeOp& op = Cast<ChangeOp>(node);
+  InstructionOperand inputs[] = {g.UseRegister(op.input())};
+  InstructionOperand outputs[] = {g.DefineAsRegister(node)};
+  InstructionOperand temps[] = {g.TempDoubleRegister()};
+  Emit(kRiscvFloat16RawBitsToFloat64, arraysize(outputs), outputs,
+       arraysize(inputs), inputs, arraysize(temps), temps);
 }
 
 // static
@@ -1698,7 +1751,7 @@ InstructionSelector::AlignmentRequirements() {
 void InstructionSelector::AddOutputToSelectContinuation(OperandGenerator* g,
                                                         int first_input_index,
                                                         OpIndex node) {
-  UNREACHABLE();
+  continuation_outputs_.push_back(g->DefineAsRegister(node));
 }
 
 #if V8_ENABLE_WEBASSEMBLY

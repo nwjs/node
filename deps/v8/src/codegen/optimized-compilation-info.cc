@@ -33,7 +33,10 @@ OptimizedCompilationInfo::OptimizedCompilationInfo(
   DCHECK_EQ(*shared, closure->shared());
   DCHECK(shared->is_compiled());
   DCHECK_IMPLIES(is_osr(), IsOptimizing());
+  // TODO(dmercadier): get the BytecodeArray from a trusted place rather than
+  // from the SharedFunctionInfo.
   bytecode_array_ = handle(shared->GetBytecodeArray(isolate), isolate);
+
   shared_info_ = shared;
   closure_ = closure;
   canonical_handles_ = std::make_unique<CanonicalHandlesMap>(
@@ -106,6 +109,7 @@ void OptimizedCompilationInfo::ConfigureFlags() {
 #endif  // V8_ENABLE_BUILTIN_JUMP_TABLE_SWITCH
       [[fallthrough]];
     case CodeKind::FOR_TESTING:
+    case CodeKind::FOR_TESTING_JS:
       if (v8_flags.turbo_splitting) set_splitting();
       if (v8_flags.enable_allocation_folding) set_allocation_folding();
 #if ENABLE_GDB_JIT_INTERFACE && DEBUG
@@ -181,6 +185,7 @@ std::unique_ptr<char[]> OptimizedCompilationInfo::GetDebugName() const {
 StackFrame::Type OptimizedCompilationInfo::GetOutputStackFrameType() const {
   switch (code_kind()) {
     case CodeKind::FOR_TESTING:
+    case CodeKind::FOR_TESTING_JS:
     case CodeKind::BYTECODE_HANDLER:
     case CodeKind::BUILTIN:
       return StackFrame::STUB;
@@ -197,10 +202,24 @@ StackFrame::Type OptimizedCompilationInfo::GetOutputStackFrameType() const {
       return StackFrame::C_WASM_ENTRY;
     case CodeKind::WASM_STACK_ENTRY:
       return StackFrame::WASM_STACK_ENTRY;
+#else
+    case CodeKind::WASM_FUNCTION:
+    case CodeKind::WASM_TO_CAPI_FUNCTION:
+    case CodeKind::JS_TO_WASM_FUNCTION:
+    case CodeKind::WASM_TO_JS_FUNCTION:
+    case CodeKind::C_WASM_ENTRY:
+    case CodeKind::WASM_STACK_ENTRY:
+      UNREACHABLE();
 #endif  // V8_ENABLE_WEBASSEMBLY
-    default:
+
+    case CodeKind::REGEXP:
+    case CodeKind::INTERPRETED_FUNCTION:
+    case CodeKind::BASELINE:
+    case CodeKind::MAGLEV:
+    case CodeKind::TURBOFAN_JS:
       UNIMPLEMENTED();
   }
+  UNREACHABLE();
 }
 
 void OptimizedCompilationInfo::SetCode(IndirectHandle<Code> code) {

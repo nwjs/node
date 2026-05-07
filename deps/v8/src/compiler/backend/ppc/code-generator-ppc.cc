@@ -13,7 +13,7 @@
 #include "src/compiler/backend/gap-resolver.h"
 #include "src/compiler/node-matchers.h"
 #include "src/compiler/osr.h"
-#include "src/heap/mutable-page-metadata.h"
+#include "src/heap/mutable-page.h"
 
 #if V8_ENABLE_WEBASSEMBLY
 #include "src/wasm/wasm-linkage.h"
@@ -128,6 +128,54 @@ static inline bool HasRegisterInput(Instruction* instr, size_t index) {
 }
 
 namespace {
+
+class OutOfLineVerifySkippedWriteBarrier final : public OutOfLineCode {
+ public:
+  OutOfLineVerifySkippedWriteBarrier(CodeGenerator* gen, Register object,
+                                     Register value, Register scratch,
+                                     UnwindingInfoWriter* unwinding_info_writer)
+      : OutOfLineCode(gen),
+        object_(object),
+        value_(value),
+        scratch_(scratch),
+        must_save_lr_(!gen->frame_access_state()->has_frame()),
+        unwinding_info_writer_(unwinding_info_writer),
+        zone_(gen->zone()) {}
+
+  void Generate() final {
+    if (COMPRESS_POINTERS_BOOL) {
+      __ DecompressTagged(value_, value_);
+    }
+
+    __ PreCheckSkippedWriteBarrier(object_, value_, scratch_, exit());
+
+    SaveFPRegsMode const save_fp_mode = frame()->DidAllocateDoubleRegisters()
+                                            ? SaveFPRegsMode::kSave
+                                            : SaveFPRegsMode::kIgnore;
+
+    if (must_save_lr_) {
+      // We need to save and restore lr if the frame was elided.
+      __ mflr(scratch_);
+      __ Push(scratch_);
+      unwinding_info_writer_->MarkLinkRegisterOnTopOfStack(__ pc_offset());
+    }
+    __ CallVerifySkippedWriteBarrierStubSaveRegisters(object_, value_,
+                                                      save_fp_mode);
+    if (must_save_lr_) {
+      __ Pop(scratch_);
+      __ mtlr(scratch_);
+      unwinding_info_writer_->MarkPopLinkRegisterFromTopOfStack(__ pc_offset());
+    }
+  }
+
+ private:
+  Register const object_;
+  Register const value_;
+  Register const scratch_;
+  bool const must_save_lr_;
+  UnwindingInfoWriter* const unwinding_info_writer_;
+  Zone* zone_;
+};
 
 class OutOfLineRecordWrite final : public OutOfLineCode {
  public:
@@ -391,15 +439,6 @@ Condition FlagsConditionToCondition(FlagsCondition condition, ArchOpcode op) {
     const CRegister cr = cr0;                                             \
     __ cmp_instr(i.InputDoubleRegister(0), i.InputDoubleRegister(1), cr); \
     DCHECK_EQ(SetRC, i.OutputRCBit());                                    \
-  } while (0)
-
-#define ASSEMBLE_MODULO(div_instr, mul_instr)                        \
-  do {                                                               \
-    const Register scratch = kScratchReg;                            \
-    __ div_instr(scratch, i.InputRegister(0), i.InputRegister(1));   \
-    __ mul_instr(scratch, scratch, i.InputRegister(1));              \
-    __ sub(i.OutputRegister(), i.InputRegister(0), scratch, LeaveOE, \
-           i.OutputRCBit());                                         \
   } while (0)
 
 #define ASSEMBLE_FLOAT_MODULO()                                             \
@@ -672,6 +711,10 @@ void CodeGenerator::AssemblePrepareTailCall() {
   frame_access_state()->SetFrameAccessToSP();
 }
 
+bool HasImmediateInput(Instruction* instr, size_t index) {
+  return instr->InputAt(index)->IsImmediate();
+}
+
 namespace {
 
 void FlushPendingPushRegisters(MacroAssembler* masm,
@@ -771,14 +814,12 @@ void CodeGenerator::AssembleCodeStartRegisterCheck() {
   __ Assert(eq, AbortReason::kWrongFunctionCodeStart);
 }
 
-#ifdef V8_ENABLE_LEAPTIERING
 void CodeGenerator::AssembleDispatchHandleRegisterCheck() {
   CHECK(!V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE_BOOL);
 }
-#endif  // V8_ENABLE_LEAPTIERING
 
-void CodeGenerator::BailoutIfDeoptimized() {
-  __ BailoutIfDeoptimized(kScratchReg);
+void CodeGenerator::AssertNotDeoptimized() {
+  __ AssertNotDeoptimized(kScratchReg);
 }
 
 // Assembles an instruction after register allocation, producing machine code.
@@ -819,8 +860,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     }
 #if V8_ENABLE_WEBASSEMBLY
     case kArchCallWasmFunction:
-    case kArchCallWasmFunctionIndirect:
-    case kArchResumeWasmContinuation: {
+    case kArchCallWasmFunctionIndirect: {
       // We must not share code targets for calls to builtins for wasm code, as
       // they might need to be patched individually.
       if (instr->InputAt(0)->IsImmediate()) {
@@ -831,9 +871,6 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       } else if (opcode == kArchCallWasmFunctionIndirect) {
         __ CallWasmCodePointer(i.InputRegister(0));
       } else {
-        // TODO(thibaudm): Use a WasmCodePointer for
-        // kArchResumeWasmContinuation. Can this be merged with
-        // kArchCallWasmFunctionIndirect?
         __ Call(i.InputRegister(0));
       }
       RecordCallPosition(instr);
@@ -893,17 +930,47 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     case kArchCallJSFunction: {
       v8::internal::Assembler::BlockTrampolinePoolScope block_trampoline_pool(
           masm());
-      Register func = i.InputRegister(0);
-      if (v8_flags.debug_code) {
-        // Check the function's context matches the context argument.
-        __ LoadTaggedField(
-            kScratchReg, FieldMemOperand(func, JSFunction::kContextOffset), r0);
-        __ CmpS64(cp, kScratchReg);
-        __ Assert(eq, AbortReason::kWrongFunctionContext);
-      }
       uint32_t num_arguments =
           i.InputUint32(instr->JSCallArgumentCountInputIndex());
-      __ CallJSFunction(func, num_arguments);
+      if (HasImmediateInput(instr, 0)) {
+        Handle<HeapObject> constant =
+            i.ToConstant(instr->InputAt(0)).ToHeapObject();
+        __ Move(kJavaScriptCallTargetRegister, constant);
+        if (Handle<JSFunction> function; TryCast(constant, &function)) {
+          if (function->shared()->HasBuiltinId()) {
+            Builtin builtin = function->shared()->builtin_id();
+            size_t expected = Builtins::GetFormalParameterCount(builtin);
+            if (num_arguments == expected) {
+              __ CallBuiltin(builtin);
+            } else {
+              __ AssertUnreachable(AbortReason::kJSSignatureMismatch);
+            }
+          } else {
+            JSDispatchHandle dispatch_handle = function->dispatch_handle();
+            size_t expected = isolate()->js_dispatch_table().GetParameterCount(
+                dispatch_handle);
+            if (num_arguments >= expected) {
+              __ RecordJSDispatchHandle(dispatch_handle, expected);
+              __ CallJSDispatchEntry(dispatch_handle, expected);
+            } else {
+              __ AssertUnreachable(AbortReason::kJSSignatureMismatch);
+            }
+          }
+        } else {
+          __ CallJSFunction(kJavaScriptCallTargetRegister, num_arguments);
+        }
+      } else {
+        Register func = i.InputRegister(0);
+        if (v8_flags.debug_code) {
+          // Check the function's context matches the context argument.
+          __ LoadTaggedField(kScratchReg,
+                             FieldMemOperand(func, JSFunction::kContextOffset),
+                             r0);
+          __ CmpS64(cp, kScratchReg);
+          __ Assert(eq, AbortReason::kWrongFunctionContext);
+        }
+        __ CallJSFunction(func, num_arguments);
+      }
       RecordCallPosition(instr);
       DCHECK_EQ(LeaveRC, i.OutputRCBit());
       frame_access_state()->ClearSPDelta();
@@ -1172,6 +1239,32 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ bind(ool->exit());
       break;
     }
+    case kArchStoreSkippedWriteBarrier:  // Fall through.
+    case kArchAtomicStoreSkippedWriteBarrier: {
+      size_t index = 0;
+      AddressingMode mode = kMode_None;
+      MemOperand operand = i.MemoryOperand(&mode, &index);
+      CHECK_EQ(index, 2);
+      Register object = i.InputRegister(0);
+      Register value = i.InputRegister(2);
+
+      if (v8_flags.debug_code) {
+        // Checking that |value| is not a cleared weakref: our write barrier
+        // does not support that for now.
+        __ cmpi(value, Operand(kClearedWeakHeapObjectLower32));
+        __ Check(ne, AbortReason::kOperandIsCleared);
+      }
+
+      DCHECK(v8_flags.verify_write_barriers);
+      auto ool = zone()->New<OutOfLineVerifySkippedWriteBarrier>(
+          this, object, value, kScratchReg, &unwinding_info_writer_);
+      __ JumpIfNotSmi(value, ool->entry());
+      __ bind(ool->exit());
+
+      __ StoreTaggedField(value, operand, r0);
+      break;
+    }
+    case kArchStoreIndirectSkippedWriteBarrier:
     case kArchStoreIndirectWithWriteBarrier: {
       UNREACHABLE();
     }
@@ -1416,32 +1509,16 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       ASSEMBLE_FLOAT_BINOP_RC(fdiv, MiscField::decode(instr->opcode()));
       break;
     case kPPC_Mod32:
-      if (CpuFeatures::IsSupported(PPC_9_PLUS)) {
-        __ modsw(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
-      } else {
-        ASSEMBLE_MODULO(divw, mullw);
-      }
+      __ modsw(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
       break;
     case kPPC_Mod64:
-      if (CpuFeatures::IsSupported(PPC_9_PLUS)) {
-        __ modsd(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
-      } else {
-        ASSEMBLE_MODULO(divd, mulld);
-      }
+      __ modsd(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
       break;
     case kPPC_ModU32:
-      if (CpuFeatures::IsSupported(PPC_9_PLUS)) {
-        __ moduw(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
-      } else {
-        ASSEMBLE_MODULO(divwu, mullw);
-      }
+      __ moduw(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
       break;
     case kPPC_ModU64:
-      if (CpuFeatures::IsSupported(PPC_9_PLUS)) {
-        __ modud(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
-      } else {
-        ASSEMBLE_MODULO(divdu, mulld);
-      }
+      __ modud(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
       break;
     case kPPC_ModDouble:
       // TODO(bmeurer): We should really get rid of this special instruction,
@@ -3152,7 +3229,7 @@ void CodeGenerator::AssembleConstructFrame() {
                     CommonFrameConstants::kFixedFrameSizeAboveFp));
         __ Call(static_cast<Address>(Builtin::kWasmHandleStackOverflow),
                 RelocInfo::WASM_STUB_CALL);
-        // If the call succesfully grew the stack, we don't expect it to have
+        // If the call successfully grew the stack, we don't expect it to have
         // allocated any heap objects or otherwise triggered any GC.
         // If it was not able to grow the stack, it may have triggered a GC when
         // allocating the stack overflow exception object, but the call did not

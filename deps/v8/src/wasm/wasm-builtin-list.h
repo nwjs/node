@@ -49,6 +49,7 @@ namespace v8::internal::wasm {
   V(WasmTableSetFuncRef)                                                       \
   V(WasmFunctionTableGet)                                                      \
   V(WasmStackGuard)                                                            \
+  V(WasmStackGuardLoop)                                                        \
   V(WasmGrowableStackGuard)                                                    \
   V(WasmStackOverflow)                                                         \
   V(WasmAllocateFixedArray)                                                    \
@@ -144,9 +145,15 @@ namespace v8::internal::wasm {
   V(WasmAnyConvertExternShared)                                                \
   V(WasmStringFromDataSegment)                                                 \
   V(WasmStringAdd_CheckNone)                                                   \
+  V(DebugPrintWord32)                                                          \
+  V(DebugPrintWord64)                                                          \
+  V(DebugPrintFloat32)                                                         \
   V(DebugPrintFloat64)                                                         \
-  V(DebugPrintWordPtr)                                                         \
+  V(DebugPrintObject)                                                          \
   V(WasmFastApiCallTypeCheckAndUpdateIC)                                       \
+  V(WasmFXResume)                                                              \
+  V(WasmFXResumeThrow)                                                         \
+  V(WasmFXSuspend)                                                             \
   V(DeoptimizationEntry_Eager)                                                 \
   V(WasmLiftoffDeoptFinish)                                                    \
   V(WasmPropagateException)                                                    \
@@ -156,6 +163,7 @@ namespace v8::internal::wasm {
   V(WasmLiftoffCastEqRefUnshared)                                              \
   V(WasmLiftoffCastArrayRefUnshared)                                           \
   V(WasmLiftoffCastStructRefUnshared)                                          \
+  V(WasmTypeAssertionFailed)                                                   \
   IF_SHADOW_STACK(V, AdaptShadowStackForDeopt)
 
 // Other wasm builtins that are not called via the far jump table, but need the

@@ -64,6 +64,12 @@ class V8_BASE_EXPORT BoundedPageAllocator : public v8::PageAllocator {
     kHintedAddressTakenOrNotFound,
   };
 
+  struct Stats {
+    size_t free_size = 0;
+    size_t largest_free_region = 0;
+    AllocationStatus allocation_status = AllocationStatus::kSuccess;
+  };
+
   using Address = uintptr_t;
 
   static const char* AllocationStatusToString(AllocationStatus);
@@ -132,6 +138,8 @@ class V8_BASE_EXPORT BoundedPageAllocator : public v8::PageAllocator {
     return allocation_status_;
   }
 
+  Stats RecordStats();
+
  private:
   v8::base::Mutex mutex_;
   const size_t allocate_page_size_;
@@ -142,6 +150,19 @@ class V8_BASE_EXPORT BoundedPageAllocator : public v8::PageAllocator {
   const PageFreeingMode page_freeing_mode_;
   AllocationStatus allocation_status_ = AllocationStatus::kSuccess;
 };
+
+constexpr const char* ToString(BoundedPageAllocator::AllocationStatus status) {
+  switch (status) {
+    case BoundedPageAllocator::AllocationStatus::kSuccess:
+      return "success";
+    case BoundedPageAllocator::AllocationStatus::kFailedToCommit:
+      return "failed to commit";
+    case BoundedPageAllocator::AllocationStatus::kRanOutOfReservation:
+      return "ran out of reservation";
+    case BoundedPageAllocator::AllocationStatus::kHintedAddressTakenOrNotFound:
+      return "hinted address taken or not found";
+  }
+}
 
 }  // namespace base
 }  // namespace v8

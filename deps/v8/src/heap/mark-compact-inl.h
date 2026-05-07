@@ -13,10 +13,9 @@
 #include "src/heap/marking-state-inl.h"
 #include "src/heap/marking-visitor-inl.h"
 #include "src/heap/marking-worklist-inl.h"
-#include "src/heap/marking-worklist.h"
 #include "src/heap/marking.h"
 #include "src/heap/memory-chunk.h"
-#include "src/heap/page-metadata.h"
+#include "src/heap/normal-page.h"
 #include "src/heap/remembered-set-inl.h"
 #include "src/objects/js-collection-inl.h"
 #include "src/objects/transitions.h"
@@ -26,8 +25,7 @@ namespace v8 {
 namespace internal {
 
 void MarkCompactCollector::MarkObject(
-    Tagged<HeapObject> host, Tagged<HeapObject> obj,
-    MarkingHelper::WorklistTarget target_worklist) {
+    Tagged<HeapObject> obj, MarkingHelper::WorklistTarget target_worklist) {
   DCHECK(ReadOnlyHeap::Contains(obj) || heap_->Contains(obj));
   MarkingHelper::TryMarkAndPush(heap_, local_marking_worklists_.get(),
                                 marking_state_, target_worklist, obj);
@@ -42,21 +40,21 @@ void MarkCompactCollector::MarkRootObject(
   if (V8_UNLIKELY(in_conservative_stack_scanning_)) {
     DCHECK_EQ(root, Root::kStackRoots);
     MemoryChunk* chunk = MemoryChunk::FromHeapObject(obj);
-    auto* metadata = MutablePageMetadata::cast(chunk->Metadata());
+    auto* page = SbxCast<MutablePage>(chunk->Metadata());
     if (chunk->IsEvacuationCandidate()) {
       DCHECK(!chunk->InYoungGeneration());
-      ReportAbortedEvacuationCandidateDueToFlags(PageMetadata::cast(metadata));
+      ReportAbortedEvacuationCandidateDueToFlags(SbxCast<NormalPage>(page));
     } else if (chunk->InYoungGeneration() && !chunk->IsLargePage()) {
       DCHECK(chunk->IsToPage());
-      if (!metadata->is_quarantined()) {
-        metadata->set_is_quarantined(true);
+      if (!page->is_quarantined()) {
+        page->set_is_quarantined(true);
       }
     }
   }
 }
 
 // static
-template <typename THeapObjectSlot>
+template <typename THeapObjectSlot, RecordYoungSlot kRecordYoung>
 void MarkCompactCollector::RecordSlot(Tagged<HeapObject> host,
                                       THeapObjectSlot slot,
                                       Tagged<HeapObject> value) {
@@ -64,31 +62,36 @@ void MarkCompactCollector::RecordSlot(Tagged<HeapObject> host,
   if (host_chunk->ShouldSkipEvacuationSlotRecording()) {
     return;
   }
-  RecordSlot(host_chunk, slot, value);
+  RecordSlot<THeapObjectSlot, kRecordYoung>(host_chunk, slot, value);
 }
 
 // static
-template <typename THeapObjectSlot>
+template <typename THeapObjectSlot, RecordYoungSlot kRecordYoung>
 void MarkCompactCollector::RecordSlot(MemoryChunk* host_chunk,
                                       THeapObjectSlot slot,
                                       Tagged<HeapObject> value) {
   const MemoryChunk* value_chunk = MemoryChunk::FromHeapObject(value);
-  if (!value_chunk->IsEvacuationCandidate()) {
+  if (!value_chunk->IsEvacuationCandidate() &&
+      (!static_cast<bool>(kRecordYoung) ||
+       !HeapLayout::InYoungGeneration(value_chunk, value))) {
     return;
   }
 
   const auto* isolate = Isolate::Current();
-  MutablePageMetadata* host_page =
-      MutablePageMetadata::cast(host_chunk->Metadata(isolate));
-  const MutablePageMetadata* value_page =
-      MutablePageMetadata::cast(value_chunk->Metadata(isolate));
+  MutablePage* host_page = SbxCast<MutablePage>(host_chunk->Metadata(isolate));
+  const MutablePage* value_page =
+      SbxCast<const MutablePage>(value_chunk->Metadata(isolate));
 
-  if (value_page->is_executable()) {
-    DCHECK(!InsideSandbox(value_chunk->address()));
+  if (static_cast<bool>(kRecordYoung) &&
+      HeapLayout::InYoungGeneration(value_chunk, value)) {
+    RememberedSet<OLD_TO_NEW_BACKGROUND>::Insert<AccessMode::ATOMIC>(
+        host_page, host_chunk->Offset(slot.address()));
+  } else if (value_page->is_executable()) {
+    DCHECK(OutsideSandbox(value_chunk->address()));
     RememberedSet<TRUSTED_TO_CODE>::Insert<AccessMode::ATOMIC>(
         host_page, host_chunk->Offset(slot.address()));
   } else if (host_page->is_trusted() && value_page->is_trusted()) {
-    DCHECK(!InsideSandbox(value_chunk->address()));
+    DCHECK(OutsideSandbox(value_chunk->address()));
     RememberedSet<TRUSTED_TO_TRUSTED>::Insert<AccessMode::ATOMIC>(
         host_page, host_chunk->Offset(slot.address()));
   } else if (V8_LIKELY(!value_page->is_writable_shared()) ||

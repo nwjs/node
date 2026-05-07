@@ -40,6 +40,8 @@
 #include "src/codegen/s390/register-s390.h"
 #elif V8_TARGET_ARCH_PPC64
 #include "src/codegen/ppc/register-ppc.h"
+#elif V8_TARGET_ARCH_LOONG64
+#include "src/codegen/loong64/register-loong64.h"
 #else
 #error "Maglev does not supported this architecture."
 #endif
@@ -378,6 +380,7 @@ void StraightForwardRegisterAllocator::AllocateRegisters() {
     printing_visitor_->PreProcessGraph(graph_);
   }
 
+  // LINT.IfChange(maglev_constant_nodes)
   for (const auto& [ref, constant] : graph_->constants()) {
     constant->regalloc_info()->SetConstantLocation();
     USE(ref);
@@ -410,6 +413,10 @@ void StraightForwardRegisterAllocator::AllocateRegisters() {
     constant->regalloc_info()->SetConstantLocation();
     USE(value);
   }
+  for (const auto& [value, constant] : graph_->holey_float64()) {
+    constant->regalloc_info()->SetConstantLocation();
+    USE(value);
+  }
   for (const auto& [value, constant] : graph_->heap_number()) {
     constant->regalloc_info()->SetConstantLocation();
     USE(value);
@@ -418,6 +425,7 @@ void StraightForwardRegisterAllocator::AllocateRegisters() {
     constant->regalloc_info()->SetConstantLocation();
     USE(ref);
   }
+  // LINT.ThenChange()
 
   for (block_it_ = graph_->begin(); block_it_ != graph_->end(); ++block_it_) {
     BasicBlock* block = *block_it_;
@@ -520,17 +528,17 @@ void StraightForwardRegisterAllocator::AllocateRegisters() {
               }
             }
           } else if (phi->owner().is_parameter() &&
-                     phi->owner().is_receiver()) {
+                     phi->owner().is_receiver() && !block->is_inline()) {
             // The receiver is a special case for a fairly silly reason:
             // OptimizedJSFrame::Summarize requires the receiver (and the
             // function) to be in a stack slot, since its value must be
             // available even though we're not deoptimizing (and thus register
             // states are not available).
             //
-            // TODO(leszeks):
-            // For inlined functions / nested graph generation, this a) doesn't
-            // work (there's no receiver stack slot); and b) isn't necessary
-            // (Summarize only looks at noninlined functions).
+            // Note that this is skipped for inlined functions / nested graph
+            // generation, since this a) wouldn't work (there's no receiver
+            // stack slot); and b) isn't necessary (Summarize only looks at
+            // noninlined functions).
             phi->regalloc_info()->Spill(compiler::AllocatedOperand(
                 compiler::AllocatedOperand::STACK_SLOT,
                 MachineRepresentation::kTagged,
@@ -635,6 +643,9 @@ void StraightForwardRegisterAllocator::AllocateRegisters() {
     AllocateControlNode(block->control_node(), block);
     ApplyPatches(block);
   }
+
+  // Clean up remaining register allocations at the end
+  ClearRegisters();
 }
 
 void StraightForwardRegisterAllocator::FreeRegistersUsedBy(ValueNode* node) {
@@ -698,6 +709,7 @@ void StraightForwardRegisterAllocator::AllocateEagerDeopt(
     UpdateUse(node, input);
     input++;
   });
+  CHECK_EQ(input, deopt_info.input_locations_end());
 }
 
 void StraightForwardRegisterAllocator::AllocateLazyDeopt(
@@ -712,6 +724,7 @@ void StraightForwardRegisterAllocator::AllocateLazyDeopt(
     UpdateUse(node, input);
     input++;
   });
+  CHECK_EQ(input, deopt_info.input_locations_end());
 }
 
 #ifdef DEBUG
@@ -731,7 +744,8 @@ GET_NODE_RESULT_REGISTER_T(DoubleRegister, AssignedDoubleRegister)
 }  // namespace
 #endif  // DEBUG
 
-void StraightForwardRegisterAllocator::AllocateNode(Node* node) {
+void StraightForwardRegisterAllocator::AllocateNode(NodeBase* node) {
+  DCHECK(node->Is<Node>() || node->Is<Throw>());
   // We shouldn't be visiting any gap moves during allocation, we should only
   // have inserted gap moves in past visits.
   DCHECK(!node->Is<GapMove>());
@@ -797,13 +811,19 @@ void StraightForwardRegisterAllocator::AllocateNode(Node* node) {
     printing_visitor_->os() << "\n";
   }
 
-  // Result register should not be in temporaries.
-  DCHECK_IMPLIES(GetNodeResultRegister(node) != Register::no_reg(),
-                 !node->regalloc_info()->general_temporaries().has(
-                     GetNodeResultRegister(node)));
-  DCHECK_IMPLIES(GetNodeResultDoubleRegister(node) != DoubleRegister::no_reg(),
-                 !node->regalloc_info()->double_temporaries().has(
-                     GetNodeResultDoubleRegister(node)));
+#ifdef DEBUG
+  if (node->Is<ValueNode>()) {
+    // Result register should not be in temporaries.
+    ValueNode* as_value_node = node->Cast<ValueNode>();
+    DCHECK_IMPLIES(GetNodeResultRegister(as_value_node) != Register::no_reg(),
+                   !node->regalloc_info()->general_temporaries().has(
+                       GetNodeResultRegister(as_value_node)));
+    DCHECK_IMPLIES(
+        GetNodeResultDoubleRegister(as_value_node) != DoubleRegister::no_reg(),
+        !node->regalloc_info()->double_temporaries().has(
+            GetNodeResultDoubleRegister(as_value_node)));
+  }
+#endif
 
   // All the temporaries should be free by the end.
   DCHECK_EQ(
@@ -1053,8 +1073,9 @@ void StraightForwardRegisterAllocator::AllocateControlNode(ControlNode* node,
                                                            BasicBlock* block) {
   current_node_ = node;
 
-  // Control nodes can't lazy deopt at the moment.
-  DCHECK(!node->properties().can_lazy_deopt());
+  // Only Throw can lazy deopt and throw so far.
+  DCHECK_EQ(node->properties().can_lazy_deopt(), node->Is<Throw>());
+  DCHECK_EQ(node->properties().can_throw(), node->Is<Throw>());
 
   if (node->Is<Abort>()) {
     // Do nothing.
@@ -1086,6 +1107,8 @@ void StraightForwardRegisterAllocator::AllocateControlNode(ControlNode* node,
     if (v8_flags.trace_maglev_regalloc) {
       printing_visitor_->Process(node, GetCurrentState());
     }
+  } else if (node->Is<Throw>()) {
+    AllocateNode(node);
   } else if (auto unconditional = node->TryCast<UnconditionalControlNode>()) {
     // No temporaries.
     DCHECK(node->regalloc_info()->general_temporaries().is_empty());
@@ -1101,12 +1124,26 @@ void StraightForwardRegisterAllocator::AllocateControlNode(ControlNode* node,
     auto predecessor_id = block->predecessor_id();
     auto target = unconditional->target();
 
-    InitializeBranchTargetPhis(predecessor_id, target);
-    MergeRegisterValues(unconditional, target, predecessor_id);
-    if (target->has_phi()) {
-      for (Phi* phi : *target->phis()) {
-        UpdateUse(phi->input(predecessor_id));
+    if (target->has_state()) {
+      // Not a fallthrough.
+      InitializeBranchTargetPhis(predecessor_id, target);
+      MergeRegisterValues(unconditional, target, predecessor_id);
+      if (target->has_phi()) {
+        for (Phi* phi : *target->phis()) {
+          UpdateUse(phi->input(predecessor_id));
+        }
       }
+    } else if (target->is_edge_split_block()) {
+      // MaglevOptimizer can rewrite control flow when folding conditionals.
+      // This can make a spurious edge split block connected by unconditional
+      // jumps.
+      // TODO(victorgomes): consider eliminating those empty blocks before
+      // regalloc.
+      InitializeEmptyBlockRegisterValues(node, target);
+    } else {
+      // Fallthrough.
+      DCHECK_EQ(unconditional->id() + 1, target->first_id());
+      DCHECK(AllUsedRegistersLiveAt(target));
     }
 
     // For JumpLoops, now update the uses of any node used in, but not defined
@@ -1614,8 +1651,8 @@ void StraightForwardRegisterAllocator::SpillRegisters() {
   double_registers_.ForEachUsedRegister(spill);
 }
 
-template <typename RegisterT>
-void StraightForwardRegisterAllocator::SpillAndClearRegisters(
+template <typename RegisterT, bool spill>
+void StraightForwardRegisterAllocator::ClearRegisters(
     RegisterFrameState<RegisterT>& registers) {
   while (registers.used() != registers.empty()) {
     RegisterT reg = registers.used().first();
@@ -1624,7 +1661,9 @@ void StraightForwardRegisterAllocator::SpillAndClearRegisters(
       printing_visitor_->os()
           << "  clearing registers with " << PrintNodeLabel(node) << "\n";
     }
-    Spill(node);
+    if (spill) {
+      Spill(node);
+    }
     registers.FreeRegistersUsedBy(node);
     DCHECK(!registers.used().has(reg));
   }
@@ -1633,6 +1672,11 @@ void StraightForwardRegisterAllocator::SpillAndClearRegisters(
 void StraightForwardRegisterAllocator::SpillAndClearRegisters() {
   SpillAndClearRegisters(general_registers_);
   SpillAndClearRegisters(double_registers_);
+}
+
+void StraightForwardRegisterAllocator::ClearRegisters() {
+  ClearRegisters(general_registers_);
+  ClearRegisters(double_registers_);
 }
 
 void StraightForwardRegisterAllocator::SaveRegisterSnapshot(NodeBase* node) {
@@ -1676,6 +1720,7 @@ void StraightForwardRegisterAllocator::SaveRegisterSnapshot(NodeBase* node) {
       }
       input++;
     });
+    CHECK_EQ(input, node->eager_deopt_info()->input_locations_end());
   }
   node->set_register_snapshot(snapshot);
 }
@@ -2359,7 +2404,7 @@ void StraightForwardRegisterAllocator::MergeRegisterValues(ControlNode* control,
       // This can only happen for conversion nodes, as they can split and take
       // over the liveness of the node they are converting.
       // TODO(v8:7700): Overeager DCHECK.
-      // DCHECK(node->properties().is_conversion());
+      // DCHECK(node->is_conversion());
       if (v8_flags.trace_maglev_regalloc) {
         printing_visitor_->os()
             << "  " << reg << " - can't load " << PrintNodeLabel(node)
@@ -2408,7 +2453,7 @@ void StraightForwardRegisterAllocator::MergeRegisterValues(ControlNode* control,
       // TODO(v8:7700): This DCHECK is overeager, {incoming} can be a Phi node
       // containing conversion nodes.
       // DCHECK_IMPLIES(!IsInRegister(target_state, incoming),
-      //                incoming->properties().is_conversion());
+      //                incoming->is_conversion());
       if (v8_flags.trace_maglev_regalloc) {
         printing_visitor_->os()
             << "  " << reg << " - can't load incoming "

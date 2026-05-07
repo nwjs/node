@@ -14,14 +14,6 @@
 namespace v8 {
 namespace internal {
 
-#ifdef V8_ENABLE_EXPERIMENTAL_TSA_BUILTINS
-// EXPAND is needed to work around MSVC's broken __VA_ARGS__ expansion.
-#define IF_TSA(TSA_MACRO, CSA_MACRO, ...) EXPAND(TSA_MACRO(__VA_ARGS__))
-#else
-// EXPAND is needed to work around MSVC's broken __VA_ARGS__ expansion.
-#define IF_TSA(TSA_MACRO, CSA_MACRO, ...) EXPAND(CSA_MACRO(__VA_ARGS__))
-#endif
-
 #if V8_ENABLE_GEARBOX
 #define WITH_GEARBOX(KIND, NAME, ...) \
   KIND(NAME##_Generic, __VA_ARGS__)   \
@@ -85,7 +77,56 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   /* size unmodified to avoid unexpected performance implications. */       \
   /* It should be removed. */
 
-#ifdef V8_ENABLE_LEAPTIERING
+#define LOAD_IC_IN_OBJECT_FIELD_WITH_INDEX_HANDLER_LIST(V, GENERATE_MACRO) \
+  GENERATE_MACRO(V, InObject, NonDouble, Field, 0)                         \
+  GENERATE_MACRO(V, InObject, NonDouble, Field, 1)                         \
+  GENERATE_MACRO(V, InObject, NonDouble, Field, 2)                         \
+  GENERATE_MACRO(V, InObject, NonDouble, Field, 3)                         \
+  GENERATE_MACRO(V, InObject, NonDouble, Field, 4)                         \
+  GENERATE_MACRO(V, InObject, NonDouble, Field, 5)                         \
+  GENERATE_MACRO(V, InObject, NonDouble, Field, 6)                         \
+  GENERATE_MACRO(V, InObject, NonDouble, Field, 7)
+
+#define LOAD_IC_OUT_OF_OBJECT_FIELD_WITH_INDEX_HANDLER_LIST(V, GENERATE_MACRO) \
+  GENERATE_MACRO(V, OutOfObject, NonDouble, Field, 0)                          \
+  GENERATE_MACRO(V, OutOfObject, NonDouble, Field, 1)                          \
+  GENERATE_MACRO(V, OutOfObject, NonDouble, Field, 2)                          \
+  GENERATE_MACRO(V, OutOfObject, NonDouble, Field, 3)
+
+#define LOAD_IC_HANDLER_LIST(V, GENERATE_MACRO)                                \
+  GENERATE_MACRO(V, /*Location*/, /*Representation*/, Uninitialized,           \
+                 /*Index*/)                                                    \
+  GENERATE_MACRO(V, InObject, NonDouble, Field, /*Index*/)                     \
+  LOAD_IC_IN_OBJECT_FIELD_WITH_INDEX_HANDLER_LIST(V, GENERATE_MACRO)           \
+  GENERATE_MACRO(V, OutOfObject, NonDouble, Field, /*Index*/)                  \
+  LOAD_IC_OUT_OF_OBJECT_FIELD_WITH_INDEX_HANDLER_LIST(V, GENERATE_MACRO)       \
+  GENERATE_MACRO(V, /*Location*/, Double, Field, /*Index*/)                    \
+  GENERATE_MACRO(V, /*Location*/, /*Representation*/, ConstantFromPrototype,   \
+                 /*Index*/)                                                    \
+  GENERATE_MACRO(V, /*Location*/, /*Representation*/, StringLength, /*Index*/) \
+  GENERATE_MACRO(V, /*Location*/, /*Representation*/, Generic, /*Index*/)
+
+#define GENERATE_BUILTIN_LOAD_IC_DEFINITION(V, Location, Representation, Kind, \
+                                            Index)                             \
+  V(LoadIC##Location##Representation##Kind##Index##Baseline, LoadBaseline)
+
+#define BUILTIN_LOAD_IC_HANDLER_LIST(V) \
+  LOAD_IC_HANDLER_LIST(V, GENERATE_BUILTIN_LOAD_IC_DEFINITION)
+
+#ifdef V8_ENABLE_SPARKPLUG_PLUS
+#define TYPED_STRICTEQUAL_HANDLER_HELPER(V, TYPE) \
+  V(StrictEqual_##TYPE##_Baseline, Compare_WithEmbeddedFeedbackOffset)
+
+#define GENERATE_BUILTIN_TYPED_STRICTEQUAL_HANDLER(V)     \
+  TYPED_STRICTEQUAL_HANDLER_HELPER(V, Any)                \
+  TYPED_STRICTEQUAL_HANDLER_HELPER(V, Symbol)             \
+  TYPED_STRICTEQUAL_HANDLER_HELPER(V, Number)             \
+  TYPED_STRICTEQUAL_HANDLER_HELPER(V, Receiver)           \
+  TYPED_STRICTEQUAL_HANDLER_HELPER(V, String)             \
+  TYPED_STRICTEQUAL_HANDLER_HELPER(V, InternalizedString) \
+  TYPED_STRICTEQUAL_HANDLER_HELPER(V, SignedSmall)        \
+  TYPED_STRICTEQUAL_HANDLER_HELPER(V, None)
+#endif
 
 /* Tiering related builtins
  *
@@ -116,14 +157,6 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   TFC(FunctionLogNextExecution, JSTrampoline)      \
   TFC(MarkReoptimizeLazyDeoptimized, JSTrampoline) \
   TFC(MarkLazyDeoptimized, JSTrampoline)
-
-#else
-
-#define BUILTIN_LIST_BASE_TIERING(TFC)                       \
-  /* TODO(saelo): should this use a different descriptor? */ \
-  TFC(CompileLazyDeoptimizedCode, JSTrampoline)
-
-#endif
 
 #define BUILTIN_LIST_BASE_TIER1(CPP, TFJ_TSA, TFJ, TFC_TSA, TFC, TFS, TFH,     \
                                 ASM)                                           \
@@ -333,7 +366,9 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   ASM(CallApiCallbackGeneric, CallApiCallbackGeneric)                          \
   ASM(CallApiCallbackOptimizedNoProfiling, CallApiCallbackOptimized)           \
   ASM(CallApiCallbackOptimized, CallApiCallbackOptimized)                      \
-  ASM(CallApiGetter, ApiGetter)                                                \
+  ASM(CallApiGetter, CallApiGetter)                                            \
+  ASM(CallNamedInterceptorGetter, CallApiGetter)                               \
+  ASM(CallNamedInterceptorSetter, CallApiSetter)                               \
   TFC(HandleApiCallOrConstruct, JSTrampoline)                                  \
   CPP(HandleApiConstruct, kDontAdaptArgumentsSentinel)                         \
   CPP(HandleApiCallAsFunctionDelegate, kDontAdaptArgumentsSentinel)            \
@@ -544,6 +579,9 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   /* https://tc39.es/proposal-arraybuffer-transfer/ */                         \
   CPP(ArrayBufferPrototypeTransfer, kDontAdaptArgumentsSentinel)               \
   CPP(ArrayBufferPrototypeTransferToFixedLength, kDontAdaptArgumentsSentinel)  \
+  /* https://tc39.es/proposal-immutable-arraybuffer/ */                        \
+  CPP(ArrayBufferPrototypeTransferToImmutable, kDontAdaptArgumentsSentinel)    \
+  CPP(ArrayBufferPrototypeSliceToImmutable, JSParameterCount(2))               \
                                                                                \
   /* AsyncFunction */                                                          \
   TFS(AsyncFunctionEnter, NeedsContext::kYes, kClosure, kReceiver)             \
@@ -720,6 +758,7 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   CPP(FunctionPrototypeBind, kDontAdaptArgumentsSentinel)                      \
   IF_WASM(CPP, WebAssemblyFunctionPrototypeBind, kDontAdaptArgumentsSentinel)  \
   IF_WASM(TFJ, WasmConstructorWrapper, kDontAdaptArgumentsSentinel)            \
+  IF_WASM(TFJ, WasmMethodWrapper, kDontAdaptArgumentsSentinel)                 \
   ASM(FunctionPrototypeCall, JSTrampoline)                                     \
   /* ES6 #sec-function.prototype.tostring */                                   \
   CPP(FunctionPrototypeToString, kDontAdaptArgumentsSentinel)                  \
@@ -776,7 +815,7 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   TFH(LoadIC_Megamorphic, LoadWithVector)                                      \
   TFH(LoadIC_Noninlined, LoadWithVector)                                       \
   TFH(LoadICTrampoline, Load)                                                  \
-  TFH(LoadICBaseline, LoadBaseline)                                            \
+  BUILTIN_LOAD_IC_HANDLER_LIST(TFH)                                            \
   TFH(LoadICTrampoline_Megamorphic, Load)                                      \
   TFH(LoadSuperIC, LoadWithReceiverAndVector)                                  \
   TFH(LoadSuperICBaseline, LoadWithReceiverBaseline)                           \
@@ -865,6 +904,10 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   TFJ(MapPrototypeGet, kJSArgcReceiverSlots + 1, kReceiver, kKey)              \
   TFJ(MapPrototypeHas, kJSArgcReceiverSlots + 1, kReceiver, kKey)              \
   CPP(MapPrototypeClear, JSParameterCount(0))                                  \
+  TFJ(MapPrototypeGetOrInsert, kJSArgcReceiverSlots + 2, kReceiver, kKey,      \
+      kValue)                                                                  \
+  TFJ(MapPrototypeGetOrInsertComputed, kJSArgcReceiverSlots + 2, kReceiver,    \
+      kKey, kCallbackfn)                                                       \
   /* ES #sec-map.prototype.entries */                                          \
   TFJ(MapPrototypeEntries, kJSArgcReceiverSlots, kReceiver)                    \
   /* ES #sec-get-map.prototype.size */                                         \
@@ -884,6 +927,7 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   CPP(NumberPrototypeToFixed, kDontAdaptArgumentsSentinel)                     \
   CPP(NumberPrototypeToLocaleString, kDontAdaptArgumentsSentinel)              \
   CPP(NumberPrototypeToPrecision, kDontAdaptArgumentsSentinel)                 \
+  CPP(MathSumPrecise, JSParameterCount(1))                                     \
   TFC(SameValue, CompareNoContext)                                             \
   TFC(SameValueNumbersOnly, CompareNoContext)                                  \
                                                                                \
@@ -934,19 +978,24 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   TFC(Add_RhsIsStringConstant_Internalize_Baseline, BinaryOp_Baseline)         \
                                                                                \
   /* Compare ops with feedback collection */                                   \
-  TFC(Equal_Baseline, Compare_Baseline)                                        \
-  TFC(StrictEqual_Baseline, Compare_Baseline)                                  \
-  TFC(LessThan_Baseline, Compare_Baseline)                                     \
-  TFC(GreaterThan_Baseline, Compare_Baseline)                                  \
-  TFC(LessThanOrEqual_Baseline, Compare_Baseline)                              \
-  TFC(GreaterThanOrEqual_Baseline, Compare_Baseline)                           \
+  TFC(Equal_Baseline, Compare_WithEmbeddedFeedbackOffset)                      \
+  TFC(StrictEqual_Generic_Baseline, Compare_WithEmbeddedFeedbackOffset)        \
                                                                                \
-  TFC(Equal_WithFeedback, Compare_WithFeedback)                                \
-  TFC(StrictEqual_WithFeedback, Compare_WithFeedback)                          \
-  TFC(LessThan_WithFeedback, Compare_WithFeedback)                             \
-  TFC(GreaterThan_WithFeedback, Compare_WithFeedback)                          \
-  TFC(LessThanOrEqual_WithFeedback, Compare_WithFeedback)                      \
-  TFC(GreaterThanOrEqual_WithFeedback, Compare_WithFeedback)                   \
+  /* Typed StirctEqual baseline stubs */                                       \
+  IF_SPARKPLUG_PLUS(GENERATE_BUILTIN_TYPED_STRICTEQUAL_HANDLER, TFC)           \
+  IF_SPARKPLUG_PLUS(TFC, StrictEqualAndTryPatchCode, CompareAndTryPatchCode)   \
+                                                                               \
+  TFC(LessThan_Baseline, Compare_WithEmbeddedFeedbackOffset)                   \
+  TFC(GreaterThan_Baseline, Compare_WithEmbeddedFeedbackOffset)                \
+  TFC(LessThanOrEqual_Baseline, Compare_WithEmbeddedFeedbackOffset)            \
+  TFC(GreaterThanOrEqual_Baseline, Compare_WithEmbeddedFeedbackOffset)         \
+                                                                               \
+  TFC(Equal_WithEmbeddedFeedback, Compare_WithEmbeddedFeedback)                \
+  TFC(StrictEqual_WithEmbeddedFeedback, Compare_WithEmbeddedFeedback)          \
+  TFC(LessThan_WithEmbeddedFeedback, Compare_WithEmbeddedFeedback)             \
+  TFC(GreaterThan_WithEmbeddedFeedback, Compare_WithEmbeddedFeedback)          \
+  TFC(LessThanOrEqual_WithEmbeddedFeedback, Compare_WithEmbeddedFeedback)      \
+  TFC(GreaterThanOrEqual_WithEmbeddedFeedback, Compare_WithEmbeddedFeedback)   \
                                                                                \
   /* Unary ops with feedback collection */                                     \
   TFC(BitwiseNot_Baseline, UnaryOp_Baseline)                                   \
@@ -1114,6 +1163,8 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   TFJ(StringPrototypeSplit, kDontAdaptArgumentsSentinel)                       \
   /* ES6 #sec-string.raw */                                                    \
   CPP(StringRaw, kDontAdaptArgumentsSentinel)                                  \
+  /*SELECT_TSA_LEVEL(IGNORE_BUILTIN, TFC_TSA, IGNORE_BUILTIN, ToString,        \
+   * ToString)*/                                                               \
                                                                                \
   /* Symbol */                                                                 \
   /* ES #sec-symbol-constructor */                                             \
@@ -1165,7 +1216,7 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
                                                                                \
   /* Wasm */                                                                   \
   IF_WASM_DRUMBRAKE(ASM, WasmInterpreterEntry, WasmDummy)                      \
-  IF_WASM_DRUMBRAKE(ASM, GenericJSToWasmInterpreterWrapper, WasmDummy)         \
+  IF_WASM_DRUMBRAKE(ASM, GenericJSToWasmInterpreterWrapper, JSTrampoline)      \
   IF_WASM_DRUMBRAKE(ASM, WasmInterpreterCWasmEntry, WasmDummy)                 \
   IF_WASM_DRUMBRAKE(ASM, GenericWasmToJSInterpreterWrapper, WasmDummy)         \
                                                                                \
@@ -1383,6 +1434,10 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   IF_WASM(TFC, WasmToJsWrapperInvalidSig, WasmToJSWrapper)                     \
   IF_WASM(ASM, WasmSuspend, WasmSuspend)                                       \
   IF_WASM(ASM, WasmResume, JSTrampoline)                                       \
+  IF_WASM(ASM, WasmFXResume, WasmFXResume)                                     \
+  IF_WASM(ASM, WasmFXResumeThrow, WasmFXResumeThrow)                           \
+  IF_WASM(ASM, WasmFXSuspend, WasmFXSuspend)                                   \
+  IF_WASM(ASM, WasmFXReturn, WasmFXReturn)                                     \
   IF_WASM(ASM, WasmReject, JSTrampoline)                                       \
   IF_WASM(ASM, WasmTrapHandlerLandingPad, WasmDummy)                           \
   IF_WASM(ASM, WasmCompileLazy, WasmDummy)                                     \
@@ -1398,9 +1453,13 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   /* WeakMap */                                                                \
   TFJ(WeakMapConstructor, kDontAdaptArgumentsSentinel)                         \
   TFS(WeakMapLookupHashIndex, NeedsContext::kYes, kTable, kKey)                \
-  TFJ(WeakMapGet, kJSArgcReceiverSlots + 1, kReceiver, kKey)                   \
+  TFJ(WeakMapPrototypeGet, kJSArgcReceiverSlots + 1, kReceiver, kKey)          \
   TFJ(WeakMapPrototypeHas, kJSArgcReceiverSlots + 1, kReceiver, kKey)          \
   TFJ(WeakMapPrototypeSet, kJSArgcReceiverSlots + 2, kReceiver, kKey, kValue)  \
+  TFJ(WeakMapPrototypeGetOrInsert, kJSArgcReceiverSlots + 2, kReceiver, kKey,  \
+      kValue)                                                                  \
+  TFJ(WeakMapPrototypeGetOrInsertComputed, kJSArgcReceiverSlots + 2,           \
+      kReceiver, kKey, kCallbackfn)                                            \
   TFJ(WeakMapPrototypeDelete, kJSArgcReceiverSlots + 1, kReceiver, kKey)       \
                                                                                \
   /* WeakSet */                                                                \
@@ -1423,17 +1482,12 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   CPP(AtomicsMutexConstructor, JSParameterCount(0))                            \
   CPP(AtomicsMutexIsMutex, JSParameterCount(1))                                \
   CPP(AtomicsMutexLock, JSParameterCount(2))                                   \
-  CPP(AtomicsMutexLockAsync, JSParameterCount(2))                              \
   CPP(AtomicsMutexLockWithTimeout, JSParameterCount(3))                        \
   CPP(AtomicsMutexTryLock, JSParameterCount(2))                                \
-  CPP(AtomicsMutexAsyncUnlockResolveHandler, JSParameterCount(1))              \
-  CPP(AtomicsMutexAsyncUnlockRejectHandler, JSParameterCount(1))               \
   CPP(AtomicsConditionConstructor, JSParameterCount(0))                        \
-  CPP(AtomicsConditionAcquireLock, JSParameterCount(0))                        \
   CPP(AtomicsConditionIsCondition, JSParameterCount(1))                        \
   CPP(AtomicsConditionWait, kDontAdaptArgumentsSentinel)                       \
   CPP(AtomicsConditionNotify, kDontAdaptArgumentsSentinel)                     \
-  CPP(AtomicsConditionWaitAsync, kDontAdaptArgumentsSentinel)                  \
                                                                                \
   /* AsyncGenerator */                                                         \
                                                                                \
@@ -1490,10 +1544,9 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
                                                                                \
   /* CEntry */                                                                 \
   ASM(CEntry_Return1_ArgvInRegister_NoBuiltinExit, InterpreterCEntry1)         \
-  ASM(CEntry_Return1_ArgvOnStack_BuiltinExit, CEntry1ArgvOnStack)              \
+  ASM(CEntry_Return1_ArgvOnStack_BuiltinExit, CEntryForCPPBuiltin)             \
   ASM(CEntry_Return1_ArgvOnStack_NoBuiltinExit, CEntryDummy)                   \
   ASM(CEntry_Return2_ArgvInRegister_NoBuiltinExit, InterpreterCEntry2)         \
-  ASM(CEntry_Return2_ArgvOnStack_BuiltinExit, CEntryDummy)                     \
   ASM(CEntry_Return2_ArgvOnStack_NoBuiltinExit, CEntryDummy)                   \
   ASM(WasmCEntry, CEntryDummy)                                                 \
   ASM(DirectCEntry, CEntryDummy)                                               \
@@ -1511,11 +1564,10 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   TFS(SetProperty, NeedsContext::kYes, kReceiver, kKey, kValue)                \
   TFS(CreateDataProperty, NeedsContext::kYes, kReceiver, kKey, kValue)         \
   TFS(GetOwnPropertyDescriptor, NeedsContext::kYes, kReceiver, kKey)           \
-  ASM(MemCopyUint8Uint8, CCall)                                                \
-  ASM(MemMove, CCall)                                                          \
   TFC(FindNonDefaultConstructorOrConstruct,                                    \
       FindNonDefaultConstructorOrConstruct)                                    \
   TFS(OrdinaryGetOwnPropertyDescriptor, NeedsContext::kYes, kReceiver, kKey)   \
+  TFS(CheckMaglevType, NeedsContext::kNo, kObject, kType)                      \
   IF_SHADOW_STACK(ASM, AdaptShadowStackForDeopt, Void)                         \
                                                                                \
   /* Trace */                                                                  \
@@ -2110,14 +2162,10 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   CPP(LocalePrototypeBaseName, JSParameterCount(0))                            \
   /* ecma402 #sec-Intl.Locale.prototype.calendar */                            \
   CPP(LocalePrototypeCalendar, JSParameterCount(0))                            \
-  /* ecma402 #sec-Intl.Locale.prototype.calendars */                           \
-  CPP(LocalePrototypeCalendars, JSParameterCount(0))                           \
   /* ecma402 #sec-Intl.Locale.prototype.caseFirst */                           \
   CPP(LocalePrototypeCaseFirst, JSParameterCount(0))                           \
   /* ecma402 #sec-Intl.Locale.prototype.collation */                           \
   CPP(LocalePrototypeCollation, JSParameterCount(0))                           \
-  /* ecma402 #sec-Intl.Locale.prototype.collations */                          \
-  CPP(LocalePrototypeCollations, JSParameterCount(0))                          \
   /* ecma402 #sec-Intl.Locale.prototype.firstDayOfWeek */                      \
   CPP(LocalePrototypeFirstDayOfWeek, JSParameterCount(0))                      \
   /* ecma402 #sec-Intl.Locale.prototype.getCalendars */                        \
@@ -2136,8 +2184,6 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   CPP(LocalePrototypeGetWeekInfo, kDontAdaptArgumentsSentinel)                 \
   /* ecma402 #sec-Intl.Locale.prototype.hourCycle */                           \
   CPP(LocalePrototypeHourCycle, JSParameterCount(0))                           \
-  /* ecma402 #sec-Intl.Locale.prototype.hourCycles */                          \
-  CPP(LocalePrototypeHourCycles, JSParameterCount(0))                          \
   /* ecma402 #sec-Intl.Locale.prototype.language */                            \
   CPP(LocalePrototypeLanguage, JSParameterCount(0))                            \
   /* ecma402 #sec-Intl.Locale.prototype.maximize */                            \
@@ -2148,20 +2194,14 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   CPP(LocalePrototypeNumeric, JSParameterCount(0))                             \
   /* ecma402 #sec-Intl.Locale.prototype.numberingSystem */                     \
   CPP(LocalePrototypeNumberingSystem, JSParameterCount(0))                     \
-  /* ecma402 #sec-Intl.Locale.prototype.numberingSystems */                    \
-  CPP(LocalePrototypeNumberingSystems, JSParameterCount(0))                    \
   /* ecma402 #sec-Intl.Locale.prototype.region */                              \
   CPP(LocalePrototypeRegion, JSParameterCount(0))                              \
   /* ecma402 #sec-Intl.Locale.prototype.script */                              \
   CPP(LocalePrototypeScript, JSParameterCount(0))                              \
-  /* ecma402 #sec-Intl.Locale.prototype.textInfo */                            \
-  CPP(LocalePrototypeTextInfo, JSParameterCount(0))                            \
-  /* ecma402 #sec-Intl.Locale.prototype.timezones */                           \
-  CPP(LocalePrototypeTimeZones, JSParameterCount(0))                           \
   /* ecma402 #sec-Intl.Locale.prototype.toString */                            \
   CPP(LocalePrototypeToString, kDontAdaptArgumentsSentinel)                    \
-  /* ecma402 #sec-Intl.Locale.prototype.weekInfo */                            \
-  CPP(LocalePrototypeWeekInfo, JSParameterCount(0))                            \
+  /* ecma402 #sec-Intl.Locale.prototype.variants */                            \
+  CPP(LocalePrototypeVariants, JSParameterCount(0))                            \
   /* ecma402 #sec-intl.numberformat */                                         \
   CPP(NumberFormatConstructor, kDontAdaptArgumentsSentinel)                    \
   /* ecma402 #sec-number-format-functions */                                   \
@@ -2257,12 +2297,19 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
   CPP(StringPrototypeToUpperCase, kDontAdaptArgumentsSentinel)
 #endif  // V8_INTL_SUPPORT
 
+#ifdef V8_DUMPLING
+#define BUILTIN_LIST_DUMPLING(ASM) ASM(DumpFrame, Void)
+#else
+#define BUILTIN_LIST_DUMPLING(ASM)
+#endif
+
 #define BUILTIN_LIST(CPP, TFJ_TSA, TFJ, TFC_TSA, TFC, TFS, TFH, BCH_TSA, BCH, \
                      ASM)                                                     \
   BUILTIN_LIST_BASE(CPP, TFJ_TSA, TFJ, TFC_TSA, TFC, TFS, TFH, ASM)           \
-  BUILTIN_LIST_FROM_TORQUE(CPP, TFJ, TFC, TFS, TFH, ASM)                      \
+  BUILTIN_LIST_FROM_TORQUE(CPP, TFJ, TFC_TSA, TFC, TFS, TFH, ASM)             \
   BUILTIN_LIST_INTL(CPP, TFJ, TFS)                                            \
   BUILTIN_LIST_TEMPORAL(CPP, TFJ)                                             \
+  BUILTIN_LIST_DUMPLING(ASM)                                                  \
   BUILTIN_LIST_BYTECODE_HANDLERS(BCH_TSA, BCH)
 
 // See the comment on top of BUILTIN_LIST_BASE_TIER0 for an explanation of
@@ -2273,9 +2320,10 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
 #define BUILTIN_LIST_TIER1(CPP, TFJ_TSA, TFJ, TFC, TFS, TFH, BCH_TSA, BCH, \
                            ASM)                                            \
   BUILTIN_LIST_BASE_TIER1(CPP, TFJ_TSA, TFJ, TFC, TFS, TFH, ASM)           \
-  BUILTIN_LIST_FROM_TORQUE(CPP, TFJ, TFC, TFS, TFH, ASM)                   \
+  BUILTIN_LIST_FROM_TORQUE(CPP, TFJ, TFC_TSA, TFC, TFS, TFH, ASM)          \
   BUILTIN_LIST_INTL(CPP, TFJ, TFS)                                         \
   BUILTIN_LIST_TEMPORAL(CPP, TFJ)                                          \
+  BUILTIN_LIST_DUMPLING(ASM)                                               \
   BUILTIN_LIST_BYTECODE_HANDLERS(BCH_TSA, BCH)
 
 // The exception thrown in the following builtins are caught

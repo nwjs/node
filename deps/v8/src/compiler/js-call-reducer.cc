@@ -175,13 +175,13 @@ class JSCallReducerAssembler : public JSGraphAssembler {
   TNode<Object> ConvertHoleToUndefined(TNode<Object> value, ElementsKind kind) {
     DCHECK(IsHoleyElementsKind(kind));
     if (kind == HOLEY_DOUBLE_ELEMENTS) {
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
       return AddNode<Number>(graph()->NewNode(
           simplified()->ChangeFloat64OrUndefinedOrHoleToTagged(), value));
 #else
       return AddNode<Number>(
           graph()->NewNode(simplified()->ChangeFloat64HoleToTagged(), value));
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
     }
     return ConvertTaggedHoleToUndefined(value);
   }
@@ -458,7 +458,8 @@ class IteratingArrayBuiltinReducerAssembler : public JSCallReducerAssembler {
                                          const bool has_stability_dependency,
                                          ElementsKind kind,
                                          SharedFunctionInfoRef shared,
-                                         NativeContextRef native_context);
+                                         NativeContextRef native_context,
+                                         ObjectRef array_ctor);
   TNode<JSArray> ReduceArrayPrototypeFilter(MapInference* inference,
                                             const bool has_stability_dependency,
                                             ElementsKind kind,
@@ -1892,7 +1893,7 @@ FrameState MapLoopEagerFrameState(const MapFrameStateParams& params,
 TNode<JSArray> IteratingArrayBuiltinReducerAssembler::ReduceArrayPrototypeMap(
     MapInference* inference, const bool has_stability_dependency,
     ElementsKind kind, SharedFunctionInfoRef shared,
-    NativeContextRef native_context) {
+    NativeContextRef native_context, ObjectRef array_ctor) {
   FrameState outer_frame_state = FrameStateInput();
   TNode<Context> context = ContextInput();
   TNode<Object> target = TargetInput();
@@ -1911,16 +1912,13 @@ TNode<JSArray> IteratingArrayBuiltinReducerAssembler::ReduceArrayPrototypeMap(
   // Even though {JSCreateArray} is not marked as {kNoThrow}, we can elide the
   // exceptional projections because it cannot throw with the given
   // parameters.
-  TNode<Object> array_ctor =
-      Constant(native_context.GetInitialJSArrayMap(broker(), kind)
-                   .GetConstructor(broker()));
 
   MapFrameStateParams frame_state_params{
       jsgraph(), shared,     context,  target,       outer_frame_state,
       receiver,  fncallback, this_arg, {} /* TBD */, original_length};
 
   TNode<JSArray> a =
-      CreateArrayNoThrow(array_ctor, original_length,
+      CreateArrayNoThrow(Constant(array_ctor), original_length,
                          MapPreLoopLazyFrameState(frame_state_params));
   frame_state_params.a = a;
 
@@ -2044,7 +2042,7 @@ IteratingArrayBuiltinReducerAssembler::ReduceArrayPrototypeFilter(
 
   // The output array is packed (filter doesn't visit holes).
   ElementsKind filtered_kind = GetPackedElementsKind(kind);
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
   if (kind == ElementsKind::HOLEY_DOUBLE_ELEMENTS) {
     // Array may contain double-encoded undefineds that may be preserved by
     // the filter operation, so the output has to be holey, too.
@@ -2053,7 +2051,7 @@ IteratingArrayBuiltinReducerAssembler::ReduceArrayPrototypeFilter(
     // encounter an undefined.
     filtered_kind = ElementsKind::HOLEY_DOUBLE_ELEMENTS;
   }
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
   TNode<JSArray> a = AllocateEmptyJSArray(filtered_kind, native_context);
 
   TNode<Number> original_length = LoadJSArrayLength(receiver, kind);
@@ -3786,12 +3784,20 @@ Reduction JSCallReducer::ReduceArrayMap(Node* node,
     return h.inference()->NoChange();
   }
 
+  OptionalObjectRef array_ctor =
+      native_context()
+          .GetInitialJSArrayMap(broker(), h.elements_kind())
+          .GetConstructor(broker());
+  if (!array_ctor.has_value()) {
+    return h.inference()->NoChange();
+  }
+
   IteratingArrayBuiltinReducerAssembler a(this, node);
   a.InitializeEffectControl(h.effect(), h.control());
 
-  TNode<Object> subgraph =
-      a.ReduceArrayPrototypeMap(h.inference(), h.has_stability_dependency(),
-                                h.elements_kind(), shared, native_context());
+  TNode<Object> subgraph = a.ReduceArrayPrototypeMap(
+      h.inference(), h.has_stability_dependency(), h.elements_kind(), shared,
+      native_context(), array_ctor.value());
   return ReplaceWithSubgraph(&a, subgraph);
 }
 
@@ -3900,7 +3906,40 @@ Reduction JSCallReducer::ReduceArraySome(Node* node,
 
 #if V8_ENABLE_WEBASSEMBLY
 
-namespace {
+Reduction JSCallReducer::ReduceWasmMethodWrapper(Node* node,
+                                                 JSFunctionRef function,
+                                                 SharedFunctionInfoRef shared) {
+  if (!shared.HasBuiltinId() ||
+      shared.builtin_id() != Builtin::kWasmMethodWrapper) {
+    return NoChange();
+  }
+  JSCallNode n(node);
+  CallParameters const& p = n.Parameters();
+  if (p.feedback().IsValid() &&
+      p.speculation_mode() != SpeculationMode::kAllowSpeculation) {
+    return NoChange();
+  }
+
+  // Duplicate the receiver into the first argument slot...
+  node->InsertInput(graph()->zone(), n.FirstArgumentIndex(), n.receiver());
+  NodeProperties::ChangeOp(
+      node, javascript()->Call(
+                JSCallNode::ArityForArgc(n.ArgumentCount() + 1), p.frequency(),
+                p.feedback(), ConvertReceiverMode::kAny, p.speculation_mode()));
+  // ...and call the target function directly.
+  ContextRef context = function.context(broker());
+  OptionalObjectRef target =
+      context.get(broker(), wasm::kMethodWrapperContextSlot);
+  if (!target.has_value()) {
+    // This is unexpected; if you see this happening please tell
+    // jkummerow@chromium.org how to reproduce it.
+    TRACE_BROKER_MISSING(broker(), "target value for context " << context);
+    return NoChange();
+  }
+  node->ReplaceInput(n.TargetIndex(),
+                     jsgraph()->ConstantNoHole(target.value(), broker()));
+  return Changed(node).FollowedBy(ReduceJSCall(node));
+}
 
 bool CanInlineJSToWasmCall(const wasm::CanonicalSig* wasm_signature) {
   if (wasm_signature->return_count() > 1) {
@@ -3920,8 +3959,6 @@ bool CanInlineJSToWasmCall(const wasm::CanonicalSig* wasm_signature) {
 
   return true;
 }
-
-}  // namespace
 
 Reduction JSCallReducer::ReduceCallWasmFunction(Node* node,
                                                 SharedFunctionInfoRef shared) {
@@ -3945,7 +3982,7 @@ Reduction JSCallReducer::ReduceCallWasmFunction(Node* node,
 
   Tagged<WasmTrustedInstanceData> instance_data =
       function_data->instance_data();
-  const wasm::CanonicalSig* wasm_signature = function_data->sig();
+  const wasm::CanonicalSig* wasm_signature = function_data->internal()->sig();
   if (!CanInlineJSToWasmCall(wasm_signature)) {
     return NoChange();
   }
@@ -4257,12 +4294,12 @@ bool IsCallWithArrayLikeOrSpread(Node* node) {
 Node* JSCallReducer::ConvertHoleToUndefined(Node* value, ElementsKind kind) {
   DCHECK(IsHoleyElementsKind(kind));
   if (kind == HOLEY_DOUBLE_ELEMENTS) {
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
     return graph()->NewNode(
         simplified()->ChangeFloat64OrUndefinedOrHoleToTagged(), value);
 #else
     return graph()->NewNode(simplified()->ChangeFloat64HoleToTagged(), value);
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
   }
   return graph()->NewNode(simplified()->ConvertTaggedHoleToUndefined(), value);
 }
@@ -4727,8 +4764,13 @@ Reduction JSCallReducer::ReduceJSCall(Node* node) {
       if (!function.native_context(broker()).equals(native_context())) {
         return NoChange();
       }
-
-      Reduction res = ReduceJSCall(node, function.shared(broker()));
+      SharedFunctionInfoRef shared = function.shared(broker());
+      Reduction res = ReduceJSCall(node, shared);
+#if V8_ENABLE_WEBASSEMBLY
+      if (!res.Changed()) {
+        res = ReduceWasmMethodWrapper(node, function, shared);
+      }
+#endif  // V8_ENABLE_WEBASSEMBLY
       if (!res.Changed()) return NoChangeOrSoftDeopt();
       return res;
     } else if (target_ref.IsJSBoundFunction()) {
@@ -5501,6 +5543,9 @@ Reduction JSCallReducer::ReduceJSConstruct(Node* node) {
 
       // Turn the {node} into a {JSCreateArray} call.
       NodeProperties::ReplaceEffectInput(node, effect);
+      // TODO(jgruber): What we really want to check here is the layout of
+      // CreateArray, not JSConstructNode. Coincidentally, the NewTargetIndex
+      // also 1 there.
       static_assert(JSConstructNode::NewTargetIndex() == 1);
       node->ReplaceInput(n.NewTargetIndex(), array_function);
       node->RemoveInput(n.FeedbackVectorIndex());
@@ -5568,14 +5613,18 @@ Reduction JSCallReducer::ReduceJSConstruct(Node* node) {
           sfi.HasBuiltinId() ? sfi.builtin_id() : Builtin::kNoBuiltinId;
       switch (builtin) {
         case Builtin::kArrayConstructor: {
-          // TODO(bmeurer): Deal with Array subclasses here.
           // Turn the {node} into a {JSCreateArray} call.
+          // TODO(bmeurer): Deal with Array subclasses here.
+          // TODO(jgruber): What we really want to check here is the layout of
+          // CreateArray, not JSConstructNode. Coincidentally, the
+          // NewTargetIndex also 1 there. Also, there's no point in the
+          // ReplaceInput call below since it replaces new_target with itself.
           static_assert(JSConstructNode::NewTargetIndex() == 1);
           node->ReplaceInput(n.NewTargetIndex(), new_target);
           node->RemoveInput(n.FeedbackVectorIndex());
           NodeProperties::ChangeOp(
               node,
-              javascript()->CreateArray(arity, std::nullopt, FeedbackSource()));
+              javascript()->CreateArray(arity, std::nullopt, p.feedback()));
           return Changed(node);
         }
         case Builtin::kObjectConstructor: {
@@ -6448,8 +6497,8 @@ Reduction JSCallReducer::ReduceArrayPrototypeShift(Node* node) {
       {
         // Call the generic C++ implementation.
         const Builtin builtin = Builtin::kArrayShift;
-        auto call_descriptor = Linkage::GetCEntryStubCallDescriptor(
-            graph()->zone(), 1, BuiltinArguments::kNumExtraArgsWithReceiver,
+        auto call_descriptor = Linkage::GetCPPBuiltinCallDescriptor(
+            graph()->zone(), BuiltinArguments::kNumExtraArgsWithReceiver,
             Builtins::name(builtin), node->op()->properties(),
             CallDescriptor::kNeedsFrameState);
         const bool has_builtin_exit_frame = true;
@@ -6463,12 +6512,32 @@ Reduction JSCallReducer::ReduceArrayPrototypeShift(Node* node) {
         static_assert(BuiltinArguments::kNewTargetIndex == 0);
         static_assert(BuiltinArguments::kTargetIndex == 1);
         static_assert(BuiltinArguments::kArgcIndex == 2);
-        static_assert(BuiltinArguments::kPaddingIndex == 3);
-        if_false1 = efalse1 = vfalse1 =
-            graph()->NewNode(common()->Call(call_descriptor), stub_code,
-                             receiver, jsgraph()->PaddingConstant(), argc,
-                             target, jsgraph()->UndefinedConstant(), entry,
-                             argc, context, frame_state, efalse1, if_false1);
+#if V8_TARGET_ARCH_ARM64
+        // Make sure we insert required stack-alignment padding between extra
+        // arguments and JS arguments.
+        static_assert(BuiltinArguments::kNumExtraArgs == 4);
+        static_assert(BuiltinArguments::kOptionalPaddingIndex == 3);
+        // Just use an existing value as padding in order to avoid generation
+        // of unnecessary instructions.
+        Node* padding_value = argc;
+#else
+        // No padding required.
+        static_assert(BuiltinArguments::kNumExtraArgs == 3);
+#endif  // V8_TARGET_ARCH_ARM64
+
+        if_false1 = efalse1 = vfalse1 = graph()->NewNode(
+            common()->Call(call_descriptor), stub_code,
+            // Extra CPP builtin arguments.
+            jsgraph()->UndefinedConstant(),  // new.target
+            target,                          // target
+            argc,                            // argc
+#if V8_TARGET_ARCH_ARM64
+            padding_value,
+#endif
+            // JS arguments.
+            receiver,
+            // CEntry arguments.
+            entry, argc, context, frame_state, efalse1, if_false1);
       }
 
       if_false0 = graph()->NewNode(common()->Merge(2), if_true1, if_false1);
@@ -7110,17 +7179,15 @@ Reduction JSCallReducer::ReduceStringPrototypeToLowerCaseIntl(Node* node) {
   }
   Effect effect = n.effect();
   Control control = n.control();
+  FrameState frame_state = n.frame_state();
 
   Node* receiver = effect = graph()->NewNode(
       simplified()->CheckString(p.feedback()), n.receiver(), effect, control);
-
-  NodeProperties::ReplaceEffectInput(node, effect);
-  RelaxEffectsAndControls(node);
-  node->ReplaceInput(0, receiver);
-  node->TrimInputCount(1);
-  NodeProperties::ChangeOp(node, simplified()->StringToLowerCaseIntl());
-  NodeProperties::SetType(node, Type::String());
-  return Changed(node);
+  Node* value = effect = control =
+      graph()->NewNode(simplified()->StringToLowerCaseIntl(), receiver,
+                       frame_state, n.context(), effect, control);
+  ReplaceWithValue(node, value, effect, control);
+  return Replace(value);
 }
 
 Reduction JSCallReducer::ReduceStringPrototypeToUpperCaseIntl(Node* node) {
@@ -7131,17 +7198,15 @@ Reduction JSCallReducer::ReduceStringPrototypeToUpperCaseIntl(Node* node) {
   }
   Effect effect = n.effect();
   Control control = n.control();
+  FrameState frame_state = n.frame_state();
 
   Node* receiver = effect = graph()->NewNode(
       simplified()->CheckString(p.feedback()), n.receiver(), effect, control);
-
-  NodeProperties::ReplaceEffectInput(node, effect);
-  RelaxEffectsAndControls(node);
-  node->ReplaceInput(0, receiver);
-  node->TrimInputCount(1);
-  NodeProperties::ChangeOp(node, simplified()->StringToUpperCaseIntl());
-  NodeProperties::SetType(node, Type::String());
-  return Changed(node);
+  Node* value = effect = control =
+      graph()->NewNode(simplified()->StringToUpperCaseIntl(), receiver,
+                       frame_state, n.context(), effect, control);
+  ReplaceWithValue(node, value, effect, control);
+  return Replace(value);
 }
 
 #endif  // V8_INTL_SUPPORT
@@ -8720,7 +8785,9 @@ Reduction JSCallReducer::ReduceDataViewAccess(Node* node, DataViewAccess access,
         simplified()->NumberEqual(),
         graph()->NewNode(
             simplified()->NumberBitwiseAnd(), buffer_bit_field,
-            jsgraph()->ConstantNoHole(JSArrayBuffer::WasDetachedBit::kMask)),
+            jsgraph()->ConstantNoHole(JSArrayBuffer::NotValidMask(
+                access == DataViewAccess::kSet ? TypedArrayAccessMode::kWrite
+                                               : TypedArrayAccessMode::kRead))),
         jsgraph()->ZeroConstant());
     effect = graph()->NewNode(
         simplified()->CheckIf(DeoptimizeReason::kArrayBufferWasDetached,

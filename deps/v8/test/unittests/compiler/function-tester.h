@@ -25,10 +25,12 @@ class FunctionTester {
 
   FunctionTester(Isolate* i_isolate, Handle<InstructionStream> code,
                  int param_count);
-  FunctionTester(Isolate* i_isolate, DirectHandle<Code> code, int param_count);
 
-  // Assumes VoidDescriptor call interface.
-  explicit FunctionTester(Isolate* i_isolate, Handle<InstructionStream> code);
+  // Assumes JSTrampolineDescriptor call interface.
+  // TODO(ishell): deduce param count from Code object and make sure it works
+  // for kDontAdaptArgumentsSentinel.
+  explicit FunctionTester(Isolate* i_isolate, DirectHandle<Code> code,
+                          int param_count = 0);
 
   Isolate* isolate;
   Handle<JSFunction> function;
@@ -53,6 +55,7 @@ class FunctionTester {
 
   void CheckThrows(Handle<Object> a);
   void CheckThrows(Handle<Object> a, Handle<Object> b);
+  v8::Local<v8::Message> CheckThrowsReturnMessage(Handle<Object> a);
   v8::Local<v8::Message> CheckThrowsReturnMessage(Handle<Object> a,
                                                   Handle<Object> b);
   void CheckCall(DirectHandle<Object> expected, Handle<Object> a,

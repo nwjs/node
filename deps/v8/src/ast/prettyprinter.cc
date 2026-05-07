@@ -592,8 +592,15 @@ void CallPrinter::VisitTemplateLiteral(TemplateLiteral* node) {
 
 void CallPrinter::VisitImportCallExpression(ImportCallExpression* node) {
   Print("import");
-  if (node->phase() == ModuleImportPhase::kSource) {
-    Print(".source");
+  switch (node->phase()) {
+    case ModuleImportPhase::kSource:
+      Print(".source");
+      break;
+    case ModuleImportPhase::kDefer:
+      Print(".defer");
+      break;
+    case ModuleImportPhase::kEvaluation:
+      break;
   }
   Print("(");
   Find(node->specifier(), true);
@@ -631,7 +638,10 @@ void CallPrinter::FindArguments(const ZonePtrList<Expression>* arguments) {
 void CallPrinter::PrintLiteral(DirectHandle<Object> value, bool quote) {
   if (!ShouldPrint()) return;
 
-  if (IsString(*value)) {
+  if (IsAnyHole(*value)) {
+    // Holes can occur in array literals, and should show up as empty entries.
+    Print("");
+  } else if (IsString(*value)) {
     if (quote) Print("\"");
     Print(Cast<String>(value));
     if (quote) Print("\"");

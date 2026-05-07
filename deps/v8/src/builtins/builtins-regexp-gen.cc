@@ -851,10 +851,8 @@ TNode<UintPtrT> RegExpBuiltinsAssembler::RegExpExecInternal(
   {
 // A stack overflow was detected in RegExp code.
 #ifdef DEBUG
-    TNode<ExternalReference> exception_address =
-        ExternalConstant(ExternalReference::Create(
-            IsolateAddressId::kExceptionAddress, isolate()));
-    TNode<Object> exception = LoadFullTagged(exception_address);
+    TNode<Object> exception =
+        LoadFullTagged(IsolateField(IsolateFieldId::kException));
     CSA_DCHECK(this, IsTheHole(exception));
 #endif  // DEBUG
     CallRuntime(Runtime::kThrowStackOverflow, context);
@@ -1044,7 +1042,8 @@ void RegExpBuiltinsAssembler::BranchIfRegExpResult(const TNode<Context> context,
                                                    Label* if_isunmodified,
                                                    Label* if_ismodified) {
   // Could be a Smi.
-  const TNode<Map> map = LoadReceiverMap(object);
+  GotoIf(TaggedIsSmi(object), if_ismodified);
+  const TNode<Map> map = LoadMap(CAST(object));
 
   const TNode<NativeContext> native_context = LoadNativeContext(context);
   const TNode<Object> initial_regexp_result_map = LoadContextElementNoCell(
@@ -1141,9 +1140,8 @@ TF_BUILTIN(RegExpExecAtom, RegExpBuiltinsAssembler) {
                      subject_string);
     StoreObjectField(match_info, offsetof(RegExpMatchInfo, last_input_),
                      subject_string);
-    UnsafeStoreArrayElement(match_info, 0, match_from,
-                            UNSAFE_SKIP_WRITE_BARRIER);
-    UnsafeStoreArrayElement(match_info, 1, match_to, UNSAFE_SKIP_WRITE_BARRIER);
+    UnsafeStoreArrayElement(match_info, 0, match_from, SKIP_WRITE_BARRIER);
+    UnsafeStoreArrayElement(match_info, 1, match_to, SKIP_WRITE_BARRIER);
 
     Return(match_info);
   }

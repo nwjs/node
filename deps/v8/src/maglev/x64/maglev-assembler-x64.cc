@@ -45,8 +45,8 @@ void AllocateRaw(MaglevAssembler* masm, Isolate* isolate,
   if (v8_flags.single_generation) {
     alloc_type = AllocationType::kOld;
   }
-  ExternalReference top = SpaceAllocationTopAddress(isolate, alloc_type);
-  ExternalReference limit = SpaceAllocationLimitAddress(isolate, alloc_type);
+  IsolateFieldId top = SpaceAllocationTopAddress(alloc_type);
+  IsolateFieldId limit = SpaceAllocationLimitAddress(alloc_type);
   ZoneLabelRef done(masm);
   Register new_top = kScratchRegister;
   // Check if there is enough space.
@@ -561,28 +561,13 @@ void MaglevAssembler::Prologue(Graph* graph) {
   AssertInSandboxedExecutionMode();
 #endif  // V8_ENABLE_SANDBOX_HARDWARE_SUPPORT
 
-  BailoutIfDeoptimized(rbx);
+  if (v8_flags.debug_code) {
+    AssertNotDeoptimized(rbx);
+  }
 
   if (graph->has_recursive_calls()) {
     BindJumpTarget(code_gen_state()->entry_label());
   }
-
-#ifndef V8_ENABLE_LEAPTIERING
-  // Tiering support.
-  if (v8_flags.turbofan) {
-    using D = MaglevOptimizeCodeOrTailCallOptimizedCodeSlotDescriptor;
-    Register feedback_vector = D::GetRegisterParameter(D::kFeedbackVector);
-    DCHECK(!AreAliased(feedback_vector, kJavaScriptCallArgCountRegister,
-                       kJSFunctionRegister, kContextRegister,
-                       kJavaScriptCallNewTargetRegister,
-                       kJavaScriptCallDispatchHandleRegister));
-    Move(feedback_vector,
-         compilation_info()->toplevel_compilation_unit()->feedback().object());
-    TailCallBuiltin(Builtin::kMaglevOptimizeCodeOrTailCallOptimizedCodeSlot,
-                    CheckFeedbackVectorFlagsNeedsProcessing(feedback_vector,
-                                                            CodeKind::MAGLEV));
-  }
-#endif  // !V8_ENABLE_LEAPTIERING
 
   EnterFrame(StackFrame::MAGLEV);
   // Save arguments in frame.
@@ -638,6 +623,12 @@ void MaglevAssembler::MaybeEmitDeoptBuiltinsCall(size_t eager_deopt_count,
                                                  Label* eager_deopt_entry,
                                                  size_t lazy_deopt_count,
                                                  Label* lazy_deopt_entry) {}
+
+void MaglevAssembler::Move(ExternalReference dst, int32_t imm) {
+  TemporaryRegisterScope temps(this);
+  Register scratch = temps.AcquireScratch();
+  movq(ExternalReferenceAsOperand(dst, scratch), Immediate(imm));
+}
 
 }  // namespace maglev
 }  // namespace internal

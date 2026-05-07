@@ -65,6 +65,8 @@ LocalHeap::LocalHeap(Heap* heap, ThreadKind kind,
   if (!is_main_thread()) {
     heap_allocator_.Setup();
     SetUpMarkingBarrier();
+    boostable_priority_ =
+        V8::GetCurrentPlatform()->CreateBoostablePriorityScope();
   }
 
   heap_->safepoint()->AddLocalHeap(this, [this] {
@@ -135,6 +137,18 @@ void LocalHeap::SetUpMainThread() {
   heap_allocator_.Setup();
   SetUpMarkingBarrier();
   SetUpSharedMarking();
+}
+
+void LocalHeap::BoostPriority() {
+  if (boostable_priority_) {
+    boostable_priority_->BoostPriority();
+  }
+}
+
+void LocalHeap::ResetPriority() {
+  if (boostable_priority_) {
+    boostable_priority_->Reset();
+  }
 }
 
 void LocalHeap::SetUpMarkingBarrier() {
@@ -237,7 +251,7 @@ void LocalHeap::ParkSlowPath() {
 
       if (current_state.IsCollectionRequested()) {
         if (!heap()->ignore_local_gc_requests()) {
-          heap_->CollectGarbageForBackground(this);
+          heap_->PerformRequestedGC(this);
           continue;
         }
 
@@ -292,7 +306,7 @@ void LocalHeap::UnparkSlowPath() {
           continue;
 
         if (!heap()->ignore_local_gc_requests()) {
-          heap_->CollectGarbageForBackground(this);
+          heap_->PerformRequestedGC(this);
         }
 
         return;
@@ -339,7 +353,7 @@ void LocalHeap::SafepointSlowPath() {
     }
 
     if (current_state.IsCollectionRequested()) {
-      heap_->CollectGarbageForBackground(this);
+      heap_->PerformRequestedGC(this);
     }
   } else {
     DCHECK(current_state.IsSafepointRequested());
@@ -419,9 +433,6 @@ void LocalHeap::MarkLinearAllocationAreasBlack() {
   heap_allocator_.MarkLinearAllocationAreasBlack();
 }
 
-void LocalHeap::UnmarkLinearAllocationsArea() {
-  heap_allocator_.UnmarkLinearAllocationsArea();
-}
 
 void LocalHeap::MarkSharedLinearAllocationAreasBlack() {
   if (heap_allocator_.shared_space_allocator()) {
@@ -429,11 +440,6 @@ void LocalHeap::MarkSharedLinearAllocationAreasBlack() {
   }
 }
 
-void LocalHeap::UnmarkSharedLinearAllocationsArea() {
-  if (heap_allocator_.shared_space_allocator()) {
-    heap_allocator_.shared_space_allocator()->UnmarkLinearAllocationArea();
-  }
-}
 
 void LocalHeap::FreeLinearAllocationAreasAndResetFreeLists() {
   heap_allocator_.FreeLinearAllocationAreasAndResetFreeLists();

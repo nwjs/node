@@ -130,11 +130,14 @@ exposed by this class execute synchronously.
 <!-- YAML
 added: v22.5.0
 changes:
-  - version: v25.5.0
+  - version:
+     - v25.5.0
+     - v24.14.0
     pr-url: https://github.com/nodejs/node/pull/61266
     description: Enable `defensive` by default.
   - version:
       - v25.1.0
+      - v24.12.0
     pr-url: https://github.com/nodejs/node/pull/60217
     description: Add `defensive` option.
   - version:
@@ -326,6 +329,7 @@ loading extensions for security reasons.
 <!-- YAML
 added:
   - v25.1.0
+  - v24.12.0
 -->
 
 * `active` {boolean} Whether to set the defensive flag.
@@ -1173,7 +1177,9 @@ called directly.
 <!-- YAML
 added: v24.9.0
 changes:
-  - version: v25.4.0
+  - version:
+     - v25.5.0
+     - v24.13.1
     pr-url: https://github.com/nodejs/node/pull/60246
     description: Changed from a method to a getter.
 -->

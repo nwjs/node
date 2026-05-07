@@ -375,12 +375,12 @@ class JSObject : public TorqueGeneratedJSObject<JSObject, JSReceiver> {
   V8_EXPORT_PRIVATE static V8_WARN_UNUSED_RESULT MaybeHandle<JSObject> New(
       DirectHandle<JSFunction> constructor, DirectHandle<JSReceiver> new_target,
       DirectHandle<AllocationSite> site,
-      NewJSObjectType = NewJSObjectType::kNoAPIWrapper);
+      NewJSObjectType = NewJSObjectType::kMaybeEmbedderFieldsAndNoApiWrapper);
 
   static MaybeDirectHandle<JSObject> NewWithMap(
       Isolate* isolate, DirectHandle<Map> initial_map,
       DirectHandle<AllocationSite> site,
-      NewJSObjectType = NewJSObjectType::kNoAPIWrapper);
+      NewJSObjectType = NewJSObjectType::kMaybeEmbedderFieldsAndNoApiWrapper);
 
   // 9.1.12 ObjectCreate ( proto [ , internalSlotsList ] )
   // Notice: This is NOT 19.1.2.2 Object.create ( O, Properties )
@@ -633,6 +633,11 @@ class JSObject : public TorqueGeneratedJSObject<JSObject, JSReceiver> {
   static inline void EnsureCanContainHeapObjectElements(
       Isolate* isolate, DirectHandle<JSObject> obj);
 
+  template <typename TSlot>
+  static inline ElementsKind GetTransitionedElementsKind(
+      Isolate* isolate, ElementsKind current_kind, TSlot elements,
+      uint32_t count, EnsureElementsMode mode);
+
   // Makes sure that this object can contain the specified elements.
   // TSlot here is either ObjectSlot or FullObjectSlot.
   template <typename TSlot>
@@ -856,8 +861,7 @@ class JSObject : public TorqueGeneratedJSObject<JSObject, JSReceiver> {
   // to ensure that |filler_map| can be collected without WB here.
   inline void InitializeBody(Tagged<Map> map, int start_offset,
                              bool is_slack_tracking_in_progress,
-                             MapWord filler_map,
-                             Tagged<Object> undefined_value);
+                             NewJSObjectType new_js_object_type);
 
   // Check whether this object references another object
   bool ReferencesObject(Tagged<Object> obj);
@@ -990,7 +994,7 @@ class JSObject : public TorqueGeneratedJSObject<JSObject, JSReceiver> {
   class FastBodyDescriptor;
 
   // Gets the number of currently used elements.
-  int GetFastElementsUsage();
+  uint32_t GetFastElementsUsage();
 
   template <typename Dictionary>
   static void ApplyAttributesToDictionary(Isolate* isolate, ReadOnlyRoots roots,
@@ -1035,7 +1039,13 @@ class JSExternalObject
     : public TorqueGeneratedJSExternalObject<JSExternalObject, JSObject> {
  public:
   // [value]: field containing the pointer value.
-  DECL_EXTERNAL_POINTER_ACCESSORS(value, void*)
+  inline void* value(ExternalPointerTagRange tag_range) const;
+  inline void* value(IsolateForSandbox isolate,
+                     ExternalPointerTagRange tag_range) const;
+  inline void init_value(IsolateForSandbox isolate, ExternalPointerTag tag,
+                         void* initial_value);
+  inline void set_value(IsolateForSandbox isolate, ExternalPointerTag tag,
+                        void* value);
 
   static constexpr int kEndOfTaggedFieldsOffset = JSObject::kHeaderSize;
 
@@ -1187,8 +1197,7 @@ class JSIteratorResult : public JSObject {
 class JSGlobalProxy
     : public TorqueGeneratedJSGlobalProxy<JSGlobalProxy, JSSpecialObject> {
  public:
-  inline bool IsDetachedFrom(Isolate* isolate,
-                             Tagged<JSGlobalObject> global) const;
+  inline bool IsDetachedFrom(Tagged<JSGlobalObject> global) const;
   V8_EXPORT_PRIVATE bool IsDetached();
 
   static int SizeWithEmbedderFields(int embedder_field_count);
@@ -1209,7 +1218,7 @@ class JSGlobalObject
   static void InvalidatePropertyCell(DirectHandle<JSGlobalObject> object,
                                      DirectHandle<Name> name);
 
-  inline bool IsDetached(Isolate* isolate);
+  inline bool IsDetached();
   inline Tagged<NativeContext> native_context();
 
   // Dispatched behavior.

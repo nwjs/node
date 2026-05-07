@@ -130,6 +130,18 @@ class V8_EXPORT_PRIVATE SimdShuffle {
     return true;
   }
 
+  // Tries to match a lane, not byte, shuffle to a scalar splat operation.
+  // Returns the index of the lane if successful.
+  template <int LANES>
+  static bool TryMatchSplat(std::array<uint8_t, LANES>& shuffle, int* lane) {
+    if (std::all_of(shuffle.begin(), shuffle.end(),
+                    [&shuffle](uint8_t i) { return i == shuffle[0]; })) {
+      *lane = shuffle[0];
+      return true;
+    }
+    return false;
+  }
+
   // Tries to match a 32x4 rotate, only makes sense if the inputs are equal
   // (is_swizzle). A rotation is a shuffle like [1, 2, 3, 0]. This will always
   // match a Concat, but can have better codegen.
@@ -284,6 +296,10 @@ class V8_EXPORT_PRIVATE SimdShuffle {
     kS16x8ReverseBytes,
     kS16x8TransposeEven,
     kS16x8TransposeOdd,
+    kS16x4DeinterleaveEvenEven,
+    kS16x4DeinterleaveOddEven,
+    kS16x4DeinterleaveEvenOdd,
+    kS16x4DeinterleaveOddOdd,
     kS16x4Reverse,
     kS16x2Reverse,
     kS16x4Even,
@@ -297,6 +313,10 @@ class V8_EXPORT_PRIVATE SimdShuffle {
     kS8x16TransposeOdd,
     kS8x8Even,
     kS8x8Odd,
+    kS8x8DeinterleaveEvenEven,
+    kS8x8DeinterleaveOddEven,
+    kS8x8DeinterleaveEvenOdd,
+    kS8x8DeinterleaveOddOdd,
   };
 
   template <size_t N = kSimd128Size>

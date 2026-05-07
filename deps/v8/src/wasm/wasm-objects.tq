@@ -16,6 +16,9 @@ type ManagedWasmNativeModule extends Foreign
 @useParentTypeChecker
 type TrustedManagedWasmJSFunctionOffheapData extends TrustedForeign
     constexpr 'TrustedManaged<WasmJSFunctionData::OffheapData>';
+@useParentTypeChecker
+type ManagedBackingStore extends Foreign
+    constexpr 'Managed<BackingStore>';
 
 type RawFunctionSigPtr extends RawPtr constexpr 'const wasm::CanonicalSig*';
 
@@ -24,7 +27,11 @@ extern enum AddressType extends uint8 constexpr 'wasm::AddressType' {
   kI64
 }
 
-type WasmCodePointer = uint32;
+type WasmCodePointer extends uint32;
+
+Convert<uintptr, WasmCodePointer>(p: WasmCodePointer): uintptr {
+  return Convert<uintptr>(Convert<uint32>(p));
+}
 
 // Trusted instance data, exposed via WasmInstanceObject::trusted_data.
 extern class WasmTrustedInstanceData extends ExposedTrustedObject;
@@ -93,6 +100,7 @@ extern class WasmInternalFunction extends ExposedTrustedObject {
   raw_call_target: WasmCodePointer;
   @if(WASM_CODE_POINTER_NEEDS_PADDING) optional_padding: uint32;
   @ifnot(WASM_CODE_POINTER_NEEDS_PADDING) optional_padding: void;
+  sig: RawFunctionSigPtr;
 }
 
 extern operator '.implicit_arg' macro LoadImplicitArgFromWasmInternalFunction(
@@ -133,7 +141,6 @@ extern class WasmExportedFunctionData extends WasmFunctionData {
   function_index: Smi;
   // Contains a Smi; boxed so that generated code can update the value.
   wrapper_budget: Cell;
-  canonical_type_index: Smi;
 
   // Experimental: set this to non-zero to let the JS-side receiver be passed
   // as Wasm-side first parameter.
@@ -144,8 +151,6 @@ extern class WasmExportedFunctionData extends WasmFunctionData {
   // present or neither.
   packed_args_size: Smi;
   c_wrapper_code: TrustedPointer<Code>;
-
-  sig: RawFunctionSigPtr;
 }
 
 extern operator '.instance_data' macro
@@ -153,16 +158,12 @@ extern operator '.instance_data' macro
         WasmExportedFunctionData): WasmTrustedInstanceData;
 
 extern class WasmJSFunctionData extends WasmFunctionData {
-  canonical_sig_index: Smi;
   protected_offheap_data:
       ProtectedPointer<TrustedManagedWasmJSFunctionOffheapData>;
 }
 
 extern class WasmCapiFunctionData extends WasmFunctionData {
-  // TODO(jkummerow): Move {canonical_sig_index} into {WasmFunctionData}.
-  canonical_sig_index: Smi;
   embedder_data: Foreign;  // Managed<wasm::FuncData>
-  sig: RawFunctionSigPtr;
 }
 
 extern class WasmResumeData extends HeapObject {
@@ -173,7 +174,7 @@ extern class WasmResumeData extends HeapObject {
 extern class WasmSuspenderObject extends ExposedTrustedObject {
   stack: ExternalPointer;
   parent: ProtectedPointer<WasmSuspenderObject>;
-  promise: JSPromise;
+  promise: JSPromise|Undefined;
   resume: JSObject|Undefined;
   reject: JSObject|Undefined;
 }
@@ -197,6 +198,7 @@ extern class WasmModuleObject extends JSObject {
 }
 
 extern class WasmDispatchTable extends ExposedTrustedObject;
+extern class WasmDispatchTableForImports extends TrustedObject;
 
 extern class WasmTableObject extends JSObject {
   // The entries array is at least as big as {current_length()}, but might be
@@ -232,14 +234,22 @@ extern class WasmTableObject extends JSObject {
 }
 
 extern class WasmMemoryObject extends JSObject {
-  array_buffer: JSArrayBuffer;
+  // Either a JSArrayBuffer or undefined if a new JSArrayBuffer needs to be
+  // allocated on the next access.
+  array_buffer: JSArrayBuffer|Undefined;
+  // A Managed<BackingStore> to allocate a new JSArrayBuffer from on demand.
+  // If we ever remove this, then `BackingStore::PerIsolateAccountingLength()`
+  // needs to be changed to properly account for the external memory.
+  // LINT.IfChange(WasmMemoryAccounting)
+  managed_backing_store: ManagedBackingStore;
+  // LINT.ThenChange(src/objects/backing-store.h:PerIsolateAccountingLength)
   maximum_pages: Smi;
   instances: WeakArrayList;
-  address_type: AddressType;
+  address_type: AddressType;  // 1 byte.
   // TODO(clemensb): Support fixed-sized arrays in torque.
-  padding_for_address_type_0: uint8;
-  padding_for_address_type_1: uint16;
-  @if(TAGGED_SIZE_8_BYTES) padding_for_address_type_2: uint32;
+  padding_for_flags_0: uint8;
+  padding_for_flags_1: uint16;
+  @if(TAGGED_SIZE_8_BYTES) padding_for_flags_2: uint32;
 }
 
 extern class WasmMemoryMapDescriptor extends JSObject {
@@ -270,7 +280,6 @@ extern class WasmGlobalObject extends JSObject {
 }
 
 extern class WasmTagObject extends JSObject {
-  serialized_signature: PodArrayOfWasmValueType;
   tag: HeapObject;
   canonical_type_index: Smi;
   trusted_data: TrustedPointer<WasmTrustedInstanceData>;
@@ -303,10 +312,6 @@ extern class WasmArray extends WasmObject {
 
   @if(TAGGED_SIZE_8_BYTES) optional_padding: uint32;
   @ifnot(TAGGED_SIZE_8_BYTES) optional_padding: void;
-}
-
-extern class WasmDescriptorOptions extends JSObject {
-  prototype: Object;
 }
 
 class WasmStringViewIter extends HeapObject {

@@ -46,6 +46,7 @@ absl_cc_library(
     absl::base
     absl::config
     absl::core_headers
+    absl::has_ostream_operator
     absl::leak_check
     absl::log_internal_nullguard
     absl::log_internal_nullstream
@@ -465,6 +466,8 @@ absl_cc_library(
     absl::config
     absl::core_headers
     absl::log
+    absl::nullability
+    absl::nullability_traits_internal
     absl::strings
   PUBLIC
 )
@@ -1199,5 +1202,38 @@ absl_cc_test(
     ${ABSL_DEFAULT_LINKOPTS}
   DEPS
     absl::log_internal_fnmatch
+    GTest::gmock_main
+)
+
+absl_cc_library(
+  NAME
+    log_internal_container
+  HDRS
+    "internal/container.h"
+  COPTS
+    ${ABSL_DEFAULT_COPTS}
+  LINKOPTS
+    ${ABSL_DEFAULT_LINKOPTS}
+  DEPS
+    absl::config
+    absl::requires_internal
+    absl::strings
+)
+
+absl_cc_test(
+  NAME
+    internal_container_test
+  SRCS
+    "internal/container_test.cc"
+  COPTS
+    ${ABSL_TEST_COPTS}
+  LINKOPTS
+    ${ABSL_DEFAULT_LINKOPTS}
+  DEPS
+    absl::config
+    absl::log_internal_container
+    absl::span
+    absl::strings
+    absl::str_format
     GTest::gmock_main
 )

@@ -51,18 +51,17 @@ class StreamTester {
       : internal_scope_(CcTest::i_isolate()), test_resolver_(test_resolver) {
     i::Isolate* i_isolate = CcTest::i_isolate();
 
-    DirectHandle<Context> context = i_isolate->native_context();
-
     stream_ = GetWasmEngine()->StartStreamingCompilation(
-        i_isolate, WasmEnabledFeatures::All(), CompileTimeImports{}, context,
+        WasmEnabledFeatures::All(), CompileTimeImports{},
         "WebAssembly.compileStreaming()", test_resolver_);
+    stream_->InitializeIsolateSpecificInfo(i_isolate);
   }
 
   void OnBytesReceived(const uint8_t* start, size_t length) {
     stream_->OnBytesReceived(base::Vector<const uint8_t>(start, length));
   }
 
-  void FinishStream() { stream_->Finish(); }
+  void FinishStream() { stream_->Finish({}); }
 
  private:
   i::HandleScope internal_scope_;

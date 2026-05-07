@@ -467,23 +467,20 @@ class ReadOnlyPromotionImpl final : public AllStatic {
       VisitObject(isolate, dst, &v);
     }
 
-#ifdef V8_ENABLE_LEAPTIERING
     // Iterate all entries in the JSDispatchTable as they could contain
     // pointers to promoted Code objects.
-    JSDispatchTable* const jdt = IsolateGroup::current()->js_dispatch_table();
-    jdt->IterateActiveEntriesIn(heap->js_dispatch_table_space(),
-                                [&](JSDispatchHandle handle) {
-                                  Tagged<Code> old_code = jdt->GetCode(handle);
-                                  auto it = moves.find(old_code);
-                                  if (it == moves.end()) return;
-                                  Tagged<HeapObject> new_code = it->second;
-                                  CHECK(IsCode(new_code));
-                                  // TODO(saelo): is it worth logging something
-                                  // in this case?
-                                  jdt->SetCodeNoWriteBarrier(
-                                      handle, TrustedCast<Code>(new_code));
-                                });
-#endif  // V8_ENABLE_LEAPTIERING
+    JSDispatchTable& jdt = isolate->js_dispatch_table();
+    jdt.IterateActiveEntriesIn(
+        heap->js_dispatch_table_space(), [&](JSDispatchHandle handle) {
+          Tagged<Code> old_code = jdt.GetCode(handle);
+          auto it = moves.find(old_code);
+          if (it == moves.end()) return;
+          Tagged<HeapObject> new_code = it->second;
+          CHECK(IsCode(new_code));
+          // TODO(saelo): is it worth logging something
+          // in this case?
+          jdt.SetCodeNoWriteBarrier(handle, TrustedCast<Code>(new_code));
+        });
   }
 
   static void DeleteDeadObjects(Isolate* isolate,
@@ -578,8 +575,19 @@ class ReadOnlyPromotionImpl final : public AllStatic {
       // read_only_external_pointer_space) now.
       RecordProcessedSlotIfDebug(slot.address());
       Address slot_value = slot.load(isolate_);
-      DCHECK(slot.ExactTagIsKnown());
-      slot.init(isolate_, host, slot_value, slot.exact_tag());
+      ExternalPointerTag tag;
+      // `slot` can have a tag range, but for slot.init below we need an exact
+      // tag. Therefore we load the actual tag of the slot. However, we do that
+      // only if there is actually a value stored in the slot. If not, then the
+      // slot is uninitialized, and so far code with tag ranges only handles
+      // initialized slots. Therefore we can use the exact tag of the slot.
+      if (slot_value) {
+        tag = slot.load_tag(isolate_);
+      } else {
+        DCHECK(slot.ExactTagIsKnown());
+        tag = slot.exact_tag();
+      }
+      slot.init(isolate_, host, slot_value, tag);
 
       if (V8_UNLIKELY(v8_flags.trace_read_only_promotion_verbose)) {
         LogUpdatedExternalPointerTableEntry(host, slot, slot_value);
@@ -589,22 +597,24 @@ class ReadOnlyPromotionImpl final : public AllStatic {
     void VisitIndirectPointer(Tagged<HeapObject> host, IndirectPointerSlot slot,
                               IndirectPointerMode mode) final {
 #ifdef V8_ENABLE_SANDBOX
-      if (slot.tag() == kCodeIndirectPointerTag) {
+      if (slot.tag_range().Contains(kCodeIndirectPointerTag)) {
         VisitCodePointer(host, slot);
+      } else {
+        DCHECK(!slot.tag_range().Contains(kCodeIndirectPointerTag));
       }
 #endif  // V8_ENABLE_SANDBOX
     }
     void VisitTrustedPointerTableEntry(Tagged<HeapObject> host,
                                        IndirectPointerSlot slot) final {
 #ifdef V8_ENABLE_SANDBOX
-      if (slot.tag() == kCodeIndirectPointerTag) {
+      if (slot.tag_range().Contains(kCodeIndirectPointerTag)) {
         VisitCodePointer(host, slot);
       }
 #endif  // V8_ENABLE_SANDBOX
     }
-    void VisitRootPointers(Root root, const char* description,
-                           OffHeapObjectSlot start,
-                           OffHeapObjectSlot end) override {
+    void VisitCompressedRootPointers(Root root, const char* description,
+                                     OffHeapObjectSlot start,
+                                     OffHeapObjectSlot end) override {
       // We shouldn't have moved any string table contents or SharedStructType
       // registry contents (which is what OffHeapObjectSlot currently refers
       // to).
@@ -645,7 +655,7 @@ class ReadOnlyPromotionImpl final : public AllStatic {
 
 #ifdef V8_ENABLE_SANDBOX
     void VisitCodePointer(Tagged<HeapObject> host, IndirectPointerSlot slot) {
-      CHECK_EQ(kCodeIndirectPointerTag, slot.tag());
+      CHECK(slot.tag_range().Contains(kCodeIndirectPointerTag));
       IndirectPointerHandle old_handle = slot.Relaxed_LoadHandle();
       auto it = code_pointer_moves_.find(old_handle);
       if (it == code_pointer_moves_.end()) return;

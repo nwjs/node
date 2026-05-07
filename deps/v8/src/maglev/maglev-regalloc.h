@@ -195,7 +195,7 @@ class StraightForwardRegisterAllocator {
                        const compiler::AllocatedOperand& location);
 
   void AllocateControlNode(ControlNode* node, BasicBlock* block);
-  void AllocateNode(Node* node);
+  void AllocateNode(NodeBase* node);
   void AllocateNodeResult(ValueNode* node);
   void AllocateEagerDeopt(const EagerDeoptInfo& deopt_info);
   void AllocateLazyDeopt(const LazyDeoptInfo& deopt_info);
@@ -226,8 +226,13 @@ class StraightForwardRegisterAllocator {
   void Spill(ValueNode* node);
   void SpillRegisters();
 
+  template <typename RegisterT, bool spill = false>
+  void ClearRegisters(RegisterFrameState<RegisterT>& registers);
   template <typename RegisterT>
-  void SpillAndClearRegisters(RegisterFrameState<RegisterT>& registers);
+  void SpillAndClearRegisters(RegisterFrameState<RegisterT>& registers) {
+    ClearRegisters<RegisterT, true>(registers);
+  }
+  void ClearRegisters();
   void SpillAndClearRegisters();
 
   void SaveRegisterSnapshot(NodeBase* node);

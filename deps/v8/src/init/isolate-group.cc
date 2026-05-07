@@ -73,15 +73,13 @@ class IsolateGroupAccessScope final {
 #endif  // V8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES
 
 #ifdef V8_ENABLE_SANDBOX
-void IsolateGroup::MemoryChunkMetadataTableEntry::SetMetadata(
-    MemoryChunkMetadata* metadata, Isolate* isolate) {
+void IsolateGroup::BasePageTableEntry::SetMetadata(BasePage* metadata,
+                                                   Isolate* isolate) {
   metadata_ = metadata;
   // Read-only and shared pages can be accessed from any isolate, mark the entry
-  // with the sentinel. Check the RO flag directly here (not calling
-  // IsReadOnlySpace()), because the latter will try to access not yet
-  // initialized (i.e. this) metadata table entry.
-  if (metadata && (metadata->Chunk()->IsFlagSet(MemoryChunk::READ_ONLY_HEAP) ||
-                   metadata->Chunk()->InWritableSharedSpace())) {
+  // with the sentinel.
+  if (metadata &&
+      (metadata->IsReadOnlyPage() || metadata->is_writable_shared())) {
     isolate_ =
         reinterpret_cast<Isolate*>(kReadOnlyOrSharedEntryIsolateSentinel);
     return;
@@ -133,10 +131,6 @@ IsolateGroup::~IsolateGroup() {
     memory_pool_->TearDown();
   }
 
-#ifdef V8_ENABLE_LEAPTIERING
-  js_dispatch_table_.TearDown();
-#endif  // V8_ENABLE_LEAPTIERING
-
 #ifdef V8_ENABLE_SANDBOX
   code_pointer_table_.TearDown();
   trusted_range_.Free();
@@ -181,6 +175,20 @@ void IsolateGroup::Initialize(bool process_wide, Sandbox* sandbox) {
   page_allocator_ = reservation_.page_allocator();
   pointer_compression_cage_ = &reservation_;
 
+#if CONTIGUOUS_COMPRESSED_READ_ONLY_SPACE_BOOL
+  void* cage_base = reinterpret_cast<void*>(reservation_.base());
+  const void* read_only_reservation_start = page_allocator_->AllocatePages(
+      cage_base, kContiguousReadOnlyReservationSize,
+      MemoryChunk::GetAlignmentForAllocation(),
+      PageAllocator::Permission::kNoAccess);
+  CHECK_EQ(read_only_reservation_start, cage_base);
+  read_only_page_allocator_ = std::make_unique<v8::base::BoundedPageAllocator>(
+      page_allocator_, reinterpret_cast<Address>(read_only_reservation_start),
+      kContiguousReadOnlyReservationSize, kRegularPageSize,
+      base::PageInitializationMode::kAllocatedPagesCanBeUninitialized,
+      base::PageFreeingMode::kMakeInaccessible);
+#endif  // CONTIGUOUS_COMPRESSED_READ_ONLY_SPACE_BOOL
+
   if (!trusted_range_.InitReservation(kMaximalTrustedRangeSize)) {
     V8::FatalProcessOutOfMemory(
         nullptr, "Failed to reserve virtual memory for TrustedRange");
@@ -193,12 +201,14 @@ void IsolateGroup::Initialize(bool process_wide, Sandbox* sandbox) {
       std::make_unique<OptimizingCompileTaskExecutor>();
 
   if (v8_flags.memory_pool) {
-    memory_pool_ = std::make_unique<MemoryPool>();
+    memory_pool_ = std::make_unique<MemoryPool>(MemoryPool::Config{
+        .single_threaded = v8_flags.single_threaded,
+        .share_memory_on_teardown =
+            v8_flags.memory_pool_share_memory_on_teardown,
+        .trace_gc_nvp = v8_flags.trace_gc_nvp,
+        .max_large_page_pool_size = v8_flags.max_large_page_pool_size,
+        .timeout_in_sec = v8_flags.memory_pool_timeout});
   }
-
-#ifdef V8_ENABLE_LEAPTIERING
-  js_dispatch_table()->Initialize();
-#endif  // V8_ENABLE_LEAPTIERING
 }
 #elif defined(V8_COMPRESS_POINTERS)
 void IsolateGroup::Initialize(bool process_wide) {
@@ -212,14 +222,31 @@ void IsolateGroup::Initialize(bool process_wide) {
         "pointer compression cage");
   }
   page_allocator_ = reservation_.page_allocator();
+
+#if CONTIGUOUS_COMPRESSED_READ_ONLY_SPACE_BOOL
+  void* cage_base = reinterpret_cast<void*>(reservation_.base());
+  const void* read_only_reservation_start = page_allocator_->AllocatePages(
+      cage_base, kContiguousReadOnlyReservationSize,
+      MemoryChunk::GetAlignmentForAllocation(),
+      PageAllocator::Permission::kNoAccess);
+  CHECK_EQ(read_only_reservation_start, cage_base);
+  read_only_page_allocator_ = std::make_unique<v8::base::BoundedPageAllocator>(
+      page_allocator_, reinterpret_cast<Address>(read_only_reservation_start),
+      kContiguousReadOnlyReservationSize, kRegularPageSize,
+      base::PageInitializationMode::kAllocatedPagesCanBeUninitialized,
+      base::PageFreeingMode::kMakeInaccessible);
+#endif  // CONTIGUOUS_COMPRESSED_READ_ONLY_SPACE_BOOL
+
   pointer_compression_cage_ = &reservation_;
   trusted_pointer_compression_cage_ = &reservation_;
   optimizing_compile_task_executor_ =
       std::make_unique<OptimizingCompileTaskExecutor>();
-  memory_pool_ = std::make_unique<MemoryPool>();
-#ifdef V8_ENABLE_LEAPTIERING
-  js_dispatch_table()->Initialize();
-#endif  // V8_ENABLE_LEAPTIERING
+  memory_pool_ = std::make_unique<MemoryPool>(MemoryPool::Config{
+      .single_threaded = v8_flags.single_threaded,
+      .share_memory_on_teardown = v8_flags.memory_pool_share_memory_on_teardown,
+      .trace_gc_nvp = v8_flags.trace_gc_nvp,
+      .max_large_page_pool_size = v8_flags.max_large_page_pool_size,
+      .timeout_in_sec = v8_flags.memory_pool_timeout});
 }
 #else   // !V8_COMPRESS_POINTERS
 void IsolateGroup::Initialize(bool process_wide) {
@@ -227,10 +254,12 @@ void IsolateGroup::Initialize(bool process_wide) {
   page_allocator_ = GetPlatformPageAllocator();
   optimizing_compile_task_executor_ =
       std::make_unique<OptimizingCompileTaskExecutor>();
-  memory_pool_ = std::make_unique<MemoryPool>();
-#ifdef V8_ENABLE_LEAPTIERING
-  js_dispatch_table()->Initialize();
-#endif  // V8_ENABLE_LEAPTIERING
+  memory_pool_ = std::make_unique<MemoryPool>(MemoryPool::Config{
+      .single_threaded = v8_flags.single_threaded,
+      .share_memory_on_teardown = v8_flags.memory_pool_share_memory_on_teardown,
+      .trace_gc_nvp = v8_flags.trace_gc_nvp,
+      .max_large_page_pool_size = v8_flags.max_large_page_pool_size,
+      .timeout_in_sec = v8_flags.memory_pool_timeout});
 }
 #endif  // V8_ENABLE_SANDBOX
 
@@ -377,6 +406,11 @@ void IsolateGroup::RemoveIsolate(Isolate* isolate) {
       main_isolate_ = *isolates_.begin();
     }
   }
+}
+
+size_t IsolateGroup::GetIsolateCount() {
+  base::MutexGuard guard(&mutex_);
+  return isolates_.size();
 }
 
 // static
@@ -550,6 +584,10 @@ class PABackedSandboxedArrayBufferAllocator::Impl final {
     }
     // The V8 sandbox is guaranteed to be large enough to host the pool.
     CHECK(pool_base);
+    // Call PartitionAddressSpace::Init() first just to make sure metadata
+    // region start is initialized and the configurable pool allocations do have
+    // out-of-line metadata.
+    partition_alloc::internal::PartitionAddressSpace::Init();
     partition_alloc::internal::PartitionAddressSpace::InitConfigurablePool(
         pool_base, pool_size);
 
@@ -596,6 +634,9 @@ class PABackedSandboxedArrayBufferAllocator::Impl final {
 
   partition_alloc::PartitionAllocator partition_;
 };
+
+PABackedSandboxedArrayBufferAllocator::PABackedSandboxedArrayBufferAllocator() =
+    default;
 
 PABackedSandboxedArrayBufferAllocator::
     ~PABackedSandboxedArrayBufferAllocator() = default;

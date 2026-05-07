@@ -213,14 +213,13 @@ class StreamTester {
   explicit StreamTester(v8::Isolate* isolate)
       : zone_(&allocator_, "StreamTester") {
     Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
     WasmEnabledFeatures features = WasmEnabledFeatures::FromIsolate(i_isolate);
     stream_ = GetWasmEngine()->StartStreamingCompilation(
-        i_isolate, features, CompileTimeImports{},
-        v8::Utils::OpenDirectHandle(*context), "WebAssembly.compileStreaming()",
+        features, CompileTimeImports{}, "WebAssembly.compileStreaming()",
         std::make_shared<TestResolver>(i_isolate, &state_, &error_message_,
                                        &module_object_));
+    stream_->InitializeIsolateSpecificInfo(i_isolate);
   }
 
   std::shared_ptr<StreamingDecoder> stream() const { return stream_; }
@@ -254,11 +253,19 @@ class StreamTester {
     stream_->OnBytesReceived(base::Vector<const uint8_t>(start, length));
   }
 
-  void FinishStream() { stream_->Finish(); }
+  void FinishStream() { stream_->Finish({}); }
 
-  void SetCompiledModuleBytes(base::Vector<const uint8_t> bytes) {
-    stream_->SetCompiledModuleBytes(bytes);
+  void FinishStreamWithCachedModuleBytes(
+      base::Vector<const uint8_t> cached_bytes) {
+    stream_->Finish(
+        [cached_bytes](
+            WasmStreaming::ModuleCachingInterface& caching_interface) {
+          caching_interface.SetCachedCompiledModuleBytes(
+              {cached_bytes.begin(), cached_bytes.size()});
+        });
   }
+
+  void SetHasCompiledModuleBytes() { stream_->SetHasCompiledModuleBytes(); }
 
   Zone* zone() { return &zone_; }
 
@@ -1369,9 +1376,9 @@ STREAM_TEST(TestDeserializationBypassesCompilation) {
   ZoneBuffer wire_bytes = GetValidModuleBytes(tester.zone());
   ZoneBuffer module_bytes =
       GetValidCompiledModuleBytes(isolate, tester.zone(), wire_bytes);
-  tester.SetCompiledModuleBytes(base::VectorOf(module_bytes));
+  tester.SetHasCompiledModuleBytes();
   tester.OnBytesReceived(wire_bytes.begin(), wire_bytes.size());
-  tester.FinishStream();
+  tester.FinishStreamWithCachedModuleBytes(base::VectorOf(module_bytes));
 
   tester.RunCompilerTasks();
 
@@ -1387,9 +1394,9 @@ STREAM_TEST(TestDeserializationFails) {
   // corrupt header
   uint8_t first_byte = *module_bytes.begin();
   module_bytes.patch_u8(0, first_byte + 1);
-  tester.SetCompiledModuleBytes(base::VectorOf(module_bytes));
+  tester.SetHasCompiledModuleBytes();
   tester.OnBytesReceived(wire_bytes.begin(), wire_bytes.size());
-  tester.FinishStream();
+  tester.FinishStreamWithCachedModuleBytes(base::VectorOf(module_bytes));
 
   tester.RunCompilerTasks();
 

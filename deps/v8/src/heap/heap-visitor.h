@@ -79,6 +79,7 @@ class MaybeObjectSize final {
   V(PropertyArray)                    \
   V(PropertyCell)                     \
   V(PrototypeInfo)                    \
+  V(PrototypeSharedClosureInfo)       \
   V(RegExpBoilerplateDescription)     \
   V(RegExpDataWrapper)                \
   V(SeqOneByteString)                 \
@@ -125,7 +126,6 @@ class MaybeObjectSize final {
   IF_WASM(V, WasmGlobalObject)              \
   IF_WASM(V, WasmInstanceObject)            \
   IF_WASM(V, WasmMemoryObject)              \
-  IF_WASM(V, WasmDescriptorOptions)         \
   IF_WASM(V, WasmSuspendingObject)          \
   IF_WASM(V, WasmTableObject)               \
   IF_WASM(V, WasmTagObject)
@@ -163,6 +163,7 @@ class MaybeObjectSize final {
   V(PropertyArray)                                        \
   V(PropertyCell)                                         \
   V(PrototypeInfo)                                        \
+  V(PrototypeSharedClosureInfo)                           \
   V(RegExpBoilerplateDescription)                         \
   V(RegExpDataWrapper)                                    \
   V(ScopeInfo)                                            \
@@ -394,7 +395,8 @@ class NewSpaceVisitor : public ConcurrentHeapVisitor<ConcreteVisitor> {
                                  MaybeObjectSize) {
     UNREACHABLE();
   }
-  size_t VisitWeakCell(Tagged<Map>, Tagged<WeakCell>, MaybeObjectSize) {
+  size_t VisitAllocationSite(Tagged<Map> map, Tagged<AllocationSite>,
+                             MaybeObjectSize) {
     UNREACHABLE();
   }
 

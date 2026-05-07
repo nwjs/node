@@ -7,6 +7,7 @@
 #include <limits>
 #include <optional>
 
+#include "src/base/bits.h"
 #include "src/base/bounds.h"
 #include "src/base/iterator.h"
 #include "src/base/logging.h"
@@ -31,6 +32,10 @@
 #if V8_ENABLE_WEBASSEMBLY
 #include "src/wasm/simd-shuffle.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
+
+#if V8_ENABLE_SANDBOX_HARDWARE_SUPPORT
+#include "src/sandbox/code-sandboxing-mode.h"
+#endif  // V8_ENABLE_SANDBOX_HARDWARE_SUPPORT
 
 namespace v8 {
 namespace internal {
@@ -1083,6 +1088,27 @@ void InstructionSelector::VisitAbortCSADcheck(OpIndex node) {
   Emit(kArchAbortCSADcheck, g.NoOutput(), g.UseFixed(check.message(), rdx));
 }
 
+#ifdef V8_ENABLE_SANDBOX_HARDWARE_SUPPORT
+void InstructionSelector::VisitSwitchSandboxMode(OpIndex node) {
+  CodeSandboxingMode sandbox_mode;
+  sandbox_mode = Cast<SwitchSandboxModeOp>(node).sandbox_mode;
+  X64OperandGenerator g(this);
+  if (sandbox_mode == CodeSandboxingMode::kUnsandboxed) {
+    Emit(kArchSwitchSandboxMode | MiscField::encode(static_cast<int>(
+                                      CodeSandboxingMode::kUnsandboxed)),
+         g.NoOutput());
+    return;
+  } else if (sandbox_mode == CodeSandboxingMode::kSandboxed) {
+    Emit(kArchSwitchSandboxMode | MiscField::encode(static_cast<int>(
+                                      CodeSandboxingMode::kSandboxed)),
+         g.NoOutput());
+    return;
+  } else {
+    UNREACHABLE();
+  }
+}
+#endif  // V8_ENABLE_SANDBOX_HARDWARE_SUPPORT
+
 #ifdef V8_ENABLE_WEBASSEMBLY
 void InstructionSelector::VisitLoadLane(OpIndex node) {
   const Simd128LaneMemoryOp& load = this->Get(node).Cast<Simd128LaneMemoryOp>();
@@ -1444,10 +1470,16 @@ void VisitStoreCommon(InstructionSelector* selector,
                  : MemoryAccessMode::kMemoryAccessProtectedMemOutOfBounds)
           : MemoryAccessMode::kMemoryAccessDirect;
 
+  DCHECK_IMPLIES(write_barrier_kind == kSkippedWriteBarrier,
+                 v8_flags.verify_write_barriers);
+
   if (write_barrier_kind != kNoWriteBarrier &&
       !v8_flags.disable_write_barriers) {
-    DCHECK(
-        CanBeTaggedOrCompressedOrIndirectPointer(store_rep.representation()));
+#if DEBUG
+    MachineRepresentation mach_rep = store_rep.representation();
+    DCHECK(CanBeTaggedOrCompressedOrIndirectPointer(mach_rep) ||
+           CanBeTaggedSigned(mach_rep));
+#endif  // DEBUG
     // Uncompressed stores should not happen if we need a write barrier.
     CHECK((store.ts_stored_rep() !=
            MemoryRepresentation::AnyUncompressedTagged()) &&
@@ -1464,22 +1496,30 @@ void VisitStoreCommon(InstructionSelector* selector,
         X64OperandGenerator::RegisterUseKind::kUseUniqueRegister);
     DCHECK_LT(input_count, 4);
     inputs[input_count++] = g.UseUniqueRegister(value);
-    RecordWriteMode record_write_mode =
-        WriteBarrierKindToRecordWriteMode(write_barrier_kind);
     InstructionOperand temps[] = {g.TempRegister(), g.TempRegister()};
     InstructionCode code;
     if (store_rep.representation() == MachineRepresentation::kIndirectPointer) {
-      DCHECK_EQ(write_barrier_kind, kIndirectPointerWriteBarrier);
+      DCHECK(write_barrier_kind == kIndirectPointerWriteBarrier ||
+             write_barrier_kind == kSkippedWriteBarrier);
       // In this case we need to add the IndirectPointerTag as additional input.
-      code = kArchStoreIndirectWithWriteBarrier;
+      code = write_barrier_kind == kSkippedWriteBarrier
+                 ? kArchStoreIndirectSkippedWriteBarrier
+                 : kArchStoreIndirectWithWriteBarrier;
+      code |= RecordWriteModeField::encode(
+          RecordWriteMode::kValueIsIndirectPointer);
       IndirectPointerTag tag = store.indirect_pointer_tag();
       inputs[input_count++] = g.UseImmediate64(static_cast<int64_t>(tag));
+    } else if (write_barrier_kind == kSkippedWriteBarrier) {
+      code = is_seqcst ? kArchAtomicStoreSkippedWriteBarrier
+                       : kArchStoreSkippedWriteBarrier;
     } else {
       code = is_seqcst ? kArchAtomicStoreWithWriteBarrier
                        : kArchStoreWithWriteBarrier;
+      const RecordWriteMode record_write_mode =
+          WriteBarrierKindToRecordWriteMode(write_barrier_kind);
+      code |= RecordWriteModeField::encode(record_write_mode);
     }
     code |= AddressingModeField::encode(addressing_mode);
-    code |= RecordWriteModeField::encode(record_write_mode);
     code |= AccessModeField::encode(access_mode);
     selector->Emit(code, 0, nullptr, input_count, inputs, arraysize(temps),
                    temps);
@@ -2056,9 +2096,14 @@ bool TryEmitLoadForLoadWord64AndShiftRight(InstructionSelector* selector,
         // in a register and replacing it with an immediate is not allowed. This
         // usually only happens in dead code anyway.
         if (!inputs[input_count - 1].IsImmediate()) return false;
+        int32_t displacement;
+        if (base::bits::SignedAddOverflow32(
+                static_cast<int32_t>(m->displacement), 4, &displacement) ||
+            !ValueFitsIntoImmediate(displacement)) {
+          return false;
+        }
         inputs[input_count - 1] =
-            ImmediateOperand(ImmediateOperand::INLINE_INT32,
-                             static_cast<int32_t>(m->displacement) + 4);
+            ImmediateOperand(ImmediateOperand::INLINE_INT32, displacement);
       }
       InstructionOperand outputs[] = {g.DefineAsRegister(node)};
       InstructionCode code = opcode | AddressingModeField::encode(mode);
@@ -2783,11 +2828,10 @@ void VisitFloatBinop(InstructionSelector* selector, OpIndex node,
 void VisitFloatUnop(InstructionSelector* selector, OpIndex node, OpIndex input,
                     InstructionCode opcode) {
   X64OperandGenerator g(selector);
-  if (selector->IsSupported(AVX)) {
-    selector->Emit(opcode, g.DefineAsRegister(node), g.UseRegister(input));
-  } else {
-    selector->Emit(opcode, g.DefineSameAsFirst(node), g.UseRegister(input));
-  }
+  InstructionOperand dst = selector->IsSupported(AVX)
+                               ? g.DefineAsRegister(node)
+                               : g.DefineSameAsFirst(node);
+  selector->Emit(opcode, dst, g.UseRegister(input));
 }
 
 }  // namespace
@@ -2841,6 +2885,10 @@ void VisitFloatUnop(InstructionSelector* selector, OpIndex node, OpIndex input,
   V(F32x4Floor, kX64F32x4Round | MiscField::encode(kRoundDown))           \
   V(F32x4Trunc, kX64F32x4Round | MiscField::encode(kRoundToZero))         \
   V(F32x4NearestInt, kX64F32x4Round | MiscField::encode(kRoundToNearest)) \
+  V(F32x8Ceil, kX64F32x8Round | MiscField::encode(kRoundUp))              \
+  V(F32x8Floor, kX64F32x8Round | MiscField::encode(kRoundDown))           \
+  V(F32x8Trunc, kX64F32x8Round | MiscField::encode(kRoundToZero))         \
+  V(F32x8NearestInt, kX64F32x8Round | MiscField::encode(kRoundToNearest)) \
   V(F64x2Ceil, kX64F64x2Round | MiscField::encode(kRoundUp))              \
   V(F64x2Floor, kX64F64x2Round | MiscField::encode(kRoundDown))           \
   V(F64x2Trunc, kX64F64x2Round | MiscField::encode(kRoundToZero))         \
@@ -5919,8 +5967,10 @@ void InstructionSelector::VisitI16x8DotI8x16I7x16S(OpIndex node) {
   X64OperandGenerator g(this);
   const Simd128BinopOp& op = Cast<Simd128BinopOp>(node);
   DCHECK_EQ(op.input_count, 2);
-  Emit(kX64I16x8DotI8x16I7x16S, g.DefineAsRegister(node),
-       g.UseUniqueRegister(op.left()), g.UseRegister(op.right()));
+  InstructionOperand dst = IsSupported(AVX) ? g.DefineAsRegister(node)
+                                            : g.DefineSameAsInput(node, 1);
+  Emit(kX64I16x8DotI8x16I7x16S, dst, g.UseRegister(op.left()),
+       g.UseRegister(op.right()));
 }
 
 void InstructionSelector::VisitI32x4DotI8x16I7x16AddS(OpIndex node) {

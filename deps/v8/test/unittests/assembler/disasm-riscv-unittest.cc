@@ -281,6 +281,21 @@ TEST_F(DisasmRiscvTest, ZICOND) {
   VERIFY_RUN();
 }
 
+TEST_F(DisasmRiscvTest, ZIMOP) {
+  SET_UP();
+
+  COMPARE(mop_r(10, s1, t3), "89ee44f3       mop.r.10  s1, t3");
+  COMPARE(mop_rr(5, a1, t1, t2), "c67345f3       mop.rr.05 a1, t1, t2");
+  if (CpuFeatures::IsSupported(ZICFISS)) {
+    COMPARE(sspush_ra(), "ce104073       sspush    ra");
+    COMPARE(sspush_t0(), "ce504073       sspush    t0");
+    COMPARE(sspopchk_ra(), "cdc0c073       sspopchk  ra");
+    COMPARE(sspopchk_t0(), "cdc2c073       sspopchk  t0");
+    COMPARE(ssrdp(a0), "cdc04573       ssrdp     a0");
+  }
+  VERIFY_RUN();
+}
+
 #ifdef V8_TARGET_ARCH_RISCV64
 TEST_F(DisasmRiscvTest, RV64I) {
   SET_UP();
@@ -659,8 +674,10 @@ TEST_F(DisasmRiscvTest,  Previleged) {
 TEST_F(DisasmRiscvTest, RVV) {
   if (!CpuFeatures::IsSupported(RISCV_SIMD)) return;
   SET_UP();
-  COMPARE(VU.set(kScratchReg, E64, m1),
-          "018079d7       vsetvli   s3, zero_reg, E64, m1");
+  COMPARE(VU.set(2, E64, m1),
+          "c5817057       vsetivli  zero_reg, 0x2, E64, m1");
+  COMPARE(VU.set(2, E64, mf2),
+          "c5f17057       vsetivli  zero_reg, 0x2, E64, mf2");
   COMPARE(vl(v2, a0, 0, VSew::E8), "02050107       vle8.v    v2, (a0)");
   COMPARE(vl(v2, a0, 0, VSew::E16), "02055107       vle16.v    v2, (a0)");
   COMPARE(vl(v2, a0, 0, VSew::E32), "02056107       vle32.v    v2, (a0)");

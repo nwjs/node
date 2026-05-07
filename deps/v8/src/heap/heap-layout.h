@@ -10,6 +10,7 @@
 
 #include "src/base/macros.h"
 #include "src/common/globals.h"
+#include "src/objects/heap-object.h"
 #include "src/objects/objects.h"
 #include "src/objects/tagged.h"
 
@@ -37,26 +38,26 @@ class HeapLayout final : public AllStatic {
   // Returns whether `object` is in a shared space.
   static V8_INLINE bool InAnySharedSpace(Tagged<HeapObject> object);
 
-  // Returns whether `object` is allocated on a black page (during
-  // incremental/concurrent marking).
-  static V8_INLINE bool InBlackAllocatedPage(Tagged<HeapObject> object);
-
   // Returns whether `object` is allocated in a large space which could be
   // either young or old generation large space.
   static V8_INLINE bool InAnyLargeSpace(Tagged<HeapObject> object);
 
   // Returns whether the map word of `object` is a self forwarding address.
   // This represents pinned objects and live large objects in Scavenger.
-  static bool IsSelfForwarded(Tagged<HeapObject> object);
-  static bool IsSelfForwarded(Tagged<HeapObject> object,
-                              PtrComprCageBase cage_base);
-  static bool IsSelfForwarded(Tagged<HeapObject> object, MapWord map_word);
+  V8_EXPORT_PRIVATE static bool IsSelfForwarded(Tagged<HeapObject> object);
+  V8_EXPORT_PRIVATE static bool IsSelfForwarded(Tagged<HeapObject> object,
+                                                PtrComprCageBase cage_base);
+  V8_EXPORT_PRIVATE static bool IsSelfForwarded(Tagged<HeapObject> object,
+                                                MapWord map_word);
+
+  V8_EXPORT_PRIVATE static bool IsForwardedPointerTo(Tagged<HeapObject> src,
+                                                     Tagged<HeapObject> dest);
 
  private:
-  V8_EXPORT static bool InYoungGenerationForStickyMarkbits(
+  V8_EXPORT_PRIVATE static bool InYoungGenerationForStickyMarkbits(
       const MemoryChunk* chunk, Tagged<HeapObject> object);
 
-  V8_EXPORT static void CheckYoungGenerationConsistency(
+  V8_EXPORT_PRIVATE static void CheckYoungGenerationConsistency(
       const MemoryChunk* chunk);
 };
 
@@ -77,6 +78,10 @@ class TrustedHeapLayout final : public AllStatic {
   // instance. This is equivalent to !InReadOnlySpace except during
   // serialization.
   static V8_INLINE bool IsOwnedByAnyHeap(Tagged<HeapObject> object);
+
+  // Returns whether `object` is allocated on a black page (during
+  // incremental/concurrent marking).
+  static V8_INLINE bool InBlackAllocatedPage(Tagged<HeapObject> object);
 };
 
 }  // namespace v8::internal

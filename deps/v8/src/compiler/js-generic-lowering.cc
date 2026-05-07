@@ -148,8 +148,11 @@ DEF_UNARY_LOWERING(Negate)
 void JSGenericLowering::ReplaceBinaryOpWithBuiltinCall(
     Node* node, Builtin builtin_without_feedback,
     Builtin builtin_with_feedback) {
-  DCHECK(JSOperator::IsBinaryWithFeedback(node->opcode()));
-  node->RemoveInput(JSBinaryOpNode::FeedbackVectorIndex());
+  DCHECK(JSOperator::IsBinaryWithFeedback(node->opcode()) ||
+         (JSOperator::IsBinaryWithEmbeddedFeedback(node->opcode())));
+  if (JSOperator::IsBinaryWithFeedback(node->opcode())) {
+    node->RemoveInput(JSBinaryOpNode::FeedbackVectorIndex());
+  }
   ReplaceWithBuiltinCall(node, builtin_without_feedback);
 }
 
@@ -158,6 +161,13 @@ void JSGenericLowering::ReplaceBinaryOpWithBuiltinCall(
     ReplaceBinaryOpWithBuiltinCall(node, Builtin::k##Name,           \
                                    Builtin::k##Name##_WithFeedback); \
   }
+
+#define DEF_BINARY_WITH_EMBEDDED_FEEDBACK_LOWERING(Name)                     \
+  void JSGenericLowering::LowerJS##Name(Node* node) {                        \
+    ReplaceBinaryOpWithBuiltinCall(node, Builtin::k##Name,                   \
+                                   Builtin::k##Name##_WithEmbeddedFeedback); \
+  }
+
 // Binary ops.
 DEF_BINARY_LOWERING(Add)
 DEF_BINARY_LOWERING(BitwiseAnd)
@@ -172,12 +182,12 @@ DEF_BINARY_LOWERING(ShiftRight)
 DEF_BINARY_LOWERING(ShiftRightLogical)
 DEF_BINARY_LOWERING(Subtract)
 // Compare ops.
-DEF_BINARY_LOWERING(Equal)
-DEF_BINARY_LOWERING(GreaterThan)
-DEF_BINARY_LOWERING(GreaterThanOrEqual)
+DEF_BINARY_WITH_EMBEDDED_FEEDBACK_LOWERING(Equal)
+DEF_BINARY_WITH_EMBEDDED_FEEDBACK_LOWERING(GreaterThan)
+DEF_BINARY_WITH_EMBEDDED_FEEDBACK_LOWERING(GreaterThanOrEqual)
 DEF_BINARY_LOWERING(InstanceOf)
-DEF_BINARY_LOWERING(LessThan)
-DEF_BINARY_LOWERING(LessThanOrEqual)
+DEF_BINARY_WITH_EMBEDDED_FEEDBACK_LOWERING(LessThan)
+DEF_BINARY_WITH_EMBEDDED_FEEDBACK_LOWERING(LessThanOrEqual)
 #undef DEF_BINARY_LOWERING
 
 void JSGenericLowering::LowerJSStrictEqual(Node* node) {
@@ -185,7 +195,6 @@ void JSGenericLowering::LowerJSStrictEqual(Node* node) {
   NodeProperties::ReplaceContextInput(node, jsgraph()->NoContextConstant());
   DCHECK_EQ(node->op()->ControlInputCount(), 1);
   node->RemoveInput(NodeProperties::FirstControlIndex(node));
-  node->RemoveInput(JSStrictEqualNode::FeedbackVectorIndex());
 
   Callable callable = Builtins::CallableFor(isolate(), Builtin::kStrictEqual);
   ReplaceWithBuiltinCall(node, callable, CallDescriptor::kNoFlags,
@@ -773,6 +782,24 @@ void JSGenericLowering::LowerJSCreateArrayFromIterable(Node* node) {
   ReplaceWithBuiltinCall(node, Builtin::kIterableToListWithSymbolLookup);
 }
 
+void JSGenericLowering::LowerJSSetPrototypeProperties(Node* node) {
+  SetPrototypePropertiesParameters const& p =
+      SetPrototypePropertiesParametersOf(node->op());
+  Node* boilerplate_desc = jsgraph()->HeapConstantNoHole(p.constant.object());
+  Node* feedback_array =
+      jsgraph()->HeapConstantNoHole(broker()->CanonicalPersistentHandle(
+          p.source.vector->closure_feedback_cell_array()));
+  Node* slot = jsgraph()->SmiConstant(p.source.index());
+
+  // Shuffling inputs.
+  // Before (from BytecodeGraphBuilder): {acc}
+  node->InsertInput(zone(), 1, boilerplate_desc);
+  node->InsertInput(zone(), 2, feedback_array);
+  node->InsertInput(zone(), 3, slot);
+  // After: {acc, boileplate, feedback_array, slot_idx}
+  ReplaceWithRuntimeCall(node, Runtime::kSetPrototypeProperties);
+}
+
 void JSGenericLowering::LowerJSCreateLiteralObject(Node* node) {
   JSCreateLiteralObjectNode n(node);
   CreateLiteralParameters const& p = n.Parameters();
@@ -1107,7 +1134,14 @@ void JSGenericLowering::LowerJSForInNext(Node* node) {
 }
 
 void JSGenericLowering::LowerJSForOfNext(Node* node) {
-  ReplaceWithBuiltinCall(node, Builtin::kForOfNextBaseline);
+  JSForOfNextNode n(node);
+  ForOfNextParameters const& p = n.Parameters();
+
+  Node* call_slot = jsgraph()->SmiConstant(p.callFeedback().slot.ToInt());
+  static_assert(n.FeedbackVectorIndex() == 2);
+
+  node->InsertInput(zone(), 3, call_slot);
+  ReplaceWithBuiltinCall(node, Builtin::kForOfNext);
 }
 
 void JSGenericLowering::LowerJSLoadMessage(Node* node) {

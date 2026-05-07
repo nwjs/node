@@ -84,6 +84,7 @@ enum InstanceType : uint16_t;
   V(PropertyArray)                    \
   V(PropertyCell)                     \
   V(PrototypeInfo)                    \
+  V(PrototypeSharedClosureInfo)       \
   V(RegExpBoilerplateDescription)     \
   V(RegExpDataWrapper)                \
   V(SharedFunctionInfo)               \
@@ -108,7 +109,6 @@ enum InstanceType : uint16_t;
   IF_WASM(V, WasmMemoryObject)        \
   IF_WASM(V, WasmResumeData)          \
   IF_WASM(V, WasmStruct)              \
-  IF_WASM(V, WasmDescriptorOptions)   \
   IF_WASM(V, WasmSuspendingObject)    \
   IF_WASM(V, WasmContinuationObject)  \
   IF_WASM(V, WasmTableObject)         \
@@ -209,7 +209,7 @@ using MapHandlesSpan = v8::MemorySpan<DirectHandle<Map>>;
 // |               |   - is_deprecated (bit 24)                      |
 // |               |   - is_unstable (bit 25)                        |
 // |               |   - is_migration_target (bit 26)                |
-// |               |   - is_extensible (bit 28)                      |
+// |               |   - is_extensible (bit 27)                      |
 // |               |   - may_have_interesting_properties (bit 28)    |
 // |               |   - construction_counter (bit 29..31)           |
 // |               |                                                 |
@@ -220,11 +220,14 @@ using MapHandlesSpan = v8::MemorySpan<DirectHandle<Map>>;
 // | TaggedPointer | [prototype]                                     |
 // +---------------+-------------------------------------------------+
 // | TaggedPointer | [constructor_or_back_pointer_or_native_context] |
+// |               | [WasmTypeInfo] (if Wasm map)                    |
 // +---------------+-------------------------------------------------+
 // | TaggedPointer | [instance_descriptors] (if JS object)           |
 // |               | [custom_descriptor]    (if WasmStruct)          |
 // +---------------+-------------------------------------------------+
-// | TaggedPointer | [dependent_code]                                |
+// | TaggedPointer | [immediate_supertype_map] (if WasmStruct with   |
+// |               |                            custom descriptor)   |
+// |               | [dependent_code] (all other maps)               |
 // +---------------+-------------------------------------------------+
 // | TaggedPointer | [prototype_validity_cell]                       |
 // +---------------+-------------------------------------------------+
@@ -451,6 +454,10 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
   inline bool is_abandoned_prototype_map() const;
   inline bool has_prototype_info() const;
   inline bool TryGetPrototypeInfo(Tagged<PrototypeInfo>* result) const;
+  inline bool TryGetPrototypeSharedClosureInfo(
+      Tagged<PrototypeSharedClosureInfo>* result) const;
+  inline void SetPrototypeSharedClosureInfo(
+      Tagged<PrototypeSharedClosureInfo> closure_infos);
 
   // Whether the instance has been added to the retained map list by
   // Heap::AddRetainedMap.
@@ -504,13 +511,16 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
       raw_transitions, Tagged<UnionOf<Smi, MaybeWeak<Map>, TransitionArray>>)
   // [prototype_info]: Per-prototype metadata. Aliased with transitions
   // (which prototype maps don't have).
-  DECL_GETTER(prototype_info, Tagged<UnionOf<Smi, PrototypeInfo>>)
-  DECL_RELEASE_ACQUIRE_ACCESSORS(prototype_info,
-                                 Tagged<UnionOf<Smi, PrototypeInfo>>)
+  DECL_GETTER(prototype_info,
+              Tagged<UnionOf<Smi, PrototypeInfo, PrototypeSharedClosureInfo>>)
+
+  DECL_RELEASE_ACQUIRE_ACCESSORS(
+      prototype_info,
+      Tagged<UnionOf<Smi, PrototypeInfo, PrototypeSharedClosureInfo>>)
   // PrototypeInfo is created lazily using this helper (which installs it on
   // the given prototype's map).
   static DirectHandle<PrototypeInfo> GetOrCreatePrototypeInfo(
-      DirectHandle<JSObject> prototype, Isolate* isolate);
+      DirectHandle<JSReceiver> prototype, Isolate* isolate);
   static DirectHandle<PrototypeInfo> GetOrCreatePrototypeInfo(
       DirectHandle<Map> prototype_map, Isolate* isolate);
   inline bool should_be_fast_prototype_map() const;
@@ -598,9 +608,24 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
       DirectHandle<Object> value);
 
   V8_EXPORT_PRIVATE static Handle<Map> Normalize(
+      Isolate* isolate, DirectHandle<Map> map, InstanceType new_instance_type,
+      ElementsKind new_elements_kind, DirectHandle<JSPrototype> new_prototype,
+      PropertyNormalizationMode mode, bool use_cache, const char* reason);
+  V8_EXPORT_PRIVATE static Handle<Map> Normalize(
       Isolate* isolate, DirectHandle<Map> map, ElementsKind new_elements_kind,
       DirectHandle<JSPrototype> new_prototype, PropertyNormalizationMode mode,
-      bool use_cache, const char* reason);
+      bool use_cache, const char* reason) {
+    return Normalize(isolate, map, map->instance_type(), new_elements_kind,
+                     new_prototype, mode, use_cache, reason);
+  }
+  V8_EXPORT_PRIVATE static Handle<Map> Normalize(
+      Isolate* isolate, DirectHandle<Map> map, InstanceType new_instance_type,
+      ElementsKind new_elements_kind, DirectHandle<JSPrototype> new_prototype,
+      PropertyNormalizationMode mode, const char* reason) {
+    const bool kUseCache = true;
+    return Normalize(isolate, map, new_instance_type, new_elements_kind,
+                     new_prototype, mode, kUseCache, reason);
+  }
   V8_EXPORT_PRIVATE static Handle<Map> Normalize(
       Isolate* isolate, DirectHandle<Map> map, ElementsKind new_elements_kind,
       DirectHandle<JSPrototype> new_prototype, PropertyNormalizationMode mode,
@@ -689,7 +714,6 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
 
   // [instance descriptors]: describes the object.
   DECL_ACCESSORS(instance_descriptors, Tagged<DescriptorArray>)
-  DECL_RELAXED_ACCESSORS(instance_descriptors, Tagged<DescriptorArray>)
   DECL_ACQUIRE_GETTER(instance_descriptors, Tagged<DescriptorArray>)
   V8_EXPORT_PRIVATE void SetInstanceDescriptors(
       Isolate* isolate, Tagged<DescriptorArray> descriptors,
@@ -709,6 +733,14 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
 
   // [dependent code]: list of optimized codes that weakly embed this map.
   DECL_ACCESSORS(dependent_code, Tagged<DependentCode>)
+#if V8_ENABLE_WEBASSEMBLY
+  // [immediate_supertype_map]: overlaid onto the "dependent_code" field,
+  // Wasm maps with custom descriptors store their immediate supertype map
+  // (i.e. the canonical RTT for their static type) here, for fast access
+  // from type checks in generated code.
+  DECL_ACCESSORS(immediate_supertype_map, Tagged<Map>)
+  static constexpr int kImmediateSupertypeOffset = kDependentCodeOffset;
+#endif  // V8_ENABLE_WEBASSEMBLY
 
   // [prototype_validity_cell]: Cell containing the validity bit for prototype
   // chains or Tagged<Smi>(0) if uninitialized.
@@ -833,6 +865,9 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
 
   static Handle<Map> CopyAsElementsKind(Isolate* isolate, DirectHandle<Map> map,
                                         ElementsKind kind, TransitionFlag flag);
+
+  V8_EXPORT_PRIVATE static Handle<Map> AsDetachedTypedArray(
+      Isolate* isolate, DirectHandle<Map> map);
 
   static DirectHandle<Map> AsLanguageMode(
       Isolate* isolate, DirectHandle<Map> initial_map,
@@ -1039,7 +1074,8 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
 
   bool EquivalentToForTransition(
       const Tagged<Map> other, ConcurrencyMode cmode,
-      DirectHandle<HeapObject> new_prototype = {}) const;
+      DirectHandle<HeapObject> new_prototype = {},
+      std::optional<InstanceType> new_instance_type = {}) const;
   bool EquivalentToForElementsKindTransition(const Tagged<Map> other,
                                              ConcurrencyMode cmode) const;
   static Handle<Map> RawCopy(Isolate* isolate, DirectHandle<Map> map,
@@ -1061,6 +1097,14 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
   static Handle<Map> CopyAddDescriptor(Isolate* isolate, DirectHandle<Map> map,
                                        Descriptor* descriptor,
                                        TransitionFlag flag);
+
+  template <typename InitMapCb>
+  static Handle<Map> CopyReplaceDescriptors(
+      Isolate* isolate, DirectHandle<Map> map,
+      DirectHandle<DescriptorArray> descriptors, TransitionFlag flag,
+      const InitMapCb& InitMap, MaybeDirectHandle<Name> maybe_name,
+      const char* reason, TransitionKindFlag transition_kind);
+
   static Handle<Map> CopyReplaceDescriptors(
       Isolate* isolate, DirectHandle<Map> map,
       DirectHandle<DescriptorArray> descriptors, TransitionFlag flag,
@@ -1075,6 +1119,7 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
                                     PropertyNormalizationMode mode);
 
   void DeprecateTransitionTree(Isolate* isolate);
+  void DeprecateTransitionTreeImpl(Isolate* isolate);
 
   void ReplaceDescriptors(Isolate* isolate,
                           Tagged<DescriptorArray> new_descriptors);

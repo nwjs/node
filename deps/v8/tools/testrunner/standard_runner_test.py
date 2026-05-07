@@ -266,9 +266,9 @@ class StandardRunnerTest(TestRunnerTest):
         "gc_stress=False, gdbjit=False, has_jitless=False, has_maglev=False, "
         "has_turbofan=False, has_webassembly=True, i18n=True, "
         "interrupt_fuzzer=False, is_android=False, is_ios=False, "
-        "isolates=False, lite_mode=False, mode=debug, msan=True, "
-        "no_harness=False, no_simd_hardware=False, novfp3=False, "
-        "optimize_for_size=False, sandbox_hardware_support=True, "
+        "isolates=False, lite_mode=False, memory_corruption_api=False, "
+        "mode=debug, msan=True, no_harness=False, no_simd_hardware=False, "
+        "novfp3=False, optimize_for_size=False, sandbox_hardware_support=True, "
         "simulator_run=False, slow_dchecks=False, "
         "system=linux, target_cpu=x86, tsan=True, ubsan=True, "
         "use_sanitizer=True, v8_target_cpu=x86, verify_heap=False, "
@@ -593,8 +593,7 @@ class StandardRunnerTest(TestRunnerTest):
         '-v',
     )
 
-    result.stdout_includes(
-        '--test bananas --random-seed=42 --nohard-abort --testing-d8-test-runner')
+    result.stdout_includes('--test bananas --random-seed=42 --nohard-abort')
     result.has_returncode(0)
 
 
@@ -626,7 +625,9 @@ class NumFuzzerTest(TestRunnerTest):
   def testNumFuzzer(self):
     fuzz_flags = [
       f'{flag}=1' for flag in self.get_runner_options()
-      if flag.startswith('--stress-') or flag.startswith('--allocation')
+      if (flag.startswith('--stress-') or
+          flag.startswith('--allocation') or
+          flag.startswith('--scavenge'))
     ]
     self.assertEqual(len(fuzz_flags), len(fuzzer.FUZZERS))
     for fuzz_flag in fuzz_flags:

@@ -24,6 +24,7 @@
 #include "src/execution/isolate-inl.h"
 #include "src/execution/protectors-inl.h"
 #include "src/execution/v8threads.h"
+#include "src/flags/flags.h"
 #include "src/handles/global-handles-inl.h"
 #include "src/heap/heap-inl.h"  // For NextDebuggingId.
 #include "src/init/bootstrapper.h"
@@ -1713,6 +1714,11 @@ class DiscardBaselineCodeVisitor : public ThreadVisitor {
       // but we need to update remaining baseline stack frames as well.
       if (code->kind() == CodeKind::BASELINE) {
         UnoptimizedJSFrame* frame = UnoptimizedJSFrame::cast(it.frame());
+        if (v8_flags.trace_baseline) {
+          PrintF("[Sparkplug] discarding on-stack ");
+          ShortPrint(*code);
+          PrintF("\n");
+        }
         int bytecode_offset = code->GetBytecodeOffsetForBaselinePC(
             frame->pc(), frame->GetBytecodeArray());
         Address* pc_addr = frame->pc_address();
@@ -1729,8 +1735,8 @@ class DiscardBaselineCodeVisitor : public ThreadVisitor {
           frame->LookupCode()->SetMarkedForDeoptimization(
               isolate, LazyDeoptimizeReason::kDebugger);
         } else {
-          PointerAuthentication::ReplacePC(pc_addr, advance,
-                                           kSystemPointerSize);
+          PointerAuthentication::ReplacePC(pc_addr, advance, kSystemPointerSize,
+                                           it.frame()->iteration_depth());
         }
         InterpretedFrame::cast(it.Reframe())
             ->PatchBytecodeOffset(bytecode_offset);
@@ -1746,6 +1752,11 @@ class DiscardBaselineCodeVisitor : public ThreadVisitor {
 void Debug::DiscardBaselineCode(Tagged<SharedFunctionInfo> shared) {
   RCS_SCOPE(isolate_, RuntimeCallCounterId::kDebugger);
   DCHECK(shared->HasBaselineCode());
+  if (v8_flags.trace_baseline) {
+    PrintF("[Sparkplug] discarding baseline code for ");
+    ShortPrint(*shared);
+    PrintF("\n");
+  }
   DiscardBaselineCodeVisitor visitor(shared);
   visitor.VisitThread(isolate_, isolate_->thread_local_top());
   isolate_->thread_manager()->IterateArchivedThreads(&visitor);
@@ -1766,6 +1777,9 @@ void Debug::DiscardBaselineCode(Tagged<SharedFunctionInfo> shared) {
 
 void Debug::DiscardAllBaselineCode() {
   RCS_SCOPE(isolate_, RuntimeCallCounterId::kDebugger);
+  if (v8_flags.trace_baseline) {
+    PrintF("[Sparkplug] discarding all baseline code\n");
+  }
   DiscardBaselineCodeVisitor visitor;
   visitor.VisitThread(isolate_, isolate_->thread_local_top());
   HeapObjectIterator iterator(isolate_->heap());
@@ -1902,7 +1916,7 @@ void Debug::InstallDebugBreakTrampoline() {
       } else if (IsJSObject(obj)) {
         Tagged<JSObject> object = Cast<JSObject>(obj);
         Tagged<DescriptorArray> descriptors =
-            object->map()->instance_descriptors(kRelaxedLoad);
+            object->map()->instance_descriptors(kAcquireLoad);
 
         for (InternalIndex i : object->map()->IterateOwnDescriptors()) {
           if (descriptors->GetDetails(i).kind() == PropertyKind::kAccessor) {
@@ -2747,10 +2761,16 @@ bool Debug::SetScriptSource(Handle<Script> script, Handle<String> source,
                             debug::LiveEditResult* result) {
   RCS_SCOPE(isolate_, RuntimeCallCounterId::kDebugger);
   DebugScope debug_scope(this);
-  running_live_edit_ = true;
-  LiveEdit::PatchScript(isolate_, script, source, preview,
-                        allow_top_frame_live_editing, result);
-  running_live_edit_ = false;
+
+  if (v8_flags.inspector_live_edit) {
+    running_live_edit_ = true;
+    LiveEdit::PatchScript(isolate_, script, source, preview,
+                          allow_top_frame_live_editing, result);
+    running_live_edit_ = false;
+  } else {
+    result->status = debug::LiveEditResult::FEATURE_DISABLED;
+  }
+
   return result->status == debug::LiveEditResult::OK;
 }
 
@@ -2850,8 +2870,10 @@ void Debug::HandleDebugBreak(IgnoreBreakMode ignore_break_mode,
   MaybeHandle<FixedArray> break_points;
   {
     DebuggableStackFrameIterator it(isolate_);
-    DCHECK(!it.done());
-    JavaScriptFrame* frame = it.frame()->is_javascript()
+    // We can get here when the early steps of processing microtasks find
+    // a pending interrupt request for an OOM callback; in that case there
+    // is no debuggable frame on the stack.
+    JavaScriptFrame* frame = !it.done() && it.frame()->is_javascript()
                                  ? JavaScriptFrame::cast(it.frame())
                                  : nullptr;
     if (frame && IsJSFunction(frame->function())) {
@@ -2956,7 +2978,6 @@ DebugScope::DebugScope(Debug* debug)
       prev_(reinterpret_cast<DebugScope*>(
           base::Relaxed_Load(&debug->thread_local_.current_debug_scope_))),
       no_interrupts_(debug_->isolate_) {
-  timer_.Start();
   // Link recursive debugger entry.
   base::Relaxed_Store(&debug_->thread_local_.current_debug_scope_,
                       reinterpret_cast<base::AtomicWord>(this));
@@ -2974,10 +2995,6 @@ DebugScope::DebugScope(Debug* debug)
 }
 
 void DebugScope::set_terminate_on_resume() { terminate_on_resume_ = true; }
-
-base::TimeDelta DebugScope::ElapsedTimeSinceCreation() {
-  return timer_.Elapsed();
-}
 
 DebugScope::~DebugScope() {
   // Terminate on resume must have been handled by retrieving it, if this is
@@ -3198,7 +3215,7 @@ void Debug::PrepareBuiltinForSideEffectCheck(Isolate* isolate, Builtin id) {
 }
 
 bool Debug::PerformSideEffectCheckForAccessor(
-    DirectHandle<AccessorInfo> accessor_info, DirectHandle<Object> receiver,
+    DirectHandle<AccessorInfo> accessor_info, DirectHandle<Object> holder,
     AccessorComponent component) {
   RCS_SCOPE(isolate_, RuntimeCallCounterId::kDebugger);
   DCHECK_EQ(isolate_->debug_execution_mode(), DebugInfo::kSideEffects);
@@ -3218,15 +3235,20 @@ bool Debug::PerformSideEffectCheckForAccessor(
       return true;
 
     case SideEffectType::kHasSideEffectToReceiver:
-      DCHECK(!receiver.is_null());
-      if (PerformSideEffectCheckForObject(receiver)) return true;
+      // For the setter case receiver is the holder but for the getter case
+      // the actual receiver is not available. So, for getters we treat this
+      // side effect type as "has side effect to holder".
+      DCHECK(!holder.is_null());
+      if (PerformSideEffectCheckForObject(holder)) return true;
       return false;
 
     case SideEffectType::kHasSideEffect:
       break;
   }
   if (v8_flags.trace_side_effect_free_debug_evaluate) {
-    PrintF("[debug-evaluate] API Callback '");
+    PrintF(
+        "[debug-evaluate] API Native Accessor Callback (%s) '",
+        component == AccessorComponent::ACCESSOR_GETTER ? "getter" : "setter");
     ShortPrint(accessor_info->name());
     PrintF("' may cause side effect.\n");
   }
@@ -3379,14 +3401,6 @@ void Debug::PrepareRestartFrame(JavaScriptFrame* frame,
   // necessary bits out of PrepareSTep into a separate method or fold them
   // into Debug::PrepareRestartFrame.
   PrepareStep(StepInto);
-}
-
-void Debug::NotifyDebuggerPausedEventSent() {
-  DebugScope* scope = reinterpret_cast<DebugScope*>(
-      base::Relaxed_Load(&thread_local_.current_debug_scope_));
-  CHECK(scope);
-  isolate_->counters()->debug_pause_to_paused_event()->AddTimedSample(
-      scope->ElapsedTimeSinceCreation());
 }
 
 }  // namespace internal

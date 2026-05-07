@@ -20,6 +20,7 @@
 #include "src/api/api-inl.h"
 #include "src/base/macros.h"
 #include "src/base/utils/random-number-generator.h"
+#include "src/flags/save-flags.h"
 #include "src/handles/handles.h"
 #include "src/heap/parked-scope.h"
 #include "src/logging/log.h"
@@ -64,6 +65,14 @@ template <typename TMixin>
 class WithJSSharedMemoryFeatureFlagsMixin : public TMixin {
  public:
   WithJSSharedMemoryFeatureFlagsMixin() { i::v8_flags.harmony_struct = true; }
+};
+
+template <typename TMixin>
+class WithShadowRealmFeatureFlagsMixin : public TMixin {
+ public:
+  WithShadowRealmFeatureFlagsMixin() {
+    i::v8_flags.harmony_shadow_realm = true;
+  }
 };
 
 using CounterMap = std::map<std::string, int>;
@@ -241,6 +250,10 @@ class WithIsolateScopeMixin : public TMixin {
     return v8::String::NewFromUtf8(this->v8_isolate(), string).ToLocalChecked();
   }
 
+  v8::Local<v8::Number> NewNumber(double value) {
+    return v8::Number::New(this->v8_isolate(), value);
+  }
+
   void EmptyMessageQueues() {
     while (v8::platform::PumpMessageLoop(internal::V8::GetCurrentPlatform(),
                                          this->v8_isolate())) {
@@ -322,7 +335,8 @@ using TestWithContext =                    //
                     ::testing::Test>>>>;
 
 // Use v8::internal::TestJSSharedMemoryWithNativeContext if you are testing
-// internals, aka. directly work with Handles.
+// internals, aka. directly work with Handles and require --harmony-struct
+// feature.
 //
 // Using this will FATAL when !V8_CAN_CREATE_SHARED_HEAP_BOOL
 using TestJSSharedMemoryWithContext =                     //
@@ -331,6 +345,17 @@ using TestJSSharedMemoryWithContext =                     //
             WithIsolateMixin<                             //
                 WithDefaultPlatformMixin<                 //
                     WithJSSharedMemoryFeatureFlagsMixin<  //
+                        ::testing::Test>>>>>;
+
+// Use v8::internal::TestShadowRealmWithContext if you are testing
+// internals, aka. directly work with Handles and require
+// --harmony-shadow-realm feature.
+using TestShadowRealmWithContext =                     //
+    WithContextMixin<                                  //
+        WithIsolateScopeMixin<                         //
+            WithIsolateMixin<                          //
+                WithDefaultPlatformMixin<              //
+                    WithShadowRealmFeatureFlagsMixin<  //
                         ::testing::Test>>>>>;
 
 class PrintExtension : public v8::Extension {
@@ -519,19 +544,6 @@ using TestJSSharedMemoryWithNativeContext =  //
                 WithIsolateMixin<            //
                     TestJSSharedMemoryWithPlatform>>>>;
 
-class V8_NODISCARD SaveFlags {
- public:
-  SaveFlags();
-  ~SaveFlags();
-  SaveFlags(const SaveFlags&) = delete;
-  SaveFlags& operator=(const SaveFlags&) = delete;
-
- private:
-#define FLAG_MODE_APPLY(ftype, ctype, nam, def, cmt) ctype SAVED_##nam;
-#include "src/flags/flag-definitions.h"
-#undef FLAG_MODE_APPLY
-};
-
 // For GTest.
 inline void PrintTo(Tagged<Object> o, ::std::ostream* os) {
   *os << reinterpret_cast<void*>(o.ptr());
@@ -625,6 +637,45 @@ class FakeCodeEventLogger : public i::CodeEventLogger {
   void LogRecordedBuffer(const i::wasm::WasmCode* code, const char* name,
                          size_t length) override {}
 #endif  // V8_ENABLE_WEBASSEMBLY
+};
+
+class CrashKeyStore {
+ public:
+  explicit CrashKeyStore(Isolate* isolate) : isolate_(isolate) {
+    InstallCallbacks();
+  }
+
+  CrashKeyStore(const CrashKeyStore&) = delete;
+  CrashKeyStore& operator=(const CrashKeyStore&) = delete;
+
+  ~CrashKeyStore() { isolate_->SetCrashKeyStringCallbacks({}, {}); }
+
+  const std::string& ValueForKey(const std::string& name) const {
+    auto it = entries_.find(name);
+    CHECK(it != entries_.end());
+    CHECK_NOT_NULL(it->second.get());
+    return it->second->value;
+  }
+
+  bool HasKey(const std::string& name) const {
+    return entries_.find(name) != entries_.end();
+  }
+
+  size_t size() const { return entries_.size(); }
+  std::unordered_set<std::string> KeyNames() const;
+
+ private:
+  struct Entry {
+    CrashKeySize size;
+    std::string value;
+  };
+
+  void InstallCallbacks();
+  CrashKey AllocateKey(const char key[], CrashKeySize size);
+  void SetValue(CrashKey crash_key, const std::string_view value);
+
+  Isolate* isolate_;
+  std::unordered_map<std::string, std::unique_ptr<Entry>> entries_;
 };
 
 #ifdef V8_CC_GNU

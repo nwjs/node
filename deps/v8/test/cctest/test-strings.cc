@@ -41,6 +41,7 @@
 #include "src/heap/factory.h"
 #include "src/heap/heap-inl.h"
 #include "src/objects/objects-inl.h"
+#include "src/sandbox/sandboxable-thread.h"
 #include "test/cctest/cctest.h"
 #include "test/cctest/heap/heap-utils.h"
 
@@ -2174,12 +2175,16 @@ TEST(CheckCachedDataInternalExternalUncachedStringTwoByte) {
 
 TEST(CheckIntlSegmentIteratorTerminateExecutionInterrupt) {
 #if V8_INTL_SUPPORT
-  class WorkerThread : public v8::base::Thread {
+  // This tag value has been picked arbitrarily between 0 and
+  // V8_EXTERNAL_POINTER_TAG_COUNT.
+  constexpr v8::ExternalPointerTypeTag kWorkerThreadTag = 23;
+  class WorkerThread : public v8::internal::SandboxableThread {
    public:
     WorkerThread(v8::base::Mutex& m, v8::base::ConditionVariable& cv)
-        : Thread(v8::base::Thread::Options("WorkerThread")), m_(m), cv_(cv) {}
+        : SandboxableThread(v8::base::Thread::Options("WorkerThread")),
+          m_(m),
+          cv_(cv) {}
     void Run() override {
-      v8::SandboxHardwareSupport::PrepareCurrentThreadForHardwareSandboxing();
       v8::Isolate::CreateParams create_params;
       create_params.array_buffer_allocator = CcTest::array_buffer_allocator();
       isolate = v8::Isolate::New(create_params);
@@ -2187,12 +2192,14 @@ TEST(CheckIntlSegmentIteratorTerminateExecutionInterrupt) {
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
         v8::Local<v8::ObjectTemplate> global = ObjectTemplate::New(isolate);
-        v8::Local<v8::Value> wrapper = v8::External::New(isolate, this);
-        global->Set(isolate, "notifyCV",
-                    v8::FunctionTemplate::New(
-                        isolate, (v8::FunctionCallback)&NotifyCallback, wrapper,
-                        Local<v8::Signature>(), 0, ConstructorBehavior::kThrow,
-                        SideEffectType::kHasNoSideEffect));
+        v8::Local<v8::Value> wrapper =
+            v8::External::New(isolate, this, kWorkerThreadTag);
+        global->Set(
+            isolate, "notifyCV",
+            v8::FunctionTemplate::New(
+                isolate, static_cast<v8::FunctionCallback>(&NotifyCallback),
+                wrapper, Local<v8::Signature>(), 0, ConstructorBehavior::kThrow,
+                SideEffectType::kHasNoSideEffect));
         LocalContext context(isolate, nullptr, global);
         v8::TryCatch try_catch(isolate);
         auto result = CompileRun(
@@ -2221,7 +2228,8 @@ TEST(CheckIntlSegmentIteratorTerminateExecutionInterrupt) {
    private:
     static WorkerThread* Unwrap(Local<Value> value) {
       CHECK(value->IsExternal());
-      return reinterpret_cast<WorkerThread*>(value.As<External>()->Value());
+      return reinterpret_cast<WorkerThread*>(
+          value.As<External>()->Value(kWorkerThreadTag));
     }
     static void NotifyCallback(
         const v8::FunctionCallbackInfo<v8::Value>& args) {

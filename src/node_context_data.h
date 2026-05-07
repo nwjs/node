@@ -149,7 +149,8 @@ class ContextEmbedderTag {
       return false;
     }
     if (context->GetAlignedPointerFromEmbedderData(
-            ContextEmbedderIndex::kContextTag, EmbedderDataTag::kPerContextData) !=
+            ContextEmbedderIndex::kContextTag,
+            EmbedderDataTag::kPerContextData) !=
         ContextEmbedderTag::kNodeContextTagPtr) [[unlikely]] {
       return false;
     }

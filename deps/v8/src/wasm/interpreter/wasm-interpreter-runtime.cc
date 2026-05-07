@@ -15,6 +15,7 @@
 #include "src/wasm/interpreter/wasm-interpreter-objects-inl.h"
 #include "src/wasm/interpreter/wasm-interpreter-runtime-inl.h"
 #include "src/wasm/wasm-arguments.h"
+#include "src/wasm/wasm-objects.h"
 #include "src/wasm/wasm-opcodes-inl.h"
 #include "src/wasm/wasm-subtyping.h"
 
@@ -354,7 +355,7 @@ void WasmInterpreterRuntime::InitGlobalAddressCache() {
   global_addresses_.resize(module_->globals.size());
   for (size_t index = 0; index < module_->globals.size(); index++) {
     const WasmGlobal& global = module_->globals[index];
-    if (!global.type.is_reference()) {
+    if (!global.type.is_ref()) {
       global_addresses_[index] =
           wasm_trusted_instance_data()->GetGlobalStorage(global);
     }
@@ -400,12 +401,12 @@ bool WasmInterpreterRuntime::TableGet(const uint8_t*& current_code,
   // This function assumes that it is executed in a HandleScope.
 
   auto table = direct_handle(
-      Cast<WasmTableObject>(
+      TrustedCast<WasmTableObject>(
           wasm_trusted_instance_data()->tables()->get(table_index)),
       isolate_);
   uint32_t table_size = table->current_length();
   if (entry_index >= table_size) {
-    SetTrap(TrapReason::kTrapTableOutOfBounds, current_code);
+    SetTrap(MessageTemplate::kWasmTrapTableOutOfBounds, current_code);
     return false;
   }
 
@@ -420,12 +421,12 @@ void WasmInterpreterRuntime::TableSet(const uint8_t*& current_code,
   // This function assumes that it is executed in a HandleScope.
 
   auto table = direct_handle(
-      Cast<WasmTableObject>(
+      TrustedCast<WasmTableObject>(
           wasm_trusted_instance_data()->tables()->get(table_index)),
       isolate_);
   uint32_t table_size = table->current_length();
   if (entry_index >= table_size) {
-    SetTrap(TrapReason::kTrapTableOutOfBounds, current_code);
+    SetTrap(MessageTemplate::kWasmTrapTableOutOfBounds, current_code);
   } else {
     WasmTableObject::Set(isolate_, table, entry_index, ref);
   }
@@ -441,7 +442,7 @@ void WasmInterpreterRuntime::TableInit(const uint8_t*& current_code,
   DirectHandle<WasmTrustedInstanceData> trusted_data =
       wasm_trusted_instance_data();
   auto table = direct_handle(
-      Cast<WasmTableObject>(trusted_data->tables()->get(table_index)),
+      TrustedCast<WasmTableObject>(trusted_data->tables()->get(table_index)),
       isolate_);
   if (IsSubtypeOf(table->type(module_), kWasmFuncRef, module_)) {
     PurgeIndirectCallCache(table_index);
@@ -453,10 +454,10 @@ void WasmInterpreterRuntime::TableInit(const uint8_t*& current_code,
           element_segment_index, dst, src, size);
   // See WasmInstanceObject::InitTableEntries.
   if (msg_template == MessageTemplate::kWasmTrapTableOutOfBounds) {
-    SetTrap(TrapReason::kTrapTableOutOfBounds, current_code);
+    SetTrap(MessageTemplate::kWasmTrapTableOutOfBounds, current_code);
   } else if (msg_template ==
              MessageTemplate::kWasmTrapElementSegmentOutOfBounds) {
-    SetTrap(TrapReason::kTrapElementSegmentOutOfBounds, current_code);
+    SetTrap(MessageTemplate::kWasmTrapElementSegmentOutOfBounds, current_code);
   }
 }
 
@@ -468,9 +469,10 @@ void WasmInterpreterRuntime::TableCopy(const uint8_t*& current_code,
 
   DirectHandle<WasmTrustedInstanceData> trusted_data =
       wasm_trusted_instance_data();
-  auto table_dst = direct_handle(
-      Cast<WasmTableObject>(trusted_data->tables()->get(dst_table_index)),
-      isolate_);
+  auto table_dst =
+      direct_handle(TrustedCast<WasmTableObject>(
+                        trusted_data->tables()->get(dst_table_index)),
+                    isolate_);
   if (IsSubtypeOf(table_dst->type(module_), kWasmFuncRef, module_)) {
     PurgeIndirectCallCache(dst_table_index);
   }
@@ -478,7 +480,7 @@ void WasmInterpreterRuntime::TableCopy(const uint8_t*& current_code,
   if (!WasmTrustedInstanceData::CopyTableEntries(
           isolate_, trusted_data, dst_table_index, src_table_index, dst, src,
           size)) {
-    SetTrap(TrapReason::kTrapTableOutOfBounds, current_code);
+    SetTrap(MessageTemplate::kWasmTrapTableOutOfBounds, current_code);
   }
 }
 
@@ -487,7 +489,7 @@ uint32_t WasmInterpreterRuntime::TableGrow(uint32_t table_index, uint32_t delta,
   // This function assumes that it is executed in a HandleScope.
 
   auto table = direct_handle(
-      Cast<WasmTableObject>(
+      TrustedCast<WasmTableObject>(
           wasm_trusted_instance_data()->tables()->get(table_index)),
       isolate_);
   return WasmTableObject::Grow(isolate_, table, delta, value);
@@ -496,7 +498,7 @@ uint32_t WasmInterpreterRuntime::TableGrow(uint32_t table_index, uint32_t delta,
 uint32_t WasmInterpreterRuntime::TableSize(uint32_t table_index) {
   HandleScope handle_scope(isolate_);  // Avoid leaking handles.
   auto table = direct_handle(
-      Cast<WasmTableObject>(
+      TrustedCast<WasmTableObject>(
           wasm_trusted_instance_data()->tables()->get(table_index)),
       isolate_);
   return table->current_length();
@@ -509,13 +511,13 @@ void WasmInterpreterRuntime::TableFill(const uint8_t*& current_code,
   // This function assumes that it is executed in a HandleScope.
 
   auto table = direct_handle(
-      Cast<WasmTableObject>(
+      TrustedCast<WasmTableObject>(
           wasm_trusted_instance_data()->tables()->get(table_index)),
       isolate_);
   uint32_t table_size = table->current_length();
   if (start + count < start ||  // Check for overflow.
       start + count > table_size) {
-    SetTrap(TrapReason::kTrapTableOutOfBounds, current_code);
+    SetTrap(MessageTemplate::kWasmTrapTableOutOfBounds, current_code);
     return;
   }
 
@@ -537,7 +539,7 @@ bool WasmInterpreterRuntime::MemoryInit(const uint8_t*& current_code,
       trusted_data->data_segment_sizes()->get(data_segment_index);
   if (!BoundsCheckMemRange(dst, &size, &dst_addr) ||
       !base::IsInBounds(src, size, src_max)) {
-    SetTrap(TrapReason::kTrapMemOutOfBounds, current_code);
+    SetTrap(MessageTemplate::kWasmTrapMemOutOfBounds, current_code);
     return false;
   }
 
@@ -555,7 +557,7 @@ bool WasmInterpreterRuntime::MemoryCopy(const uint8_t*& current_code,
   Address src_addr;
   if (!BoundsCheckMemRange(dst, &size, &dst_addr) ||
       !BoundsCheckMemRange(src, &size, &src_addr)) {
-    SetTrap(TrapReason::kTrapMemOutOfBounds, current_code);
+    SetTrap(MessageTemplate::kWasmTrapMemOutOfBounds, current_code);
     return false;
   }
 
@@ -569,7 +571,7 @@ bool WasmInterpreterRuntime::MemoryFill(const uint8_t*& current_code,
                                         uint64_t size) {
   Address dst_addr;
   if (!BoundsCheckMemRange(dst, &size, &dst_addr)) {
-    SetTrap(TrapReason::kTrapMemOutOfBounds, current_code);
+    SetTrap(MessageTemplate::kWasmTrapMemOutOfBounds, current_code);
     return false;
   }
 
@@ -583,8 +585,8 @@ void WasmInterpreterRuntime::UnpackException(
     uint32_t* sp, const WasmTag& tag, DirectHandle<Object> exception_object,
     uint32_t first_param_slot_index, uint32_t first_param_ref_stack_index) {
   DirectHandle<FixedArray> encoded_values =
-      Cast<FixedArray>(WasmExceptionPackage::GetExceptionValues(
-          isolate_, Cast<WasmExceptionPackage>(exception_object)));
+      TrustedCast<FixedArray>(WasmExceptionPackage::GetExceptionValues(
+          isolate_, TrustedCast<WasmExceptionPackage>(exception_object)));
   // Decode the exception values from the given exception package and push
   // them onto the operand stack. This encoding has to be in sync with other
   // backends so that exceptions can be passed between them.
@@ -631,8 +633,8 @@ void WasmInterpreterRuntime::UnpackException(
         break;
       }
       case kS128: {
-        int32x4 s128 = {0, 0, 0, 0};
-        uint32_t* vals = reinterpret_cast<uint32_t*>(s128.val);
+        Simd128::int32x4 s128 = {0, 0, 0, 0};
+        uint32_t* vals = reinterpret_cast<uint32_t*>(s128.data());
         DecodeI32ExceptionValue(encoded_values, &encoded_index, &vals[0]);
         DecodeI32ExceptionValue(encoded_values, &encoded_index, &vals[1]);
         DecodeI32ExceptionValue(encoded_values, &encoded_index, &vals[2]);
@@ -659,7 +661,7 @@ void WasmInterpreterRuntime::UnpackException(
         UNREACHABLE();
     }
   }
-  DCHECK_EQ(WasmExceptionPackage::GetEncodedSize(&tag), encoded_index);
+  DCHECK_EQ(WasmExceptionPackage::GetEncodedSize(module_, &tag), encoded_index);
 }
 
 namespace {
@@ -675,10 +677,10 @@ WasmInterpreterRuntime::CreateWasmExceptionPackage(uint32_t tag_index) const {
   DirectHandle<WasmTrustedInstanceData> trusted_data =
       wasm_trusted_instance_data();
   DirectHandle<WasmExceptionTag> exception_tag(
-      Cast<WasmExceptionTag>(trusted_data->tags_table()->get(tag_index)),
+      TrustedCast<WasmExceptionTag>(trusted_data->tags_table()->get(tag_index)),
       isolate_);
   const WasmTag& tag = GetWasmTag(tag_index);
-  uint32_t encoded_size = WasmExceptionPackage::GetEncodedSize(&tag);
+  uint32_t encoded_size = WasmExceptionPackage::GetEncodedSize(module_, &tag);
   DirectHandle<WasmExceptionPackage> exception_object =
       WasmExceptionPackage::New(isolate_, exception_tag, encoded_size);
   return exception_object;
@@ -753,7 +755,7 @@ WasmInterpreterRuntime::HandleException(uint32_t* sp,
           // WasmExceptionPackage.
           DirectHandle<Object> caught_tag =
               WasmExceptionPackage::GetExceptionTag(
-                  isolate_, Cast<WasmExceptionPackage>(exception));
+                  isolate_, TrustedCast<WasmExceptionPackage>(exception));
           DirectHandle<Object> expected_tag(
               trusted_data->tags_table()->get(catch_handler.tag_index),
               isolate_);
@@ -797,7 +799,7 @@ WasmInterpreterRuntime::HandleException(uint32_t* sp,
           DirectHandle<JSObject> js_tag_object(
               isolate_->native_context()->wasm_js_tag(), isolate_);
           DirectHandle<WasmTagObject> wasm_tag_object(
-              Cast<WasmTagObject>(*js_tag_object), isolate_);
+              TrustedCast<WasmTagObject>(*js_tag_object), isolate_);
           DirectHandle<Object> caught_tag(wasm_tag_object->tag(), isolate_);
           DirectHandle<Object> expected_tag(
               trusted_data->tags_table()->get(catch_handler.tag_index),
@@ -850,10 +852,11 @@ int32_t WasmInterpreterRuntime::AtomicNotify(uint64_t buffer_offset,
     HandleScope handle_scope(isolate_);
     // TODO(paolosev@microsoft.com): Support multiple memories.
     uint32_t memory_index = 0;
-    DirectHandle<JSArrayBuffer> array_buffer(wasm_trusted_instance_data()
-                                                 ->memory_object(memory_index)
-                                                 ->array_buffer(),
-                                             isolate_);
+    DirectHandle<JSArrayBuffer> array_buffer = WasmMemoryObject::GetArrayBuffer(
+        isolate_,
+        direct_handle(wasm_trusted_instance_data()->memory_object(memory_index),
+                      isolate_));
+
     int result = FutexEmulation::Wake(*array_buffer, buffer_offset, val);
     return result;
   }
@@ -869,10 +872,14 @@ int32_t WasmInterpreterRuntime::I32AtomicWait(uint64_t buffer_offset,
   HandleScope handle_scope(isolate_);
   // TODO(paolosev@microsoft.com): Support multiple memories.
   uint32_t memory_index = 0;
-  DirectHandle<JSArrayBuffer> array_buffer(
-      wasm_trusted_instance_data()->memory_object(memory_index)->array_buffer(),
-      isolate_);
-  auto result = FutexEmulation::WaitWasm32(isolate_, array_buffer,
+  DirectHandle<JSArrayBuffer> array_buffer = WasmMemoryObject::GetArrayBuffer(
+      isolate_,
+      direct_handle(wasm_trusted_instance_data()->memory_object(memory_index),
+                    isolate_));
+
+  std::shared_ptr<BackingStore> backing_store = array_buffer->GetBackingStore();
+  DCHECK_EQ(array_buffer->backing_store(), backing_store->buffer_start());
+  auto result = FutexEmulation::WaitWasm32(isolate_, backing_store.get(),
                                            buffer_offset, val, timeout);
   return result.ToSmi().value();
 }
@@ -887,10 +894,14 @@ int32_t WasmInterpreterRuntime::I64AtomicWait(uint64_t buffer_offset,
   HandleScope handle_scope(isolate_);
   // TODO(paolosev@microsoft.com): Support multiple memories.
   uint32_t memory_index = 0;
-  DirectHandle<JSArrayBuffer> array_buffer(
-      wasm_trusted_instance_data()->memory_object(memory_index)->array_buffer(),
-      isolate_);
-  auto result = FutexEmulation::WaitWasm64(isolate_, array_buffer,
+  DirectHandle<JSArrayBuffer> array_buffer = WasmMemoryObject::GetArrayBuffer(
+      isolate_,
+      direct_handle(wasm_trusted_instance_data()->memory_object(memory_index),
+                    isolate_));
+
+  std::shared_ptr<BackingStore> backing_store = array_buffer->GetBackingStore();
+  DCHECK_EQ(array_buffer->backing_store(), backing_store->buffer_start());
+  auto result = FutexEmulation::WaitWasm64(isolate_, backing_store.get(),
                                            buffer_offset, val, timeout);
   return result.ToSmi().value();
 }
@@ -956,7 +967,7 @@ void WasmInterpreterRuntime::BeginExecution(
       SealHandleScope shs(isolate_);
       isolate_->StackOverflow();
       const pc_t trap_pc = 0;
-      SetTrap(TrapReason::kTrapUnreachable, trap_pc);
+      SetTrap(MessageTemplate::kWasmTrapUnreachable, trap_pc);
       thread->FinishActivation();
       return;
     }
@@ -1188,8 +1199,7 @@ void WasmInterpreterRuntime::ContinueExecution(WasmInterpreterThread* thread,
     start_function_index_ = start_function_index;
     current_frame_ = current_frame;
   } else if (state() == WasmInterpreterThread::State::TRAPPED) {
-    MessageTemplate message_id =
-        WasmOpcodes::TrapReasonToMessageId(thread->GetTrapReason());
+    MessageTemplate message_id = thread->GetMessageTemplate();
     thread->RaiseException(isolate_, message_id);
   } else if (state() == WasmInterpreterThread::State::EH_UNWINDING) {
     // Uncaught exception.
@@ -1424,7 +1434,7 @@ void WasmInterpreterRuntime::InitializeRefLocalsRefs(
       if (local_type == kWasmExternRef || local_type == kWasmNullExternRef) {
         StoreWasmRef(ref_stack_index++,
                      WasmRef(isolate_->factory()->null_value()));
-      } else if (local_type.is_reference()) {
+      } else if (local_type.is_ref()) {
         StoreWasmRef(ref_stack_index++,
                      WasmRef(isolate_->factory()->wasm_null()));
       }
@@ -1484,7 +1494,7 @@ void WasmInterpreterRuntime::PrepareTailCall(const uint8_t*& code,
             (stack_limit = current_frame_.thread_->StackLimitAddress()) -
                 current_frame_.current_sp_)) {
       SealHandleScope shs(isolate_);
-      SetTrap(TrapReason::kTrapUnreachable, code);
+      SetTrap(MessageTemplate::kWasmTrapUnreachable, code);
       isolate_->StackOverflow();
       return;
     }
@@ -1593,7 +1603,7 @@ void WasmInterpreterRuntime::ExecuteFunction(const uint8_t*& code,
             (stack_limit = current_frame_.thread_->StackLimitAddress()) -
                 current_frame_.current_sp_)) {
       SealHandleScope shs(isolate_);
-      SetTrap(TrapReason::kTrapUnreachable, code);
+      SetTrap(MessageTemplate::kWasmTrapUnreachable, code);
       isolate_->StackOverflow();
       return;
     }
@@ -1797,7 +1807,7 @@ void WasmInterpreterRuntime::ExecuteIndirectCall(
           wasm_trusted_instance_data()->dispatch_tables()->get(table_index))
           ->length());
   if (entry_index >= table.size()) {
-    SetTrap(TrapReason::kTrapTableOutOfBounds, current_code);
+    SetTrap(MessageTemplate::kWasmTrapTableOutOfBounds, current_code);
     return;
   }
 
@@ -1812,7 +1822,8 @@ void WasmInterpreterRuntime::ExecuteIndirectCall(
     if (Tagged<WasmTrustedInstanceData> trusted_instance_object;
         TryCast(*object_implicit_arg, &trusted_instance_object)) {
       DirectHandle<WasmInstanceObject> instance_object(
-          Cast<WasmInstanceObject>(trusted_instance_object->instance_object()),
+          TrustedCast<WasmInstanceObject>(
+              trusted_instance_object->instance_object()),
           isolate_);
       if (instance_object_.is_identical_to(instance_object)) {
         // Call to an import.
@@ -1830,7 +1841,7 @@ void WasmInterpreterRuntime::ExecuteIndirectCall(
   }
 
   if (!CheckIndirectCallSignature(table_index, entry_index, sig_index)) {
-    SetTrap(TrapReason::kTrapFuncSigMismatch, current_code);
+    SetTrap(MessageTemplate::kWasmTrapFuncSigMismatch, current_code);
     return;
   }
 
@@ -1873,61 +1884,13 @@ void WasmInterpreterRuntime::ExecuteIndirectCall(
 
     if (IsWasmTrustedInstanceData(*object_implicit_arg)) {
       // Call Wasm function in a different instance.
-
-      // Note that tail calls across WebAssembly module boundaries should
-      // guarantee tail behavior, so this implementation does not conform to the
-      // spec for a tail call. But it is really difficult to implement
-      // cross-instance calls in the interpreter without recursively adding C++
-      // stack frames.
-      DirectHandle<WasmInstanceObject> target_instance(
-          TrustedCast<WasmInstanceObject>(
-              TrustedCast<WasmTrustedInstanceData>(*object_implicit_arg)
-                  ->instance_object()),
-          isolate_);
-
-      // Make sure the target WasmInterpreterObject and InterpreterHandle exist.
-      DirectHandle<Tuple2> interpreter_object =
-          WasmTrustedInstanceData::GetOrCreateInterpreterObject(
-              target_instance);
-      GetOrCreateInterpreterHandle(isolate_, interpreter_object);
-
-      Address frame_pointer = FindInterpreterEntryFramePointer(isolate_);
-
-      {
-        // We should not allocate anything in the heap and avoid GCs after we
-        // store ref arguments into stack slots.
-        DisallowHeapAllocation no_gc;
-
-        uint8_t* fp = reinterpret_cast<uint8_t*>(sp) + slot_offset;
-        StoreRefArgsIntoStackSlots(fp, ref_stack_fp_offset,
-                                   indirect_call.signature);
-        bool success = WasmInterpreterObject::RunInterpreter(
-            isolate_, frame_pointer, target_instance, entry.function_index(),
-            fp);
-        if (success) {
-          StoreRefResultsIntoRefStack(fp, ref_stack_fp_offset,
-                                      indirect_call.signature);
-
-#ifdef V8_ENABLE_DRUMBRAKE_TRACING
-          // Update shadow stack
-          if (v8_flags.trace_drumbrake_execution && shadow_stack_ != nullptr) {
-            for (size_t i = 0; i < indirect_call.signature->parameter_count();
-                 i++) {
-              TracePop();
-            }
-
-            for (size_t i = 0; i < indirect_call.signature->return_count();
-                 i++) {
-              return_slot_offset +=
-                  TracePush(indirect_call.signature->GetReturn(i).kind(),
-                            return_slot_offset);
-            }
-          }
-#endif  // V8_ENABLE_DRUMBRAKE_TRACING
-        } else {
-          thread->Stop();
-          RedirectCodeToUnwindHandler(current_code);
-        }
+      ExternalCallResult result = CallExternalWasmFunction(
+          entry.function_index(), object_implicit_arg, indirect_call.signature,
+          sp + slot_offset / kSlotSize, return_slot_offset,
+          ref_stack_fp_offset);
+      if (result == ExternalCallResult::EXTERNAL_EXCEPTION) {
+        thread->Stop();
+        RedirectCodeToUnwindHandler(current_code);
       }
     } else {
       // We should not allocate anything in the heap and avoid GCs after we
@@ -1970,24 +1933,32 @@ void WasmInterpreterRuntime::ExecuteCallRef(
     const uint8_t*& current_code, WasmRef func_ref, uint32_t sig_index,
     uint32_t stack_pos, uint32_t* sp, uint32_t ref_stack_fp_offset,
     uint32_t slot_offset, uint32_t return_slot_offset, bool is_tail_call) {
-  if (IsWasmFuncRef(*func_ref)) {
-    func_ref = direct_handle(Cast<WasmFuncRef>(*func_ref)->internal(isolate_),
-                             isolate_);
-  }
-  if (Tagged<WasmInternalFunction> wasm_internal_function;
-      TryCast(*func_ref, &wasm_internal_function)) {
-    Tagged<Object> implicit_arg = wasm_internal_function->implicit_arg();
-    if (IsWasmImportData(implicit_arg)) {
-      func_ref = direct_handle(implicit_arg, isolate_);
-    } else {
-      DCHECK(IsWasmTrustedInstanceData(implicit_arg));
-      func_ref = WasmInternalFunction::GetOrCreateExternal(
-          direct_handle(wasm_internal_function, isolate_));
-      DCHECK(IsJSFunction(*func_ref) || IsUndefined(*func_ref));
-    }
-  }
+  DirectHandle<WasmFuncRef> wasm_func_ref = Cast<WasmFuncRef>(func_ref);
+  Tagged<WasmInternalFunction> internal = wasm_func_ref->internal(isolate_);
+  DirectHandle<Object> object_implicit_arg{internal->implicit_arg(), isolate_};
 
   const FunctionSig* signature = module_->signature({sig_index});
+  bool hasWasmInstance = IsWasmTrustedInstanceData(*object_implicit_arg);
+  if (hasWasmInstance) {
+    if (TrustedCast<WasmTrustedInstanceData>(object_implicit_arg)
+            ->instance_object() == *instance_object_) {
+      // InternalCall
+      uint32_t function_index = internal->function_index();
+      if (is_tail_call) {
+        PrepareTailCall(current_code, function_index, stack_pos,
+                        return_slot_offset);
+      } else {
+        ExecuteFunction(current_code, function_index, stack_pos,
+                        ref_stack_fp_offset, slot_offset, return_slot_offset);
+        if (state() == WasmInterpreterThread::State::TRAPPED ||
+            state() == WasmInterpreterThread::State::STOPPED ||
+            state() == WasmInterpreterThread::State::EH_UNWINDING) {
+          RedirectCodeToUnwindHandler(current_code);
+        }
+      }
+      return;
+    }
+  }
 
   // ExternalCall
   HandleScope handle_scope(isolate_);  // Avoid leaking handles.
@@ -2002,28 +1973,43 @@ void WasmInterpreterRuntime::ExecuteCallRef(
       current_frame_.ref_array_current_sp_ + ref_stack_fp_offset,
       ref_stack_fp_offset);
 
-  // We should not allocate anything in the heap and avoid GCs after we
-  // store ref arguments into stack slots.
-  DisallowHeapAllocation no_gc;
-
-  // Note that tail calls to host functions do not have to guarantee tail
-  // behaviour, so it is ok to recursively allocate C++ stack frames here.
-  uint8_t* fp = reinterpret_cast<uint8_t*>(sp) + slot_offset;
-  StoreRefArgsIntoStackSlots(fp, ref_stack_fp_offset, signature);
-  ExternalCallResult result =
-      CallExternalJSFunction(current_code, module_, func_ref, signature,
-                             sp + slot_offset / kSlotSize, return_slot_offset);
-  if (result == ExternalCallResult::EXTERNAL_RETURNED) {
-    StoreRefResultsIntoRefStack(fp, ref_stack_fp_offset, signature);
-  } else {  // ExternalCallResult::EXTERNAL_EXCEPTION
-    AllowHeapAllocation allow_gc;
-
-    if (HandleException(sp, current_code) ==
-        WasmInterpreterThread::ExceptionHandlingResult::UNWOUND) {
+  if (hasWasmInstance) {
+    uint32_t function_index = internal->function_index();
+    ExternalCallResult result = CallExternalWasmFunction(
+        function_index, object_implicit_arg, signature,
+        sp + slot_offset / kSlotSize, return_slot_offset, ref_stack_fp_offset);
+    if (result == ExternalCallResult::EXTERNAL_EXCEPTION) {
       thread->Stop();
       RedirectCodeToUnwindHandler(current_code);
-    } else {
-      thread->Run();
+    }
+  } else {
+    if (IsWasmImportData(*object_implicit_arg)) {
+      func_ref = direct_handle(*object_implicit_arg, isolate_);
+    }
+
+    // We should not allocate anything in the heap and avoid GCs after we
+    // store ref arguments into stack slots.
+    DisallowHeapAllocation no_gc;
+
+    // Note that tail calls to host functions do not have to guarantee tail
+    // behaviour, so it is ok to recursively allocate C++ stack frames here.
+    uint8_t* fp = reinterpret_cast<uint8_t*>(sp) + slot_offset;
+    StoreRefArgsIntoStackSlots(fp, ref_stack_fp_offset, signature);
+    ExternalCallResult result = CallExternalJSFunction(
+        current_code, module_, func_ref, signature,
+        sp + slot_offset / kSlotSize, return_slot_offset);
+    if (result == ExternalCallResult::EXTERNAL_RETURNED) {
+      StoreRefResultsIntoRefStack(fp, ref_stack_fp_offset, signature);
+    } else {  // ExternalCallResult::EXTERNAL_EXCEPTION
+      AllowHeapAllocation allow_gc;
+
+      if (HandleException(sp, current_code) ==
+          WasmInterpreterThread::ExceptionHandlingResult::UNWOUND) {
+        thread->Stop();
+        RedirectCodeToUnwindHandler(current_code);
+      } else {
+        thread->Run();
+      }
     }
   }
 
@@ -2042,69 +2028,18 @@ ExternalCallResult WasmInterpreterRuntime::CallImportedFunction(
   const FunctionSig* sig = module_->functions[function_index].sig;
 
   ImportedFunctionEntry entry(wasm_trusted_instance_data(), function_index);
+  DirectHandle<Object> object_implicit_arg(entry.implicit_arg(), isolate_);
   int target_function_index = entry.function_index_in_called_module();
   if (target_function_index >= 0) {
     // WasmToWasm call.
-    DCHECK(IsWasmTrustedInstanceData(entry.implicit_arg()));
-    DirectHandle<WasmInstanceObject> target_instance(
-        TrustedCast<WasmInstanceObject>(
-            TrustedCast<WasmTrustedInstanceData>(entry.implicit_arg())
-                ->instance_object()),
-        isolate_);
-
-    // Make sure the WasmInterpreterObject and InterpreterHandle for this
-    // instance exist.
-    DirectHandle<Tuple2> interpreter_object =
-        WasmTrustedInstanceData::GetOrCreateInterpreterObject(target_instance);
-    GetOrCreateInterpreterHandle(isolate_, interpreter_object);
-
-    Address frame_pointer = FindInterpreterEntryFramePointer(isolate_);
-
-    {
-      // We should not allocate anything in the heap and avoid GCs after we
-      // store ref arguments into stack slots.
-      DisallowHeapAllocation no_gc;
-
-      uint8_t* fp = reinterpret_cast<uint8_t*>(sp);
-      StoreRefArgsIntoStackSlots(fp, ref_stack_fp_offset, sig);
-      // Note that tail calls across WebAssembly module boundaries should
-      // guarantee tail behavior, so this implementation does not conform to the
-      // spec for a tail call. But it is really difficult to implement
-      // cross-instance calls in the interpreter without recursively adding C++
-      // stack frames.
-
-      // TODO(paolosev@microsoft.com) - Is it possible to short-circuit this in
-      // the case where we are calling a function in the same Wasm instance,
-      // with a simple call to WasmInterpreterRuntime::ExecuteFunction()?
-      bool success = WasmInterpreterObject::RunInterpreter(
-          isolate_, frame_pointer, target_instance, target_function_index, fp);
-      if (success) {
-        StoreRefResultsIntoRefStack(fp, ref_stack_fp_offset, sig);
-
-#ifdef V8_ENABLE_DRUMBRAKE_TRACING
-        // Update shadow stack
-        if (v8_flags.trace_drumbrake_execution && shadow_stack_ != nullptr) {
-          for (size_t i = 0; i < sig->parameter_count(); i++) {
-            TracePop();
-          }
-
-          for (size_t i = 0; i < sig->return_count(); i++) {
-            current_slot_offset +=
-                TracePush(sig->GetReturn(i).kind(), current_slot_offset);
-          }
-        }
-#endif  // V8_ENABLE_DRUMBRAKE_TRACING
-        return ExternalCallResult::EXTERNAL_RETURNED;
-      }
-      return ExternalCallResult::EXTERNAL_EXCEPTION;
-    }
+    return CallExternalWasmFunction(target_function_index, object_implicit_arg,
+                                    sig, sp, current_slot_offset,
+                                    ref_stack_fp_offset);
   } else {
     // WasmToJS call.
 
     // Note that tail calls to host functions do not have to guarantee tail
     // behaviour, so it is ok to recursively allocate C++ stack frames here.
-
-    DirectHandle<Object> object_implicit_arg(entry.implicit_arg(), isolate_);
 
     // We should not allocate anything in the heap and avoid GCs after we store
     // ref arguments into stack slots.
@@ -2132,6 +2067,29 @@ int WasmInterpreterRuntime::instruction_table_offset() {
   return OFFSET_OF(WasmInterpreterRuntime, instruction_table_);
 }
 
+#if defined(V8_ENABLE_DRUMBRAKE_TRACING) && !defined(V8_DRUMBRAKE_BOUNDS_CHECKS)
+// static
+int WasmInterpreterRuntime::trace_pop_func_offset() {
+  return OFFSET_OF(WasmInterpreterRuntime, trace_pop_func_);
+}
+
+// static
+int WasmInterpreterRuntime::trace_pop2_func_offset() {
+  return OFFSET_OF(WasmInterpreterRuntime, trace_pop2_func_);
+}
+
+// static
+int WasmInterpreterRuntime::trace_push_func_offset() {
+  return OFFSET_OF(WasmInterpreterRuntime, trace_push_func_);
+}
+
+// static
+int WasmInterpreterRuntime::trace_replace_func_offset() {
+  return OFFSET_OF(WasmInterpreterRuntime, trace_replace_func_);
+}
+#endif  // defined(V8_ENABLE_DRUMBRAKE_TRACING) &&
+        // !defined(V8_DRUMBRAKE_BOUNDS_CHECKS)
+
 struct StackHandlerMarker {
   Address next;
   Address padding;
@@ -2151,18 +2109,17 @@ void WasmInterpreterRuntime::CallWasmToJSBuiltin(
 
   // TODO(paolosev@microsoft.com) - Can callable be a JSProxy?
   DirectHandle<Object> js_function = callable;
-  while (IsJSBoundFunction(*js_function, isolate_)) {
-    if (IsJSBoundFunction(*js_function, isolate_)) {
-      js_function = direct_handle(
-          Cast<JSBoundFunction>(js_function)->bound_target_function(), isolate);
-    }
+  Tagged<JSBoundFunction> js_bound_function;
+  while (TryCast(*js_function, &js_bound_function)) {
+    js_function =
+        direct_handle(js_bound_function->bound_target_function(), isolate_);
   }
 
-  if (IsJSProxy(*js_function, isolate_)) {
+  if (Tagged<JSProxy> js_proxy; TryCast(*js_function, &js_proxy)) {
     do {
-      Tagged<HeapObject> target = Cast<JSProxy>(js_function)->target(isolate);
+      Tagged<HeapObject> target = js_proxy->target(isolate);
       js_function = DirectHandle<Object>(target, isolate);
-    } while (IsJSProxy(*js_function, isolate_));
+    } while (TryCast(*js_function, &js_proxy));
   }
 
   if (!IsJSFunction(*js_function, isolate_)) {
@@ -2230,7 +2187,7 @@ ExternalCallResult WasmInterpreterRuntime::CallExternalJSFunction(
 
 #ifdef V8_ENABLE_DRUMBRAKE_TRACING
   if (v8_flags.trace_drumbrake_execution) {
-    Trace("  => Calling external function\n");
+    Trace("  => Calling external js function\n");
   }
 #endif  // V8_ENABLE_DRUMBRAKE_TRACING
 
@@ -2287,7 +2244,7 @@ ExternalCallResult WasmInterpreterRuntime::CallExternalJSFunction(
 
 #ifdef V8_ENABLE_DRUMBRAKE_TRACING
   if (v8_flags.trace_drumbrake_execution) {
-    Trace("  => External wasm function returned%s\n",
+    Trace("  => External js function returned%s\n",
           isolate_->has_exception() ? " with exception" : "");
   }
 #endif  // V8_ENABLE_DRUMBRAKE_TRACING
@@ -2367,9 +2324,79 @@ ExternalCallResult WasmInterpreterRuntime::CallExternalJSFunction(
   return ExternalCallResult::EXTERNAL_RETURNED;
 }
 
+ExternalCallResult WasmInterpreterRuntime::CallExternalWasmFunction(
+    uint32_t target_function_index, DirectHandle<Object> object_ref,
+    const FunctionSig* sig, uint32_t* sp, uint32_t return_slot_offset,
+    uint32_t ref_stack_fp_offset) {
+#ifdef V8_ENABLE_DRUMBRAKE_TRACING
+  if (v8_flags.trace_drumbrake_execution) {
+    Trace("  => Calling external wasm function\n");
+  }
+#endif  // V8_ENABLE_DRUMBRAKE_TRACING
+
+  DCHECK(IsWasmTrustedInstanceData(*object_ref));
+  DirectHandle<WasmInstanceObject> target_instance(
+      TrustedCast<WasmInstanceObject>(
+          TrustedCast<WasmTrustedInstanceData>(object_ref)->instance_object()),
+      isolate_);
+
+  // Make sure the WasmInterpreterObject and InterpreterHandle for this
+  // instance exist.
+  DirectHandle<Tuple2> interpreter_object =
+      WasmTrustedInstanceData::GetOrCreateInterpreterObject(target_instance);
+  GetOrCreateInterpreterHandle(isolate_, interpreter_object);
+
+  Address frame_pointer = FindInterpreterEntryFramePointer(isolate_);
+
+  {
+    // We should not allocate anything in the heap and avoid GCs after we
+    // store ref arguments into stack slots.
+    DisallowHeapAllocation no_gc;
+
+    uint8_t* fp = reinterpret_cast<uint8_t*>(sp);
+    StoreRefArgsIntoStackSlots(fp, ref_stack_fp_offset, sig);
+    // Note that tail calls across WebAssembly module boundaries should
+    // guarantee tail behavior, so this implementation does not conform to the
+    // spec for a tail call. But it is really difficult to implement
+    // cross-instance calls in the interpreter without recursively adding C++
+    // stack frames.
+
+    DCHECK(*target_instance != *instance_object_);
+    bool success = WasmInterpreterObject::RunInterpreter(
+        isolate_, frame_pointer, target_instance, target_function_index, fp);
+    if (success) {
+      StoreRefResultsIntoRefStack(fp, ref_stack_fp_offset, sig);
+
+#ifdef V8_ENABLE_DRUMBRAKE_TRACING
+      // Update shadow stack
+      if (v8_flags.trace_drumbrake_execution && shadow_stack_ != nullptr) {
+        for (size_t i = 0; i < sig->parameter_count(); i++) {
+          TracePop();
+        }
+
+        for (size_t i = 0; i < sig->return_count(); i++) {
+          return_slot_offset +=
+              TracePush(sig->GetReturn(i).kind(), return_slot_offset);
+        }
+      }
+#endif  // V8_ENABLE_DRUMBRAKE_TRACING
+    }
+
+#ifdef V8_ENABLE_DRUMBRAKE_TRACING
+    if (v8_flags.trace_drumbrake_execution) {
+      Trace("  => External wasm function returned%s\n",
+            success ? "" : " with exception");
+    }
+#endif  // V8_ENABLE_DRUMBRAKE_TRACING
+
+    return success ? ExternalCallResult::EXTERNAL_RETURNED
+                   : ExternalCallResult::EXTERNAL_EXCEPTION;
+  }
+}
+
 DirectHandle<Map> WasmInterpreterRuntime::RttCanon(uint32_t type_index) const {
   DirectHandle<Map> rtt{
-      Cast<Map>(
+      TrustedCast<Map>(
           wasm_trusted_instance_data()->managed_object_maps()->get(type_index)),
       isolate_};
   return rtt;
@@ -2377,10 +2404,14 @@ DirectHandle<Map> WasmInterpreterRuntime::RttCanon(uint32_t type_index) const {
 
 std::pair<DirectHandle<WasmStruct>, const StructType*>
 WasmInterpreterRuntime::StructNewUninitialized(uint32_t index) const {
+  const TypeDefinition& type = module_->types[index];
   const StructType* struct_type = module_->struct_type({index});
   DirectHandle<Map> rtt = RttCanon(index);
-  return {isolate_->factory()->NewWasmStructUninitialized(struct_type, rtt),
-          struct_type};
+  return {
+      isolate_->factory()->NewWasmStructUninitialized(
+          struct_type, rtt,
+          type.is_shared ? AllocationType::kSharedOld : AllocationType::kYoung),
+      struct_type};
 }
 
 std::pair<DirectHandle<WasmArray>, const ArrayType*>
@@ -2536,13 +2567,13 @@ WasmRef WasmInterpreterRuntime::JSToWasmObject(WasmRef extern_ref,
 }
 
 WasmRef WasmInterpreterRuntime::WasmToJSObject(WasmRef value) const {
-  if (IsWasmFuncRef(*value)) {
-    value =
-        direct_handle(Cast<WasmFuncRef>(*value)->internal(isolate_), isolate_);
+  if (Tagged<WasmFuncRef> wasm_func_ref; TryCast(*value, &wasm_func_ref)) {
+    value = direct_handle(wasm_func_ref->internal(isolate_), isolate_);
   }
-  if (IsWasmInternalFunction(*value)) {
+  if (Tagged<WasmInternalFunction> wasm_internal_function;
+      TryCast(*value, &wasm_internal_function)) {
     DirectHandle<WasmInternalFunction> internal =
-        TrustedCast<WasmInternalFunction>(value);
+        direct_handle(wasm_internal_function, isolate_);
     return WasmInternalFunction::GetOrCreateExternal(internal);
   }
   if (IsWasmNull(*value)) {
@@ -2582,7 +2613,7 @@ bool WasmInterpreterRuntime::SubtypeCheck(const WasmRef obj,
                                           const DirectHandle<Map> rtt,
                                           const ModuleTypeIndex target_type,
                                           bool null_succeeds) const {
-  bool is_cast_from_any = obj_type.is_reference_to(HeapType::kAny);
+  bool is_cast_from_any = obj_type.is_reference_to(wasm::GenericKind::kAny);
 
   // Skip the null check if casting from any and not {null_succeeds}.
   // In that case the instance type check will identify null as not being a
@@ -2600,8 +2631,9 @@ bool WasmInterpreterRuntime::SubtypeCheck(const WasmRef obj,
     return false;
   }
 
-  if (!IsHeapObject(*obj)) return false;
-  Tagged<Map> obj_map = Cast<HeapObject>(obj)->map();
+  Tagged<HeapObject> heap_obj;
+  if (!TryCast(*obj, &heap_obj)) return false;
+  Tagged<Map> obj_map = heap_obj->map();
 
   if (module_->types[target_type.index].is_final) {
     // In this case, simply check for map equality.
@@ -2646,8 +2678,9 @@ static bool EqCheck(const WasmRef obj) {
   if (IsSmi(*obj)) {
     return true;
   }
-  if (!IsHeapObject(*obj)) return false;
-  InstanceType instance_type = Cast<HeapObject>(obj)->map()->instance_type();
+  Tagged<HeapObject> heap_obj;
+  if (!TryCast(*obj, &heap_obj)) return false;
+  InstanceType instance_type = heap_obj->map()->instance_type();
   return instance_type >= FIRST_WASM_OBJECT_TYPE &&
          instance_type <= LAST_WASM_OBJECT_TYPE;
 }
@@ -2668,8 +2701,9 @@ static bool StructCheck(const WasmRef obj) {
   if (IsSmi(*obj)) {
     return false;
   }
-  if (!IsHeapObject(*obj)) return false;
-  InstanceType instance_type = Cast<HeapObject>(obj)->map()->instance_type();
+  Tagged<HeapObject> heap_obj;
+  if (!TryCast(*obj, &heap_obj)) return false;
+  InstanceType instance_type = heap_obj->map()->instance_type();
   return instance_type == WASM_STRUCT_TYPE;
 }
 bool WasmInterpreterRuntime::RefIsStruct(const WasmRef obj,
@@ -2682,8 +2716,9 @@ static bool ArrayCheck(const WasmRef obj) {
   if (IsSmi(*obj)) {
     return false;
   }
-  if (!IsHeapObject(*obj)) return false;
-  InstanceType instance_type = Cast<HeapObject>(obj)->map()->instance_type();
+  Tagged<HeapObject> heap_obj;
+  if (!TryCast(*obj, &heap_obj)) return false;
+  InstanceType instance_type = heap_obj->map()->instance_type();
   return instance_type == WASM_ARRAY_TYPE;
 }
 bool WasmInterpreterRuntime::RefIsArray(const WasmRef obj,
@@ -2696,8 +2731,9 @@ static bool StringCheck(const WasmRef obj) {
   if (IsSmi(*obj)) {
     return false;
   }
-  if (!IsHeapObject(*obj)) return false;
-  InstanceType instance_type = Cast<HeapObject>(obj)->map()->instance_type();
+  Tagged<HeapObject> heap_obj;
+  if (!TryCast(*obj, &heap_obj)) return false;
+  InstanceType instance_type = heap_obj->map()->instance_type();
   return instance_type < FIRST_NONSTRING_TYPE;
 }
 bool WasmInterpreterRuntime::RefIsString(const WasmRef obj,
@@ -2706,7 +2742,8 @@ bool WasmInterpreterRuntime::RefIsString(const WasmRef obj,
   return AbstractTypeCast<&StringCheck>(isolate_, obj, obj_type, null_succeeds);
 }
 
-void WasmInterpreterRuntime::SetTrap(TrapReason trap_reason, pc_t trap_pc) {
+void WasmInterpreterRuntime::SetTrap(MessageTemplate message_template,
+                                     pc_t trap_pc) {
   trap_function_index_ =
       current_frame_.current_function_
           ? current_frame_.current_function_->GetFunctionIndex()
@@ -2715,13 +2752,13 @@ void WasmInterpreterRuntime::SetTrap(TrapReason trap_reason, pc_t trap_pc) {
   DCHECK_LT(trap_function_index_, module_->functions.size());
 
   trap_pc_ = trap_pc;
-  thread()->Trap(trap_reason, trap_function_index_, static_cast<int>(trap_pc_),
-                 current_frame_);
+  thread()->Trap(message_template, trap_function_index_,
+                 static_cast<int>(trap_pc_), current_frame_);
 }
 
-void WasmInterpreterRuntime::SetTrap(TrapReason trap_reason,
+void WasmInterpreterRuntime::SetTrap(MessageTemplate message_template,
                                      const uint8_t*& code) {
-  SetTrap(trap_reason,
+  SetTrap(message_template,
           current_frame_.current_function_
               ? current_frame_.current_function_->GetPcFromTrapCode(code)
               : 0);
@@ -2933,7 +2970,7 @@ DirectHandle<WasmInstanceObject> InterpreterHandle::GetInstanceObject() {
   // Check that this is indeed the instance which is connected to this
   // interpreter.
   DCHECK_EQ(this,
-            Cast<Managed<InterpreterHandle>>(
+            TrustedCast<Managed<InterpreterHandle>>(
                 WasmInterpreterObject::get_interpreter_handle(
                     instance_obj->trusted_data(isolate_)->interpreter_object()))
                 ->raw());

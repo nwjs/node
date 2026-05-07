@@ -37,8 +37,8 @@ void AllocateRaw(MaglevAssembler* masm, Isolate* isolate,
   if (v8_flags.single_generation) {
     alloc_type = AllocationType::kOld;
   }
-  ExternalReference top = SpaceAllocationTopAddress(isolate, alloc_type);
-  ExternalReference limit = SpaceAllocationLimitAddress(isolate, alloc_type);
+  IsolateFieldId top = SpaceAllocationTopAddress(alloc_type);
+  IsolateFieldId limit = SpaceAllocationLimitAddress(alloc_type);
   ZoneLabelRef done(masm);
   MaglevAssembler::TemporaryRegisterScope temps(masm);
   Register scratch = temps.AcquireScratch();
@@ -49,16 +49,16 @@ void AllocateRaw(MaglevAssembler* masm, Isolate* isolate,
   // {size_in_bytes}.
   Register new_top = object;
   // Check if there is enough space.
-  __ ldr(object, __ ExternalReferenceAsOperand(top, scratch));
+  __ ldr(object, __ ExternalReferenceAsOperand(top));
   __ add(new_top, object, Operand(size_in_bytes), LeaveCC);
-  __ ldr(scratch, __ ExternalReferenceAsOperand(limit, scratch));
+  __ ldr(scratch, __ ExternalReferenceAsOperand(limit));
   __ cmp(new_top, scratch);
   // Otherwise call runtime.
   __ JumpToDeferredIf(kUnsignedGreaterThanEqual, AllocateSlow<T>,
                       register_snapshot, object, AllocateBuiltin(alloc_type),
                       size_in_bytes, done);
   // Store new top and tag object.
-  __ Move(__ ExternalReferenceAsOperand(top, scratch), new_top);
+  __ Move(__ ExternalReferenceAsOperand(top), new_top);
 #if V8_VERIFY_WRITE_BARRIERS
   if (v8_flags.verify_write_barriers) {
     ExternalReference last_young_allocation =
@@ -146,36 +146,14 @@ void MaglevAssembler::Prologue(Graph* graph) {
 
   DCHECK(!graph->is_osr());
 
-  BailoutIfDeoptimized();
+  if (v8_flags.debug_code) {
+    AssertNotDeoptimized();
+  }
 
   if (graph->has_recursive_calls()) {
     bind(code_gen_state()->entry_label());
   }
 
-#ifndef V8_ENABLE_LEAPTIERING
-  // Tiering support.
-  if (v8_flags.turbofan) {
-    using D = MaglevOptimizeCodeOrTailCallOptimizedCodeSlotDescriptor;
-    Register flags = D::GetRegisterParameter(D::kFlags);
-    Register feedback_vector = D::GetRegisterParameter(D::kFeedbackVector);
-    DCHECK(!AreAliased(flags, feedback_vector, kJavaScriptCallArgCountRegister,
-                       kJSFunctionRegister, kContextRegister,
-                       kJavaScriptCallNewTargetRegister));
-    DCHECK(!temps.Available().has(flags));
-    DCHECK(!temps.Available().has(feedback_vector));
-    Move(feedback_vector,
-         compilation_info()->toplevel_compilation_unit()->feedback().object());
-    Condition needs_processing =
-        LoadFeedbackVectorFlagsAndCheckIfNeedsProcessing(flags, feedback_vector,
-                                                         CodeKind::MAGLEV);
-    // Tail call on Arm produces 3 instructions, so we emit that in deferred
-    // code.
-    JumpToDeferredIf(needs_processing, [](MaglevAssembler* masm) {
-      __ TailCallBuiltin(
-          Builtin::kMaglevOptimizeCodeOrTailCallOptimizedCodeSlot);
-    });
-  }
-#endif  // !V8_ENABLE_LEAPTIERING
 
   EnterFrame(StackFrame::MAGLEV);
   // Save arguments in frame.
@@ -620,6 +598,14 @@ void MaglevAssembler::TryChangeFloat64ToIndex(Register result,
   VFPCompareAndSetFlags(value, converted_back);
   JumpIf(kNotEqual, fail);
   Jump(success);
+}
+
+void MaglevAssembler::Move(ExternalReference dst, int32_t imm) {
+  TemporaryRegisterScope temps(this);
+  Register scratch_imm = temps.AcquireScratch();
+  Register scratch_dst = temps.AcquireScratch();
+  Move(scratch_imm, imm);
+  str(scratch_imm, ExternalReferenceAsOperand(dst, scratch_dst));
 }
 
 }  // namespace maglev

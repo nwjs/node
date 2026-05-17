@@ -533,7 +533,7 @@ The `RequestOptions.method` property should not be value `'CONNECT'`.
 
 `body` contains the following additional extensions:
 
-- `dump({ limit: Integer })`, dump the response by reading up to `limit` bytes without killing the socket (optional) - Default: 262144.
+- `dump({ limit: Integer })`, dump the response by reading up to `limit` bytes without killing the socket (optional) - Default: 131072.
 
 Note that body will still be a `Readable` even if it is empty, but attempting to deserialize it with `json()` will result in an exception. Recommended way to ensure there is a body to deserialize is to check if status code is not 204, and `content-type` header starts with `application/json`.
 
@@ -1031,7 +1031,7 @@ const client = new Client("http://service.example").compose(
 The `dump` interceptor enables you to dump the response body from a request upon a given limit.
 
 **Options**
-- `maxSize` - The maximum size (in bytes) of the response body to dump. If the size of the request's body exceeds this value then the connection will be closed. Default: `1048576`.
+- `maxSize` - The maximum size (in bytes) of the response body to dump. If the size of the response's body exceeds this value then the connection will be closed. Default: `1048576`.
 
 > The `Dispatcher#options` also gets extended with the options `dumpMaxSize`, `abortOnDumped`, and `waitForTrailers` which can be used to configure the interceptor at a request-per-request basis.
 
@@ -1354,10 +1354,10 @@ Emitted when dispatcher is no longer busy.
 
 ## Parameter: `UndiciHeaders`
 
-* `Record<string, string | string[] | undefined> | string[] | Iterable<[string, string | string[] | undefined]> | null`
+* `Record<string, number | string | string[] | undefined> | string[] | Iterable<[string, string | string[] | undefined]> | null`
 
 Header arguments such as `options.headers` in [`Client.dispatch`](/docs/docs/api/Client.md#clientdispatchoptions-handlers) can be specified in three forms:
-* As an object specified by the `Record<string, string | string[] | undefined>` (`IncomingHttpHeaders`) type.
+* As an object specified by the `Record<string, number | string | string[] | undefined>` (`OutgoingHttpHeaders`) type.
 * As an array of strings. An array representation of a header list must have an even length, or an `InvalidArgumentError` will be thrown.
 * As an iterable that can encompass `Headers`, `Map`, or a custom iterator returning key-value pairs.
 Keys are lowercase and values are not modified.

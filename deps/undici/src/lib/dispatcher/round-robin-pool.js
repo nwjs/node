@@ -69,9 +69,6 @@ class RoundRobinPool extends PoolBase {
     this[kConnections] = connections || null
     this[kUrl] = util.parseOrigin(origin)
     this[kOptions] = { ...util.deepClone(options), connect, allowH2, clientTtl, socketPath }
-    this[kOptions].interceptors = options.interceptors
-      ? { ...options.interceptors }
-      : undefined
     this[kFactory] = factory
     this[kIndex] = -1
 
@@ -95,10 +92,9 @@ class RoundRobinPool extends PoolBase {
 
   [kGetDispatcher] () {
     const clientTtlOption = this[kOptions].clientTtl
-    const clientsLength = this[kClients].length
 
     // If we have no clients yet, create one
-    if (clientsLength === 0) {
+    if (this[kClients].length === 0) {
       const dispatcher = this[kFactory](this[kUrl], this[kOptions])
       this[kAddClient](dispatcher)
       return dispatcher
@@ -106,14 +102,14 @@ class RoundRobinPool extends PoolBase {
 
     // Round-robin through existing clients
     let checked = 0
-    while (checked < clientsLength) {
-      this[kIndex] = (this[kIndex] + 1) % clientsLength
+    while (checked < this[kClients].length) {
+      this[kIndex] = (this[kIndex] + 1) % this[kClients].length
       const client = this[kClients][this[kIndex]]
 
       // Check if client is stale (TTL expired)
       if (clientTtlOption != null && clientTtlOption > 0 && client.ttl && ((Date.now() - client.ttl) > clientTtlOption)) {
         this[kRemoveClient](client)
-        checked++
+        this[kIndex]--
         continue
       }
 
@@ -126,7 +122,7 @@ class RoundRobinPool extends PoolBase {
     }
 
     // All clients are busy, create a new one if we haven't reached the limit
-    if (!this[kConnections] || clientsLength < this[kConnections]) {
+    if (!this[kConnections] || this[kClients].length < this[kConnections]) {
       const dispatcher = this[kFactory](this[kUrl], this[kOptions])
       this[kAddClient](dispatcher)
       return dispatcher

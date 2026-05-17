@@ -191,6 +191,36 @@ This behavior also applies to `child_process.spawn()`, but in that case, the
 flags are propagated via the `NODE_OPTIONS` environment variable rather than
 directly through the process arguments.
 
+### `--allow-ffi`
+
+<!-- YAML
+added: v26.1.0
+-->
+
+> Stability: 1.1 - Active development
+
+When using the [Permission Model][], the process will not be able to use FFI
+APIs by default. Attempts to use FFI APIs will throw an `ERR_ACCESS_DENIED`
+exception unless the user explicitly passes the `--allow-ffi` flag when
+starting Node.js. The [`node:ffi`][] module also requires the
+`--experimental-ffi` flag and is only available in builds with FFI support.
+
+Example:
+
+```js
+const { DynamicLibrary } = require('node:ffi');
+const lib = new DynamicLibrary('mylib.so');
+```
+
+```console
+$ node --permission --experimental-ffi index.js
+Error: Access to this API has been restricted. Use --allow-ffi to manage permissions.
+    at node:internal/main/run_main_module:17:47 {
+  code: 'ERR_ACCESS_DENIED',
+  permission: 'FFI'
+}
+```
+
 ### `--allow-fs-read`
 
 <!-- YAML
@@ -233,9 +263,9 @@ $ node --permission -r custom-require.js -r custom-require-2.js index.js
   by default in the allowed read list.
 
 ```js
-process.has('fs.read', 'index.js'); // true
-process.has('fs.read', 'custom-require.js'); // true
-process.has('fs.read', 'custom-require-2.js'); // true
+process.permission.has('fs.read', 'index.js'); // true
+process.permission.has('fs.read', 'custom-require.js'); // true
+process.permission.has('fs.read', 'custom-require-2.js'); // true
 ```
 
 ### `--allow-fs-write`
@@ -1015,7 +1045,7 @@ added:
 
 Enable experimental import support for `.node` addons.
 
-### `--experimental-config-file=config`
+### `--experimental-config-file=path`, `--experimental-config-file`
 
 <!-- YAML
 added:
@@ -1026,6 +1056,12 @@ added:
 > Stability: 1.0 - Early development
 
 If present, Node.js will look for a configuration file at the specified path.
+If the path is not specified, Node.js will look for a `node.config.json` file
+in the current working directory.
+To specify a custom path, use the `--experimental-config-file=path` form.
+The space-separated `--experimental-config-file path` form is not supported.
+The alias `--experimental-default-config-file` is equivalent to
+`--experimental-config-file` without an argument.
 Node.js will read the configuration file and apply the settings. The
 configuration file should be a JSON file with the following structure. `vX.Y.Z`
 in the `$schema` must be replaced with the version of Node.js you are using.
@@ -1107,12 +1143,12 @@ node --import amaro/strip --watch-path=src --watch-preserve-output --test-isolat
 The priority in configuration is as follows:
 
 1. NODE\_OPTIONS and command-line options
-2. Configuration file
-3. Dotenv NODE\_OPTIONS
+2. Dotenv NODE\_OPTIONS
+3. Configuration file
 
 Values in the configuration file will not override the values in the environment
-variables and command-line options, but will override the values in the `NODE_OPTIONS`
-env file parsed by the `--env-file` flag.
+variables, command-line options, or the `NODE_OPTIONS` env file parsed by the
+`--env-file` flag.
 
 Keys cannot be duplicated within the same or different namespaces.
 
@@ -1132,9 +1168,10 @@ added:
 
 > Stability: 1.0 - Early development
 
-If the `--experimental-default-config-file` flag is present, Node.js will look for a
+This flag is an alias for `--experimental-config-file` without an argument.
+If present, Node.js will look for a
 `node.config.json` file in the current working directory and load it as a
-as configuration file.
+configuration file.
 
 ### `--experimental-eventsource`
 
@@ -1145,6 +1182,18 @@ added:
 -->
 
 Enable exposition of [EventSource Web API][] on the global scope.
+
+### `--experimental-ffi`
+
+<!-- YAML
+added: v26.1.0
+-->
+
+> Stability: 1 - Experimental
+
+Enable the experimental [`node:ffi`][] module.
+
+This flag is only available in builds with FFI support.
 
 ### `--experimental-import-meta-resolve`
 
@@ -1276,7 +1325,7 @@ Enable experimental support for storage inspection
 ### `--experimental-stream-iter`
 
 <!-- YAML
-added: v26.0.0
+added: v25.9.0
 -->
 
 > Stability: 1 - Experimental
@@ -2172,6 +2221,7 @@ following permissions are restricted:
 * Worker Threads - manageable through [`--allow-worker`][] flag
 * WASI - manageable through [`--allow-wasi`][] flag
 * Addons - manageable through [`--allow-addons`][] flag
+* FFI - manageable through [`--allow-ffi`](#--allow-ffi) flag
 
 ### `--permission-audit`
 
@@ -2779,6 +2829,38 @@ changes:
 
 Configures the test runner to only execute top level tests that have the `only`
 option set. This flag is not necessary when test isolation is disabled.
+
+### `--test-random-seed`
+
+<!-- YAML
+added: v26.1.0
+-->
+
+Set the seed used to randomize test execution order. This applies to both test
+file execution order and queued tests within each file. Providing this flag
+enables randomization implicitly, even without `--test-randomize`.
+
+The value must be an integer between `0` and `4294967295`.
+
+This flag cannot be used with `--watch` or `--test-rerun-failures`.
+
+### `--test-randomize`
+
+<!-- YAML
+added: v26.1.0
+-->
+
+Randomize test execution order. This applies to both test file execution order
+and queued tests within each file. This can help detect tests that rely on
+shared state or execution order.
+
+The seed used for randomization is printed in the test summary and can be
+reused with `--test-random-seed`.
+
+For detailed behavior and examples, see
+[randomizing tests execution order][].
+
+This flag cannot be used with `--watch` or `--test-rerun-failures`.
 
 ### `--test-reporter`
 
@@ -3584,6 +3666,7 @@ one is included in the list below.
 
 * `--allow-addons`
 * `--allow-child-process`
+* `--allow-ffi`
 * `--allow-fs-read`
 * `--allow-fs-write`
 * `--allow-inspector`
@@ -3609,6 +3692,7 @@ one is included in the list below.
 * `--experimental-addon-modules`
 * `--experimental-detect-module`
 * `--experimental-eventsource`
+* `--experimental-ffi`
 * `--experimental-import-meta-resolve`
 * `--experimental-json-modules`
 * `--experimental-loader`
@@ -3698,6 +3782,8 @@ one is included in the list below.
 * `--test-isolation`
 * `--test-name-pattern`
 * `--test-only`
+* `--test-random-seed`
+* `--test-randomize`
 * `--test-reporter-destination`
 * `--test-reporter`
 * `--test-rerun-failures`
@@ -4257,6 +4343,7 @@ node --stack-trace-limit=12 -p -e "Error.stackTraceLimit" # prints 12
 [`import.meta.url`]: esm.md#importmetaurl
 [`import` specifier]: esm.md#import-specifiers
 [`net.getDefaultAutoSelectFamilyAttemptTimeout()`]: net.md#netgetdefaultautoselectfamilyattempttimeout
+[`node:ffi`]: ffi.md
 [`node:sqlite`]: sqlite.md
 [`node:stream/iter`]: stream_iter.md
 [`process.setUncaughtExceptionCaptureCallback()`]: process.md#processsetuncaughtexceptioncapturecallbackfn
@@ -4282,6 +4369,7 @@ node --stack-trace-limit=12 -p -e "Error.stackTraceLimit" # prints 12
 [libuv threadpool documentation]: https://docs.libuv.org/en/latest/threadpool.html
 [module compile cache]: module.md#module-compile-cache
 [preloading asynchronous module customization hooks]: module.md#registration-of-asynchronous-customization-hooks
+[randomizing tests execution order]: test.md#randomizing-tests-execution-order
 [remote code execution]: https://www.owasp.org/index.php/Code_Injection
 [running tests from the command line]: test.md#running-tests-from-the-command-line
 [scavenge garbage collector]: https://v8.dev/blog/orinoco-parallel-scavenger

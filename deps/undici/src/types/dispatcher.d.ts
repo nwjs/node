@@ -2,17 +2,15 @@ import { URL } from 'node:url'
 import { Duplex, Readable, Writable } from 'node:stream'
 import { EventEmitter } from 'node:events'
 import { Blob } from 'node:buffer'
-import { IncomingHttpHeaders } from './header'
+import { IncomingHttpHeaders, OutgoingHttpHeaders } from './header'
 import BodyReadable from './readable'
 import { FormData } from './formdata'
 import Errors from './errors'
 import { Autocomplete } from './utility'
 
-type AbortSignal = unknown
-
 export default Dispatcher
 
-export type UndiciHeaders = Record<string, string | string[]> | IncomingHttpHeaders | string[] | Iterable<[string, string | string[] | undefined]> | null
+export type UndiciHeaders = OutgoingHttpHeaders | string[] | Iterable<[string, string | string[] | undefined]> | null
 
 /** Dispatcher is the core API used to dispatch requests. */
 declare class Dispatcher extends EventEmitter {
@@ -212,8 +210,8 @@ declare namespace Dispatcher {
     get aborted(): boolean
     get paused(): boolean
     get reason(): Error | null
-    rawHeaders?: Buffer[] | string[] | null
-    rawTrailers?: Buffer[] | string[] | null
+    rawHeaders?: Buffer[] | string[] | IncomingHttpHeaders | null
+    rawTrailers?: Buffer[] | string[] | IncomingHttpHeaders | null
     abort(reason: Error): void
     pause(): void
     resume(): void

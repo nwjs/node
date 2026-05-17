@@ -104,7 +104,7 @@ class ProxyAgent extends DispatcherBase {
       throw new InvalidArgumentError('Proxy opts.clientFactory must be a function.')
     }
 
-    const { proxyTunnel = true } = opts
+    const { proxyTunnel = true, connectTimeout } = opts
 
     super()
 
@@ -126,11 +126,13 @@ class ProxyAgent extends DispatcherBase {
       this[kProxyHeaders]['proxy-authorization'] = opts.token
     } else if (username && password) {
       this[kProxyHeaders]['proxy-authorization'] = `Basic ${Buffer.from(`${decodeURIComponent(username)}:${decodeURIComponent(password)}`).toString('base64')}`
+    } else if (username) {
+      this[kProxyHeaders]['proxy-authorization'] = `Basic ${Buffer.from(`${decodeURIComponent(username)}:`).toString('base64')}`
     }
 
-    const connect = buildConnector({ ...opts.proxyTls })
-    this[kConnectEndpoint] = buildConnector({ ...opts.requestTls })
-    this[kConnectEndpointHTTP1] = buildConnector({ ...opts.requestTls, allowH2: false })
+    const connect = buildConnector({ timeout: connectTimeout, ...opts.proxyTls })
+    this[kConnectEndpoint] = buildConnector({ timeout: connectTimeout, ...opts.requestTls })
+    this[kConnectEndpointHTTP1] = buildConnector({ timeout: connectTimeout, ...opts.requestTls, allowH2: false })
 
     const agentFactory = opts.factory || defaultAgentFactory
     const factory = (origin, options) => {

@@ -64,12 +64,7 @@ const { getGlobalDispatcher } = require('../../global')
 const { webidl } = require('../webidl')
 const { STATUS_CODES } = require('node:http')
 const { bytesMatch } = require('../subresource-integrity/subresource-integrity')
-const { createDeferredPromise } = require('../../util/promise')
 const { isomorphicEncode } = require('../infra')
-const { runtimeFeatures } = require('../../util/runtime-features')
-
-// Node.js v23.8.0+ and v22.15.0+ supports Zstandard
-const hasZstd = runtimeFeatures.has('zstd')
 
 const GET_OR_HEAD = ['GET', 'HEAD']
 
@@ -79,6 +74,35 @@ const defaultUserAgent = typeof __UNDICI_IS_NODE__ !== 'undefined' || typeof esb
 
 /** @type {import('buffer').resolveObjectURL} */
 let resolveObjectURL
+
+function appendHeadersListFromResponseHeaders (headersList, headers, rawHeaders) {
+  if (Array.isArray(rawHeaders)) {
+    for (let i = 0; i < rawHeaders.length; i += 2) {
+      const nameStr = bufferToLowerCasedHeaderName(rawHeaders[i])
+      const value = rawHeaders[i + 1]
+
+      if (Array.isArray(value) && !Buffer.isBuffer(value)) {
+        for (const val of value) {
+          headersList.append(nameStr, val.toString('latin1'), true)
+        }
+      } else {
+        headersList.append(nameStr, value.toString('latin1'), true)
+      }
+    }
+
+    return
+  }
+
+  for (const [name, value] of Object.entries(headers ?? {})) {
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        headersList.append(name, `${entry}`, true)
+      }
+    } else {
+      headersList.append(name, `${value}`, true)
+    }
+  }
+}
 
 class Fetch extends EE {
   constructor (dispatcher) {
@@ -136,7 +160,7 @@ function fetch (input, init = undefined) {
   webidl.argumentLengthCheck(arguments, 1, 'globalThis.fetch')
 
   // 1. Let p be a new promise.
-  let p = createDeferredPromise()
+  let p = Promise.withResolvers()
 
   // 2. Let requestObject be the result of invoking the initial value of
   // Request as constructor with input and init as arguments. If this throws
@@ -1030,7 +1054,7 @@ function fetchFinale (fetchParams, response) {
       let responseStatus = 0
 
       // 7. If fetchParams’s request’s mode is not "navigate" or response’s has-cross-origin-redirects is false:
-      if (fetchParams.request.mode !== 'navigator' || !response.hasCrossOriginRedirects) {
+      if (fetchParams.request.mode !== 'navigate' || !response.hasCrossOriginRedirects) {
         // 1. Set responseStatus to response’s status.
         responseStatus = response.status
 
@@ -1433,7 +1457,10 @@ async function httpNetworkOrCacheFetch (
   //    8. If contentLengthHeaderValue is non-null, then append
   //    `Content-Length`/contentLengthHeaderValue to httpRequest’s header
   //    list.
-  if (contentLengthHeaderValue != null) {
+  if (
+    contentLengthHeaderValue != null &&
+    !httpRequest.headersList.contains('content-length', true)
+  ) {
     httpRequest.headersList.append('content-length', contentLengthHeaderValue, true)
   }
 
@@ -1644,12 +1671,25 @@ async function httpNetworkOrCacheFetch (
   // 14. If response’s status is 401, httpRequest’s response tainting is not "cors",
   //     includeCredentials is true, and request’s traversable for user prompts is
   //     a traversable navigable:
-  if (response.status === 401 && httpRequest.responseTainting !== 'cors' && includeCredentials && isTraversableNavigable(request.traversableForUserPrompts)) {
+  //
+  //     In Node.js there is no traversable navigable to prompt the user, but we
+  //     still need to handle URL-embedded credentials so authentication retries
+  //     for WebSocket handshakes continue to work.
+  if (response.status === 401 && httpRequest.responseTainting !== 'cors' && includeCredentials && (
+    request.useURLCredentials !== undefined ||
+    isTraversableNavigable(request.traversableForUserPrompts)
+  )) {
     // 2. If request’s body is non-null, then:
     if (request.body != null) {
       // 1. If request’s body’s source is null, then return a network error.
       if (request.body.source == null) {
-        return makeNetworkError('expected non-null body source')
+        // Note: In Node.js, this code path should not be reached because
+        // isTraversableNavigable() returns false for non-navigable contexts.
+        // However, we handle it gracefully by returning the response instead of
+        // a network error, as we won't actually retry the request.
+        // This aligns with the Fetch spec discussion in whatwg/fetch#1132,
+        // which allows implementations flexibility when credentials can't be obtained.
+        return response
       }
 
       // 2. Set request’s body to the body of the result of safely extracting
@@ -2185,25 +2225,14 @@ async function httpNetworkFetch (
             timingInfo.finalNetworkResponseStartTime = coarsenedSharedCurrentTime(fetchParams.crossOriginIsolatedCapability)
           },
 
-          onResponseStart (controller, status, _headers, statusText) {
+          onResponseStart (controller, status, headers, statusText) {
             if (status < 200) {
               return
             }
 
             const rawHeaders = controller?.rawHeaders ?? []
             const headersList = new HeadersList()
-
-            for (let i = 0; i < rawHeaders.length; i += 2) {
-              const nameStr = bufferToLowerCasedHeaderName(rawHeaders[i])
-              const value = rawHeaders[i + 1]
-              if (Array.isArray(value) && !Buffer.isBuffer(rawHeaders[i + 1])) {
-                for (const val of value) {
-                  headersList.append(nameStr, val.toString('latin1'), true)
-                }
-              } else {
-                headersList.append(nameStr, value.toString('latin1'), true)
-              }
-            }
+            appendHeadersListFromResponseHeaders(headersList, headers, rawHeaders)
             const location = headersList.get('location', true)
 
             this.body = new Readable({ read: () => controller.resume() })
@@ -2251,7 +2280,7 @@ async function httpNetworkFetch (
                     flush: zlib.constants.BROTLI_OPERATION_FLUSH,
                     finishFlush: zlib.constants.BROTLI_OPERATION_FLUSH
                   }))
-                } else if (coding === 'zstd' && hasZstd) {
+                } else if (coding === 'zstd') {
                   decoders.push(zlib.createZstdDecompress({
                     flush: zlib.constants.ZSTD_e_continue,
                     finishFlush: zlib.constants.ZSTD_e_end
@@ -2338,7 +2367,7 @@ async function httpNetworkFetch (
             reject(error)
           },
 
-          onRequestUpgrade (controller, status, _headers, socket) {
+          onRequestUpgrade (controller, status, headers, socket) {
             // We need to support 200 for websocket over h2 as per RFC-8441
             // Absence of session means H1
             if ((socket.session != null && status !== 200) || (socket.session == null && status !== 101)) {
@@ -2347,18 +2376,7 @@ async function httpNetworkFetch (
 
             const rawHeaders = controller?.rawHeaders ?? []
             const headersList = new HeadersList()
-
-            for (let i = 0; i < rawHeaders.length; i += 2) {
-              const nameStr = bufferToLowerCasedHeaderName(rawHeaders[i])
-              const value = rawHeaders[i + 1]
-              if (Array.isArray(value) && !Buffer.isBuffer(rawHeaders[i + 1])) {
-                for (const val of value) {
-                  headersList.append(nameStr, val.toString('latin1'), true)
-                }
-              } else {
-                headersList.append(nameStr, value.toString('latin1'), true)
-              }
-            }
+            appendHeadersListFromResponseHeaders(headersList, headers, rawHeaders)
 
             resolve({
               status,

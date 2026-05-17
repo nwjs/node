@@ -380,7 +380,7 @@ added: v10.0.0
 #### `filehandle.pull([...transforms][, options])`
 
 <!-- YAML
-added: v26.0.0
+added: v25.9.0
 -->
 
 > Stability: 1 - Experimental
@@ -457,7 +457,7 @@ run().catch(console.error);
 #### `filehandle.pullSync([...transforms][, options])`
 
 <!-- YAML
-added: v26.0.0
+added: v25.9.0
 -->
 
 > Stability: 1 - Experimental
@@ -778,15 +778,17 @@ Read from a file and write to an array of {ArrayBufferView}s
 <!-- YAML
 added: v10.0.0
 changes:
+  - version: v26.1.0
+    pr-url: https://github.com/nodejs/node/pull/57775
+    description: Now accepts an additional `signal` property to allow aborting the operation.
   - version: v10.5.0
     pr-url: https://github.com/nodejs/node/pull/20220
-    description: Accepts an additional `options` object to specify whether
-                 the numeric values returned should be bigint.
+    description: Accepts an additional `options` object to specify whether the numeric values returned should be bigint.
 -->
 
 * `options` {Object}
-  * `bigint` {boolean} Whether the numeric values in the returned
-    {fs.Stats} object should be `bigint`. **Default:** `false`.
+  * `bigint` {boolean} Whether the numeric values in the returned {fs.Stats} object should be `bigint`. **Default:** `false`.
+  * `signal` {AbortSignal} An AbortSignal to cancel the operation. **Default:** `undefined`.
 * Returns: {Promise} Fulfills with an {fs.Stats} for the file.
 
 #### `filehandle.sync()`
@@ -1010,7 +1012,7 @@ the end of the file.
 #### `filehandle.writer([options])`
 
 <!-- YAML
-added: v26.0.0
+added: v25.9.0
 -->
 
 > Stability: 1 - Experimental
@@ -1349,6 +1351,9 @@ behavior is similar to `cp dir1/ dir2/`.
 <!-- YAML
 added: v22.0.0
 changes:
+  - version: v26.1.0
+    pr-url: https://github.com/nodejs/node/pull/62695
+    description: Add support for the `followSymlinks` option.
   - version:
       - v24.1.0
       - v22.17.0
@@ -1378,10 +1383,15 @@ changes:
     If a string array is provided, each string should be a glob pattern that
     specifies paths to exclude. Note: Negation patterns (e.g., '!foo.js') are
     not supported.
+  * `followSymlinks` {boolean} When `true`, symbolic links to directories are
+    followed while expanding `**` patterns. **Default:** `false`.
   * `withFileTypes` {boolean} `true` if the glob should return paths as Dirents,
     `false` otherwise. **Default:** `false`.
 * Returns: {AsyncIterator} An AsyncIterator that yields the paths of files
   that match the pattern.
+
+When `followSymlinks` is enabled, detected symbolic link cycles are not
+traversed recursively.
 
 ```mjs
 import { glob } from 'node:fs/promises';
@@ -3462,6 +3472,9 @@ descriptor. See [`fs.utimes()`][].
 <!-- YAML
 added: v22.0.0
 changes:
+  - version: v26.1.0
+    pr-url: https://github.com/nodejs/node/pull/62695
+    description: Add support for the `followSymlinks` option.
   - version:
       - v24.1.0
       - v22.17.0
@@ -3489,6 +3502,8 @@ changes:
   * `exclude` {Function|string\[]} Function to filter out files/directories or a
     list of glob patterns to be excluded. If a function is provided, return
     `true` to exclude the item, `false` to include it. **Default:** `undefined`.
+  * `followSymlinks` {boolean} When `true`, symbolic links to directories are
+    followed while expanding `**` patterns. **Default:** `false`.
   * `withFileTypes` {boolean} `true` if the glob should return paths as Dirents,
     `false` otherwise. **Default:** `false`.
 
@@ -3496,6 +3511,9 @@ changes:
   * `err` {Error}
 
 * Retrieves the files matching the specified pattern.
+
+When `followSymlinks` is enabled, detected symbolic link cycles are not
+traversed recursively.
 
 ```mjs
 import { glob } from 'node:fs';
@@ -5057,6 +5075,9 @@ The `atime` and `mtime` arguments follow these rules:
 <!-- YAML
 added: v0.5.10
 changes:
+  - version: v26.1.0
+    pr-url: https://github.com/nodejs/node/pull/61870
+    description: Added `throwIfNoEntry` option.
   - version: v19.1.0
     pr-url: https://github.com/nodejs/node/pull/45098
     description: Added recursive support for Linux, AIX and IBMi.
@@ -5085,6 +5106,8 @@ changes:
   * `encoding` {string} Specifies the character encoding to be used for the
     filename passed to the listener. **Default:** `'utf8'`.
   * `signal` {AbortSignal} allows closing the watcher with an AbortSignal.
+  * `throwIfNoEntry` {boolean} Indicates whether an exception should be thrown when the
+    path does not exist. **Default:** `true`.
   * `ignore` {string|RegExp|Function|Array} Pattern(s) to ignore. Strings are
     glob patterns (using [`minimatch`][]), RegExp patterns are tested against
     the filename, and functions receive the filename and return `true` to
@@ -6031,6 +6054,9 @@ Synchronous version of [`fs.futimes()`][]. Returns `undefined`.
 <!-- YAML
 added: v22.0.0
 changes:
+  - version: v26.1.0
+    pr-url: https://github.com/nodejs/node/pull/62695
+    description: Add support for the `followSymlinks` option.
   - version:
       - v24.1.0
       - v22.17.0
@@ -6057,9 +6083,14 @@ changes:
   * `exclude` {Function|string\[]} Function to filter out files/directories or a
     list of glob patterns to be excluded. If a function is provided, return
     `true` to exclude the item, `false` to include it. **Default:** `undefined`.
+  * `followSymlinks` {boolean} When `true`, symbolic links to directories are
+    followed while expanding `**` patterns. **Default:** `false`.
   * `withFileTypes` {boolean} `true` if the glob should return paths as Dirents,
     `false` otherwise. **Default:** `false`.
 * Returns: {string\[]} paths of files that match the pattern.
+
+When `followSymlinks` is enabled, detected symbolic link cycles are not
+traversed recursively.
 
 ```mjs
 import { globSync } from 'node:fs';
@@ -7895,6 +7926,7 @@ numeric values will be `bigint` instead of `number`.
 StatFs {
   type: 1397114950,
   bsize: 4096,
+  frsize: 4096,
   blocks: 121938943,
   bfree: 61058895,
   bavail: 61058895,
@@ -7909,6 +7941,7 @@ StatFs {
 StatFs {
   type: 1397114950n,
   bsize: 4096n,
+  frsize: 4096n,
   blocks: 121938943n,
   bfree: 61058895n,
   bavail: 61058895n,
@@ -7964,6 +7997,16 @@ added:
 * Type: {number|bigint}
 
 Optimal transfer block size.
+
+#### `statfs.frsize`
+
+<!-- YAML
+added: v26.1.0
+-->
+
+* Type: {number|bigint}
+
+Fundamental file system block size.
 
 #### `statfs.ffree`
 

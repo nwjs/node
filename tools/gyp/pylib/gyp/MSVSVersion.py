@@ -109,10 +109,16 @@ class VisualStudioVersion:
             )
 
             # Always use a native executable, cross-compiling if necessary.
-            host_arch = "amd64" if is_host_arch_x64 else "x86"
-            msvc_target_arch = "amd64" if target_arch == "x64" else "x86"
-            if target_arch == "arm64":
-                msvc_target_arch = "arm64"
+            host_arch = (
+                "amd64"
+                if is_host_arch_x64
+                else (
+                    "arm64"
+                    if os.environ.get("PROCESSOR_ARCHITECTURE") == "ARM64"
+                    else "x86"
+                )
+            )
+            msvc_target_arch = {"x64": "amd64"}.get(target_arch, target_arch)
             arg = host_arch
             if host_arch != msvc_target_arch:
                 arg += "_" + msvc_target_arch

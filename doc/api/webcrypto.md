@@ -2,7 +2,7 @@
 
 <!-- YAML
 changes:
-  - version: v26.0.0
+  - version: v25.9.0
     pr-url: https://github.com/nodejs/node/pull/62183
     description: TurboSHAKE and KangarooTwelve algorithms
       are now supported.
@@ -513,8 +513,8 @@ const decrypted = new TextDecoder().decode(await crypto.subtle.decrypt(
 
 ## Algorithm matrix
 
-The tables details the algorithms supported by the Node.js Web Crypto API
-implementation and the APIs supported for each:
+The following tables detail the algorithms supported by the Node.js Web
+Crypto API implementation and the APIs supported for each:
 
 ### Key Management APIs
 
@@ -755,7 +755,7 @@ Valid key usages depend on the key algorithm (identified by
 | `'ECDSA'`                            |            | ✔                  |                        |              |                   |
 | `'Ed25519'`                          |            | ✔                  |                        |              |                   |
 | `'Ed448'`[^secure-curves]            |            | ✔                  |                        |              |                   |
-| `'HDKF'`                             |            |                    | ✔                      |              |                   |
+| `'HKDF'`                             |            |                    | ✔                      |              |                   |
 | `'HMAC'`                             |            | ✔                  |                        |              |                   |
 | `'KMAC128'`[^modern-algos]           |            | ✔                  |                        |              |                   |
 | `'KMAC256'`[^modern-algos]           |            | ✔                  |                        |              |                   |
@@ -992,7 +992,7 @@ a new {CryptoKey} based on the method and parameters in `derivedKeyAlgorithm`.
 
 Calling this method is equivalent to calling [`subtle.deriveBits()`][] to
 generate raw keying material, then passing the result into the
-[`subtle.importKey()`][] method using the `deriveKeyAlgorithm`, `extractable`, and
+[`subtle.importKey()`][] method using the `derivedKeyAlgorithm`, `extractable`, and
 `keyUsages` parameters as input.
 
 The algorithms currently supported include:
@@ -1011,7 +1011,7 @@ The algorithms currently supported include:
 <!-- YAML
 added: v15.0.0
 changes:
-  - version: v26.0.0
+  - version: v25.9.0
     pr-url: https://github.com/nodejs/node/pull/62183
     description: TurboSHAKE and KangarooTwelve algorithms
       are now supported.
@@ -1132,6 +1132,9 @@ The algorithms currently supported include:
 <!-- YAML
 added: v15.0.0
 changes:
+  - version: v26.1.0
+    pr-url: https://github.com/nodejs/node/pull/62706
+    description: Added JWK format support for ML-KEM key types.
   - version: v24.8.0
     pr-url: https://github.com/nodejs/node/pull/59647
     description: KMAC algorithms are now supported.
@@ -1190,9 +1193,9 @@ specification.
 | `'ML-DSA-44'`[^modern-algos]         | ✔        | ✔         | ✔       |         |                | ✔              | ✔            |
 | `'ML-DSA-65'`[^modern-algos]         | ✔        | ✔         | ✔       |         |                | ✔              | ✔            |
 | `'ML-DSA-87'`[^modern-algos]         | ✔        | ✔         | ✔       |         |                | ✔              | ✔            |
-| `'ML-KEM-512'`[^modern-algos]        | ✔        | ✔         |         |         |                | ✔              | ✔            |
-| `'ML-KEM-768'`[^modern-algos]        | ✔        | ✔         |         |         |                | ✔              | ✔            |
-| `'ML-KEM-1024'`[^modern-algos]       | ✔        | ✔         |         |         |                | ✔              | ✔            |
+| `'ML-KEM-512'`[^modern-algos]        | ✔        | ✔         | ✔       |         |                | ✔              | ✔            |
+| `'ML-KEM-768'`[^modern-algos]        | ✔        | ✔         | ✔       |         |                | ✔              | ✔            |
+| `'ML-KEM-1024'`[^modern-algos]       | ✔        | ✔         | ✔       |         |                | ✔              | ✔            |
 | `'RSA-OAEP'`                         | ✔        | ✔         | ✔       |         |                |                |              |
 | `'RSA-PSS'`                          | ✔        | ✔         | ✔       |         |                |                |              |
 | `'RSASSA-PKCS1-v1_5'`                | ✔        | ✔         | ✔       |         |                |                |              |
@@ -1280,7 +1283,10 @@ The {CryptoKey} (secret key) generating algorithms supported include:
 <!-- YAML
 added: v15.0.0
 changes:
-  - version: v26.0.0
+  - version: v26.1.0
+    pr-url: https://github.com/nodejs/node/pull/62706
+    description: Added JWK format support for ML-KEM key types.
+  - version: v25.9.0
     pr-url: https://github.com/nodejs/node/pull/62218
     description: Importing ML-DSA and ML-KEM PKCS#8 keys
       without a seed is no longer supported.
@@ -1346,16 +1352,16 @@ The algorithms currently supported include:
 | `'ECDSA'`                            | ✔        | ✔         | ✔       | ✔       |                | ✔              |              |
 | `'Ed25519'`                          | ✔        | ✔         | ✔       | ✔       |                | ✔              |              |
 | `'Ed448'`[^secure-curves]            | ✔        | ✔         | ✔       | ✔       |                | ✔              |              |
-| `'HDKF'`                             |          |           |         | ✔       | ✔              |                |              |
+| `'HKDF'`                             |          |           |         | ✔       | ✔              |                |              |
 | `'HMAC'`                             |          |           | ✔       | ✔       | ✔              |                |              |
 | `'KMAC128'`[^modern-algos]           |          |           | ✔       |         | ✔              |                |              |
 | `'KMAC256'`[^modern-algos]           |          |           | ✔       |         | ✔              |                |              |
 | `'ML-DSA-44'`[^modern-algos]         | ✔        | ✔         | ✔       |         |                | ✔              | ✔            |
 | `'ML-DSA-65'`[^modern-algos]         | ✔        | ✔         | ✔       |         |                | ✔              | ✔            |
 | `'ML-DSA-87'`[^modern-algos]         | ✔        | ✔         | ✔       |         |                | ✔              | ✔            |
-| `'ML-KEM-512'`[^modern-algos]        | ✔        | ✔         |         |         |                | ✔              | ✔            |
-| `'ML-KEM-768'`[^modern-algos]        | ✔        | ✔         |         |         |                | ✔              | ✔            |
-| `'ML-KEM-1024'`[^modern-algos]       | ✔        | ✔         |         |         |                | ✔              | ✔            |
+| `'ML-KEM-512'`[^modern-algos]        | ✔        | ✔         | ✔       |         |                | ✔              | ✔            |
+| `'ML-KEM-768'`[^modern-algos]        | ✔        | ✔         | ✔       |         |                | ✔              | ✔            |
+| `'ML-KEM-1024'`[^modern-algos]       | ✔        | ✔         | ✔       |         |                | ✔              | ✔            |
 | `'PBKDF2'`                           |          |           |         | ✔       | ✔              |                |              |
 | `'RSA-OAEP'`                         | ✔        | ✔         | ✔       |         |                |                |              |
 | `'RSA-PSS'`                          | ✔        | ✔         | ✔       |         |                |                |              |
@@ -1470,14 +1476,14 @@ The unwrapped key algorithms supported include:
 * `'Ed25519'`
 * `'Ed448'`[^secure-curves]
 * `'HMAC'`
-* `'KMAC128'`[^secure-curves]
-* `'KMAC256'`[^secure-curves]
+* `'KMAC128'`[^modern-algos]
+* `'KMAC256'`[^modern-algos]
 * `'ML-DSA-44'`[^modern-algos]
 * `'ML-DSA-65'`[^modern-algos]
 * `'ML-DSA-87'`[^modern-algos]
 * `'ML-KEM-512'`[^modern-algos]
 * `'ML-KEM-768'`[^modern-algos]
-* `'ML-KEM-1024'`[^modern-algos]v
+* `'ML-KEM-1024'`[^modern-algos]
 * `'RSA-OAEP'`
 * `'RSA-PSS'`
 * `'RSASSA-PKCS1-v1_5'`
@@ -1523,8 +1529,8 @@ The algorithms currently supported include:
 * `'Ed25519'`
 * `'Ed448'`[^secure-curves]
 * `'HMAC'`
-* `'KMAC128'`[^secure-curves]
-* `'KMAC256'`[^secure-curves]
+* `'KMAC128'`[^modern-algos]
+* `'KMAC256'`[^modern-algos]
 * `'ML-DSA-44'`[^modern-algos]
 * `'ML-DSA-65'`[^modern-algos]
 * `'ML-DSA-87'`[^modern-algos]
@@ -1871,7 +1877,7 @@ added: v24.7.0
 added: v24.7.0
 -->
 
-* Type: {string} Must be `Ed448`[^secure-curves], `'ML-DSA-44'`[^modern-algos],
+* Type: {string} Must be `'Ed448'`[^secure-curves], `'ML-DSA-44'`[^modern-algos],
   `'ML-DSA-65'`[^modern-algos], or `'ML-DSA-87'`[^modern-algos].
 
 #### `contextParams.context`
@@ -1894,7 +1900,7 @@ the message.
 <!-- YAML
 added: v24.7.0
 changes:
-  - version: v26.0.0
+  - version: v25.9.0
     pr-url: https://github.com/nodejs/node/pull/61875
     description: Renamed `cShakeParams.length` to `cShakeParams.outputLength`.
 -->
@@ -1905,12 +1911,12 @@ changes:
 added: v24.7.0
 -->
 
-* Type: {string} Must be `'cSHAKE128'`[^modern-algos] or `'cSHAKE256'`[^modern-algos]
+* Type: {string} Must be `'cSHAKE128'`[^modern-algos] or `'cSHAKE256'`[^modern-algos].
 
 #### `cShakeParams.outputLength`
 
 <!-- YAML
-added: v26.0.0
+added: v25.9.0
 -->
 
 * Type: {number} represents the requested output length in bits.
@@ -1923,7 +1929,7 @@ added: v24.7.0
 
 * Type: {ArrayBuffer|TypedArray|DataView|Buffer|undefined}
 
-The `functionName` member represents represents the function name, used by NIST to define
+The `functionName` member represents the function name, used by NIST to define
 functions based on cSHAKE.
 The Node.js Web Crypto API implementation only supports zero-length functionName
 which is equivalent to not providing functionName at all.
@@ -1962,9 +1968,9 @@ added: v15.0.0
 
 * Type: {CryptoKey}
 
-ECDH key derivation operates by taking as input one parties private key and
-another parties public key -- using both to generate a common shared secret.
-The `ecdhKeyDeriveParams.public` property is set to the other parties public
+ECDH key derivation operates by taking as input one party's private key and
+another party's public key -- using both to generate a common shared secret.
+The `ecdhKeyDeriveParams.public` property is set to the other party's public
 key.
 
 ### Class: `EcdsaParams`
@@ -2339,13 +2345,13 @@ added: v15.0.0
 ### Class: `KangarooTwelveParams`
 
 <!-- YAML
-added: v26.0.0
+added: v25.9.0
 -->
 
 #### `kangarooTwelveParams.customization`
 
 <!-- YAML
-added: v26.0.0
+added: v25.9.0
 -->
 
 * Type: {ArrayBuffer|TypedArray|DataView|Buffer|undefined}
@@ -2355,15 +2361,15 @@ The optional customization string for KangarooTwelve.
 #### `kangarooTwelveParams.name`
 
 <!-- YAML
-added: v26.0.0
+added: v25.9.0
 -->
 
-* Type: {string} Must be `'KT128'`[^modern-algos] or `'KT256'`[^modern-algos]
+* Type: {string} Must be `'KT128'`[^modern-algos] or `'KT256'`[^modern-algos].
 
 #### `kangarooTwelveParams.outputLength`
 
 <!-- YAML
-added: v26.0.0
+added: v25.9.0
 -->
 
 * Type: {number} represents the requested output length in bits.
@@ -2448,7 +2454,7 @@ added: v24.8.0
 <!-- YAML
 added: v24.8.0
 changes:
-  - version: v26.0.0
+  - version: v25.9.0
     pr-url: https://github.com/nodejs/node/pull/61875
     description: Renamed `kmacParams.length` to `kmacParams.outputLength`.
 -->
@@ -2464,7 +2470,7 @@ added: v24.8.0
 #### `kmacParams.outputLength`
 
 <!-- YAML
-added: v26.0.0
+added: v25.9.0
 -->
 
 * Type: {number}
@@ -2741,13 +2747,13 @@ The length (in bytes) of the random salt to use.
 ### Class: `TurboShakeParams`
 
 <!-- YAML
-added: v26.0.0
+added: v25.9.0
 -->
 
 #### `turboShakeParams.domainSeparation`
 
 <!-- YAML
-added: v26.0.0
+added: v25.9.0
 -->
 
 * Type: {number|undefined}
@@ -2757,15 +2763,15 @@ The optional domain separation byte (0x01-0x7f). Defaults to `0x1f`.
 #### `turboShakeParams.name`
 
 <!-- YAML
-added: v26.0.0
+added: v25.9.0
 -->
 
-* Type: {string} Must be `'TurboSHAKE128'`[^modern-algos] or `'TurboSHAKE256'`[^modern-algos]
+* Type: {string} Must be `'TurboSHAKE128'`[^modern-algos] or `'TurboSHAKE256'`[^modern-algos].
 
 #### `turboShakeParams.outputLength`
 
 <!-- YAML
-added: v26.0.0
+added: v25.9.0
 -->
 
 * Type: {number} represents the requested output length in bits.

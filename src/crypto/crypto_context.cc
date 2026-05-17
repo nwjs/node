@@ -1928,8 +1928,13 @@ void SecureContext::SetDHParam(const FunctionCallbackInfo<Value>& args) {
   // true to this function instead of the original string. Any other string
   // value will be interpreted as custom DH parameters below.
   if (args[0]->IsTrue()) {
+#ifdef SSL_CTX_set_dh_auto
     CHECK(SSL_CTX_set_dh_auto(sc->ctx_.get(), true));
     return;
+#else
+    return THROW_ERR_CRYPTO_UNSUPPORTED_OPERATION(
+        env, "Automatic DH parameter selection is not supported");
+#endif
   }
 
   DHPointer dh;
@@ -2437,6 +2442,12 @@ void SecureContext::GetCertificate(const FunctionCallbackInfo<Value>& args) {
   i2d_X509(cert, &serialized);
 
   args.GetReturnValue().Set(buff);
+}
+
+void SecureContext::MemoryInfo(MemoryTracker* tracker) const {
+  tracker->TrackFieldWithSize("ctx", ctx_ ? kSizeOf_SSL_CTX : 0);
+  tracker->TrackFieldWithSize("cert", cert_ ? kSizeOf_X509 : 0);
+  tracker->TrackFieldWithSize("issuer", issuer_ ? kSizeOf_X509 : 0);
 }
 
 // UseExtraCaCerts is called only once at the start of the Node.js process.

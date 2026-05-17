@@ -44,6 +44,7 @@
     'node_shared_nghttp2%': 'false',
     'node_shared_openssl': 'false',
     'node_shared_sqlite%': 'false',
+    'node_shared_ffi%': 'false',
     'node_shared_temporal_capi%': 'false',
     'node_shared_uvwasi%': 'false',
     'node_shared_zlib%': 'false',
@@ -57,6 +58,7 @@
     'node_use_openssl': 'true',
     'node_use_quic%': 'false',
     'node_use_sqlite': 'true',
+    'node_use_ffi%': 'false',
     'node_use_v8_platform%': 'true',
     'node_v8_options%': '',
     'ossfuzz' : 'false',
@@ -479,6 +481,7 @@
       'src/node_os.cc',
       'src/node_perf.cc',
       'src/node_platform.cc',
+      'src/node_profiling.cc',
       'src/node_postmortem_metadata.cc',
       'src/node_process_events.cc',
       'src/node_process_methods.cc',
@@ -510,6 +513,7 @@
       'src/node_zlib.cc',
       'src/path.cc',
       'src/permission/child_process_permission.cc',
+      'src/permission/ffi_permission.cc',
       'src/permission/fs_permission.cc',
       'src/permission/inspector_permission.cc',
       'src/permission/permission.cc',
@@ -609,6 +613,7 @@
       'src/node_mem.h',
       'src/node_mem-inl.h',
       'src/node_messaging.h',
+      'src/node_hash.h',
       'src/node_metadata.h',
       'src/node_mutex.h',
       'src/node_diagnostics_channel.h',
@@ -619,6 +624,7 @@
       'src/node_perf.h',
       'src/node_perf_common.h',
       'src/node_platform.h',
+      'src/node_profiling.h',
       'src/node_process.h',
       'src/node_process-inl.h',
       'src/node_realm.h',
@@ -644,6 +650,7 @@
       'src/node_worker.h',
       'src/path.h',
       'src/permission/child_process_permission.h',
+      'src/permission/ffi_permission.h',
       'src/permission/fs_permission.h',
       'src/permission/inspector_permission.h',
       'src/permission/permission.h',
@@ -694,6 +701,7 @@
       'src/quic/tlscontext.cc',
       'src/quic/transportparams.cc',
       'src/quic/quic.cc',
+      'src/quic/arena.h',
       'src/quic/bindingdata.h',
       'src/quic/cid.h',
       'src/quic/data.h',
@@ -726,7 +734,7 @@
       'src/crypto/crypto_cipher.cc',
       'src/crypto/crypto_context.cc',
       'src/crypto/crypto_ec.cc',
-      'src/crypto/crypto_ml_dsa.cc',
+      'src/crypto/crypto_pqc.cc',
       'src/crypto/crypto_kem.cc',
       'src/crypto/crypto_hmac.cc',
       'src/crypto/crypto_kmac.cc',
@@ -764,7 +772,7 @@
       'src/crypto/crypto_clienthello.h',
       'src/crypto/crypto_context.h',
       'src/crypto/crypto_ec.h',
-      'src/crypto/crypto_ml_dsa.h',
+      'src/crypto/crypto_pqc.h',
       'src/crypto/crypto_hkdf.h',
       'src/crypto/crypto_pbkdf2.h',
       'src/crypto/crypto_sig.h',
@@ -780,6 +788,7 @@
       'test/cctest/test_node_crypto_env.cc',
     ],
     'node_cctest_quic_sources': [
+      'test/cctest/test_quic_arena.cc',
       'test/cctest/test_quic_cid.cc',
       'test/cctest/test_quic_error.cc',
       'test/cctest/test_quic_preferredaddress.cc',
@@ -796,6 +805,14 @@
       'src/node_webstorage.cc',
       'src/node_sqlite.h',
       'src/node_webstorage.h',
+    ],
+    'node_ffi_sources': [
+      'src/node_ffi.cc',
+      'src/node_ffi.h',
+      'src/ffi/data.cc',
+      'src/ffi/data.h',
+      'src/ffi/types.cc',
+      'src/ffi/types.h',
     ],
     'node_mksnapshot_exec': '<(PRODUCT_DIR)/<(EXECUTABLE_PREFIX)node_mksnapshot<(EXECUTABLE_SUFFIX)',
     'node_js2c_exec': '<(PRODUCT_DIR)/<(EXECUTABLE_PREFIX)node_js2c<(EXECUTABLE_SUFFIX)',
@@ -1058,35 +1075,34 @@
             'Ws2_32.lib',
           ],
         }],
+        # Thin LTO for node_main.cc and linker (scoped to node_exe)
         ['node_with_ltcg=="true"', {
           'msvs_settings': {
             'VCCLCompilerTool': {
-              'WholeProgramOptimization': 'true'   # /GL, whole program optimization, needed for LTCG
+              'AdditionalOptions': ['-flto=thin'],
             },
-            'VCLibrarianTool': {
-              'AdditionalOptions': [
-                '/LTCG:INCREMENTAL',               # link time code generation
-              ],
+            'VCLinkerTool': {
+              'AdditionalOptions': ['-flto=thin'],
             },
+          },
+        }],
+        # Whole-program optimization: either Thin LTO or PGO
+        ['node_with_ltcg=="true" or enable_lto=="true" or enable_thin_lto=="true" or enable_pgo_generate=="true" or enable_pgo_use=="true"', {
+          'msvs_settings': {
             'VCLinkerTool': {
               'OptimizeReferences': 2,             # /OPT:REF
               'EnableCOMDATFolding': 2,            # /OPT:ICF
               'LinkIncremental': 1,                # disable incremental linking
-              'AdditionalOptions': [
-                '/LTCG:INCREMENTAL',               # incremental link-time code generation
-              ],
-            }
-          }
-        }, {
-          'msvs_settings': {
-            'VCCLCompilerTool': {
-              'WholeProgramOptimization': 'false'
-            },
-            'VCLinkerTool': {
-              'LinkIncremental': 2                 # enable incremental linking
             },
           },
-         }],
+        }, {
+          # No whole-program optimization
+          'msvs_settings': {
+            'VCLinkerTool': {
+              'LinkIncremental': 2,                # enable incremental linking
+            },
+          },
+        }],
          ['node_use_node_snapshot=="true"', {
           'dependencies': [
             'node_mksnapshot',
@@ -1368,6 +1384,18 @@
             '<@(node_sqlite_sources)',
           ],
         }],
+        [ 'node_use_ffi=="true"', {
+          'sources': [
+            '<@(node_ffi_sources)',
+          ],
+          'conditions': [
+            [ 'node_shared_ffi=="false"', {
+              'dependencies': [
+                'deps/libffi/libffi.gyp:libffi',
+              ],
+            }],
+          ],
+        }],
         [ 'node_shared=="true" and node_module_version!="" and OS!="win"', {
           'product_extension': '<(shlib_suffix)',
           'xcode_settings': {
@@ -1428,6 +1456,18 @@
             '<@(node_sqlite_sources)',
           ],
         }],
+        [ 'node_use_ffi=="true"', {
+          'sources': [
+            '<@(node_ffi_sources)',
+          ],
+          'conditions': [
+            [ 'node_shared_ffi=="false"', {
+              'dependencies': [
+                'deps/libffi/libffi.gyp:libffi',
+              ],
+            }],
+          ],
+        }],
         [ 'node_use_quic=="true"', {
           'sources': [
             '<@(node_quic_sources)',
@@ -1486,6 +1526,17 @@
         }],
         [ 'debug_nghttp2==1', {
           'defines': [ 'NODE_DEBUG_NGHTTP2=1' ]
+        }],
+        # Thin LTO for node sources (scoped to libnode, not global)
+        ['node_with_ltcg=="true"', {
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              'AdditionalOptions': ['-flto=thin'],
+            },
+            'VCLibrarianTool': {
+              'AdditionalOptions': ['-flto=thin'],
+            },
+          },
         }],
       ],
       'actions': [
@@ -1787,6 +1838,16 @@
         ['enable_lto=="true"', {
           'ldflags': [ '-fno-lto' ],
         }],
+        ['node_with_ltcg=="true" or enable_lto=="true" or enable_thin_lto=="true"', {
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              'AdditionalOptions': ['-fno-lto'],
+            },
+            'VCLinkerTool': {
+              'AdditionalOptions': ['-fno-lto'],
+            },
+          },
+        }],
       ],
     }, # cctest
 
@@ -1850,6 +1911,16 @@
         # Avoid excessive LTO
         ['enable_lto=="true"', {
           'ldflags': [ '-fno-lto' ],
+        }],
+        ['node_with_ltcg=="true" or enable_lto=="true" or enable_thin_lto=="true"', {
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              'AdditionalOptions': ['-fno-lto'],
+            },
+            'VCLinkerTool': {
+              'AdditionalOptions': ['-fno-lto'],
+            },
+          },
         }],
       ],
     }, # embedtest
@@ -1927,6 +1998,16 @@
         # Avoid excessive LTO
         ['enable_lto=="true"', {
           'ldflags': [ '-fno-lto' ],
+        }],
+        ['node_with_ltcg=="true" or enable_lto=="true" or enable_thin_lto=="true"', {
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              'AdditionalOptions': ['-fno-lto'],
+            },
+            'VCLinkerTool': {
+              'AdditionalOptions': ['-fno-lto'],
+            },
+          },
         }],
       ]
     }, # overlapped-checker
@@ -2056,6 +2137,16 @@
         # Avoid excessive LTO
         ['enable_lto=="true"', {
           'ldflags': [ '-fno-lto' ],
+        }],
+        ['node_with_ltcg=="true" or enable_lto=="true" or enable_thin_lto=="true"', {
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              'AdditionalOptions': ['-fno-lto'],
+            },
+            'VCLinkerTool': {
+              'AdditionalOptions': ['-fno-lto'],
+            },
+          },
         }],
       ],
     }, # node_mksnapshot

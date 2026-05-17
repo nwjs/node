@@ -6,13 +6,11 @@ const { IncomingMessage } = require('node:http')
 const stream = require('node:stream')
 const net = require('node:net')
 const { stringify } = require('node:querystring')
-const { EventEmitter: EE } = require('node:events')
+const { EventEmitter: EE, addAbortListener: addAbortListenerNative } = require('node:events')
 const timers = require('../util/timers')
 const { InvalidArgumentError, ConnectTimeoutError } = require('./errors')
 const { headerNameLowerCasedRecord } = require('./constants')
 const { tree } = require('./tree')
-
-const [nodeMajor, nodeMinor] = process.versions.node.split('.', 2).map(v => Number(v))
 
 class BodyAsyncIterable {
   constructor (body) {
@@ -323,7 +321,7 @@ function isIterable (obj) {
  */
 function hasSafeIterator (obj) {
   const prototype = Object.getPrototypeOf(obj)
-  const ownIterator = Object.prototype.hasOwnProperty.call(obj, Symbol.iterator)
+  const ownIterator = Object.hasOwn(obj, Symbol.iterator)
   return ownIterator || (prototype != null && prototype !== Object.prototype && typeof obj[Symbol.iterator] === 'function')
 }
 
@@ -466,10 +464,30 @@ function parseHeaders (headers, obj) {
 }
 
 /**
- * @param {Buffer[]} headers
+ * @param {Buffer[] | string[] | Record<string, string | string[]> | null | undefined} headers
  * @returns {string[]}
  */
 function parseRawHeaders (headers) {
+  if (headers == null) {
+    return []
+  }
+
+  if (!Array.isArray(headers)) {
+    const rawHeaders = []
+
+    for (const [name, value] of Object.entries(headers)) {
+      if (Array.isArray(value)) {
+        for (const entry of value) {
+          rawHeaders.push(name, `${entry}`)
+        }
+      } else {
+        rawHeaders.push(name, `${value}`)
+      }
+    }
+
+    return rawHeaders
+  }
+
   const headersLength = headers.length
   /**
    * @type {string[]}
@@ -680,7 +698,12 @@ function isFormDataLike (object) {
 }
 
 function addAbortListener (signal, listener) {
-  if ('addEventListener' in signal) {
+  if (signal instanceof AbortSignal) {
+    const disposable = addAbortListenerNative(signal, listener)
+    return () => disposable[Symbol.dispose]()
+  }
+
+  if (typeof signal.addEventListener === 'function') {
     signal.addEventListener('abort', listener, { once: true })
     return () => signal.removeEventListener('abort', listener)
   }
@@ -989,8 +1012,6 @@ module.exports = {
   normalizedMethodRecords,
   isValidPort,
   isHttpOrHttpsPrefixed,
-  nodeMajor,
-  nodeMinor,
   safeHTTPMethods: Object.freeze(['GET', 'HEAD', 'OPTIONS', 'TRACE']),
   wrapRequestBody,
   setupConnectTimeout,

@@ -122,6 +122,7 @@ BuiltinLoader::BuiltinCategories BuiltinLoader::GetBuiltinCategories() const {
         "internal/inspector/network", "internal/inspector/network_http",
         "internal/inspector/network_http2", "internal/inspector/network_undici",
         "internal/inspector_async_hook", "internal/inspector_network_tracking",
+        "internal/inspector/webstorage",
 #endif  // !HAVE_INSPECTOR
 
 #if !NODE_USE_V8_PLATFORM || !defined(NODE_HAVE_I18N_SUPPORT)
@@ -138,15 +139,20 @@ BuiltinLoader::BuiltinCategories BuiltinLoader::GetBuiltinCategories() const {
 #ifndef OPENSSL_NO_QUIC
         "internal/quic/quic", "internal/quic/symbols", "internal/quic/stats",
         "internal/quic/state",
-#endif                  // !OPENSSL_NO_QUIC
+#endif  // !OPENSSL_NO_QUIC
+#if !HAVE_FFI
+        "internal/ffi-shared-buffer",
+#endif                  // !HAVE_FFI
+        "ffi",          // Experimental.
         "quic",         // Experimental.
         "sqlite",       // Experimental.
         "stream/iter",  // Experimental.
-        "zlib/iter",    // Experimental.
         "sys",          // Deprecated.
         "wasi",         // Experimental.
+        "zlib/iter",    // Experimental.
 #if !HAVE_SQLITE
         "internal/webstorage",  // Experimental.
+        "internal/inspector/webstorage",
 #endif
         "internal/test/binding", "internal/v8_prof_polyfill",
   };

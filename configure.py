@@ -202,14 +202,14 @@ parser.add_argument("--enable-pgo-generate",
     dest="enable_pgo_generate",
     default=None,
     help="Enable profiling with pgo of a binary. This feature is only available "
-         "on linux with gcc and g++ 5.4.1 or newer.")
+         "on linux with gcc and g++ 5.4.1 or newer and on windows.")
 
 parser.add_argument("--enable-pgo-use",
     action="store_true",
     dest="enable_pgo_use",
     default=None,
     help="Enable use of the profile generated with --enable-pgo-generate. This "
-         "feature is only available on linux with gcc and g++ 5.4.1 or newer.")
+         "feature is only available on linux with gcc and g++ 5.4.1 or newer and on windows.")
 
 parser.add_argument("--enable-lto",
     action="store_true",
@@ -217,6 +217,13 @@ parser.add_argument("--enable-lto",
     default=None,
     help="Enable compiling with lto of a binary. This feature is only available "
          "with gcc 5.4.1+ or clang 3.9.1+.")
+
+parser.add_argument("--enable-thin-lto",
+    action="store_true",
+    dest="enable_thin_lto",
+    default=None,
+    help="Enable compiling with thin lto of a binary. This feature is only available "
+         "on windows.")
 
 parser.add_argument("--link-module",
     action="append",
@@ -686,6 +693,28 @@ shared_optgroup.add_argument('--shared-sqlite-libpath',
     dest='shared_sqlite_libpath',
     help='a directory to search for the shared sqlite DLL')
 
+shared_optgroup.add_argument('--shared-ffi',
+    action='store_true',
+    dest='shared_ffi',
+    default=None,
+    help='link to a shared libffi DLL instead of static linking')
+
+shared_optgroup.add_argument('--shared-ffi-includes',
+    action='store',
+    dest='shared_ffi_includes',
+    help='directory containing libffi header files')
+
+shared_optgroup.add_argument('--shared-ffi-libname',
+    action='store',
+    dest='shared_ffi_libname',
+    default='ffi',
+    help='alternative libffi name to link to [default: %(default)s]')
+
+shared_optgroup.add_argument('--shared-ffi-libpath',
+    action='store',
+    dest='shared_ffi_libpath',
+    help='a directory to search for the shared libffi DLL')
+
 shared_optgroup.add_argument('--shared-temporal_capi',
     action='store_true',
     dest='shared_temporal_capi',
@@ -774,6 +803,12 @@ parser.add_argument('--enable-trace-maps',
     dest='trace_maps',
     default=None,
     help='Enable the --trace-maps flag in V8 (use at your own risk)')
+
+parser.add_argument('--enable-all-experimentals',
+    action='store_true',
+    dest='enable_all_experimentals',
+    default=None,
+    help='Enable all experimental features by default')
 
 parser.add_argument('--experimental-enable-pointer-compression',
     action='store_true',
@@ -897,7 +932,8 @@ parser.add_argument('--with-ltcg',
     action='store_true',
     dest='with_ltcg',
     default=None,
-    help='Use Link Time Code Generation. This feature is only available on Windows.')
+    help='Use Thin LTO scoped to node.exe and libnode only. '
+         'This feature is only available on Windows.')
 
 parser.add_argument('--write-snapshot-as-array-literals',
     action='store_true',
@@ -1016,6 +1052,12 @@ parser.add_argument('--without-sqlite',
     dest='without_sqlite',
     default=None,
     help='build without SQLite (disables SQLite and Web Storage API)')
+
+parser.add_argument('--without-ffi',
+    action='store_true',
+    dest='without_ffi',
+    default=None,
+    help='build without FFI (Foreign Function Interface) support')
 
 parser.add_argument('--experimental-quic',
     action='store_true',
@@ -1535,7 +1577,7 @@ def check_compiler(o):
   o['variables']['llvm_version'] = get_llvm_version(CC) if is_clang else '0.0'
 
   # cargo and rustc are needed for Temporal.
-  if not options.v8_disable_temporal_support or not options.shared_temporal_capi:
+  if not options.v8_disable_temporal_support and not options.shared_temporal_capi:
     # Minimum cargo and rustc versions should match values in BUILDING.md.
     min_cargo_ver_tuple = (1, 82)
     min_rustc_ver_tuple = (1, 82)
@@ -1627,12 +1669,6 @@ def is_arch_armv7():
   return cc_macros_cache.get('__ARM_ARCH') == '7'
 
 
-def is_arch_armv6():
-  """Check for ARMv6 instructions"""
-  cc_macros_cache = cc_macros()
-  return cc_macros_cache.get('__ARM_ARCH') == '6'
-
-
 def is_arm_hard_float_abi():
   """Check for hardfloat or softfloat eabi on ARM"""
   # GCC versions 4.6 and above define __ARM_PCS or __ARM_PCS_VFP to specify
@@ -1716,7 +1752,7 @@ def configure_arm(o):
     arm_fpu = 'vfpv3'
     o['variables']['arm_version'] = '7'
   else:
-    o['variables']['arm_version'] = '6' if is_arch_armv6() else 'default'
+    o['variables']['arm_version'] = 'default'
 
   o['variables']['arm_thumb'] = 0      # -marm
   o['variables']['arm_float_abi'] = arm_float_abi
@@ -1775,6 +1811,7 @@ def configure_node_cctest_sources(o):
 def configure_node(o):
   if options.dest_os == 'android':
     o['variables']['OS'] = 'android'
+  o['variables']['node_enable_experimentals'] = b(options.enable_all_experimentals)
   o['variables']['node_prefix'] = options.prefix
   o['variables']['node_install_npm'] = b(not options.without_npm)
   o['variables']['node_install_corepack'] = b(options.with_corepack)
@@ -1885,9 +1922,9 @@ def configure_node(o):
   else:
     o['variables']['node_enable_v8_vtunejit'] = 'false'
 
-  if flavor != 'linux' and (options.enable_pgo_generate or options.enable_pgo_use):
+  if (flavor != 'linux' and flavor != 'win') and (options.enable_pgo_generate or options.enable_pgo_use):
     raise Exception(
-      'The pgo option is supported only on linux.')
+      'The pgo option is supported only on linux and windows.')
 
   if flavor == 'linux':
     if options.enable_pgo_generate or options.enable_pgo_use:
@@ -1898,21 +1935,55 @@ def configure_node(o):
           'The options --enable-pgo-generate and --enable-pgo-use '
           f'are supported for gcc and gxx {version_checked_str} or newer only.')
 
-    if options.enable_pgo_generate and options.enable_pgo_use:
-      raise Exception(
-        'Only one of the --enable-pgo-generate or --enable-pgo-use options '
-        'can be specified at a time. You would like to use '
-        '--enable-pgo-generate first, profile node, and then recompile '
-        'with --enable-pgo-use')
+  if options.enable_pgo_generate and options.enable_pgo_use:
+    raise Exception(
+      'Only one of the --enable-pgo-generate or --enable-pgo-use options '
+      'can be specified at a time. You would like to use '
+      '--enable-pgo-generate first, profile node, and then recompile '
+      'with --enable-pgo-use')
 
   o['variables']['enable_pgo_generate'] = b(options.enable_pgo_generate)
   o['variables']['enable_pgo_use']      = b(options.enable_pgo_use)
 
-  if flavor == 'win' and (options.enable_lto):
-    raise Exception(
-      'Use Link Time Code Generation instead.')
+  if flavor == 'win' and (options.enable_pgo_generate or options.enable_pgo_use):
+    lib_suffix = 'aarch64' if target_arch == 'arm64' else 'x86_64'
+    lib_name = f'clang_rt.profile-{lib_suffix}.lib'
+    msvc_dir = target_arch  # 'x64' or 'arm64'
 
-  if options.enable_lto:
+    vc_tools_dir = os.environ.get('VCToolsInstallDir', '')
+    if vc_tools_dir:
+      clang_profile_lib = os.path.join(vc_tools_dir, 'lib', msvc_dir, lib_name)
+      if os.path.isfile(clang_profile_lib):
+        o['variables']['clang_profile_lib'] = clang_profile_lib
+      else:
+        raise Exception(
+          f'PGO profile runtime library not found at {clang_profile_lib}. '
+          'Ensure the ClangCL toolset is installed.')
+    else:
+      raise Exception(
+        'VCToolsInstallDir not set. Run from a Visual Studio command prompt.')
+
+  if flavor != 'win' and options.enable_thin_lto:
+    raise Exception(
+      'Use --enable-lto instead.')
+
+  # LTO mutual exclusion
+  if flavor == 'win':
+    lto_options = []
+    if options.enable_lto:
+      lto_options.append('--enable-lto')
+    if options.enable_thin_lto:
+      lto_options.append('--enable-thin-lto')
+    if options.with_ltcg:
+      lto_options.append('--with-ltcg')
+    if len(lto_options) > 1:
+      raise Exception(
+        f'Only one LTO option can be specified at a time: {", ".join(lto_options)}. '
+        'Use --enable-lto for Full LTO (global), '
+        '--enable-thin-lto for Thin LTO (global), '
+        'or --with-ltcg for Thin LTO (scoped to node.exe and libnode).')
+
+  if options.enable_lto and flavor != 'win':
     gcc_version_checked = (5, 4, 1)
     clang_version_checked = (3, 9, 1)
     if not gcc_version_ge(gcc_version_checked) and not clang_version_ge(clang_version_checked):
@@ -1923,6 +1994,7 @@ def configure_node(o):
         f'or clang {clang_version_checked_str}+ only.')
 
   o['variables']['enable_lto'] = b(options.enable_lto)
+  o['variables']['enable_thin_lto'] = b(options.enable_thin_lto)
 
   if options.node_use_large_pages or options.node_use_large_pages_script_lld:
     warn('''The `--use-largepages` and `--use-largepages-script-lld` options
@@ -2237,6 +2309,43 @@ def configure_sqlite(o):
 
   configure_library('sqlite', o, pkgname='sqlite3')
 
+def bundled_ffi_supported(os_name, target_arch):
+  supported = {
+    'freebsd': {'arm', 'arm64', 'x64'},
+    'linux': {'arm', 'arm64', 'x64'},
+    'mac': {'arm64', 'x64'},
+    'win': {'arm64', 'x64'},
+  }
+
+  if target_arch == 'x86':
+    target_arch = 'ia32'
+
+  return target_arch in supported.get(os_name, set())
+
+def configure_ffi(o):
+  use_ffi = not options.without_ffi
+
+  if use_ffi and not options.shared_ffi:
+    target_arch = o['variables']['target_arch']
+    if not bundled_ffi_supported(flavor, target_arch):
+      warn(f'FFI is disabled for {flavor}/{target_arch}: the bundled libffi '
+           'integration is not available on this platform. Use --shared-ffi '
+           'to provide a system libffi or --without-ffi to silence this '
+           'warning.')
+      use_ffi = False
+
+  o['variables']['node_use_ffi'] = b(use_ffi)
+
+  if options.without_ffi:
+    if options.shared_ffi:
+      error('--without-ffi is incompatible with --shared-ffi')
+    return
+
+  if not use_ffi:
+    return
+
+  configure_library('ffi', o, pkgname='libffi')
+
 def configure_quic(o):
   o['variables']['node_use_quic'] = b(options.experimental_quic and
                                       not options.without_ssl)
@@ -2327,6 +2436,7 @@ def configure_intl(o):
 
   # always set icu_small, node.gyp depends on it being defined.
   o['variables']['icu_small'] = b(False)
+  o['variables']['icu_system'] = b(False)
 
   # prevent data override
   o['defines'] += ['ICU_NO_USER_DATA_OVERRIDE']
@@ -2363,6 +2473,7 @@ def configure_intl(o):
     o['variables']['v8_enable_i18n_support'] = 1
   elif with_intl == 'system-icu':
     # ICU from pkg-config.
+    o['variables']['icu_system'] = b(True)
     o['variables']['v8_enable_i18n_support'] = 1
     pkgicu = pkg_config(['icu-i18n', 'icu-uc'])
     if not pkgicu[0]:
@@ -2690,6 +2801,7 @@ configure_library('nghttp3', output, pkgname='libnghttp3')
 configure_library('ngtcp2', output, pkgname='libngtcp2')
 configure_lief(output);
 configure_sqlite(output);
+configure_ffi(output);
 configure_library('temporal_capi', output)
 configure_library('uvwasi', output)
 configure_library('zstd', output, pkgname='libzstd')

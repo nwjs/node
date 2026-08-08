@@ -17,6 +17,18 @@
       'sources': [
         '<@(perfetto_sdk_sources)',
       ],
+      'conditions': [
+        # nwjs: the amalgamation includes <windows.h> (sdk/perfetto.cc:73773)
+        # and then <winsock2.h> two lines later. Without WIN32_LEAN_AND_MEAN
+        # the first pulls in the Winsock 1.1 <winsock.h>, and winsock2.h then
+        # redefines protoent/WSAData. Chromium builds this same source with
+        # WIN32_LEAN_AND_MEAN (build/config/win/BUILD.gn); upstream node never
+        # hits it because v8_use_perfetto defaults to 0 there, so nothing but
+        # nw compiles the bundled SDK.
+        ['OS=="win"', {
+          'defines': [ 'WIN32_LEAN_AND_MEAN' ],
+        }],
+      ],
     },
   ]
 }

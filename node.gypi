@@ -119,7 +119,16 @@
         'NODE_RELEASE_URLBASE="<(node_release_urlbase)"',
       ]
     }],
-    ['node_target_type=="shared_library"', {
+    # nwjs: _type guard -- these defines describe a *consumer* of node.dll, and
+    # are meant for the executable that links it. Since upstream's node_base
+    # split (26.7) the shared library itself depends on a static_library that
+    # also includes node.gypi, so without this guard node_base exports
+    # USING_UV_SHARED=1 into the `node` target, which already has
+    # BUILDING_UV_SHARED=1 from common.gypi -- and uv.h refuses both at once
+    # ("Define either BUILDING_UV_SHARED or USING_UV_SHARED, not both").
+    # node_lib_target_name is a shared_library, so it still exports these to
+    # the nodebin executable exactly as before.
+    ['node_target_type=="shared_library" and _type!="static_library"', {
       'direct_dependent_settings': {
         'defines': [
           'USING_UV_SHARED=1',

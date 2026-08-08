@@ -1018,11 +1018,15 @@
               '-Wl,-force_load,<(PRODUCT_DIR)/<(STATIC_LIB_PREFIX)node_base<(STATIC_LIB_SUFFIX)',
             ],
           },
+          # nwjs: upstream points these at <(PRODUCT_DIR)/lib/, which is not
+          # where the ninja generator puts static libs -- they land under
+          # obj\<dir-of-the-gyp-file>\, the idiom already used in node.gypi for
+          # zlib/uv/openssl. gyp only auto-whole-archives static deps of
+          # shared_library targets on posix, so windows needs this spelled out.
           'msvs_settings': {
             'VCLinkerTool': {
               'AdditionalOptions': [
-                '/WHOLEARCHIVE:<(PRODUCT_DIR)/lib/<(STATIC_LIB_PREFIX)node_base<(STATIC_LIB_SUFFIX)',
-                '/WHOLEARCHIVE:<(PRODUCT_DIR)/lib/<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)',
+                '/WHOLEARCHIVE:obj\\third_party\\node-nw\\<(STATIC_LIB_PREFIX)node_base<(STATIC_LIB_SUFFIX)',
               ],
             },
           },
@@ -1032,6 +1036,17 @@
                 'OTHER_LDFLAGS': [
                   '-Wl,-force_load,<(PRODUCT_DIR)/<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)',
                 ],
+              },
+              # nwjs: moved here from the unconditional block above. nw builds
+              # against chromium's v8 and never produces this library, so
+              # referencing it unconditionally broke the link. Path is untested:
+              # nw never sets node_use_bundled_v8=true.
+              'msvs_settings': {
+                'VCLinkerTool': {
+                  'AdditionalOptions': [
+                    '/WHOLEARCHIVE:obj\\third_party\\node-nw\\tools\\v8_gypfiles\\<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)',
+                  ],
+                },
               },
             }],
             ['node_use_bundled_v8=="true" and OS != "aix" and OS != "os400" and OS != "mac" and OS != "ios"', {
@@ -1361,21 +1376,12 @@
         }, {
           'defines': [ 'HAVE_INSPECTOR=0' ]
         }],
-        [ 'OS=="win"', {
-          'conditions': [
-            [ 'component == "shared_library"', {
-              'libraries': [ 'Winmm', 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/third_party/perfetto/libperfettonode.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/libc++.dll.lib'],
-            }, {
-              'libraries': [ 'Winmm', 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/third_party/perfetto/libperfettonode.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libcpp.lib'],
-            }],
-            [ 'nw_browser_tests == 1', {
-              'libraries': [ '<(PRODUCT_DIR)/../nw/browser_tests.lib'],
-              'product_name': 'node_tests',
-            }, {
-              'libraries': [ '<(PRODUCT_DIR)/../nw/nw.dll.lib'],
-            }],
-          ],
-        }],
+        # nwjs: the OS=="win" link libraries that used to live here moved to the
+        # node_lib_target_name target below. node_base is a static_library and
+        # never links, so 'libraries' attached to it are silently dropped --
+        # node.dll ended up without nw.dll.lib/libc++, and every v8 import came
+        # out undefined. Upstream's node_base split (26.7) is what relocated the
+        # surrounding OS=="win" block into this target.
         [ 'node_use_openssl=="true"', {
           'sources': [
             '<@(node_crypto_sources)',
@@ -1593,11 +1599,15 @@
               '-Wl,-force_load,<(PRODUCT_DIR)/<(STATIC_LIB_PREFIX)node_base<(STATIC_LIB_SUFFIX)',
             ],
           },
+          # nwjs: upstream points these at <(PRODUCT_DIR)/lib/, which is not
+          # where the ninja generator puts static libs -- they land under
+          # obj\<dir-of-the-gyp-file>\, the idiom already used in node.gypi for
+          # zlib/uv/openssl. gyp only auto-whole-archives static deps of
+          # shared_library targets on posix, so windows needs this spelled out.
           'msvs_settings': {
             'VCLinkerTool': {
               'AdditionalOptions': [
-                '/WHOLEARCHIVE:<(PRODUCT_DIR)/lib/<(STATIC_LIB_PREFIX)node_base<(STATIC_LIB_SUFFIX)',
-                '/WHOLEARCHIVE:<(PRODUCT_DIR)/lib/<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)',
+                '/WHOLEARCHIVE:obj\\third_party\\node-nw\\<(STATIC_LIB_PREFIX)node_base<(STATIC_LIB_SUFFIX)',
               ],
             },
           },
@@ -1607,6 +1617,17 @@
                 'OTHER_LDFLAGS': [
                   '-Wl,-force_load,<(PRODUCT_DIR)/<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)',
                 ],
+              },
+              # nwjs: moved here from the unconditional block above. nw builds
+              # against chromium's v8 and never produces this library, so
+              # referencing it unconditionally broke the link. Path is untested:
+              # nw never sets node_use_bundled_v8=true.
+              'msvs_settings': {
+                'VCLinkerTool': {
+                  'AdditionalOptions': [
+                    '/WHOLEARCHIVE:obj\\third_party\\node-nw\\tools\\v8_gypfiles\\<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)',
+                  ],
+                },
               },
             }],
             # gyp automatically applies `--whole-archive` to static dependencies of `shared_library` targets.
@@ -1634,6 +1655,23 @@
             'Dbghelp.lib',
             'winmm.lib',
             'Ws2_32.lib',
+          ],
+        }],
+        # nwjs: moved here from node_base, which is a static_library and so
+        # never links -- these have to sit on the target that produces node.dll.
+        [ 'OS=="win"', {
+          'conditions': [
+            [ 'component == "shared_library"', {
+              'libraries': [ 'Winmm', 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/third_party/perfetto/libperfettonode.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/libc++.dll.lib'],
+            }, {
+              'libraries': [ 'Winmm', 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/third_party/perfetto/libperfettonode.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libcpp.lib'],
+            }],
+            [ 'nw_browser_tests == 1', {
+              'libraries': [ '<(PRODUCT_DIR)/../nw/browser_tests.lib'],
+              'product_name': 'node_tests',
+            }, {
+              'libraries': [ '<(PRODUCT_DIR)/../nw/nw.dll.lib'],
+            }],
           ],
         }],
       ],

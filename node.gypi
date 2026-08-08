@@ -284,6 +284,11 @@
         # we need to use node's preferred "darwin" rather than gyp's preferred "mac"
         'NODE_PLATFORM="darwin"',
       ],
+    }],
+    # nwjs: split out of the block above so it does not reach static_library
+    # targets. gyp applies postbuilds to mac archives too, and there is no
+    # ${EXECUTABLE_PATH} to install_name_tool there. See the _type note below.
+    [ 'OS=="mac" and _type!="static_library"', {
      'postbuilds': [
        {
          'postbuild_name': 'Fix Framework Link',
@@ -386,7 +391,14 @@
         ],
       },
     }],
-    [ 'OS=="mac" and component == "shared_library"', {
+    # nwjs: _type guard -- node.gypi is included by every target in node.gyp,
+    # and gyp feeds OTHER_LDFLAGS straight into libtool's flags for
+    # static_library targets (xcode_emulation.GetLibtoolflags). Archives do not
+    # link, so the framework/-lv8/-force_load flags are meaningless there, and
+    # the ninja generator emits them without expanding $!PRODUCT_DIR, producing
+    # "bad $-escape" at build time. Upstream's node_base split (26.7) added the
+    # first static_library target here, which is when this started to bite.
+    [ 'OS=="mac" and component == "shared_library" and _type!="static_library"', {
       'xcode_settings': {
         'OTHER_LDFLAGS': [
           '-L<(PRODUCT_DIR)/../nw/', '-lv8',
@@ -421,7 +433,8 @@
         },
       ],
     }],
-    [ 'OS=="mac" and component != "shared_library"', {
+    # nwjs: see the _type note on the shared_library block above.
+    [ 'OS=="mac" and component != "shared_library" and _type!="static_library"', {
      'xcode_settings': {
        'OTHER_LDFLAGS': [
          '<(PRODUCT_DIR)/../nw/nwjs\\ Framework.framework/nwjs\\ Framework',

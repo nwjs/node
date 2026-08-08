@@ -51,6 +51,7 @@
 
 #include <iostream>
 
+#include <algorithm>
 #include <vector>
 #include "node_webkit.h"
 
@@ -1804,6 +1805,49 @@ NODE_EXTERN v8::Handle<v8::Value> CallNWTickCallback(Environment* env, const v8:
 
 }  // namespace node
 
+// nwjs: registry of every live Environment created by g_start_nw_instance().
+// In mixed-context each window gets its own Environment on the shared
+// uv_default_loop, but tls_ctx->env only ever names the most recently created
+// one and is never restored when a window closes.
+//
+// Per-thread, like the tls_ctx it supplements: g_start_nw_instance() also runs
+// on worker threads (WorkerContextCreated), and an Environment may only be
+// touched from the thread that owns its isolate and loop. A shared registry
+// would both race and let one thread's pump drain another thread's envs.
+static thread_local std::vector<node::Environment*> g_live_envs;
+
+static void g_forget_live_env(node::Environment* env) {
+  g_live_envs.erase(std::remove(g_live_envs.begin(), g_live_envs.end(), env),
+                    g_live_envs.end());
+}
+
+// nwjs: drain the nextTick and microtask queues of every live Environment.
+// JS enters node from Blink (e.g. a DOM event handler calling require('http'))
+// without an InternalCallbackScope wrapping the crossing, so the message pump
+// is the only thing that flushes these queues. Draining tls_ctx->env alone
+// strands work queued by any other window -- notably net.js' deferred
+// internalConnect(), which leaves an http request that never issues a connect.
+// Node used to flush each Environment from its own uv_check handle, but 26.7
+// (2a672ee9e89) made Environment::CheckImmediate return before building the
+// InternalCallbackScope that did it.
+static void g_drain_live_envs() {
+  if (!node::g_nw_tick_callback || g_live_envs.empty())
+    return;
+  // Draining runs JS, which can create or destroy Environments, so walk a copy
+  // and re-check liveness before each call.
+  std::vector<node::Environment*> envs(g_live_envs);
+  for (node::Environment* env : envs) {
+    if (std::find(g_live_envs.begin(), g_live_envs.end(), env) ==
+        g_live_envs.end())
+      continue;
+    v8::Isolate* isolate = env->isolate();
+    if (!isolate)
+      continue;
+    v8::HandleScope handle_scope(isolate);
+    node::CallNWTickCallback(env, v8::Undefined(isolate));
+  }
+}
+
 #if !HAVE_INSPECTOR
 void Initialize() {}
 
@@ -1890,7 +1934,9 @@ NODE_EXTERN void g_msg_pump_did_work(msg_pump_context_t* ctx) {
     v8::HandleScope handleScope(isolate);
     v8::Context::Scope cscope(tls_ctx->env->context());
     (*node::g_nw_uv_run)((uv_loop_t*)ctx->loop, UV_RUN_NOWAIT);
-    node::CallNWTickCallback(tls_ctx->env, v8::Undefined(isolate));
+    // nwjs: drain every live Environment, not just tls_ctx->env, which in
+    // mixed-context names whichever window opened last. See g_drain_live_envs().
+    g_drain_live_envs();
   }
 }
 
@@ -1903,6 +1949,9 @@ NODE_EXTERN void g_msg_pump_need_work(msg_pump_context_t* ctx) {
     }
   }
   (*node::g_nw_uv_run)((uv_loop_t*)ctx->loop, UV_RUN_ONCE);
+  // nwjs: a tick queued just before the pump blocked would otherwise sit here
+  // until some unrelated event wakes us again.
+  g_drain_live_envs();
   if (tls_ctx && tls_ctx->env) {
     tls_ctx->env->context()->Exit();
   }
@@ -1920,6 +1969,8 @@ NODE_EXTERN void g_msg_pump_delay_work(msg_pump_context_t* ctx, int sec) {
   (*node::g_nw_uv_run)((uv_loop_t*)ctx->loop, UV_RUN_ONCE);
   uv_idle_stop((uv_idle_t*)ctx->idle_handle);
   uv_timer_stop((uv_timer_t*)ctx->delay_timer);
+  // nwjs: see g_msg_pump_need_work().
+  g_drain_live_envs();
   if (tls_ctx && tls_ctx->env) {
     tls_ctx->env->context()->Exit();
   }
@@ -2069,6 +2120,7 @@ NODE_EXTERN void g_stop_nw_instance() {
   }
   node::NodePlatform* platform = (node::NodePlatform*)tls_ctx->env->isolate_data()->platform();
   v8::Isolate* isolate = tls_ctx->env->isolate();
+  g_forget_live_env(tls_ctx->env);
   node::FreeEnvironment(tls_ctx->env);
   platform->UnregisterIsolate(isolate);
   delete platform;
@@ -2077,7 +2129,11 @@ NODE_EXTERN void g_stop_nw_instance() {
   //std::cerr << "QUIT LOOP" << std::endl;
 }
 
-static std::vector<node::Environment*> g_envs_to_free;
+// nwjs: per-thread for the same reason as g_live_envs. g_start_nw_instance()
+// drains this on whatever thread it runs on, so with a shared list a starting
+// worker would FreeEnvironment() environments owned by the renderer main
+// thread.
+static thread_local std::vector<node::Environment*> g_envs_to_free;
 
 NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Context> context, void* icu_data) {
 
@@ -2147,6 +2203,7 @@ NODE_EXTERN void g_start_nw_instance(int argc, char *argv[], v8::Handle<v8::Cont
   tls_ctx->env = node::CreateEnvironment(
       isolate_data, context, args, exec_args,
       static_cast<node::EnvironmentFlags::Flags>(env_flags));
+  g_live_envs.push_back(tls_ctx->env);
   isolate->SetFatalErrorHandler(node::OnFatalError);
   isolate->AddMessageListener(node::errors::PerIsolateMessageListener);
   //isolate->SetAutorunMicrotasks(false);
@@ -2197,9 +2254,21 @@ NODE_EXTERN void g_run_at_exit(node::Environment* env) {
   node::RunAtExit(env);
 }
 
+// nwjs: drain the tick/microtask queue of every live Environment. Exposed so
+// message pumps that do not go through g_msg_pump_did_work() -- notably the mac
+// CFRunLoop pump, via nw::KickNextTick() -- flush all windows rather than only
+// tls_ctx->env. See g_drain_live_envs().
+NODE_EXTERN void g_drain_node_envs() {
+  g_drain_live_envs();
+}
+
 NODE_EXTERN void g_queue_nw_env_for_free(node::Environment* env) {
-  if (env)
+  if (env) {
+    // nwjs: its context is already gone, so stop draining it right away rather
+    // than waiting for the deferred free in g_start_nw_instance().
+    g_forget_live_env(env);
     g_envs_to_free.push_back(env);
+  }
 }
 
 NODE_EXTERN void g_promise_reject_callback(v8::PromiseRejectMessage* data) {

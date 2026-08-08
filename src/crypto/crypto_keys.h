@@ -77,7 +77,9 @@ class KeyObjectData final : public MemoryRetainer {
       bool allow_key_object);
 
   static KeyObjectData GetPublicOrPrivateKeyFromJs(
-      const v8::FunctionCallbackInfo<v8::Value>& args, unsigned int* offset);
+      const v8::FunctionCallbackInfo<v8::Value>& args,
+      unsigned int* offset,
+      bool allow_private_key_store = false);
 
   static v8::Maybe<ncrypto::EVPKeyPointer::PrivateKeyEncodingConfig>
   GetPrivateKeyEncodingFromJs(const v8::FunctionCallbackInfo<v8::Value>& args,
@@ -115,13 +117,17 @@ class KeyObjectData final : public MemoryRetainer {
   KeyType key_type_;
   mutable std::shared_ptr<Mutex> mutex_;
 
-  struct Data {
+  struct Data final : public MemoryRetainer {
     const ByteSource symmetric_key;
     const ncrypto::EVPKeyPointer asymmetric_key;
     explicit Data(ByteSource symmetric_key)
         : symmetric_key(std::move(symmetric_key)) {}
     explicit Data(ncrypto::EVPKeyPointer asymmetric_key)
         : asymmetric_key(std::move(asymmetric_key)) {}
+
+    void MemoryInfo(MemoryTracker* tracker) const override;
+    SET_MEMORY_INFO_NAME(KeyObjectData::Data)
+    SET_SELF_SIZE(Data)
   };
   std::shared_ptr<Data> data_;
 
@@ -151,6 +157,7 @@ class KeyObjectHandle : public BaseObject {
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
 
   static void Init(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetKeyType(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetKeyDetail(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Equals(const v8::FunctionCallbackInfo<v8::Value>& args);
 
@@ -189,6 +196,11 @@ class KeyObjectHandle : public BaseObject {
   KeyObjectData data_;
 };
 
+// NativeKeyObject is the native base class for the Node.js-specific
+// `KeyObject`. It holds the underlying KeyObjectData for structured
+// cloning and exposes the native hidden slot tuple that JS needs:
+// [type enum, KeyObjectHandle]. JS primes a per-instance private-field
+// cache from that result and lazily appends derived metadata there.
 class NativeKeyObject : public BaseObject {
  public:
   static void Initialize(Environment* env, v8::Local<v8::Object> target);
@@ -197,6 +209,15 @@ class NativeKeyObject : public BaseObject {
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void CreateNativeKeyObjectClass(
       const v8::FunctionCallbackInfo<v8::Value>& args);
+
+  // True if `value` is a real NativeKeyObject instance. Uses the
+  // FunctionTemplate stored on the Environment as a brand check.
+  // Used by `GetSlots` to validate its receiver.
+  static bool HasInstance(Environment* env, v8::Local<v8::Value> value);
+
+  // Returns [type, handle] in one call so JS can prime a per-instance cache
+  // on first access. Derived metadata is not returned from native here.
+  static void GetSlots(const v8::FunctionCallbackInfo<v8::Value>& args);
 
   SET_NO_MEMORY_INFO()
   SET_MEMORY_INFO_NAME(NativeKeyObject)
@@ -256,6 +277,12 @@ class NativeCryptoKey : public BaseObject {
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void CreateCryptoKeyClass(
       const v8::FunctionCallbackInfo<v8::Value>& args);
+
+  static v8::MaybeLocal<v8::Value> Create(Environment* env,
+                                          const KeyObjectData& data,
+                                          v8::Local<v8::Value> algorithm,
+                                          uint32_t usages_mask,
+                                          bool extractable);
 
   // True if `value` is a real NativeCryptoKey instance. Uses the
   // FunctionTemplate stored on the Environment as a brand check.

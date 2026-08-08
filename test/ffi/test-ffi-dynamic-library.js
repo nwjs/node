@@ -1,9 +1,10 @@
-// Flags: --experimental-ffi --expose-gc
+// Flags: --experimental-ffi --expose-gc --allow-natives-syntax
 'use strict';
 const common = require('../common');
 common.skipIfFFIMissing();
 const { gcUntil } = require('../common/gc');
 const assert = require('node:assert');
+const { endianness } = require('node:os');
 const { test } = require('node:test');
 const ffi = require('node:ffi');
 const { fixtureSymbols, libraryPath } = require('./ffi-test-common');
@@ -26,7 +27,7 @@ test('dlopen resolves symbols from the current process with null path', {
   skip: common.isWindows,
 }, () => {
   const { lib, functions } = ffi.dlopen(null, {
-    uv_os_getpid: { result: 'i32', parameters: [] },
+    uv_os_getpid: { return: 'i32', arguments: [] },
   });
 
   try {
@@ -40,8 +41,8 @@ test('dlopen resolves symbols from the current process with null path', {
 test('dlopen resolves functions from definitions', () => {
   const { lib, functions } = ffi.dlopen(libraryPath, {
     add_i32: fixtureSymbols.add_i32,
-    add_f32: { returns: 'f32', arguments: ['f32', 'f32'] },
-    add_u64: { return: 'u64', parameters: ['u64', 'u64'] },
+    add_f32: { return: 'f32', arguments: ['f32', 'f32'] },
+    add_u64: { return: 'u64', arguments: ['u64', 'u64'] },
   });
 
   try {
@@ -54,8 +55,11 @@ test('dlopen resolves functions from definitions', () => {
     // Shared-buffer wrapper sets `length` to the FFI signature's arity
     // (see `inheritMetadata` in lib/internal/ffi-shared-buffer.js). The raw
     // native function has length 0, but the wrapper exposes the parameter
-    // count so `fn.length` is useful for introspection.
-    assert.strictEqual(functions.add_i32.length, 2);
+    // count so `fn.length` is useful for introspection. The shared-buffer
+    // wrapper is disabled on big-endian hosts.
+    assert.strictEqual(
+      functions.add_i32.length,
+      endianness() === 'BE' ? 0 : 2);
     assert.strictEqual(typeof functions.add_i32.pointer, 'bigint');
     assert.strictEqual(Object.getPrototypeOf(functions), null);
   } finally {
@@ -69,7 +73,7 @@ test('DynamicLibrary exposes functions and symbols', () => {
   try {
     const addI32 = lib.getFunction('add_i32', fixtureSymbols.add_i32);
     const addU64 = lib.getFunction('add_u64', {
-      returns: 'u64',
+      return: 'u64',
       arguments: ['u64', 'u64'],
     });
     const addI32Ptr = lib.getSymbol('add_i32');
@@ -80,7 +84,7 @@ test('DynamicLibrary exposes functions and symbols', () => {
     assert.strictEqual(addI32.pointer, addI32Ptr);
 
     const functions = lib.getFunctions({
-      add_f32: { result: 'f32', parameters: ['f32', 'f32'] },
+      add_f32: { return: 'f32', arguments: ['f32', 'f32'] },
       add_i64: { return: 'i64', arguments: ['i64', 'i64'] },
     });
 
@@ -99,6 +103,60 @@ test('DynamicLibrary exposes functions and symbols', () => {
   }
 });
 
+test('DynamicLibrary evaluates function signatures once', () => {
+  function makeChangingSignature() {
+    const reads = { arguments: 0, return: 0 };
+    return {
+      reads,
+      signature: {
+        get arguments() {
+          reads.arguments++;
+          return reads.arguments === 1 ?
+            Array(8).fill('i32') : ['i32'];
+        },
+        get return() {
+          reads.return++;
+          return 'i32';
+        },
+      },
+    };
+  }
+
+  {
+    const lib = new ffi.DynamicLibrary(libraryPath);
+    const { reads, signature } = makeChangingSignature();
+
+    try {
+      const fn = lib.getFunction('sum_8_i32', signature);
+      assert.strictEqual(fn(1, 2, 3, 4, 5, 6, 7, 8), 36);
+      assert.deepStrictEqual(reads, { arguments: 1, return: 1 });
+    } finally {
+      lib.close();
+    }
+  }
+
+  {
+    const lib = new ffi.DynamicLibrary(libraryPath);
+    const { reads, signature } = makeChangingSignature();
+    let definitionReads = 0;
+    const definitions = {
+      get sum_8_i32() {
+        definitionReads++;
+        return signature;
+      },
+    };
+
+    try {
+      const { sum_8_i32: fn } = lib.getFunctions(definitions);
+      assert.strictEqual(fn(1, 2, 3, 4, 5, 6, 7, 8), 36);
+      assert.strictEqual(definitionReads, 1);
+      assert.deepStrictEqual(reads, { arguments: 1, return: 1 });
+    } finally {
+      lib.close();
+    }
+  }
+});
+
 test('getFunction caches signatures consistently', () => {
   const lib = new ffi.DynamicLibrary(libraryPath);
 
@@ -111,7 +169,7 @@ test('getFunction caches signatures consistently', () => {
     );
 
     assert.throws(() => {
-      lib.getFunction('add_i32', { parameters: ['u32', 'u32'], result: 'u32' });
+      lib.getFunction('add_i32', { arguments: ['u32', 'u32'], return: 'u32' });
     }, /already requested with a different signature/);
   } finally {
     lib.close();
@@ -149,6 +207,27 @@ test('closed libraries reject subsequent operations', () => {
   assert.throws(() => functions.add_i32(1, 2), /Library is closed/);
   assert.throws(() => lib.getFunction('add_i32', fixtureSymbols.add_i32), /Library is closed/);
   assert.throws(() => lib.getSymbol('add_i32'), /Library is closed/);
+});
+
+test('optimized fast calls reject calls after the library is closed', () => {
+  const { lib, functions } = ffi.dlopen(libraryPath, {
+    multiply_f64: fixtureSymbols.multiply_f64,
+  });
+
+  function hot(a, b) {
+    return functions.multiply_f64(a, b);
+  }
+
+  eval('%PrepareFunctionForOptimization(hot)');
+  assert.strictEqual(hot(2, 3), 6);
+  eval('%OptimizeFunctionOnNextCall(hot)');
+  assert.strictEqual(hot(2, 3), 6);
+
+  lib.close();
+  assert.throws(() => hot(2, 3), {
+    code: 'ERR_FFI_LIBRARY_CLOSED',
+    message: 'Library is closed',
+  });
 });
 
 test('DynamicLibrary supports Symbol.dispose', () => {
@@ -222,7 +301,7 @@ test('dynamic library APIs validate failures and bad signatures', () => {
   assert.throws(() => {
     ffi.dlopen(libraryPath, {
       add_i32: fixtureSymbols.add_i32,
-      missing_symbol: { result: 'void', parameters: [] },
+      missing_symbol: { return: 'void', arguments: [] },
     });
   }, /dlsym failed:/);
 
@@ -241,7 +320,7 @@ test('dynamic library APIs validate failures and bad signatures', () => {
 
   try {
     assert.throws(() => {
-      lib.getFunction('missing_symbol', { result: 'void', parameters: [] });
+      lib.getFunction('missing_symbol', { return: 'void', arguments: [] });
     }, /dlsym failed:/);
 
     assert.throws(() => {
@@ -255,21 +334,21 @@ test('dynamic library APIs validate failures and bad signatures', () => {
     assert.throws(() => {
       lib.getFunctions({
         add_i32: fixtureSymbols.add_i32,
-        missing_symbol: { result: 'void', parameters: [] },
+        missing_symbol: { return: 'void', arguments: [] },
       });
     }, /dlsym failed:/);
 
     assert.strictEqual(lib.getFunction('add_i32', {
-      result: 'pointer',
-      parameters: ['pointer'],
+      return: 'pointer',
+      arguments: ['pointer'],
     }).pointer, lib.getSymbol('add_i32'));
 
     assert.throws(() => {
-      lib.getFunction('add_i32', { result: 'i32\0bad', parameters: [] });
+      lib.getFunction('add_i32', { return: 'i32\0bad', arguments: [] });
     }, /Return value type of function add_i32 must not contain null bytes/);
 
     assert.throws(() => {
-      lib.getFunction('add_i32', { result: 'i32', parameters: ['i32\0bad'] });
+      lib.getFunction('add_i32', { return: 'i32', arguments: ['i32\0bad'] });
     }, /Argument 0 of function add_i32 must not contain null bytes/);
 
     assert.throws(() => {
@@ -301,30 +380,14 @@ test('dynamic library APIs validate failures and bad signatures', () => {
     });
 
     assert.throws(() => {
-      lib.getFunction('add_i32', {
-        result: 'i32',
-        return: 'i32',
-        parameters: ['i32', 'i32'],
-      });
-    }, /must have either 'returns', 'return' or 'result' property/);
-
-    assert.throws(() => {
-      lib.getFunction('add_i32', {
-        result: 'i32',
-        parameters: ['i32', 'i32'],
-        arguments: ['i32', 'i32'],
-      });
-    }, /must have either 'parameters' or 'arguments' property/);
-
-    assert.throws(() => {
-      lib.getFunction('add_i32', { result: 'bogus', parameters: [] });
+      lib.getFunction('add_i32', { return: 'bogus', arguments: [] });
     }, /Unsupported FFI type: bogus/);
 
     const hasTrapError = new Error('signature has trap');
     assert.throws(() => {
       lib.getFunction('add_i32', new Proxy({}, {
         has(target, key) {
-          if (key === 'result') {
+          if (key === 'return') {
             throw hasTrapError;
           }
           return Reflect.has(target, key);
@@ -335,8 +398,8 @@ test('dynamic library APIs validate failures and bad signatures', () => {
     const getterError = new Error('signature getter');
     assert.throws(() => {
       lib.getFunction('add_i32', {
-        result: 'i32',
-        get parameters() {
+        return: 'i32',
+        get arguments() {
           throw getterError;
         },
       });

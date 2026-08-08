@@ -48,8 +48,10 @@
   V(async_id_symbol, "async_id_symbol")                                        \
   V(ffi_sb_shared_buffer_symbol, "ffi_sb_shared_buffer_symbol")                \
   V(ffi_sb_invoke_slow_symbol, "ffi_sb_invoke_slow_symbol")                    \
-  V(ffi_sb_params_symbol, "ffi_sb_params_symbol")                              \
-  V(ffi_sb_result_symbol, "ffi_sb_result_symbol")                              \
+  V(ffi_sb_arguments_symbol, "ffi_sb_arguments_symbol")                        \
+  V(ffi_sb_return_symbol, "ffi_sb_return_symbol")                              \
+  V(ffi_fast_arguments_symbol, "ffi_fast_arguments_symbol")                    \
+  V(ffi_fast_buffer_invoke_symbol, "ffi_fast_buffer_invoke_symbol")            \
   V(constructor_key_symbol, "constructor_key_symbol")                          \
   V(handle_onclose_symbol, "handle_onclose")                                   \
   V(no_message_symbol, "no_message_symbol")                                    \
@@ -293,7 +295,6 @@
   V(password_string, "password")                                               \
   V(path_string, "path")                                                       \
   V(pathname_string, "pathname")                                               \
-  V(parameters_string, "parameters")                                           \
   V(pending_handle_string, "pendingHandle")                                    \
   V(permission_string, "permission")                                           \
   V(phase_string, "phase")                                                     \
@@ -329,9 +330,8 @@
   V(require_string, "require")                                                 \
   V(resource_string, "resource")                                               \
   V(result_string, "result")                                                   \
-  V(return_string, "return")                                                   \
-  V(returns_string, "returns")                                                 \
   V(return_arrays_string, "returnArrays")                                      \
+  V(return_string, "return")                                                   \
   V(salt_length_string, "saltLength")                                          \
   V(search_string, "search")                                                   \
   V(servername_string, "servername")                                           \
@@ -363,6 +363,7 @@
   V(target_string, "target")                                                   \
   V(thread_id_string, "threadId")                                              \
   V(thread_name_string, "threadName")                                          \
+  V(tls_group_string, "TLSGroup")                                              \
   V(ticketkeycallback_string, "onticketkeycallback")                           \
   V(timeout_string, "timeout")                                                 \
   V(time_to_first_byte_string, "timeToFirstByte")                              \
@@ -409,6 +410,7 @@
   V(cpu_usage_template, v8::DictionaryTemplate)                                \
   V(crypto_cryptokey_constructor_template, v8::FunctionTemplate)               \
   V(crypto_key_object_handle_constructor, v8::FunctionTemplate)                \
+  V(crypto_key_object_constructor_template, v8::FunctionTemplate)              \
   V(env_proxy_template, v8::ObjectTemplate)                                    \
   V(env_proxy_ctor_template, v8::FunctionTemplate)                             \
   V(ephemeral_key_template, v8::DictionaryTemplate)                            \
@@ -430,6 +432,7 @@
   V(http2ping_constructor_template, v8::ObjectTemplate)                        \
   V(i18n_converter_template, v8::ObjectTemplate)                               \
   V(intervalhistogram_constructor_template, v8::FunctionTemplate)              \
+  V(iterationhistogram_constructor_template, v8::FunctionTemplate)             \
   V(iter_template, v8::DictionaryTemplate)                                     \
   V(js_transferable_constructor_template, v8::FunctionTemplate)                \
   V(libuv_stream_wrap_ctor_template, v8::FunctionTemplate)                     \

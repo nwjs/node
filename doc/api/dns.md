@@ -205,14 +205,12 @@ Returns an array of IP address strings, formatted according to [RFC 5952][],
 that are currently configured for DNS resolution. A string will include a port
 section if a custom port is used.
 
-<!-- eslint-disable @stylistic/js/semi-->
-
-```js
+```json
 [
-  '8.8.8.8',
-  '2001:4860:4860::8888',
-  '8.8.8.8:1053',
-  '[2001:4860:4860::8888]:1053',
+  "8.8.8.8",
+  "2001:4860:4860::8888",
+  "8.8.8.8:1053",
+  "[2001:4860:4860::8888]:1053",
 ]
 ```
 
@@ -485,7 +483,7 @@ changes:
   * `err` {Error}
   * `addresses` {string\[] | Object\[]}
 
-Uses the DNS protocol to resolve a IPv4 addresses (`A` records) for the
+Uses the DNS protocol to resolve an IPv4 addresses (`A` records) for the
 `hostname`. The `addresses` argument passed to the `callback` function
 will contain an array of IPv4 addresses (e.g.
 `['74.125.79.104', '74.125.79.105', '74.125.79.106']`).
@@ -559,8 +557,6 @@ will be present on the object:
 
 Here is an example of the `ret` object passed to the callback:
 
-<!-- eslint-disable @stylistic/js/semi -->
-
 ```js
 [ { type: 'A', address: '127.0.0.1', ttl: 299 },
   { type: 'CNAME', value: 'example.com' },
@@ -574,7 +570,7 @@ Here is an example of the `ret` object passed to the callback:
     refresh: 900,
     retry: 900,
     expire: 1800,
-    minttl: 60 } ]
+    minttl: 60 } ];
 ```
 
 DNS server operators may choose not to respond to `ANY`
@@ -678,17 +674,15 @@ function will contain an array of objects with the following properties:
 * `order`
 * `preference`
 
-<!-- eslint-skip -->
-
 ```js
-{
+({
   flags: 's',
   service: 'SIP+D2U',
   regexp: '',
   replacement: '_sip._udp.example.com',
   order: 30,
-  preference: 100
-}
+  preference: 100,
+});
 ```
 
 ## `dns.resolveNs(hostname, callback)`
@@ -763,18 +757,16 @@ be an object with the following properties:
 * `expire`
 * `minttl`
 
-<!-- eslint-skip -->
-
 ```js
-{
+({
   nsname: 'ns.example.com',
   hostmaster: 'root.example.com',
   serial: 2013101809,
   refresh: 10000,
   retry: 2400,
   expire: 604800,
-  minttl: 3600
-}
+  minttl: 3600,
+});
 ```
 
 ## `dns.resolveSrv(hostname, callback)`
@@ -803,15 +795,13 @@ be an array of objects with the following properties:
 * `port`
 * `name`
 
-<!-- eslint-skip -->
-
 ```js
-{
+({
   priority: 10,
   weight: 5,
   port: 21223,
-  name: 'service.example.com'
-}
+  name: 'service.example.com',
+});
 ```
 
 ## `dns.resolveTlsa(hostname, callback)`
@@ -840,15 +830,13 @@ array of objects with these properties:
 * `match`
 * `data`
 
-<!-- eslint-skip -->
-
 ```js
-{
+({
   certUsage: 3,
   selector: 1,
   match: 1,
-  data: [ArrayBuffer]
-}
+  data: [ArrayBuffer],
+});
 ```
 
 ## `dns.resolveTxt(hostname, callback)`
@@ -1081,14 +1069,12 @@ Returns an array of IP address strings, formatted according to [RFC 5952][],
 that are currently configured for DNS resolution. A string will include a port
 section if a custom port is used.
 
-<!-- eslint-disable @stylistic/js/semi-->
-
-```js
+```json
 [
-  '8.8.8.8',
-  '2001:4860:4860::8888',
-  '8.8.8.8:1053',
-  '[2001:4860:4860::8888]:1053',
+  "8.8.8.8",
+  "2001:4860:4860::8888",
+  "8.8.8.8:1053",
+  "[2001:4860:4860::8888]:1053"
 ]
 ```
 
@@ -1127,8 +1113,7 @@ changes:
     IPv4 addresses are placed before IPv6 addresses.
     This option will be deprecated in favor of `order`. When both are specified,
     `order` has higher precedence. New code should only use `order`.
-    **Default:** currently `false` (addresses are reordered) but this is
-    expected to change in the not too distant future. Default value is
+    **Default:** `true` (addresses are not reordered). Default value is
     configurable using [`dns.setDefaultResultOrder()`][] or
     [`--dns-result-order`][].
 
@@ -1329,8 +1314,6 @@ present on the object:
 
 Here is an example of the result object:
 
-<!-- eslint-disable @stylistic/js/semi -->
-
 ```js
 [ { type: 'A', address: '127.0.0.1', ttl: 299 },
   { type: 'CNAME', value: 'example.com' },
@@ -1344,7 +1327,7 @@ Here is an example of the result object:
     refresh: 900,
     retry: 900,
     expire: 1800,
-    minttl: 60 } ]
+    minttl: 60 } ];
 ```
 
 ### `dnsPromises.resolveCaa(hostname)`
@@ -1407,17 +1390,15 @@ of objects with the following properties:
 * `order`
 * `preference`
 
-<!-- eslint-skip -->
-
 ```js
-{
+({
   flags: 's',
   service: 'SIP+D2U',
   regexp: '',
   replacement: '_sip._udp.example.com',
   order: 30,
-  preference: 100
-}
+  preference: 100,
+});
 ```
 
 ### `dnsPromises.resolveNs(hostname)`
@@ -1465,18 +1446,16 @@ following properties:
 * `expire`
 * `minttl`
 
-<!-- eslint-skip -->
-
 ```js
-{
+({
   nsname: 'ns.example.com',
   hostmaster: 'root.example.com',
   serial: 2013101809,
   refresh: 10000,
   retry: 2400,
   expire: 604800,
-  minttl: 3600
-}
+  minttl: 3600,
+});
 ```
 
 ### `dnsPromises.resolveSrv(hostname)`
@@ -1496,15 +1475,13 @@ the following properties:
 * `port`
 * `name`
 
-<!-- eslint-skip -->
-
 ```js
-{
+({
   priority: 10,
   weight: 5,
   port: 21223,
-  name: 'service.example.com'
-}
+  name: 'service.example.com',
+});
 ```
 
 ### `dnsPromises.resolveTlsa(hostname)`
@@ -1526,15 +1503,13 @@ with these properties:
 * `match`
 * `data`
 
-<!-- eslint-skip -->
-
 ```js
-{
+({
   certUsage: 3,
   selector: 1,
   match: 1,
-  data: [ArrayBuffer]
-}
+  data: [ArrayBuffer],
+});
 ```
 
 ### `dnsPromises.resolveTxt(hostname)`

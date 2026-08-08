@@ -810,7 +810,7 @@ changes:
 Type: Revoked
 
 The [`events.listenerCount(emitter, eventName)`][] API was deprecated, as it
-provided identical fuctionality to [`emitter.listenerCount(eventName)`][]. The
+provided identical functionality to [`emitter.listenerCount(eventName)`][]. The
 deprecation was revoked because this function has been repurposed to also
 accept {EventTarget} arguments.
 
@@ -1680,6 +1680,12 @@ Type: End-of-Life
 The `tls.createSecurePair()` API was deprecated in documentation in Node.js
 0.11.3. Users should use `tls.Socket` instead.
 
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/tls-create-secure-pair-to-tls-socket)):
+
+```bash
+npx codemod @nodejs/tls-create-secure-pair-to-tls-socket
+```
+
 ### DEP0065: `repl.REPL_MODE_MAGIC` and `NODE_REPL_MODE=magic`
 
 <!-- YAML
@@ -2276,6 +2282,12 @@ Type: End-of-Life
 `timers.enroll()` has been removed. Please use the publicly documented
 [`setTimeout()`][] or [`setInterval()`][] instead.
 
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/timers-deprecations)).
+
+```bash
+npx codemod @nodejs/timers-deprecations
+```
+
 ### DEP0096: `timers.unenroll()`
 
 <!-- YAML
@@ -2292,6 +2304,12 @@ Type: End-of-Life
 
 `timers.unenroll()` has been removed. Please use the publicly documented
 [`clearTimeout()`][] or [`clearInterval()`][] instead.
+
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/timers-deprecations)).
+
+```bash
+npx codemod @nodejs/timers-deprecations
+```
 
 ### DEP0097: `MakeCallback` with `domain` property
 
@@ -2482,6 +2500,12 @@ It is recommended to derive a key using
 [`crypto.pbkdf2()`][] or [`crypto.scrypt()`][] with random salts and to use
 [`crypto.createCipheriv()`][] and [`crypto.createDecipheriv()`][] to obtain the
 [`Cipheriv`][] and [`Decipheriv`][] objects respectively.
+
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/crypto-createcipheriv-migration)):
+
+```bash
+npx codemod @nodejs/crypto-createcipheriv-migration
+```
 
 ### DEP0107: `tls.convertNPNProtocols()`
 
@@ -2872,6 +2896,12 @@ Please use the publicly documented [`timeout.refresh()`][] instead.
 If re-referencing the timeout is necessary, [`timeout.ref()`][] can be used
 with no performance impact since Node.js 10.
 
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/timers-deprecations)).
+
+```bash
+npx codemod @nodejs/timers-deprecations
+```
+
 ### DEP0127: `timers._unrefActive()`
 
 <!-- YAML
@@ -2890,6 +2920,12 @@ The previously undocumented and "private" `timers._unrefActive()` has been remov
 Please use the publicly documented [`timeout.refresh()`][] instead.
 If unreferencing the timeout is necessary, [`timeout.unref()`][] can be used
 with no performance impact since Node.js 10.
+
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/timers-deprecations)).
+
+```bash
+npx codemod @nodejs/timers-deprecations
+```
 
 ### DEP0128: modules with an invalid `main` entry and an `index.js` file
 
@@ -3558,6 +3594,12 @@ Type: End-of-Life
 
 This error code was removed due to adding more confusion to
 the errors used for value type validation.
+
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/err-invalid-callback)):
+
+```bash
+npx codemod @nodejs/err-invalid-callback
+```
 
 ### DEP0160: `process.on('multipleResolves', handler)`
 
@@ -4277,6 +4319,12 @@ Type: End-of-Life
 
 The support for priority signaling has been removed following its deprecation in the [RFC 9113][].
 
+An automated migration is available ([source](https://github.com/nodejs/userland-migrations/tree/main/recipes/http2-priority-signaling)):
+
+```bash
+npx codemod@latest @nodejs/http2-priority-signaling
+```
+
 ### DEP0195: Instantiating `node:http` classes without `new`
 
 <!-- YAML
@@ -4544,9 +4592,25 @@ The `module.register()` API provides off-thread async hooks for customizing ES m
 the `module.registerHooks()` API provides similar hooks that are synchronous, in-thread, and
 work for all types of modules.
 Supporting async hooks has proven to be complex, involving worker threads orchestration, and there are issues
-that have proven unresolveable. See [caveats of asynchronous customization hooks][]. Please migrate to
+that have proven unresolvable. See [caveats of asynchronous customization hooks][]. Please migrate to
 `module.registerHooks()` as soon as possible as `module.register()` will be
 removed in a future version of Node.js.
+
+### DEP0206: Calling `digest()` on an already-finalized `Hmac` instance
+
+<!-- YAML
+changes:
+  - version: v26.2.0
+    pr-url: https://github.com/nodejs/node/pull/63121
+    description: Documentation-only deprecation.
+-->
+
+Type: Documentation-only
+
+Calling `hmac.digest()` more than once returns an empty buffer instead of
+throwing an error. This behavior is inconsistent with `hash.digest()` and
+may lead to subtle bugs. Calling `hmac.digest()` on a finalized `Hmac` instance
+will throw an error in a future version.
 
 [DEP0142]: #dep0142-repl_builtinlibs
 [NIST SP 800-38D]: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf

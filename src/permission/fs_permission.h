@@ -18,6 +18,9 @@ class FSPermission final : public PermissionBase {
   void Apply(Environment* env,
              const std::vector<std::string>& allow,
              PermissionScope scope) override;
+  void Drop(Environment* env,
+            PermissionScope scope,
+            const std::string_view& param = "") override;
   bool is_granted(Environment* env,
                   PermissionScope perm,
                   const std::string_view& param) const override;
@@ -48,12 +51,13 @@ class FSPermission final : public PermissionBase {
           children[label] = new Node(path_prefix);
           return children[label];
         }
+        bool child_was_end_node = child->IsEndNode();
 
         // swap prefix
         size_t i = 0;
         size_t prefix_len = path_prefix.length();
         for (; i < child->prefix.length(); ++i) {
-          if (i > prefix_len || path_prefix[i] != child->prefix[i]) {
+          if (i >= prefix_len || path_prefix[i] != child->prefix[i]) {
             std::string parent_prefix = child->prefix.substr(0, i);
             std::string child_prefix = child->prefix.substr(i);
 
@@ -65,7 +69,9 @@ class FSPermission final : public PermissionBase {
             return split_child->CreateChild(path_prefix.substr(i));
           }
         }
-        child->is_leaf = true;
+        if (child_was_end_node) {
+          child->is_leaf = true;
+        }
         return child->CreateChild(path_prefix.substr(i));
       }
 
@@ -139,6 +145,7 @@ class FSPermission final : public PermissionBase {
     RadixTree();
     ~RadixTree();
     void Insert(const std::string& s);
+    void Clear();
     bool Lookup(const std::string_view& s) const { return Lookup(s, false); }
     bool Lookup(const std::string_view& s, bool when_empty_return) const;
 
@@ -148,9 +155,14 @@ class FSPermission final : public PermissionBase {
 
  private:
   void GrantAccess(PermissionScope scope, const std::string& param);
+  void RevokeAccess(PermissionScope scope, const std::string& param);
+  void RebuildTree(PermissionScope scope);
   // fs granted on startup
   RadixTree granted_in_fs_;
   RadixTree granted_out_fs_;
+
+  std::vector<std::string> granted_paths_in_;
+  std::vector<std::string> granted_paths_out_;
 
   bool deny_all_in_ = true;
   bool deny_all_out_ = true;

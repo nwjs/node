@@ -53,8 +53,6 @@ try {
 }
 ```
 
-<!-- eslint-enable no-global-assign -->
-
 When using the lexical ESM `import` keyword, the error can only be
 caught if a handler for `process.on('uncaughtException')` is registered
 _before_ any attempt to load the module is made (using, for instance,
@@ -75,38 +73,48 @@ try {
 
 ## Asymmetric key types
 
-The following table lists the asymmetric key types recognized by the
-[`KeyObject`][] API and the export/import formats supported for each key type.
+The following lists group the asymmetric key types recognized by the
+[`KeyObject`][] API by the complete set of formats supported for importing and
+exporting each type.
 
-| Key Type                           | Description        | OID                     | `'pem'` | `'der'` | `'jwk'` | `'raw-public'` | `'raw-private'` | `'raw-seed'` |
-| ---------------------------------- | ------------------ | ----------------------- | ------- | ------- | ------- | -------------- | --------------- | ------------ |
-| `'dh'`                             | Diffie-Hellman     | 1.2.840.113549.1.3.1    | ✔       | ✔       |         |                |                 |              |
-| `'dsa'`                            | DSA                | 1.2.840.10040.4.1       | ✔       | ✔       |         |                |                 |              |
-| `'ec'`                             | Elliptic curve     | 1.2.840.10045.2.1       | ✔       | ✔       | ✔       | ✔              | ✔               |              |
-| `'ed25519'`                        | Ed25519            | 1.3.101.112             | ✔       | ✔       | ✔       | ✔              | ✔               |              |
-| `'ed448'`                          | Ed448              | 1.3.101.113             | ✔       | ✔       | ✔       | ✔              | ✔               |              |
-| `'ml-dsa-44'`[^openssl35]          | ML-DSA-44          | 2.16.840.1.101.3.4.3.17 | ✔       | ✔       | ✔       | ✔              |                 | ✔            |
-| `'ml-dsa-65'`[^openssl35]          | ML-DSA-65          | 2.16.840.1.101.3.4.3.18 | ✔       | ✔       | ✔       | ✔              |                 | ✔            |
-| `'ml-dsa-87'`[^openssl35]          | ML-DSA-87          | 2.16.840.1.101.3.4.3.19 | ✔       | ✔       | ✔       | ✔              |                 | ✔            |
-| `'ml-kem-512'`[^openssl35]         | ML-KEM-512         | 2.16.840.1.101.3.4.4.1  | ✔       | ✔       | ✔       | ✔              |                 | ✔            |
-| `'ml-kem-768'`[^openssl35]         | ML-KEM-768         | 2.16.840.1.101.3.4.4.2  | ✔       | ✔       | ✔       | ✔              |                 | ✔            |
-| `'ml-kem-1024'`[^openssl35]        | ML-KEM-1024        | 2.16.840.1.101.3.4.4.3  | ✔       | ✔       | ✔       | ✔              |                 | ✔            |
-| `'rsa-pss'`                        | RSA PSS            | 1.2.840.113549.1.1.10   | ✔       | ✔       |         |                |                 |              |
-| `'rsa'`                            | RSA                | 1.2.840.113549.1.1.1    | ✔       | ✔       | ✔       |                |                 |              |
-| `'slh-dsa-sha2-128f'`[^openssl35]  | SLH-DSA-SHA2-128f  | 2.16.840.1.101.3.4.3.21 | ✔       | ✔       | ✔       | ✔              | ✔               |              |
-| `'slh-dsa-sha2-128s'`[^openssl35]  | SLH-DSA-SHA2-128s  | 2.16.840.1.101.3.4.3.20 | ✔       | ✔       | ✔       | ✔              | ✔               |              |
-| `'slh-dsa-sha2-192f'`[^openssl35]  | SLH-DSA-SHA2-192f  | 2.16.840.1.101.3.4.3.23 | ✔       | ✔       | ✔       | ✔              | ✔               |              |
-| `'slh-dsa-sha2-192s'`[^openssl35]  | SLH-DSA-SHA2-192s  | 2.16.840.1.101.3.4.3.22 | ✔       | ✔       | ✔       | ✔              | ✔               |              |
-| `'slh-dsa-sha2-256f'`[^openssl35]  | SLH-DSA-SHA2-256f  | 2.16.840.1.101.3.4.3.25 | ✔       | ✔       | ✔       | ✔              | ✔               |              |
-| `'slh-dsa-sha2-256s'`[^openssl35]  | SLH-DSA-SHA2-256s  | 2.16.840.1.101.3.4.3.24 | ✔       | ✔       | ✔       | ✔              | ✔               |              |
-| `'slh-dsa-shake-128f'`[^openssl35] | SLH-DSA-SHAKE-128f | 2.16.840.1.101.3.4.3.27 | ✔       | ✔       | ✔       | ✔              | ✔               |              |
-| `'slh-dsa-shake-128s'`[^openssl35] | SLH-DSA-SHAKE-128s | 2.16.840.1.101.3.4.3.26 | ✔       | ✔       | ✔       | ✔              | ✔               |              |
-| `'slh-dsa-shake-192f'`[^openssl35] | SLH-DSA-SHAKE-192f | 2.16.840.1.101.3.4.3.29 | ✔       | ✔       | ✔       | ✔              | ✔               |              |
-| `'slh-dsa-shake-192s'`[^openssl35] | SLH-DSA-SHAKE-192s | 2.16.840.1.101.3.4.3.28 | ✔       | ✔       | ✔       | ✔              | ✔               |              |
-| `'slh-dsa-shake-256f'`[^openssl35] | SLH-DSA-SHAKE-256f | 2.16.840.1.101.3.4.3.31 | ✔       | ✔       | ✔       | ✔              | ✔               |              |
-| `'slh-dsa-shake-256s'`[^openssl35] | SLH-DSA-SHAKE-256s | 2.16.840.1.101.3.4.3.30 | ✔       | ✔       | ✔       | ✔              | ✔               |              |
-| `'x25519'`                         | X25519             | 1.3.101.110             | ✔       | ✔       | ✔       | ✔              | ✔               |              |
-| `'x448'`                           | X448               | 1.3.101.111             | ✔       | ✔       | ✔       | ✔              | ✔               |              |
+**Formats:** `'pem'`, `'der'`
+
+* **`'dh'` (Diffie-Hellman)** — OID `1.2.840.113549.1.3.1`
+* **`'dsa'`** — OID `1.2.840.10040.4.1`
+* **`'rsa-pss'`** — OID `1.2.840.113549.1.1.10`
+
+**Formats:** `'pem'`, `'der'`, `'jwk'`
+
+* **`'rsa'`** — OID `1.2.840.113549.1.1.1`
+
+**Formats:** `'pem'`, `'der'`, `'jwk'`, `'raw-public'`, `'raw-private'`
+
+* **`'ec'` (Elliptic curve)** — OID `1.2.840.10045.2.1`
+* **`'ed25519'`** — OID `1.3.101.112`
+* **`'ed448'`** — OID `1.3.101.113`
+* **`'slh-dsa-sha2-128f'`[^openssl35]** — OID `2.16.840.1.101.3.4.3.21`
+* **`'slh-dsa-sha2-128s'`[^openssl35]** — OID `2.16.840.1.101.3.4.3.20`
+* **`'slh-dsa-sha2-192f'`[^openssl35]** — OID `2.16.840.1.101.3.4.3.23`
+* **`'slh-dsa-sha2-192s'`[^openssl35]** — OID `2.16.840.1.101.3.4.3.22`
+* **`'slh-dsa-sha2-256f'`[^openssl35]** — OID `2.16.840.1.101.3.4.3.25`
+* **`'slh-dsa-sha2-256s'`[^openssl35]** — OID `2.16.840.1.101.3.4.3.24`
+* **`'slh-dsa-shake-128f'`[^openssl35]** — OID `2.16.840.1.101.3.4.3.27`
+* **`'slh-dsa-shake-128s'`[^openssl35]** — OID `2.16.840.1.101.3.4.3.26`
+* **`'slh-dsa-shake-192f'`[^openssl35]** — OID `2.16.840.1.101.3.4.3.29`
+* **`'slh-dsa-shake-192s'`[^openssl35]** — OID `2.16.840.1.101.3.4.3.28`
+* **`'slh-dsa-shake-256f'`[^openssl35]** — OID `2.16.840.1.101.3.4.3.31`
+* **`'slh-dsa-shake-256s'`[^openssl35]** — OID `2.16.840.1.101.3.4.3.30`
+* **`'x25519'`** — OID `1.3.101.110`
+* **`'x448'`** — OID `1.3.101.111`
+
+**Formats:** `'pem'`, `'der'`, `'jwk'`, `'raw-public'`, `'raw-seed'`
+
+* **`'ml-dsa-44'`[^openssl35]** — OID `2.16.840.1.101.3.4.3.17`
+* **`'ml-dsa-65'`[^openssl35]** — OID `2.16.840.1.101.3.4.3.18`
+* **`'ml-dsa-87'`[^openssl35]** — OID `2.16.840.1.101.3.4.3.19`
+* **`'ml-kem-512'`[^openssl35]** — OID `2.16.840.1.101.3.4.4.1`
+* **`'ml-kem-768'`[^openssl35]** — OID `2.16.840.1.101.3.4.4.2`
+* **`'ml-kem-1024'`[^openssl35]** — OID `2.16.840.1.101.3.4.4.3`
 
 ### Key formats
 
@@ -840,6 +848,9 @@ added: v0.1.94
   If `outputEncoding` is specified, a string is
   returned. If an `outputEncoding` is not provided, a [`Buffer`][] is returned.
 
+If an output encoding was specified in a previous call to
+[`cipher.update()`][], `outputEncoding` must use the same encoding.
+
 Once the `cipher.final()` method has been called, the `Cipheriv` object can no
 longer be used to encrypt data. Attempts to call `cipher.final()` more than
 once will result in an error being thrown.
@@ -932,6 +943,8 @@ The `outputEncoding` specifies the output format of the enciphered
 data. If the `outputEncoding`
 is specified, a string using the specified encoding is returned. If no
 `outputEncoding` is provided, a [`Buffer`][] is returned.
+When `outputEncoding` is specified, it must use the same encoding as previous
+calls to `cipher.update()`.
 
 The `cipher.update()` method can be called multiple times with new data until
 [`cipher.final()`][] is called. Calling `cipher.update()` after
@@ -1150,6 +1163,9 @@ added: v0.1.94
   If `outputEncoding` is specified, a string is
   returned. If an `outputEncoding` is not provided, a [`Buffer`][] is returned.
 
+If an output encoding was specified in a previous call to
+[`decipher.update()`][], `outputEncoding` must use the same encoding.
+
 Once the `decipher.final()` method has been called, the `Decipheriv` object can
 no longer be used to decrypt data. Attempts to call `decipher.final()` more
 than once will result in an error being thrown.
@@ -1282,6 +1298,8 @@ The `outputEncoding` specifies the output format of the enciphered
 data. If the `outputEncoding`
 is specified, a string using the specified encoding is returned. If no
 `outputEncoding` is provided, a [`Buffer`][] is returned.
+When `outputEncoding` is specified, it must use the same encoding as previous
+calls to `decipher.update()`.
 
 The `decipher.update()` method can be called multiple times with new data until
 [`decipher.final()`][] is called. Calling `decipher.update()` after
@@ -2645,7 +2663,7 @@ changes:
 
 <!--lint disable maximum-line-length remark-lint-->
 
-* `privateKey` {Object|string|ArrayBuffer|Buffer|TypedArray|DataView|KeyObject|CryptoKey}
+* `privateKey` {Object|string|ArrayBuffer|Buffer|TypedArray|DataView|KeyObject|CryptoKey|URL}
   * `dsaEncoding` {string}
   * `padding` {integer}
   * `saltLength` {integer}
@@ -2658,8 +2676,10 @@ Calculates the signature on all the data passed through using either
 [`sign.update()`][] or [`sign.write()`][stream-writable-write].
 
 If `privateKey` is not a [`KeyObject`][], this function behaves as if
-`privateKey` had been passed to [`crypto.createPrivateKey()`][]. If it is an
-object, the following additional properties can be passed:
+`privateKey` had been passed to [`crypto.createPrivateKey()`][]. When
+`privateKey` is a string, `ArrayBuffer`, [`Buffer`][], `TypedArray`, or
+`DataView`, it must contain PEM-encoded key material. If it is an object, the
+following additional properties can be passed:
 
 * `dsaEncoding` {string} For DSA and ECDSA, this option specifies the
   format of the generated signature. It can be one of the following:
@@ -2789,8 +2809,10 @@ changes:
 Verifies the provided data using the given `key` and `signature`.
 
 If `key` is not a [`KeyObject`][], this function behaves as if
-`key` had been passed to [`crypto.createPublicKey()`][]. If it is an
-object, the following additional properties can be passed:
+`key` had been passed to [`crypto.createPublicKey()`][]. When `key` is a string,
+`ArrayBuffer`, [`Buffer`][], `TypedArray`, or `DataView`, it must contain
+PEM-encoded key material. If it is an object, the following additional
+properties can be passed:
 
 * `dsaEncoding` {string} For DSA and ECDSA, this option specifies the
   format of the signature. It can be one of the following:
@@ -3310,8 +3332,6 @@ Does not perform any other validation checks on the certificate.
 added: v24.7.0
 -->
 
-> Stability: 1.2 - Release candidate
-
 * `algorithm` {string} Variant of Argon2, one of `"argon2d"`, `"argon2i"` or `"argon2id"`.
 * `parameters` {Object}
   * `message` {string|ArrayBuffer|Buffer|TypedArray|DataView} REQUIRED, this is the password for password
@@ -3395,8 +3415,6 @@ argon2('argon2id', parameters, (err, derivedKey) => {
 <!-- YAML
 added: v24.7.0
 -->
-
-> Stability: 1.2 - Release candidate
 
 * `algorithm` {string} Variant of Argon2, one of `"argon2d"`, `"argon2i"` or `"argon2id"`.
 * `parameters` {Object}
@@ -3775,6 +3793,8 @@ using the given `algorithm`. Optional `options` argument controls stream
 behavior. For XOF hash functions such as `'shake256'`, the `outputLength` option
 can be used to specify the desired output length in bytes.
 
+When the data is small (< 5MB) and readily available, [`crypto.hash()`][] is usually faster.
+
 The `algorithm` is dependent on the available algorithms supported by the
 version of OpenSSL on the platform. Examples are `'sha256'`, `'sha512'`, etc.
 On recent releases of OpenSSL, `openssl list -digest-algorithms` will
@@ -3932,6 +3952,13 @@ input.on('readable', () => {
 <!-- YAML
 added: v11.6.0
 changes:
+  - version: v26.7.0
+    pr-url: https://github.com/nodejs/node/pull/63949
+    description: The key can also be a URL referencing an object for an
+                 OpenSSL STORE loader. The `properties` option was added.
+  - version: v26.7.0
+    pr-url: https://github.com/nodejs/node/pull/63188
+    description: Passing a CryptoKey as `key` is no longer supported.
   - version: v26.1.0
     pr-url: https://github.com/nodejs/node/pull/62706
     description: Added JWK format support for ML-KEM and SLH-DSA
@@ -3957,14 +3984,19 @@ changes:
 
 <!--lint disable maximum-line-length remark-lint-->
 
-* `key` {Object|string|ArrayBuffer|Buffer|TypedArray|DataView}
-  * `key` {string|ArrayBuffer|Buffer|TypedArray|DataView|Object} The key
-    material, either in PEM, DER, JWK, or raw format.
+* `key` {Object|string|ArrayBuffer|Buffer|TypedArray|DataView|URL}
+  * `key` {string|ArrayBuffer|Buffer|TypedArray|DataView|Object|URL} The key
+    material, either in PEM, DER, JWK, or raw format, or a {URL} referencing an
+    object for an OpenSSL STORE loader.
   * `format` {string} Must be `'pem'`, `'der'`, `'jwk'`, `'raw-private'`,
     or `'raw-seed'`. **Default:** `'pem'`.
   * `type` {string} Must be `'pkcs1'`, `'pkcs8'` or `'sec1'`. This option is
     required only if the `format` is `'der'` and ignored otherwise.
-  * `passphrase` {string | Buffer} The passphrase to use for decryption.
+  * `passphrase` {string | Buffer} The passphrase to use for decryption. When
+    `key` is a {URL}, this is the optional PIN/passphrase forwarded to the
+    STORE loader.
+  * `properties` {string} The optional OpenSSL property query used when
+    fetching the STORE loader for a {URL} key.
   * `encoding` {string} The string encoding to use when `key` is a string.
   * `asymmetricKeyType` {string} Required when `format` is `'raw-private'`
     or `'raw-seed'` and ignored otherwise.
@@ -3981,6 +4013,46 @@ must be an object with the properties described above.
 
 If the private key is encrypted, a `passphrase` must be specified. The length
 of the passphrase is limited to 1024 bytes.
+
+#### Private keys from OpenSSL STORE loaders
+
+> Stability: 1.1 - Active development
+
+If `key` is a {URL} (or an object whose `key` is a {URL}), the private key is
+loaded through an OpenSSL STORE loader. The URL is passed to OpenSSL as a URI,
+for example a `file:` URI or a provider-backed scheme such as `pkcs11:`. When
+the [Permission Model][] is enabled, [`--allow-openssl-store`][] is required.
+
+> **Warning**: A URI scheme does not pin an OpenSSL STORE loader or prove where
+> the returned key came from. Node.js forwards the URI to OpenSSL, which chooses
+> loaders according to its version and configuration. For example, OpenSSL may
+> offer an opaque URI such as `pkcs11:object=...` (one without `//` after the
+> scheme) to its `file` loader before trying the `pkcs11` loader. If the complete
+> URI is a valid local path and that file exists, it may be loaded instead.
+> Node.js does not verify which loader supplied the key. Do not rely on a
+> provider-specific URI scheme as proof that a key came from that provider or
+> from a hardware device.
+
+Configured OpenSSL STORE loaders have broad authority and may access files,
+devices, tokens, or the network. Access performed by a loader is not constrained
+by the `fs.read`, `fs.write`, or `net` permission scopes.
+
+When a {URL} is used, `format`, `type`, `asymmetricKeyType`, and `namedCurve`
+are ignored even when those options would otherwise depend on each other, such
+as `type` with `format: 'der'` or `namedCurve` with
+`asymmetricKeyType: 'ec'`. The input is passed to the STORE loader as a URI,
+not handled as PEM, DER, JWK, or raw key material. `passphrase` is still used as
+the optional PIN/passphrase passed to the loader, and `encoding` applies if that
+`passphrase` is a string.
+
+Use `passphrase` instead of embedding credentials in the URI passed to the
+STORE loader. Node.js redacts the URI from its own permission-denial resource
+and diagnostics. Errors reported by OpenSSL or a provider after loading begins
+may include the URI.
+
+When `properties` is specified with a {URL} key, it is passed to OpenSSL as the
+property query for selecting the STORE loader. It is not appended to the URL and
+is distinct from provider-specific URI parameters.
 
 ### `crypto.createPublicKey(key)`
 
@@ -4049,6 +4121,10 @@ returned `KeyObject` will be `'public'` and that the private key cannot be
 extracted from the returned `KeyObject`. Similarly, if a `KeyObject` with type
 `'private'` is given, a new `KeyObject` with type `'public'` will be returned
 and it will be impossible to extract the private key from the returned object.
+
+A store-backed private key can be used as a public key by first loading it with
+[`crypto.createPrivateKey()`][]; a {URL} cannot be passed to
+`crypto.createPublicKey()` directly.
 
 ### `crypto.createSecretKey(key[, encoding])`
 
@@ -4121,9 +4197,7 @@ algorithm names.
 added: v24.7.0
 -->
 
-> Stability: 1.2 - Release candidate
-
-* `key` {Object|string|ArrayBuffer|Buffer|TypedArray|DataView|KeyObject} Private Key
+* `key` {Object|string|ArrayBuffer|Buffer|TypedArray|DataView|KeyObject|URL} Private Key
 * `ciphertext` {ArrayBuffer|Buffer|TypedArray|DataView}
 * `callback` {Function}
   * `err` {Error}
@@ -4165,7 +4239,7 @@ changes:
 -->
 
 * `options` {Object}
-  * `privateKey` {Object|string|ArrayBuffer|Buffer|TypedArray|DataView|KeyObject}
+  * `privateKey` {Object|string|ArrayBuffer|Buffer|TypedArray|DataView|KeyObject|URL}
   * `publicKey` {Object|string|ArrayBuffer|Buffer|TypedArray|DataView|KeyObject}
 * `callback` {Function}
   * `err` {Error}
@@ -4189,8 +4263,6 @@ If the `callback` function is provided this function uses libuv's threadpool.
 <!-- YAML
 added: v24.7.0
 -->
-
-> Stability: 1.2 - Release candidate
 
 * `key` {Object|string|ArrayBuffer|Buffer|TypedArray|DataView|KeyObject} Public Key
 * `callback` {Function}
@@ -4979,7 +5051,7 @@ HKDF is a simple key derivation function defined in RFC 5869. The given `ikm`,
 `salt` and `info` are used with the `digest` to derive a key of `keylen` bytes.
 
 The supplied `callback` function is called with two arguments: `err` and
-`derivedKey`. If an errors occurs while deriving the key, `err` will be set;
+`derivedKey`. If an error occurs while deriving the key, `err` will be set;
 otherwise `err` will be `null`. The successfully generated `derivedKey` will
 be passed to the callback as an {ArrayBuffer}. An error will be thrown if any
 of the input arguments specify invalid values or types.
@@ -5248,7 +5320,7 @@ changes:
 
 <!--lint disable maximum-line-length remark-lint-->
 
-* `privateKey` {Object|string|ArrayBuffer|Buffer|TypedArray|DataView|KeyObject|CryptoKey}
+* `privateKey` {Object|string|ArrayBuffer|Buffer|TypedArray|DataView|KeyObject|CryptoKey|URL}
   * `oaepHash` {string} The hash function to use for OAEP padding and MGF1.
     **Default:** `'sha1'`
   * `oaepLabel` {string|ArrayBuffer|Buffer|TypedArray|DataView} The label to
@@ -5293,9 +5365,10 @@ changes:
 
 <!--lint disable maximum-line-length remark-lint-->
 
-* `privateKey` {Object|string|ArrayBuffer|Buffer|TypedArray|DataView|KeyObject|CryptoKey}
-  * `key` {string|ArrayBuffer|Buffer|TypedArray|DataView|KeyObject|CryptoKey}
-    A PEM encoded private key.
+* `privateKey` {Object|string|ArrayBuffer|Buffer|TypedArray|DataView|KeyObject|CryptoKey|URL}
+  * `key` {string|ArrayBuffer|Buffer|TypedArray|DataView|KeyObject|CryptoKey|URL}
+    The private key material, a {KeyObject}, or a {URL} referencing an object
+    for an OpenSSL STORE loader.
   * `passphrase` {string|ArrayBuffer|Buffer|TypedArray|DataView} An optional
     passphrase for the private key.
   * `padding` {crypto.constants} An optional padding value defined in
@@ -6134,8 +6207,8 @@ changes:
 <!--lint disable maximum-line-length remark-lint-->
 
 * `algorithm` {string | null | undefined}
-* `data` {ArrayBuffer|Buffer|TypedArray|DataView}
-* `key` {Object|string|ArrayBuffer|Buffer|TypedArray|DataView|KeyObject|CryptoKey}
+* `data` {ArrayBuffer|Buffer|SharedArrayBuffer|TypedArray|DataView|string}
+* `key` {Object|string|ArrayBuffer|Buffer|TypedArray|DataView|KeyObject|CryptoKey|URL}
 * `callback` {Function}
   * `err` {Error}
   * `signature` {Buffer}
@@ -6151,8 +6224,10 @@ dependent upon the key type.
 ML-DSA.
 
 If `key` is not a [`KeyObject`][], this function behaves as if `key` had been
-passed to [`crypto.createPrivateKey()`][]. If it is an object, the following
-additional properties can be passed:
+passed to [`crypto.createPrivateKey()`][]. When `key` is a string, `ArrayBuffer`,
+[`Buffer`][], `TypedArray`, or `DataView`, it must contain PEM-encoded key
+material. If it is an object, the following additional properties can be
+passed:
 
 * `dsaEncoding` {string} For DSA and ECDSA, this option specifies the
   format of the generated signature. It can be one of the following:
@@ -6266,9 +6341,9 @@ changes:
 <!--lint disable maximum-line-length remark-lint-->
 
 * `algorithm` {string|null|undefined}
-* `data` {ArrayBuffer| Buffer|TypedArray|DataView}
+* `data` {ArrayBuffer|Buffer|SharedArrayBuffer|TypedArray|DataView|string}
 * `key` {Object|string|ArrayBuffer|Buffer|TypedArray|DataView|KeyObject|CryptoKey}
-* `signature` {ArrayBuffer|Buffer|TypedArray|DataView}
+* `signature` {ArrayBuffer|Buffer|SharedArrayBuffer|TypedArray|DataView}
 * `callback` {Function}
   * `err` {Error}
   * `result` {boolean}
@@ -6286,8 +6361,10 @@ key type.
 ML-DSA.
 
 If `key` is not a [`KeyObject`][], this function behaves as if `key` had been
-passed to [`crypto.createPublicKey()`][]. If it is an object, the following
-additional properties can be passed:
+passed to [`crypto.createPublicKey()`][]. When `key` is a string, `ArrayBuffer`,
+[`Buffer`][], `TypedArray`, or `DataView`, it must contain PEM-encoded key
+material. If it is an object, the following additional properties can be
+passed:
 
 * `dsaEncoding` {string} For DSA and ECDSA, this option specifies the
   format of the signature. It can be one of the following:
@@ -6659,7 +6736,7 @@ See the [list of SSL OP Flags][] for details.
   </tr>
   <tr>
     <td><code>SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS</code></td>
-    <td>Instructs OpenSSL to disable a SSL 3.0/TLS 1.0 vulnerability
+    <td>Instructs OpenSSL to disable an SSL 3.0/TLS 1.0 vulnerability
     workaround added in OpenSSL 0.9.6d.</td>
   </tr>
   <tr>
@@ -6897,6 +6974,7 @@ See the [list of SSL OP Flags][] for details.
 [NIST SP 800-38D]: https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf
 [OpenSSL's FIPS README file]: https://github.com/openssl/openssl/blob/openssl-3.0/README-FIPS.md
 [OpenSSL's SPKAC implementation]: https://www.openssl.org/docs/man3.0/man1/openssl-spkac.html
+[Permission Model]: permissions.md#permission-model
 [RFC 1421]: https://www.rfc-editor.org/rfc/rfc1421.txt
 [RFC 2409]: https://www.rfc-editor.org/rfc/rfc2409.txt
 [RFC 2818]: https://www.rfc-editor.org/rfc/rfc2818.txt
@@ -6910,6 +6988,7 @@ See the [list of SSL OP Flags][] for details.
 [RFC 8032]: https://www.rfc-editor.org/rfc/rfc8032.txt
 [RFC 9562]: https://www.rfc-editor.org/rfc/rfc9562.txt
 [Web Crypto API documentation]: webcrypto.md
+[`--allow-openssl-store`]: cli.md#--allow-openssl-store
 [`BN_is_prime_ex`]: https://www.openssl.org/docs/man1.1.1/man3/BN_is_prime_ex.html
 [`Buffer`]: buffer.md
 [`DH_generate_key()`]: https://www.openssl.org/docs/man3.0/man3/DH_generate_key.html
@@ -6937,6 +7016,7 @@ See the [list of SSL OP Flags][] for details.
 [`crypto.getCurves()`]: #cryptogetcurves
 [`crypto.getDiffieHellman()`]: #cryptogetdiffiehellmangroupname
 [`crypto.getHashes()`]: #cryptogethashes
+[`crypto.hash()`]: #cryptohashalgorithm-data-options
 [`crypto.privateDecrypt()`]: #cryptoprivatedecryptprivatekey-buffer
 [`crypto.privateEncrypt()`]: #cryptoprivateencryptprivatekey-buffer
 [`crypto.publicDecrypt()`]: #cryptopublicdecryptkey-buffer

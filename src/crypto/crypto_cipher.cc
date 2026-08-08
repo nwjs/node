@@ -93,6 +93,11 @@ void GetCipherInfo(const FunctionCallbackInfo<Value>& args) {
     // If it is, then the getCipherInfo will succeed with the given
     // values.
     auto ctx = CipherCtxPointer::New();
+    if (!ctx) {
+      return THROW_ERR_CRYPTO_OPERATION_FAILED(
+          env, "Failed to allocate cipher context");
+    }
+
     if (!ctx.init(cipher, true)) {
       return;
     }
@@ -338,7 +343,10 @@ void CipherBase::CommonInit(const char* cipher_type,
   MarkPopErrorOnReturn mark_pop_error_on_return;
   CHECK(!ctx_);
   ctx_ = CipherCtxPointer::New();
-  CHECK(ctx_);
+  if (!ctx_) {
+    return THROW_ERR_CRYPTO_OPERATION_FAILED(
+        env(), "Failed to allocate cipher context");
+  }
 
   if (cipher.isWrapMode()) {
     ctx_.setAllowWrap();
@@ -711,7 +719,7 @@ bool CipherBase::Final(std::unique_ptr<BackingStore>* out) {
       static_cast<size_t>(ctx_.getBlockSize()),
       BackingStoreInitializationMode::kUninitialized);
 
-#if (OPENSSL_VERSION_NUMBER < 0x30000000L)
+#if !OPENSSL_VERSION_PREREQ(3, 0)
   // OpenSSL v1.x doesn't verify the presence of the auth tag so do
   // it ourselves, see https://github.com/nodejs/node/issues/45874.
   if (kind_ == kDecipher && ctx_.isChaCha20Poly1305() &&
@@ -829,7 +837,11 @@ void PublicKeyCipher::Cipher(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
 
   unsigned int offset = 0;
-  auto data = KeyObjectData::GetPublicOrPrivateKeyFromJs(args, &offset);
+  // TODO(panva): Use GetPrivateKeyFromJs() for private operations, then
+  // remove allow_private_key_store and URL handling from
+  // GetPublicOrPrivateKeyFromJs().
+  auto data = KeyObjectData::GetPublicOrPrivateKeyFromJs(
+      args, &offset, operation == PublicKeyCipher::kPrivate);
   if (!data) return;
   const auto& pkey = data.GetAsymmetricKey();
   if (!pkey) return;

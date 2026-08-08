@@ -257,6 +257,8 @@ class NODE_EXTERN_PRIVATE IsolateData : public MemoryRetainer {
 
 struct ContextInfo {
   explicit ContextInfo(const std::string& name) : name(name) {}
+  ContextInfo(const std::string& name, const std::string& origin)
+      : name(name), origin(origin) {}
   const std::string name;
   std::string origin;
   bool is_default = false;
@@ -1035,6 +1037,7 @@ class Environment final : public MemoryRetainer {
 
   void RunAndClearNativeImmediates(bool only_refed = false);
   void RunAndClearInterrupts();
+  bool HasNativeImmediates() const;
 
   uv_buf_t allocate_managed_buffer(const size_t suggested_size);
   std::unique_ptr<v8::BackingStore> release_managed_buffer(const uv_buf_t& buf);

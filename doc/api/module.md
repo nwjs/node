@@ -243,6 +243,7 @@ changes:
   * `deregister()` {Function} Remove the registered hooks so that they are no
     longer called. Hooks are otherwise retained for the lifetime of the running
     process.
+  * `[Symbol.dispose]` {Function} The same as `deregister`.
 
 Register [hooks][] that customize Node.js module resolution and loading behavior.
 See [Customization hooks][]. The returned object can be used to
@@ -364,7 +365,7 @@ changes:
 
 The module compile cache can be enabled either using the [`module.enableCompileCache()`][]
 method or the [`NODE_COMPILE_CACHE=dir`][] environment variable. After it is enabled,
-whenever Node.js compiles a CommonJS, a ECMAScript Module, or a TypeScript module, it will
+whenever Node.js compiles a CommonJS, an ECMAScript Module, or a TypeScript module, it will
 use on-disk [V8 code cache][] persisted in the specified directory to speed up the compilation.
 This may slow down the first load of a module graph, but subsequent loads of the same module
 graph may get a significant speedup if the contents of the modules do not change.
@@ -528,7 +529,7 @@ For general use cases, it's recommended to call `module.enableCompileCache()` wi
 specifying the `options.directory`, so that the directory can be overridden by the
 `NODE_COMPILE_CACHE` environment variable when necessary.
 
-Since compile cache is supposed to be a optimization that is not mission critical, this
+Since compile cache is supposed to be an optimization that is not mission critical, this
 method is designed to not throw any exception when the compile cache cannot be enabled.
 Instead, it will return an object containing an error message in the `message` field to
 aid debugging. If compile cache is enabled successfully, the `directory` field in the
@@ -1010,7 +1011,7 @@ function load(url, context, nextLoad) {
   };
 }
 
-registerHooks({ resolve });
+registerHooks({ load });
 ```
 
 In a more advanced scenario, this can also be used to transform an unsupported
@@ -1118,8 +1119,6 @@ export async function load(url, context, nextLoad) {
 Unlike synchronous hooks, the asynchronous hooks would not run for these modules loaded in the file
 that calls `register()`:
 
-<!-- eslint-disable no-restricted-globals -->
-
 ```mjs
 // register-hooks.js
 import { register, createRequire } from 'node:module';
@@ -1127,11 +1126,9 @@ register('./hooks.mjs', import.meta.url);
 
 // Asynchronous hooks does not affect modules loaded via custom require()
 // functions created by module.createRequire().
-const userRequire = createRequire(__filename);
+const userRequire = createRequire(import.meta.filename);
 userRequire('./my-app-2.cjs');  // Hooks won't affect this
 ```
-
-<!-- eslint-enable no-restricted-globals -->
 
 ```cjs
 // register-hooks.js

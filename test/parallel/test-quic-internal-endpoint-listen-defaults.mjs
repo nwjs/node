@@ -1,5 +1,5 @@
 // Flags: --expose-internals --experimental-quic --no-warnings
-import { hasQuic, skip } from '../common/index.mjs';
+import { hasQuic, skip, mustNotCall } from '../common/index.mjs';
 
 import assert from 'node:assert';
 import * as fixtures from '../common/fixtures.mjs';
@@ -32,15 +32,15 @@ await assert.rejects(listen(123, { sni, endpoint }), {
 // Buffer is not detached.
 assert.strictEqual(cert.buffer.detached, false);
 
-await assert.rejects(listen(() => {}, 123), {
+await assert.rejects(listen(mustNotCall(), 123), {
   code: 'ERR_INVALID_ARG_TYPE',
 });
 
-await listen(() => {}, { sni, endpoint });
+await listen(mustNotCall(), { sni, endpoint });
 // Buffer is not detached.
 assert.strictEqual(cert.buffer.detached, false);
 
-await assert.rejects(listen(() => {}, { sni, endpoint }), {
+await assert.rejects(listen(mustNotCall(), { sni, endpoint }), {
   code: 'ERR_INVALID_STATE',
 });
 // Buffer is not detached.
@@ -64,7 +64,7 @@ assert.strictEqual(endpoint.closed, endpoint.close());
 await endpoint.closed;
 assert.ok(endpoint.destroyed);
 
-await assert.rejects(listen(() => {}, { sni, endpoint }), {
+await assert.rejects(listen(mustNotCall(), { sni, endpoint }), {
   code: 'ERR_INVALID_STATE',
 });
 // Buffer is not detached.

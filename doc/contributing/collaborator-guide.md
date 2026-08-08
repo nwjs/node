@@ -132,6 +132,9 @@ Pay special attention to pull requests for dependencies which have not
 been automatically generated and follow the guidance in
 [Maintaining Dependencies](https://github.com/nodejs/node/blob/main/doc/contributing/maintaining/maintaining-dependencies.md#updating-dependencies).
 
+Pull requests that exceed 5000 lines of changes have additional requirements.
+See the [large pull requests][] guide.
+
 In some cases, it might be necessary to summon a GitHub team to a pull request
 for review by @-mention.
 See [Who to CC in the issue tracker](#who-to-cc-in-the-issue-tracker).
@@ -293,7 +296,7 @@ label to the pull request.
 
 * [`node-stress-single-test`](https://ci.nodejs.org/job/node-stress-single-test/)
   can run a group of tests over and over on a specific platform. Use it to check
-  that the tests are reliable.
+  that the tests are reliable (i.e. not flaky).
 
 * [`node-test-commit-v8-linux`](https://ci.nodejs.org/job/node-test-commit-v8-linux/)
   runs the standard V8 tests. Run it when updating V8 in Node.js or floating new
@@ -440,10 +443,12 @@ metadata. Raise a pull request like any other change.
 
 Treat commits that introduce new core modules with extra care.
 
-New modules must only be added with the `node:` prefix.
+New modules must only be added with the `node:` prefix, as `semver-minor`.
 
-When adding promises to an existing API, add `/promises`
-(`inspector/promises`, etc.). Apply the `semver-major` label to the addition.
+When adding a "sub-module", e.g. a promise variant of an existing API (e.g.
+`node:inspector/promises`) that is available without the `node:` prefix, making
+the sub-module available without the prefix is possible behind a runtime flag,
+or as a `semver-major` change.
 
 If the new module name is free in npm, register
 a placeholder in the module registry as soon as possible. Link to the pull
@@ -1068,6 +1073,7 @@ need to be attached anymore, as only important bugfixes will be included.
 [git-node]: https://github.com/nodejs/node-core-utils/blob/HEAD/docs/git-node.md
 [git-node-metadata]: https://github.com/nodejs/node-core-utils/blob/HEAD/docs/git-node.md#git-node-metadata
 [git-username]: https://help.github.com/articles/setting-your-username-in-git/
+[large pull requests]: large-pull-requests.md
 [macos]: https://github.com/orgs/nodejs/teams/platform-macos
 [node-core-utils-credentials]: https://github.com/nodejs/node-core-utils#setting-up-credentials
 [node-core-utils-issues]: https://github.com/nodejs/node-core-utils/issues

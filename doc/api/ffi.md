@@ -30,15 +30,17 @@ const ffi = require('node:ffi');
 This module is only available under the `node:` scheme in builds with FFI
 support and is gated by the `--experimental-ffi` flag.
 
-Bundled libffi support currently targets:
+Building Node.js with `node:ffi` support is available via the bundled `libffi` on
+platforms where `libffi` provides a compatible static backend, or via a
+shared `libffi` using the `--shared-ffi` configure flag.
+The unofficial GN build does not support `node:ffi`.
 
-* macOS on `arm64` and `x64`
-* Windows on `arm64` and `x64`
-* FreeBSD on `arm`, `arm64`, and `x64`
-* Linux on `arm`, `arm64`, and `x64`
+The following targets are not supported by bundled libffi:
 
-Other targets require building Node.js against a shared libffi with
-`--shared-ffi`. The unofficial GN build does not support `node:ffi`.
+* `s390x`.
+* `mips`, `mipsel`, and `mips64el` on targets other than FreeBSD, Linux, and
+  OpenBSD.
+* `ppc64` on Android, CloudABI, iOS, OpenHarmony, OS/400, Solaris, and Windows.
 
 When using the [Permission Model][], FFI APIs are
 restricted unless the [`--allow-ffi`][] flag is provided.
@@ -60,16 +62,17 @@ FFI signatures use string type names.
 Supported type names:
 
 * `void`
+* `char`
 * `i8`, `int8`
-* `u8`, `uint8`, `bool`, `char`
+* `u8`, `uint8`, `bool`
 * `i16`, `int16`
 * `u16`, `uint16`
 * `i32`, `int32`
 * `u32`, `uint32`
 * `i64`, `int64`
 * `u64`, `uint64`
-* `f32`, `float`
-* `f64`, `double`
+* `f32`, `float`, `float32`
+* `f64`, `double`, `float64`
 * `pointer`, `ptr`
 * `string`, `str`
 * `buffer`
@@ -118,22 +121,35 @@ is signed it behaves like `i8`; otherwise it behaves like `u8`.
 The `bool` type is marshaled as an 8-bit unsigned integer. Pass numeric values
 such as `0` and `1`; JavaScript `true` and `false` are not accepted.
 
+On optimized Fast FFI calls, `pointer`, `ptr`, and `function` parameters accept
+raw pointer `bigint` values. For pointer-like parameters, `null`, `undefined`,
+strings, `Buffer`, typed array, `DataView`, and `ArrayBuffer` values are
+converted on the JavaScript side before calling the optimized native wrapper.
+
+Optimized Fast FFI calls support at most 8 function arguments, but the exact
+limit depends on the architecture and on the argument types, because each
+argument must fit in the registers used by the platform trampoline. Integer
+and pointer arguments are limited to 7 on AArch64 and to 6 on x86-64, while
+floating-point arguments can use up to 8 on both. Functions that exceed these
+limits, including any function with more than 8 arguments, use the generic FFI
+call path instead.
+
 ## Signature objects
 
 Functions and callbacks are described with signature objects.
 
-Supported fields:
+Signature objects may contain the following properties, both of which are
+optional:
 
-* `result`, `return`, or `returns` for the return type.
-* `parameters` or `arguments` for the parameter type list.
+* `return` {string} A [type name][type names] specifying the return type of the
+  function or callback. **Default:** `'void'`.
+* `arguments` {string\[]} An array of [type names][] specifying the argument
+  type list of the function or callback. **Default:** `[]`.
 
-Only one return-type field and one parameter-list field may be present in a
-single signature object.
-
-```cjs
+```js
 const signature = {
-  result: 'i32',
-  parameters: ['i32', 'i32'],
+  return: 'i32',
+  arguments: ['i32', 'i32'],
 };
 ```
 
@@ -187,33 +203,33 @@ so it can be used with the [`using`][] declaration. Disposing the returned
 object closes the library handle.
 
 ```mjs
-import { dlopen } from 'node:ffi';
+import { dlopen, suffix } from 'node:ffi';
 
 {
-  using handle = dlopen('./mylib.so', {
-    add_i32: { parameters: ['i32', 'i32'], result: 'i32' },
+  using handle = dlopen(`./mylib.${suffix}`, {
+    add_i32: { arguments: ['i32', 'i32'], return: 'i32' },
   });
   console.log(handle.functions.add_i32(20, 22));
 } // handle.lib.close() is invoked automatically here.
 ```
 
 ```mjs
-import { dlopen } from 'node:ffi';
+import { dlopen, suffix } from 'node:ffi';
 
-const { lib, functions } = dlopen('./mylib.so', {
-  add_i32: { parameters: ['i32', 'i32'], result: 'i32' },
-  string_length: { parameters: ['pointer'], result: 'u64' },
+const { lib, functions } = dlopen(`./mylib.${suffix}`, {
+  add_i32: { arguments: ['i32', 'i32'], return: 'i32' },
+  string_length: { arguments: ['pointer'], return: 'u64' },
 });
 
 console.log(functions.add_i32(20, 22));
 ```
 
 ```cjs
-const { dlopen } = require('node:ffi');
+const { dlopen, suffix } = require('node:ffi');
 
-const { lib, functions } = dlopen('./mylib.so', {
-  add_i32: { parameters: ['i32', 'i32'], result: 'i32' },
-  string_length: { parameters: ['pointer'], result: 'u64' },
+const { lib, functions } = dlopen(`./mylib.${suffix}`, {
+  add_i32: { arguments: ['i32', 'i32'], return: 'i32' },
+  string_length: { arguments: ['pointer'], return: 'u64' },
 });
 
 console.log(functions.add_i32(20, 22));
@@ -263,9 +279,9 @@ Loads the dynamic library without resolving any functions eagerly.
 On Windows passing `null` is not supported.
 
 ```cjs
-const { DynamicLibrary } = require('node:ffi');
+const { DynamicLibrary, suffix } = require('node:ffi');
 
-const lib = new DynamicLibrary('./mylib.so');
+const lib = new DynamicLibrary(`./mylib.${suffix}`);
 ```
 
 ### `library.path`
@@ -295,10 +311,10 @@ library instance can be managed with the [`using`][] declaration. Leaving the
 enclosing scope invokes `library.close()` automatically.
 
 ```mjs
-import { DynamicLibrary } from 'node:ffi';
+import { DynamicLibrary, suffix } from 'node:ffi';
 
 {
-  using lib = new DynamicLibrary('./mylib.so');
+  using lib = new DynamicLibrary(`./mylib.${suffix}`);
   // Use `lib` here; `lib.close()` is called when the block exits.
 }
 ```
@@ -350,12 +366,12 @@ If the same symbol has already been resolved, requesting it again with a
 different signature throws.
 
 ```cjs
-const { DynamicLibrary } = require('node:ffi');
+const { DynamicLibrary, suffix } = require('node:ffi');
 
-const lib = new DynamicLibrary('./mylib.so');
+const lib = new DynamicLibrary(`./mylib.${suffix}`);
 const add = lib.getFunction('add_i32', {
-  parameters: ['i32', 'i32'],
-  result: 'i32',
+  arguments: ['i32', 'i32'],
+  return: 'i32',
 });
 
 console.log(add(20, 22));
@@ -400,12 +416,12 @@ The return value is the callback pointer address as a `bigint`. It can be
 passed to native functions expecting a callback pointer.
 
 ```cjs
-const { DynamicLibrary } = require('node:ffi');
+const { DynamicLibrary, suffix } = require('node:ffi');
 
-const lib = new DynamicLibrary('./mylib.so');
+const lib = new DynamicLibrary(`./mylib.${suffix}`);
 
 const callback = lib.registerCallback(
-  { parameters: ['i32'], result: 'i32' },
+  { arguments: ['i32'], return: 'i32' },
   (value) => value * 2,
 );
 ```
@@ -415,7 +431,7 @@ Callbacks are subject to the following restrictions:
 * They must be invoked on the same system thread where they were created.
 * They must not throw exceptions.
 * They must not return promises.
-* They must return a value compatible with the declared result type.
+* They must return a value compatible with the declared return type.
 * They must not call `library.close()` on their owning library while running.
 * They must not unregister themselves while running.
 
@@ -444,6 +460,10 @@ memory.
 
 Keeps the callback strongly referenced by JavaScript.
 
+Throws `ERR_INVALID_ARG_VALUE` if the callback function has already been
+garbage collected after a previous `library.unrefCallback(pointer)` call, since
+a collected function cannot be referenced again.
+
 ### `library.unrefCallback(pointer)`
 
 * `pointer` {bigint}
@@ -454,6 +474,9 @@ If the callback function is later garbage collected, subsequent native
 invocations become a no-op. Non-void return values are zero-initialized before
 returning to native code.
 
+Throws `ERR_INVALID_ARG_VALUE` if the callback function has already been
+garbage collected.
+
 ## Calling native functions
 
 Argument conversion depends on the declared FFI type.
@@ -463,7 +486,7 @@ JavaScript `number` values that match the declared type.
 
 For 64-bit integer types (`i64` and `u64`), pass JavaScript `bigint` values.
 
-For pointer-like parameters:
+For pointer-like arguments:
 
 * `null` and `undefined` are passed as null pointers.
 * `string` values are copied to temporary NUL-terminated UTF-8 strings for the
@@ -700,6 +723,25 @@ This is unsafe and dangerous. The returned pointer can become invalid if the
 underlying memory is detached, resized, transferred, or otherwise invalidated.
 Using stale pointers can cause memory corruption or process crashes.
 
+## `ffi.getCurrentEventLoop()`
+
+<!-- YAML
+added: v26.6.0
+-->
+
+* Returns: {bigint}
+
+Returns the address of the current thread's `uv_loop_t` as a `bigint`.
+
+The returned address is for the current Node.js environment. In the main thread,
+this is the main thread event loop. In a worker thread, this is that worker's
+event loop.
+
+This is unsafe and dangerous. The returned pointer is only valid for the lifetime
+of the current environment. Using it after the environment exits, or from native
+code that assumes a different thread or lifetime, can crash the process or
+corrupt memory.
+
 ## Safety notes
 
 The `node:ffi` module does not track pointer validity, memory ownership, or
@@ -725,3 +767,4 @@ and keep callback and pointer lifetimes explicit on the native side.
 [`--allow-ffi`]: cli.md#--allow-ffi
 [`ffi.toBuffer(pointer, length, copy)`]: #ffitobufferpointer-length-copy
 [`using`]: https://tc39.es/proposal-explicit-resource-management/#sec-using-declarations
+[type names]: #type-names

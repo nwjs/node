@@ -183,7 +183,7 @@ added:
 
 ### `blockList.fromJSON(value)`
 
-> Stability: 1 - Experimental
+> Stability: 1.2 - Release candidate
 
  <!-- YAML
 added:
@@ -207,7 +207,7 @@ blockList.fromJSON(JSON.stringify(data));
 
 ### `blockList.toJSON()`
 
-> Stability: 1 - Experimental
+> Stability: 1.2 - Release candidate
 
  <!-- YAML
 added:
@@ -304,6 +304,11 @@ added: v0.1.90
 * Extends: {EventEmitter}
 
 This class is used to create a TCP or [IPC][] server.
+
+A listening TCP `net.Server` can be transferred to a worker thread by listing it
+in the `transferList` of a [`worker_threads`][] `postMessage()` call. This moves
+the underlying listening socket to the receiving thread, where it resumes
+accepting connections. See [Transferring TCP handles to other threads][].
 
 ### `new net.Server([options][, connectionListener])`
 
@@ -523,8 +528,12 @@ Start a server listening for connections on a given `handle` that has
 already been bound to a port, a Unix domain socket, or a Windows named pipe.
 
 The `handle` object can be either a server, a socket (anything with an
-underlying `_handle` member), or an object with an `fd` member that is a
-valid file descriptor.
+underlying `_handle` member), a [`BoundSocket`][], or an object with an `fd`
+member that is a valid file descriptor.
+
+When `handle` is a [`BoundSocket`][], the server adopts the already-bound
+socket and starts listening on it. Adoption consumes the bound socket (see
+[ownership transfer][`BoundSocket`]).
 
 Listening on a file descriptor is not supported on Windows.
 
@@ -550,6 +559,10 @@ changes:
   * `backlog` {number} Common parameter of [`server.listen()`][]
     functions.
   * `exclusive` {boolean} **Default:** `false`
+  * `handle` {net.BoundSocket} A pre-bound [`BoundSocket`][]. The server adopts
+    the already-bound socket and listens on it, ignoring `host`, `port`, and
+    `path`. Adoption consumes the bound socket (see
+    [ownership transfer][`BoundSocket`]).
   * `host` {string}
   * `ipv6Only` {boolean} For TCP servers, setting `ipv6Only` to `true` will
     disable dual-stack support, i.e., binding to host `::` won't make
@@ -573,7 +586,8 @@ changes:
   functions.
 * Returns: {net.Server}
 
-If `port` is specified, it behaves the same as
+If `handle` is specified, the server adopts that pre-bound socket. Otherwise, if
+`port` is specified, it behaves the same as
 [`server.listen([port[, host[, backlog]]][, callback])`][`server.listen(port)`].
 Otherwise, if `path` is specified, it behaves the same as
 [`server.listen(path[, backlog][, callback])`][`server.listen(path)`].
@@ -742,6 +756,39 @@ is received. For example, it is passed to the listeners of a
 [`'connection'`][] event emitted on a [`net.Server`][], so the user can use
 it to interact with the client.
 
+### Transferring TCP handles to other threads
+
+A connected TCP `net.Socket` can be moved to another thread by listing it in the
+`transferList` of a [`worker_threads`][] `postMessage()` call. After the
+transfer, the source socket is destroyed on the sending thread (further use
+fails with `ERR_STREAM_DESTROYED` rather than silently dropping data), and the
+socket continues to work on the receiving thread. This makes it possible to
+accept connections on one thread and distribute them across a pool of worker
+threads, for example to build a `node:cluster`-like model on top of worker
+threads.
+
+The socket must be a freshly accepted or created TCP connection: it must still
+be attached to a live handle, must not be connecting or destroyed, and must not
+have started reading or have buffered data. Otherwise `postMessage()` throws
+`ERR_WORKER_HANDLE_NOT_TRANSFERABLE`. Only TCP sockets are supported.
+
+```cjs
+const net = require('node:net');
+const { Worker } = require('node:worker_threads');
+
+// worker.js receives `{ socket }` messages and handles each connection.
+const worker = new Worker('./worker.js');
+
+const server = net.createServer((socket) => {
+  // Hand the freshly accepted connection off to the worker thread.
+  worker.postMessage({ socket }, [socket]);
+});
+server.listen(8000);
+```
+
+A listening [`net.Server`][] can be transferred the same way, which moves the
+listening socket itself (and its pending accept queue) to the receiving thread.
+
 ### `new net.Socket([options])`
 
 <!-- YAML
@@ -767,6 +814,12 @@ changes:
     access to specific IP addresses, IP ranges, or IP subnets.
   * `fd` {number} If specified, wrap around an existing socket with
     the given file descriptor, otherwise a new socket will be created.
+  * `handle` {net.BoundSocket} If specified, wrap around the bound socket from a
+    [`BoundSocket`][]. A subsequent
+    [`socket.connect()`][`socket.connect()`] uses the bound socket as the
+    connection's source binding (honoring the bound local address and port).
+    Adoption consumes the bound socket (see
+    [ownership transfer][`BoundSocket`]).
   * `keepAlive` {boolean} If set to `true`, it enables keep-alive functionality on
     the socket immediately after the connection is established, similarly on what
     is done in [`socket.setKeepAlive()`][]. **Default:** `false`.
@@ -1345,6 +1398,17 @@ added: v0.5.10
 The numeric representation of the remote port. For example, `80` or `21`. Value may be `undefined` if
 the socket is destroyed (for example, if the client disconnected).
 
+### `socket.server`
+
+<!-- YAML
+added: v0.3.4
+-->
+
+* Type: {net.Server|null}
+
+Reference to the server that accepted the socket. This is `null` for sockets
+that were not accepted by a server.
+
 ### `socket.resetAndDestroy()`
 
 <!-- YAML
@@ -1378,11 +1442,76 @@ added: v0.1.90
 Set the encoding for the socket as a [Readable Stream][]. See
 [`readable.setEncoding()`][] for more information.
 
-### `socket.setKeepAlive([enable][, initialDelay])`
+### `socket.setKeepAlive()`
+
+Enable/disable keep-alive functionality, and optionally configure the
+keepalive probe timing. Returns the socket itself.
+
+Possible signatures:
+
+* [`socket.setKeepAlive([options])`][`socket.setKeepAlive(options)`]
+* [`socket.setKeepAlive([enable][, initialDelay][, interval][, count])`][`socket.setKeepAlive(enable)`]
+
+Enabling keep-alive sets the initial delay before the first keepalive probe is
+sent on an idle socket.
+
+Set `initialDelay` (in milliseconds) to set the delay between the last
+data packet received and the first keepalive probe. Setting `0` for
+`initialDelay` will leave the value unchanged from the default
+(or previous) setting.
+
+Set `interval` (in milliseconds) to set the delay between successive
+keepalive probes once they begin (`TCP_KEEPINTVL`). Set `count` to the
+number of unacknowledged probes sent before the connection is dropped
+(`TCP_KEEPCNT`). Both are only applied when keep-alive is enabled.
+Omitting `interval` or `count` uses the defaults of `1000` ms and `10`.
+As with `initialDelay`, a non-positive `interval` or `count` leaves the
+corresponding system default unchanged.
+
+`initialDelay` and `interval` are specified in milliseconds but the
+underlying socket options are configured in whole seconds; the values are
+divided by `1000` and rounded down before being applied.
+
+Enabling the keep-alive functionality will set the following socket options:
+
+* `SO_KEEPALIVE=1`
+* `TCP_KEEPIDLE=initialDelay / 1000`
+* `TCP_KEEPCNT=count`
+* `TCP_KEEPINTVL=interval / 1000`
+
+On Windows versions older than build 1709, keep-alive is configured through
+`SIO_KEEPALIVE_VALS`, which has no probe-count field, so `count` is ignored on
+those platforms.
+
+#### `socket.setKeepAlive([options])`
+
+<!-- YAML
+added: v26.4.0
+-->
+
+* `options` {Object}
+  * `enable` {boolean} **Default:** `false`
+  * `initialDelay` {number} **Default:** `0`
+  * `interval` {number} **Default:** `1000`
+  * `count` {number} **Default:** `10`
+* Returns: {net.Socket} The socket itself.
+
+Configure keep-alive using an options object. See [`socket.setKeepAlive()`][]
+for a description of each property.
+
+```js
+socket.setKeepAlive({ enable: true, initialDelay: 1000, interval: 1000, count: 10 });
+```
+
+#### `socket.setKeepAlive([enable][, initialDelay][, interval][, count])`
 
 <!-- YAML
 added: v0.1.92
 changes:
+  - version: v26.4.0
+    pr-url: https://github.com/nodejs/node/pull/63825
+    description: Added the `interval` and `count` arguments to configure
+                 `TCP_KEEPINTVL` and `TCP_KEEPCNT`.
   - version:
     - v13.12.0
     - v12.17.0
@@ -1392,22 +1521,12 @@ changes:
 
 * `enable` {boolean} **Default:** `false`
 * `initialDelay` {number} **Default:** `0`
+* `interval` {number} **Default:** `1000`
+* `count` {number} **Default:** `10`
 * Returns: {net.Socket} The socket itself.
 
-Enable/disable keep-alive functionality, and optionally set the initial
-delay before the first keepalive probe is sent on an idle socket.
-
-Set `initialDelay` (in milliseconds) to set the delay between the last
-data packet received and the first keepalive probe. Setting `0` for
-`initialDelay` will leave the value unchanged from the default
-(or previous) setting.
-
-Enabling the keep-alive functionality will set the following socket options:
-
-* `SO_KEEPALIVE=1`
-* `TCP_KEEPIDLE=initialDelay`
-* `TCP_KEEPCNT=10`
-* `TCP_KEEPINTVL=1`
+Configure keep-alive using positional arguments. See
+[`socket.setKeepAlive()`][] for a description of each argument.
 
 ### `socket.setNoDelay([noDelay])`
 
@@ -1561,10 +1680,141 @@ added: v0.5.0
 
 This property represents the state of the connection as a string.
 
-* If the stream is connecting `socket.readyState` is `opening`.
-* If the stream is readable and writable, it is `open`.
-* If the stream is readable and not writable, it is `readOnly`.
-* If the stream is not readable and writable, it is `writeOnly`.
+* If the socket is connecting, `socket.readyState` is `opening`.
+* If the socket is readable and writable, it is `open`.
+* If the socket is readable and not writable, it is `readOnly`.
+* If the socket is not readable and writable, it is `writeOnly`.
+* Otherwise, it is `closed`.
+
+## Class: `net.BoundSocket`
+
+<!-- YAML
+added: v26.4.0
+-->
+
+Allows for the synchronous creation of a pre-bound socket, that can be passed
+to `listen()` or `new net.Socket()` later on. For `listen()` this enables
+synchronous port reservation, while for `new net.Socket()`, it allows control
+over the local egress port/IP, via `bind(2)` semantics.
+
+A `BoundSocket` binds either a TCP endpoint (`host` or `port`) or a
+Unix domain/named-pipe endpoint (`path`); the two are mutually exclusive. For a
+`path`, the file system entry is reserved in the constructor, so conflicts such
+as `EADDRINUSE` throw synchronously exactly as a TCP bind does. On Linux a
+leading `'\0'` in `path` selects the abstract namespace (no file system entry);
+an abstract path on any other platform throws [`ERR_INVALID_ARG_VALUE`][].
+
+Adoption transfers ownership of the socket; afterwards `address()` and `close()`
+throw [`ERR_SOCKET_HANDLE_ADOPTED`][]. A handle that is never adopted must be
+closed to avoid leaking the socket. Closing a pipe `BoundSocket` removes its
+file system entry; abstract and TCP binds have none to remove.
+
+When a pipe `BoundSocket` bound to a source `path` is adopted as a client, that
+path is reported as the socket's `localAddress` once it connects.
+
+When an adopted `BoundSocket` connects to a numeric IP literal, `connect(2)` is
+issued synchronously, so [`socket.localAddress`][] is resolved once
+[`socket.connect()`][] returns. Connection failures are still reported via a
+deferred `'error'` event.
+
+```mjs
+import net from 'node:net';
+
+const bound = new net.BoundSocket();
+const { port } = bound.address();
+console.log(`Reserved port ${port} for server`);
+
+const server = net.createServer();
+server.listen(bound); // Adopt as a server, or pass to new net.Socket() instead.
+```
+
+### `new net.BoundSocket([options])`
+
+<!-- YAML
+added: v26.4.0
+changes:
+  - version: v26.7.0
+    pr-url: https://github.com/nodejs/node/pull/64399
+    description: The `path` option is supported.
+-->
+
+* `options` {Object}
+  * `host` {string} Local address to bind. Must be a numeric IP literal; no DNS
+    resolution is performed. **Default:** `'0.0.0.0'`, or `'::'` when
+    `ipv6Only` is `true`.
+  * `port` {number} Local port. `0` requests an OS-assigned ephemeral port.
+    **Default:** `0`.
+  * `ipv6Only` {boolean} Sets `IPV6_V6ONLY`, disabling dual-stack support so the
+    socket binds IPv6 only. Only meaningful for IPv6 binds. **Default:**
+    `false`.
+  * `reusePort` {boolean} Sets `SO_REUSEPORT`, allowing multiple sockets to bind
+    the same address and port for kernel-level load balancing. Support is
+    platform-dependent. **Default:** `false`.
+  * `path` {string} Binds a Unix domain socket (or Windows named pipe) at the
+    given path instead of a TCP endpoint. A leading `'\0'` selects the Linux
+    abstract namespace. Mutually exclusive with `host`, `port`, `ipv6Only`, and
+    `reusePort`; combining them throws [`ERR_INVALID_ARG_VALUE`][].
+
+### `boundSocket.address()`
+
+<!-- YAML
+added: v26.4.0
+changes:
+  - version: v26.7.0
+    pr-url: https://github.com/nodejs/node/pull/64399
+    description: The bound path is returned for a pipe bind.
+-->
+
+* Returns: {Object|string} For a TCP bind, an object with `address`, `family`,
+  and `port` properties, as [`server.address()`][] returns. For a pipe bind, the
+  bound path string, as [`server.address()`][] returns for a pipe server.
+
+Returns the bound local address. When bound with `port: 0`, `port` is the
+OS-assigned ephemeral port.
+
+### `boundSocket.isPipe`
+
+<!-- YAML
+added: v26.7.0
+-->
+
+* {boolean}
+
+`true` when the socket was bound with a `path` (a Unix domain socket or Windows
+named pipe), `false` for a TCP bind. The getter's presence on
+`net.BoundSocket.prototype` also serves as a capability probe for `path`
+support.
+
+### `boundSocket.fd()`
+
+<!-- YAML
+added: v26.4.0
+-->
+
+* Returns: {integer} The underlying OS file descriptor, or `-1` on platforms
+  that do not expose one for sockets (such as Windows).
+
+Returns the file descriptor of the bound socket. Ownership remains with the
+`BoundSocket`, so the descriptor must not be closed by the caller. The
+descriptor is only available before the handle is adopted; afterwards it belongs
+to the adopting [`net.Server`][] or [`net.Socket`][] and `fd()` throws
+[`ERR_SOCKET_HANDLE_ADOPTED`][].
+
+### `boundSocket.close()`
+
+<!-- YAML
+added: v26.4.0
+-->
+
+Releases the bound socket. Only needed when the handle is never adopted.
+
+### `boundSocket[Symbol.dispose]()`
+
+<!-- YAML
+added: v26.4.0
+-->
+
+Closes the handle if it has not been adopted or closed; otherwise a no-op.
 
 ## `net.connect()`
 
@@ -1660,6 +1910,9 @@ and [`socket.connect(options[, connectListener])`][`socket.connect(options)`].
 
 Additional options:
 
+* `handle` {net.BoundSocket} A pre-bound [`BoundSocket`][] used as the
+  connection's source binding, honoring its local address and port. Adoption
+  consumes the bound socket (see [ownership transfer][`BoundSocket`]).
 * `timeout` {number} If set, will be used to call
   [`socket.setTimeout(timeout)`][] after the socket is created, but before
   it starts the connection.
@@ -1840,7 +2093,7 @@ Creates a new TCP or [IPC][] server.
 If `allowHalfOpen` is set to `true`, when the other end of the socket
 signals the end of transmission, the server will only send back the end of
 transmission when [`socket.end()`][] is explicitly called. For example, in the
-context of TCP, when a FIN packed is received, a FIN packed is sent
+context of TCP, when a FIN packet is received, a FIN packet is sent
 back only when [`socket.end()`][] is explicitly called. Until then the
 connection is half-closed (non-readable but still writable). See [`'end'`][]
 event and [RFC 1122][half-closed] (section 4.2.2.13) for more information.
@@ -2027,6 +2280,7 @@ net.isIPv6('fhqwhgads'); // returns false
 [Identifying paths for IPC connections]: #identifying-paths-for-ipc-connections
 [RFC 8305]: https://www.rfc-editor.org/rfc/rfc8305.txt
 [Readable Stream]: stream.md#class-streamreadable
+[Transferring TCP handles to other threads]: #transferring-tcp-handles-to-other-threads
 [`'close'`]: #event-close
 [`'connect'`]: #event-connect
 [`'connection'`]: #event-connection
@@ -2036,6 +2290,9 @@ net.isIPv6('fhqwhgads'); // returns false
 [`'error'`]: #event-error_1
 [`'listening'`]: #event-listening
 [`'timeout'`]: #event-timeout
+[`BoundSocket`]: #class-netboundsocket
+[`ERR_INVALID_ARG_VALUE`]: errors.md#err_invalid_arg_value
+[`ERR_SOCKET_HANDLE_ADOPTED`]: errors.md#err_socket_handle_adopted
 [`EventEmitter`]: events.md#class-eventemitter
 [`child_process.fork()`]: child_process.md#child_processforkmodulepath-args-options
 [`dns.lookup()`]: dns.md#dnslookuphostname-options-callback
@@ -2055,6 +2312,7 @@ net.isIPv6('fhqwhgads'); // returns false
 [`net.getDefaultAutoSelectFamilyAttemptTimeout()`]: #netgetdefaultautoselectfamilyattempttimeout
 [`new net.Socket(options)`]: #new-netsocketoptions
 [`readable.setEncoding()`]: stream.md#readablesetencodingencoding
+[`server.address()`]: #serveraddress
 [`server.close()`]: #serverclosecallback
 [`server.dropMaxConnection`]: #serverdropmaxconnection
 [`server.listen()`]: #serverlisten
@@ -2071,13 +2329,17 @@ net.isIPv6('fhqwhgads'); // returns false
 [`socket.connecting`]: #socketconnecting
 [`socket.destroy()`]: #socketdestroyerror
 [`socket.end()`]: #socketenddata-encoding-callback
+[`socket.localAddress`]: #socketlocaladdress
 [`socket.pause()`]: #socketpause
 [`socket.resume()`]: #socketresume
 [`socket.setEncoding()`]: #socketsetencodingencoding
-[`socket.setKeepAlive()`]: #socketsetkeepaliveenable-initialdelay
+[`socket.setKeepAlive()`]: #socketsetkeepalive
+[`socket.setKeepAlive(enable)`]: #socketsetkeepaliveenable-initialdelay-interval-count
+[`socket.setKeepAlive(options)`]: #socketsetkeepaliveoptions
 [`socket.setTimeout()`]: #socketsettimeouttimeout-callback
 [`socket.setTimeout(timeout)`]: #socketsettimeouttimeout-callback
 [`stream.getDefaultHighWaterMark()`]: stream.md#streamgetdefaulthighwatermarkobjectmode
+[`worker_threads`]: worker_threads.md
 [`writable.destroy()`]: stream.md#writabledestroyerror
 [`writable.destroyed`]: stream.md#writabledestroyed
 [`writable.end()`]: stream.md#writableendchunk-encoding-callback

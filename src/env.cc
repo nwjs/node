@@ -71,7 +71,6 @@ using v8::SnapshotCreator;
 using v8::StackTrace;
 using v8::String;
 using v8::Symbol;
-using v8::TracingController;
 using v8::TryCatch;
 using v8::Uint32;
 using v8::Undefined;
@@ -899,10 +898,9 @@ Environment::Environment(IsolateData* isolate_data,
 #endif
 
 #if 0
-  if (tracing::AgentWriterHandle* writer = GetTracingAgentWriter()) {
+  if (tracing::Agent* agent = tracing::Agent::GetInstance()) {
     trace_state_observer_ = std::make_unique<TrackingTraceStateObserver>(this);
-    if (TracingController* tracing_controller = writer->GetTracingController())
-      tracing_controller->AddTraceStateObserver(trace_state_observer_.get());
+    agent->AddTraceStateObserver(trace_state_observer_.get());
   }
 #endif
 
@@ -948,6 +946,10 @@ Environment::Environment(IsolateData* isolate_data,
     }
     if (!options_->allow_ffi) {
       permission()->Apply(this, {"*"}, permission::PermissionScope::kFFI);
+    }
+    if (!options_->allow_openssl_store) {
+      permission()->Apply(
+          this, {"*"}, permission::PermissionScope::kOpenSSLStore);
     }
     if (!options_->allow_worker_threads) {
       permission()->Apply(
@@ -1072,10 +1074,8 @@ Environment::~Environment() {
   principal_realm_.reset();
 
   if (trace_state_observer_) {
-    tracing::AgentWriterHandle* writer = GetTracingAgentWriter();
-    CHECK_NOT_NULL(writer);
-    if (TracingController* tracing_controller = writer->GetTracingController())
-      tracing_controller->RemoveTraceStateObserver(trace_state_observer_.get());
+    if (tracing::Agent* agent = tracing::Agent::GetInstance())
+      agent->RemoveTraceStateObserver(trace_state_observer_.get());
   }
 
   TRACE_EVENT_NESTABLE_ASYNC_END0(
@@ -1420,9 +1420,19 @@ void Environment::RunAndClearInterrupts() {
   }
 }
 
+bool Environment::HasNativeImmediates() const {
+  return native_immediates_.size() > 0 ||
+         native_immediates_threadsafe_.size() > 0 ||
+         native_immediates_interrupts_.size() > 0;
+}
+
 void Environment::RunAndClearNativeImmediates(bool only_refed) {
   TRACE_EVENT0(TRACING_CATEGORY_NODE1(environment),
                "RunAndClearNativeImmediates");
+  if (!HasNativeImmediates()) {
+    return;
+  }
+
   HandleScope handle_scope(isolate_);
   // In case the Isolate is no longer accessible just use an empty Local. This
   // is not an issue for InternalCallbackScope as this case is already handled
@@ -1594,6 +1604,9 @@ void Environment::RunTimers(uv_timer_t* handle) {
 void Environment::CheckImmediate(uv_check_t* handle) {
   Environment* env = Environment::from_immediate_check_handle(handle);
   TRACE_EVENT0(TRACING_CATEGORY_NODE1(environment), "CheckImmediate");
+
+  if (env->immediate_info()->count() == 0 && !env->HasNativeImmediates())
+    return;
 
   HandleScope scope(env->isolate());
   Context::Scope context_scope(env->context());

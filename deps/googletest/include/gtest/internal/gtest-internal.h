@@ -96,6 +96,12 @@
 
 namespace proto2 {
 class [[nodiscard]] MessageLite;
+
+// Dummy forward declaration of `DynamicCastMessage`. Does not match any actual
+// overloads of `DynamicCastMessage`, but can be used to assist name resolution
+// in templates.
+template <typename T>
+T DynamicCastMessage() = delete;
 }
 
 namespace testing {
@@ -1447,12 +1453,12 @@ class [[nodiscard]] NeverThrown {
 // representation of expression as it was passed into the EXPECT_TRUE.
 #define GTEST_TEST_BOOLEAN_(expression, text, actual, expected, fail) \
   GTEST_AMBIGUOUS_ELSE_BLOCKER_                                       \
-  if (const ::testing::AssertionResult gtest_ar_ =                    \
-          ::testing::AssertionResult(expression))                     \
+  if (::testing::internal::AssertionResultExpectation gtest_are_ = {  \
+          ::testing::AssertionResult(expression), expected})          \
     ;                                                                 \
   else                                                                \
     fail(::testing::internal::GetBoolAssertionFailureMessage(         \
-        gtest_ar_, text, #actual, #expected))
+        gtest_are_.assertion_result, text, #actual, #expected))
 
 #define GTEST_TEST_NO_FATAL_FAILURE_(statement, fail)               \
   GTEST_AMBIGUOUS_ELSE_BLOCKER_                                     \

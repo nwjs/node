@@ -3,6 +3,7 @@
 #include "main_thread_interface.h"
 #include "node_internals.h"
 #include "node_v8_platform-inl.h"
+#include "tracing/agent_legacy.h"
 #include "v8.h"
 
 #include <set>
@@ -163,13 +164,14 @@ DispatchResponse TracingAgent::start(
         "At least one category should be enabled");
 
 #if 0
-  tracing::AgentWriterHandle* writer = GetTracingAgentWriter();
-  if (writer != nullptr) {
+  auto* agent =
+      static_cast<tracing::LegacyTracingAgent*>(tracing::Agent::GetInstance());
+  if (agent != nullptr) {
     trace_writer_ =
-        writer->agent()->AddClient(categories_set,
-                                   std::make_unique<InspectorTraceWriter>(
-                                       frontend_object_id_, main_thread_),
-                                   tracing::Agent::kIgnoreDefaultCategories);
+        agent->AddClient(categories_set,
+                         std::make_unique<InspectorTraceWriter>(
+                             frontend_object_id_, main_thread_),
+                         tracing::LegacyTracingAgent::kIgnoreDefaultCategories);
   }
 #endif
   return DispatchResponse::Success();

@@ -187,14 +187,15 @@ void ECDH::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
     return;
   }
 
-  int field_size = EC_GROUP_get_degree(ecdh->group_);
-  size_t out_len = (field_size + 7) / 8;
-  auto bs = ArrayBuffer::NewBackingStore(
-      env->isolate(), out_len, BackingStoreInitializationMode::kUninitialized);
-
-  if (!ECDH_compute_key(
-          bs->Data(), bs->ByteLength(), pub, ecdh->key_.get(), nullptr))
+  auto secret = ecdh->key_.computeSecret(pub);
+  if (!secret)
     return THROW_ERR_CRYPTO_OPERATION_FAILED(env, "Failed to compute ECDH key");
+
+  auto bs = ArrayBuffer::NewBackingStore(
+      env->isolate(),
+      secret.size(),
+      BackingStoreInitializationMode::kUninitialized);
+  memcpy(bs->Data(), secret.get(), secret.size());
 
   Local<ArrayBuffer> ab = ArrayBuffer::New(env->isolate(), std::move(bs));
   Local<Value> buffer;
@@ -469,15 +470,20 @@ bool ExportJWKEcKey(Environment* env,
   const auto& m_pkey = key.GetAsymmetricKey();
   CHECK_EQ(m_pkey.id(), EVP_PKEY_EC);
 
-  const EC_KEY* ec = m_pkey;
-  CHECK_NOT_NULL(ec);
+  ECKeyPointer ec(m_pkey);
+  if (!ec) {
+    THROW_ERR_CRYPTO_INVALID_JWK(env, "Invalid JWK EC key");
+    return false;
+  }
+  // A provider-backed key need not expose its public point.
+  if (ec.getPublicKey() == nullptr) return false;
 
-  const auto pub = ECKeyPointer::GetPublicKey(ec);
-  const auto group = ECKeyPointer::GetGroup(ec);
+  const auto pub = ec.getPublicKey();
+  const auto group = ec.getGroup();
 
   int degree_bits = EC_GROUP_get_degree(group);
   int degree_bytes =
-    (degree_bits / CHAR_BIT) + (7 + (degree_bits % CHAR_BIT)) / 8;
+      (degree_bits / CHAR_BIT) + (7 + (degree_bits % CHAR_BIT)) / 8;
 
   auto x = BignumPointer::New();
   auto y = BignumPointer::New();
@@ -488,10 +494,10 @@ bool ExportJWKEcKey(Environment* env,
     return false;
   }
 
-  if (target->Set(
-          env->context(),
-          env->jwk_kty_string(),
-          env->jwk_ec_string()).IsNothing()) {
+  if (!target
+           ->DefineOwnProperty(
+               env->context(), env->jwk_kty_string(), env->jwk_ec_string())
+           .FromMaybe(false)) {
     return false;
   }
 
@@ -531,15 +537,15 @@ bool ExportJWKEcKey(Environment* env,
       return false;
     }
   }
-  if (target->Set(
-      env->context(),
-      env->jwk_crv_string(),
-      crv_name).IsNothing()) {
+  if (!target
+           ->DefineOwnProperty(env->context(), env->jwk_crv_string(), crv_name)
+           .FromMaybe(false)) {
     return false;
   }
 
   if (key.GetKeyType() == kKeyTypePrivate) {
-    auto pvt = ECKeyPointer::GetPrivateKey(ec);
+    auto pvt = ec.getPrivateKey();
+    if (pvt == nullptr) return false;
     return SetEncodedValue(env, target, env->jwk_d_string(), pvt, degree_bytes)
         .IsJust();
   }
@@ -577,20 +583,23 @@ bool ExportJWKEdKey(Environment* env,
     const ncrypto::Buffer<const char> out = data;
     return StringBytes::Encode(env->isolate(), out.data, out.len, BASE64URL)
                .ToLocal(&encoded) &&
-           target->Set(env->context(), key, encoded).IsJust();
+           target->DefineOwnProperty(env->context(), key, encoded)
+               .FromMaybe(false);
   };
 
   return !(
-      target
-          ->Set(env->context(),
-                env->jwk_crv_string(),
-                OneByteString(env->isolate(), curve))
-          .IsNothing() ||
+      !target
+           ->DefineOwnProperty(env->context(),
+                               env->jwk_crv_string(),
+                               OneByteString(env->isolate(), curve))
+           .FromMaybe(false) ||
       (key.GetKeyType() == kKeyTypePrivate &&
        !trySetKey(env, pkey.rawPrivateKey(), target, env->jwk_d_string())) ||
       !trySetKey(env, pkey.rawPublicKey(), target, env->jwk_x_string()) ||
-      target->Set(env->context(), env->jwk_kty_string(), env->jwk_okp_string())
-          .IsNothing());
+      !target
+           ->DefineOwnProperty(
+               env->context(), env->jwk_kty_string(), env->jwk_okp_string())
+           .FromMaybe(false));
 }
 KeyObjectData ImportJWKEdKey(Environment* env, Local<Object> jwk) {
   Local<Value> crv_value;
@@ -749,11 +758,12 @@ bool GetEcKeyDetail(Environment* env,
   const auto& m_pkey = key.GetAsymmetricKey();
   CHECK_EQ(m_pkey.id(), EVP_PKEY_EC);
 
-  const EC_KEY* ec = m_pkey;
-  CHECK_NOT_NULL(ec);
+  ECKeyPointer ec(m_pkey);
+  if (!ec) return true;
 
-  const auto group = ECKeyPointer::GetGroup(ec);
+  const auto group = ec.getGroup();
   int nid = EC_GROUP_get_curve_name(group);
+  if (nid == NID_undef) return true;
 
   return target
       ->Set(env->context(),
@@ -768,11 +778,12 @@ bool GetEcKeyDetail(Environment* env,
 // https://github.com/chromium/chromium/blob/7af6cfd/components/webcrypto/algorithms/ecdsa.cc
 
 size_t GroupOrderSize(const EVPKeyPointer& key) {
-  const EC_KEY* ec = key;
-  CHECK_NOT_NULL(ec);
+  ECKeyPointer ec(key);
+  if (!ec) return 0;
   auto order = BignumPointer::New();
-  CHECK(order);
-  CHECK(EC_GROUP_get_order(ECKeyPointer::GetGroup(ec), order.get(), nullptr));
+  if (!order || !EC_GROUP_get_order(ec.getGroup(), order.get(), nullptr)) {
+    return 0;
+  }
   return order.byteLength();
 }
 }  // namespace crypto

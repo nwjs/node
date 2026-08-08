@@ -265,6 +265,43 @@ const { KeyObject } = require('crypto');
   })().then(common.mustCall());
 }
 
+if (hasOpenSSL(3)) {
+  (async () => {
+    const derivedKeyAlgorithm = { name: 'KMAC128', length: 0 };
+    const usages = ['sign'];
+    for (const [algorithm, baseKeyAlgorithm] of [
+      [
+        { name: 'HKDF', salt: new Uint8Array(), info: new Uint8Array(), hash: 'SHA-256' },
+        { name: 'HKDF' },
+      ],
+      [
+        { name: 'PBKDF2', salt: new Uint8Array(), hash: 'SHA-256', iterations: 20 },
+        { name: 'PBKDF2' },
+      ],
+    ]) {
+      const baseKey = await subtle.importKey(
+        'raw',
+        new Uint8Array(),
+        baseKeyAlgorithm,
+        false,
+        ['deriveKey']);
+      const derived = await subtle.deriveKey(
+        algorithm,
+        baseKey,
+        derivedKeyAlgorithm,
+        false,
+        usages);
+      assert.strictEqual(derived.algorithm.length, 0);
+
+      const signature = await subtle.sign({
+        name: 'KMAC128',
+        outputLength: 256,
+      }, derived, new Uint8Array());
+      assert.strictEqual(signature.byteLength, 32);
+    }
+  })().then(common.mustCall());
+}
+
 // Test X25519 and X448 key derivation
 {
   async function test(name) {

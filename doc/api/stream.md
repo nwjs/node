@@ -70,6 +70,11 @@ or `require('node:stream').promises`.
 added: v15.0.0
 changes:
   - version:
+      - v19.7.0
+      - v18.16.0
+    pr-url: https://github.com/nodejs/node/pull/46307
+    description: Added support for webstreams.
+  - version:
       - v18.0.0
       - v17.2.0
       - v16.14.0
@@ -79,13 +84,14 @@ changes:
                  ends.
 -->
 
-* `streams` {Stream\[]|Iterable\[]|AsyncIterable\[]|Function\[]}
-* `source` {Stream|Iterable|AsyncIterable|Function}
+* `streams` {Stream\[]|Iterable\[]|AsyncIterable\[]|Function\[]|
+  ReadableStream\[]|WritableStream\[]|TransformStream\[]}
+* `source` {Stream|Iterable|AsyncIterable|Function|ReadableStream}
   * Returns: {Promise|AsyncIterable}
-* `...transforms` {Stream|Function}
+* `...transforms` {Stream|Function|TransformStream}
   * `source` {AsyncIterable}
   * Returns: {Promise|AsyncIterable}
-* `destination` {Stream|Function}
+* `destination` {Stream|Function|WritableStream}
   * `source` {AsyncIterable}
   * Returns: {Promise|AsyncIterable}
 * `options` {Object} Pipeline options
@@ -1995,7 +2001,7 @@ If the loop terminates with a `break`, `return`, or a `throw`, the stream will
 be destroyed. In other terms, iterating over a stream will consume the stream
 fully. The stream will be read in chunks of size equal to the `highWaterMark`
 option. In the code example above, data will be in a single chunk if the file
-has less then 64 KiB of data because no `highWaterMark` option is provided to
+has less than 64 KiB of data because no `highWaterMark` option is provided to
 [`fs.createReadStream()`][].
 
 ##### `readable[Symbol.for('Stream.toAsyncStreamable')]()`
@@ -3013,6 +3019,9 @@ const server = http.createServer((req, res) => {
 <!-- YAML
 added: v16.9.0
 changes:
+  - version: v26.2.0
+    pr-url: https://github.com/nodejs/node/pull/62562
+    description: Marking the API stable.
   - version:
     - v21.1.0
     - v20.10.0
@@ -3024,8 +3033,6 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/46675
     description: Added support for webstreams.
 -->
-
-> Stability: 1 - `stream.compose` is experimental.
 
 * `streams` {Stream\[]|Iterable\[]|AsyncIterable\[]|Function\[]|
   ReadableStream\[]|WritableStream\[]|TransformStream\[]|Duplex\[]|Function}
@@ -3112,6 +3119,19 @@ console.log(res); // prints 'HELLOWORLD'
 
 For convenience, the [`readable.compose(stream)`][] method is available on
 {Readable} and {Duplex} streams as a wrapper for this function.
+
+### `stream.isDestroyed(stream)`
+
+<!-- YAML
+added:
+  - v19.9.0
+  - v18.17.0
+-->
+
+* `stream` {Readable|Writable|Duplex}
+* Returns: {boolean|null} - Only returns `null` if `stream` is not a valid `Readable`, `Writable` or `Duplex`.
+
+Returns whether the stream has been destroyed.
 
 ### `stream.isErrored(stream)`
 
@@ -3543,7 +3563,7 @@ changes:
 * `stream` {Stream|ReadableStream|WritableStream} A stream to attach a signal
   to.
 
-Attaches an AbortSignal to a readable or writeable stream. This lets code
+Attaches an AbortSignal to a readable or writable stream. This lets code
 control stream destruction using an `AbortController`.
 
 Calling `abort` on the `AbortController` corresponding to the passed
@@ -3655,8 +3675,6 @@ First, a stream developer would declare a new JavaScript class that extends one
 of the four basic stream classes (`stream.Writable`, `stream.Readable`,
 `stream.Duplex`, or `stream.Transform`), making sure they call the appropriate
 parent class constructor:
-
-<!-- eslint-disable no-useless-constructor -->
 
 ```js
 const { Writable } = require('node:stream');
@@ -3837,7 +3855,7 @@ const myWritable = new Writable({
 
 Calling `abort` on the `AbortController` corresponding to the passed
 `AbortSignal` will behave the same way as calling `.destroy(new AbortError())`
-on the writeable stream.
+on the writable stream.
 
 ```js
 const { Writable } = require('node:stream');

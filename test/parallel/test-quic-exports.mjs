@@ -33,11 +33,5 @@ assert.strictEqual(quic.constants.DEFAULT_GROUPS, 'X25519:P-256:P-384:P-521');
 assert.throws(() => { quic.constants.cc.RENO = 'foo'; }, TypeError);
 assert.strictEqual(quic.constants.cc.RENO, 'reno');
 
-assert.throws(() => { quic.constants.cc.NEW_CONSTANT = 'bar'; }, TypeError);
-assert.strictEqual(quic.constants.cc.NEW_CONSTANT, undefined);
-
 assert.throws(() => { quic.constants.DEFAULT_CIPHERS = 123; }, TypeError);
 assert.strictEqual(typeof quic.constants.DEFAULT_CIPHERS, 'string');
-
-assert.throws(() => { quic.constants.NEW_CONSTANT = 456; }, TypeError);
-assert.strictEqual(quic.constants.NEW_CONSTANT, undefined);

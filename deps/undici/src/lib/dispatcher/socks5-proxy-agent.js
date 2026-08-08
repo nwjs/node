@@ -1,6 +1,5 @@
 'use strict'
 
-const net = require('node:net')
 const { URL } = require('node:url')
 
 let tls // include tls conditionally since it is not always available
@@ -17,8 +16,10 @@ const debug = debuglog('undici:socks5-proxy')
 const kProxyUrl = Symbol('proxy url')
 const kProxyHeaders = Symbol('proxy headers')
 const kProxyAuth = Symbol('proxy auth')
+const kProxyProtocol = Symbol('proxy protocol')
 const kPools = Symbol('pools')
 const kConnector = Symbol('connector')
+const kRequestTls = Symbol('request tls settings')
 
 // Static flag to ensure warning is only emitted once per process
 let experimentalWarningEmitted = false
@@ -52,6 +53,8 @@ class Socks5ProxyAgent extends DispatcherBase {
 
     this[kProxyUrl] = url
     this[kProxyHeaders] = options.headers || {}
+    this[kProxyProtocol] = options.proxyTls ? 'https:' : 'http:'
+    this[kRequestTls] = options.requestTls
 
     // Extract auth from URL or options
     this[kProxyAuth] = {
@@ -81,25 +84,20 @@ class Socks5ProxyAgent extends DispatcherBase {
     // Connect to the SOCKS5 proxy
     const socketReady = Promise.withResolvers()
 
-    const onSocketConnect = () => {
-      socket.removeListener('error', onSocketError)
-      socketReady.resolve(socket)
-    }
-
-    const onSocketError = (err) => {
-      socket.removeListener('connect', onSocketConnect)
-      socketReady.reject(err)
-    }
-
-    const socket = net.connect({
+    this[kConnector]({
+      hostname: proxyHost,
       host: proxyHost,
-      port: proxyPort
+      port: proxyPort,
+      protocol: this[kProxyProtocol]
+    }, (err, socket) => {
+      if (err) {
+        socketReady.reject(err)
+      } else {
+        socketReady.resolve(socket)
+      }
     })
 
-    socket.once('connect', onSocketConnect)
-    socket.once('error', onSocketError)
-
-    await socketReady.promise
+    const socket = await socketReady.promise
 
     // Create SOCKS5 client
     const socks5Client = new Socks5Client(socket, this[kProxyAuth])
@@ -177,7 +175,7 @@ class Socks5ProxyAgent extends DispatcherBase {
   /**
    * Dispatch a request through the SOCKS5 proxy
    */
-  async [kDispatch] (opts, handler) {
+  [kDispatch] (opts, handler) {
     const { origin } = opts
 
     debug('dispatching request to', origin, 'via SOCKS5')
@@ -209,9 +207,9 @@ class Socks5ProxyAgent extends DispatcherBase {
                 }
                 debug('upgrading to TLS')
                 finalSocket = tls.connect({
+                  ...this[kRequestTls],
                   socket,
-                  servername: targetHost,
-                  ...connectOpts.tls || {}
+                  servername: this[kRequestTls]?.servername || targetHost
                 })
 
                 const tlsReady = Promise.withResolvers()
@@ -234,8 +232,12 @@ class Socks5ProxyAgent extends DispatcherBase {
       return pool[kDispatch](opts, handler)
     } catch (err) {
       debug('dispatch error:', err)
-      if (typeof handler.onError === 'function') {
+      if (typeof handler.onResponseError === 'function') {
+        handler.onResponseError(null, err)
+        return false
+      } else if (typeof handler.onError === 'function') {
         handler.onError(err)
+        return false
       } else {
         throw err
       }

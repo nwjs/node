@@ -15,6 +15,7 @@
     'enable_thin_lto': 'false',
     'clang_profile_lib%': '',
     'python%': 'python3',
+    'emulator%': [],
 
     'node_shared%': 'true',
     'node_enable_experimentals%': 'false',
@@ -32,6 +33,17 @@
     'node_module_version%': '',
     'node_with_ltcg%': '',
     'node_shared_openssl%': 'false',
+    'openssl_is_boringssl%': 'false',
+    # deps/openssl/openssl.gyp and deps/ncrypto/ncrypto.gyp are loaded as
+    # standalone .gyp files, so they do not see node.gyp's variables. Upstream
+    # gets these from the configure-generated config.gypi; nw uses a checked-in
+    # one, so declare them here instead.
+    'node_shared_zlib%': 'false',
+    'node_shared_brotli%': 'false',
+    'node_shared_zstd%': 'false',
+    # OpenSSL 3.5.7, encoded as OPENSSL_VERSION_NUMBER (0xMNN00PPSL).
+    # Keep in sync with deps/openssl/openssl/VERSION.dat.
+    'openssl_version%': 0x3050007f,
 
     'build_v8_with_gn': 'false',
     'openssl_no_asm': 1,
@@ -59,7 +71,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.19',
+    'v8_embedder_string': '-node.28',
 
     ##### V8 defaults for Node.js #####
 
@@ -437,6 +449,13 @@
                   },
                   'VCLinkerTool': {
                     'AdditionalOptions': ['-flto=thin'],
+                  },
+                },
+              },],
+              ['(enable_thin_lto=="true" or enable_lto=="true") and lto_jobs!=""', {
+                'msvs_settings': {
+                  'VCLinkerTool': {
+                    'AdditionalOptions': ['/opt:lldltojobs=<(lto_jobs)'],
                   },
                 },
               },],

@@ -302,10 +302,10 @@ ContextifyContext* ContextifyContext::New(Local<Context> v8_context,
                                 sandbox_obj);
   }
   if (node_is_nwjs) {
-    void* data = env->context()->GetAlignedPointerFromEmbedderData(2); //v8ContextPerContextDataIndex
+    void* data = env->context()->GetAlignedPointerFromEmbedderData(2, v8::kEmbedderDataTypeTagDefault); //v8ContextPerContextDataIndex
     if (!((uintptr_t)data & 1))
-      v8_context->SetAlignedPointerInEmbedderData(2, data);
-    v8_context->SetAlignedPointerInEmbedderData(50, (void*)0x08110800);
+      v8_context->SetAlignedPointerInEmbedderData(2, data, v8::kEmbedderDataTypeTagDefault);
+    v8_context->SetAlignedPointerInEmbedderData(50, (void*)0x08110800, v8::kEmbedderDataTypeTagDefault);
   }
 
   // Delegate the code generation validation to
@@ -605,7 +605,7 @@ Intercepted ContextifyContext::PropertyGetterCallback(
 Intercepted ContextifyContext::PropertySetterCallback(
     Local<Name> property,
     Local<Value> value,
-    const PropertyCallbackInfo<void>& args) {
+    const PropertyCallbackInfo<Boolean>& args) {
   ContextifyContext* ctx = ContextifyContext::Get(args);
 
   // Still initializing
@@ -698,7 +698,7 @@ Intercepted ContextifyContext::PropertyDescriptorCallback(
 Intercepted ContextifyContext::PropertyDefinerCallback(
     Local<Name> property,
     const PropertyDescriptor& desc,
-    const PropertyCallbackInfo<void>& args) {
+    const PropertyCallbackInfo<Boolean>& args) {
   ContextifyContext* ctx = ContextifyContext::Get(args);
 
   // Still initializing
@@ -878,7 +878,7 @@ Intercepted ContextifyContext::IndexedPropertyGetterCallback(
 Intercepted ContextifyContext::IndexedPropertySetterCallback(
     uint32_t index,
     Local<Value> value,
-    const PropertyCallbackInfo<void>& args) {
+    const PropertyCallbackInfo<Boolean>& args) {
   ContextifyContext* ctx = ContextifyContext::Get(args);
 
   // Still initializing
@@ -907,7 +907,7 @@ Intercepted ContextifyContext::IndexedPropertyDescriptorCallback(
 Intercepted ContextifyContext::IndexedPropertyDefinerCallback(
     uint32_t index,
     const PropertyDescriptor& desc,
-    const PropertyCallbackInfo<void>& args) {
+    const PropertyCallbackInfo<Boolean>& args) {
   ContextifyContext* ctx = ContextifyContext::Get(args);
 
   // Still initializing

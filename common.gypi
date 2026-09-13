@@ -974,6 +974,42 @@
               ],
             },
           }],
+          # nwjs: when building as part of nw, libnode.dylib is linked
+          # against Chromium's libc++ (libcpp.a is force-loaded, see
+          # node.gypi) and runs alongside code built with Chromium's
+          # clang/libc++ ABI: buildtools/third_party/libc++/__config_site
+          # selects libc++ ABI v2 (alternate std::string layout,
+          # trivial-ABI unique_ptr/shared_ptr so they are returned in
+          # registers, and other layout changes). The macOS SDK libc++
+          # headers default to ABI v1, so node code compiled against them
+          # disagrees with the framework on every std::string and on the
+          # calling convention of functions returning std::unique_ptr
+          # (e.g. v8::ArrayBuffer::NewBackingStore), corrupting data at
+          # runtime. Build node against Chromium's libc++ headers instead,
+          # like the win/linux branches do. This requires Chromium's clang:
+          # set CC_target/CXX_target to
+          # third_party/llvm-build/Release+Asserts/bin/clang[/++] (Apple
+          # clang cannot parse these headers).
+          # Host toolset tools (node_js2c, ...) link the system libc++ and
+          # keep using the SDK headers, hence the _toolset=="target" guard.
+          [ '_toolset=="target" and <(building_nw)==1', {
+            'include_dirs': [
+              '<(PRODUCT_DIR)/../../buildtools/third_party/libc++',
+            ],
+            'xcode_settings': {
+              'SDKROOT': 'macosx',
+              'OTHER_CFLAGS': [
+                '-nostdinc++',
+                '-isystem', '<(PRODUCT_DIR)/../../third_party/libc++/src/include',
+                '-isystem', '<(PRODUCT_DIR)/../../third_party/libc++abi/src/include',
+              ],
+              'OTHER_CXXFLAGS': [
+                '-nostdinc++',
+                '-isystem', '<(PRODUCT_DIR)/../../third_party/libc++/src/include',
+                '-isystem', '<(PRODUCT_DIR)/../../third_party/libc++abi/src/include',
+              ],
+            },
+          }],
         ],
         'conditions': [
           ['target_arch=="ia32"', {

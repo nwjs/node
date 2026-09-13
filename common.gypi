@@ -986,10 +986,11 @@
           # calling convention of functions returning std::unique_ptr
           # (e.g. v8::ArrayBuffer::NewBackingStore), corrupting data at
           # runtime. Build node against Chromium's libc++ headers instead,
-          # like the win/linux branches do. This requires Chromium's clang:
-          # set CC_target/CXX_target to
-          # third_party/llvm-build/Release+Asserts/bin/clang[/++] (Apple
-          # clang cannot parse these headers).
+          # like the win/linux branches do. This requires Chromium's clang
+          # (Apple clang cannot parse these headers); tools/gyp/gyp_main.py
+          # picks it up from the Chromium checkout automatically when
+          # building_nw=1, so no per-builder compiler configuration is
+          # needed.
           # Host toolset tools (node_js2c, ...) link the system libc++ and
           # keep using the SDK headers, hence the _toolset=="target" guard.
           [ '_toolset=="target" and <(building_nw)==1', {

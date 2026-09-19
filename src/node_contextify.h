@@ -18,7 +18,7 @@ struct ContextOptions {
   v8::Local<v8::String> origin;
   v8::Local<v8::Boolean> allow_code_gen_strings;
   v8::Local<v8::Boolean> allow_code_gen_wasm;
-  std::unique_ptr<v8::MicrotaskQueue> own_microtask_queue;
+  v8::MicrotaskQueue* own_microtask_queue = nullptr;
   v8::Local<v8::Symbol> host_defined_options_id;
   bool vanilla = false;
 };
@@ -122,7 +122,7 @@ class ContextifyContext final : CPPGC_MIXIN(ContextifyContext) {
   }
 
   inline v8::MicrotaskQueue* microtask_queue() const {
-    return microtask_queue_.get();
+    return microtask_queue_;
   }
 
   template <typename T>
@@ -186,7 +186,10 @@ class ContextifyContext final : CPPGC_MIXIN(ContextifyContext) {
       const v8::PropertyCallbackInfo<v8::Array>& args);
 
   v8::TracedReference<v8::Context> context_;
-  std::unique_ptr<v8::MicrotaskQueue> microtask_queue_;
+  // With V8_CPPGC_MICROTASK_QUEUE, v8::MicrotaskQueue::New() returns a
+  // cppgc-managed object instead of a std::unique_ptr; keep it alive with a
+  // cppgc member (this class is a cppgc mixin and traces it).
+  cppgc::Member<v8::MicrotaskQueue> microtask_queue_;
 };
 
 class ContextifyScript final : CPPGC_MIXIN(ContextifyScript) {

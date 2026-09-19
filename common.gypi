@@ -536,6 +536,10 @@
     # Defines these mostly for node-gyp to pickup.
     'defines': [
       'V8_REVERSE_JSARGS',
+      # Keep in sync with v8.gni in the Chromium v8 checkout, which NW.js
+      # builds with v8_cppgc_microtask_queue=true: v8::MicrotaskQueue::New()
+      # returns a cppgc-managed pointer instead of a std::unique_ptr.
+      'V8_CPPGC_MICROTASK_QUEUE',
       '_GLIBCXX_USE_CXX11_ABI=1',
       # This help forks when building Node.js on a 32-bit arch as
       # libuv is always compiled with _FILE_OFFSET_BITS=64

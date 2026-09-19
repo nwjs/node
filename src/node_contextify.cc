@@ -156,7 +156,7 @@ ContextifyContext* ContextifyContext::New(Environment* env,
 
   MicrotaskQueue* queue =
       options->own_microtask_queue
-          ? options->own_microtask_queue.get()
+          ? options->own_microtask_queue
           : env->isolate()->GetCurrentContext()->GetMicrotaskQueue();
 
   Local<Context> v8_context;
@@ -171,15 +171,14 @@ ContextifyContext* ContextifyContext::New(Environment* env,
 void ContextifyContext::Trace(cppgc::Visitor* visitor) const {
   CppgcMixin::Trace(visitor);
   visitor->Trace(context_);
+  visitor->Trace(microtask_queue_);
 }
 
 ContextifyContext::ContextifyContext(Environment* env,
                                      Local<Object> wrapper,
                                      Local<Context> v8_context,
                                      ContextOptions* options)
-    : microtask_queue_(options->own_microtask_queue
-                           ? options->own_microtask_queue.release()
-                           : nullptr) {
+    : microtask_queue_(options->own_microtask_queue) {
   CppgcMixin::Wrap(this, env, wrapper);
 
   context_.Reset(env->isolate(), v8_context);
@@ -493,7 +492,7 @@ ContextifyContext* ContextifyContext::Get(const PropertyCallbackInfo<T>& args) {
   // args.GetIsolate()->GetCurrentContext() and take the pointer at
   // ContextEmbedderIndex::kContextifyContext, as V8 is supposed to
   // push the creation context before invoking these callbacks.
-  return Get(args.HolderV2());
+  return Get(args.Holder());
 }
 
 ContextifyContext* ContextifyContext::Get(Local<Object> object) {

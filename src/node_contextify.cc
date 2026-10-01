@@ -23,6 +23,7 @@
 
 #include "base_object-inl.h"
 #include "cppgc/allocation.h"
+#include "cppgc/garbage-collected.h"  // NWJS: opaque blink ScriptState slot copy
 #include "debug_utils-inl.h"
 #include "memory_tracker-inl.h"
 #include "module_wrap.h"
@@ -40,6 +41,15 @@
 namespace node {
 extern bool node_is_nwjs;
 namespace contextify {
+
+// NWJS: opaque stand-in for blink's ScriptState (a cppgc object) so the
+// per-context data slot (v8ContextPerContextDataIndex) can be copied with
+// v8's cppgc-typed embedder data API, which is the only public API for
+// CppHeapPointerTag access. See the copy in ContextifyContext::New().
+class BlinkScriptStateSlot : public cppgc::GarbageCollected<BlinkScriptStateSlot> {
+ public:
+  void Trace(cppgc::Visitor*) const {}
+};
 
 using errors::TryCatchScope;
 
@@ -301,9 +311,26 @@ ContextifyContext* ContextifyContext::New(Local<Context> v8_context,
                                 sandbox_obj);
   }
   if (node_is_nwjs) {
-    void* data = env->context()->GetAlignedPointerFromEmbedderData(2, v8::kEmbedderDataTypeTagDefault); //v8ContextPerContextDataIndex
+    // v8ContextPerContextDataIndex (2): blink stores its ScriptState* here
+    // tagged with blink's CppHeapPointerTag::kScriptStateTag
+    // (third_party/blink/renderer/platform/bindings/wrapper_type_info.h:
+    // kLastGeneratedScriptWrappableTag (2000) + 19). Copy it into the new
+    // context with the same tag so blink's ScriptState::From() keeps working
+    // in node-created contexts. Reading/writing with
+    // v8::kEmbedderDataTypeTagDefault no longer sees the value since v8
+    // d04704a20fc ("[sandbox] Store CppHeapPointerHandles in
+    // EmbedderDataArray") enforces exact tag matching under pointer
+    // compression: a mismatched tag silently yields nullptr and blink crashes
+    // on the first DOM access from the context (e.g. issue4018-vm-crash).
+    // BlinkScriptStateSlot is an opaque stand-in satisfying v8's
+    // cppgc-typed embedder data API (the raw pointer overloads are private).
+    constexpr v8::CppHeapPointerTag kScriptStateTag =
+        static_cast<v8::CppHeapPointerTag>(2019);
+    BlinkScriptStateSlot* data =
+        env->context()->GetAlignedPointerFromEmbedderData<BlinkScriptStateSlot>(
+            env->isolate(), 2, kScriptStateTag); //v8ContextPerContextDataIndex
     if (!((uintptr_t)data & 1))
-      v8_context->SetAlignedPointerInEmbedderData(2, data, v8::kEmbedderDataTypeTagDefault);
+      v8_context->SetAlignedPointerInEmbedderData(2, data, kScriptStateTag);
     v8_context->SetAlignedPointerInEmbedderData(50, (void*)0x08110800, v8::kEmbedderDataTypeTagDefault);
   }
 

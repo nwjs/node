@@ -324,8 +324,17 @@ ContextifyContext* ContextifyContext::New(Local<Context> v8_context,
     // on the first DOM access from the context (e.g. issue4018-vm-crash).
     // BlinkScriptStateSlot is an opaque stand-in satisfying v8's
     // cppgc-typed embedder data API (the raw pointer overloads are private).
+    // The numeric value of blink's CppHeapPointerTag::kScriptStateTag
+    // changes across Chromium versions (2019 at the time this was written;
+    // 2023 after it moved into wrapper_type_info.h's ScriptWrappable enum;
+    // 29186 in the current tree, after the tag moved into the new
+    // CppHeapExternalTag enum in cpp_heap_external_tag.h,
+    // kBlinkNonWrappableTagRange.first (0x7200) + 2, when the ScriptWrappable
+    // tags are added). It is guarded by the
+    // content/nw/test/sanity/issue4018-vm-crash test - update it when that
+    // test regresses after a Chromium roll.
     constexpr v8::CppHeapPointerTag kScriptStateTag =
-        static_cast<v8::CppHeapPointerTag>(2019);
+        static_cast<v8::CppHeapPointerTag>(29186);
     BlinkScriptStateSlot* data =
         env->context()->GetAlignedPointerFromEmbedderData<BlinkScriptStateSlot>(
             env->isolate(), 2, kScriptStateTag); //v8ContextPerContextDataIndex

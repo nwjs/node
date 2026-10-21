@@ -120,6 +120,10 @@ void NodeCategorySet::Disable(const FunctionCallbackInfo<Value>& args) {
 #endif
 }
 
+static void HasAgent(const FunctionCallbackInfo<Value>& args) {
+  args.GetReturnValue().Set(tracing::Agent::GetInstance() != nullptr);
+}
+
 void GetEnabledCategories(const FunctionCallbackInfo<Value>& args) {
 #if 0
   Environment* env = Environment::GetCurrent(args);
@@ -142,7 +146,9 @@ static void SetTraceCategoryStateUpdateHandler(
 
 static void GetCategoryEnabledBuffer(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[0]->IsString());
-
+  // The flag lives outside the V8 sandbox and cannot back an ArrayBuffer
+  // there; lib/internal/trace_events.js falls back to isTraceCategoryEnabled().
+#ifndef V8_ENABLE_SANDBOX
   Isolate* isolate = args.GetIsolate();
   node::Utf8Value category_name(isolate, args[0]);
 
@@ -159,6 +165,7 @@ static void GetCategoryEnabledBuffer(const FunctionCallbackInfo<Value>& args) {
   v8::Local<Uint8Array> u8 = v8::Uint8Array::New(ab, 0, 1);
 
   args.GetReturnValue().Set(u8);
+#endif
 }
 
 void NodeCategorySet::Initialize(Local<Object> target,
@@ -168,6 +175,7 @@ void NodeCategorySet::Initialize(Local<Object> target,
   Environment* env = Environment::GetCurrent(context);
   Isolate* isolate = env->isolate();
 
+  SetMethod(context, target, "hasAgent", HasAgent);
   SetMethod(context, target, "getEnabledCategories", GetEnabledCategories);
   SetMethod(context,
             target,
@@ -210,6 +218,7 @@ void NodeCategorySet::Initialize(Local<Object> target,
 
 void NodeCategorySet::RegisterExternalReferences(
     ExternalReferenceRegistry* registry) {
+  registry->Register(HasAgent);
   registry->Register(GetEnabledCategories);
   registry->Register(SetTraceCategoryStateUpdateHandler);
   registry->Register(GetCategoryEnabledBuffer);

@@ -669,7 +669,8 @@ process.on('SIGTERM', handle);
 * `'SIGTERM'` and `'SIGINT'` have default handlers on non-Windows platforms that
   reset the terminal mode before exiting with code `128 + signal number`. If one
   of these signals has a listener installed, its default behavior will be
-  removed (Node.js will no longer exit).
+  removed. Signal events are emitted asynchronously, so Node.js may exit before
+  the listener is called if the event loop is otherwise empty.
 * `'SIGPIPE'` is ignored by default. It can have a listener installed.
 * `'SIGHUP'` is generated on Windows when the console window is closed, and on
   other platforms under various similar conditions. See signal(7). It can have a
@@ -2060,9 +2061,13 @@ Since it's not possible to build Node.js without libuv, this value is always `tr
 
 <!-- YAML
 added: v22.5.0
+changes:
+  - version: v26.12.0
+    pr-url: https://github.com/nodejs/node/pull/66436
+    description: Marked as release candidate.
 -->
 
-> Stability: 1.1 - Active Development
+> Stability: 1.2 - Release candidate
 
 * `ref` {Object | Function} The reference to the resource that is being tracked.
 * `callback` {Function} The callback function to be called when the resource
@@ -2169,9 +2174,13 @@ as it is not guaranteed that the callback will be called under all circumstances
 
 <!-- YAML
 added: v22.5.0
+changes:
+  - version: v26.12.0
+    pr-url: https://github.com/nodejs/node/pull/66436
+    description: Marked as release candidate.
 -->
 
-> Stability: 1.1 - Active Development
+> Stability: 1.2 - Release candidate
 
 * `ref` {Object | Function} The reference
   to the resource that is being tracked.
@@ -2190,9 +2199,13 @@ this means that there is a possibility that the callback will not be called unde
 
 <!-- YAML
 added: v22.5.0
+changes:
+  - version: v26.12.0
+    pr-url: https://github.com/nodejs/node/pull/66436
+    description: Marked as release candidate.
 -->
 
-> Stability: 1.1 - Active Development
+> Stability: 1.2 - Release candidate
 
 * `ref` {Object | Function} The reference
   to the resource that was registered previously.
@@ -3138,10 +3151,14 @@ for the current process. Additional documentation is available in the
 
 <!-- YAML
 added: v20.0.0
+changes:
+  - version: v26.12.0
+    pr-url: https://github.com/nodejs/node/pull/65492
+    description: The `reference` argument can be a `URL` or a `Uint8Array`.
 -->
 
 * `scope` {string}
-* `reference` {string}
+* `reference` {string|URL|Uint8Array}
 * Returns: {boolean}
 
 Verifies that the process is able to access the given scope and reference.
@@ -3155,6 +3172,10 @@ permission status, but denied operations will not throw `ERR_ACCESS_DENIED`.
 The reference has a meaning based on the provided scope. For example,
 the reference when the scope is File System means files and folders.
 
+For File System scopes, a `URL` reference must use the `file:` protocol and is
+converted to a path, while a `Uint8Array` reference is treated as the raw bytes
+of a path. Other scopes ignore the reference.
+
 The available scopes are:
 
 * `fs` - All File System
@@ -3163,6 +3184,10 @@ The available scopes are:
 * `child` - Child process spawning operations
 * `openssl.store` - Loading keys through OpenSSL STORE loaders
 * `worker` - Worker thread spawning operation
+* `net` - Network operations
+* `inspector` - Inspector operations
+* `wasi` - WASI operations
+* `addon` - Native addon operations
 * `ffi` - Foreign function interface operations
 
 ```js
@@ -3175,13 +3200,19 @@ process.permission.has('fs.read');
 ### `process.permission.drop(scope[, reference])`
 
 <!-- YAML
-added: v26.3.0
+added:
+ - v26.3.0
+ - v24.20.0
+changes:
+  - version: v26.12.0
+    pr-url: https://github.com/nodejs/node/pull/65492
+    description: The `reference` argument can be a `URL` or a `Uint8Array`.
 -->
 
 > Stability: 1.1 - Active Development
 
 * `scope` {string}
-* `reference` {string}
+* `reference` {string|URL|Uint8Array}
 
 Drops the specified permission from the current process. This operation is
 **irreversible** — once a permission is dropped, it cannot be restored through
@@ -3222,6 +3253,7 @@ The available scopes are the same as [`process.permission.has()`][]:
 * `inspector` - Inspector operations
 * `wasi` - WASI operations
 * `addon` - Native addon operations
+* `ffi` - Foreign function interface operations
 
 ```js
 const fs = require('node:fs');
@@ -3327,9 +3359,11 @@ console.log(`The parent process is pid ${ppid}`);
 added:
   - v23.6.0
   - v22.14.0
+changes:
+  - version: v26.11.0
+    pr-url: https://github.com/nodejs/node/pull/66213
+    description: This API is no longer experimental.
 -->
-
-> Stability: 1 - Experimental
 
 * `maybeRefable` {any} An object that may be "refable".
 
@@ -4430,9 +4464,11 @@ In [`Worker`][] threads, `process.umask(mask)` will throw an exception.
 added:
   - v23.6.0
   - v22.14.0
+changes:
+  - version: v26.11.0
+    pr-url: https://github.com/nodejs/node/pull/66213
+    description: This API is no longer experimental.
 -->
-
-> Stability: 1 - Experimental
 
 * `maybeRefable` {any} An object that may be "unref'd".
 
@@ -4596,6 +4632,8 @@ cases:
 * `14` **Snapshot Failure**: Node.js was started to build a V8 startup
   snapshot and it failed because certain requirements of the state of
   the application were not met.
+* `124` **Process Timeout**: The process was still running when the duration
+  set with [`--process-timeout`][] elapsed.
 * `>128` **Signal Exits**: If Node.js receives a fatal signal such as
   `SIGKILL` or `SIGHUP`, then its exit code will be `128` plus the
   value of the signal code. This is a standard POSIX practice, since
@@ -4624,6 +4662,7 @@ cases:
 [`--no-deprecation`]: cli.md#--no-deprecation
 [`--permission-audit`]: cli.md#--permission-audit
 [`--permission`]: cli.md#--permission
+[`--process-timeout`]: cli.md#--process-timeoutduration
 [`--unhandled-rejections`]: cli.md#--unhandled-rejectionsmode
 [`Buffer`]: buffer.md
 [`ChildProcess.disconnect()`]: child_process.md#subprocessdisconnect

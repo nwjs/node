@@ -1,9 +1,14 @@
 import { URL } from 'node:url'
+import { SessionOptions } from 'node:http2'
 import Dispatcher from './dispatcher'
 import buildConnector from './connector'
 import TClientStats from './client-stats'
 
 type ClientConnectOptions<TOpaque = null> = Omit<Dispatcher.ConnectOptions<TOpaque>, 'origin'>
+
+// TODO: Pendings
+// 1. Reflect this on Client instantiation
+// 2. Client H2 should use this namespaced options instead.
 
 /**
  * A basic HTTP/1.1 client, mapped on top a single TCP/TLS connection. Pipelining is disabled by default.
@@ -75,6 +80,8 @@ export declare namespace Client {
     maxResponseSize?: number;
     /** WebSocket-specific options */
     webSocket?: Client.WebSocketOptions;
+    /** EventSource-specific options */
+    eventSource?: Client.EventSourceOptions;
     /** Enables a family autodetection algorithm that loosely implements section 5 of RFC 8305. */
     autoSelectFamily?: boolean;
     /** The amount of time in milliseconds to wait for a connection attempt to finish before trying the next address when using the `autoSelectFamily` option. */
@@ -85,25 +92,35 @@ export declare namespace Client {
      */
     allowH2?: boolean;
     /**
-     * @description Dictates the maximum number of concurrent streams for a single H2 session. It can be overridden by a SETTINGS remote frame.
+     * @description Dictates the maximum number of concurrent streams for a single H2 session. The server's SETTINGS_MAX_CONCURRENT_STREAMS can lower it, but not raise it.
      * @default 100
+     * @deprecated Use h2Options.maxConcurrentStreams instead
      */
     maxConcurrentStreams?: number;
     /**
      * @description Sets the HTTP/2 stream-level flow-control window size (SETTINGS_INITIAL_WINDOW_SIZE).
      * @default 262144
+     * @deprecated Use h2Options.settings.initialWindowSize instead
      */
     initialWindowSize?: number;
     /**
      * @description Sets the HTTP/2 connection-level flow-control window size (ClientHttp2Session.setLocalWindowSize).
      * @default 524288
+     * @deprecated Use h2Options.connectionWindowSize instead
      */
     connectionWindowSize?: number;
     /**
      * @description Time interval between PING frames dispatch
      * @default 60000
+     * @deprecated Use h2Options.connectionWindowSize instead
      */
     pingInterval?: number;
+    /**
+     * @description HTTP/2 configuration options
+     */
+    h2Options?: Client.H2Options;
+    /** @experimental Enables the experimental Milo HTTP/1 parser for this client. Defaults to the `UNDICI_USE_MILO` environment variable. */
+    useMilo?: boolean;
   }
   export interface SocketInfo {
     localAddress?: string
@@ -128,6 +145,45 @@ export declare namespace Client {
      * @default 134217728 (128 MB)
      */
     maxPayloadSize?: number;
+  }
+
+  export interface H2Options extends Omit<SessionOptions, keyof buildConnector.BuildOptions> {
+    /**
+     * @description Sets the HTTP/2 connection-level flow-control window size (ClientHttp2Session.setLocalWindowSize).
+     * @default 524288
+     */
+    connectionWindowSize?: number;
+    /**
+     * @description Time interval between PING frames dispatch
+     * @default 60000
+     */
+    pingInterval?: number;
+    /**
+     * @description Dictates the maximum number of concurrent streams for a single H2 session. The server's SETTINGS_MAX_CONCURRENT_STREAMS can lower it, but not raise it.
+     * @default 100
+    */
+    maxConcurrentStreams?: number;
+    /**
+     * @description Enable support for H2C (plain text)
+     * @default false
+     */
+    useH2c?: boolean;
+    /**
+     * @description SETTINGS frame object. Default to 'node:http2' defaults
+     */
+    settings?: Omit<SessionOptions['settings'], 'enablePush' | 'maxConcurrentStreams' | 'enableConnectProtocol'>
+  }
+  export interface EventSourceOptions {
+    /**
+     * Maximum total bytes of data and metadata field values retained for a
+     * pending EventSource event. Each unfinished line is separately bounded
+     * to this value plus seven syntax bytes. The number of data lines per
+     * event and buffered input chunks are each limited to
+     * min(131072, max(1024, floor(maxEventSize / 128))).
+     * Set to 0 to disable these limits.
+     * @default buffer.kStringMaxLength
+     */
+    maxEventSize?: number;
   }
 }
 

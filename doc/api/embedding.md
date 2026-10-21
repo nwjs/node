@@ -93,6 +93,13 @@ to as `node::Environment`. Each `node::Environment` is associated with:
   that `node::IsolateData` is shared only among `node::Environment`s that
   use the same `v8::Isolate`, Node.js does not perform this check.
 
+`node::Environment`s that share a `node::IsolateData` also share its
+`uv_loop_t`. `node::FreeEnvironment()` runs that loop until the handles of the
+`node::Environment` being freed have closed. Timers, I/O callbacks and thread
+pool completions of the other `node::Environment`s that become due in those
+loop iterations run normally, including their JavaScript; only the
+`node::Environment` being freed can no longer call into JavaScript.
+
 In order to set up a `v8::Isolate`, an `v8::ArrayBuffer::Allocator` needs
 to be provided. One possible choice is the default Node.js allocator, which
 can be created through `node::ArrayBufferAllocator::Create()`. Using the Node.js

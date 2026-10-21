@@ -3,7 +3,8 @@
 
 const common = require('../common');
 const assert = require('assert');
-const { push, ondrain, text } = require('stream/iter');
+const { dump, ondrain, push, text } = require('stream/iter');
+const { setImmediate } = require('timers/promises');
 
 async function testOndrain() {
   const { writer } = push({ budget: 16384 });
@@ -17,6 +18,36 @@ async function testOndrain() {
   // After close, ondrain returns null
   writer.end();
   assert.strictEqual(ondrain(writer), null);
+}
+
+async function testDropPoliciesReportPhysicalCapacity() {
+  const chunk = new Uint8Array(16384);
+
+  for (const backpressure of ['drop-oldest', 'drop-newest']) {
+    const { writer, readable } = push({
+      budget: chunk.byteLength,
+      backpressure,
+    });
+    const iterator = readable[Symbol.asyncIterator]();
+
+    assert.strictEqual(writer.writeSync(chunk), true);
+    assert.strictEqual(writer.canWrite, false);
+
+    let drained = false;
+    const drain = ondrain(writer);
+    drain.then(common.mustCall(() => { drained = true; }));
+
+    // Drop policies still accept writes despite having no physical capacity.
+    assert.strictEqual(writer.writeSync(chunk), true);
+    assert.strictEqual(writer.canWrite, false);
+    await setImmediate();
+    assert.strictEqual(drained, false);
+
+    assert.strictEqual((await iterator.next()).done, false);
+    assert.strictEqual(await drain, true);
+    assert.strictEqual(writer.canWrite, true);
+    await iterator.return();
+  }
 }
 
 async function testOndrainNonDrainable() {
@@ -54,9 +85,9 @@ async function testWriteWithSignalRejects() {
   await assert.rejects(writePromise, { name: 'AbortError' });
 
   // Clean up
-  writer.end();
-  // eslint-disable-next-line no-unused-vars
-  for await (const _ of readable) { break; }
+  const end = writer.end();
+  await text(readable);
+  await end;
 }
 
 async function testWriteWithPreAbortedSignal() {
@@ -70,9 +101,10 @@ async function testWriteWithPreAbortedSignal() {
 
   // Writer should still be usable for other writes
   writer.write('ok');
-  writer.end();
+  const end = writer.end();
   const data = await text(readable);
   assert.strictEqual(data, 'ok');
+  await end;
 }
 
 async function testCancelledWriteRemovedFromQueue() {
@@ -97,7 +129,7 @@ async function testCancelledWriteRemovedFromQueue() {
   // The cancelled write should NOT occupy a pending slot.
   // A new write should succeed now that the buffer has room.
   await writer.write(kChunk);
-  writer.end();
+  const end = writer.end();
 
   const result = await iter.next();
   assert.ok(!result.done);
@@ -106,7 +138,8 @@ async function testCancelledWriteRemovedFromQueue() {
     totalBytes += chunk.byteLength;
   }
   assert.strictEqual(totalBytes, 16384);
-  await iter.return();
+  assert.strictEqual((await iter.next()).done, true);
+  await end;
 }
 
 async function testOndrainResolvesFalseOnConsumerBreak() {
@@ -184,7 +217,7 @@ async function testWritevSyncInvalidChunkDoesNotQueue() {
   const { writer, readable } = push({ budget: 16384 });
 
   assert.throws(
-    () => writer.writevSync([1]),
+    () => writer.writevSync([Symbol('invalid')]),
     { code: 'ERR_INVALID_ARG_TYPE' },
   );
 
@@ -192,7 +225,7 @@ async function testWritevSyncInvalidChunkDoesNotQueue() {
   const next = iter.next();
   const result = await Promise.race([
     next.then(() => 'resolved'),
-    new Promise((resolve) => setImmediate(resolve, 'pending')),
+    setImmediate('pending'),
   ]);
   assert.strictEqual(result, 'pending');
 
@@ -242,8 +275,7 @@ async function testFail() {
   // Second fail is a no-op (already errored)
   writer.fail(new Error('boom2'));
   await assert.rejects(async () => {
-    // eslint-disable-next-line no-unused-vars
-    for await (const _ of readable) { /* consume */ }
+    await dump(readable);
   }, { message: 'boom' });
 }
 
@@ -252,8 +284,7 @@ async function testEndAsyncReturnValue() {
   writer.writeSync('hello');
   // Start consuming concurrently (end() waits for drain)
   const consume = (async () => {
-    // eslint-disable-next-line no-unused-vars
-    for await (const _ of readable) { /* drain */ }
+    await dump(readable);
   })();
   const total = await writer.end();
   assert.strictEqual(total, 5);
@@ -294,6 +325,21 @@ async function testEndSignalAbortWhileDraining() {
   assert.strictEqual(await completedEnd, 5);
 }
 
+async function testFactorySignalAbortWhileDraining() {
+  const controller = new AbortController();
+  const reason = new Error('stream aborted while draining');
+  const { writer, readable } = push({ signal: controller.signal });
+
+  writer.writeSync('hello');
+  const end = writer.end();
+  const endRejected = assert.rejects(end, (error) => error === reason);
+  controller.abort(reason);
+
+  await endRejected;
+  await assert.rejects(text(readable), (error) => error === reason);
+  await assert.rejects(writer.end(), (error) => error === reason);
+}
+
 async function testEndAfterEndSyncWaitsForDrain() {
   const { writer, readable } = push();
   writer.writeSync('hello');
@@ -308,8 +354,7 @@ async function testEndAfterEndSyncWaitsForDrain() {
   await Promise.resolve();
   assert.strictEqual(ended, false);
 
-  // eslint-disable-next-line no-unused-vars
-  for await (const _ of readable) { /* drain */ }
+  await dump(readable);
   assert.strictEqual(await end, 5);
 }
 
@@ -329,7 +374,7 @@ async function testOndrainWaitsForDrain() {
   let drainState = 'pending';
   const drainPromise = ondrain(writer).then((v) => { drainState = v; });
 
-  await new Promise(setImmediate);
+  await setImmediate();
   assert.strictEqual(drainState, 'pending'); // Still waiting
 
   // Read to drain
@@ -382,7 +427,7 @@ async function testEndResolvesPendingRead() {
   const readPromise = iter.next();
 
   // Give the read a tick to enter the pending state
-  await new Promise(setImmediate);
+  await setImmediate();
 
   // End the writer — should resolve the pending read with done:true
   writer.endSync();
@@ -397,7 +442,7 @@ async function testFailRejectsPendingRead() {
   const iter = readable[Symbol.asyncIterator]();
   const readPromise = iter.next();
 
-  await new Promise(setImmediate);
+  await setImmediate();
 
   writer.fail(new Error('fail during read'));
   await assert.rejects(
@@ -413,7 +458,7 @@ async function testConsumerReturnResolvesPendingRead() {
   const iter = readable[Symbol.asyncIterator]();
   const readPromise = iter.next();
 
-  await new Promise(setImmediate);
+  await setImmediate();
 
   const returnResult = await iter.return();
   assert.strictEqual(returnResult.value, undefined);
@@ -424,6 +469,20 @@ async function testConsumerReturnResolvesPendingRead() {
   assert.strictEqual(readResult.done, true);
 }
 
+async function testEndRejectsAfterConsumerReturn() {
+  const { writer, readable } = push();
+  writer.writeSync('data');
+  const iter = readable[Symbol.asyncIterator]();
+
+  await iter.return();
+
+  await assert.rejects(
+    writer.end({ signal: AbortSignal.timeout(common.platformTimeout(100)) }),
+    { code: 'ERR_INVALID_STATE' },
+  );
+  assert.strictEqual((await iter.next()).done, true);
+}
+
 // iterator.throw() rejects a pending read with the thrown error
 async function testConsumerThrowRejectsPendingRead() {
   const { readable } = push();
@@ -431,7 +490,7 @@ async function testConsumerThrowRejectsPendingRead() {
   const iter = readable[Symbol.asyncIterator]();
   const readPromise = iter.next();
 
-  await new Promise(setImmediate);
+  await setImmediate();
 
   const err = new Error('consumer read boom');
   const readRejects = assert.rejects(
@@ -446,28 +505,48 @@ async function testConsumerThrowRejectsPendingRead() {
   await readRejects;
 }
 
-// end() while writes are pending rejects those writes
-async function testEndRejectsPendingWrites() {
+// end() drains writes that were already pending, then waits for EOF to be read.
+async function testEndDrainsPendingWrites() {
   const kChunk = new Uint8Array(16384);
   const { writer, readable } = push({ budget: 16384, backpressure: 'unbounded' });
   writer.writeSync(kChunk); // fill budget
 
   // This write blocks on backpressure
   const writePromise = writer.write(kChunk);
+  const endPromise = writer.end();
+  await assert.rejects(writer.write(kChunk), { code: 'ERR_INVALID_STATE' });
 
-  await new Promise(setImmediate);
+  let ended = false;
+  endPromise.then(common.mustCall(() => { ended = true; }));
+  const iterator = readable[Symbol.asyncIterator]();
 
-  // Ending should reject the pending write
-  writer.endSync();
+  assert.strictEqual((await iterator.next()).done, false);
+  await writePromise;
+  assert.strictEqual((await iterator.next()).done, false);
+  await Promise.resolve();
+  assert.strictEqual(ended, false);
 
-  await assert.rejects(
-    () => writePromise,
-    { code: 'ERR_INVALID_STATE' },
-  );
+  assert.strictEqual((await iterator.next()).done, true);
+  assert.strictEqual(await endPromise, kChunk.byteLength * 2);
+  assert.strictEqual(ended, true);
+}
 
-  // Clean up: drain the readable
-  // eslint-disable-next-line no-unused-vars
-  for await (const _ of readable) { break; }
+async function testEndWaitsForEofPull() {
+  const { writer, readable } = push();
+  writer.writeSync('hello');
+  const endPromise = writer.end();
+  let ended = false;
+  endPromise.then(common.mustCall(() => { ended = true; }));
+  const iterator = readable[Symbol.asyncIterator]();
+
+  const data = await iterator.next();
+  assert.strictEqual(data.done, false);
+  await Promise.resolve();
+  assert.strictEqual(ended, false);
+
+  assert.strictEqual((await iterator.next()).done, true);
+  await endPromise;
+  assert.strictEqual(ended, true);
 }
 
 async function testEndIdempotentWhenClosed() {
@@ -475,8 +554,7 @@ async function testEndIdempotentWhenClosed() {
   await writer.write('hello');
   // Start consuming concurrently (end() waits for drain)
   const consume = (async () => {
-    // eslint-disable-next-line no-unused-vars
-    for await (const _ of readable) { /* drain */ }
+    await dump(readable);
   })();
   const first = await writer.end();
   assert.strictEqual(first, 5);
@@ -495,11 +573,27 @@ async function testAsyncDispose() {
   assert.strictEqual(writer.writeSync('fail'), false);
   // Drain readable
   try {
-    // eslint-disable-next-line no-unused-vars
-    for await (const _ of readable) { /* consume */ }
+    await dump(readable);
   } catch {
     // Expected - reader sees the error
   }
+}
+
+async function testAsyncDisposeWaitsAfterEndSync() {
+  const { writer, readable } = push({ budget: 16384 });
+  writer.writeSync('hello');
+  assert.strictEqual(writer.endSync(), -1);
+
+  let disposed = false;
+  const disposal = writer[Symbol.asyncDispose]().then(() => {
+    disposed = true;
+  });
+  await Promise.resolve();
+  assert.strictEqual(disposed, false);
+
+  assert.strictEqual(await text(readable), 'hello');
+  await disposal;
+  assert.strictEqual(disposed, true);
 }
 
 async function testSyncDispose() {
@@ -511,8 +605,7 @@ async function testSyncDispose() {
   assert.strictEqual(writer.writeSync('fail'), false);
   // Drain readable
   try {
-    // eslint-disable-next-line no-unused-vars
-    for await (const _ of readable) { /* consume */ }
+    await dump(readable);
   } catch {
     // Expected
   }
@@ -559,7 +652,7 @@ async function testFailRejectsPendingReadWithFalsyReason() {
   const iter = readable[Symbol.asyncIterator]();
   const readPromise = iter.next();
 
-  await new Promise(setImmediate);
+  await setImmediate();
 
   writer.fail(false);
   await readPromise.then(
@@ -572,6 +665,7 @@ async function testFailRejectsPendingReadWithFalsyReason() {
 
 Promise.all([
   testOndrain(),
+  testDropPoliciesReportPhysicalCapacity(),
   testOndrainNonDrainable(),
   testWriteWithSignalRejects(),
   testWriteWithPreAbortedSignal(),
@@ -589,6 +683,7 @@ Promise.all([
   testEndAsyncReturnValue(),
   testEndWithPreAbortedSignal(),
   testEndSignalAbortWhileDraining(),
+  testFactorySignalAbortWhileDraining(),
   testEndAfterEndSyncWaitsForDrain(),
   testWriteUint8Array(),
   testOndrainWaitsForDrain(),
@@ -599,10 +694,13 @@ Promise.all([
   testFailRejectsFutureReadWithFalsyReason(),
   testFailRejectsPendingReadWithFalsyReason(),
   testConsumerReturnResolvesPendingRead(),
+  testEndRejectsAfterConsumerReturn(),
   testConsumerThrowRejectsPendingRead(),
-  testEndRejectsPendingWrites(),
+  testEndDrainsPendingWrites(),
+  testEndWaitsForEofPull(),
   testEndIdempotentWhenClosed(),
   testEndRejectsWhenErrored(),
   testAsyncDispose(),
+  testAsyncDisposeWaitsAfterEndSync(),
   testSyncDispose(),
 ]).then(common.mustCall());

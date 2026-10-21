@@ -210,8 +210,10 @@ enum Flags : uint32_t {
   kNoICU = 1 << 3,
   // Do not modify stdio file descriptor or TTY state.
   kNoStdioInitialization = 1 << 4,
-  // Do not register Node.js-specific signal handlers
-  // and reset other signal handlers to default state.
+  // Do not register Node.js-specific signal handlers, reset other signal
+  // handlers to default state, or replace the calling thread's signal mask
+  // (without this flag, POSIX builds with the inspector set it to block
+  // SIGUSR1 and nothing else).
   kNoDefaultSignalHandling = 1 << 5,
   // Do not perform V8 initialization.
   kNoInitializeV8 = 1 << 6,
@@ -223,7 +225,8 @@ enum Flags : uint32_t {
   kNoParseGlobalDebugVariables = 1 << 9,
   // Do not adjust OS resource limits for this process.
   kNoAdjustResourceLimits = 1 << 10,
-  // Do not map code segments into large pages for this process.
+  // Legacy flag for not mapping code segments into large pages for this
+  // process. The feature is no longer supported so this is just a no-op.
   kNoUseLargePages = 1 << 11,
   // Skip printing output for --help, --version, --v8-options.
   kNoPrintHelpOrVersionOutput = 1 << 12,
@@ -233,6 +236,11 @@ enum Flags : uint32_t {
   kNoInitializeCppgc = 1 << 13,
   // Initialize the process for predictable snapshot generation.
   kGeneratePredictableSnapshot = 1 << 14,
+  // Do not serialize a code cache for builtins that had to be compiled without
+  // one. By default such caches are kept so that worker threads created later
+  // start faster; an embedder that supplies an EmbedderBuiltinCodeCache or
+  // never creates workers only pays for the serialization.
+  kNoHarvestBuiltinCodeCache = 1 << 15,
 
   kNWJS = //disable all except OpenSSL and CLI options
       ((1 << 14) - 1) ^ (kNoInitOpenSSL | kDisableCLIOptions | kNoParseGlobalDebugVariables),
@@ -421,6 +429,7 @@ enum IsolateSettingsFlags {
   DETAILED_SOURCE_POSITIONS_FOR_PROFILING = 1 << 1,
   SHOULD_NOT_SET_PROMISE_REJECTION_CALLBACK = 1 << 2,
   SHOULD_NOT_SET_PREPARE_STACK_TRACE_CALLBACK = 1 << 3,
+  SHOULD_NOT_SET_WASM_STREAMING_CALLBACK = 1 << 4,
   ALLOW_MODIFY_CODE_GENERATION_FROM_STRINGS_CALLBACK = 0, /* legacy no-op */
 };
 
@@ -645,7 +654,12 @@ enum Flags : uint64_t {
   // Controls whether the InspectorAgent created for this Environment waits for
   // Inspector frontend events during the Environment creation. It's used to
   // call node::Stop(env) on a Worker thread that is waiting for the events.
-  kNoWaitForInspectorFrontend = 1 << 11
+  kNoWaitForInspectorFrontend = 1 << 11,
+  // Set this flag to exempt process._linkedBinding() from the permission
+  // model's addon scope (--allow-addons): linked bindings are compiled into
+  // the executable by the embedder, unlike addons loaded from the file system
+  // through process.dlopen(), which stays gated. Inherited by worker threads.
+  kNoAddonPermissionForLinkedBindings = 1 << 12
 };
 }  // namespace EnvironmentFlags
 
@@ -679,6 +693,43 @@ struct SnapshotConfig {
 struct InspectorParentHandle {
   virtual ~InspectorParentHandle() = default;
 };
+
+// Code cache for the built-in JavaScript of Environments that are bootstrapped
+// rather than deserialized from a snapshot; see SetBuiltinCodeCache().
+class NODE_EXTERN EmbedderBuiltinCodeCache {
+ public:
+  struct Entry {
+    std::string id;  // e.g. "internal/bootstrap/node"
+    std::unique_ptr<v8::ScriptCompiler::CachedData> data;
+  };
+  explicit EmbedderBuiltinCodeCache(std::vector<Entry> entries);
+  ~EmbedderBuiltinCodeCache();
+
+  // Compiles every built-in module in `context`, which must come from
+  // NewContext(), and returns their code caches; empty on failure.
+  static std::vector<Entry> Generate(v8::Local<v8::Context> context);
+
+  v8::ScriptCompiler::CachedData::CompatibilityCheckResult CompatibilityCheck(
+      v8::Isolate* isolate) const;
+
+  EmbedderBuiltinCodeCache(const EmbedderBuiltinCodeCache&) = delete;
+  EmbedderBuiltinCodeCache& operator=(const EmbedderBuiltinCodeCache&) = delete;
+
+  struct Impl;
+
+ private:
+  std::unique_ptr<Impl> impl_;
+  friend NODE_EXTERN v8::ScriptCompiler::CachedData::CompatibilityCheckResult
+  SetBuiltinCodeCache(IsolateData*, const EmbedderBuiltinCodeCache*);
+};
+
+// Environments created from `isolate_data` afterwards start with `cache`'s
+// entries (they share its buffers; `cache` itself may be freed after the call);
+// nullptr clears it. Returns the result of `cache->CompatibilityCheck()` and
+// leaves `isolate_data` unchanged unless that is kSuccess.
+NODE_EXTERN v8::ScriptCompiler::CachedData::CompatibilityCheckResult
+SetBuiltinCodeCache(IsolateData* isolate_data,
+                    const EmbedderBuiltinCodeCache* cache);
 
 // TODO(addaleax): Maybe move per-Environment options parsing here.
 // Returns nullptr when the Environment cannot be created e.g. there are
@@ -841,6 +892,9 @@ NODE_EXTERN v8::MaybeLocal<v8::Value> LoadEnvironment(
     const ModuleData* entry_point,
     EmbedderPreloadCallback preload = nullptr);
 
+// Runs `env`'s event loop until its handles have closed, with JavaScript
+// execution disallowed for `env`; see doc/api/embedding.md if that loop is
+// shared with other Environments.
 NODE_EXTERN void FreeEnvironment(Environment* env);
 
 // Set a callback that is called when process.exit() is called from JS,
@@ -854,6 +908,16 @@ NODE_EXTERN void SetProcessExitHandler(
     Environment* env,
     std::function<void(Environment*, int)>&& handler);
 NODE_EXTERN void DefaultProcessExitHandler(Environment* env, int exit_code);
+
+// Sets a process-global handler invoked when Node.js programmatically aborts.
+// Nullable strings representing the location and reason for the abort may or
+// may not be passed as a parameter to the handler. The handler should not
+// return, but node will ensure that the process exits after the handler is
+// called regardless of whether or not it returns. Passing nullptr restores the
+// default handler. This is process-global and may be invoked before any Isolate
+// or Environment exists.
+using AbortHandler = void (*)(const char* location, const char* message);
+NODE_EXTERN void SetAbortHandler(AbortHandler handler);
 
 // This may return nullptr if context is not associated with a Node instance.
 NODE_EXTERN Environment* GetCurrentEnvironment(v8::Local<v8::Context> context);
@@ -955,6 +1019,9 @@ class NODE_EXTERN CommonEnvironmentSetup {
   // will be empty.
   // env_args will be passed through as arguments to CreateEnvironment(), after
   // `isolate_data` and `context`.
+  // `snapshot_data` has to stay alive as long as the setup created from it,
+  // and every setup in a process has to use the same snapshot: all isolates
+  // are created from the blob the first one used.
   template <typename... EnvironmentArgs>
   static std::unique_ptr<CommonEnvironmentSetup> Create(
       MultiIsolatePlatform* platform,

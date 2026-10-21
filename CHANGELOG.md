@@ -41,7 +41,16 @@ release.
 </tr>
 <tr>
   <td valign="top">
-<b><a href="doc/changelogs/CHANGELOG_V26.md#26.7.0">26.7.0</a></b><br/>
+<b><a href="doc/changelogs/CHANGELOG_V26.md#26.12.1">26.12.1</a></b><br/>
+<a href="doc/changelogs/CHANGELOG_V26.md#26.12.0">26.12.0</a><br/>
+<a href="doc/changelogs/CHANGELOG_V26.md#26.11.1">26.11.1</a><br/>
+<a href="doc/changelogs/CHANGELOG_V26.md#26.11.0">26.11.0</a><br/>
+<a href="doc/changelogs/CHANGELOG_V26.md#26.10.0">26.10.0</a><br/>
+<a href="doc/changelogs/CHANGELOG_V26.md#26.9.0">26.9.0</a><br/>
+<a href="doc/changelogs/CHANGELOG_V26.md#26.8.2">26.8.2</a><br/>
+<a href="doc/changelogs/CHANGELOG_V26.md#26.8.1">26.8.1</a><br/>
+<a href="doc/changelogs/CHANGELOG_V26.md#26.8.0">26.8.0</a><br/>
+<a href="doc/changelogs/CHANGELOG_V26.md#26.7.0">26.7.0</a><br/>
 <a href="doc/changelogs/CHANGELOG_V26.md#26.6.0">26.6.0</a><br/>
 <a href="doc/changelogs/CHANGELOG_V26.md#26.5.1">26.5.1</a><br/>
 <a href="doc/changelogs/CHANGELOG_V26.md#26.5.0">26.5.0</a><br/>

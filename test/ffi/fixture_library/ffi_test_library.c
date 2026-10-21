@@ -49,6 +49,30 @@ FFI_EXPORT int32_t identity_i32(int32_t value) {
   return value;
 }
 
+FFI_EXPORT int64_t identity_i64(int64_t value) {
+  return value;
+}
+
+FFI_EXPORT uint64_t identity_u64(uint64_t value) {
+  return value;
+}
+
+FFI_EXPORT int64_t identity_i64_fallback(void* pointer,
+                                         int64_t value,
+                                         void (*callback)(void)) {
+  (void)pointer;
+  (void)callback;
+  return value;
+}
+
+FFI_EXPORT uint64_t identity_u64_fallback(void* pointer,
+                                          uint64_t value,
+                                          void (*callback)(void)) {
+  (void)pointer;
+  (void)callback;
+  return value;
+}
+
 FFI_EXPORT char identity_char(char value) {
   return value;
 }
@@ -106,6 +130,11 @@ FFI_EXPORT uint8_t string_first_char(const char* str) {
 
 FFI_EXPORT uint8_t string_equals_hello(const char* str) {
   return str && strcmp(str, "hello") == 0;
+}
+
+FFI_EXPORT uint8_t overwrite_string(char* str, int32_t value, uint64_t length) {
+  memset(str, value, (size_t)length);
+  return (uint8_t)str[0];
 }
 
 FFI_EXPORT char* string_concat(const char* a, const char* b) {

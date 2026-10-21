@@ -27,13 +27,14 @@ struct V8Platform {
       StartTracingAgent();
     }
     // Tracing must be initialized before platform threads are created.
-    platform_ = new NodePlatform(thread_pool_size,
-                                 tracing_agent_->GetTracingController());
-    v8::V8::InitializePlatform(platform_);
+    platform_ = std::make_unique<NodePlatform>(
+        thread_pool_size, tracing_agent_->GetTracingController());
+    v8::V8::InitializePlatform(platform_.get());
 #endif
     tracing_agent_.reset(nullptr);
-    platform_ = new NodePlatform(thread_pool_size, new v8::TracingController());
-    v8::V8::InitializePlatform(platform_);
+    platform_ = std::make_unique<NodePlatform>(thread_pool_size,
+                                              new v8::TracingController());
+    v8::V8::InitializePlatform(platform_.get());
   }
   // Make sure V8Platform don not call into Libuv threadpool,
   // see DefaultProcessExitHandlerInternal in environment.cc
@@ -43,8 +44,7 @@ struct V8Platform {
     initialized_ = false;
     StopTracingAgent();
     platform_->Shutdown();
-    delete platform_;
-    platform_ = nullptr;
+    platform_.reset();
     // Destroy tracing after the platform (and platform threads) have been
     // stopped.
     tracing_agent_.reset(nullptr);
@@ -64,10 +64,12 @@ struct V8Platform {
 
   inline void StopTracingAgent() {} // tracing_agent_->StopTracing();
 
-  inline NodePlatform* Platform() { return platform_; }
+  inline NodePlatform* Platform() {
+    return platform_.get();
+  }
 
   std::unique_ptr<tracing::Agent, tracing::Agent::Deleter> tracing_agent_;
-  NodePlatform* platform_;
+  std::unique_ptr<NodePlatform> platform_;
 #else   // !NODE_USE_V8_PLATFORM
   inline void Initialize(int thread_pool_size) {}
   inline void Dispose() {}

@@ -98,6 +98,12 @@ and libc version. The table below lists the support tier for each supported
 combination. A list of [supported compile toolchains](#supported-toolchains) is
 also supplied for tier 1 platforms.
 
+Some built-in functionality requires WebAssembly or runtime allocation of
+executable memory. When a capability is unavailable, Node.js does not guarantee
+an alternative implementation of the affected feature. See the
+[`--jitless` documentation](doc/api/cli.md#--jitless) and
+[FFI documentation](doc/api/ffi.md) for the corresponding limitations and errors.
+
 **For production applications, run Node.js on supported platforms only (Tier 1 or 2).**
 
 Node.js does not support a platform version if a vendor has expired support
@@ -107,7 +113,7 @@ platforms. This is true regardless of entries in the table below.
 | Operating System | Architectures    | Versions                          | Support Type | Notes                                                      |
 | ---------------- | ---------------- | --------------------------------- | ------------ | ---------------------------------------------------------- |
 | GNU/Linux        | x64              | kernel >= 4.18[^1], glibc >= 2.28 | Tier 1       | e.g. Ubuntu 20.04, Debian 10, RHEL 8                       |
-| GNU/Linux        | x64              | kernel >= 3.10, musl >= 1.1.19    | Experimental | e.g. Alpine 3.8                                            |
+| GNU/Linux        | x64              | kernel >= 6.12, musl >= 1.2.5     | Tier 2       | e.g. Alpine 3.22                                           |
 | GNU/Linux        | x86              | kernel >= 3.10, glibc >= 2.17     | Experimental | Downgraded as of Node.js 10                                |
 | GNU/Linux        | arm64            | kernel >= 4.18[^1], glibc >= 2.28 | Tier 1       | e.g. Ubuntu 20.04, Debian 10, RHEL 8                       |
 | GNU/Linux        | armv7            | kernel >= 4.18[^1], glibc >= 2.28 | Experimental | Downgraded as of Node.js 24                                |
@@ -187,6 +193,7 @@ Binaries at <https://nodejs.org/download/release/> are produced on:
 | linux-ppc64le           | RHEL 8 with Clang 20.1 and gcc-toolset-14-libatomic-devel[^6] |
 | linux-s390x             | RHEL 8 with Clang 20.1 and gcc-toolset-14-libatomic-devel[^6] |
 | linux-x64               | RHEL 8 with Clang 20.1 and gcc-toolset-14-libatomic-devel[^6] |
+| linux-x64-musl          | Alpine 3.23 with Clang 21                                     |
 | win-arm64               | Windows Server 2022 (x64) with Visual Studio 2022             |
 | win-x64                 | Windows Server 2022 (x64) with Visual Studio 2022             |
 
@@ -241,7 +248,7 @@ tarball and/or browse the git repository checked out at the relevant tag.
 
 ### Prerequisites
 
-* [A supported version of Python][Python versions] for building and testing.
+* [A supported version of Python][Python versions] (excludes pre-release versions) for building and testing.
 * A Rust toolchain if [building Node.js with Temporal support](#building-nodejs-with-temporal-support).
 * Memory: at least 8GB of RAM is typically required when compiling with 4 parallel jobs (e.g: `make -j4`).
 
@@ -874,16 +881,7 @@ Follow <https://github.com/ccache/ccache/wiki/MS-Visual-Studio>, and you
 should notice that obj file will be bigger than the normal one.
 
 First, install ccache. Assuming the installation of ccache is in `c:\ccache`
-(where you can find `ccache.exe`), copy `c:\ccache\ccache.exe` to `c:\ccache\cl.exe`
-with this command.
-
-```powershell
-cp c:\ccache\ccache.exe c:\ccache\cl.exe
-```
-
-With newer version of Visual Studio, it may need the copy to be `clang-cl.exe`
-instead. If the output of `vcbuild.bat` suggests missing `clang-cl.exe`, copy
-it differently:
+(where you can find `ccache.exe`), setup aliases as the following commands:
 
 ```powershell
 cp c:\ccache\ccache.exe c:\ccache\clang-cl.exe
@@ -897,12 +895,6 @@ When building Node.js, provide a path to your ccache via the option:
 
 This will allow for near-instantaneous rebuilds when switching branches back
 and forth that were built with cache.
-
-To use it with ClangCL, run this instead:
-
-```powershell
-.\vcbuild.bat clang-cl ccache c:\ccache\
-```
 
 ### Android
 
@@ -1032,11 +1024,11 @@ as `deps/icu` (You'll have: `deps/icu/source/...`)
 ### Configure OpenSSL appname
 
 Node.js can use an OpenSSL configuration file by specifying the environment
-variable `OPENSSL_CONF`, or using the command line option `--openssl-conf`, and
-if none of those are specified will default to reading the default OpenSSL
-configuration file `openssl.cnf`. Node.js will only read a section that is by
-default named `nodejs_conf`, but this name can be overridden using the following
-configure option:
+variable `OPENSSL_CONF`, or using the command line option `--openssl-config`,
+which takes precedence. If neither is specified, Node.js defaults to reading the
+default OpenSSL configuration file `openssl.cnf`. Node.js will only read a
+section that is by default named `nodejs_conf`, but this name can be overridden
+using the following configure option:
 
 ```bash
 ./configure --openssl-conf-name=<some_conf_name>
@@ -1047,6 +1039,8 @@ configure option:
 Node.js supports FIPS when statically or dynamically linked with OpenSSL 3 via
 [OpenSSL's provider model](https://docs.openssl.org/3.0/man7/crypto/#OPENSSL-PROVIDERS).
 It is not necessary to rebuild Node.js to enable support for FIPS.
+
+When using OpenSSL 1.1.1, Node.js must be built against a FIPS-capable OpenSSL.
 
 See [FIPS mode](doc/api/crypto.md#fips-mode) for more information on how to
 enable FIPS support in Node.js.

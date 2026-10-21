@@ -82,8 +82,8 @@ using the [`--allow-child-process`][] and [`--allow-worker`][] respectively.
 To allow network access, use [`--allow-net`][] and for allowing native addons
 when using permission model, use the [`--allow-addons`][]
 flag. For WASI, use the [`--allow-wasi`][] flag. For FFI, use the
-[`--allow-ffi`][] flag. The [`node:ffi`](ffi.md) module also requires the
-`--experimental-ffi` flag and is only available in builds with FFI support.
+[`--allow-ffi`][] flag. The [`node:ffi`](ffi.md) module is only available in
+builds with FFI support.
 
 To allow use of OpenSSL STORE loaders, for example to load a private key
 from a {URL} passed to [`crypto.createPrivateKey()`][], use the
@@ -138,7 +138,7 @@ const config = fs.readFileSync('/etc/myapp/config.json', 'utf8');
 // Drop read access to /etc/myapp after initialization
 process.permission.drop('fs.read', '/etc/myapp');
 
-// This will now throw ERR_ACCESS_DENIED
+// This will now return false
 process.permission.has('fs.read', '/etc/myapp/config.json'); // false
 
 // Drop child process permission entirely
@@ -219,7 +219,7 @@ $ node --permission index.js
 * `index.js` will be included in the allowed file system read list
 
 ```console
-$ node -r /path/to/custom-require.js --permission index.js.
+$ node -r /path/to/custom-require.js --permission index.js
 ```
 
 * `/path/to/custom-require.js` will be included in the allowed file system read
@@ -258,12 +258,20 @@ does not exist, the wildcard will not be added, and access will be limited to
 yet, make sure to explicitly include the wildcard:
 `/my-path/folder-do-not-exist/*`.
 
+Some `node:fs` operations act on an already-open file descriptor rather than a
+path, so they cannot be tied to a `--allow-fs-read` or `--allow-fs-write` grant.
+When the permission model is enabled these operations are disabled and throw
+`ERR_ACCESS_DENIED`, regardless of how the descriptor was obtained. This applies
+both to the top-level `node:fs` functions and to the equivalent
+`FileHandle` methods, and currently includes `fsync`/`fdatasync`,
+`fchmod`, `fchown`, and `futimes` (and their synchronous variants).
+
 #### Configuration file support
 
 In addition to passing permission flags on the command line, they can also be
-declared in a Node.js configuration file when using the experimental
-\[`--experimental-config-file`]\[] flag. Permission options must be placed inside
-the `permission` top-level object.
+declared in a Node.js configuration file when using the [`--config-file`][]
+flag. Permission options must be placed inside the `permission` top-level
+object.
 
 Example `node.config.json`:
 
@@ -286,7 +294,7 @@ When the `permission` namespace is present in the configuration file, Node.js
 automatically enables the `--permission` flag. Run with:
 
 ```console
-$ node --experimental-default-config-file app.js
+$ node --config-file app.js
 ```
 
 #### Using the Permission Model with `npx`
@@ -330,7 +338,13 @@ easy to configure permissions as needed when using `npx`.
 
 There are constraints you need to know before using this system:
 
-* The model does not inherit to a worker thread.
+* The model does not inherit to a worker thread. A default
+  `worker_threads.Worker` (no `execArgv` option) still receives the parent
+  process CLI flags, including `--permission` and `--allow-*` if those were
+  passed to the parent. Setting `execArgv` explicitly, including
+  `execArgv: []`, replaces the inherited flags. The worker then does not keep
+  the parent's Permission Model grants unless those flags are listed again in
+  `execArgv`. That difference is intended, not a bypass.
 * When using the Permission Model the following features will be restricted:
   * Native modules
   * Network
@@ -346,6 +360,14 @@ There are constraints you need to know before using this system:
   to read files before environment initialization. As a result, such flags are
   not subject to the rules of the Permission Model. The same applies for V8
   flags that can be set via runtime through `v8.setFlagsFromString`.
+* Files that Node.js itself creates, writes, or reads at a location selected
+  by an operator flag may not be consistently checked against the Permission
+  Model, in particular when the flag accepts a template or pattern that
+  expands to several paths. For example, trace files rotated by
+  `--trace-event-file-pattern` (`${rotation}`) can be written even when the
+  expanded path is not covered by `--allow-fs-write`. Because the location is
+  chosen by the operator, gaps like this are treated as regular bugs rather
+  than vulnerabilities. Please report them through the regular issue tracker.
 * OpenSSL engines cannot be requested at runtime when the Permission
   Model is enabled, affecting the built-in crypto, https, and tls modules.
 * Run-Time Loadable Extensions cannot be loaded when the Permission Model is
@@ -395,6 +417,7 @@ Developers relying on --permission to sandbox untrusted code should be aware tha
 [`--allow-openssl-store`]: cli.md#--allow-openssl-store
 [`--allow-wasi`]: cli.md#--allow-wasi
 [`--allow-worker`]: cli.md#--allow-worker
+[`--config-file`]: cli.md#--config-filepath---config-file
 [`--permission-audit`]: cli.md#--permission-audit
 [`--permission`]: cli.md#--permission
 [`crypto.createPrivateKey()`]: crypto.md#cryptocreateprivatekeykey

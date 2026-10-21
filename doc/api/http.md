@@ -286,15 +286,14 @@ added: v8.1.0
 -->
 
 * `socket` {stream.Duplex}
+* Returns: {boolean}
 
 Called when `socket` is detached from a request and could be persisted by the
-`Agent`. Default behavior is to:
+`Agent`. The `Agent` calls this method only when `keepAlive` is enabled.
 
-```js
-socket.setKeepAlive(true, this.keepAliveMsecs);
-socket.unref();
-return true;
-```
+By default, TCP keep-alive is enabled and the socket is unrefed. A server
+keep-alive timeout hint may adjust the socket timeout or cause this method to
+return `false`; otherwise, it returns `true`.
 
 This method can be overridden by a particular `Agent` subclass. If this
 method returns a falsy value, the socket will be destroyed instead of persisting
@@ -1127,7 +1126,7 @@ const hasContentType = request.hasHeader('content-type');
 
 ### `request.maxHeadersCount`
 
-* Type: {number} **Default:** `2000`
+* Type: {number} **Default:** `1000`
 
 Limits maximum response headers count. If set to 0, no limit will be applied.
 
@@ -1191,56 +1190,55 @@ added:
 
 * Type: {boolean} Whether the request is sent through a reused socket.
 
-When sending request through a keep-alive enabled agent, the underlying socket
-might be reused. But if server closes connection at unfortunate time, client
-may run into a 'ECONNRESET' error.
+When sending a request through a keep-alive-enabled agent, the underlying socket
+might be reused. If the server closes the connection at the same time that the
+agent reuses it, the request may encounter an `ECONNRESET` error.
+
+The following example sends requests near the server's keep-alive timeout to
+make this race easier to reproduce. It sets
+[`server.keepAliveTimeoutBuffer`][] to `0` so the internal socket timeout
+matches [`server.keepAliveTimeout`][].
 
 ```mjs
 import http from 'node:http';
 const agent = new http.Agent({ keepAlive: true });
-
-// Server has a 5 seconds keep-alive timeout by default
-http
-  .createServer((req, res) => {
+const server = http.createServer(
+  { keepAliveTimeout: 3000, keepAliveTimeoutBuffer: 0 },
+  (req, res) => {
     res.write('hello\n');
     res.end();
-  })
-  .listen(3000);
+  },
+);
+server.listen(3000);
 
 setInterval(() => {
-  // Adapting a keep-alive agent
   http.get('http://localhost:3000', { agent }, (res) => {
-    res.on('data', (data) => {
-      // Do nothing
-    });
+    res.resume();
   });
-}, 5000); // Sending request on 5s interval so it's easy to hit idle timeout
+}, 3000);
 ```
 
 ```cjs
 const http = require('node:http');
 const agent = new http.Agent({ keepAlive: true });
-
-// Server has a 5 seconds keep-alive timeout by default
-http
-  .createServer((req, res) => {
+const server = http.createServer(
+  { keepAliveTimeout: 3000, keepAliveTimeoutBuffer: 0 },
+  (req, res) => {
     res.write('hello\n');
     res.end();
-  })
-  .listen(3000);
+  },
+);
+server.listen(3000);
 
 setInterval(() => {
-  // Adapting a keep-alive agent
   http.get('http://localhost:3000', { agent }, (res) => {
-    res.on('data', (data) => {
-      // Do nothing
-    });
+    res.resume();
   });
-}, 5000); // Sending request on 5s interval so it's easy to hit idle timeout
+}, 3000);
 ```
 
-By marking a request whether it reused socket or not, we can do
-automatic error retry base on it.
+By checking `request.reusedSocket`, an application can retry idempotent requests
+that fail because a reused connection was reset.
 
 ```mjs
 import http from 'node:http';
@@ -1914,7 +1912,7 @@ added: v5.7.0
 added: v0.7.0
 -->
 
-* Type: {number} **Default:** `2000`
+* Type: {number} **Default:** `1000`
 
 Limits maximum incoming headers count. If set to 0, no limit will be applied.
 
@@ -3693,6 +3691,11 @@ changes:
     pr-url: https://github.com/nodejs/node/pull/59824
     description: The `shouldUpgradeCallback` option is now supported.
   - version:
+      - v24.6.0
+      - v22.19.0
+    pr-url: https://github.com/nodejs/node/pull/59243
+    description: The `keepAliveTimeoutBuffer` option is supported now.
+  - version:
     - v20.1.0
     - v18.17.0
     pr-url: https://github.com/nodejs/node/pull/47405
@@ -3772,6 +3775,10 @@ changes:
     the last response, before a socket will be destroyed.
     See [`server.keepAliveTimeout`][] for more information.
     **Default:** `65000`.
+  * `keepAliveTimeoutBuffer`: An additional buffer time in milliseconds added
+    to `keepAliveTimeout` to extend the internal socket timeout.
+    See [`server.keepAliveTimeoutBuffer`][] for more information.
+    **Default:** `1000`.
   * `maxHeaderSize` {number} Optionally overrides the value of
     [`--max-http-header-size`][] for requests received by this server, i.e.
     the maximum length of request headers in bytes.
@@ -4297,6 +4304,13 @@ the following events will be emitted in the following order:
   `'Error: aborted'` and code `'ECONNRESET'`
 * `'close'` on the `res` object
 
+If a socket error (such as a TLS error) causes the premature close, that error
+is emitted on the request before the close. The error emitted on the incomplete
+response retains the message `'aborted'` and code `'ECONNRESET'`, with the original
+socket error available as its `cause`. This also applies when the original socket
+error has code `'ECONNRESET'`. If no underlying error is available, the response
+error has no `cause` property.
+
 If `req.destroy()` is called before a socket is assigned, the following
 events will be emitted in the following order:
 
@@ -4324,7 +4338,8 @@ events will be emitted in the following order:
 * `'aborted'` on the `res` object
 * `'close'`
 * `'error'` on the `res` object with an error with message `'Error: aborted'`
-  and code `'ECONNRESET'`, or the error with which `req.destroy()` was called
+  and code `'ECONNRESET'`. If an error was passed to `req.destroy()`, it is
+  available as the response error's `cause`.
 * `'close'` on the `res` object
 
 If `req.abort()` is called before a socket is assigned, the following
@@ -4366,6 +4381,89 @@ Passing an `AbortSignal` and then calling `abort()` on the corresponding
 request. Specifically, the `'error'` event will be emitted with an error with
 the message `'AbortError: The operation was aborted'`, the code `'ABORT_ERR'`
 and the `cause`, if one was provided.
+
+## `http.isValidHeaderName(name)`
+
+<!-- YAML
+added: v26.11.0
+-->
+
+* `name` {any}
+* Returns: {boolean}
+
+Returns `true` if `name` is a valid HTTP header name (a non-empty string that
+is an HTTP [token][]), and `false` otherwise. This is the same check that
+[`http.validateHeaderName()`][] performs, but the result is returned instead of
+an error being thrown, so it is suitable for use in hot paths where invalid
+input is expected.
+
+HTTP methods are also tokens, so this function can validate them as well.
+
+```mjs
+import { isValidHeaderName } from 'node:http';
+
+console.log(isValidHeaderName('content-type')); // true
+console.log(isValidHeaderName('X-Request-Id')); // true
+console.log(isValidHeaderName('')); // false
+console.log(isValidHeaderName('bad header')); // false
+console.log(isValidHeaderName(42)); // false
+```
+
+```cjs
+const { isValidHeaderName } = require('node:http');
+
+console.log(isValidHeaderName('content-type')); // true
+console.log(isValidHeaderName('X-Request-Id')); // true
+console.log(isValidHeaderName('')); // false
+console.log(isValidHeaderName('bad header')); // false
+console.log(isValidHeaderName(42)); // false
+```
+
+## `http.isValidHeaderValue(value[, options])`
+
+<!-- YAML
+added: v26.11.0
+-->
+
+* `value` {any}
+* `options` {Object}
+  * `httpValidation` {string} Validation strictness, one of `'strict'` or
+    `'relaxed'`. These have the same meaning as the `httpValidation` option of
+    [`http.createServer()`][] and [`http.request()`][]. **Default:** `'strict'`.
+* Returns: {boolean}
+
+Returns `true` if `value` is a valid HTTP header value, and `false` otherwise.
+With the default options this is the same check that
+[`http.validateHeaderValue()`][] performs, but the result is returned instead
+of an error being thrown.
+
+`undefined` and symbols are never valid header values. Other non-string
+values are converted to strings before being checked, as they are when passed
+to [`outgoingMessage.setHeader(name, value)`][].
+
+Passing an invalid `options` argument throws.
+
+```mjs
+import { isValidHeaderValue } from 'node:http';
+
+console.log(isValidHeaderValue('text/html')); // true
+console.log(isValidHeaderValue(123)); // true
+console.log(isValidHeaderValue(undefined)); // false
+console.log(isValidHeaderValue('a\r\nb')); // false
+console.log(isValidHeaderValue('a\x01b')); // false
+console.log(isValidHeaderValue('a\x01b', { httpValidation: 'relaxed' })); // true
+```
+
+```cjs
+const { isValidHeaderValue } = require('node:http');
+
+console.log(isValidHeaderValue('text/html')); // true
+console.log(isValidHeaderValue(123)); // true
+console.log(isValidHeaderValue(undefined)); // false
+console.log(isValidHeaderValue('a\r\nb')); // false
+console.log(isValidHeaderValue('a\x01b')); // false
+console.log(isValidHeaderValue('a\x01b', { httpValidation: 'relaxed' })); // true
+```
 
 ## `http.validateHeaderName(name[, label])`
 
@@ -4517,6 +4615,92 @@ requests are made and avoid invoking it in the middle of any requests.
 
 See [Built-in Proxy Support][] for details on proxy URL formats and `NO_PROXY`
 syntax.
+
+## `http.websocketMask(source, mask, output, offset, length)`
+
+<!-- YAML
+added: v26.12.0
+-->
+
+* `source` {Buffer|TypedArray|DataView} The data to mask.
+* `mask` {Buffer|TypedArray|DataView} The 4-byte masking key.
+* `output` {Buffer|TypedArray|DataView} Where to write the masked data.
+* `offset` {integer} Byte offset in `output` at which to start writing.
+* `length` {integer} Number of bytes of `source` to mask.
+
+XORs the first `length` bytes of `source` with `mask`, repeated, and writes the
+result to `output` starting at `offset`: byte `i` of `source` is XORed with
+byte `i % 4` of `mask`. This is the masking operation that WebSocket clients
+apply to every frame payload they send ([RFC 6455, Section 5.3][]), and that
+servers undo on every frame they receive. Applying it twice with the same
+`mask` restores the original data. `source` is not modified, unless it shares
+memory with `output`.
+
+All arguments are treated as raw bytes, whatever the view type. `source` and
+`output` may be the same view or overlapping views over the same memory; the
+result is the same as if `source` had been copied first.
+
+An error is thrown if `mask` is not exactly 4 bytes long, if `length` is
+greater than `source.byteLength`, if `offset + length` is greater than
+`output.byteLength`, or if `output` is backed by an immutable `ArrayBuffer`.
+Nothing is written in that case. `source` and `mask` may be backed by an
+immutable `ArrayBuffer`.
+
+```mjs
+import { Buffer } from 'node:buffer';
+import { websocketMask, websocketUnmask } from 'node:http';
+
+const key = Buffer.from([0x37, 0xfa, 0x21, 0x3d]);
+const payload = Buffer.from('Hello');
+
+// Write a masked copy of the payload after a 6-byte frame header.
+const frame = Buffer.alloc(6 + payload.length);
+websocketMask(payload, key, frame, 6, payload.length);
+console.log(frame.subarray(6));
+// Prints: <Buffer 7f 9f 4d 51 58>
+
+const received = frame.subarray(6);
+websocketUnmask(received, key);
+console.log(received.toString());
+// Prints: Hello
+```
+
+```cjs
+const { Buffer } = require('node:buffer');
+const { websocketMask, websocketUnmask } = require('node:http');
+
+const key = Buffer.from([0x37, 0xfa, 0x21, 0x3d]);
+const payload = Buffer.from('Hello');
+
+// Write a masked copy of the payload after a 6-byte frame header.
+const frame = Buffer.alloc(6 + payload.length);
+websocketMask(payload, key, frame, 6, payload.length);
+console.log(frame.subarray(6));
+// Prints: <Buffer 7f 9f 4d 51 58>
+
+const received = frame.subarray(6);
+websocketUnmask(received, key);
+console.log(received.toString());
+// Prints: Hello
+```
+
+## `http.websocketUnmask(buffer, mask)`
+
+<!-- YAML
+added: v26.12.0
+-->
+
+* `buffer` {Buffer|TypedArray|DataView} The data to unmask, in place.
+* `mask` {Buffer|TypedArray|DataView} The 4-byte masking key.
+
+XORs every byte of `buffer` with `mask`, repeated, in place: byte `i` is XORed
+with byte `i % 4` of `mask`. This is equivalent to
+`http.websocketMask(buffer, mask, buffer, 0, buffer.byteLength)`, and is
+typically used to unmask a received WebSocket frame payload
+([RFC 6455, Section 5.3][]). See [`http.websocketMask()`][] for an example.
+
+An error is thrown, and nothing is written, if `mask` is not exactly 4 bytes
+long or if `buffer` is backed by an immutable `ArrayBuffer`.
 
 ## Class: `WebSocket`
 
@@ -4726,6 +4910,7 @@ const agent2 = new http.Agent({ proxyEnv: process.env });
 ```
 
 [Built-in Proxy Support]: #built-in-proxy-support
+[RFC 6455, Section 5.3]: https://datatracker.ietf.org/doc/html/rfc6455#section-5.3
 [RFC 8187]: https://www.rfc-editor.org/rfc/rfc8187.txt
 [RFC 9110 Section 6.6.1]: https://www.rfc-editor.org/rfc/rfc9110#section-6.6.1
 [`'ERR_HTTP_CONTENT_LENGTH_MISMATCH'`]: errors.md#err_http_content_length_mismatch
@@ -4759,6 +4944,9 @@ const agent2 = new http.Agent({ proxyEnv: process.env });
 [`http.globalAgent`]: #httpglobalagent
 [`http.request()`]: #httprequestoptions-callback
 [`http.setGlobalProxyFromEnv()`]: #httpsetglobalproxyfromenvproxyenv
+[`http.validateHeaderName()`]: #httpvalidateheadernamename-label
+[`http.validateHeaderValue()`]: #httpvalidateheadervaluename-value
+[`http.websocketMask()`]: #httpwebsocketmasksource-mask-output-offset-length
 [`message.headers`]: #messageheaders
 [`message.rawHeaders`]: #messagerawheaders
 [`message.socket`]: #messagesocket
@@ -4821,3 +5009,4 @@ const agent2 = new http.Agent({ proxyEnv: process.env });
 [information event]: #event-information
 [initial delay]: net.md#socketsetkeepaliveenable-initialdelay-interval-count
 [request target]: https://datatracker.ietf.org/doc/html/rfc9112#section-3.2
+[token]: https://datatracker.ietf.org/doc/html/rfc9110#section-5.6.2

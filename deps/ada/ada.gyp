@@ -9,7 +9,6 @@
       'type': 'static_library',
       'include_dirs': [
         '.',
-        '<(DEPTH)/deps/v8/third_party/simdutf',
       ],
       'direct_dependent_settings': {
         'include_dirs': ['.'],
@@ -18,7 +17,7 @@
         'ADA_USE_SIMDUTF=1',
       ],
       'dependencies': [
-        '../../tools/v8_gypfiles/v8.gyp:simdutf',
+        '../../tools/v8_gypfiles/simdutf.gyp:simdutf',
       ],
       'sources': [ '<@(ada_sources)' ]
     },

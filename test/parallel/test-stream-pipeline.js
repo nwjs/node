@@ -243,12 +243,12 @@ tmpdir.refresh();
     pipeline(rs, res, () => {});
   }));
 
-  let cnt = 10;
+  let received = 0;
 
   const badSink = new Writable({
     write(data, enc, cb) {
-      cnt--;
-      if (cnt === 0) cb(new Error('kaboom'));
+      received += data.length;
+      if (received >= 50) cb(new Error('kaboom'));
       else cb();
     }
   });
@@ -1655,6 +1655,22 @@ tmpdir.refresh();
     assert.strictEqual(res, 'helloworld');
     assert.strictEqual(writable.closed, false);
   }));
+}
+
+{
+  async function* passThrough(source) {
+    for await (const chunk of source) {
+      yield chunk;
+    }
+  }
+
+  const streams = () => [
+    Readable.from(Array.from({ length: 100 }, (_, i) => i)),
+    passThrough,
+  ];
+
+  pipelinep(...streams()).then(common.mustCall());
+  pipelinep(streams()).then(common.mustCall());
 }
 
 {

@@ -107,7 +107,7 @@ Maybe<FunctionSignature> ParseFunctionSignature(Environment* env,
     }
 
     if (!return_type_val->IsString()) {
-      THROW_ERR_INVALID_ARG_VALUE(
+      THROW_ERR_INVALID_ARG_TYPE(
           env, "Return value type of function %s must be a string", name);
       return {};
     }
@@ -132,7 +132,7 @@ Maybe<FunctionSignature> ParseFunctionSignature(Environment* env,
     }
 
     if (!arguments_val->IsArray()) {
-      THROW_ERR_INVALID_ARG_VALUE(
+      THROW_ERR_INVALID_ARG_TYPE(
           env, "Arguments list of function %s must be an array", name);
       return {};
     }
@@ -148,7 +148,7 @@ Maybe<FunctionSignature> ParseFunctionSignature(Environment* env,
       }
 
       if (!arg->IsString()) {
-        THROW_ERR_INVALID_ARG_VALUE(
+        THROW_ERR_INVALID_ARG_TYPE(
             env, "Argument %u of function %s must be a string", i, name);
         return {};
       }
@@ -552,34 +552,33 @@ void WriteFFIReturnToBuffer(ffi_type* type,
 v8::Maybe<ffi_type*> ToFFIType(Environment* env, std::string_view type_str) {
   if (type_str == "void") {
     return Just(&ffi_type_void);
-  } else if (type_str == "i8" || type_str == "int8") {
-    return Just(&ffi_type_sint8);
-  } else if (type_str == "u8" || type_str == "uint8" || type_str == "bool") {
-    return Just(&ffi_type_uint8);
   } else if (type_str == "char") {
     return Just(CHAR_MIN < 0 ? &ffi_type_sint8 : &ffi_type_uint8);
-  } else if (type_str == "i16" || type_str == "int16") {
+  } else if (type_str == "int8" || type_str == "i8") {
+    return Just(&ffi_type_sint8);
+  } else if (type_str == "uint8" || type_str == "u8" || type_str == "bool") {
+    return Just(&ffi_type_uint8);
+  } else if (type_str == "int16" || type_str == "i16") {
     return Just(&ffi_type_sint16);
-  } else if (type_str == "u16" || type_str == "uint16") {
+  } else if (type_str == "uint16" || type_str == "u16") {
     return Just(&ffi_type_uint16);
-  } else if (type_str == "i32" || type_str == "int32") {
+  } else if (type_str == "int32" || type_str == "i32") {
     return Just(&ffi_type_sint32);
-  } else if (type_str == "u32" || type_str == "uint32") {
+  } else if (type_str == "uint32" || type_str == "u32") {
     return Just(&ffi_type_uint32);
-  } else if (type_str == "i64" || type_str == "int64") {
+  } else if (type_str == "int64" || type_str == "i64") {
     return Just(&ffi_type_sint64);
-  } else if (type_str == "u64" || type_str == "uint64") {
+  } else if (type_str == "uint64" || type_str == "u64") {
     return Just(&ffi_type_uint64);
-  } else if (type_str == "f32" || type_str == "float" ||
-             type_str == "float32") {
+  } else if (type_str == "float32" || type_str == "f32" ||
+             type_str == "float") {
     return Just(&ffi_type_float);
-  } else if (type_str == "f64" || type_str == "double" ||
-             type_str == "float64") {
+  } else if (type_str == "float64" || type_str == "f64" ||
+             type_str == "double") {
     return Just(&ffi_type_double);
-  } else if (type_str == "buffer" || type_str == "arraybuffer" ||
-             type_str == "string" || type_str == "str" ||
-             type_str == "pointer" || type_str == "ptr" ||
-             type_str == "function") {
+  } else if (type_str == "pointer" || type_str == "string" ||
+             type_str == "buffer" || type_str == "arraybuffer" ||
+             type_str == "function" || type_str == "ptr" || type_str == "str") {
     return Just(&ffi_type_pointer);
   } else {
     THROW_ERR_INVALID_ARG_VALUE(env, "Unsupported FFI type: %s", type_str);
@@ -649,28 +648,43 @@ Maybe<FFIArgumentCategory> ToFFIArgument(Environment* env,
 
     *static_cast<uint32_t*>(ret) = arg->Uint32Value(context).FromJust();
   } else if (type == &ffi_type_sint64) {
-    if (!arg->IsBigInt()) {
-      THROW_ERR_INVALID_ARG_VALUE(env, "Argument %u must be an int64", index);
-      return {};
-    }
+    if (arg->IsBigInt()) {
+      bool lossless;
+      int64_t value = arg.As<BigInt>()->Int64Value(&lossless);
+      if (!lossless) {
+        THROW_ERR_INVALID_ARG_VALUE(env, "Argument %u must be an int64", index);
+        return {};
+      }
 
-    bool lossless;
-    *static_cast<int64_t*>(ret) = arg.As<BigInt>()->Int64Value(&lossless);
-    if (!lossless) {
-      THROW_ERR_INVALID_ARG_VALUE(env, "Argument %u must be an int64", index);
-      return {};
+      *static_cast<int64_t*>(ret) = value;
+    } else {
+      int64_t value;
+      if (!GetStrictSignedInteger(
+              arg, -kMaxSafeJsInteger, kMaxSafeJsInteger, &value)) {
+        THROW_ERR_INVALID_ARG_VALUE(env, "Argument %u must be an int64", index);
+        return {};
+      }
+
+      *static_cast<int64_t*>(ret) = value;
     }
   } else if (type == &ffi_type_uint64) {
-    if (!arg->IsBigInt()) {
-      THROW_ERR_INVALID_ARG_VALUE(env, "Argument %u must be a uint64", index);
-      return {};
-    }
+    if (arg->IsBigInt()) {
+      bool lossless;
+      uint64_t value = arg.As<BigInt>()->Uint64Value(&lossless);
+      if (!lossless) {
+        THROW_ERR_INVALID_ARG_VALUE(env, "Argument %u must be a uint64", index);
+        return {};
+      }
 
-    bool lossless;
-    *static_cast<uint64_t*>(ret) = arg.As<BigInt>()->Uint64Value(&lossless);
-    if (!lossless) {
-      THROW_ERR_INVALID_ARG_VALUE(env, "Argument %u must be a uint64", index);
-      return {};
+      *static_cast<uint64_t*>(ret) = value;
+    } else {
+      uint64_t value;
+      if (!GetStrictUnsignedInteger(arg, kMaxSafeJsInteger, &value)) {
+        THROW_ERR_INVALID_ARG_VALUE(env, "Argument %u must be a uint64", index);
+        return {};
+      }
+
+      *static_cast<uint64_t*>(ret) = value;
     }
   } else if (type == &ffi_type_float) {
     if (!arg->IsNumber()) {
@@ -700,6 +714,14 @@ Maybe<FFIArgumentCategory> ToFFIArgument(Environment* env,
       // invalidating that backing store during the active FFI call is
       // unsupported and dangerous.
       Local<ArrayBufferView> view = arg.As<ArrayBufferView>();
+      if (view->Buffer()->WasDetached()) {
+        THROW_ERR_INVALID_ARG_VALUE(
+            env,
+            "Argument %u is an ArrayBufferView backed by a detached "
+            "ArrayBuffer",
+            index);
+        return {};
+      }
       std::shared_ptr<BackingStore> store = view->Buffer()->GetBackingStore();
 
       if (!store) {
@@ -721,6 +743,11 @@ Maybe<FFIArgumentCategory> ToFFIArgument(Environment* env,
       // that backing store during the active FFI call is unsupported and
       // dangerous.
       Local<ArrayBuffer> buffer = arg.As<ArrayBuffer>();
+      if (buffer->WasDetached()) {
+        THROW_ERR_INVALID_ARG_VALUE(
+            env, "Argument %u is a detached ArrayBuffer", index);
+        return {};
+      }
       std::shared_ptr<BackingStore> store = buffer->GetBackingStore();
 
       if (!store) {

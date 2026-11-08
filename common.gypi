@@ -1007,7 +1007,9 @@
           ],
         },
         'target_conditions': [
-          ['_type!="static_library"', {
+          # NW.js: these link flags are for the mac target; host toolset tools
+          # (node_js2c, ...) are linked natively during a cross-OS build.
+          ['_type!="static_library" and _toolset=="target"', {
             'xcode_settings': {
               'OTHER_LDFLAGS': [
                 '-fuse-ld=lld -Wl,-search_paths_first'

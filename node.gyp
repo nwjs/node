@@ -2071,7 +2071,9 @@
         '../simdutf/simdutf.cpp',
       ],
       'conditions': [
-        [ 'OS=="mac"', {
+        # NW.js: node_js2c is a host tool, so in a cross-OS build it is
+        # linked for the host OS and must not pull in mac frameworks.
+        [ 'OS=="mac" and _toolset!="host"', {
           'libraries': [ '-framework CoreFoundation -framework Security' ],
         }],
         [ 'node_shared_simdutf=="false" and node_use_bundled_v8!="false"', {

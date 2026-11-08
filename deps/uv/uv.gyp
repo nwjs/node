@@ -268,7 +268,10 @@
             '-Wno-varargs',
           ],
         }],
-        [ 'OS in "mac ios"', {
+        # NW.js: in a cross-OS build (e.g. linux host -> mac target) the
+        # 'host' toolset is compiled for the *host* OS, so it needs the linux
+        # sources instead of the apple ones.
+        [ 'OS in "mac ios" and _toolset!="host"', {
           'sources': [
             '<@(uv_sources_apple)',
           ],
@@ -277,7 +280,7 @@
             '_DARWIN_UNLIMITED_SELECT=1',
           ]
         }],
-        [ 'OS=="linux"', {
+        [ 'OS=="linux" or _toolset=="host"', {
           #'defines': [ '_FILE_OFFSET_BITS=64' ],
           'sources': [
             '<@(uv_sources_linux)',
@@ -390,7 +393,8 @@
             'src/unix/bsd-proctitle.c'
           ],
         }],
-        [ 'OS in "ios mac freebsd dragonflybsd openbsd netbsd".split()', {
+        [ 'OS in "ios mac freebsd dragonflybsd openbsd netbsd".split()' +
+              ' and _toolset!="host"', {
           'sources': [
             '<@(uv_sources_bsd_common)',
           ],

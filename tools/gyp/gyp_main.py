@@ -80,4 +80,17 @@ def UseChromiumClangOnMac():
 
 if __name__ == "__main__":
     UseChromiumClangOnMac()
+    # nwjs: gyp has no host-os notion: OS is the target OS, and
+    # _toolset=="host" is set for host-toolset targets in
+    # native builds too, so toolset-aware conditions cannot tell a
+    # cross-OS build's host apart (see deps/uv/uv.gyp). Define
+    # host_os (mac/win/linux) from the machine running gyp.
+    if not any(a == 'host_os' or
+               a.startswith('host_os=')
+               for a in sys.argv[1:]):
+        sys.argv += ['-D',
+                      'host_os=' +
+                      {'darwin': 'mac',
+                       'win32': 'win'}.get(
+                          sys.platform, 'linux')]
     sys.exit(gyp.script_main())

@@ -1,6 +1,7 @@
 {
   'variables': {
     'uv_library%': 'static_library',
+    'host_os%': '',  # set by tools/gyp/gyp_main.py (mac/win/linux)
     'conditions': [
       ['OS=="win"', {
         'shared_unix_defines': [ ],
@@ -271,7 +272,7 @@
         # NW.js: in a cross-OS build (e.g. linux host -> mac target) the
         # 'host' toolset is compiled for the *host* OS, so it needs the linux
         # sources instead of the apple ones.
-        [ 'OS in "mac ios" and _toolset!="host"', {
+        [ 'OS in "mac ios" and (_toolset!="host" or host_os=="mac")', {
           'sources': [
             '<@(uv_sources_apple)',
           ],
@@ -280,7 +281,14 @@
             '_DARWIN_UNLIMITED_SELECT=1',
           ]
         }],
-        [ 'OS=="linux" or _toolset=="host"', {
+        # NW.js: pick sources by HOST os for the host toolset. gyp sets
+        # _toolset=="host" in native builds too, so _toolset
+        # alone cannot tell a cross-OS host apart (it broke native mac and
+        # windows builds); gyp_main.py defines host_os for this. Native
+        # builds keep the upstream behaviour; in a linux host -> mac target
+        # cross the host toolset takes the linux sources, giving the linux
+        # sources here while the target one takes the apple sources above.
+        [ 'OS=="linux" or (_toolset=="host" and host_os=="linux")', {
           #'defines': [ '_FILE_OFFSET_BITS=64' ],
           'sources': [
             '<@(uv_sources_linux)',
@@ -394,7 +402,7 @@
           ],
         }],
         [ 'OS in "ios mac freebsd dragonflybsd openbsd netbsd".split()' +
-              ' and _toolset!="host"', {
+              ' and (_toolset!="host" or host_os=="mac")', {
           'sources': [
             '<@(uv_sources_bsd_common)',
           ],

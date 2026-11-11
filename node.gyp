@@ -1337,12 +1337,50 @@
         [ 'v8_use_perfetto==1', {
           'sources': [
             '<@(node_tracing_perfetto_sources)',
+            # nwjs: compile the bundled perfetto amalgamation into
+            # node_base itself. node_base is whole-archive linked, so the
+            # definitions are guaranteed to end up in node.dll/libnode,
+            # whereas a dependency on the separate perfetto_sdk
+            # static_library is not propagated to the final link (deps of
+            # a static_library are dropped - see the OS==win libraries
+            # below, moved here for the same reason). Chromium perfetto
+            # cannot substitute: nw exports no perfetto symbols (hidden
+            # visibility) and its revision differs from this SDK.
+            'deps/perfetto/sdk/perfetto.cc',
+          ],
+          'include_dirs': [
+            'deps/perfetto/sdk',
           ],
           'conditions': [
-            ['node_shared_perfetto=="false"', {
-              'dependencies': [
-                'deps/perfetto/perfetto.gyp:perfetto_sdk',
-              ],
+            ['OS=="win"', {
+              # nwjs: Windows uses the Chromium-built perfetto from
+              # libperfettonode.lib (linked below), so the bundled
+              # amalgamation must NOT be compiled too. On posix the
+              # sdk must stay in node_base: nw exports no perfetto
+              # symbols (hidden visibility), so libnode would load
+              # with undefined perfetto::*.
+              'sources!': [ 'deps/perfetto/sdk/perfetto.cc' ],
+              # ... but that SDK's inline header machinery still needs
+              # this one out-of-line definition. Chromium perfetto has
+              # only the three-argument Reset (Encoding) exported and the
+              # two-argument overload as an inline forwarder. Supply it,
+              # instead of linking the whole amalgamation (which would
+              # collide with libperfettonode).
+              'sources': [ 'deps/perfetto/reset_compat.cc' ],
+              # The amalgamation includes <windows.h> and then
+              # <winsock2.h>; without WIN32_LEAN_AND_MEAN the first
+              # pulls in Winsock 1.1 and winsock2.h then redefines
+              # protoent/WSAData. The standalone perfetto_sdk target
+              # set this; keep it here as the source moved.
+              'defines': [ 'WIN32_LEAN_AND_MEAN' ],
+            }],
+            ['OS=="mac"', {
+              # nwjs: as on Windows, the SDK would duplicate Chromium's
+              # perfetto: node.gypi force-loads libperfettonode.a. Keep it
+              # out and supply only its two-argument Message::Reset, which
+              # the Chromium revision offers only as a 3-arg forwarder.
+              'sources!': [ 'deps/perfetto/sdk/perfetto.cc' ],
+              'sources': [ 'deps/perfetto/reset_compat.cc' ],
             }],
           ],
         }, {
@@ -1644,9 +1682,9 @@
         [ 'OS=="win"', {
           'conditions': [
             [ 'component == "shared_library"', {
-              'libraries': [ 'Winmm', 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/third_party/perfetto/libperfettonode.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/libc++.dll.lib'],
+              'libraries': [ 'Winmm', 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/obj/third_party/perfetto/libperfettonode.lib', '<(PRODUCT_DIR)/../nw/libc++.dll.lib'],
             }, {
-              'libraries': [ 'Winmm', 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/third_party/perfetto/libperfettonode.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libcpp.lib'],
+              'libraries': [ 'Winmm', 'ws2_32', '-lpsapi.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libbase.lib', '<(PRODUCT_DIR)/../nw/obj/v8/v8_libplatform.lib', '<(PRODUCT_DIR)/../nw/obj/third_party/perfetto/libperfettonode.lib', '<(PRODUCT_DIR)/../nw/obj/buildtools/third_party/libc++/libcpp.lib'],
             }],
             [ 'nw_browser_tests == 1', {
               'libraries': [ '<(PRODUCT_DIR)/../nw/browser_tests.lib'],

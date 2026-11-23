@@ -125,7 +125,7 @@ uintptr_t PointerFromValue(v8::Local<v8::Value> value) {
   // ArrayBuffer and SharedArrayBuffer point at the start of their store.
   if (value->IsArrayBufferView()) {
     v8::Local<v8::ArrayBufferView> view = value.As<v8::ArrayBufferView>();
-    void* data = view->Buffer()->Data();
+    void* data = view->GetBuffer()->Data();
     return reinterpret_cast<uintptr_t>(static_cast<char*>(data) +
                                        view->ByteOffset());
   }
@@ -253,7 +253,7 @@ extern "C" uintptr_t node_ffi_fast_buffer_data(v8::Local<v8::Value> value,
   // lifetimes match the generic path.
   if (value->IsArrayBufferView()) {
     v8::Local<v8::ArrayBufferView> view = value.As<v8::ArrayBufferView>();
-    if (view->Buffer()->WasDetached()) {
+    if (view->GetBuffer()->WasDetached()) {
       if (isolate != nullptr) {
         // No HandleScope is active during a Fast API call, so open one before
         // creating the error object.

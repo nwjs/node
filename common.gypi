@@ -124,6 +124,13 @@
     'v8_enable_sandbox%': 0,
     'v8_enable_v8_checks%': 0,
     'v8_use_perfetto': 1,
+    # Must be greater than NODE_CONTEXT_TAG in src/node_context_data.h.
+    # NW.js runs Node.js inside Chromium, so this must be at least as large
+    # as the value V8 itself is built with (v8_embedder_data_array_size in
+    # Chromium's v8/BUILD.gn), and it must exceed every index used below plus
+    # NW.js' own security token marker at index 50
+    # (content/nw/src/renderer/nw_extensions_renderer_hooks.cc).
+    'v8_embedder_data_array_size%': 51,
     'tsan%': 0,
 
     ##### end V8 defaults #####
@@ -727,6 +734,34 @@
       }],
       # The defines bellow must include all things from the external_v8_defines
       # list in v8/BUILD.gn.
+      #
+      # NW.js compiles node against the V8 library that ships with Chromium
+      # instead of against node's bundled deps/v8, so the V8 configuration
+      # defines have to match the ones that V8 itself is compiled with in the
+      # Chromium tree (v8/BUILD.gn: enabled_external_v8_defines). Those defines
+      # change the layout of V8 internal data structures that are accessed from
+      # inline code in v8's public headers (e.g. the external pointer table
+      # used for external strings), so a mismatch between node and V8 makes
+      # node read garbage: an external one-byte string reports a NULL resource
+      # and `new Buffer(<blink string>)` crashes with a null dereference.
+      ['building_nw == 1', {
+        'defines': [
+          'V8_ARRAY_BUFFER_INTERNAL_FIELD_COUNT=0',
+          'V8_ARRAY_BUFFER_VIEW_INTERNAL_FIELD_COUNT=0',
+          'V8_PROMISE_INTERNAL_FIELD_COUNT=0',
+          'V8_USE_DEFAULT_HASHER_SECRET=true',
+          'V8_COMPRESS_POINTERS',
+          'V8_COMPRESS_POINTERS_IN_SHARED_CAGE',
+          'V8_31BIT_SMIS_ON_64BIT_ARCH',
+          'V8_DEPRECATION_WARNINGS',
+          'V8_DISALLOW_JS_IN_API_INTERRUPTS_IS_CHECKED',
+          'V8_USE_PERFETTO',
+          'V8_USE_PERFETTO_JSON_EXPORT',
+          'V8_SUPPORT_LA57',
+          'V8_HAVE_TARGET_OS',
+          'V8_TARGET_OS_LINUX',
+        ],
+      }],
       ['node_enable_experimentals == "true"', {
         'defines': ['EXPERIMENTALS_DEFAULT_VALUE=true'],
       }],
@@ -736,13 +771,16 @@
       ['v8_enable_pointer_compression == 1', {
         'defines': ['V8_COMPRESS_POINTERS'],
       }],
-      ['v8_enable_pointer_compression == 1 and v8_enable_pointer_compression_shared_cage != 1', {
+      # V8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES/V8_VIRTUAL_MEMORY_CAGE describe
+      # node's bundled V8 and contradict Chromium's V8 configuration, so they
+      # are never used when node is built as part of NW.js.
+      ['v8_enable_pointer_compression == 1 and v8_enable_pointer_compression_shared_cage != 1 and building_nw != 1', {
         'defines': ['V8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES'],
       }],
       ['v8_enable_pointer_compression_shared_cage == 1', {
         'defines': ['V8_COMPRESS_POINTERS_IN_SHARED_CAGE'],
       }],
-      ['target_arch=="x64"', {
+      ['target_arch=="x64" and building_nw != 1', {
         'defines': ['V8_VIRTUAL_MEMORY_CAGE'],
       }],
       ['v8_enable_pointer_compression == 1 or v8_enable_31bit_smis_on_64bit_arch == 1', {
@@ -762,6 +800,11 @@
       }],
       ['v8_use_perfetto == 1', {
         'defines': ['V8_USE_PERFETTO',],
+      }],
+      ['v8_embedder_data_array_size != 0', {
+        'defines': [
+          'V8_EMBEDDER_DATA_ARRAY_SIZE=<(v8_embedder_data_array_size)',
+        ],
       }],
       ['v8_enable_map_packing == 1', {
         'defines': ['V8_MAP_PACKING',],

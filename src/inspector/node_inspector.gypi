@@ -157,7 +157,7 @@
     {
       'action_name': 'concatenate_protocols',
       'inputs': [
-        '../../../../third_party/devtools-frontend/src/node_modules/devtools-protocol/json/js_protocol.json',
+        '../../tools/js_protocol.json',
         '<(SHARED_INTERMEDIATE_DIR)/src/node_protocol.json',
       ],
       'outputs': [

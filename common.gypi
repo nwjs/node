@@ -750,9 +750,6 @@
           'V8_ARRAY_BUFFER_VIEW_INTERNAL_FIELD_COUNT=0',
           'V8_PROMISE_INTERNAL_FIELD_COUNT=0',
           'V8_USE_DEFAULT_HASHER_SECRET=true',
-          'V8_COMPRESS_POINTERS',
-          'V8_COMPRESS_POINTERS_IN_SHARED_CAGE',
-          'V8_31BIT_SMIS_ON_64BIT_ARCH',
           'V8_DEPRECATION_WARNINGS',
           'V8_DISALLOW_JS_IN_API_INTERRUPTS_IS_CHECKED',
           'V8_USE_PERFETTO',
@@ -760,6 +757,19 @@
           'V8_SUPPORT_LA57',
           'V8_HAVE_TARGET_OS',
           'V8_TARGET_OS_LINUX',
+        ],
+      }],
+      # V8 pointer compression is only supported on 64-bit architectures.
+      # Mirror v8/BUILD.gn's condition (gni/v8.gni derives
+      # v8_enable_pointer_compression from v8_current_cpu being x64/arm64/
+      # loong64); defining these on a 32-bit build trips the static_asserts in
+      # v8-internal.h ("Pointer compression can be enabled only for 64-bit
+      # architectures") and shifts a 32-bit size_t by 32.
+      ['building_nw == 1 and (target_arch=="x64" or target_arch=="arm64" or target_arch=="loong64")', {
+        'defines': [
+          'V8_COMPRESS_POINTERS',
+          'V8_COMPRESS_POINTERS_IN_SHARED_CAGE',
+          'V8_31BIT_SMIS_ON_64BIT_ARCH',
         ],
       }],
       ['node_enable_experimentals == "true"', {
